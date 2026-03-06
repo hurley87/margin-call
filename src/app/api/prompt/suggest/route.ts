@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
 
     const messages = await buildPromptSuggestionMessages(theme.trim());
     const result = await callModel<DealPromptSuggestions>(
-      messages as Awaited<typeof messages>,
+      messages,
       DealPromptSuggestionsSchema,
       "deal_prompt_suggestions"
     );

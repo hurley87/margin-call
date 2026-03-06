@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
       randomSeed,
     });
 
-    let outcome = await callModel<DealOutcome>(
+    const outcome = await callModel<DealOutcome>(
       messages,
       DealOutcomeSchema,
       "deal_outcome"
