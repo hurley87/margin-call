@@ -55,3 +55,42 @@ export function withPayment<T = unknown>(
   const routeConfig = createRouteConfig(price, description, payTo);
   return withX402(handler, routeConfig, resourceServer);
 }
+
+/**
+ * Wraps a Next.js route handler with x402 payment protection using a
+ * dynamic price extracted from the request body.
+ *
+ * The priceResolver receives the parsed request body and returns the
+ * dollar amount string (e.g. "$50.00"). The request body is cloned
+ * so the handler can still read it.
+ *
+ * @param handler - The route handler to protect
+ * @param priceResolver - Function that extracts the price from the request body
+ * @param description - Human-readable description of what the payment is for
+ * @param payTo - Wallet to receive payment (defaults to platform wallet)
+ */
+export function withDynamicPayment<T = unknown>(
+  handler: (request: NextRequest) => Promise<NextResponse<T>>,
+  priceResolver: (body: Record<string, unknown>) => string,
+  description: string,
+  payTo?: string
+) {
+  return async (request: NextRequest): Promise<NextResponse<T>> => {
+    // Clone request to read body without consuming it
+    const clonedRequest = request.clone();
+    let body: Record<string, unknown>;
+    try {
+      body = await clonedRequest.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 }
+      ) as NextResponse<T>;
+    }
+
+    const price = priceResolver(body);
+    const routeConfig = createRouteConfig(price, description, payTo);
+    const wrappedHandler = withX402(handler, routeConfig, resourceServer);
+    return wrappedHandler(request);
+  };
+}

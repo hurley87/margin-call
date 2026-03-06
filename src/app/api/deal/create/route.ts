@@ -2,12 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyPrivyToken } from "@/lib/privy/server";
 import { createServerClient } from "@/lib/supabase/client";
 import { createDeal } from "@/lib/supabase/queries";
-import { withPayment } from "@/lib/x402/middleware";
+import { withDynamicPayment } from "@/lib/x402/middleware";
+import { MIN_POT_AMOUNT, MIN_ENTRY_COST } from "@/lib/constants";
 import {
-  DEAL_CREATION_FEE_PERCENTAGE,
-  MIN_POT_AMOUNT,
-  MIN_ENTRY_COST,
-} from "@/lib/constants";
+  calculateCreationFee,
+  calculateNetPot,
+  formatPaymentPrice,
+} from "@/lib/x402/payment-validation";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function handler(request: NextRequest): Promise<NextResponse<any>> {
@@ -73,9 +74,9 @@ async function handler(request: NextRequest): Promise<NextResponse<any>> {
       );
     }
 
-    // Deduct 5% creation fee from the pot
-    const feeAmount = pot_amount * (DEAL_CREATION_FEE_PERCENTAGE / 100);
-    const netPot = pot_amount - feeAmount;
+    // Deduct 5% creation fee — fee routes to platform wallet via x402 payTo
+    const feeAmount = calculateCreationFee(pot_amount);
+    const netPot = calculateNetPot(pot_amount);
 
     const deal = await createDeal({
       creator_id: deskManager.id,
@@ -92,11 +93,16 @@ async function handler(request: NextRequest): Promise<NextResponse<any>> {
   }
 }
 
-// x402: require USDC payment to create a deal
-// Note: The price here is a placeholder — in production, the client sends
-// the pot_amount as the x402 payment. The route validates the body matches.
-export const POST = withPayment(
+// x402: require USDC payment matching pot_amount from request body.
+// Payment settles to platform wallet (5% fee); deal is only written after settlement.
+export const POST = withDynamicPayment(
   handler,
-  "$20.00",
+  (body) => {
+    const potAmount = Number(body.pot_amount);
+    if (!potAmount || potAmount < MIN_POT_AMOUNT) {
+      return formatPaymentPrice(MIN_POT_AMOUNT);
+    }
+    return formatPaymentPrice(potAmount);
+  },
   "Create a deal on Margin Call"
 );

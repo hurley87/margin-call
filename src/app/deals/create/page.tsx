@@ -20,6 +20,7 @@ export default function CreateDealPage() {
   const [potAmount, setPotAmount] = useState("");
   const [entryCost, setEntryCost] = useState("");
   const [theme, setTheme] = useState("");
+  const [showConfirmation, setShowConfirmation] = useState(false);
 
   if (!ready) {
     return (
@@ -48,9 +49,12 @@ export default function CreateDealPage() {
   const netPot =
     potNum > 0 ? potNum * (1 - DEAL_CREATION_FEE_PERCENTAGE / 100) : 0;
 
-  async function handleSubmit(e: React.FormEvent) {
+  function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    setShowConfirmation(true);
+  }
 
+  async function handleConfirmPayment() {
     const deal = await createDeal.mutateAsync({
       prompt,
       pot_amount: parseFloat(potAmount),
@@ -172,12 +176,62 @@ export default function CreateDealPage() {
 
         <button
           type="submit"
-          disabled={createDeal.isPending}
+          disabled={createDeal.isPending || showConfirmation}
           className="rounded-full bg-green-500 px-8 py-3 font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
         >
           {createDeal.isPending ? "Creating..." : "Create Deal"}
         </button>
       </form>
+
+      {showConfirmation && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+          <div className="flex w-full max-w-md flex-col gap-4 rounded-lg border border-zinc-700 bg-zinc-900 p-6">
+            <h2 className="text-lg font-semibold text-zinc-50">
+              Confirm Payment
+            </h2>
+            <p className="text-sm text-zinc-400">
+              Creating this deal requires a USDC payment via x402.
+            </p>
+            <div className="flex flex-col gap-1 rounded border border-zinc-700 bg-zinc-800 p-3 text-sm">
+              <div className="flex justify-between text-zinc-300">
+                <span>Pot amount</span>
+                <span>{parseFloat(potAmount).toFixed(2)} USDC</span>
+              </div>
+              <div className="flex justify-between text-zinc-400">
+                <span>Platform fee ({DEAL_CREATION_FEE_PERCENTAGE}%)</span>
+                <span>
+                  {(
+                    parseFloat(potAmount) *
+                    (DEAL_CREATION_FEE_PERCENTAGE / 100)
+                  ).toFixed(2)}{" "}
+                  USDC
+                </span>
+              </div>
+              <hr className="border-zinc-700" />
+              <div className="flex justify-between font-medium text-zinc-50">
+                <span>Net pot</span>
+                <span>{netPot.toFixed(2)} USDC</span>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowConfirmation(false)}
+                disabled={createDeal.isPending}
+                className="flex-1 rounded-full border border-zinc-600 px-4 py-2 text-sm font-medium text-zinc-300 transition-colors hover:bg-zinc-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmPayment}
+                disabled={createDeal.isPending}
+                className="flex-1 rounded-full bg-green-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
+              >
+                {createDeal.isPending ? "Processing..." : "Pay & Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
