@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyPrivyToken } from "@/lib/privy/server";
 import { createServerClient } from "@/lib/supabase/client";
 import { createDeal } from "@/lib/supabase/queries";
-import { DEAL_CREATION_FEE_PERCENTAGE } from "@/lib/constants";
+import { withPayment } from "@/lib/x402/middleware";
+import {
+  DEAL_CREATION_FEE_PERCENTAGE,
+  MIN_POT_AMOUNT,
+  MIN_ENTRY_COST,
+} from "@/lib/constants";
 
-export async function POST(request: NextRequest) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function handler(request: NextRequest): Promise<NextResponse<any>> {
   try {
     const { user } = await verifyPrivyToken(request);
 
@@ -30,16 +36,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!pot_amount || typeof pot_amount !== "number" || pot_amount <= 0) {
+    if (
+      !pot_amount ||
+      typeof pot_amount !== "number" ||
+      pot_amount < MIN_POT_AMOUNT
+    ) {
       return NextResponse.json(
-        { error: "pot_amount must be a positive number" },
+        { error: `pot_amount must be at least ${MIN_POT_AMOUNT} USDC` },
         { status: 400 }
       );
     }
 
-    if (!entry_cost || typeof entry_cost !== "number" || entry_cost <= 0) {
+    if (
+      !entry_cost ||
+      typeof entry_cost !== "number" ||
+      entry_cost < MIN_ENTRY_COST
+    ) {
       return NextResponse.json(
-        { error: "entry_cost must be a positive number" },
+        { error: `entry_cost must be at least ${MIN_ENTRY_COST} USDC` },
         { status: 400 }
       );
     }
@@ -77,3 +91,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: message }, { status: 401 });
   }
 }
+
+// x402: require USDC payment to create a deal
+// Note: The price here is a placeholder — in production, the client sends
+// the pot_amount as the x402 payment. The route validates the body matches.
+export const POST = withPayment(
+  handler,
+  "$20.00",
+  "Create a deal on Margin Call"
+);

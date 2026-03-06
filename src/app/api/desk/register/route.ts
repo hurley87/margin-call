@@ -6,7 +6,12 @@ export async function POST(request: NextRequest) {
   try {
     const { user } = await verifyPrivyToken(request);
 
-    const walletAddress = user.wallet?.address;
+    const walletAccount = user.linkedAccounts?.find((a) => a.type === "wallet");
+    const walletAddress =
+      user.wallet?.address ??
+      (walletAccount && "address" in walletAccount
+        ? (walletAccount as { address: string }).address
+        : undefined);
     if (!walletAddress) {
       return NextResponse.json(
         { error: "No wallet linked to this account" },
@@ -30,11 +35,13 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
+      console.error("Supabase error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
     return NextResponse.json({ deskManager: data });
   } catch (e) {
+    console.error("Register error:", e);
     const message = e instanceof Error ? e.message : "Unauthorized";
     return NextResponse.json({ error: message }, { status: 401 });
   }

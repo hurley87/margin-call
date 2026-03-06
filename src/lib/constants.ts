@@ -16,5 +16,9 @@ export const RAKE_PERCENTAGE = 10; // 10% of winnings
 export const DEAL_CREATION_FEE_PERCENTAGE = 5; // 5% of pot
 export const MAX_EXTRACTION_PERCENTAGE = 25; // 25% of pot per win
 
+// Minimums
+export const MIN_POT_AMOUNT = 20; // 20 USDC
+export const MIN_ENTRY_COST = 1; // 1 USDC
+
 // Agent runtime
 export const AGENT_LOOP_INTERVAL_MS = 30_000; // 30 seconds

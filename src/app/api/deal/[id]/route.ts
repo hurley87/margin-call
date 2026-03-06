@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getDeal } from "@/lib/supabase/queries";
+import { getDeal, listDealOutcomes } from "@/lib/supabase/queries";
 
 export async function GET(
   _request: NextRequest,
@@ -7,8 +7,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
-    const deal = await getDeal(id);
-    return NextResponse.json({ deal });
+    const [deal, outcomes] = await Promise.all([
+      getDeal(id),
+      listDealOutcomes(id),
+    ]);
+    return NextResponse.json({ deal, outcomes });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Internal server error";
     return NextResponse.json({ error: message }, { status: 404 });

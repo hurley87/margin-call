@@ -7,4 +7,9 @@ export const privyConfig: PrivyClientConfig = {
     accentColor: "#22c55e",
     logo: undefined,
   },
+  embeddedWallets: {
+    ethereum: {
+      createOnLogin: "users-without-wallets",
+    },
+  },
 };
