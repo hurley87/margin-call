@@ -1,47 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-
-interface Deal {
-  id: string;
-  prompt: string;
-  pot_usdc: number;
-  entry_cost_usdc: number;
-  max_extraction_percentage: number;
-  status: string;
-  entry_count: number;
-  wipeout_count: number;
-  created_at: string;
-}
+import { useDeal } from "@/hooks/use-deals";
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const [deal, setDeal] = useState<Deal | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { data, isLoading, error } = useDeal(id);
 
-  useEffect(() => {
-    async function fetchDeal() {
-      try {
-        const res = await fetch(`/api/deal/${id}`);
-        if (!res.ok) {
-          setError("Deal not found");
-          return;
-        }
-        const data = await res.json();
-        setDeal(data.deal);
-      } catch {
-        setError("Failed to load deal");
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchDeal();
-  }, [id]);
-
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black">
         <p className="text-zinc-400">Loading...</p>
@@ -49,10 +16,10 @@ export default function DealDetailPage() {
     );
   }
 
-  if (error || !deal) {
+  if (error || !data) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black">
-        <p className="text-red-400">{error ?? "Deal not found"}</p>
+        <p className="text-red-400">{error?.message ?? "Deal not found"}</p>
         <Link
           href="/deals"
           className="text-sm text-zinc-400 hover:text-zinc-300"
@@ -62,6 +29,8 @@ export default function DealDetailPage() {
       </div>
     );
   }
+
+  const { deal, outcomes } = data;
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-black px-4 py-12">
@@ -107,10 +76,85 @@ export default function DealDetailPage() {
 
         <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
           <h2 className="mb-3 text-sm font-medium text-zinc-400">Outcomes</h2>
-          <p className="text-sm text-zinc-500">
-            No outcomes yet. Outcomes will appear here as traders enter the
-            deal.
-          </p>
+          {outcomes.length === 0 ? (
+            <p className="text-sm text-zinc-500">
+              No outcomes yet. Outcomes will appear here as traders enter the
+              deal.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-4">
+              {outcomes.map((outcome) => (
+                <div
+                  key={outcome.id}
+                  className="rounded border border-zinc-700 bg-zinc-800 p-4"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <span
+                      className={`text-sm font-medium ${
+                        outcome.trader_pnl_usdc >= 0
+                          ? "text-green-400"
+                          : "text-red-400"
+                      }`}
+                    >
+                      {outcome.trader_pnl_usdc >= 0 ? "+" : ""}
+                      {outcome.trader_pnl_usdc} USDC
+                    </span>
+                    {outcome.trader_wiped_out && (
+                      <span className="rounded bg-red-500/10 px-2 py-0.5 text-xs font-medium text-red-400">
+                        WIPED OUT
+                        {outcome.wipeout_reason
+                          ? ` — ${outcome.wipeout_reason.replace("_", " ")}`
+                          : ""}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                    {outcome.narrative.map((event, i) => (
+                      <div key={i}>
+                        <p className="text-xs font-medium text-zinc-400">
+                          {event.event}
+                        </p>
+                        <p className="text-sm text-zinc-300">
+                          {event.description}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {outcome.assets_gained.length > 0 && (
+                    <div className="mt-3">
+                      <p className="text-xs text-zinc-500">Assets gained:</p>
+                      <p className="text-xs text-green-400">
+                        {outcome.assets_gained
+                          .map((a) => `${a.name} ($${a.value_usdc})`)
+                          .join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  {outcome.assets_lost.length > 0 && (
+                    <div className="mt-1">
+                      <p className="text-xs text-zinc-500">Assets lost:</p>
+                      <p className="text-xs text-red-400">
+                        {outcome.assets_lost.join(", ")}
+                      </p>
+                    </div>
+                  )}
+
+                  {outcome.rake_usdc > 0 && (
+                    <p className="mt-2 text-xs text-zinc-600">
+                      Rake: {outcome.rake_usdc} USDC
+                    </p>
+                  )}
+
+                  <p className="mt-2 text-xs text-zinc-600">
+                    {new Date(outcome.created_at).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

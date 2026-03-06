@@ -1,36 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
-
-interface Deal {
-  id: string;
-  prompt: string;
-  pot_usdc: number;
-  entry_cost_usdc: number;
-  entry_count: number;
-  status: string;
-  created_at: string;
-}
+import { useDeals } from "@/hooks/use-deals";
 
 export default function DealsPage() {
-  const [deals, setDeals] = useState<Deal[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchDeals() {
-      try {
-        const res = await fetch("/api/deal/list");
-        if (res.ok) {
-          const data = await res.json();
-          setDeals(data.deals ?? []);
-        }
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchDeals();
-  }, []);
+  const { data: deals, isLoading, error } = useDeals();
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-black px-4 py-12">
@@ -45,9 +19,11 @@ export default function DealsPage() {
           </Link>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <p className="text-zinc-400">Loading deals...</p>
-        ) : deals.length === 0 ? (
+        ) : error ? (
+          <p className="text-red-400">Failed to load deals.</p>
+        ) : !deals || deals.length === 0 ? (
           <p className="text-zinc-400">No open deals yet.</p>
         ) : (
           <div className="flex flex-col gap-4">

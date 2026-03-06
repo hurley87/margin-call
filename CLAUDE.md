@@ -16,6 +16,7 @@ Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s W
 
 - **Framework:** Next.js 16 (App Router) with React 19, TypeScript (strict mode)
 - **Styling:** Tailwind CSS v4 with `tw-animate-css`, `class-variance-authority`, `tailwind-merge`, `clsx`
+- **Data Fetching:** `@tanstack/react-query` for all client-side data fetching
 - **UI Components:** Base UI (`@base-ui/react`) + shadcn/ui pattern, Lucide icons
 - **Package Manager:** pnpm (workspace enabled)
 - **Path alias:** `@/*` maps to `./src/*`
@@ -30,6 +31,7 @@ The project is in early stages (scaffolded Next.js app). The target architecture
 - **`src/hooks/`** — React hooks for game state (traders, deals, activity, approvals)
 
 ### Key integrations to be built:
+
 - **Auth/Wallet:** Privy (wallet connect, embedded wallets)
 - **Database:** Supabase (Postgres + Realtime subscriptions)
 - **Payments:** x402 protocol (USDC on Base via Coinbase facilitator)
@@ -38,9 +40,11 @@ The project is in early stages (scaffolded Next.js app). The target architecture
 - **Agent Runtime:** Vercel Workflow (durable agent trade cycle with sleep/hooks)
 
 ### Core game loop (Vercel Workflow):
+
 Scan deals → evaluate against mandate → check approval threshold → enter deal (x402) → resolve via GPT-5 mini → apply outcome → sleep 30s → loop
 
 ## Conventions
 
 - Fonts: Geist Sans + Geist Mono via `next/font/google` (CSS variables `--font-geist-sans`, `--font-geist-mono`)
 - ESLint flat config (`eslint.config.mjs`) with `eslint-config-next` core-web-vitals + TypeScript
+- Use TanStack Query (`useQuery`/`useMutation`) for all client-side data fetching. Do not use `useEffect` + `fetch()`. Query hooks live in `src/hooks/`.

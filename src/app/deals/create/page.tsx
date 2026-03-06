@@ -1,19 +1,23 @@
 "use client";
 
-import { usePrivy, getAccessToken } from "@privy-io/react-auth";
+import { usePrivy } from "@privy-io/react-auth";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { DEAL_CREATION_FEE_PERCENTAGE } from "@/lib/constants";
+import {
+  DEAL_CREATION_FEE_PERCENTAGE,
+  MIN_POT_AMOUNT,
+  MIN_ENTRY_COST,
+} from "@/lib/constants";
+import { useCreateDeal } from "@/hooks/use-deals";
 
 export default function CreateDealPage() {
   const { ready, authenticated, login } = usePrivy();
   const router = useRouter();
+  const createDeal = useCreateDeal();
 
   const [prompt, setPrompt] = useState("");
   const [potAmount, setPotAmount] = useState("");
   const [entryCost, setEntryCost] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   if (!ready) {
     return (
@@ -44,37 +48,14 @@ export default function CreateDealPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
-    setSubmitting(true);
 
-    try {
-      const token = await getAccessToken();
-      const res = await fetch("/api/deal/create", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          prompt,
-          pot_amount: parseFloat(potAmount),
-          entry_cost: parseFloat(entryCost),
-        }),
-      });
+    const deal = await createDeal.mutateAsync({
+      prompt,
+      pot_amount: parseFloat(potAmount),
+      entry_cost: parseFloat(entryCost),
+    });
 
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Failed to create deal");
-        return;
-      }
-
-      router.push(`/deals/${data.deal.id}`);
-    } catch {
-      setError("Something went wrong");
-    } finally {
-      setSubmitting(false);
-    }
+    router.push(`/deals/${deal.id}`);
   }
 
   return (
@@ -110,9 +91,9 @@ export default function CreateDealPage() {
             value={potAmount}
             onChange={(e) => setPotAmount(e.target.value)}
             required
-            min="0.01"
+            min={MIN_POT_AMOUNT}
             step="0.01"
-            placeholder="100.00"
+            placeholder={MIN_POT_AMOUNT.toString()}
             className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none"
           />
           {potNum > 0 && (
@@ -133,21 +114,23 @@ export default function CreateDealPage() {
             value={entryCost}
             onChange={(e) => setEntryCost(e.target.value)}
             required
-            min="0.01"
+            min={MIN_ENTRY_COST}
             step="0.01"
-            placeholder="10.00"
+            placeholder={MIN_ENTRY_COST.toString()}
             className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none"
           />
         </div>
 
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {createDeal.error && (
+          <p className="text-sm text-red-400">{createDeal.error.message}</p>
+        )}
 
         <button
           type="submit"
-          disabled={submitting}
+          disabled={createDeal.isPending}
           className="rounded-full bg-green-500 px-8 py-3 font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
         >
-          {submitting ? "Creating..." : "Create Deal"}
+          {createDeal.isPending ? "Creating..." : "Create Deal"}
         </button>
       </form>
     </div>
