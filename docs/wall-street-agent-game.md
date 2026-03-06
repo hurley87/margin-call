@@ -2,7 +2,7 @@
 
 ## What Is This
 
-An AI-powered trading game set on 1980s Wall Street. Players act as **desk managers** — they fund and configure AI **trader agents** that autonomously enter **deals**. Claude determines deal outcomes. All payments flow in USDC on Base via the x402 protocol.
+An AI-powered trading game set on 1980s Wall Street. Players act as **desk managers** — they fund and configure AI **trader agents** that autonomously enter **deals**. GPT-5 mini determines deal outcomes. All payments flow in USDC on Base via the x402 protocol.
 
 ---
 
@@ -38,7 +38,7 @@ Desk Manager (Privy wallet)
 │  NEXT.JS (App Router)                     │
 │  API Routes (game logic)                  │
 │  Vercel Workflow (agent runtime)          │
-│  Claude LLM (deal outcomes)              │
+│  OpenAI GPT-5 mini (deal outcomes)       │
 │  Supabase (game state + realtime)         │
 └────────────────────────────────────────────┘
   │                          │
@@ -56,7 +56,7 @@ Agent Wallet (CDP)      Next.js Frontend
 | **Database** | Supabase (Postgres + Realtime) |
 | **Payments** | x402 protocol (USDC on Base via Coinbase facilitator) |
 | **Agent Wallets** | Coinbase CDP AgentKit (keys managed in TEE) |
-| **AI / LLM** | Anthropic Claude API (deal outcomes + prompt suggestions) |
+| **AI / LLM** | OpenAI GPT-5 mini (deal outcomes + prompt suggestions) |
 | **Agent Runtime** | Vercel Workflow (durable steps, sleep, hooks for approvals) |
 | **Chain** | Base (Ethereum L2) |
 | **Hosting** | Vercel (frontend + API routes + workflows) |
@@ -172,11 +172,11 @@ Workflow: agent-trade-cycle(traderId)
 
   Step 5: "resolve-outcome"
     → Build LLM message (deal prompt, trader inventory, portfolio, random seed)
-    → Call Claude → get narrative + outcome
+    → Call GPT-5 mini → get narrative + outcome
 
   Step 6: "apply-outcome"
     → Apply to Supabase (balance changes, asset changes, wipeout check)
-    → Run correction LLM if outcome was modified by validation
+    → Run correction GPT-5 mini call if outcome was modified by validation
     → Calculate and deduct rake on winnings
     → Log result to agent_activity_log
 
@@ -291,14 +291,14 @@ The rake is applied in the API route — USDC arrives via x402, the route deduct
 
 ### Deal Outcome Prompt
 
-The API route sends Claude:
+The API route sends GPT-5 mini:
 - **Deal description** (the prompt written by the creator)
 - **Trader name and inventory** (assets they're carrying)
 - **Trader portfolio balance** (USDC)
 - **Max value per win** (25% of deal pot)
 - **Random seed** (0.00–0.99, cryptographically secure)
 
-Claude returns:
+GPT-5 mini returns:
 - **Narrative** — array of story events
 - **Balance transfers** — USDC gained or lost
 - **Asset changes** — items gained or lost
@@ -384,10 +384,10 @@ When wiped out, all remaining value transfers to the deal that killed them. The 
 │   │   └── realtime.ts           # Subscription helpers
 │   ├── privy/                    # Privy config + hooks
 │   │   └── config.ts
-│   ├── llm/                      # Claude API integration
-│   │   ├── call-model.ts         # Claude API caller
+│   ├── llm/                      # OpenAI GPT-5 mini integration
+│   │   ├── call-model.ts         # OpenAI API caller (structured outputs)
 │   │   ├── schemas.ts            # Zod schemas for LLM responses
-│   │   └── messages.ts           # Message construction
+│   │   └── messages.ts           # Message construction (OpenAI format)
 │   ├── x402/                     # x402 payment verification
 │   │   └── middleware.ts         # Verify + settle x402 payments
 │   ├── agent/                    # Agent runtime logic
@@ -451,7 +451,7 @@ When player activity is low and the floor needs auto-generated deals, add:
 - x402 payment verification helper
 - `/api/deal/create` and `/api/deal/enter` routes (open to any wallet via x402)
 - `/api/trader/register-external` — external agent registration
-- Claude LLM integration (deal outcome generation + correction)
+- OpenAI GPT-5 mini integration (deal outcome generation + correction)
 - Supabase reads/writes for all game state
 
 ### Phase 3: Agent Runtime
@@ -486,7 +486,7 @@ When player activity is low and the floor needs auto-generated deals, add:
 ## Verification
 
 1. **Phase 1:** `pnpm dev` runs Next.js, Privy login works, Supabase local is up
-2. **Phase 2:** `POST /api/deal/create` creates deal in Supabase, `POST /api/deal/enter` resolves via Claude and writes outcome
+2. **Phase 2:** `POST /api/deal/create` creates deal in Supabase, `POST /api/deal/enter` resolves via GPT-5 mini and writes outcome
 3. **Phase 3:** Workflow scans deals, enters autonomously, logs activity, respects mandate, pauses for approvals
 4. **Phase 4:** Dashboard shows portfolio, activity feed, deal browsing, approval queue in realtime
-5. **End-to-end:** Fund agent → workflow enters deal → Claude resolves → outcome in dashboard → P&L updates
+5. **End-to-end:** Fund agent → workflow enters deal → GPT-5 mini resolves → outcome in dashboard → P&L updates
