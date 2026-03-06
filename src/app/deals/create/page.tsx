@@ -8,16 +8,18 @@ import {
   MIN_POT_AMOUNT,
   MIN_ENTRY_COST,
 } from "@/lib/constants";
-import { useCreateDeal } from "@/hooks/use-deals";
+import { useCreateDeal, useSuggestPrompts } from "@/hooks/use-deals";
 
 export default function CreateDealPage() {
   const { ready, authenticated, login } = usePrivy();
   const router = useRouter();
   const createDeal = useCreateDeal();
+  const suggestPrompts = useSuggestPrompts();
 
   const [prompt, setPrompt] = useState("");
   const [potAmount, setPotAmount] = useState("");
   const [entryCost, setEntryCost] = useState("");
+  const [theme, setTheme] = useState("");
 
   if (!ready) {
     return (
@@ -65,6 +67,49 @@ export default function CreateDealPage() {
         className="flex w-full max-w-lg flex-col gap-6 rounded-lg border border-zinc-800 bg-zinc-900 p-8"
       >
         <h1 className="text-2xl font-semibold text-zinc-50">Create a Deal</h1>
+
+        <div className="flex flex-col gap-2">
+          <label htmlFor="theme" className="text-sm text-zinc-400">
+            AI Prompt Suggestions
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="theme"
+              type="text"
+              value={theme}
+              onChange={(e) => setTheme(e.target.value)}
+              placeholder="e.g. insider trading, hostile takeover"
+              className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={suggestPrompts.isPending || theme.trim().length === 0}
+              onClick={() => suggestPrompts.mutate(theme.trim())}
+              className="whitespace-nowrap rounded bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-600 disabled:opacity-50"
+            >
+              {suggestPrompts.isPending ? "Thinking..." : "Suggest Prompts"}
+            </button>
+          </div>
+          {suggestPrompts.error && (
+            <p className="text-sm text-red-400">
+              {suggestPrompts.error.message}
+            </p>
+          )}
+          {suggestPrompts.data && (
+            <div className="flex flex-col gap-2">
+              {suggestPrompts.data.map((suggestion, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setPrompt(suggestion)}
+                  className="rounded border border-zinc-700 bg-zinc-800 px-3 py-3 text-left text-sm text-zinc-300 transition-colors hover:border-green-500 hover:text-zinc-50"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-col gap-2">
           <label htmlFor="prompt" className="text-sm text-zinc-400">

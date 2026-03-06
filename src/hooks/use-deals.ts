@@ -63,6 +63,21 @@ interface CreateDealInput {
   entry_cost: number;
 }
 
+export function useSuggestPrompts() {
+  return useMutation({
+    mutationFn: async (theme: string) => {
+      const res = await fetch("/api/prompt/suggest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to suggest prompts");
+      return data.suggestions as string[];
+    },
+  });
+}
+
 export function useCreateDeal() {
   return useMutation({
     mutationFn: async (input: CreateDealInput) => {
