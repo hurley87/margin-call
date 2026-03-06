@@ -6,6 +6,7 @@ export interface DeskManager {
   id: string;
   wallet_address: string;
   display_name: string;
+  settings: Record<string, unknown>;
   created_at: string;
 }
 
