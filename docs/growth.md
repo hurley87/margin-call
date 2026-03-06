@@ -1,0 +1,25 @@
+- Base Batches: http://batches.base.org
+- @ycombinator: http://ycombinator.com/apply
+- @alliance: http://alliance.xyz/apply
+- @a16zcrypto CSX: http://a16zcrypto.com/accelerator
+- @southpkcommons: http://southparkcommons.com
+- Learn to Build Onchain: http://docs.base.org/get-started/base
+- Paymaster Gas Credits: http://coinbase.com/developer-platform/products/paymaster
+- Free Onchain Monitoring: http://blog.base.org/introducing-free-onchain-monitoring-for-base-builders
+- Free Security Reviews: http://blog.base.dev/free-security-reviews
+- Grow Your App: http://base.dev
+- Builder Codes: http://docs.base.org/base-chain/builder-codes/builder-codes
+- Get Funded: http://docs.base.org/get-started/get-funded
+- Base Services Hub: http://docs.base.org/get-started/base-services-hub
+- Base Ecosystem Job Network: http://base.hirechain.io
+- Base Mentorship Program: http://docs.base.org/get-started/base-mentorship-program
+- Country Leads and Ambassadors: http://docs.base.org/get-started/country-leads-and-ambassadors
+- Builder Network: http://docs.google.com/forms/d/e/1FAIpQLScM26LzZEvOuyaIPGHLWUVfOJL_WW71xz7CvPVqcVQcxuDNHA/viewform
+- Base Content Creators: http://x.com/i/lists/1869425408573075694
+- Coinbase Business: http://coinbase.com/business
+- Coinbase Prime: http://coinbase.com/prime/custody
+- Coinbase Token Manager: http://coinbase.com/tokenmanager
+- Raising on @echodotxyz / Sonar: http://echo.xyz
+- Raising on @legiondotcc: http://legion.cc
+- @spindl_xyz Ads: http://spindl.xyz
+- @coinbase DEX Trading: http://coinbase.com/trade-crypto/dex
