@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     const maxValuePerWin = deal.pot_usdc * (MAX_EXTRACTION_PERCENTAGE / 100);
 
     // Call GPT-5 mini for deal resolution
-    const messages = buildDealResolutionMessages({
+    const messages = await buildDealResolutionMessages({
       dealPrompt: deal.prompt,
       traderName: trader.display_name || "Anonymous Trader",
       traderInventory: [], // TODO: load from assets table when built
@@ -111,7 +111,7 @@ export async function POST(request: NextRequest) {
 
     // Correction flow: rewrite narrative if we modified the outcome
     if (corrected) {
-      const correctionMessages = buildCorrectionMessages({
+      const correctionMessages = await buildCorrectionMessages({
         originalNarrative: outcome.narrative,
         originalBalanceChange,
         correctedBalanceChange: outcome.balance_change_usdc,

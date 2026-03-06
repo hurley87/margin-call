@@ -89,6 +89,21 @@ export async function listDealOutcomes(dealId: string) {
   return data;
 }
 
+export async function getActiveSystemPrompt(name: string): Promise<string> {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("system_prompts")
+    .select("content")
+    .eq("name", name)
+    .eq("is_active", true)
+    .single();
+
+  if (error || !data) {
+    throw new Error(`System prompt "${name}" not found or inactive`);
+  }
+  return data.content;
+}
+
 export async function updateDealAfterEntry(
   dealId: string,
   potChange: number,

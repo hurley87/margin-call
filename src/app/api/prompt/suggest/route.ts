@@ -15,9 +15,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "theme is required" }, { status: 400 });
     }
 
-    const messages = buildPromptSuggestionMessages(theme.trim());
+    const messages = await buildPromptSuggestionMessages(theme.trim());
     const result = await callModel<DealPromptSuggestions>(
-      messages,
+      messages as Awaited<typeof messages>,
       DealPromptSuggestionsSchema,
       "deal_prompt_suggestions"
     );

@@ -1,6 +1,5 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-
-const SYSTEM_PERSONA = `You are the omniscient narrator of a ruthless 1980s Wall Street trading floor. You speak in vivid, cinematic prose — think Oliver Stone's "Wall Street" meets a noir thriller. Every deal is life or death. Every dollar is blood money. The trading floor is a jungle and only the ruthless survive.`;
+import { getActiveSystemPrompt } from "@/lib/supabase/queries";
 
 interface DealResolutionParams {
   dealPrompt: string;
@@ -11,9 +10,11 @@ interface DealResolutionParams {
   randomSeed: number;
 }
 
-export function buildDealResolutionMessages(
+export async function buildDealResolutionMessages(
   params: DealResolutionParams
-): ChatCompletionMessageParam[] {
+): Promise<ChatCompletionMessageParam[]> {
+  const systemPrompt = await getActiveSystemPrompt("deal_outcome");
+
   const inventoryDescription =
     params.traderInventory.length > 0
       ? params.traderInventory
@@ -22,7 +23,7 @@ export function buildDealResolutionMessages(
       : "empty — no assets";
 
   return [
-    { role: "system", content: SYSTEM_PERSONA },
+    { role: "system", content: systemPrompt },
     {
       role: "user",
       content: `Resolve this deal for the trader and return the outcome as structured JSON.
@@ -52,11 +53,13 @@ interface CorrectionParams {
   traderName: string;
 }
 
-export function buildCorrectionMessages(
+export async function buildCorrectionMessages(
   params: CorrectionParams
-): ChatCompletionMessageParam[] {
+): Promise<ChatCompletionMessageParam[]> {
+  const systemPrompt = await getActiveSystemPrompt("correction_narrative");
+
   return [
-    { role: "system", content: SYSTEM_PERSONA },
+    { role: "system", content: systemPrompt },
     {
       role: "user",
       content: `The outcome of a deal was modified by the house for validation reasons. Rewrite the narrative to match the corrected numbers. Keep the same dramatic tone and story beats, but adjust the details so the narrative is consistent with the new balance change.
@@ -74,11 +77,13 @@ Return the corrected narrative as an array of story events with the same structu
   ];
 }
 
-export function buildPromptSuggestionMessages(
+export async function buildPromptSuggestionMessages(
   theme: string
-): ChatCompletionMessageParam[] {
+): Promise<ChatCompletionMessageParam[]> {
+  const systemPrompt = await getActiveSystemPrompt("prompt_suggestions");
+
   return [
-    { role: "system", content: SYSTEM_PERSONA },
+    { role: "system", content: systemPrompt },
     {
       role: "user",
       content: `A desk manager wants to create a new deal on the trading floor. They gave the theme: "${theme}"
