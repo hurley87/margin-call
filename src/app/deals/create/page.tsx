@@ -8,10 +8,12 @@ import {
   MIN_POT_AMOUNT,
   MIN_ENTRY_COST,
 } from "@/lib/constants";
+import { useBaseNetwork } from "@/hooks/use-base-network";
 import { useCreateDeal, useSuggestPrompts } from "@/hooks/use-deals";
 
 export default function CreateDealPage() {
   const { ready, authenticated, login } = usePrivy();
+  const { isWrongNetwork } = useBaseNetwork();
   const router = useRouter();
   const createDeal = useCreateDeal();
   const suggestPrompts = useSuggestPrompts();
@@ -174,9 +176,15 @@ export default function CreateDealPage() {
           <p className="text-sm text-red-400">{createDeal.error.message}</p>
         )}
 
+        {isWrongNetwork && (
+          <p className="text-sm text-amber-400">
+            Switch your wallet to Base using the banner above to create a deal.
+          </p>
+        )}
+
         <button
           type="submit"
-          disabled={createDeal.isPending || showConfirmation}
+          disabled={createDeal.isPending || showConfirmation || isWrongNetwork}
           className="rounded-full bg-green-500 px-8 py-3 font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
         >
           {createDeal.isPending ? "Creating..." : "Create Deal"}
@@ -223,7 +231,7 @@ export default function CreateDealPage() {
               </button>
               <button
                 onClick={handleConfirmPayment}
-                disabled={createDeal.isPending}
+                disabled={createDeal.isPending || isWrongNetwork}
                 className="flex-1 rounded-full bg-green-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
               >
                 {createDeal.isPending ? "Processing..." : "Pay & Create"}

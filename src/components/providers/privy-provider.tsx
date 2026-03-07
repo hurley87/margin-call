@@ -2,8 +2,19 @@
 
 import { useState } from "react";
 import { PrivyProvider as BasePrivyProvider } from "@privy-io/react-auth";
+import { WagmiProvider, createConfig } from "@privy-io/wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { base } from "viem/chains";
+import { http } from "wagmi";
+import { BaseNetworkGuard } from "@/components/providers/base-network-guard";
 import { privyConfig } from "@/lib/privy/config";
+
+const wagmiConfig = createConfig({
+  chains: [base],
+  transports: {
+    [base.id]: http(),
+  },
+});
 
 export function PrivyProvider({ children }: { children: React.ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
@@ -24,7 +35,12 @@ export function PrivyProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BasePrivyProvider appId={appId} config={privyConfig}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+      <QueryClientProvider client={queryClient}>
+        <WagmiProvider config={wagmiConfig}>
+          <BaseNetworkGuard />
+          {children}
+        </WagmiProvider>
+      </QueryClientProvider>
     </BasePrivyProvider>
   );
 }

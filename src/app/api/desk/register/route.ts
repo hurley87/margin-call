@@ -35,6 +35,27 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (error) {
+      if (error.code === "PGRST116") {
+        const { data: existingDeskManager, error: existingDeskManagerError } =
+          await supabase
+            .from("desk_managers")
+            .select("id, wallet_address, display_name")
+            .eq("wallet_address", walletAddress)
+            .maybeSingle();
+        if (existingDeskManagerError) {
+          console.error(
+            "Existing desk manager lookup error:",
+            existingDeskManagerError
+          );
+          return NextResponse.json(
+            { error: existingDeskManagerError.message },
+            { status: 500 }
+          );
+        }
+        if (existingDeskManager) {
+          return NextResponse.json({ deskManager: existingDeskManager });
+        }
+      }
       console.error("Supabase error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
