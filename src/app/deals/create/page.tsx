@@ -9,11 +9,19 @@ import {
   MIN_ENTRY_COST,
 } from "@/lib/constants";
 import { useBaseNetwork } from "@/hooks/use-base-network";
+import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import { useCreateDeal, useSuggestPrompts } from "@/hooks/use-deals";
+import { PAYMENT_CHAIN_NAME } from "@/lib/privy/config";
+import Link from "next/link";
 
 export default function CreateDealPage() {
   const { ready, authenticated, login } = usePrivy();
   const { isWrongNetwork } = useBaseNetwork();
+  const {
+    balance,
+    isLoading: balanceLoading,
+    walletAddress,
+  } = useUsdcBalance();
   const router = useRouter();
   const createDeal = useCreateDeal();
   const suggestPrompts = useSuggestPrompts();
@@ -47,9 +55,52 @@ export default function CreateDealPage() {
     );
   }
 
+  const noBalance = balance !== undefined && balance === 0;
+
+  if (!balanceLoading && noBalance && walletAddress) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black px-4">
+        <div className="flex w-full max-w-lg flex-col gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-8">
+          <h1 className="text-2xl font-semibold text-zinc-50">Create a Deal</h1>
+          <div className="rounded border border-amber-500/50 bg-amber-500/10 p-4">
+            <p className="font-medium text-amber-400">No USDC balance</p>
+            <p className="mt-2 text-sm text-zinc-400">
+              You need USDC on Base to create deals. Send USDC to your wallet
+              and this page will update automatically. You can withdraw your
+              USDC at any time from your{" "}
+              <Link
+                href="/wallet"
+                className="text-green-400 underline hover:text-green-300"
+              >
+                wallet page
+              </Link>
+              .
+            </p>
+            <p className="mt-3 text-sm text-zinc-400">Your wallet address:</p>
+            <button
+              type="button"
+              className="mt-1 w-full break-all rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-left font-mono text-sm text-zinc-300 transition-colors hover:border-green-500 hover:text-zinc-50"
+              onClick={() => navigator.clipboard.writeText(walletAddress)}
+              title="Copy address"
+            >
+              {walletAddress}
+            </button>
+            <p className="mt-2 text-xs text-zinc-500">Click to copy</p>
+          </div>
+          <p className="text-center text-xs text-zinc-500">
+            Wallet balance: {balance.toFixed(2)} USDC — checking every 15s
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const potNum = parseFloat(potAmount);
   const netPot =
     potNum > 0 ? potNum * (1 - DEAL_CREATION_FEE_PERCENTAGE / 100) : 0;
+  const hasPotAmount = !isNaN(potNum) && potNum > 0;
+  const insufficientBalance =
+    balance !== undefined && hasPotAmount && balance < potNum;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -153,6 +204,33 @@ export default function CreateDealPage() {
               {netPot.toFixed(2)} USDC
             </p>
           )}
+          {balance !== undefined && (
+            <p className="text-xs text-zinc-500">
+              Wallet balance: {balance.toFixed(2)} USDC
+            </p>
+          )}
+          {insufficientBalance && walletAddress && (
+            <div className="rounded border border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+              <p className="font-medium text-amber-400">
+                Insufficient USDC balance
+              </p>
+              <p className="mt-1 text-zinc-400">
+                You need {potNum.toFixed(2)} USDC but only have{" "}
+                {balance!.toFixed(2)} USDC.
+              </p>
+              <p className="mt-1 text-zinc-400">
+                Send USDC on Base to:{" "}
+                <button
+                  type="button"
+                  className="break-all font-mono text-zinc-300 underline decoration-zinc-600 hover:text-zinc-50"
+                  onClick={() => navigator.clipboard.writeText(walletAddress)}
+                  title="Copy address"
+                >
+                  {walletAddress}
+                </button>
+              </p>
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-2">
@@ -178,13 +256,20 @@ export default function CreateDealPage() {
 
         {isWrongNetwork && (
           <p className="text-sm text-amber-400">
-            Switch your wallet to Base using the banner above to create a deal.
+            Switch your wallet to {PAYMENT_CHAIN_NAME} using the banner above to
+            create a deal.
           </p>
         )}
 
         <button
           type="submit"
-          disabled={createDeal.isPending || showConfirmation || isWrongNetwork}
+          disabled={
+            createDeal.isPending ||
+            showConfirmation ||
+            isWrongNetwork ||
+            insufficientBalance ||
+            balanceLoading
+          }
           className="rounded-full bg-green-500 px-8 py-3 font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
         >
           {createDeal.isPending ? "Creating..." : "Create Deal"}
@@ -231,7 +316,9 @@ export default function CreateDealPage() {
               </button>
               <button
                 onClick={handleConfirmPayment}
-                disabled={createDeal.isPending || isWrongNetwork}
+                disabled={
+                  createDeal.isPending || isWrongNetwork || insufficientBalance
+                }
                 className="flex-1 rounded-full bg-green-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
               >
                 {createDeal.isPending ? "Processing..." : "Pay & Create"}

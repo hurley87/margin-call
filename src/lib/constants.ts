@@ -1,8 +1,5 @@
-import type { Network } from "@x402/core/types";
-
-// Base chain (Ethereum L2)
+// Base chain ID (used by Privy config and network guard)
 export const BASE_CHAIN_ID = 8453;
-export const BASE_NETWORK: Network = `eip155:${BASE_CHAIN_ID}`;
 
 // USDC on Base
 export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
@@ -17,7 +14,7 @@ export const DEAL_CREATION_FEE_PERCENTAGE = 5; // 5% of pot
 export const MAX_EXTRACTION_PERCENTAGE = 25; // 25% of pot per win
 
 // Minimums
-export const MIN_POT_AMOUNT = 20; // 20 USDC
+export const MIN_POT_AMOUNT = 5; // 5 USDC
 export const MIN_ENTRY_COST = 1; // 1 USDC
 
 // Agent runtime

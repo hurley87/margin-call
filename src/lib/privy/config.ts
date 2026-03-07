@@ -1,14 +1,17 @@
 import type { PrivyClientConfig } from "@privy-io/react-auth";
 import { base } from "viem/chains";
 
-/** Base mainnet chain ID (number). Use for switchChain and comparisons. */
-export const BASE_CHAIN_ID = base.id;
+export const PAYMENT_CHAIN = base;
+export const PAYMENT_CHAIN_NAME = PAYMENT_CHAIN.name;
 
-/** CAIP-2 chain id for Base (e.g. from Privy wallet.chainId). */
+/** Base chain id (number). Use for switchChain and comparisons. */
+export const BASE_CHAIN_ID = PAYMENT_CHAIN.id;
+
+/** CAIP-2 chain id for Base. */
 export const BASE_CHAIN_ID_CAIP2 = `eip155:${BASE_CHAIN_ID}` as const;
 
 /**
- * Returns true if the given chain id (number or CAIP-2 string) is Base mainnet.
+ * Returns true if the given chain id (number or CAIP-2 string) matches Base.
  */
 export function isChainIdBase(chainId: string | number): boolean {
   if (typeof chainId === "number") return chainId === BASE_CHAIN_ID;
@@ -16,7 +19,7 @@ export function isChainIdBase(chainId: string | number): boolean {
 }
 
 export const privyConfig: PrivyClientConfig = {
-  loginMethods: ["wallet", "email", "google", "twitter"],
+  loginMethods: ["email"],
   appearance: {
     theme: "dark",
     accentColor: "#22c55e",
@@ -27,6 +30,6 @@ export const privyConfig: PrivyClientConfig = {
       createOnLogin: "users-without-wallets",
     },
   },
-  defaultChain: base,
-  supportedChains: [base],
+  defaultChain: PAYMENT_CHAIN,
+  supportedChains: [PAYMENT_CHAIN],
 };

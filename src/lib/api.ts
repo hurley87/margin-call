@@ -1,11 +1,11 @@
 import { getAccessToken } from "@privy-io/react-auth";
 
 export async function authFetch(
-  url: string,
+  input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<Response> {
   const token = await getAccessToken();
-  return fetch(url, {
+  return fetch(input, {
     ...init,
     headers: {
       ...init?.headers,

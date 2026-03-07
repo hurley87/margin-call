@@ -14,20 +14,20 @@ function getEthereumWallet(
 }
 
 export interface UseBaseNetworkResult {
-  /** True when the connected EVM wallet is on a chain other than Base. */
+  /** True when the connected EVM wallet is on a chain other than the selected payment network. */
   isWrongNetwork: boolean;
   /** True while a switch-chain request is in progress. */
   isSwitching: boolean;
   /** Non-null after a failed or rejected switch (e.g. user declined). */
   switchError: string | null;
-  /** Request the active wallet to switch to Base. No-op if already on Base or no wallet. */
+  /** Request the active wallet to switch to the selected payment network. */
   switchToBase: () => Promise<void>;
   /** True when we have enough data to decide (authenticated, wallets ready). */
   isReady: boolean;
 }
 
 /**
- * Tracks whether the user's connected Privy wallet is on Base and exposes a switch action.
+ * Tracks whether the user's connected Privy wallet is on the selected payment network and exposes a switch action.
  * Uses the active wallet when it's Ethereum; otherwise falls back to the first connected wallet.
  */
 export function useBaseNetwork(): UseBaseNetworkResult {

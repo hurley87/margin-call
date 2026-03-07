@@ -5,23 +5,23 @@ import {
   isChainIdBase,
 } from "@/lib/privy/config";
 
-describe("Base chain id helpers", () => {
+describe("payment chain id helpers", () => {
   describe("constants", () => {
-    it("BASE_CHAIN_ID is 8453", () => {
+    it("BASE_CHAIN_ID defaults to 8453", () => {
       expect(BASE_CHAIN_ID).toBe(8453);
     });
 
-    it("BASE_CHAIN_ID_CAIP2 is eip155:8453", () => {
+    it("BASE_CHAIN_ID_CAIP2 defaults to eip155:8453", () => {
       expect(BASE_CHAIN_ID_CAIP2).toBe("eip155:8453");
     });
   });
 
   describe("isChainIdBase", () => {
-    it("returns true for Base chain id number", () => {
+    it("returns true for the payment chain id number", () => {
       expect(isChainIdBase(8453)).toBe(true);
     });
 
-    it("returns true for Base CAIP-2 string", () => {
+    it("returns true for the payment chain CAIP-2 string", () => {
       expect(isChainIdBase("eip155:8453")).toBe(true);
     });
 

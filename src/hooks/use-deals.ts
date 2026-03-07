@@ -1,3 +1,9 @@
+import {
+  useActiveWallet,
+  useWallets,
+  useX402Fetch,
+  type ConnectedWallet,
+} from "@privy-io/react-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { authFetch } from "@/lib/api";
 
@@ -63,6 +69,14 @@ interface CreateDealInput {
   entry_cost: number;
 }
 
+function getEthereumWallet(
+  activeWallet: ReturnType<typeof useActiveWallet>["wallet"],
+  wallets: ConnectedWallet[]
+): ConnectedWallet | undefined {
+  if (activeWallet?.type === "ethereum") return activeWallet as ConnectedWallet;
+  return wallets[0];
+}
+
 export function useSuggestPrompts() {
   return useMutation({
     mutationFn: async (theme: string) => {
@@ -79,13 +93,31 @@ export function useSuggestPrompts() {
 }
 
 export function useCreateDeal() {
+  const { wallet: activeWallet } = useActiveWallet();
+  const { wallets } = useWallets();
+  const { wrapFetchWithPayment } = useX402Fetch();
+
   return useMutation({
     mutationFn: async (input: CreateDealInput) => {
-      const res = await authFetch("/api/deal/create", {
+      const paymentWallet = getEthereumWallet(activeWallet, wallets);
+      if (!paymentWallet) {
+        throw new Error("Connect an Ethereum wallet to pay and create a deal");
+      }
+
+      const maxValue = BigInt(Math.round(input.pot_amount * 1_000_000));
+
+      const fetchWithPayment = wrapFetchWithPayment({
+        walletAddress: paymentWallet.address,
+        fetch: authFetch,
+        maxValue,
+      });
+
+      const res = await fetchWithPayment("/api/deal/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(input),
       });
+
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to create deal");
       return data.deal as Deal;

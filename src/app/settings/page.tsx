@@ -4,12 +4,14 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useState, useEffect } from "react";
 import { useDeskManager } from "@/hooks/use-desk";
 import { useUpdateSettings } from "@/hooks/use-settings";
+import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import Link from "next/link";
 
 export default function SettingsPage() {
   const { ready, authenticated, login } = usePrivy();
   const { data: deskManager, isLoading } = useDeskManager();
   const updateSettings = useUpdateSettings();
+  const { balance } = useUsdcBalance();
 
   const [displayName, setDisplayName] = useState("");
   const [saved, setSaved] = useState(false);
@@ -86,15 +88,23 @@ export default function SettingsPage() {
           <p className="text-xs text-zinc-500">
             Manage your USDC balance for creating and entering deals.
           </p>
+          {balance !== undefined && (
+            <p className="text-sm text-zinc-300">
+              Balance:{" "}
+              <span className="font-medium text-zinc-50">
+                {balance.toFixed(2)} USDC
+              </span>
+            </p>
+          )}
           <div className="flex gap-3">
             <Link
-              href="#"
+              href="/wallet"
               className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:border-green-500 hover:text-green-400"
             >
               Fund Wallet
             </Link>
             <Link
-              href="#"
+              href="/wallet"
               className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:border-green-500 hover:text-green-400"
             >
               Withdraw
