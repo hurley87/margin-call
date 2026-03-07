@@ -1,5 +1,4 @@
 import {
-  useActiveWallet,
   useWallets,
   useX402Fetch,
   type ConnectedWallet,
@@ -69,12 +68,10 @@ interface CreateDealInput {
   entry_cost: number;
 }
 
-function getEthereumWallet(
-  activeWallet: ReturnType<typeof useActiveWallet>["wallet"],
+function getEmbeddedWallet(
   wallets: ConnectedWallet[]
 ): ConnectedWallet | undefined {
-  if (activeWallet?.type === "ethereum") return activeWallet as ConnectedWallet;
-  return wallets[0];
+  return wallets.find((w) => w.walletClientType === "privy");
 }
 
 export function useSuggestPrompts() {
@@ -93,15 +90,14 @@ export function useSuggestPrompts() {
 }
 
 export function useCreateDeal() {
-  const { wallet: activeWallet } = useActiveWallet();
   const { wallets } = useWallets();
   const { wrapFetchWithPayment } = useX402Fetch();
 
   return useMutation({
     mutationFn: async (input: CreateDealInput) => {
-      const paymentWallet = getEthereumWallet(activeWallet, wallets);
+      const paymentWallet = getEmbeddedWallet(wallets);
       if (!paymentWallet) {
-        throw new Error("Connect an Ethereum wallet to pay and create a deal");
+        throw new Error("No Privy embedded wallet found. Please log in again.");
       }
 
       const maxValue = BigInt(Math.round(input.pot_amount * 1_000_000));

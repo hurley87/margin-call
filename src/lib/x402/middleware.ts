@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PLATFORM_WALLET_ADDRESS, USDC_ADDRESS } from "@/lib/constants";
 
-/** x402 v0.7 network name for Base mainnet */
+/** x402 network name for Base mainnet */
 const BASE_NETWORK = "base";
 
 const FACILITATOR_URL =
-  process.env.X402_FACILITATOR_URL ?? "https://x402.org/facilitator";
+  process.env.X402_FACILITATOR_URL ?? "https://facilitator.corbits.dev";
 
 interface PaymentRequirements {
   scheme: "exact";
