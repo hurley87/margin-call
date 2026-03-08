@@ -1,10 +1,4 @@
-import {
-  useWallets,
-  useX402Fetch,
-  type ConnectedWallet,
-} from "@privy-io/react-auth";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { authFetch } from "@/lib/api";
 
 export interface Deal {
   id: string;
@@ -62,18 +56,6 @@ export function useDeal(id: string) {
   });
 }
 
-interface CreateDealInput {
-  prompt: string;
-  pot_amount: number;
-  entry_cost: number;
-}
-
-function getEmbeddedWallet(
-  wallets: ConnectedWallet[]
-): ConnectedWallet | undefined {
-  return wallets.find((w) => w.walletClientType === "privy");
-}
-
 export function useSuggestPrompts() {
   return useMutation({
     mutationFn: async (theme: string) => {
@@ -85,38 +67,6 @@ export function useSuggestPrompts() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to suggest prompts");
       return data.suggestions as string[];
-    },
-  });
-}
-
-export function useCreateDeal() {
-  const { wallets } = useWallets();
-  const { wrapFetchWithPayment } = useX402Fetch();
-
-  return useMutation({
-    mutationFn: async (input: CreateDealInput) => {
-      const paymentWallet = getEmbeddedWallet(wallets);
-      if (!paymentWallet) {
-        throw new Error("No Privy embedded wallet found. Please log in again.");
-      }
-
-      const maxValue = BigInt(Math.round(input.pot_amount * 1_000_000));
-
-      const fetchWithPayment = wrapFetchWithPayment({
-        walletAddress: paymentWallet.address,
-        fetch: authFetch,
-        maxValue,
-      });
-
-      const res = await fetchWithPayment("/api/deal/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to create deal");
-      return data.deal as Deal;
     },
   });
 }

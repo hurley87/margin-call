@@ -21,7 +21,7 @@ export function BaseNetworkGuard() {
     >
       <span>
         Your wallet is on a different network. Switch to {PAYMENT_CHAIN_NAME} to
-        use x402 payments in this app.
+        use this app.
       </span>
       <button
         type="button"

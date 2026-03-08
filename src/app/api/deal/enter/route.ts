@@ -68,9 +68,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Deal is not open" }, { status: 400 });
     }
 
-    // TODO: x402 payment for entry_cost_usdc will be wired in when agent wallets are live
-    // For now, we proceed without actual payment to enable testing the LLM flow
-
     // Generate random seed
     const randomSeed = generateRandomSeed();
 

@@ -5,7 +5,6 @@ import { useState, useEffect } from "react";
 import { useDeskManager } from "@/hooks/use-desk";
 import { useUpdateSettings } from "@/hooks/use-settings";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
-import Link from "next/link";
 
 export default function SettingsPage() {
   const { ready, authenticated, login } = usePrivy();
@@ -81,35 +80,6 @@ export default function SettingsPage() {
           <p className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-500">
             {deskManager?.wallet_address ?? "..."}
           </p>
-        </div>
-
-        <div className="flex flex-col gap-3 rounded border border-zinc-800 bg-zinc-950 p-4">
-          <h2 className="text-sm font-medium text-zinc-300">Fund / Withdraw</h2>
-          <p className="text-xs text-zinc-500">
-            Manage your USDC balance for creating and entering deals.
-          </p>
-          {balance !== undefined && (
-            <p className="text-sm text-zinc-300">
-              Balance:{" "}
-              <span className="font-medium text-zinc-50">
-                {balance.toFixed(2)} USDC
-              </span>
-            </p>
-          )}
-          <div className="flex gap-3">
-            <Link
-              href="/wallet"
-              className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:border-green-500 hover:text-green-400"
-            >
-              Fund Wallet
-            </Link>
-            <Link
-              href="/wallet"
-              className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-400 transition-colors hover:border-green-500 hover:text-green-400"
-            >
-              Withdraw
-            </Link>
-          </div>
         </div>
 
         {updateSettings.error && (
