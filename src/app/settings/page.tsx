@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { useState, useEffect } from "react";
 import { useDeskManager } from "@/hooks/use-desk";
@@ -96,6 +97,22 @@ export default function SettingsPage() {
           {updateSettings.isPending ? "Saving..." : "Save Settings"}
         </button>
       </form>
+
+      <div className="mt-6 w-full max-w-lg rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+        <h2 className="mb-2 text-sm font-medium text-zinc-400">
+          Trader Funding
+        </h2>
+        <p className="mb-4 text-sm text-zinc-500">
+          Deposit or withdraw USDC from your traders&apos; escrow balances on
+          their detail pages.
+        </p>
+        <Link
+          href="/traders"
+          className="inline-block rounded-full bg-zinc-700 px-6 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-600"
+        >
+          Manage Traders
+        </Link>
+      </div>
     </div>
   );
 }

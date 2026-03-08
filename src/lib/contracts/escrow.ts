@@ -15,7 +15,11 @@ export const ERC6551_REGISTRY_ADDRESS =
 export const CONTRACTS_CHAIN = baseSepolia;
 export const CONTRACTS_CHAIN_ID = baseSepolia.id;
 
-// Minimal ABI for MarginCallEscrow reads
+// USDC on Base Sepolia (Circle test token)
+export const USDC_SEPOLIA_ADDRESS =
+  "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
+
+// ABI for MarginCallEscrow
 export const escrowAbi = [
   {
     type: "function",
@@ -31,6 +35,92 @@ export const escrowAbi = [
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "depositFor",
+    inputs: [
+      { name: "traderId", type: "uint256" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "withdraw",
+    inputs: [
+      { name: "traderId", type: "uint256" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "Deposit",
+    inputs: [
+      { name: "traderId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Withdrawal",
+    inputs: [
+      { name: "traderId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "function",
+    name: "createDeal",
+    inputs: [
+      { name: "prompt", type: "string" },
+      { name: "potAmount", type: "uint256" },
+      { name: "entryCost", type: "uint256" },
+    ],
+    outputs: [{ name: "dealId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "getDeal",
+    inputs: [{ name: "dealId", type: "uint256" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "creator", type: "address" },
+          { name: "prompt", type: "string" },
+          { name: "potAmount", type: "uint256" },
+          { name: "entryCost", type: "uint256" },
+          { name: "fee", type: "uint256" },
+          { name: "status", type: "uint8" },
+          { name: "pendingEntries", type: "uint256" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "dealCount",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "DealCreated",
+    inputs: [
+      { name: "dealId", type: "uint256", indexed: true },
+      { name: "creator", type: "address", indexed: true },
+      { name: "prompt", type: "string", indexed: false },
+      { name: "pot", type: "uint256", indexed: false },
+      { name: "entryCost", type: "uint256", indexed: false },
+    ],
+  },
 ] as const;
 
 // Minimal ABI for ERC-8004 Identity Registry
@@ -45,9 +135,25 @@ export const identityRegistryAbi = [
   {
     type: "function",
     name: "register",
-    inputs: [{ name: "to", type: "address" }],
-    outputs: [{ name: "tokenId", type: "uint256" }],
+    inputs: [],
+    outputs: [{ name: "agentId", type: "uint256" }],
     stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "register",
+    inputs: [{ name: "agentURI", type: "string" }],
+    outputs: [{ name: "agentId", type: "uint256" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "Transfer",
+    inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "tokenId", type: "uint256", indexed: true },
+    ],
   },
 ] as const;
 

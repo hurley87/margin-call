@@ -7,6 +7,9 @@ export interface CreateDealParams {
   pot_usdc: number;
   entry_cost_usdc: number;
   max_extraction_percentage?: number;
+  on_chain_deal_id?: number;
+  fee_usdc?: number;
+  on_chain_tx_hash?: string;
 }
 
 export async function createDeal(params: CreateDealParams) {

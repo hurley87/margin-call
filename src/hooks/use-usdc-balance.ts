@@ -3,8 +3,10 @@
 import { useReadContract } from "wagmi";
 import { erc20Abi } from "viem";
 import { usePrivy } from "@privy-io/react-auth";
-import { USDC_ADDRESS } from "@/lib/constants";
-import { base } from "viem/chains";
+import {
+  USDC_SEPOLIA_ADDRESS,
+  CONTRACTS_CHAIN_ID,
+} from "@/lib/contracts/escrow";
 
 export function useUsdcBalance() {
   const { user } = usePrivy();
@@ -12,11 +14,11 @@ export function useUsdcBalance() {
   const walletAddress = user?.wallet?.address as `0x${string}` | undefined;
 
   const { data, isLoading, error, refetch } = useReadContract({
-    address: USDC_ADDRESS as `0x${string}`,
+    address: USDC_SEPOLIA_ADDRESS,
     abi: erc20Abi,
     functionName: "balanceOf",
     args: walletAddress ? [walletAddress] : undefined,
-    chainId: base.id,
+    chainId: CONTRACTS_CHAIN_ID,
     query: {
       enabled: !!walletAddress,
       refetchInterval: 15_000,

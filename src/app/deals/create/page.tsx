@@ -2,6 +2,7 @@
 
 import { usePrivy } from "@privy-io/react-auth";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   DEAL_CREATION_FEE_PERCENTAGE,
   MIN_POT_AMOUNT,
@@ -10,7 +11,15 @@ import {
 import { useBaseNetwork } from "@/hooks/use-base-network";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import { useSuggestPrompts } from "@/hooks/use-deals";
+import { useCreateDeal } from "@/hooks/use-create-deal";
 import { PAYMENT_CHAIN_NAME } from "@/lib/privy/config";
+
+const STEP_LABELS: Record<string, string> = {
+  approving: "Approving USDC...",
+  creating: "Creating deal on-chain...",
+  syncing: "Syncing deal...",
+  done: "Deal created!",
+};
 
 export default function CreateDealPage() {
   const { ready, authenticated, login } = usePrivy();
@@ -21,6 +30,16 @@ export default function CreateDealPage() {
     walletAddress,
   } = useUsdcBalance();
   const suggestPrompts = useSuggestPrompts();
+  const {
+    createDeal,
+    reset: resetCreateDeal,
+    step,
+    isLoading: isCreating,
+    error: createError,
+    dealId,
+    createHash,
+  } = useCreateDeal();
+  const router = useRouter();
 
   const [prompt, setPrompt] = useState("");
   const [potAmount, setPotAmount] = useState("");
@@ -62,8 +81,9 @@ export default function CreateDealPage() {
               Insufficient USDC balance
             </p>
             <p className="mt-2 text-sm text-zinc-400">
-              You need at least {MIN_POT_AMOUNT} USDC on Base to create a deal.
-              Send USDC to your wallet and this page will update automatically.
+              You need at least {MIN_POT_AMOUNT} USDC on {PAYMENT_CHAIN_NAME} to
+              create a deal. Send USDC to your wallet and this page will update
+              automatically.
             </p>
             <p className="mt-3 text-sm text-zinc-400">Your wallet address:</p>
             <button
@@ -91,9 +111,58 @@ export default function CreateDealPage() {
   const insufficientBalance =
     balance !== undefined && hasPotAmount && balance < potNum;
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TODO: wire up escrow contract interaction
+    const pot = parseFloat(potAmount);
+    const entry = parseFloat(entryCost);
+    if (!prompt.trim() || isNaN(pot) || isNaN(entry)) return;
+
+    try {
+      const result = await createDeal(prompt.trim(), pot, entry);
+      if (result?.dealId !== undefined) {
+        // Navigate to deals list after short delay so user sees success
+        setTimeout(() => router.push("/deals"), 1500);
+      }
+    } catch {
+      // error is in createError state
+    }
+  }
+
+  if (step === "done") {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black px-4">
+        <div className="flex w-full max-w-lg flex-col gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-8">
+          <h1 className="text-2xl font-semibold text-green-400">
+            Deal Created!
+          </h1>
+          {dealId !== undefined && (
+            <p className="text-sm text-zinc-400">
+              On-chain Deal ID: {dealId.toString()}
+            </p>
+          )}
+          {createHash && (
+            <a
+              href={`https://sepolia.basescan.org/tx/${createHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-green-400 underline decoration-green-400/50 hover:text-green-300"
+            >
+              View transaction on BaseScan
+            </a>
+          )}
+          <p className="text-sm text-zinc-400">Redirecting to deals...</p>
+          <button
+            onClick={() => {
+              resetCreateDeal();
+              router.push("/deals");
+            }}
+            className="rounded-full bg-zinc-700 px-6 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-600"
+          >
+            Go to Deals
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -115,11 +184,16 @@ export default function CreateDealPage() {
               value={theme}
               onChange={(e) => setTheme(e.target.value)}
               placeholder="e.g. insider trading, hostile takeover"
+              disabled={isCreating}
               className="flex-1 rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none"
             />
             <button
               type="button"
-              disabled={suggestPrompts.isPending || theme.trim().length === 0}
+              disabled={
+                suggestPrompts.isPending ||
+                theme.trim().length === 0 ||
+                isCreating
+              }
               onClick={() => suggestPrompts.mutate(theme.trim())}
               className="whitespace-nowrap rounded bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-600 disabled:opacity-50"
             >
@@ -138,6 +212,7 @@ export default function CreateDealPage() {
                   key={i}
                   type="button"
                   onClick={() => setPrompt(suggestion)}
+                  disabled={isCreating}
                   className="rounded border border-zinc-700 bg-zinc-800 px-3 py-3 text-left text-sm text-zinc-300 transition-colors hover:border-green-500 hover:text-zinc-50"
                 >
                   {suggestion}
@@ -157,6 +232,7 @@ export default function CreateDealPage() {
             onChange={(e) => setPrompt(e.target.value)}
             required
             rows={4}
+            disabled={isCreating}
             placeholder="Write a scenario for traders to enter..."
             className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none"
           />
@@ -174,6 +250,7 @@ export default function CreateDealPage() {
             required
             min={MIN_POT_AMOUNT}
             step="0.01"
+            disabled={isCreating}
             placeholder={MIN_POT_AMOUNT.toString()}
             className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none"
           />
@@ -198,7 +275,7 @@ export default function CreateDealPage() {
                 {balance!.toFixed(2)} USDC.
               </p>
               <p className="mt-1 text-zinc-400">
-                Send USDC on Base to:{" "}
+                Send USDC on {PAYMENT_CHAIN_NAME} to:{" "}
                 <button
                   type="button"
                   className="break-all font-mono text-zinc-300 underline decoration-zinc-600 hover:text-zinc-50"
@@ -224,6 +301,7 @@ export default function CreateDealPage() {
             required
             min={MIN_ENTRY_COST}
             step="0.01"
+            disabled={isCreating}
             placeholder={MIN_ENTRY_COST.toString()}
             className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none"
           />
@@ -236,12 +314,53 @@ export default function CreateDealPage() {
           </p>
         )}
 
+        {createError && (
+          <div className="rounded border border-red-500/50 bg-red-500/10 p-3">
+            <p className="text-sm text-red-400">{createError}</p>
+            <button
+              type="button"
+              onClick={resetCreateDeal}
+              className="mt-2 text-xs text-zinc-400 underline hover:text-zinc-300"
+            >
+              Try again
+            </button>
+          </div>
+        )}
+
+        {isCreating && (
+          <div className="rounded border border-green-500/50 bg-green-500/10 p-3">
+            <p className="text-sm text-green-400">
+              {STEP_LABELS[step] ?? "Processing..."}
+            </p>
+            <div className="mt-2 h-1 overflow-hidden rounded-full bg-zinc-700">
+              <div
+                className="h-full rounded-full bg-green-500 transition-all duration-500"
+                style={{
+                  width:
+                    step === "approving"
+                      ? "33%"
+                      : step === "creating"
+                        ? "66%"
+                        : step === "syncing"
+                          ? "90%"
+                          : "100%",
+                }}
+              />
+            </div>
+          </div>
+        )}
+
         <button
           type="submit"
-          disabled={isWrongNetwork || insufficientBalance || balanceLoading}
+          disabled={
+            isWrongNetwork ||
+            insufficientBalance ||
+            balanceLoading ||
+            isCreating
+          }
           className="rounded-full bg-green-500 px-8 py-3 font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
         >
-          Create Deal
+          {isCreating ? "Creating Deal..." : "Create Deal"}
         </button>
       </form>
     </div>

@@ -2,23 +2,30 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useTraders, useCreateTrader } from "@/hooks/use-traders";
+import { useTraders } from "@/hooks/use-traders";
+import { useCreateTrader } from "@/hooks/use-create-trader";
 
 export default function TradersPage() {
   const { data: traders, isLoading, error } = useTraders();
-  const createTrader = useCreateTrader();
+  const {
+    createTrader,
+    step,
+    error: createError,
+    isLoading: isCreating,
+  } = useCreateTrader();
   const [name, setName] = useState("");
   const [showForm, setShowForm] = useState(false);
 
-  function handleCreate(e: React.FormEvent) {
+  async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    createTrader.mutate(name.trim(), {
-      onSuccess: () => {
-        setName("");
-        setShowForm(false);
-      },
-    });
+    try {
+      await createTrader(name.trim());
+      setName("");
+      setShowForm(false);
+    } catch {
+      // error is surfaced via hook state
+    }
   }
 
   return (
@@ -52,15 +59,17 @@ export default function TradersPage() {
             />
             <button
               type="submit"
-              disabled={createTrader.isPending || !name.trim()}
+              disabled={isCreating || !name.trim()}
               className="rounded-full bg-green-500 px-6 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
             >
-              {createTrader.isPending ? "Minting NFT..." : "Mint Trader"}
+              {step === "minting"
+                ? "Sign in Wallet..."
+                : step === "syncing"
+                  ? "Saving..."
+                  : "Mint Trader"}
             </button>
-            {createTrader.error && (
-              <p className="mt-3 text-sm text-red-400">
-                {createTrader.error.message}
-              </p>
+            {createError && (
+              <p className="mt-3 text-sm text-red-400">{createError}</p>
             )}
           </form>
         )}

@@ -63,6 +63,12 @@ export default function DealDetailPage() {
               <p className="text-zinc-500">Entry Cost</p>
               <p className="text-zinc-50">{deal.entry_cost_usdc} USDC</p>
             </div>
+            {deal.fee_usdc !== undefined && deal.fee_usdc > 0 && (
+              <div>
+                <p className="text-zinc-500">Fee (5%)</p>
+                <p className="text-zinc-50">{deal.fee_usdc} USDC</p>
+              </div>
+            )}
             <div>
               <p className="text-zinc-500">Entries</p>
               <p className="text-zinc-50">{deal.entry_count}</p>
@@ -71,7 +77,23 @@ export default function DealDetailPage() {
               <p className="text-zinc-500">Wipeouts</p>
               <p className="text-zinc-50">{deal.wipeout_count}</p>
             </div>
+            {deal.on_chain_deal_id !== undefined && (
+              <div>
+                <p className="text-zinc-500">On-chain ID</p>
+                <p className="text-zinc-50">#{deal.on_chain_deal_id}</p>
+              </div>
+            )}
           </div>
+          {deal.on_chain_tx_hash && (
+            <a
+              href={`https://sepolia.basescan.org/tx/${deal.on_chain_tx_hash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-block text-xs text-green-400 underline decoration-green-400/50 hover:text-green-300"
+            >
+              View creation tx on BaseScan
+            </a>
+          )}
         </div>
 
         <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">

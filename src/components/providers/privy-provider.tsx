@@ -4,14 +4,15 @@ import { useState } from "react";
 import { PrivyProvider as BasePrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider, createConfig } from "@privy-io/wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { base } from "viem/chains";
+import { base, baseSepolia } from "viem/chains";
 import { http } from "wagmi";
 import { BaseNetworkGuard } from "@/components/providers/base-network-guard";
 import { privyConfig } from "@/lib/privy/config";
 
 const wagmiConfig = createConfig({
-  chains: [base],
+  chains: [baseSepolia, base],
   transports: {
+    [baseSepolia.id]: http(),
     [base.id]: http(),
   },
 });

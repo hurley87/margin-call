@@ -2,14 +2,17 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 
 export interface Deal {
   id: string;
+  on_chain_deal_id?: number;
   prompt: string;
   pot_usdc: number;
   entry_cost_usdc: number;
+  fee_usdc?: number;
   max_extraction_percentage: number;
   entry_count: number;
   wipeout_count: number;
   status: string;
   created_at: string;
+  on_chain_tx_hash?: string;
 }
 
 interface StoryEvent {
