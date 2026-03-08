@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PLATFORM_WALLET_ADDRESS, USDC_ADDRESS } from "@/lib/constants";
+import { generateJwt } from "@coinbase/cdp-sdk/auth";
 
 /** x402 network name for Base mainnet */
 const BASE_NETWORK = "base";
 
-const FACILITATOR_URL =
-  process.env.X402_FACILITATOR_URL ?? "https://facilitator.corbits.dev";
+const FACILITATOR_URL = "https://api.cdp.coinbase.com/platform/v2/x402";
+
+async function createCdpAuthHeader(path: string): Promise<string> {
+  const token = await generateJwt({
+    apiKeyId: process.env.CDP_API_KEY_ID!,
+    apiKeySecret: process.env.CDP_API_KEY_SECRET!,
+    requestMethod: "POST",
+    requestHost: "api.cdp.coinbase.com",
+    requestPath: `/platform/v2/x402${path}`,
+  });
+  return `Bearer ${token}`;
+}
 
 interface PaymentRequirements {
   scheme: "exact";
@@ -60,9 +71,13 @@ async function verifyPayment(
   requirements: PaymentRequirements
 ): Promise<{ isValid: boolean; invalidReason?: string }> {
   const payload = decodePaymentHeader(paymentHeader);
+  const authHeader = await createCdpAuthHeader("/verify");
   const res = await fetch(`${FACILITATOR_URL}/verify`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authHeader,
+    },
     body: JSON.stringify({
       x402Version: 1,
       paymentPayload: payload,
@@ -84,9 +99,13 @@ async function settlePayment(
   requirements: PaymentRequirements
 ): Promise<void> {
   const payload = decodePaymentHeader(paymentHeader);
+  const authHeader = await createCdpAuthHeader("/settle");
   await fetch(`${FACILITATOR_URL}/settle`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: authHeader,
+    },
     body: JSON.stringify({
       x402Version: 1,
       paymentPayload: payload,

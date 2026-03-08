@@ -1,4 +1,4 @@
-# Plan: Margin Call
+# Plan: Margin Call — AI-Powered PvP Trading Game
 
 > Source PRD: `docs/wall-street-agent-game.md`
 
@@ -6,272 +6,311 @@
 
 Durable decisions that apply across all phases:
 
-- **Framework**: Next.js 16 (App Router), React 19, TypeScript strict mode
-- **Auth/Wallet**: Privy (desk managers), wallet signature (external agents)
-- **Database**: Supabase Postgres + Realtime subscriptions
-- **Payments**: x402 protocol (USDC on Base via Coinbase facilitator)
-- **Agent Wallets**: Coinbase CDP AgentKit (TEE-managed keys)
-- **AI/LLM**: OpenAI GPT-5 mini (structured outputs via `openai` SDK)
-- **Agent Runtime**: Vercel Workflow (durable steps, sleep, hooks)
-- **Styling**: Tailwind CSS v4, shadcn/ui pattern, Lucide icons
-- **Path alias**: `@/*` maps to `./src/*`
-
-- **Routes (API)**:
-  - `POST /api/desk/register` — register desk manager
-  - `POST /api/desk/fund` — fund agent wallet
-  - `POST /api/desk/withdraw` — withdraw from agent wallet
-  - `POST /api/desk/configure` — update trader mandate
-  - `POST /api/desk/approve` — approve/reject deal
-  - `POST /api/deal/create` — create deal (x402)
-  - `POST /api/deal/enter` — enter deal (x402)
-  - `GET /api/deal/list` — list open deals
-  - `GET /api/deal/[id]` — deal detail + outcomes
-  - `POST /api/trader/create` — provision CDP agent wallet
-  - `POST /api/trader/register-external` — register external agent
-  - `POST /api/trader/pause` — pause agent loop
-  - `POST /api/trader/resume` — resume agent loop
-  - `GET /api/trader/[id]/activity` — activity feed (paginated)
-  - `POST /api/prompt/suggest` — AI deal prompt suggestions
-
-- **Routes (Pages)**:
+- **Routes (pages)**:
   - `/` — Dashboard (portfolio overview, P&L)
-  - `/traders` — Trader list
-  - `/traders/[id]` — Trader detail + activity feed
+  - `/traders` — List desk manager's traders (NFTs)
+  - `/traders/[id]` — Trader detail (activity, stats, mandate, reputation)
   - `/deals` — Browse open deals
-  - `/deals/create` — Create a deal
-  - `/deals/[id]` — Deal detail + outcomes
+  - `/deals/create` — Create deal (contract interaction + AI prompt suggestions)
+  - `/deals/[id]` — Deal detail (outcomes, pot history)
   - `/approvals` — Pending approval queue
+  - `/marketplace` — Browse/buy/sell trader NFTs
   - `/settings` — Desk manager settings
 
-- **Schema (Supabase tables)**:
-  - `desk_managers` — wallet_address, display_name, settings
-  - `traders` — desk_manager_id, agent_wallet_address, display_name, status, mandate (JSON), portfolio_balance_usdc, total_pnl_usdc
-  - `deals` — creator_type, prompt, pot_usdc, entry_cost_usdc, max_extraction_percentage, status, entry_count, wipeout_count
-  - `deal_outcomes` — deal_id, trader_id, narrative (JSON), trader_pnl_usdc, pot_change_usdc, rake_usdc, assets_gained/lost, trader_wiped_out
-  - `assets` — trader_id, name, value_usdc, lost_at, lost_in_outcome_id
-  - `agent_activity_log` — trader_id, activity_type, message, deal_id
-  - `deal_approvals` — trader_id, deal_id, desk_manager_id, status, expires_at
-  - `system_prompts` — name, content, return_format, is_active
+- **API routes**:
+  - `POST /api/deal/enter` — Agent enters deal (LLM resolution + contract settlement)
+  - `GET /api/deal/list` — List open deals
+  - `GET /api/deal/[id]` — Deal detail + outcomes
+  - `POST /api/desk/register` — Register desk manager
+  - `POST /api/desk/configure` — Update trader mandate
+  - `POST /api/desk/approve` — Approve/reject big deal
+  - `POST /api/trader/create` — Mint ERC-8004 NFT + register trader
+  - `POST /api/trader/pause` — Pause agent loop
+  - `POST /api/trader/resume` — Resume agent loop
+  - `GET /api/trader/[id]/activity` — Activity feed
+  - `POST /api/prompt/suggest` — AI deal prompt suggestions
 
-- **Key constants**:
-  - Rake: 10% of winnings
-  - Deal creation fee: 5% of pot
-  - Max value per win: 25% of deal pot
-  - Agent loop interval: 30s sleep between cycles
+- **Smart contract**: Single `MarginCallEscrow.sol` on Base. Manages deal pots, trader escrow balances, fund distribution, platform fees. ERC-8004 registries are existing infrastructure (not built by us).
 
----
+- **Schema (Supabase)**: `desk_managers`, `traders`, `deals`, `deal_outcomes`, `assets`, `agent_activity_log`, `deal_approvals`, `system_prompts` — mirrors on-chain state for fast reads. On-chain is source of truth for balances and reputation.
 
-## Phase 1: Auth + Desk Manager Registration
+- **Auth**: Privy (wallet connect, embedded wallets, server-side token verification)
 
-**User stories**: Sign up, connect wallet via Privy, become a desk manager
+- **Money flow**: All USDC flows through the escrow contract. Desk managers interact with the contract directly from the frontend (wagmi). Server calls `resolveEntry()` as whitelisted operator.
 
-### What to build
+- **Agent identity**: ERC-8004 NFTs on Base Identity Registry. ERC-6551 Token Bound Accounts as trader wallets. Reputation posted to ERC-8004 Reputation Registry after every deal.
 
-A complete auth flow: Privy integration for wallet connect / email / social login, a registration API route that writes to the `desk_managers` Supabase table, and a basic dashboard page that shows the logged-in desk manager's info. This is the foundation every other phase builds on.
+- **LLM**: OpenAI GPT-5 mini with structured outputs (Zod schemas). Correction flow rewrites narrative when validation modifies outcome.
 
-### Acceptance criteria
-
-- [ ] Privy provider configured in the app layout
-- [ ] User can connect wallet (or use email/social) and authenticate
-- [ ] `POST /api/desk/register` creates a row in `desk_managers`
-- [ ] Supabase project connected with `desk_managers` table migrated
-- [ ] Dashboard (`/`) shows the authenticated desk manager's wallet address and display name
-- [ ] Unauthenticated users are redirected to login
+- **Agent runtime**: Vercel Workflow — durable steps, sleep, hooks for approval pauses.
 
 ---
 
-## Phase 2: Create & Browse Deals
+## Phase 0: Cleanup
 
-**User stories**: Create a deal (fund the pot), browse open deals, view deal detail
+**User stories**: N/A — housekeeping to align codebase with contract-based architecture
 
 ### What to build
 
-The deal creation and browsing flow end-to-end. A desk manager creates a deal by writing a prompt and funding a USDC pot via x402 payment. The deal is stored in Supabase. Anyone can browse open deals and view deal details. This establishes the x402 payment pattern used throughout the game.
+Remove code from the x402 facilitator payment approach that is no longer needed. The PRD specifies all money flows through the escrow contract, not x402.
+
+Files to delete:
+
+- `src/lib/x402/middleware.ts` — x402 payment wrapping
+- `src/lib/x402/payment-validation.ts` — x402 price formatting
+- `src/lib/x402/__tests__/payment-validation.test.ts` — x402 tests
+- `src/hooks/use-send-usdc.ts` — raw ERC-20 transfer (funding goes through escrow)
+- `src/app/wallet/page.tsx` — standalone wallet page (funding/withdrawing goes through escrow)
+- `src/app/api/deal/create/route.ts` — deal creation API route (moves to direct contract call)
+
+Files to update:
+
+- `src/hooks/use-deals.ts` — remove `useCreateDeal` hook and all x402/Privy payment imports
+- `src/app/deals/create/page.tsx` — remove x402 payment confirmation modal and `useCreateDeal` usage (keep form structure and prompt suggestions)
+- `src/app/settings/page.tsx` — remove Fund/Withdraw wallet links (will be rewired to escrow later)
+- `src/components/providers/base-network-guard.tsx` — remove x402 mention from copy
+- `src/app/api/deal/enter/route.ts` — remove x402 TODO comment
+- `package.json` — remove `@x402/core`, `@x402/evm`, `@x402/next` dependencies
 
 ### Acceptance criteria
 
-- [ ] `deals` table migrated in Supabase
-- [ ] `POST /api/deal/create` accepts x402 USDC payment, deducts 5% creation fee, stores deal in Supabase
-- [ ] x402 payment verification middleware implemented and reusable
-- [ ] `GET /api/deal/list` returns open deals with pot sizes and entry costs
-- [ ] `GET /api/deal/[id]` returns deal detail including outcomes
-- [ ] `/deals` page displays list of open deals
-- [ ] `/deals/create` page has form for prompt + pot amount
-- [ ] `/deals/[id]` page shows deal detail
+- [ ] All x402 code removed, no imports referencing `x402` anywhere
+- [ ] `use-send-usdc` hook and wallet page deleted
+- [ ] Deal create API route deleted
+- [ ] `pnpm build` passes with no errors
+- [ ] `pnpm lint` passes
 
 ---
 
-## Phase 3: Enter a Deal + LLM Resolution
+## Phase 1: Escrow Contract
 
-**User stories**: Enter a deal, GPT-5 mini resolves outcome, see narrative and P&L changes
+**User stories**: Deal creation with USDC pot, trader balance management, fund distribution after resolution, platform fee collection
 
 ### What to build
 
-The core game mechanic: entering a deal triggers an x402 payment, then GPT-5 mini generates a structured outcome (narrative, balance changes, asset changes, wipeout status). A correction flow rewrites the narrative if validation modifies the result. The outcome is stored and displayed on the deal detail page.
+Write and deploy the `MarginCallEscrow.sol` contract on Base Sepolia. This is the single custom contract — the financial backbone of the game. It holds all USDC (deal pots, trader balances, platform fees) and enforces authorization via ERC-8004 NFT ownership.
+
+Scaffold using LazerForge (`github.com/LazerTechnologies/LazerForge`) in a `contracts/` directory. Write Foundry tests covering all functions and edge cases.
+
+Contract state: `deals[dealId]`, `balances[traderId]`, `platformFees`.
+
+Contract functions:
+
+- `createDeal(prompt, potAmount, entryCost)` — transfers USDC into pot, deducts 5% fee
+- `closeDeal(dealId)` — creator withdraws remaining pot (requires 0 pending entries)
+- `depositFor(traderId, amount)` — fund trader's escrow balance (requires NFT ownership)
+- `withdraw(traderId, amount)` — withdraw from trader's escrow balance (requires NFT ownership)
+- `resolveEntry(dealId, traderId, pnl, rake)` — server distributes funds based on LLM outcome
+- `withdrawFees()` — platform owner withdraws accumulated fees
+
+Authorization: desk manager functions check `ownerOf(traderId)` on ERC-8004 Identity Registry. `resolveEntry` restricted to whitelisted operator address.
+
+Set up operator wallet via Coinbase CDP server wallet for the server to call `resolveEntry`.
+
+Add frontend contract interaction hooks (wagmi) for read operations (deal state, balances).
 
 ### Acceptance criteria
 
-- [ ] `deal_outcomes` table migrated in Supabase
-- [ ] `POST /api/deal/enter` accepts x402 payment, validates entry conditions (deal open, sufficient funds)
-- [ ] OpenAI GPT-5 mini integration with structured output (Zod schema for narrative, balance transfers, asset changes, wipeout)
-- [ ] LLM receives deal prompt, trader inventory, portfolio balance, max value per win, and cryptographic random seed
-- [ ] 10% rake deducted from winnings
-- [ ] Correction flow: second LLM call rewrites narrative if validation modified the outcome
-- [ ] `/deals/[id]` page displays outcome narratives and P&L
+- [ ] `MarginCallEscrow.sol` compiles and all Foundry tests pass
+- [ ] Contract deployed to Base Sepolia testnet
+- [ ] Can create a deal and verify pot + fee deduction on-chain
+- [ ] Can deposit and withdraw for a trader balance
+- [ ] `resolveEntry` correctly moves funds based on positive/negative PnL
+- [ ] Operator wallet configured and can call `resolveEntry` from server
+- [ ] Wagmi hooks can read deal state and trader balances from contract
 
 ---
 
-## Phase 4: Trader Agent Provisioning
+## Phase 2: ERC-8004 Trader Identity
 
-**User stories**: Hire a trader agent with its own wallet, fund it, withdraw from it, view traders
+**User stories**: Mint a trader agent as an NFT, derive its wallet, display traders in the frontend
 
 ### What to build
 
-Desk managers can create trader agents, each provisioned with a CDP AgentKit wallet. Fund and withdraw USDC between the desk manager's wallet and the agent's wallet. Traders are listed and viewable with their balance and status.
+Integrate with the existing ERC-8004 Identity Registry deployed on Base. When a desk manager creates a trader, mint an ERC-8004 NFT and deterministically derive the ERC-6551 Token Bound Account (the trader's wallet).
+
+Build the `POST /api/trader/create` route, `traders` Supabase table migration, and the `/traders` + `/traders/[id]` pages showing owned traders with their NFT identity and derived wallet address.
+
+Trader metadata (name, mandate, capabilities) stored as `tokenURI` pointing to JSON.
 
 ### Acceptance criteria
 
-- [ ] `traders` table migrated in Supabase
-- [ ] `POST /api/trader/create` provisions a CDP AgentKit wallet and creates a trader row
-- [ ] `POST /api/desk/fund` transfers USDC from desk manager wallet to agent wallet
-- [ ] `POST /api/desk/withdraw` transfers USDC from agent wallet back to desk manager
-- [ ] `/traders` page lists the desk manager's traders with status and balance
-- [ ] `/traders/[id]` page shows trader detail (balance, P&L, mandate, status)
+- [ ] `POST /api/trader/create` mints ERC-8004 NFT to desk manager's wallet
+- [ ] ERC-6551 Token Bound Account derived and stored in Supabase
+- [ ] `traders` table migration applied
+- [ ] `/traders` page lists desk manager's trader NFTs
+- [ ] `/traders/[id]` page shows trader detail (name, wallet, status)
+- [ ] Trader appears on Base block explorer as standard ERC-721
 
 ---
 
-## Phase 5: Agent Runtime (Autonomous Trade Loop)
+## Phase 3: Deal Creation (On-Chain)
 
-**User stories**: Agent autonomously scans deals, evaluates against mandate, enters deals, logs activity
+**User stories**: Create a deal by calling the escrow contract directly from the frontend, browse deals
 
 ### What to build
 
-The Vercel Workflow `agent-trade-cycle` that runs the autonomous agent loop: scan open deals, evaluate each against the trader's mandate, enter the best eligible deal via x402 from the CDP wallet, resolve via LLM, apply the outcome, log activity, sleep 30s, and loop. This is the heart of the game.
+Rewire the `/deals/create` page to call `createDeal()` on the escrow contract via wagmi (replacing the deleted API route). The frontend handles USDC approval + contract write. An event listener (or indexer) syncs new deals from contract events to the Supabase `deals` table so they appear in the deal list.
+
+Keep the existing AI prompt suggestion flow. Update the `/deals` listing page to read from Supabase (already done) and the `/deals/[id]` detail page.
 
 ### Acceptance criteria
 
-- [ ] `agent_activity_log` table migrated in Supabase
-- [ ] Vercel Workflow `agent-trade-cycle` implemented with durable steps: scan, evaluate, enter, resolve, apply, loop
-- [ ] Deal evaluator filters deals by mandate (risk tolerance, deal size filters, bankroll rules)
-- [ ] Agent pays deal entry via x402 from its CDP wallet
-- [ ] Outcome applied to Supabase (balance changes, activity log)
+- [ ] `/deals/create` page calls escrow contract directly (USDC approve + createDeal)
+- [ ] 5% fee deducted on-chain, visible in contract state
+- [ ] New deals sync from contract events to Supabase `deals` table
+- [ ] `/deals` page shows on-chain deals
+- [ ] `/deals/[id]` shows deal detail with correct pot and entry cost
+- [ ] AI prompt suggestions still work on create page
+
+---
+
+## Phase 4: Trader Funding & Withdrawal
+
+**User stories**: Fund a trader's escrow balance, withdraw USDC from escrow back to wallet
+
+### What to build
+
+Add frontend flows for `depositFor(traderId, amount)` and `withdraw(traderId, amount)` on the escrow contract. Display escrow balance on the trader detail page. Update the `/settings` page to link to trader funding instead of the removed wallet page.
+
+### Acceptance criteria
+
+- [ ] Desk manager can deposit USDC into a trader's escrow balance from `/traders/[id]`
+- [ ] Desk manager can withdraw USDC from a trader's escrow balance
+- [ ] Escrow balance displayed on trader detail page (reads from contract)
+- [ ] Settings page updated with new funding flow
+- [ ] Requires NFT ownership (`ownerOf` check enforced by contract)
+
+---
+
+## Phase 5: Deal Entry + LLM Resolution + On-Chain Settlement
+
+**User stories**: Trader enters a deal, GPT-5 mini resolves the outcome, funds settle on-chain, reputation posted
+
+### What to build
+
+Wire the existing `POST /api/deal/enter` route to the escrow contract. After GPT-5 mini resolves the outcome (already implemented), the server calls `resolveEntry(dealId, traderId, pnl, rake)` on the contract to settle funds. Then post the outcome to the ERC-8004 Reputation Registry (score, tags, outcome link). Mirror the result to Supabase.
+
+Update the deal detail page to show on-chain settlement status (tx hash) alongside the existing narrative display.
+
+### Acceptance criteria
+
+- [ ] Deal entry triggers LLM resolution (already working)
+- [ ] Server calls `resolveEntry()` on escrow contract after resolution
+- [ ] Win: funds move from pot to trader balance (minus rake)
+- [ ] Loss: funds move from trader balance to pot
+- [ ] Rake credited to platform fees in contract
+- [ ] Outcome posted to ERC-8004 Reputation Registry (score + tags)
+- [ ] Outcome mirrored to Supabase with `on_chain_tx_hash`
+- [ ] Correction flow still works (second LLM call if outcome was capped)
+- [ ] Deal detail page shows tx hash for each outcome
+
+---
+
+## Phase 6: Agent Runtime (Autonomous Trade Loop)
+
+**User stories**: Trader agent autonomously scans deals, evaluates against mandate, enters deals, logs activity
+
+### What to build
+
+Implement the `agent-trade-cycle` Vercel Workflow. Each active trader runs as an independent workflow instance that loops: scan deals → evaluate against mandate → check approval threshold → verify escrow balance → enter deal (calls `/api/deal/enter` internally) → log to `agent_activity_log` → sleep 30s → repeat.
+
+Build the deal evaluator (mandate matching: risk tolerance, deal size filters, bankroll rules). Add `POST /api/trader/pause` and `POST /api/trader/resume` routes.
+
+### Acceptance criteria
+
+- [ ] Vercel Workflow `agent-trade-cycle` runs for an active trader
+- [ ] Workflow scans open deals and filters by mandate
+- [ ] Workflow skips deals that exceed balance or don't match filters
+- [ ] Workflow enters eligible deals and logs to `agent_activity_log`
 - [ ] Workflow sleeps 30s between cycles
-- [ ] Workflow terminates if trader is wiped out or paused
-- [ ] `POST /api/trader/pause` and `POST /api/trader/resume` control the workflow
-- [ ] `GET /api/trader/[id]/activity` returns paginated activity feed
-- [ ] `/traders/[id]` page shows live activity feed
+- [ ] Workflow ends when trader is wiped out
+- [ ] Pause/resume controls work (`/api/trader/pause`, `/api/trader/resume`)
+- [ ] Activity logged to Supabase for each step
 
 ---
 
-## Phase 6: Desk Manager Controls (Configure + Approve)
+## Phase 7: Desk Manager Controls
 
-**User stories**: Set risk tolerance and approval thresholds, approve or reject big deals
+**User stories**: Configure trader mandate, approve/reject big deals, close deals
 
 ### What to build
 
-Desk managers configure their trader's mandate (risk tolerance, deal filters, approval threshold, bankroll rules). When the agent encounters a deal above the approval threshold, the workflow pauses and waits for desk manager approval. The approval queue page lets managers approve or reject pending deals.
+Build `POST /api/desk/configure` for updating trader mandate (risk tolerance, deal filters, approval threshold, bankroll rules). Implement the approval flow: when a deal exceeds the trader's approval threshold, the workflow pauses and creates a `deal_approvals` record. The desk manager approves/rejects via `POST /api/desk/approve`, which resumes the workflow.
+
+Build the `/approvals` page showing pending approval requests. Add `closeDeal` flow from frontend (calls contract directly).
 
 ### Acceptance criteria
 
-- [ ] `deal_approvals` table migrated in Supabase
-- [ ] `POST /api/desk/configure` updates the trader's mandate JSON
-- [ ] Workflow approval hook: pauses when deal exceeds approval threshold, resumes on approval
-- [ ] `POST /api/desk/approve` approves or rejects a pending deal, triggers workflow resume
-- [ ] Approval expires after a configurable timeout
-- [ ] `/approvals` page shows pending approval queue with deal details
-- [ ] `/traders/[id]` page includes mandate configuration form
-- [ ] `/settings` page for desk manager preferences
+- [ ] Desk manager can configure trader mandate from `/traders/[id]`
+- [ ] Mandate changes take effect on next agent cycle
+- [ ] Deals above approval threshold pause the workflow
+- [ ] `deal_approvals` record created with expiration
+- [ ] Desk manager can approve/reject from `/approvals` page
+- [ ] Approved deal resumes workflow; rejected deal skips
+- [ ] Expired approvals auto-reject
+- [ ] Desk manager can close their deal from `/deals/[id]` (contract call)
+- [ ] Close deal requires 0 pending entries (enforced by contract)
 
 ---
 
-## Phase 7: Dashboard + Realtime
+## Phase 8: Dashboard + Realtime
 
-**User stories**: Portfolio overview, P&L chart, live activity feed, realtime updates across the app
+**User stories**: Portfolio overview, live activity feed, realtime deal updates, approval notifications
 
 ### What to build
 
-Wire up Supabase Realtime subscriptions across the app. The dashboard shows portfolio value over time with a P&L chart. Agent activity feeds, deal status changes, and approval requests all update in realtime without page refresh.
+Build the `/` dashboard page with portfolio value, P&L chart (portfolio over time), and per-deal breakdown. Enable Supabase Realtime subscriptions on `deals`, `deal_outcomes`, `agent_activity_log`, `deal_approvals`, and `traders` tables.
+
+Add a live agent activity feed to `/traders/[id]`. Real-time deal status updates on `/deals` and `/deals/[id]`. Approval queue with realtime updates on `/approvals`. On-chain reputation display (score, win/loss record) on trader pages.
 
 ### Acceptance criteria
 
-- [ ] Supabase Realtime enabled on: `deals`, `deal_outcomes`, `agent_activity_log`, `deal_approvals`, `traders`
-- [ ] Dashboard (`/`) shows total portfolio value, aggregate P&L, and per-trader breakdown
-- [ ] P&L chart displays portfolio value over time
-- [ ] Agent activity feed on `/traders/[id]` updates in realtime
-- [ ] Deal list and detail pages reflect status changes in realtime
-- [ ] Approval queue updates when new approvals arrive or expire
+- [ ] Dashboard shows total portfolio value across all traders
+- [ ] P&L chart renders portfolio value over time
+- [ ] Agent activity feed updates in realtime on trader detail page
+- [ ] Deal list and detail pages update in realtime (new entries, pot changes)
+- [ ] Approval queue updates in realtime (new requests, status changes)
+- [ ] Trader pages show on-chain reputation score and win/loss record
+- [ ] No polling — all updates via Supabase Realtime subscriptions
 
 ---
 
-## Phase 8: External Agent Integration
+## Phase 9: Assets + Wipeout System
 
-**User stories**: External AI agents register, discover deals, and enter deals via API without Privy
+**User stories**: Traders gain/lose assets from deals, traders get wiped out when balance reaches 0
 
 ### What to build
 
-Open the game to any AI agent that can make HTTP requests and sign x402 payments. External agents register with a wallet signature (no Privy needed), then use the public deal endpoints to browse and enter deals.
+Implement the asset system: deal outcomes can grant or remove assets (insider tips, contacts, SEC immunity, etc.) stored in the `assets` table. Assets are included in the LLM prompt for future deal resolutions (already partially in the message builder).
+
+Implement wipeout conditions: when a trader's escrow balance reaches 0, the contract transfers any remaining value to the deal pot. Wipeout reasons (margin call, SEC bust, burnout, heart attack, prison) come from the LLM. The trader NFT remains as a permanent record of failure. Desk manager must mint a new trader to continue.
 
 ### Acceptance criteria
 
-- [ ] `POST /api/trader/register-external` accepts a wallet signature and creates a trader row
-- [ ] External agents can call `GET /api/deal/list` and `GET /api/deal/[id]` without auth
-- [ ] External agents can call `POST /api/deal/enter` and `POST /api/deal/create` with x402 payment (no Privy)
-- [ ] Deal entry and creation routes accept any wallet with valid x402 payment (managed and external)
-- [ ] Documentation or example showing how an external agent integrates
+- [ ] Assets gained from deal outcomes stored in `assets` table
+- [ ] Assets lost removed from trader's inventory
+- [ ] Assets included in LLM prompt for deal resolution
+- [ ] Trader wiped out when escrow balance reaches 0
+- [ ] Wipeout transfers remaining value to deal pot (contract logic)
+- [ ] Wipeout reason displayed on trader page
+- [ ] Wiped-out trader's workflow ends permanently
+- [ ] Trader NFT remains on-chain (permanent failure record)
+- [ ] Desk manager can mint a new trader after wipeout
 
 ---
 
-## Phase 9: AI Deal Prompt Suggestions
+## Phase 10: AI Deal Prompt Suggestions
 
-**User stories**: Desk manager asks AI for deal prompt ideas when creating a deal
-
-### What to build
-
-An AI-assisted deal creation flow. The desk manager provides a theme or topic, and GPT-5 mini suggests 3 deal prompts styled as 1980s Wall Street scenarios. The suggestions appear in the deal creation UI.
-
-### Acceptance criteria
-
-- [ ] `POST /api/prompt/suggest` accepts a theme and returns 3 AI-generated deal prompts
-- [ ] OpenAI call uses structured output for consistent prompt format
-- [ ] `/deals/create` page includes a "suggest prompts" feature that calls the API
-- [ ] Suggested prompts can be selected and edited before creating the deal
-
----
-
-## Phase 10: Assets + Wipeout System
-
-**User stories**: Traders carry assets gained from deals, assets can be lost, traders get wiped out
+**User stories**: AI suggests deal prompts based on a theme
 
 ### What to build
 
-The asset and wipeout system. Traders accumulate assets (insider tips, contacts, SEC immunity, etc.) from deal outcomes. Assets have USDC value and can be lost in future deals. When a trader's portfolio hits 0, they are wiped out — all remaining value transfers to the killing deal, the workflow terminates, and the desk manager must hire a new trader.
+Polish the existing `POST /api/prompt/suggest` flow and integrate it cleanly into the contract-based `/deals/create` page from Phase 3. The core LLM suggestion logic is already built — this phase ensures it works well with the new on-chain deal creation flow and refines the prompts/UX.
 
 ### Acceptance criteria
 
-- [ ] `assets` table migrated in Supabase
-- [ ] Deal outcomes can include assets gained and lost (already part of LLM schema from Phase 3)
-- [ ] Assets displayed on `/traders/[id]` page with name and value
-- [ ] Wipeout conditions triggered when portfolio reaches 0 (margin call, SEC bust, burnout, heart attack, prison)
-- [ ] Wiped out trader's remaining value transfers to the deal pot
-- [ ] Workflow terminates on wipeout, trader status set to `wiped_out`
-- [ ] Wipeout narrative included in deal outcome
-- [ ] Desk manager can create a new trader after wipeout
-
----
-
-## Phase 11: Polish + Launch Prep
-
-**User stories**: Wall Street themed experience, production hardening, monitoring
-
-### What to build
-
-Final polish for launch. Wall Street themed system prompts stored in Supabase for easy iteration. Rate limiting on API routes to prevent abuse. Error monitoring via Sentry. Load testing the agent runtime to validate concurrent workflows.
-
-### Acceptance criteria
-
-- [ ] `system_prompts` table migrated and seeded with themed prompts
-- [ ] LLM calls use system prompts from the database (swappable without deploy)
-- [ ] Rate limiting on all API routes (sensible defaults per endpoint)
-- [ ] Sentry integrated for error tracking
-- [ ] Agent runtime load tested with multiple concurrent trader workflows
-- [ ] All pages have consistent Wall Street 1980s visual theme
+- [ ] Theme input generates 3 vivid 1980s Wall Street scenario prompts
+- [ ] Selecting a suggestion populates the deal prompt field
+- [ ] Works seamlessly with the contract-based deal creation flow
+- [ ] System prompt in Supabase produces high-quality, varied suggestions

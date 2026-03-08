@@ -55,26 +55,20 @@ export default function CreateDealPage() {
     );
   }
 
-  const noBalance = balance !== undefined && balance === 0;
+  const belowMinPot = balance !== undefined && balance < MIN_POT_AMOUNT;
 
-  if (!balanceLoading && noBalance && walletAddress) {
+  if (!balanceLoading && belowMinPot && walletAddress) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black px-4">
         <div className="flex w-full max-w-lg flex-col gap-4 rounded-lg border border-zinc-800 bg-zinc-900 p-8">
           <h1 className="text-2xl font-semibold text-zinc-50">Create a Deal</h1>
           <div className="rounded border border-amber-500/50 bg-amber-500/10 p-4">
-            <p className="font-medium text-amber-400">No USDC balance</p>
+            <p className="font-medium text-amber-400">
+              Insufficient USDC balance
+            </p>
             <p className="mt-2 text-sm text-zinc-400">
-              You need USDC on Base to create deals. Send USDC to your wallet
-              and this page will update automatically. You can withdraw your
-              USDC at any time from your{" "}
-              <Link
-                href="/wallet"
-                className="text-green-400 underline hover:text-green-300"
-              >
-                wallet page
-              </Link>
-              .
+              You need at least {MIN_POT_AMOUNT} USDC on Base to create a deal.
+              Send USDC to your wallet and this page will update automatically.
             </p>
             <p className="mt-3 text-sm text-zinc-400">Your wallet address:</p>
             <button
@@ -88,7 +82,7 @@ export default function CreateDealPage() {
             <p className="mt-2 text-xs text-zinc-500">Click to copy</p>
           </div>
           <p className="text-center text-xs text-zinc-500">
-            Wallet balance: {balance.toFixed(2)} USDC — checking every 15s
+            Wallet balance: {balance!.toFixed(2)} USDC — checking every 15s
           </p>
         </div>
       </div>

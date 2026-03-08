@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
+    "@coinbase/cdp-sdk": "^1.45.0",
     "@privy-io/react-auth": "^3.16.0",
     "@privy-io/server-auth": "^1.32.5",
     "@privy-io/wagmi": "^4.0.2",
