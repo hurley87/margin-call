@@ -30,6 +30,7 @@ export interface DealOutcome {
   assets_gained: { name: string; value_usdc: number }[];
   assets_lost: string[];
   created_at: string;
+  on_chain_tx_hash?: string;
 }
 
 export function useDeals() {

@@ -41,3 +41,25 @@ export function useTrader(id: string) {
     },
   });
 }
+
+export interface TraderHistoryEvent {
+  type: "deposit" | "withdrawal" | "enter" | "resolve";
+  block: number;
+  txHash: string;
+  amount?: number;
+  dealId?: number;
+  pnl?: number;
+  rake?: number;
+}
+
+export function useTraderHistory(id: string) {
+  return useQuery({
+    queryKey: ["trader-history", id],
+    queryFn: async () => {
+      const res = await fetch(`/api/trader/${id}/history`);
+      if (!res.ok) throw new Error("Failed to load history");
+      const data = await res.json();
+      return (data.events ?? []) as TraderHistoryEvent[];
+    },
+  });
+}

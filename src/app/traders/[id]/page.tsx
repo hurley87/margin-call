@@ -5,7 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useReadContract } from "wagmi";
 import { parseUnits } from "viem";
-import { useTrader } from "@/hooks/use-traders";
+import { useTrader, useTraderHistory } from "@/hooks/use-traders";
+import type { TraderHistoryEvent } from "@/hooks/use-traders";
 import {
   useSepoliaUsdcBalance,
   useDepositFlow,
@@ -136,7 +137,91 @@ export default function TraderDetailPage() {
             </pre>
           )}
         </div>
+
+        <ActivityHistory id={id} />
       </div>
+    </div>
+  );
+}
+
+function formatEvent(event: TraderHistoryEvent) {
+  switch (event.type) {
+    case "deposit":
+      return {
+        label: "Deposit",
+        detail: `+${event.amount} USDC`,
+        color: "text-green-400",
+      };
+    case "withdrawal":
+      return {
+        label: "Withdrawal",
+        detail: `-${event.amount} USDC`,
+        color: "text-red-400",
+      };
+    case "enter":
+      return {
+        label: "Entered Deal",
+        detail: `Deal #${event.dealId}`,
+        color: "text-zinc-300",
+      };
+    case "resolve": {
+      const pnl = event.pnl ?? 0;
+      const net = pnl > 0 ? pnl - (event.rake ?? 0) : pnl;
+      const sign = net >= 0 ? "+" : "";
+      return {
+        label: pnl > 0 ? "Win" : pnl < 0 ? "Loss" : "Break-even",
+        detail: `${sign}${net.toFixed(6)} USDC (Deal #${event.dealId})`,
+        color:
+          pnl > 0
+            ? "text-green-400"
+            : pnl < 0
+              ? "text-red-400"
+              : "text-zinc-300",
+      };
+    }
+  }
+}
+
+function ActivityHistory({ id }: { id: string }) {
+  const { data: events, isLoading } = useTraderHistory(id);
+
+  return (
+    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+      <h2 className="mb-3 text-sm font-medium text-zinc-400">
+        Activity History
+      </h2>
+      {isLoading ? (
+        <p className="text-sm text-zinc-500">Loading...</p>
+      ) : !events || events.length === 0 ? (
+        <p className="text-sm text-zinc-500">No on-chain activity yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {events.map((event, i) => {
+            const { label, detail, color } = formatEvent(event);
+            return (
+              <div
+                key={`${event.txHash}-${i}`}
+                className="flex items-center justify-between rounded border border-zinc-700/50 bg-zinc-800/50 px-3 py-2"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-medium text-zinc-400 w-24">
+                    {label}
+                  </span>
+                  <span className={`text-sm ${color}`}>{detail}</span>
+                </div>
+                <a
+                  href={`https://sepolia.basescan.org/tx/${event.txHash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-zinc-500 hover:text-zinc-300"
+                >
+                  tx
+                </a>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

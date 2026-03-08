@@ -170,9 +170,21 @@ export default function DealDetailPage() {
                     </p>
                   )}
 
-                  <p className="mt-2 text-xs text-zinc-600">
-                    {new Date(outcome.created_at).toLocaleString()}
-                  </p>
+                  <div className="mt-2 flex items-center gap-3">
+                    <p className="text-xs text-zinc-600">
+                      {new Date(outcome.created_at).toLocaleString()}
+                    </p>
+                    {outcome.on_chain_tx_hash && (
+                      <a
+                        href={`https://sepolia.basescan.org/tx/${outcome.on_chain_tx_hash}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-green-400 underline decoration-green-400/50 hover:text-green-300"
+                      >
+                        Settlement tx
+                      </a>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

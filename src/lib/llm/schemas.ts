@@ -24,7 +24,7 @@ export const DealOutcomeSchema = z.object({
   assets_gained: z.array(AssetGainedSchema),
   assets_lost: z.array(z.string()),
   trader_wiped_out: z.boolean(),
-  wipeout_reason: WipeoutReasonEnum.optional(),
+  wipeout_reason: WipeoutReasonEnum.nullable(),
 });
 
 export const CorrectionNarrativeSchema = z.object({

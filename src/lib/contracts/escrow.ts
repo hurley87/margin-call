@@ -56,6 +56,28 @@ export const escrowAbi = [
     stateMutability: "nonpayable",
   },
   {
+    type: "function",
+    name: "enterDeal",
+    inputs: [
+      { name: "dealId", type: "uint256" },
+      { name: "traderId", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "resolveEntry",
+    inputs: [
+      { name: "dealId", type: "uint256" },
+      { name: "traderId", type: "uint256" },
+      { name: "pnl", type: "int256" },
+      { name: "rake", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
     type: "event",
     name: "Deposit",
     inputs: [
@@ -69,6 +91,24 @@ export const escrowAbi = [
     inputs: [
       { name: "traderId", type: "uint256", indexed: true },
       { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "DealEntered",
+    inputs: [
+      { name: "dealId", type: "uint256", indexed: true },
+      { name: "traderId", type: "uint256", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "EntryResolved",
+    inputs: [
+      { name: "dealId", type: "uint256", indexed: true },
+      { name: "traderId", type: "uint256", indexed: true },
+      { name: "pnl", type: "int256", indexed: false },
+      { name: "rake", type: "uint256", indexed: false },
     ],
   },
   {
@@ -119,6 +159,59 @@ export const escrowAbi = [
       { name: "prompt", type: "string", indexed: false },
       { name: "pot", type: "uint256", indexed: false },
       { name: "entryCost", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
+
+// ABI for ERC-8004 Reputation Registry (giveFeedback + read)
+export const reputationRegistryAbi = [
+  {
+    type: "function",
+    name: "giveFeedback",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "value", type: "int128" },
+      { name: "valueDecimals", type: "uint8" },
+      { name: "tag1", type: "string" },
+      { name: "tag2", type: "string" },
+      { name: "endpoint", type: "string" },
+      { name: "feedbackURI", type: "string" },
+      { name: "feedbackHash", type: "bytes32" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "getSummary",
+    inputs: [
+      { name: "agentId", type: "uint256" },
+      { name: "clientAddresses", type: "address[]" },
+      { name: "tag1", type: "string" },
+      { name: "tag2", type: "string" },
+    ],
+    outputs: [
+      { name: "count", type: "uint64" },
+      { name: "summaryValue", type: "int128" },
+      { name: "summaryValueDecimals", type: "uint8" },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "NewFeedback",
+    inputs: [
+      { name: "agentId", type: "uint256", indexed: true },
+      { name: "clientAddress", type: "address", indexed: true },
+      { name: "feedbackIndex", type: "uint64", indexed: false },
+      { name: "value", type: "int128", indexed: false },
+      { name: "valueDecimals", type: "uint8", indexed: false },
+      { name: "indexedTag1", type: "string", indexed: true },
+      { name: "tag1", type: "string", indexed: false },
+      { name: "tag2", type: "string", indexed: false },
+      { name: "endpoint", type: "string", indexed: false },
+      { name: "feedbackURI", type: "string", indexed: false },
+      { name: "feedbackHash", type: "bytes32", indexed: false },
     ],
   },
 ] as const;

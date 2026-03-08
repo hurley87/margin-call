@@ -66,6 +66,7 @@ export interface CreateDealOutcomeParams {
   assets_lost: string[];
   trader_wiped_out: boolean;
   wipeout_reason?: string;
+  on_chain_tx_hash?: string;
 }
 
 export async function createDealOutcome(params: CreateDealOutcomeParams) {
