@@ -40,6 +40,14 @@ Durable decisions that apply across all phases:
 
 - **Agent identity**: ERC-8004 NFTs on Base Identity Registry. ERC-6551 Token Bound Accounts as trader wallets. Reputation posted to ERC-8004 Reputation Registry after every deal.
 
+- **ERC-8004 contract addresses**:
+  - Base Sepolia (testnet):
+    - IdentityRegistry: `0x8004A818BFB912233c491871b3d84c89A494BD9e`
+    - ReputationRegistry: `0x8004B663056A597Dffe9eCcC1965A193B7388713`
+  - Base Mainnet:
+    - IdentityRegistry: `0x8004A169FB4a3325136EB29fA0ceB6D2e539a432`
+    - ReputationRegistry: `0x8004BAa17C55a88189AE136b182e5fdA19dE9b63`
+
 - **LLM**: OpenAI GPT-5 mini with structured outputs (Zod schemas). Correction flow rewrites narrative when validation modifies outcome.
 
 - **Agent runtime**: Vercel Workflow — durable steps, sleep, hooks for approval pauses.
@@ -88,7 +96,7 @@ Files to update:
 
 ### What to build
 
-Write and deploy the `MarginCallEscrow.sol` contract on Base Sepolia. This is the single custom contract — the financial backbone of the game. It holds all USDC (deal pots, trader balances, platform fees) and enforces authorization via ERC-8004 NFT ownership.
+Write and deploy the `MarginCallEscrow.sol` contract on Base Sepolia. This is the single custom contract — the financial backbone of the game. It holds all USDC (deal pots, trader balances, platform fees) and enforces authorization via ERC-8004 NFT ownership. The ERC-8004 IdentityRegistry is already deployed on Base Sepolia at `0x8004A818BFB912233c491871b3d84c89A494BD9e`.
 
 Scaffold using LazerForge (`github.com/LazerTechnologies/LazerForge`) in a `contracts/` directory. Write Foundry tests covering all functions and edge cases.
 
@@ -127,7 +135,7 @@ Add frontend contract interaction hooks (wagmi) for read operations (deal state,
 
 ### What to build
 
-Integrate with the existing ERC-8004 Identity Registry deployed on Base. When a desk manager creates a trader, mint an ERC-8004 NFT and deterministically derive the ERC-6551 Token Bound Account (the trader's wallet).
+Integrate with the existing ERC-8004 Identity Registry on Base Sepolia (`0x8004A818BFB912233c491871b3d84c89A494BD9e`). When a desk manager creates a trader, mint an ERC-8004 NFT and deterministically derive the ERC-6551 Token Bound Account (the trader's wallet). Use direct contract interaction (not the Registry Broker SDK) for tight control over minting and wallet derivation.
 
 Build the `POST /api/trader/create` route, `traders` Supabase table migration, and the `/traders` + `/traders/[id]` pages showing owned traders with their NFT identity and derived wallet address.
 
@@ -200,7 +208,7 @@ Update the deal detail page to show on-chain settlement status (tx hash) alongsi
 - [ ] Win: funds move from pot to trader balance (minus rake)
 - [ ] Loss: funds move from trader balance to pot
 - [ ] Rake credited to platform fees in contract
-- [ ] Outcome posted to ERC-8004 Reputation Registry (score + tags)
+- [ ] Outcome posted to ERC-8004 Reputation Registry on Base Sepolia (`0x8004B663056A597Dffe9eCcC1965A193B7388713`)
 - [ ] Outcome mirrored to Supabase with `on_chain_tx_hash`
 - [ ] Correction flow still works (second LLM call if outcome was capped)
 - [ ] Deal detail page shows tx hash for each outcome

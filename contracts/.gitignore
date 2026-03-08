@@ -1,0 +1,6 @@
+# Foundry
+cache/
+out/
+
+# Dependencies (restore with: forge install)
+lib/
