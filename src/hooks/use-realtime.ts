@@ -183,3 +183,27 @@ export function useDashboardRealtime() {
     },
   ]);
 }
+
+/**
+ * Subscribe to realtime updates for the leaderboard + global activity.
+ */
+export function useLeaderboardRealtime() {
+  useRealtimeInvalidation([
+    {
+      table: "deal_outcomes",
+      queryKeys: [["leaderboard"], ["global-activity"]],
+    },
+    {
+      table: "traders",
+      queryKeys: [["leaderboard"]],
+    },
+    {
+      table: "agent_activity_log",
+      queryKeys: [["global-activity"]],
+    },
+    {
+      table: "assets",
+      queryKeys: [["leaderboard"]],
+    },
+  ]);
+}
