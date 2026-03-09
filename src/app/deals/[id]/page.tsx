@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useDeal } from "@/hooks/use-deals";
+import { useDealRealtime } from "@/hooks/use-realtime";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
@@ -13,6 +14,7 @@ import {
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
+  useDealRealtime(id);
   const { data, isLoading, error } = useDeal(id);
   const { user } = usePrivy();
   const walletAddress = user?.wallet?.address;

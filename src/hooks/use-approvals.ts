@@ -24,7 +24,7 @@ export function usePendingApprovals() {
       const data = await res.json();
       return (data.approvals ?? []) as PendingApproval[];
     },
-    refetchInterval: 30_000,
+    // Realtime subscriptions handle live updates — no polling needed
   });
 }
 

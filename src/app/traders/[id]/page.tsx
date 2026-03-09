@@ -31,9 +31,11 @@ import {
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
 import { useConfigureMandate } from "@/hooks/use-approvals";
+import { useTraderRealtime } from "@/hooks/use-realtime";
 
 export default function TraderDetailPage() {
   const { id } = useParams<{ id: string }>();
+  useTraderRealtime(id);
   const { data: trader, isLoading, error } = useTrader(id);
 
   const { data: escrowBalance, refetch: refetchBalance } = useReadContract({
@@ -120,6 +122,8 @@ export default function TraderDetailPage() {
 
           <AgentControls traderId={id} status={trader.status} />
         </div>
+
+        <ReputationSection traderId={id} traderStatus={trader.status} />
 
         <FundingSection
           traderId={trader.token_id}
@@ -810,6 +814,77 @@ function MandateConfig({
       {configure.isError && (
         <p className="mt-2 text-xs text-red-400">{configure.error.message}</p>
       )}
+    </div>
+  );
+}
+
+/* ── Reputation Section ── */
+
+function ReputationSection({
+  traderId,
+  traderStatus,
+}: {
+  traderId: string;
+  traderStatus: string;
+}) {
+  const { data: outcomes, isLoading } = useTraderOutcomes(
+    traderId,
+    traderStatus
+  );
+
+  if (isLoading || !outcomes) return null;
+
+  const wins = outcomes.filter((o) => Number(o.trader_pnl_usdc) > 0).length;
+  const losses = outcomes.filter((o) => Number(o.trader_pnl_usdc) < 0).length;
+  const wipeouts = outcomes.filter((o) => o.trader_wiped_out).length;
+  const totalPnl = outcomes.reduce(
+    (acc, o) => acc + Number(o.trader_pnl_usdc),
+    0
+  );
+  const totalDeals = outcomes.length;
+  const winRate = totalDeals > 0 ? ((wins / totalDeals) * 100).toFixed(0) : "0";
+
+  // Reputation score: wins * 3 - losses - wipeouts * 5, floor at 0
+  const reputationScore = Math.max(0, wins * 3 - losses - wipeouts * 5);
+
+  if (totalDeals === 0) return null;
+
+  return (
+    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+      <h2 className="mb-3 text-sm font-medium text-zinc-400">Reputation</h2>
+      <div className="grid grid-cols-3 gap-4 text-center sm:grid-cols-6">
+        <div>
+          <p className="text-lg font-semibold text-zinc-50">
+            {reputationScore}
+          </p>
+          <p className="text-xs text-zinc-500">Score</p>
+        </div>
+        <div>
+          <p className="text-lg font-semibold text-green-400">{wins}</p>
+          <p className="text-xs text-zinc-500">Wins</p>
+        </div>
+        <div>
+          <p className="text-lg font-semibold text-red-400">{losses}</p>
+          <p className="text-xs text-zinc-500">Losses</p>
+        </div>
+        <div>
+          <p className="text-lg font-semibold text-zinc-50">{winRate}%</p>
+          <p className="text-xs text-zinc-500">Win Rate</p>
+        </div>
+        <div>
+          <p className="text-lg font-semibold text-red-400">{wipeouts}</p>
+          <p className="text-xs text-zinc-500">Wipeouts</p>
+        </div>
+        <div>
+          <p
+            className={`text-lg font-semibold ${totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}
+          >
+            {totalPnl >= 0 ? "+" : ""}
+            {totalPnl.toFixed(2)}
+          </p>
+          <p className="text-xs text-zinc-500">Total P&L</p>
+        </div>
+      </div>
     </div>
   );
 }

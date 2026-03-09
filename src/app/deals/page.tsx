@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { useDeals } from "@/hooks/use-deals";
+import { useDealsRealtime } from "@/hooks/use-realtime";
 
 export default function DealsPage() {
+  useDealsRealtime();
   const { data: deals, isLoading, error } = useDeals();
 
   return (

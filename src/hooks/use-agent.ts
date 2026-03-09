@@ -28,9 +28,7 @@ export interface DealOutcomeWithNarrative {
 
 export type { Asset as TraderAsset } from "@/lib/supabase/queries";
 
-export function useTraderAssets(traderId: string, traderStatus?: string) {
-  const isTrading = traderStatus === "active";
-
+export function useTraderAssets(traderId: string, _traderStatus?: string) {
   return useQuery({
     queryKey: ["trader-assets", traderId],
     queryFn: async () => {
@@ -40,13 +38,11 @@ export function useTraderAssets(traderId: string, traderStatus?: string) {
       return (data.assets ?? []) as import("@/lib/supabase/queries").Asset[];
     },
     enabled: !!traderId,
-    refetchInterval: isTrading ? 15_000 : false,
+    // Realtime subscriptions handle live updates — no polling needed
   });
 }
 
-export function useAgentActivity(traderId: string, traderStatus?: string) {
-  const isTrading = traderStatus === "active";
-
+export function useAgentActivity(traderId: string, _traderStatus?: string) {
   return useQuery({
     queryKey: ["agent-activity", traderId],
     queryFn: async () => {
@@ -56,13 +52,11 @@ export function useAgentActivity(traderId: string, traderStatus?: string) {
       return (data.activity ?? []) as AgentActivity[];
     },
     enabled: !!traderId,
-    refetchInterval: isTrading ? 5_000 : false,
+    // Realtime subscriptions handle live updates — no polling needed
   });
 }
 
-export function useTraderOutcomes(traderId: string, traderStatus?: string) {
-  const isTrading = traderStatus === "active";
-
+export function useTraderOutcomes(traderId: string, _traderStatus?: string) {
   return useQuery({
     queryKey: ["trader-outcomes", traderId],
     queryFn: async () => {
@@ -72,7 +66,7 @@ export function useTraderOutcomes(traderId: string, traderStatus?: string) {
       return (data.outcomes ?? []) as DealOutcomeWithNarrative[];
     },
     enabled: !!traderId,
-    refetchInterval: isTrading ? 15_000 : false,
+    // Realtime subscriptions handle live updates — no polling needed
   });
 }
 

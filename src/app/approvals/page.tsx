@@ -7,8 +7,10 @@ import {
   useApproveReject,
   type PendingApproval,
 } from "@/hooks/use-approvals";
+import { useApprovalsRealtime } from "@/hooks/use-realtime";
 
 export default function ApprovalsPage() {
+  useApprovalsRealtime();
   const { data: approvals, isLoading } = usePendingApprovals();
 
   return (
