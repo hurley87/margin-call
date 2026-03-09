@@ -1,32 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { makePublicClient } from "@/lib/contracts/client";
-import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
 import { createServerClient } from "@/lib/supabase/client";
+import { getTrader } from "@/lib/supabase/traders";
+import { getEscrowBalance } from "@/lib/contracts/balance";
 
 async function fetchOnChainBalance(id: string) {
-  const supabase = createServerClient();
-  const { data: trader, error } = await supabase
-    .from("traders")
-    .select("token_id, name")
-    .eq("id", id)
-    .single();
-
-  if (error || !trader) return null;
-
-  const publicClient = makePublicClient();
-  const balanceRaw = await publicClient.readContract({
-    address: ESCROW_ADDRESS,
-    abi: escrowAbi,
-    functionName: "getBalance",
-    args: [BigInt(trader.token_id)],
-  });
+  const trader = await getTrader(id);
+  const balanceUsdc = await getEscrowBalance(trader.token_id);
 
   return {
     trader_id: id,
     token_id: trader.token_id,
     name: trader.name,
-    balance_usdc: Number(balanceRaw) / 1_000_000,
-    balance_raw: balanceRaw.toString(),
+    balance_usdc: balanceUsdc,
   };
 }
 
@@ -37,9 +22,6 @@ export async function GET(
   try {
     const { id } = await params;
     const result = await fetchOnChainBalance(id);
-    if (!result) {
-      return NextResponse.json({ error: "Trader not found" }, { status: 404 });
-    }
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to fetch balance";
@@ -56,9 +38,6 @@ export async function POST(
   try {
     const { id } = await params;
     const result = await fetchOnChainBalance(id);
-    if (!result) {
-      return NextResponse.json({ error: "Trader not found" }, { status: 404 });
-    }
 
     const supabase = createServerClient();
     const { error } = await supabase

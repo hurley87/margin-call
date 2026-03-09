@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { keccak256, toBytes, parseUnits } from "viem";
 import { verifyPrivyToken } from "@/lib/privy/server";
+import { verifyAgentSecret } from "@/lib/agent/auth";
 import { createServerClient } from "@/lib/supabase/client";
+import { getTrader, getOwnedTrader } from "@/lib/supabase/traders";
 import {
   createDealOutcome,
   getDeal,
@@ -20,6 +22,7 @@ import {
 import { RAKE_PERCENTAGE, MAX_EXTRACTION_PERCENTAGE } from "@/lib/constants";
 import { makePublicClient } from "@/lib/contracts/client";
 import { makeOperatorWalletClient } from "@/lib/contracts/operator";
+import { getEscrowBalance } from "@/lib/contracts/balance";
 import {
   ESCROW_ADDRESS,
   REPUTATION_REGISTRY_ADDRESS,
@@ -98,20 +101,11 @@ async function postReputation(
 
 export async function POST(request: NextRequest) {
   try {
-    const { user } = await verifyPrivyToken(request);
-
-    const walletAddress = user.wallet?.address;
-    if (!walletAddress) {
-      return NextResponse.json(
-        { error: "No wallet linked to this account" },
-        { status: 400 }
-      );
-    }
-
     const body = await request.json();
-    const { deal_id, trader_id } = body as {
+    const { deal_id, trader_id, _agent_cycle } = body as {
       deal_id?: string;
       trader_id?: string;
+      _agent_cycle?: boolean;
     };
 
     if (!deal_id) {
@@ -123,54 +117,56 @@ export async function POST(request: NextRequest) {
 
     const supabase = createServerClient();
 
-    // ----- Look up trader -----
-    // If trader_id is provided, use the traders table (on-chain trader with token_id).
-    // Otherwise fall back to desk_managers for backward compatibility.
+    // ----- Auth: Privy user or internal agent cycle -----
     let traderId: string;
     let traderName: string;
     let tokenId: bigint | null = null;
 
-    if (trader_id) {
-      const { data: trader, error: traderError } = await supabase
-        .from("traders")
-        .select("id, token_id, name, owner_address")
-        .eq("id", trader_id)
-        .single();
-
-      if (traderError || !trader) {
-        return NextResponse.json(
-          { error: "Trader not found" },
-          { status: 404 }
-        );
+    if (_agent_cycle && trader_id) {
+      // Server-to-server call from agent cycle — verify secret
+      if (!verifyAgentSecret(request)) {
+        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
       }
 
-      if (trader.owner_address.toLowerCase() !== walletAddress.toLowerCase()) {
-        return NextResponse.json(
-          { error: "You do not own this trader" },
-          { status: 403 }
-        );
-      }
-
+      const trader = await getTrader(trader_id);
       traderId = trader.id;
       traderName = trader.name || "Anonymous Trader";
       tokenId = BigInt(trader.token_id);
     } else {
-      // Legacy: use desk_manager as trader
-      const { data: dm, error: dmError } = await supabase
-        .from("desk_managers")
-        .select("id, display_name, wallet_address")
-        .eq("wallet_address", walletAddress)
-        .single();
+      // Normal user request — verify Privy token
+      const { user } = await verifyPrivyToken(request);
 
-      if (dmError || !dm) {
+      const walletAddress = user.wallet?.address;
+      if (!walletAddress) {
         return NextResponse.json(
-          { error: "Desk manager not found. Register first." },
-          { status: 404 }
+          { error: "No wallet linked to this account" },
+          { status: 400 }
         );
       }
 
-      traderId = dm.id;
-      traderName = dm.display_name || "Anonymous Trader";
+      if (trader_id) {
+        const trader = await getOwnedTrader(trader_id, walletAddress);
+        traderId = trader.id;
+        traderName = trader.name || "Anonymous Trader";
+        tokenId = BigInt(trader.token_id);
+      } else {
+        // Legacy: use desk_manager as trader
+        const { data: dm, error: dmError } = await supabase
+          .from("desk_managers")
+          .select("id, display_name, wallet_address")
+          .eq("wallet_address", walletAddress)
+          .single();
+
+        if (dmError || !dm) {
+          return NextResponse.json(
+            { error: "Desk manager not found. Register first." },
+            { status: 404 }
+          );
+        }
+
+        traderId = dm.id;
+        traderName = dm.display_name || "Anonymous Trader";
+      }
     }
 
     // ----- Fetch deal -----
@@ -195,14 +191,7 @@ export async function POST(request: NextRequest) {
     let portfolioBalance = deal.entry_cost_usdc;
     if (tokenId !== null) {
       try {
-        const publicClient = makePublicClient();
-        const balance = await publicClient.readContract({
-          address: ESCROW_ADDRESS,
-          abi: escrowAbi,
-          functionName: "getBalance",
-          args: [tokenId],
-        });
-        portfolioBalance = Number(balance) / 1_000_000;
+        portfolioBalance = await getEscrowBalance(tokenId);
       } catch {
         // Fall back to entry cost as proxy
       }

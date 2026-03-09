@@ -108,6 +108,32 @@ export async function getActiveSystemPrompt(name: string): Promise<string> {
   return data.content;
 }
 
+export async function listTraderOutcomes(traderId: string, limit = 20) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deal_outcomes")
+    .select()
+    .eq("trader_id", traderId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data;
+}
+
+export async function listTraderActivity(traderId: string, limit = 50) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("agent_activity_log")
+    .select()
+    .eq("trader_id", traderId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data;
+}
+
 export async function updateDealAfterEntry(
   dealId: string,
   potChange: number,
