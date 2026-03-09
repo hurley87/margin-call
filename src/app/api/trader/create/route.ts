@@ -7,11 +7,14 @@ import {
   IDENTITY_REGISTRY_ADDRESS,
   ERC6551_REGISTRY_ADDRESS,
   ERC6551_DEFAULT_IMPLEMENTATION,
-  CONTRACTS_CHAIN,
   CONTRACTS_CHAIN_ID,
-  identityRegistryAbi,
   erc6551RegistryAbi,
 } from "@/lib/contracts/escrow";
+import {
+  createTraderCdpAccounts,
+  setDepositorOnChain,
+} from "@/lib/cdp/trader-wallet";
+import { registerTraderAsOperator } from "@/lib/cdp/register-operator";
 
 export async function POST(request: NextRequest) {
   try {
@@ -32,8 +35,6 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const name = body.name?.trim();
-    const tokenId = body.tokenId;
-    const txHash = body.txHash;
 
     if (!name || typeof name !== "string" || name.length > 50) {
       return NextResponse.json(
@@ -42,33 +43,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (tokenId === undefined || typeof tokenId !== "number") {
-      return NextResponse.json(
-        { error: "tokenId is required" },
-        { status: 400 }
-      );
-    }
+    // 1. Create CDP accounts + mint NFT server-side to CDP EOA
+    const { smartAccount, tokenId, cdpOwnerAddress, cdpWalletAddress } =
+      await createTraderCdpAccounts(name);
 
-    const publicClient = makePublicClient();
+    // 2. Register the Smart Account as an authorized operator on the escrow contract
+    await registerTraderAsOperator(cdpWalletAddress as `0x${string}`);
 
-    // Verify on-chain ownership: caller must own the NFT
-    const owner = await publicClient.readContract({
-      address: IDENTITY_REGISTRY_ADDRESS,
-      abi: identityRegistryAbi,
-      functionName: "ownerOf",
-      args: [BigInt(tokenId)],
-    });
+    // 3. Set the desk manager's wallet as the depositor for this trader
+    await setDepositorOnChain(smartAccount, tokenId, walletAddress);
 
-    if (getAddress(owner as string) !== getAddress(walletAddress)) {
-      return NextResponse.json(
-        { error: "You do not own this token" },
-        { status: 403 }
-      );
-    }
-
-    // Derive ERC-6551 Token Bound Account address
+    // 4. Derive ERC-6551 Token Bound Account address (optional, for reference)
     let tbaAddress: string;
     try {
+      const publicClient = makePublicClient();
       const tba = await publicClient.readContract({
         address: ERC6551_REGISTRY_ADDRESS,
         abi: erc6551RegistryAbi,
@@ -116,7 +104,7 @@ export async function POST(request: NextRequest) {
       tbaAddress = getAddress(`0x${keccak256(create2Input).slice(26)}`);
     }
 
-    // Store trader in Supabase
+    // 5. Store trader in Supabase
     const supabase = createServerClient();
 
     const { data: trader, error: dbError } = await supabase
@@ -126,6 +114,8 @@ export async function POST(request: NextRequest) {
         name,
         owner_address: walletAddress.toLowerCase(),
         tba_address: tbaAddress,
+        cdp_wallet_address: cdpWalletAddress,
+        cdp_owner_address: cdpOwnerAddress,
         status: "active",
         mandate: {},
       })

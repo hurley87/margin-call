@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
 import { runCycle } from "@/lib/agent/cycle";
 import { logActivity } from "@/lib/agent/activity";
-import { verifyAgentSecret, getBaseUrl } from "@/lib/agent/auth";
+import { getBaseUrl } from "@/lib/agent/auth";
+import { verifySIWARequest } from "@/lib/siwa/verify";
 import { createServerClient } from "@/lib/supabase/client";
 import { AGENT_LOOP_INTERVAL_MS } from "@/lib/constants";
 
@@ -18,8 +19,27 @@ import { AGENT_LOOP_INTERVAL_MS } from "@/lib/constants";
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!verifyAgentSecret(request)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    // Verify SIWA (Sign In With Agent) authentication
+    const siwaMessageB64 = request.headers.get("x-siwa-message");
+    const siwaSignature = request.headers.get("x-siwa-signature");
+    console.log(
+      "[cycle] SIWA headers present:",
+      !!siwaMessageB64,
+      !!siwaSignature
+    );
+    if (!siwaMessageB64 || !siwaSignature) {
+      console.log("[cycle] Missing SIWA headers, returning 401");
+      return NextResponse.json(
+        { error: "Missing SIWA auth headers" },
+        { status: 401 }
+      );
+    }
+    const siwaMessage = Buffer.from(siwaMessageB64, "base64").toString("utf-8");
+    console.log("[cycle] Decoded SIWA message length:", siwaMessage.length);
+    const siwaResult = await verifySIWARequest(siwaMessage, siwaSignature);
+    console.log("[cycle] SIWA result:", JSON.stringify(siwaResult));
+    if (!siwaResult.valid) {
+      return NextResponse.json({ error: "Invalid SIWA auth" }, { status: 401 });
     }
 
     const body = await request.json();
@@ -71,11 +91,46 @@ export async function POST(request: NextRequest) {
         }
 
         try {
+          // Sign next cycle request with trader's SIWA identity
+          const { getOrCreateTraderSmartAccount } =
+            await import("@/lib/cdp/trader-wallet");
+          const { signAgentRequest } = await import("@/lib/siwa/sign");
+          const { getTrader } = await import("@/lib/supabase/traders");
+
+          const traderData = await getTrader(trader_id);
+          const { owner, smartAccount } = await getOrCreateTraderSmartAccount(
+            traderData.token_id
+          );
+
+          const nonceRes = await fetch(`${baseUrl}/api/siwa/nonce`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              agent_id: traderData.token_id,
+              address: smartAccount.address,
+            }),
+          });
+
+          let siwaHeaders: Record<string, string> = {};
+          if (nonceRes.ok) {
+            const { nonce } = await nonceRes.json();
+            const { message, signature } = await signAgentRequest(
+              owner,
+              traderData.token_id,
+              nonce,
+              smartAccount
+            );
+            siwaHeaders = {
+              "x-siwa-message": Buffer.from(message).toString("base64"),
+              "x-siwa-signature": signature,
+            };
+          }
+
           await fetch(`${baseUrl}/api/agent/cycle`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-agent-secret": process.env.AGENT_CYCLE_SECRET ?? "",
+              ...siwaHeaders,
             },
             body: JSON.stringify({ trader_id }),
           });

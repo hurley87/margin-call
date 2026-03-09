@@ -9,6 +9,8 @@ import {
   hasPendingApproval,
   consumeApprovedEntry,
 } from "@/lib/supabase/approvals";
+import { getOrCreateTraderSmartAccount } from "@/lib/cdp/trader-wallet";
+import { signAgentRequest } from "@/lib/siwa/sign";
 
 export type CycleStatus =
   | "entered"
@@ -163,11 +165,38 @@ export async function runCycle(
   );
 
   try {
+    // Sign request with SIWA (Sign In With Agent) for per-agent identity
+    const { owner, smartAccount } = await getOrCreateTraderSmartAccount(
+      trader.token_id
+    );
+    const nonceRes = await fetch(`${baseUrl}/api/siwa/nonce`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        agent_id: trader.token_id,
+        address: smartAccount.address,
+      }),
+    });
+    let siwaHeaders: Record<string, string> = {};
+    if (nonceRes.ok) {
+      const { nonce } = await nonceRes.json();
+      const { message, signature } = await signAgentRequest(
+        owner,
+        trader.token_id,
+        nonce,
+        smartAccount
+      );
+      siwaHeaders = {
+        "x-siwa-message": Buffer.from(message).toString("base64"),
+        "x-siwa-signature": signature,
+      };
+    }
+
     const enterRes = await fetch(`${baseUrl}/api/deal/enter`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-agent-secret": process.env.AGENT_CYCLE_SECRET ?? "",
+        ...siwaHeaders,
       },
       body: JSON.stringify({
         deal_id: bestDeal.id,

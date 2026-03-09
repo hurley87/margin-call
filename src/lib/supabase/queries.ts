@@ -93,6 +93,27 @@ export async function listDealOutcomes(dealId: string) {
   return data;
 }
 
+/**
+ * Return an existing outcome for this deal + trader if any (for idempotency).
+ */
+export async function getExistingDealOutcome(
+  dealId: string,
+  traderId: string
+): Promise<{ id: string; [key: string]: unknown } | null> {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deal_outcomes")
+    .select()
+    .eq("deal_id", dealId)
+    .eq("trader_id", traderId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as { id: string; [key: string]: unknown } | null;
+}
+
 export async function getActiveSystemPrompt(name: string): Promise<string> {
   const supabase = createServerClient();
   const { data, error } = await supabase
@@ -127,6 +148,20 @@ export async function listTraderActivity(traderId: string, limit = 50) {
     .from("agent_activity_log")
     .select()
     .eq("trader_id", traderId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data;
+}
+
+export async function listActivityFeed(traderIds: string[], limit = 100) {
+  if (traderIds.length === 0) return [];
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("agent_activity_log")
+    .select()
+    .in("trader_id", traderIds)
     .order("created_at", { ascending: false })
     .limit(limit);
 

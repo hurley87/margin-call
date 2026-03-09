@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { keccak256, toBytes, parseUnits } from "viem";
 import { verifyPrivyToken } from "@/lib/privy/server";
-import { verifyAgentSecret } from "@/lib/agent/auth";
+import { verifySIWARequest } from "@/lib/siwa/verify";
 import { createServerClient } from "@/lib/supabase/client";
 import { getTrader, getOwnedTrader } from "@/lib/supabase/traders";
 import {
   createDealOutcome,
   getDeal,
+  getExistingDealOutcome,
   updateDealAfterEntry,
   getTraderAssets,
   syncAssetsFromOutcome,
@@ -22,9 +23,17 @@ import {
   type DealOutcome,
 } from "@/lib/llm/schemas";
 import { RAKE_PERCENTAGE, MAX_EXTRACTION_PERCENTAGE } from "@/lib/constants";
-import { makePublicClient } from "@/lib/contracts/client";
-import { makeOperatorWalletClient } from "@/lib/contracts/operator";
+import { getOrCreateTraderSmartAccount } from "@/lib/cdp/trader-wallet";
+import {
+  sendContractCall,
+  sendBatchContractCalls,
+} from "@/lib/cdp/send-contract-call";
 import { getEscrowBalance } from "@/lib/contracts/balance";
+import {
+  getOnChainDeal,
+  getNftOwner,
+  DEAL_STATUS_OPEN,
+} from "@/lib/contracts/on-chain";
 import {
   ESCROW_ADDRESS,
   REPUTATION_REGISTRY_ADDRESS,
@@ -51,6 +60,7 @@ function usdcToUnits(amount: number): bigint {
  * Best-effort: failures are logged but do not block the response.
  */
 async function postReputation(
+  traderId: string,
   tokenId: bigint,
   pnlUsdc: number,
   wipedOut: boolean,
@@ -58,8 +68,9 @@ async function postReputation(
   outcomeId: string
 ) {
   try {
-    const walletClient = makeOperatorWalletClient();
-    const publicClient = makePublicClient();
+    const { smartAccount } = await getOrCreateTraderSmartAccount(
+      Number(tokenId)
+    );
 
     // value = pnl in USDC scaled to 6 decimals (int128)
     const value = BigInt(Math.round(pnlUsdc * 1_000_000));
@@ -77,7 +88,7 @@ async function postReputation(
     });
     const feedbackHash = keccak256(toBytes(feedbackURI));
 
-    const hash = await walletClient.writeContract({
+    const receipt = await sendContractCall(smartAccount, {
       address: REPUTATION_REGISTRY_ADDRESS,
       abi: reputationRegistryAbi,
       functionName: "giveFeedback",
@@ -93,8 +104,7 @@ async function postReputation(
       ],
     });
 
-    await publicClient.waitForTransactionReceipt({ hash });
-    return hash;
+    return receipt.transactionHash;
   } catch (err) {
     console.error("Failed to post reputation:", err);
     return null;
@@ -123,17 +133,35 @@ export async function POST(request: NextRequest) {
     let traderId: string;
     let traderName: string;
     let tokenId: bigint | null = null;
+    /** Expected on-chain NFT owner when tokenId is set; used to verify before operator write. */
+    let expectedOwnerAddress: string | null = null;
 
     if (_agent_cycle && trader_id) {
-      // Server-to-server call from agent cycle — verify secret
-      if (!verifyAgentSecret(request)) {
-        return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+      // Agent cycle call — verify SIWA (Sign In With Agent) auth
+      const siwaMessageB64 = request.headers.get("x-siwa-message");
+      const siwaSignature = request.headers.get("x-siwa-signature");
+      if (!siwaMessageB64 || !siwaSignature) {
+        return NextResponse.json(
+          { error: "Missing SIWA auth headers" },
+          { status: 401 }
+        );
+      }
+      const siwaMessage = Buffer.from(siwaMessageB64, "base64").toString(
+        "utf-8"
+      );
+      const siwaResult = await verifySIWARequest(siwaMessage, siwaSignature);
+      if (!siwaResult.valid) {
+        return NextResponse.json(
+          { error: "Invalid SIWA auth" },
+          { status: 401 }
+        );
       }
 
       const trader = await getTrader(trader_id);
       traderId = trader.id;
       traderName = trader.name || "Anonymous Trader";
       tokenId = BigInt(trader.token_id);
+      expectedOwnerAddress = trader.cdp_wallet_address ?? trader.owner_address;
     } else {
       // Normal user request — verify Privy token
       const { user } = await verifyPrivyToken(request);
@@ -151,6 +179,8 @@ export async function POST(request: NextRequest) {
         traderId = trader.id;
         traderName = trader.name || "Anonymous Trader";
         tokenId = BigInt(trader.token_id);
+        expectedOwnerAddress =
+          trader.cdp_wallet_address ?? trader.owner_address;
       } else {
         // Legacy: use desk_manager as trader
         const { data: dm, error: dmError } = await supabase
@@ -182,6 +212,60 @@ export async function POST(request: NextRequest) {
       deal.on_chain_deal_id !== null && deal.on_chain_deal_id !== undefined
         ? BigInt(deal.on_chain_deal_id)
         : null;
+
+    // ----- Idempotency and on-chain checks (before LLM / operator writes) -----
+    if (onChainDealId !== null && tokenId !== null) {
+      const existing = await getExistingDealOutcome(deal_id, traderId);
+      if (existing) {
+        return NextResponse.json({
+          outcome: existing,
+          summary: {
+            balance_change:
+              Number(existing.trader_pnl_usdc ?? 0) +
+              Number(existing.rake_usdc ?? 0),
+            rake: Number(existing.rake_usdc ?? 0),
+            net_pnl: Number(existing.trader_pnl_usdc ?? 0),
+            wiped_out: Boolean(existing.trader_wiped_out),
+            enter_tx_hash: null,
+            resolve_tx_hash: existing.on_chain_tx_hash ?? null,
+          },
+        });
+      }
+
+      const onChainDeal = await getOnChainDeal(onChainDealId);
+      if (!onChainDeal || onChainDeal.status !== DEAL_STATUS_OPEN) {
+        return NextResponse.json(
+          { error: "Deal is not open on-chain" },
+          { status: 400 }
+        );
+      }
+
+      const balanceUsdc = await getEscrowBalance(tokenId);
+      if (balanceUsdc < deal.entry_cost_usdc) {
+        return NextResponse.json(
+          { error: "Insufficient escrow balance" },
+          { status: 400 }
+        );
+      }
+
+      if (expectedOwnerAddress) {
+        let currentOwner: string;
+        try {
+          currentOwner = await getNftOwner(tokenId);
+        } catch {
+          return NextResponse.json(
+            { error: "Failed to verify NFT ownership (RPC error)" },
+            { status: 502 }
+          );
+        }
+        if (currentOwner.toLowerCase() !== expectedOwnerAddress.toLowerCase()) {
+          return NextResponse.json(
+            { error: "Trader NFT ownership changed" },
+            { status: 403 }
+          );
+        }
+      }
+    }
 
     // ----- LLM resolution -----
     // Resolve via LLM first, before touching on-chain funds.
@@ -273,31 +357,32 @@ export async function POST(request: NextRequest) {
     let resolveTxHash: string | null = null;
 
     if (onChainDealId !== null && tokenId !== null) {
-      const walletClient = makeOperatorWalletClient();
-      const publicClient = makePublicClient();
+      const { smartAccount } = await getOrCreateTraderSmartAccount(
+        Number(tokenId)
+      );
 
-      // 1. Enter deal — deducts entry cost from trader balance, adds to pot
-      const enterHash = await walletClient.writeContract({
-        address: ESCROW_ADDRESS,
-        abi: escrowAbi,
-        functionName: "enterDeal",
-        args: [onChainDealId, tokenId],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: enterHash });
-      enterTxHash = enterHash;
-
-      // 2. Resolve entry — settles funds based on LLM outcome
       const pnlUnits = usdcToUnits(outcome.balance_change_usdc);
       const rakeUnits = usdcToUnits(rakeAmount);
 
-      const resolveHash = await walletClient.writeContract({
-        address: ESCROW_ADDRESS,
-        abi: escrowAbi,
-        functionName: "resolveEntry",
-        args: [onChainDealId, tokenId, pnlUnits, rakeUnits],
-      });
-      await publicClient.waitForTransactionReceipt({ hash: resolveHash });
-      resolveTxHash = resolveHash;
+      // Batch enterDeal + resolveEntry into a single UserOp so they
+      // execute atomically — avoids the bundler simulating resolveEntry
+      // against state where enterDeal hasn't been mined yet.
+      const receipt = await sendBatchContractCalls(smartAccount, [
+        {
+          address: ESCROW_ADDRESS,
+          abi: escrowAbi,
+          functionName: "enterDeal",
+          args: [onChainDealId, tokenId],
+        },
+        {
+          address: ESCROW_ADDRESS,
+          abi: escrowAbi,
+          functionName: "resolveEntry",
+          args: [onChainDealId, tokenId, pnlUnits, rakeUnits],
+        },
+      ]);
+      enterTxHash = receipt.transactionHash;
+      resolveTxHash = receipt.transactionHash;
     }
 
     // ----- Save outcome to Supabase -----
@@ -333,6 +418,7 @@ export async function POST(request: NextRequest) {
     if (tokenId !== null) {
       // Fire and forget — don't block the response
       postReputation(
+        traderId,
         tokenId,
         traderPnl,
         outcome.trader_wiped_out,

@@ -177,5 +177,9 @@ export function useDashboardRealtime() {
       table: "deal_approvals",
       queryKeys: [["pending-approvals"]],
     },
+    {
+      table: "agent_activity_log",
+      queryKeys: [["activity-feed"]],
+    },
   ]);
 }

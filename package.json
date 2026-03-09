@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
+    "@buildersgarden/siwa": "^0.0.24",
     "@coinbase/cdp-sdk": "^1.45.0",
     "@privy-io/react-auth": "^3.16.0",
     "@privy-io/server-auth": "^1.32.5",

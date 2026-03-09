@@ -1,7 +1,10 @@
 import { baseSepolia } from "viem/chains";
 
+/** MarginCallEscrow deal status: 0 = Open, 1 = Closed. */
+export const DEAL_STATUS_OPEN = 0;
+
 export const ESCROW_ADDRESS =
-  "0x5bF862884263388611918149D935366752649a8D" as const;
+  "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
 
 export const IDENTITY_REGISTRY_ADDRESS =
   "0x8004A818BFB912233c491871b3d84c89A494BD9e" as const;
@@ -151,12 +154,55 @@ export const escrowAbi = [
     stateMutability: "nonpayable",
   },
   {
+    type: "function",
+    name: "addOperator",
+    inputs: [{ name: "op", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "removeOperator",
+    inputs: [{ name: "op", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "authorizedOperators",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "depositors",
+    inputs: [{ name: "", type: "uint256" }],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setDepositor",
+    inputs: [
+      { name: "traderId", type: "uint256" },
+      { name: "depositor", type: "address" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "DepositorSet",
+    inputs: [
+      { name: "traderId", type: "uint256", indexed: true },
+      { name: "depositor", type: "address", indexed: true },
+    ],
+  },
+  {
     type: "event",
     name: "DealClosed",
-    inputs: [
-      { name: "dealId", type: "uint256", indexed: true },
-      { name: "remainingPot", type: "uint256", indexed: false },
-    ],
+    inputs: [{ name: "dealId", type: "uint256", indexed: true }],
   },
   {
     type: "function",

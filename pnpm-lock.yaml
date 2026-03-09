@@ -10,6 +10,9 @@ importers:
       "@base-ui/react":
         specifier: ^1.2.0
         version: 1.2.0(@types/react@19.2.14)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+      "@buildersgarden/siwa":
+        specifier: ^0.0.24
+        version: 0.0.24(bufferutil@4.1.0)(express@5.2.1)(hono@4.12.5)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.3.6)
       "@coinbase/cdp-sdk":
         specifier: ^1.45.0
         version: 1.45.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)
@@ -536,6 +539,35 @@ packages:
       react-dom: ^17 || ^18 || ^19
     peerDependenciesMeta:
       "@types/react":
+        optional: true
+
+  "@buildersgarden/siwa@0.0.24":
+    resolution:
+      {
+        integrity: sha512-wGWmnpKKHBNFteOkNALROtB8P8eID85/WymYMxxRJQAspCKEB4PoJGwLqpoT4OceisUG/40UOlUXGlvOBX7tmw==,
+      }
+    peerDependencies:
+      "@circle-fin/developer-controlled-wallets": ">=6.0.0"
+      "@fastify/cors": ">=9.0.0"
+      "@openfort/openfort-node": ">=0.9.0"
+      "@privy-io/node": ">=1.0.0"
+      express: ^4.0.0 || ^5.0.0
+      fastify: ">=4.0.0"
+      hono: ">=4.0.0"
+    peerDependenciesMeta:
+      "@circle-fin/developer-controlled-wallets":
+        optional: true
+      "@fastify/cors":
+        optional: true
+      "@openfort/openfort-node":
+        optional: true
+      "@privy-io/node":
+        optional: true
+      express:
+        optional: true
+      fastify:
+        optional: true
+      hono:
         optional: true
 
   "@bytecodealliance/preview2-shim@0.17.0":
@@ -3071,6 +3103,12 @@ packages:
         integrity: sha512-tlqY9xq5ukxTUZBmoOp+m61cqwQD5pHJtFY3Mn8CA8ps6yghLH/Hw8UPdqg4OLmFW3IFlcXnQNmo/dh8HzXYIQ==,
       }
     engines: { node: ">=18" }
+
+  "@slicekit/erc8128@0.1.1":
+    resolution:
+      {
+        integrity: sha512-BMjXbmt9+kwvhJlo656tyusC5qJcI8a2eJyQIdLN4EH8uB4EkwmtgvLySsXlx67poxnwwi6LwLjKxLkr0Bx7vQ==,
+      }
 
   "@socket.io/component-emitter@3.1.2":
     resolution:
@@ -13020,6 +13058,19 @@ snapshots:
     optionalDependencies:
       "@types/react": 19.2.14
 
+  "@buildersgarden/siwa@0.0.24(bufferutil@4.1.0)(express@5.2.1)(hono@4.12.5)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.3.6)":
+    dependencies:
+      "@slicekit/erc8128": 0.1.1
+      viem: 2.47.0(bufferutil@4.1.0)(typescript@5.9.3)(utf-8-validate@6.0.6)(zod@4.3.6)
+    optionalDependencies:
+      express: 5.2.1
+      hono: 4.12.5
+    transitivePeerDependencies:
+      - bufferutil
+      - typescript
+      - utf-8-validate
+      - zod
+
   "@bytecodealliance/preview2-shim@0.17.0": {}
 
   "@bytecodealliance/preview2-shim@0.17.8": {}
@@ -15370,6 +15421,10 @@ snapshots:
   "@sindresorhus/is@5.6.0": {}
 
   "@sindresorhus/merge-streams@4.0.0": {}
+
+  "@slicekit/erc8128@0.1.1":
+    dependencies:
+      "@noble/hashes": 1.8.0
 
   "@socket.io/component-emitter@3.1.2": {}
 

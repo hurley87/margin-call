@@ -157,13 +157,66 @@ async function syncAll() {
   return { synced, total: Number(dealCount) };
 }
 
+/** Sync a single deal by on-chain ID (e.g. after closeDeal). Updates status, pot, entry count from chain. */
+async function syncDealByOnChainId(onChainDealId: number) {
+  const publicClient = makePublicClient();
+  const supabase = createServerClient();
+
+  const dealIdBigInt = BigInt(onChainDealId);
+  const deal = await publicClient.readContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getDeal",
+    args: [dealIdBigInt],
+  });
+
+  const status = deal.status === 0 ? "open" : "closed";
+  const potUsdc = Number(deal.potAmount) / 1_000_000;
+  const entryCount = Number(deal.pendingEntries);
+
+  const { data, error } = await supabase
+    .from("deals")
+    .update({
+      status,
+      pot_usdc: potUsdc,
+      entry_count: entryCount,
+    })
+    .eq("on_chain_deal_id", onChainDealId)
+    .select("id, status, pot_usdc, entry_count")
+    .single();
+
+  if (error) {
+    console.error(`Failed to sync deal ${onChainDealId}:`, error);
+    return { synced: 0, error: error.message };
+  }
+  return {
+    synced: 1,
+    dealId: data?.id,
+    status,
+    pot_usdc: potUsdc,
+    entry_count: entryCount,
+  };
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const txHash = (body as { txHash?: string }).txHash;
+    const { txHash, on_chain_deal_id: onChainDealId } = body as {
+      txHash?: string;
+      on_chain_deal_id?: number;
+    };
 
     if (txHash && /^0x[a-fA-F0-9]{64}$/.test(txHash)) {
       const result = await syncByTxHash(txHash as `0x${string}`);
+      return NextResponse.json(result);
+    }
+
+    if (
+      onChainDealId !== undefined &&
+      Number.isInteger(onChainDealId) &&
+      onChainDealId >= 0
+    ) {
+      const result = await syncDealByOnChainId(onChainDealId);
       return NextResponse.json(result);
     }
 

@@ -13,18 +13,13 @@ import {
   useWithdrawFlow,
 } from "@/hooks/use-escrow";
 import {
-  useAgentActivity,
   useTraderOutcomes,
   useTraderAssets,
   usePauseTrader,
   useResumeTrader,
   useReviveTrader,
 } from "@/hooks/use-agent";
-import type {
-  AgentActivity,
-  DealOutcomeWithNarrative,
-  TraderAsset,
-} from "@/hooks/use-agent";
+import type { DealOutcomeWithNarrative, TraderAsset } from "@/hooks/use-agent";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
@@ -32,6 +27,7 @@ import {
 } from "@/lib/contracts/escrow";
 import { useConfigureMandate } from "@/hooks/use-approvals";
 import { useTraderRealtime } from "@/hooks/use-realtime";
+import { Nav } from "@/components/nav";
 
 export default function TraderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -54,19 +50,21 @@ export default function TraderDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <p className="text-zinc-400">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--t-bg)]">
+        <p className="text-[var(--t-muted)]">Loading...</p>
       </div>
     );
   }
 
   if (error || !trader) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black">
-        <p className="text-red-400">{error?.message ?? "Trader not found"}</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--t-bg)]">
+        <p className="text-[var(--t-red)]">
+          {error?.message ?? "Trader not found"}
+        </p>
         <Link
           href="/traders"
-          className="text-sm text-zinc-400 hover:text-zinc-300"
+          className="text-sm text-[var(--t-muted)] hover:text-[var(--t-text)]"
         >
           Back to traders
         </Link>
@@ -78,18 +76,12 @@ export default function TraderDetailPage() {
     escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-black px-4 py-12">
-      <div className="w-full max-w-2xl">
-        <Link
-          href="/traders"
-          className="mb-6 inline-block text-sm text-zinc-400 transition-colors hover:text-zinc-300"
-        >
-          &larr; All Traders
-        </Link>
-
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+    <div className="min-h-screen bg-[var(--t-bg)]">
+      <Nav />
+      <div className="mx-auto w-full max-w-2xl px-4 py-8">
+        <div className="border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
           <div className="mb-4 flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-zinc-50">
+            <h1 className="text-xl font-semibold text-[var(--t-text)] font-[family-name:var(--font-plex-sans)]">
               {trader.name}
             </h1>
             <StatusBadge status={trader.status} />
@@ -97,24 +89,24 @@ export default function TraderDetailPage() {
 
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
-              <p className="text-zinc-500">Token ID</p>
-              <p className="text-zinc-50">#{trader.token_id}</p>
+              <p className="text-xs text-[var(--t-muted)]">Token ID</p>
+              <p className="text-[var(--t-text)]">#{trader.token_id}</p>
             </div>
             <div>
-              <p className="text-zinc-500">Escrow Balance</p>
-              <p className="text-zinc-50">
+              <p className="text-xs text-[var(--t-muted)]">Escrow Balance</p>
+              <p className="text-[var(--t-text)]">
                 {balanceUsdc !== null ? `${balanceUsdc} USDC` : "..."}
               </p>
             </div>
             <div className="col-span-2">
-              <p className="text-zinc-500">Trader Wallet</p>
-              <p className="font-mono text-xs text-zinc-50">
+              <p className="text-xs text-[var(--t-muted)]">Trader Wallet</p>
+              <p className="font-mono text-xs text-[var(--t-text)]">
                 {trader.tba_address ?? "Not derived"}
               </p>
             </div>
             <div className="col-span-2">
-              <p className="text-zinc-500">Owner</p>
-              <p className="font-mono text-xs text-zinc-50">
+              <p className="text-xs text-[var(--t-muted)]">Owner</p>
+              <p className="font-mono text-xs text-[var(--t-text)]">
                 {trader.owner_address}
               </p>
             </div>
@@ -138,7 +130,6 @@ export default function TraderDetailPage() {
 
         <AssetInventory traderId={id} traderStatus={trader.status} />
         <DealOutcomes traderId={id} traderStatus={trader.status} />
-        <AgentActivityFeed traderId={id} traderStatus={trader.status} />
         <ActivityHistory id={id} />
       </div>
     </div>
@@ -149,16 +140,22 @@ export default function TraderDetailPage() {
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {
-    active: "bg-green-500/10 text-green-400",
-    paused: "bg-yellow-500/10 text-yellow-400",
-    wiped_out: "bg-red-500/10 text-red-400",
+    active: "text-[var(--t-green)]",
+    paused: "text-[var(--t-amber)]",
+    wiped_out: "text-[var(--t-red)]",
+  };
+
+  const labels: Record<string, string> = {
+    active: "[ACTIVE]",
+    paused: "[PAUSED]",
+    wiped_out: "[WIPED]",
   };
 
   return (
     <span
-      className={`rounded px-2 py-1 text-xs font-medium ${styles[status] ?? "bg-zinc-500/10 text-zinc-400"}`}
+      className={`text-[10px] font-bold uppercase ${styles[status] ?? "text-[var(--t-muted)]"}`}
     >
-      {status === "wiped_out" ? "WIPED OUT" : status}
+      {labels[status] ?? `[${status.toUpperCase()}]`}
     </span>
   );
 }
@@ -178,20 +175,22 @@ function AgentControls({
 
   if (status === "wiped_out") {
     return (
-      <div className="mt-4 rounded border border-red-500/20 bg-red-500/5 px-4 py-3">
+      <div className="mt-4 border border-[var(--t-red)]/20 bg-[var(--t-red)]/5 px-4 py-3">
+        <p className="text-sm text-[var(--t-red)]">
+          This trader has been wiped out and can no longer trade.
+        </p>
         <button
           onClick={() => revive.mutate(traderId)}
           disabled={revive.isPending}
-          className="mt-3 rounded bg-purple-500/10 px-4 py-2 text-sm font-medium text-purple-400 transition-colors hover:bg-purple-500/20 disabled:opacity-50"
+          className="mt-3 border border-[var(--t-border)] px-4 py-2 text-sm text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] disabled:opacity-50"
         >
           {revive.isPending ? "Reviving..." : "Revive Trader"}
         </button>
         {revive.isError && (
-          <p className="mt-2 text-xs text-red-400">{revive.error.message}</p>
+          <p className="mt-2 text-xs text-[var(--t-red)]">
+            {revive.error.message}
+          </p>
         )}
-        <p className="text-sm text-red-400">
-          This trader has been wiped out and can no longer trade.
-        </p>
       </div>
     );
   }
@@ -202,7 +201,7 @@ function AgentControls({
         <button
           onClick={() => pause.mutate(traderId)}
           disabled={pause.isPending}
-          className="rounded bg-yellow-500/10 px-4 py-2 text-sm font-medium text-yellow-400 transition-colors hover:bg-yellow-500/20 disabled:opacity-50"
+          className="border border-[var(--t-border)] px-4 py-2 text-sm text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] disabled:opacity-50"
         >
           {pause.isPending ? "Pausing..." : "Pause Trading"}
         </button>
@@ -210,27 +209,27 @@ function AgentControls({
         <button
           onClick={() => resume.mutate(traderId)}
           disabled={resume.isPending}
-          className="rounded bg-green-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
+          className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
         >
           {resume.isPending ? "Resuming..." : "Start Trading"}
         </button>
       )}
 
       {status === "active" && (
-        <span className="flex items-center gap-1.5 text-xs text-green-400">
+        <span className="flex items-center gap-1.5 text-xs text-[var(--t-green)]">
           <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-400" />
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--t-green)] opacity-75" />
+            <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--t-green)]" />
           </span>
           Trading autonomously
         </span>
       )}
 
       {pause.isError && (
-        <p className="text-xs text-red-400">{pause.error.message}</p>
+        <p className="text-xs text-[var(--t-red)]">{pause.error.message}</p>
       )}
       {resume.isError && (
-        <p className="text-xs text-red-400">{resume.error.message}</p>
+        <p className="text-xs text-[var(--t-red)]">{resume.error.message}</p>
       )}
     </div>
   );
@@ -248,23 +247,23 @@ function AssetInventory({
   const { data: assets, isLoading } = useTraderAssets(traderId, traderStatus);
 
   return (
-    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-      <h2 className="mb-3 text-sm font-medium text-zinc-400">
+    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
+      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
         Asset Inventory
       </h2>
       {isLoading ? (
-        <p className="text-sm text-zinc-500">Loading...</p>
+        <p className="text-sm text-[var(--t-muted)]">Loading...</p>
       ) : !assets || assets.length === 0 ? (
-        <p className="text-sm text-zinc-500">No assets acquired yet.</p>
+        <p className="text-sm text-[var(--t-muted)]">No assets acquired yet.</p>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
           {assets.map((asset) => (
             <div
               key={asset.id}
-              className="flex items-center justify-between rounded border border-zinc-700/50 bg-zinc-800/50 px-3 py-2"
+              className="flex items-center justify-between bg-[var(--t-bg)] px-3 py-2"
             >
-              <span className="text-sm text-zinc-300">{asset.name}</span>
-              <span className="text-sm text-green-400">
+              <span className="text-sm text-[var(--t-text)]">{asset.name}</span>
+              <span className="text-sm text-[var(--t-green)]">
                 ${Number(asset.value_usdc).toFixed(2)}
               </span>
             </div>
@@ -291,14 +290,16 @@ function DealOutcomes({
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-      <h2 className="mb-3 text-sm font-medium text-zinc-400">Deal Outcomes</h2>
+    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
+      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
+        Deal Outcomes
+      </h2>
       {isLoading ? (
-        <p className="text-sm text-zinc-500">Loading...</p>
+        <p className="text-sm text-[var(--t-muted)]">Loading...</p>
       ) : !outcomes || outcomes.length === 0 ? (
-        <p className="text-sm text-zinc-500">No deals entered yet.</p>
+        <p className="text-sm text-[var(--t-muted)]">No deals entered yet.</p>
       ) : (
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
           {outcomes.map((outcome) => (
             <OutcomeCard
               key={outcome.id}
@@ -327,22 +328,22 @@ function OutcomeCard({
   const pnl = Number(outcome.trader_pnl_usdc);
   const isWin = pnl > 0;
   const isWipeout = outcome.trader_wiped_out;
-  const pnlColor = isWin ? "text-green-400" : "text-red-400";
+  const pnlColor = isWin ? "text-[var(--t-green)]" : "text-[var(--t-red)]";
   const pnlLabel = isWipeout ? "WIPEOUT" : isWin ? "WIN" : "LOSS";
 
   return (
     <div
-      className={`rounded border transition-colors ${
+      className={`bg-[var(--t-bg)] ${
         isWipeout
-          ? "border-red-500/30 bg-red-500/5"
+          ? "border-l-2 border-l-[var(--t-red)]"
           : isWin
-            ? "border-green-500/20 bg-green-500/5"
-            : "border-zinc-700/50 bg-zinc-800/50"
+            ? "border-l-2 border-l-[var(--t-green)]"
+            : ""
       }`}
     >
       <button
         onClick={onToggle}
-        className="flex w-full items-center justify-between px-4 py-3 text-left"
+        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-[var(--t-surface)]"
       >
         <div className="flex items-center gap-3">
           <span className={`text-sm font-medium ${pnlColor}`}>{pnlLabel}</span>
@@ -351,30 +352,30 @@ function OutcomeCard({
             {pnl.toFixed(2)} USDC
           </span>
           {isWipeout && outcome.wipeout_reason && (
-            <span className="rounded bg-red-500/10 px-1.5 py-0.5 text-xs text-red-400">
-              {outcome.wipeout_reason.replace("_", " ")}
+            <span className="text-[10px] text-[var(--t-red)]">
+              ({outcome.wipeout_reason.replace("_", " ")})
             </span>
           )}
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-[var(--t-muted)]">
             {new Date(outcome.created_at).toLocaleString()}
           </span>
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-[var(--t-muted)]">
             {isExpanded ? "▲" : "▼"}
           </span>
         </div>
       </button>
 
       {isExpanded && outcome.narrative && (
-        <div className="border-t border-zinc-700/30 px-4 py-3">
+        <div className="border-t border-[var(--t-border)] px-4 py-3">
           <div className="flex flex-col gap-3">
             {outcome.narrative.map((beat, i) => (
               <div key={i}>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--t-muted)]">
                   {beat.event}
                 </p>
-                <p className="text-sm leading-relaxed text-zinc-300">
+                <p className="text-sm leading-relaxed text-[var(--t-text)]">
                   {beat.description}
                 </p>
               </div>
@@ -386,7 +387,7 @@ function OutcomeCard({
                 (asset: { name: string; value_usdc: number }, i: number) => (
                   <span
                     key={i}
-                    className="rounded bg-green-500/10 px-2 py-1 text-xs text-green-400"
+                    className="border border-[var(--t-green)]/30 px-2 py-1 text-xs text-[var(--t-green)]"
                   >
                     +{asset.name} (${asset.value_usdc})
                   </span>
@@ -399,14 +400,14 @@ function OutcomeCard({
               {outcome.assets_lost.map((name: string, i: number) => (
                 <span
                   key={i}
-                  className="rounded bg-red-500/10 px-2 py-1 text-xs text-red-400"
+                  className="border border-[var(--t-red)]/30 px-2 py-1 text-xs text-[var(--t-red)]"
                 >
                   -{name}
                 </span>
               ))}
             </div>
           )}
-          <div className="mt-3 flex gap-4 border-t border-zinc-700/30 pt-3 text-xs text-zinc-500">
+          <div className="mt-3 flex gap-4 border-t border-[var(--t-border)] pt-3 text-xs text-[var(--t-muted)]">
             <span>Rake: ${Number(outcome.rake_usdc).toFixed(2)}</span>
             <span>
               Pot change: ${Number(outcome.pot_change_usdc).toFixed(2)}
@@ -414,79 +415,6 @@ function OutcomeCard({
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-/* ── Agent Activity Feed ── */
-
-function AgentActivityFeed({
-  traderId,
-  traderStatus,
-}: {
-  traderId: string;
-  traderStatus: string;
-}) {
-  const { data: activity, isLoading } = useAgentActivity(
-    traderId,
-    traderStatus
-  );
-
-  return (
-    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-      <h2 className="mb-3 text-sm font-medium text-zinc-400">
-        Agent Activity Log
-      </h2>
-      {isLoading ? (
-        <p className="text-sm text-zinc-500">Loading...</p>
-      ) : !activity || activity.length === 0 ? (
-        <p className="text-sm text-zinc-500">No agent activity yet.</p>
-      ) : (
-        <div className="flex flex-col gap-1">
-          {activity.map((entry) => (
-            <ActivityRow key={entry.id} entry={entry} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-const ACTIVITY_DISPLAY: Record<string, { label: string; color: string }> = {
-  cycle_start: { label: "CYCLE", color: "text-zinc-500" },
-  scan: { label: "SCAN", color: "text-blue-400" },
-  evaluate: { label: "EVAL", color: "text-blue-400" },
-  skip: { label: "SKIP", color: "text-zinc-500" },
-  enter: { label: "ENTER", color: "text-yellow-400" },
-  win: { label: "WIN", color: "text-green-400" },
-  loss: { label: "LOSS", color: "text-red-400" },
-  wipeout: { label: "WIPEOUT", color: "text-red-400" },
-  pause: { label: "PAUSE", color: "text-yellow-400" },
-  resume: { label: "RESUME", color: "text-green-400" },
-  revive: { label: "REVIVE", color: "text-purple-400" },
-  approval_required: { label: "APPROVAL", color: "text-orange-400" },
-  approved: { label: "APPROVED", color: "text-green-400" },
-  rejected: { label: "REJECTED", color: "text-red-400" },
-  error: { label: "ERROR", color: "text-red-400" },
-  cycle_end: { label: "DONE", color: "text-zinc-500" },
-};
-
-function ActivityRow({ entry }: { entry: AgentActivity }) {
-  const display = ACTIVITY_DISPLAY[entry.activity_type] ?? {
-    label: entry.activity_type,
-    color: "text-zinc-400",
-  };
-  const time = new Date(entry.created_at).toLocaleTimeString();
-
-  return (
-    <div className="flex items-start gap-3 rounded px-2 py-1.5 transition-colors hover:bg-zinc-800/50">
-      <span className="mt-0.5 font-mono text-xs text-zinc-600">{time}</span>
-      <span
-        className={`mt-0.5 w-14 text-right font-mono text-xs font-bold ${display.color}`}
-      >
-        {display.label}
-      </span>
-      <span className="flex-1 text-sm text-zinc-300">{entry.message}</span>
     </div>
   );
 }
@@ -499,19 +427,19 @@ function formatEvent(event: TraderHistoryEvent) {
       return {
         label: "Deposit",
         detail: `+${event.amount} USDC`,
-        color: "text-green-400",
+        color: "text-[var(--t-green)]",
       };
     case "withdrawal":
       return {
         label: "Withdrawal",
         detail: `-${event.amount} USDC`,
-        color: "text-red-400",
+        color: "text-[var(--t-red)]",
       };
     case "enter":
       return {
         label: "Entered Deal",
         detail: `Deal #${event.dealId}`,
-        color: "text-zinc-300",
+        color: "text-[var(--t-text)]",
       };
     case "resolve": {
       const pnl = event.pnl ?? 0;
@@ -522,10 +450,10 @@ function formatEvent(event: TraderHistoryEvent) {
         detail: `${sign}${net.toFixed(6)} USDC (Deal #${event.dealId})`,
         color:
           pnl > 0
-            ? "text-green-400"
+            ? "text-[var(--t-green)]"
             : pnl < 0
-              ? "text-red-400"
-              : "text-zinc-300",
+              ? "text-[var(--t-red)]"
+              : "text-[var(--t-text)]",
       };
     }
   }
@@ -535,25 +463,27 @@ function ActivityHistory({ id }: { id: string }) {
   const { data: events, isLoading } = useTraderHistory(id);
 
   return (
-    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-      <h2 className="mb-3 text-sm font-medium text-zinc-400">
+    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
+      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
         On-Chain History
       </h2>
       {isLoading ? (
-        <p className="text-sm text-zinc-500">Loading...</p>
+        <p className="text-sm text-[var(--t-muted)]">Loading...</p>
       ) : !events || events.length === 0 ? (
-        <p className="text-sm text-zinc-500">No on-chain activity yet.</p>
+        <p className="text-sm text-[var(--t-muted)]">
+          No on-chain activity yet.
+        </p>
       ) : (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
           {events.map((event, i) => {
             const { label, detail, color } = formatEvent(event);
             return (
               <div
                 key={`${event.txHash}-${i}`}
-                className="flex items-center justify-between rounded border border-zinc-700/50 bg-zinc-800/50 px-3 py-2"
+                className="flex items-center justify-between bg-[var(--t-bg)] px-3 py-2"
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-24 text-xs font-medium text-zinc-400">
+                  <span className="w-24 text-xs font-medium text-[var(--t-muted)]">
                     {label}
                   </span>
                   <span className={`text-sm ${color}`}>{detail}</span>
@@ -562,7 +492,7 @@ function ActivityHistory({ id }: { id: string }) {
                   href={`https://sepolia.basescan.org/tx/${event.txHash}`}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="text-xs text-zinc-500 hover:text-zinc-300"
+                  className="text-xs text-[var(--t-muted)] hover:text-[var(--t-accent)]"
                 >
                   tx
                 </a>
@@ -632,18 +562,18 @@ function MandateConfig({
 
   if (!editing) {
     return (
-      <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+      <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-zinc-400">Mandate</h2>
+          <h2 className="text-sm font-medium text-[var(--t-muted)]">Mandate</h2>
           <button
             onClick={() => setEditing(true)}
-            className="text-xs text-zinc-400 hover:text-zinc-300"
+            className="text-xs text-[var(--t-muted)] hover:text-[var(--t-text)]"
           >
             Configure
           </button>
         </div>
         {Object.keys(mandate).length === 0 ? (
-          <p className="text-sm text-zinc-500">
+          <p className="text-sm text-[var(--t-muted)]">
             No mandate configured yet. Configure risk tolerance and deal filters
             to control how this trader enters deals.
           </p>
@@ -651,38 +581,42 @@ function MandateConfig({
           <div className="grid grid-cols-2 gap-3 text-sm">
             {mandate.max_entry_cost_usdc !== undefined && (
               <div>
-                <p className="text-zinc-500">Max Entry Cost</p>
-                <p className="text-zinc-50">
+                <p className="text-xs text-[var(--t-muted)]">Max Entry Cost</p>
+                <p className="text-[var(--t-text)]">
                   ${String(mandate.max_entry_cost_usdc)} USDC
                 </p>
               </div>
             )}
             {mandate.min_pot_usdc !== undefined && (
               <div>
-                <p className="text-zinc-500">Min Pot</p>
-                <p className="text-zinc-50">
+                <p className="text-xs text-[var(--t-muted)]">Min Pot</p>
+                <p className="text-[var(--t-text)]">
                   ${String(mandate.min_pot_usdc)} USDC
                 </p>
               </div>
             )}
             {mandate.max_pot_usdc !== undefined && (
               <div>
-                <p className="text-zinc-500">Max Pot</p>
-                <p className="text-zinc-50">
+                <p className="text-xs text-[var(--t-muted)]">Max Pot</p>
+                <p className="text-[var(--t-text)]">
                   ${String(mandate.max_pot_usdc)} USDC
                 </p>
               </div>
             )}
             {mandate.bankroll_pct !== undefined && (
               <div>
-                <p className="text-zinc-500">Bankroll %</p>
-                <p className="text-zinc-50">{String(mandate.bankroll_pct)}%</p>
+                <p className="text-xs text-[var(--t-muted)]">Bankroll %</p>
+                <p className="text-[var(--t-text)]">
+                  {String(mandate.bankroll_pct)}%
+                </p>
               </div>
             )}
             {mandate.approval_threshold_usdc !== undefined && (
               <div>
-                <p className="text-zinc-500">Approval Threshold</p>
-                <p className="text-zinc-50">
+                <p className="text-xs text-[var(--t-muted)]">
+                  Approval Threshold
+                </p>
+                <p className="text-[var(--t-text)]">
                   ${String(mandate.approval_threshold_usdc)} USDC
                 </p>
               </div>
@@ -690,8 +624,8 @@ function MandateConfig({
             {Array.isArray(mandate.keywords) &&
               (mandate.keywords as string[]).length > 0 && (
                 <div className="col-span-2">
-                  <p className="text-zinc-500">Keywords</p>
-                  <p className="text-zinc-50">
+                  <p className="text-xs text-[var(--t-muted)]">Keywords</p>
+                  <p className="text-[var(--t-text)]">
                     {(mandate.keywords as string[]).join(", ")}
                   </p>
                 </div>
@@ -703,13 +637,13 @@ function MandateConfig({
   }
 
   return (
-    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-      <h2 className="mb-3 text-sm font-medium text-zinc-400">
+    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
+      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
         Configure Mandate
       </h2>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="mb-1 block text-xs text-zinc-500">
+          <label className="mb-1 block text-xs text-[var(--t-muted)]">
             Max Entry Cost (USDC)
           </label>
           <input
@@ -721,11 +655,11 @@ function MandateConfig({
               setForm({ ...form, max_entry_cost_usdc: e.target.value })
             }
             placeholder="No limit"
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-500">
+          <label className="mb-1 block text-xs text-[var(--t-muted)]">
             Min Pot (USDC)
           </label>
           <input
@@ -735,11 +669,11 @@ function MandateConfig({
             value={form.min_pot_usdc}
             onChange={(e) => setForm({ ...form, min_pot_usdc: e.target.value })}
             placeholder="No limit"
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-500">
+          <label className="mb-1 block text-xs text-[var(--t-muted)]">
             Max Pot (USDC)
           </label>
           <input
@@ -749,11 +683,11 @@ function MandateConfig({
             value={form.max_pot_usdc}
             onChange={(e) => setForm({ ...form, max_pot_usdc: e.target.value })}
             placeholder="No limit"
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-500">
+          <label className="mb-1 block text-xs text-[var(--t-muted)]">
             Bankroll % (1-100)
           </label>
           <input
@@ -764,11 +698,11 @@ function MandateConfig({
             value={form.bankroll_pct}
             onChange={(e) => setForm({ ...form, bankroll_pct: e.target.value })}
             placeholder="25"
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-500">
+          <label className="mb-1 block text-xs text-[var(--t-muted)]">
             Approval Threshold (USDC)
           </label>
           <input
@@ -780,11 +714,11 @@ function MandateConfig({
               setForm({ ...form, approval_threshold_usdc: e.target.value })
             }
             placeholder="No approval required"
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-zinc-500">
+          <label className="mb-1 block text-xs text-[var(--t-muted)]">
             Keywords (comma-separated)
           </label>
           <input
@@ -792,7 +726,7 @@ function MandateConfig({
             value={form.keywords}
             onChange={(e) => setForm({ ...form, keywords: e.target.value })}
             placeholder="e.g. oil, gold, tech"
-            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
           />
         </div>
       </div>
@@ -800,19 +734,21 @@ function MandateConfig({
         <button
           onClick={handleSave}
           disabled={configure.isPending}
-          className="rounded bg-green-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
+          className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
         >
           {configure.isPending ? "Saving..." : "Save Mandate"}
         </button>
         <button
           onClick={() => setEditing(false)}
-          className="text-sm text-zinc-400 hover:text-zinc-300"
+          className="text-sm text-[var(--t-muted)] hover:text-[var(--t-text)]"
         >
           Cancel
         </button>
       </div>
       {configure.isError && (
-        <p className="mt-2 text-xs text-red-400">{configure.error.message}</p>
+        <p className="mt-2 text-xs text-[var(--t-red)]">
+          {configure.error.message}
+        </p>
       )}
     </div>
   );
@@ -844,45 +780,50 @@ function ReputationSection({
   const totalDeals = outcomes.length;
   const winRate = totalDeals > 0 ? ((wins / totalDeals) * 100).toFixed(0) : "0";
 
-  // Reputation score: wins * 3 - losses - wipeouts * 5, floor at 0
   const reputationScore = Math.max(0, wins * 3 - losses - wipeouts * 5);
 
   if (totalDeals === 0) return null;
 
   return (
-    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-      <h2 className="mb-3 text-sm font-medium text-zinc-400">Reputation</h2>
+    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
+      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
+        Reputation
+      </h2>
       <div className="grid grid-cols-3 gap-4 text-center sm:grid-cols-6">
         <div>
-          <p className="text-lg font-semibold text-zinc-50">
+          <p className="text-lg font-semibold text-[var(--t-text)]">
             {reputationScore}
           </p>
-          <p className="text-xs text-zinc-500">Score</p>
+          <p className="text-xs text-[var(--t-muted)]">Score</p>
         </div>
         <div>
-          <p className="text-lg font-semibold text-green-400">{wins}</p>
-          <p className="text-xs text-zinc-500">Wins</p>
+          <p className="text-lg font-semibold text-[var(--t-green)]">{wins}</p>
+          <p className="text-xs text-[var(--t-muted)]">Wins</p>
         </div>
         <div>
-          <p className="text-lg font-semibold text-red-400">{losses}</p>
-          <p className="text-xs text-zinc-500">Losses</p>
+          <p className="text-lg font-semibold text-[var(--t-red)]">{losses}</p>
+          <p className="text-xs text-[var(--t-muted)]">Losses</p>
         </div>
         <div>
-          <p className="text-lg font-semibold text-zinc-50">{winRate}%</p>
-          <p className="text-xs text-zinc-500">Win Rate</p>
+          <p className="text-lg font-semibold text-[var(--t-text)]">
+            {winRate}%
+          </p>
+          <p className="text-xs text-[var(--t-muted)]">Win Rate</p>
         </div>
         <div>
-          <p className="text-lg font-semibold text-red-400">{wipeouts}</p>
-          <p className="text-xs text-zinc-500">Wipeouts</p>
+          <p className="text-lg font-semibold text-[var(--t-red)]">
+            {wipeouts}
+          </p>
+          <p className="text-xs text-[var(--t-muted)]">Wipeouts</p>
         </div>
         <div>
           <p
-            className={`text-lg font-semibold ${totalPnl >= 0 ? "text-green-400" : "text-red-400"}`}
+            className={`text-lg font-semibold ${totalPnl >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]"}`}
           >
             {totalPnl >= 0 ? "+" : ""}
             {totalPnl.toFixed(2)}
           </p>
-          <p className="text-xs text-zinc-500">Total P&L</p>
+          <p className="text-xs text-[var(--t-muted)]">Total P&L</p>
         </div>
       </div>
     </div>
@@ -947,10 +888,12 @@ function FundingSection({
   }
 
   return (
-    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-      <h2 className="mb-1 text-sm font-medium text-zinc-400">Fund Trader</h2>
+    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
+      <h2 className="mb-1 text-sm font-medium text-[var(--t-muted)]">
+        Fund Trader
+      </h2>
       {walletUsdc !== undefined && (
-        <p className="mb-4 text-xs text-zinc-500">
+        <p className="mb-4 text-xs text-[var(--t-muted)]">
           Wallet balance: {walletUsdc} USDC (Base Sepolia)
         </p>
       )}
@@ -958,7 +901,10 @@ function FundingSection({
       <div className="grid gap-6 sm:grid-cols-2">
         {/* Deposit */}
         <form onSubmit={handleDeposit} className="flex flex-col gap-3">
-          <label htmlFor="depositAmount" className="text-sm text-zinc-300">
+          <label
+            htmlFor="depositAmount"
+            className="text-sm text-[var(--t-text)]"
+          >
             Deposit USDC
           </label>
           <input
@@ -970,12 +916,12 @@ function FundingSection({
             onChange={(e) => setDepositAmount(e.target.value)}
             placeholder="0.00"
             disabled={isDepositBusy}
-            className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none disabled:opacity-50"
+            className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={isDepositBusy || !depositAmount}
-            className="rounded bg-green-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
+            className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
           >
             {depositStep === "approving"
               ? "Approving USDC..."
@@ -984,17 +930,17 @@ function FundingSection({
                 : "Deposit"}
           </button>
           {depositStep === "done" && (
-            <p className="text-xs text-green-400">Deposit confirmed.</p>
+            <p className="text-xs text-[var(--t-green)]">Deposit confirmed.</p>
           )}
           {depositError && (
             <div className="flex items-center gap-2">
-              <p className="text-xs text-red-400">
+              <p className="text-xs text-[var(--t-red)]">
                 {depositError.slice(0, 120)}
               </p>
               <button
                 type="button"
                 onClick={resetDeposit}
-                className="text-xs text-zinc-400 underline hover:text-zinc-300"
+                className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
               >
                 Retry
               </button>
@@ -1004,7 +950,10 @@ function FundingSection({
 
         {/* Withdraw */}
         <form onSubmit={handleWithdraw} className="flex flex-col gap-3">
-          <label htmlFor="withdrawAmount" className="text-sm text-zinc-300">
+          <label
+            htmlFor="withdrawAmount"
+            className="text-sm text-[var(--t-text)]"
+          >
             Withdraw USDC
           </label>
           <input
@@ -1016,27 +965,29 @@ function FundingSection({
             onChange={(e) => setWithdrawAmount(e.target.value)}
             placeholder="0.00"
             disabled={withdrawBusy}
-            className="rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-zinc-50 placeholder-zinc-500 focus:border-green-500 focus:outline-none disabled:opacity-50"
+            className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
           />
           <button
             type="submit"
             disabled={withdrawBusy || !withdrawAmount}
-            className="rounded bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-200 transition-colors hover:bg-zinc-600 disabled:opacity-50"
+            className="border border-[var(--t-border)] px-4 py-2 text-sm font-medium text-[var(--t-text)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] disabled:opacity-50"
           >
             {withdrawBusy ? "Withdrawing..." : "Withdraw"}
           </button>
           {withdrawDone && (
-            <p className="text-xs text-green-400">Withdrawal confirmed.</p>
+            <p className="text-xs text-[var(--t-green)]">
+              Withdrawal confirmed.
+            </p>
           )}
           {withdrawError && (
             <div className="flex items-center gap-2">
-              <p className="text-xs text-red-400">
+              <p className="text-xs text-[var(--t-red)]">
                 {withdrawError.slice(0, 120)}
               </p>
               <button
                 type="button"
                 onClick={resetWithdraw}
-                className="text-xs text-zinc-400 underline hover:text-zinc-300"
+                className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
               >
                 Retry
               </button>

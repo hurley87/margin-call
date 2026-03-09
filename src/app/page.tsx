@@ -1,13 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { useDeskManager } from "@/hooks/use-desk";
-import { usePortfolio, type PnlPoint } from "@/hooks/use-portfolio";
+import { usePortfolio } from "@/hooks/use-portfolio";
 import { useTraders } from "@/hooks/use-traders";
-import { usePendingApprovals } from "@/hooks/use-approvals";
+import { usePendingApprovals, useApproveReject } from "@/hooks/use-approvals";
 import { useDeals } from "@/hooks/use-deals";
 import { useDashboardRealtime } from "@/hooks/use-realtime";
+import { useActivityFeed } from "@/hooks/use-activity-feed";
+import { Nav } from "@/components/nav";
+import type { AgentActivity } from "@/hooks/use-agent";
 
 export default function Home() {
   const { ready, authenticated, login, logout } = usePrivy();
@@ -15,205 +19,150 @@ export default function Home() {
 
   if (!ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <p className="text-zinc-400">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] font-mono">
+        <p className="text-[var(--t-muted)]">
+          INITIALIZING...<span className="cursor-blink">█</span>
+        </p>
       </div>
     );
   }
 
   if (!authenticated) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-6 bg-black">
-        <h1 className="text-3xl font-semibold tracking-tight text-zinc-50">
-          Margin Call
-        </h1>
-        <p className="text-zinc-400">Wall Street Agent Trading Game</p>
+      <div className="crt-scanlines flex min-h-screen flex-col items-center justify-center gap-8 bg-[var(--t-bg)] font-mono">
+        <div className="text-center">
+          <h1 className="text-2xl font-bold text-[var(--t-text)] tracking-tight font-[family-name:var(--font-plex-sans)]">
+            MARGIN CALL
+          </h1>
+          <p className="mt-2 text-sm text-[var(--t-muted)]">
+            Wall Street Agent Trading Game
+          </p>
+        </div>
+        <div className="flex flex-col items-center gap-3 text-xs text-[var(--t-muted)]">
+          <p>DESK_OS v2.1</p>
+          <p>LOADING TRADE ENGINE...</p>
+        </div>
         <button
           onClick={login}
-          className="rounded-full bg-green-500 px-8 py-3 font-medium text-black transition-colors hover:bg-green-400"
+          className="border border-[var(--t-border)] bg-[var(--t-surface)] px-8 py-3 font-mono text-sm text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
         >
-          Connect Wallet
+          {">"} CONNECT_WALLET<span className="cursor-blink">█</span>
         </button>
+        <p className="text-[10px] uppercase tracking-widest text-[var(--t-muted)]">
+          SECURE LINK VIA PRIVY // BASE NETWORK
+        </p>
       </div>
     );
   }
 
   if (deskLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black">
-        <p className="text-zinc-400">Registering...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] font-mono">
+        <p className="text-[var(--t-muted)]">
+          REGISTERING DESK MANAGER...<span className="cursor-blink">█</span>
+        </p>
       </div>
     );
   }
 
   if (!deskManager) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-black">
-        <p className="text-zinc-400">No wallet connected</p>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--t-bg)] font-mono">
+        <p className="text-[var(--t-red)]">ERR: NO WALLET DETECTED</p>
         <button
           onClick={logout}
-          className="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+          className="text-sm text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)]"
         >
-          Disconnect
+          [DISCONNECT]
         </button>
       </div>
     );
   }
 
-  return <Dashboard displayName={deskManager.display_name} onLogout={logout} />;
+  return <Dashboard displayName={deskManager.display_name} />;
 }
 
-function Dashboard({
-  displayName,
-  onLogout,
-}: {
-  displayName: string;
-  onLogout: () => void;
-}) {
+/* ── Dashboard ── */
+
+function Dashboard({ displayName }: { displayName: string }) {
   useDashboardRealtime();
 
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: traders } = useTraders();
   const { data: approvals } = usePendingApprovals();
   const { data: deals } = useDeals();
+  const { data: feedData, isLoading: feedLoading } = useActivityFeed();
+
+  const [traderFilter, setTraderFilter] = useState<string | null>(null);
+
+  const activity = feedData?.activity ?? [];
+  const traderNames = feedData?.traderNames ?? {};
+
+  const filteredActivity = traderFilter
+    ? activity.filter((a) => a.trader_id === traderFilter)
+    : activity;
+
+  const pnl = portfolio?.stats.total_pnl ?? 0;
+  const pendingCount = approvals?.length ?? 0;
 
   return (
-    <div className="flex min-h-screen flex-col items-center bg-black px-4 py-8">
-      <div className="w-full max-w-3xl">
-        {/* Header */}
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-zinc-50">
-              {displayName}
-            </h1>
-            <p className="text-sm text-zinc-500">Desk Manager Dashboard</p>
-          </div>
+    <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
+      <Nav />
+
+      {/* Ticker Strip */}
+      <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-1.5 text-xs">
           <div className="flex items-center gap-4">
-            {approvals && approvals.length > 0 && (
-              <Link
-                href="/approvals"
-                className="flex items-center gap-1.5 rounded-full bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-400 transition-colors hover:bg-orange-500/20"
-              >
-                <span className="flex h-4 w-4 items-center justify-center rounded-full bg-orange-500 text-[10px] font-bold text-black">
-                  {approvals.length}
-                </span>
-                Approvals
-              </Link>
-            )}
-            <button
-              onClick={onLogout}
-              className="text-sm text-zinc-500 transition-colors hover:text-zinc-300"
+            <span className="text-[var(--t-text)]">
+              <span className="text-[var(--t-muted)]">PORT </span>
+              {portfolioLoading
+                ? "..."
+                : `$${(portfolio?.total_value_usdc ?? 0).toFixed(2)}`}
+            </span>
+            <span
+              className={
+                pnl >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]"
+              }
             >
-              Disconnect
-            </button>
+              <span className="text-[var(--t-muted)]">P&L </span>
+              {portfolioLoading
+                ? "..."
+                : `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`}
+            </span>
           </div>
+          <span className="text-[var(--t-muted)]">{displayName}</span>
         </div>
+      </div>
 
-        {/* Portfolio Overview */}
-        <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          <StatCard
-            label="Portfolio Value"
-            value={
-              portfolioLoading
-                ? "..."
-                : `$${(portfolio?.total_value_usdc ?? 0).toFixed(2)}`
-            }
-            highlight
-          />
-          <StatCard
-            label="Total P&L"
-            value={
-              portfolioLoading
-                ? "..."
-                : `${(portfolio?.stats.total_pnl ?? 0) >= 0 ? "+" : ""}$${(portfolio?.stats.total_pnl ?? 0).toFixed(2)}`
-            }
-            positive={(portfolio?.stats.total_pnl ?? 0) >= 0}
-          />
-          <StatCard
-            label="Win / Loss"
-            value={
-              portfolioLoading
-                ? "..."
-                : `${portfolio?.stats.total_wins ?? 0}W / ${portfolio?.stats.total_losses ?? 0}L`
-            }
-          />
-          <StatCard
-            label="Wipeouts"
-            value={
-              portfolioLoading
-                ? "..."
-                : String(portfolio?.stats.total_wipeouts ?? 0)
-            }
-          />
-        </div>
-
-        {/* P&L Chart */}
-        {portfolio && portfolio.pnl_history.length > 1 && (
-          <div className="mb-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-            <h2 className="mb-4 text-sm font-medium text-zinc-400">
-              P&L Over Time
-            </h2>
-            <PnlChart data={portfolio.pnl_history} />
-          </div>
-        )}
-
-        {/* Quick Nav */}
-        <div className="mb-6 grid grid-cols-3 gap-3">
-          <Link
-            href="/traders"
-            className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-center transition-colors hover:border-zinc-700"
-          >
-            <p className="text-lg font-semibold text-zinc-50">
-              {traders?.length ?? 0}
-            </p>
-            <p className="text-xs text-zinc-500">Traders</p>
-          </Link>
-          <Link
-            href="/deals"
-            className="rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-center transition-colors hover:border-zinc-700"
-          >
-            <p className="text-lg font-semibold text-zinc-50">
-              {deals?.length ?? 0}
-            </p>
-            <p className="text-xs text-zinc-500">Open Deals</p>
-          </Link>
-          <Link
-            href="/deals/create"
-            className="flex items-center justify-center rounded-lg border border-zinc-800 bg-zinc-900 p-4 text-sm font-medium text-green-400 transition-colors hover:border-zinc-700"
-          >
-            + New Deal
-          </Link>
-        </div>
-
-        {/* Per-Trader Breakdown */}
+      <div className="mx-auto max-w-2xl px-4 py-4">
+        {/* Trader Roster */}
         {portfolio && portfolio.traders.length > 0 && (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-            <h2 className="mb-4 text-sm font-medium text-zinc-400">
-              Trader Breakdown
-            </h2>
-            <div className="flex flex-col gap-3">
+          <div className="mb-6">
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              TRADERS ({portfolio.traders.length})
+            </div>
+            <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
               {portfolio.traders.map((t) => (
                 <Link
                   key={t.id}
                   href={`/traders/${t.id}`}
-                  className="flex items-center justify-between rounded border border-zinc-700/50 bg-zinc-800/50 px-4 py-3 transition-colors hover:border-zinc-600"
+                  className="flex items-center justify-between bg-[var(--t-bg)] px-3 py-2.5 text-xs transition-colors hover:bg-[var(--t-surface)]"
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="text-sm font-medium text-zinc-50">
-                      {t.name}
-                    </span>
-                    <TraderStatusDot status={t.status} />
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`inline-block h-1.5 w-1.5 rounded-full ${
+                        t.status === "active"
+                          ? "bg-[var(--t-green)]"
+                          : t.status === "paused"
+                            ? "bg-[var(--t-amber)]"
+                            : "bg-[var(--t-red)]"
+                      }`}
+                    />
+                    <span className="text-[var(--t-text)]">{t.name}</span>
                   </div>
-                  <div className="flex items-center gap-6 text-sm">
-                    <span className="text-zinc-400">
-                      Escrow: ${t.escrow_usdc.toFixed(2)}
-                    </span>
-                    {t.asset_value_usdc > 0 && (
-                      <span className="text-zinc-400">
-                        Assets: ${t.asset_value_usdc.toFixed(2)}
-                      </span>
-                    )}
-                    <span className="font-medium text-zinc-50">
+                  <div className="flex items-center gap-4 text-[var(--t-muted)]">
+                    <span>${t.escrow_usdc.toFixed(2)}</span>
+                    <span className="text-[var(--t-text)]">
                       ${t.total_value_usdc.toFixed(2)}
                     </span>
                   </div>
@@ -223,16 +172,95 @@ function Dashboard({
           </div>
         )}
 
-        {/* Empty state */}
-        {!portfolioLoading && portfolio && portfolio.traders.length === 0 && (
-          <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-8 text-center">
-            <p className="mb-2 text-zinc-400">No traders yet</p>
-            <Link
-              href="/traders"
-              className="text-sm text-green-400 hover:text-green-300"
+        {/* Trader Filter Chips */}
+        {traders && traders.length > 0 && (
+          <div className="mb-4 flex items-center gap-2 overflow-x-auto text-xs">
+            <button
+              onClick={() => setTraderFilter(null)}
+              className={`shrink-0 border px-2.5 py-1 transition-colors ${
+                traderFilter === null
+                  ? "border-[var(--t-accent)] text-[var(--t-accent)]"
+                  : "border-[var(--t-border)] text-[var(--t-muted)] hover:text-[var(--t-text)]"
+              }`}
             >
-              Create your first trader to start trading
-            </Link>
+              ALL
+            </button>
+            {traders.map((t) => (
+              <button
+                key={t.id}
+                onClick={() =>
+                  setTraderFilter(traderFilter === t.id ? null : t.id)
+                }
+                className={`flex shrink-0 items-center gap-1.5 border px-2.5 py-1 transition-colors ${
+                  traderFilter === t.id
+                    ? "border-[var(--t-accent)] text-[var(--t-accent)]"
+                    : "border-[var(--t-border)] text-[var(--t-muted)] hover:text-[var(--t-text)]"
+                }`}
+              >
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${
+                    t.status === "active"
+                      ? "bg-[var(--t-green)]"
+                      : t.status === "paused"
+                        ? "bg-[var(--t-amber)]"
+                        : "bg-[var(--t-red)]"
+                  }`}
+                />
+                {t.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Activity Feed */}
+        <div className="mb-6">
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+            LIVE FEED
+            {traderFilter && traderNames[traderFilter]
+              ? ` — ${traderNames[traderFilter]}`
+              : ""}
+          </div>
+          <div className="border border-[var(--t-border)] bg-[var(--t-bg)]">
+            {feedLoading ? (
+              <div className="p-6 text-center text-sm text-[var(--t-muted)]">
+                LOADING FEED...<span className="cursor-blink">█</span>
+              </div>
+            ) : filteredActivity.length === 0 ? (
+              <div className="p-8 text-center">
+                <p className="text-sm text-[var(--t-muted)]">NO ACTIVITY YET</p>
+                <Link
+                  href="/traders"
+                  className="mt-2 inline-block text-xs text-[var(--t-accent)] hover:text-[var(--t-text)]"
+                >
+                  {">"} FUND A TRADER TO BEGIN
+                </Link>
+              </div>
+            ) : (
+              <div className="max-h-[60vh] overflow-y-auto">
+                {filteredActivity.map((entry) => (
+                  <FeedLine
+                    key={entry.id}
+                    entry={entry}
+                    traderName={traderNames[entry.trader_id] ?? "???"}
+                    showTrader={traderFilter === null}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Inline Pending Approvals */}
+        {approvals && approvals.length > 0 && (
+          <div className="mb-6">
+            <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              PENDING APPROVALS ({approvals.length})
+            </div>
+            <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
+              {approvals.map((a) => (
+                <ApprovalCard key={a.id} approval={a} />
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -240,139 +268,149 @@ function Dashboard({
   );
 }
 
-/* ── Stat Card ── */
+/* ── Feed Line ── */
 
-function StatCard({
-  label,
-  value,
-  highlight,
-  positive,
+const FEED_DISPLAY: Record<string, { label: string; color: string }> = {
+  cycle_start: { label: "CYCLE", color: "text-[var(--t-muted)]" },
+  scan: { label: "SCAN", color: "text-[var(--t-muted)]" },
+  evaluate: { label: "EVAL", color: "text-[var(--t-accent)]" },
+  skip: { label: "SKIP", color: "text-[var(--t-muted)]" },
+  enter: { label: "ENTER", color: "text-[var(--t-accent)]" },
+  win: { label: "WIN", color: "text-[var(--t-green)]" },
+  loss: { label: "LOSS", color: "text-[var(--t-red)]" },
+  wipeout: { label: "WIPEOUT", color: "text-[var(--t-red)]" },
+  pause: { label: "PAUSE", color: "text-[var(--t-amber)]" },
+  resume: { label: "RESUME", color: "text-[var(--t-green)]" },
+  revive: { label: "REVIVE", color: "text-[var(--t-accent)]" },
+  approval_required: { label: "APPROVAL", color: "text-[var(--t-amber)]" },
+  approved: { label: "OK", color: "text-[var(--t-green)]" },
+  rejected: { label: "DENIED", color: "text-[var(--t-red)]" },
+  error: { label: "ERR", color: "text-[var(--t-red)]" },
+  cycle_end: { label: "DONE", color: "text-[var(--t-muted)]" },
+};
+
+function FeedLine({
+  entry,
+  traderName,
+  showTrader,
 }: {
-  label: string;
-  value: string;
-  highlight?: boolean;
-  positive?: boolean;
+  entry: AgentActivity;
+  traderName: string;
+  showTrader: boolean;
 }) {
-  const valueColor = highlight
-    ? "text-green-400"
-    : positive !== undefined
-      ? positive
-        ? "text-green-400"
-        : "text-red-400"
-      : "text-zinc-50";
+  const display = FEED_DISPLAY[entry.activity_type] ?? {
+    label: entry.activity_type.toUpperCase(),
+    color: "text-[var(--t-muted)]",
+  };
+  const time = new Date(entry.created_at).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  });
+
+  const isHighEvent =
+    entry.activity_type === "win" ||
+    entry.activity_type === "loss" ||
+    entry.activity_type === "wipeout";
 
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
-      <p className="mb-1 text-xs text-zinc-500">{label}</p>
-      <p className={`text-lg font-semibold ${valueColor}`}>{value}</p>
+    <div
+      className={`flex items-start gap-2 border-b border-[var(--t-border)]/30 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--t-surface)] ${
+        entry.activity_type === "wipeout" ? "bg-[#D48787]/5" : ""
+      }`}
+    >
+      <span className="shrink-0 text-[var(--t-muted)]">{time}</span>
+      <span className={`w-12 shrink-0 text-right font-bold ${display.color}`}>
+        {display.label}
+      </span>
+      {showTrader && (
+        <span className="w-16 shrink-0 truncate text-[var(--t-accent)]">
+          {traderName}
+        </span>
+      )}
+      <span
+        className={`flex-1 truncate ${isHighEvent ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
+      >
+        {entry.message}
+      </span>
     </div>
   );
 }
 
-/* ── Trader Status Dot ── */
+/* ── Approval Card ── */
 
-function TraderStatusDot({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    active: "bg-green-400",
-    paused: "bg-yellow-400",
-    wiped_out: "bg-red-400",
+function ApprovalCard({
+  approval,
+}: {
+  approval: {
+    id: string;
+    trader_name: string;
+    deal_prompt: string;
+    entry_cost_usdc: number;
+    deal_pot_usdc: number;
+    expires_at: string;
   };
-
-  return (
-    <span
-      className={`inline-block h-2 w-2 rounded-full ${colors[status] ?? "bg-zinc-500"}`}
-      title={status}
-    />
+}) {
+  const { mutate, isPending } = useApproveReject();
+  const expiresAt = new Date(approval.expires_at);
+  const now = new Date();
+  const minutesLeft = Math.max(
+    0,
+    Math.round((expiresAt.getTime() - now.getTime()) / 60000)
   );
-}
-
-/* ── P&L Chart (SVG area chart) ── */
-
-function PnlChart({ data }: { data: PnlPoint[] }) {
-  const width = 600;
-  const height = 160;
-  const padding = { top: 10, right: 10, bottom: 20, left: 50 };
-
-  const values = data.map((d) => d.cumulative_pnl);
-  const minVal = Math.min(0, ...values);
-  const maxVal = Math.max(0, ...values);
-  const range = maxVal - minVal || 1;
-
-  const chartW = width - padding.left - padding.right;
-  const chartH = height - padding.top - padding.bottom;
-
-  const points = data.map((d, i) => {
-    const x = padding.left + (i / (data.length - 1)) * chartW;
-    const y =
-      padding.top + chartH - ((d.cumulative_pnl - minVal) / range) * chartH;
-    return { x, y };
-  });
-
-  const zeroY = padding.top + chartH - ((0 - minVal) / range) * chartH;
-
-  const linePath = points
-    .map((p, i) => `${i === 0 ? "M" : "L"}${p.x},${p.y}`)
-    .join(" ");
-  const areaPath = `${linePath} L${points[points.length - 1].x},${zeroY} L${points[0].x},${zeroY} Z`;
-
-  const lastVal = values[values.length - 1];
-  const isPositive = lastVal >= 0;
-  const strokeColor = isPositive ? "#4ade80" : "#f87171";
-  const fillColor = isPositive
-    ? "rgba(74, 222, 128, 0.1)"
-    : "rgba(248, 113, 113, 0.1)";
-
-  // Y-axis labels
-  const yLabels = [minVal, minVal + range / 2, maxVal];
+  const isExpired = minutesLeft <= 0;
 
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full"
-      preserveAspectRatio="xMidYMid meet"
-    >
-      {/* Zero line */}
-      <line
-        x1={padding.left}
-        y1={zeroY}
-        x2={width - padding.right}
-        y2={zeroY}
-        stroke="#3f3f46"
-        strokeWidth={1}
-        strokeDasharray="4 4"
-      />
-
-      {/* Y-axis labels */}
-      {yLabels.map((val, i) => {
-        const y = padding.top + chartH - ((val - minVal) / range) * chartH;
-        return (
-          <text
-            key={i}
-            x={padding.left - 8}
-            y={y + 4}
-            textAnchor="end"
-            className="fill-zinc-600"
-            fontSize={10}
-          >
-            {val >= 0 ? "+" : ""}
-            {val.toFixed(1)}
-          </text>
-        );
-      })}
-
-      {/* Area fill */}
-      <path d={areaPath} fill={fillColor} />
-
-      {/* Line */}
-      <path d={linePath} fill="none" stroke={strokeColor} strokeWidth={2} />
-
-      {/* End dot */}
-      <circle
-        cx={points[points.length - 1].x}
-        cy={points[points.length - 1].y}
-        r={3}
-        fill={strokeColor}
-      />
-    </svg>
+    <div className="bg-[var(--t-bg)] px-3 py-3">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-[var(--t-accent)]">
+              {approval.trader_name}
+            </span>
+            <span className="text-[var(--t-muted)]">
+              ${approval.entry_cost_usdc.toFixed(2)} into $
+              {approval.deal_pot_usdc.toFixed(2)} pot
+            </span>
+            <span
+              className={`text-[10px] ${
+                isExpired
+                  ? "text-[var(--t-red)]"
+                  : minutesLeft < 5
+                    ? "text-[var(--t-red)]"
+                    : "text-[var(--t-amber)]"
+              }`}
+            >
+              {isExpired ? "EXPIRED" : `${minutesLeft}m`}
+            </span>
+          </div>
+          <p className="mt-1 truncate text-xs text-[var(--t-muted)]">
+            {approval.deal_prompt}
+          </p>
+        </div>
+        {!isExpired && (
+          <div className="flex shrink-0 items-center gap-2 text-[10px]">
+            <button
+              onClick={() =>
+                mutate({ approvalId: approval.id, action: "approve" })
+              }
+              disabled={isPending}
+              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] disabled:opacity-50"
+            >
+              APPROVE
+            </button>
+            <button
+              onClick={() =>
+                mutate({ approvalId: approval.id, action: "reject" })
+              }
+              disabled={isPending}
+              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
+            >
+              DENY
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
