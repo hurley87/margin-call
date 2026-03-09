@@ -1,10 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { callModel } from "@/lib/llm/call-model";
+import OpenAI from "openai";
 import { buildPromptSuggestionMessages } from "@/lib/llm/messages";
-import {
-  DealPromptSuggestionsSchema,
-  type DealPromptSuggestions,
-} from "@/lib/llm/schemas";
+
+const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(request: NextRequest) {
   try {
@@ -16,13 +14,44 @@ export async function POST(request: NextRequest) {
     }
 
     const messages = await buildPromptSuggestionMessages(theme.trim());
-    const result = await callModel<DealPromptSuggestions>(
-      messages,
-      DealPromptSuggestionsSchema,
-      "deal_prompt_suggestions"
+
+    // Use json_object mode instead of zodResponseFormat — much faster
+    // for a simple { suggestions: string[] } response
+    const completion = await client.chat.completions.create(
+      {
+        model: "gpt-4o-mini",
+        messages: [
+          ...messages,
+          {
+            role: "user",
+            content:
+              'Respond with a JSON object: {"suggestions": ["suggestion1", "suggestion2", "suggestion3"]}',
+          },
+        ],
+        response_format: { type: "json_object" },
+      },
+      { timeout: 15_000 }
     );
 
-    return NextResponse.json({ suggestions: result.suggestions });
+    const raw = completion.choices[0]?.message?.content;
+    if (!raw) {
+      return NextResponse.json(
+        { error: "No response from model" },
+        { status: 500 }
+      );
+    }
+
+    const parsed = JSON.parse(raw);
+    const suggestions = parsed.suggestions;
+
+    if (!Array.isArray(suggestions) || suggestions.length < 3) {
+      return NextResponse.json(
+        { error: "Invalid suggestions format" },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({ suggestions: suggestions.slice(0, 3) });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Failed to generate suggestions";

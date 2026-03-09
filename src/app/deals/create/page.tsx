@@ -197,7 +197,14 @@ export default function CreateDealPage() {
               onClick={() => suggestPrompts.mutate(theme.trim())}
               className="whitespace-nowrap rounded bg-zinc-700 px-4 py-2 text-sm font-medium text-zinc-50 transition-colors hover:bg-zinc-600 disabled:opacity-50"
             >
-              {suggestPrompts.isPending ? "Thinking..." : "Suggest Prompts"}
+              {suggestPrompts.isPending ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-zinc-400" />
+                  Thinking...
+                </span>
+              ) : (
+                "Suggest Prompts"
+              )}
             </button>
           </div>
           {suggestPrompts.error && (
@@ -218,6 +225,16 @@ export default function CreateDealPage() {
                   {suggestion}
                 </button>
               ))}
+              <button
+                type="button"
+                onClick={() => suggestPrompts.mutate(theme.trim())}
+                disabled={suggestPrompts.isPending || isCreating}
+                className="self-end text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+              >
+                {suggestPrompts.isPending
+                  ? "Thinking..."
+                  : "Try different suggestions"}
+              </button>
             </div>
           )}
         </div>

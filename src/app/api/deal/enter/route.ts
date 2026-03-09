@@ -8,6 +8,8 @@ import {
   createDealOutcome,
   getDeal,
   updateDealAfterEntry,
+  getTraderAssets,
+  syncAssetsFromOutcome,
 } from "@/lib/supabase/queries";
 import { callModel } from "@/lib/llm/call-model";
 import {
@@ -197,10 +199,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Load trader's current assets for LLM context
+    const traderAssets = await getTraderAssets(traderId);
+    const traderInventory = traderAssets.map((a) => ({
+      name: a.name,
+      value_usdc: Number(a.value_usdc),
+    }));
+
     const messages = await buildDealResolutionMessages({
       dealPrompt: deal.prompt,
       traderName,
-      traderInventory: [], // TODO: load from assets table when built
+      traderInventory,
       portfolioBalance,
       maxValuePerWin,
       randomSeed,
@@ -305,6 +314,17 @@ export async function POST(request: NextRequest) {
       wipeout_reason: outcome.wipeout_reason ?? undefined,
       on_chain_tx_hash: resolveTxHash ?? undefined,
     });
+
+    // Sync assets gained/lost
+    if (outcome.assets_gained.length > 0 || outcome.assets_lost.length > 0) {
+      await syncAssetsFromOutcome(
+        traderId,
+        deal_id,
+        dealOutcome.id,
+        outcome.assets_gained,
+        outcome.assets_lost
+      );
+    }
 
     // Update deal stats
     await updateDealAfterEntry(deal_id, potChange, outcome.trader_wiped_out);
