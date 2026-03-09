@@ -178,10 +178,21 @@ function AgentControls({
 }) {
   const pause = usePauseTrader();
   const resume = useResumeTrader();
+  const revive = useReviveTrader();
 
   if (status === "wiped_out") {
     return (
       <div className="mt-4 rounded border border-red-500/20 bg-red-500/5 px-4 py-3">
+        <button
+          onClick={() => revive.mutate(traderId)}
+          disabled={revive.isPending}
+          className="mt-3 rounded bg-purple-500/10 px-4 py-2 text-sm font-medium text-purple-400 transition-colors hover:bg-purple-500/20 disabled:opacity-50"
+        >
+          {revive.isPending ? "Reviving..." : "Revive Trader"}
+        </button>
+        {revive.isError && (
+          <p className="mt-2 text-xs text-red-400">{revive.error.message}</p>
+        )}
         <p className="text-sm text-red-400">
           This trader has been wiped out and can no longer trade.
         </p>
@@ -391,6 +402,7 @@ const ACTIVITY_DISPLAY: Record<string, { label: string; color: string }> = {
   wipeout: { label: "WIPEOUT", color: "text-red-400" },
   pause: { label: "PAUSE", color: "text-yellow-400" },
   resume: { label: "RESUME", color: "text-green-400" },
+  revive: { label: "REVIVE", color: "text-purple-400" },
   error: { label: "ERROR", color: "text-red-400" },
   cycle_end: { label: "DONE", color: "text-zinc-500" },
 };
