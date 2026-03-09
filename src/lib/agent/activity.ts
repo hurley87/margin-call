@@ -12,6 +12,9 @@ export type ActivityType =
   | "pause"
   | "resume"
   | "revive"
+  | "approval_required"
+  | "approved"
+  | "rejected"
   | "error"
   | "cycle_end";
 

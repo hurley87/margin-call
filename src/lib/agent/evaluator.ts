@@ -17,6 +17,7 @@ export interface Mandate {
   max_pot_usdc?: number;
   bankroll_pct?: number;
   keywords?: string[];
+  approval_threshold_usdc?: number; // deals above this entry cost require desk manager approval
 }
 
 export interface Deal {

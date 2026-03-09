@@ -33,12 +33,20 @@ export default function TradersPage() {
       <div className="w-full max-w-2xl">
         <div className="mb-8 flex items-center justify-between">
           <h1 className="text-2xl font-semibold text-zinc-50">My Traders</h1>
-          <button
-            onClick={() => setShowForm(!showForm)}
-            className="rounded-full bg-green-500 px-6 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400"
-          >
-            {showForm ? "Cancel" : "Create Trader"}
-          </button>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/approvals"
+              className="rounded-full border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition-colors hover:border-zinc-500"
+            >
+              Approvals
+            </Link>
+            <button
+              onClick={() => setShowForm(!showForm)}
+              className="rounded-full bg-green-500 px-6 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400"
+            >
+              {showForm ? "Cancel" : "Create Trader"}
+            </button>
+          </div>
         </div>
 
         {showForm && (

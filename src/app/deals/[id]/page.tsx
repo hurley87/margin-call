@@ -2,7 +2,17 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { useDeal } from "@/hooks/use-deals";
+import {
+  ESCROW_ADDRESS,
+  escrowAbi,
+  CONTRACTS_CHAIN_ID,
+} from "@/lib/contracts/escrow";
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -31,6 +41,7 @@ export default function DealDetailPage() {
   }
 
   const { deal, outcomes } = data;
+  const { address } = useAccount();
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-black px-4 py-12">
@@ -94,6 +105,13 @@ export default function DealDetailPage() {
               View creation tx on BaseScan
             </a>
           )}
+
+          {deal.on_chain_deal_id !== undefined &&
+            deal.status === "open" &&
+            address &&
+            deal.creator_address?.toLowerCase() === address.toLowerCase() && (
+              <CloseDealButton onChainDealId={deal.on_chain_deal_id} />
+            )}
         </div>
 
         <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
@@ -191,6 +209,65 @@ export default function DealDetailPage() {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
+  const { writeContract, data: txHash, isPending, error } = useWriteContract();
+  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+    hash: txHash,
+  });
+
+  function handleClose() {
+    writeContract({
+      address: ESCROW_ADDRESS,
+      abi: escrowAbi,
+      functionName: "closeDeal",
+      args: [BigInt(onChainDealId)],
+      chainId: CONTRACTS_CHAIN_ID,
+    });
+  }
+
+  if (isSuccess) {
+    return (
+      <div className="mt-4">
+        <p className="text-xs text-green-400">Deal closed successfully.</p>
+        {txHash && (
+          <a
+            href={`https://sepolia.basescan.org/tx/${txHash}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-green-400 underline decoration-green-400/50 hover:text-green-300"
+          >
+            View tx on BaseScan
+          </a>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4">
+      <button
+        onClick={handleClose}
+        disabled={isPending || isConfirming}
+        className="rounded bg-red-500/10 px-4 py-2 text-sm font-medium text-red-400 transition-colors hover:bg-red-500/20 disabled:opacity-50"
+      >
+        {isPending
+          ? "Confirm in wallet..."
+          : isConfirming
+            ? "Closing deal..."
+            : "Close Deal"}
+      </button>
+      <p className="mt-1 text-xs text-zinc-500">
+        Withdraw remaining pot. Requires 0 pending entries.
+      </p>
+      {error && (
+        <p className="mt-1 text-xs text-red-400">
+          {error.message.slice(0, 150)}
+        </p>
+      )}
     </div>
   );
 }

@@ -145,6 +145,21 @@ export const escrowAbi = [
   },
   {
     type: "function",
+    name: "closeDeal",
+    inputs: [{ name: "dealId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "DealClosed",
+    inputs: [
+      { name: "dealId", type: "uint256", indexed: true },
+      { name: "remainingPot", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "function",
     name: "dealCount",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],

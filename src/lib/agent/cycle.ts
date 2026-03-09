@@ -1,9 +1,14 @@
 import { createServerClient } from "@/lib/supabase/client";
-import { listOpenDeals } from "@/lib/supabase/queries";
+import { listOpenDeals, clearTraderAssets } from "@/lib/supabase/queries";
 import { getTrader } from "@/lib/supabase/traders";
 import { getEscrowBalance } from "@/lib/contracts/balance";
 import { evaluateDeals, pickBestDeal, type Mandate } from "./evaluator";
 import { logActivity, logActivities } from "./activity";
+import {
+  createApproval,
+  hasPendingApproval,
+  hasApprovedEntry,
+} from "@/lib/supabase/approvals";
 
 export type CycleStatus =
   | "entered"
@@ -11,6 +16,7 @@ export type CycleStatus =
   | "skipped_all"
   | "wiped_out"
   | "paused"
+  | "awaiting_approval"
   | "not_found"
   | "error";
 
@@ -107,6 +113,43 @@ export async function runCycle(
     return { traderId, status: "skipped_all", message: "No eligible deals" };
   }
 
+  // Step 5b: Check approval threshold
+  const threshold = mandate.approval_threshold_usdc;
+  if (threshold !== undefined && bestDeal.entry_cost_usdc >= threshold) {
+    // Check if already approved
+    const approvedId = await hasApprovedEntry(traderId, bestDeal.id);
+    if (!approvedId) {
+      // Check if there's already a pending approval for this deal
+      const alreadyPending = await hasPendingApproval(traderId, bestDeal.id);
+      if (!alreadyPending) {
+        await createApproval(traderId, bestDeal.id, bestDeal.entry_cost_usdc);
+      }
+      await logActivity(
+        traderId,
+        "approval_required",
+        `Deal requires approval: entry $${bestDeal.entry_cost_usdc} >= threshold $${threshold}`,
+        bestDeal.id
+      );
+      await logActivity(
+        traderId,
+        "cycle_end",
+        "Cycle paused — awaiting desk manager approval"
+      );
+      return {
+        traderId,
+        status: "awaiting_approval",
+        dealId: bestDeal.id,
+        message: `Deal requires approval (entry $${bestDeal.entry_cost_usdc} >= threshold $${threshold})`,
+      };
+    }
+    // Has approval — consume it by continuing to enter
+    const supabase = createServerClient();
+    await supabase
+      .from("deal_approvals")
+      .update({ status: "approved" })
+      .eq("id", approvedId);
+  }
+
   // Step 6: Enter the deal via the existing /api/deal/enter route
   await logActivity(
     traderId,
@@ -168,6 +211,7 @@ export async function runCycle(
         .from("traders")
         .update({ status: "wiped_out" })
         .eq("id", traderId);
+      await clearTraderAssets(traderId);
       await logActivity(
         traderId,
         "cycle_end",

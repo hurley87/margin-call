@@ -15,6 +15,7 @@ import {
 import {
   useAgentActivity,
   useTraderOutcomes,
+  useTraderAssets,
   usePauseTrader,
   useResumeTrader,
   useReviveTrader,
@@ -22,12 +23,14 @@ import {
 import type {
   AgentActivity,
   DealOutcomeWithNarrative,
+  TraderAsset,
 } from "@/hooks/use-agent";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
+import { useConfigureMandate } from "@/hooks/use-approvals";
 
 export default function TraderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -127,20 +130,9 @@ export default function TraderDetailPage() {
           }}
         />
 
-        <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
-          <h2 className="mb-3 text-sm font-medium text-zinc-400">Mandate</h2>
-          {Object.keys(trader.mandate).length === 0 ? (
-            <p className="text-sm text-zinc-500">
-              No mandate configured yet. Configure risk tolerance and deal
-              filters to control how this trader enters deals.
-            </p>
-          ) : (
-            <pre className="text-xs text-zinc-300">
-              {JSON.stringify(trader.mandate, null, 2)}
-            </pre>
-          )}
-        </div>
+        <MandateConfig traderId={id} mandate={trader.mandate} />
 
+        <AssetInventory traderId={id} traderStatus={trader.status} />
         <DealOutcomes traderId={id} traderStatus={trader.status} />
         <AgentActivityFeed traderId={id} traderStatus={trader.status} />
         <ActivityHistory id={id} />
@@ -235,6 +227,45 @@ function AgentControls({
       )}
       {resume.isError && (
         <p className="text-xs text-red-400">{resume.error.message}</p>
+      )}
+    </div>
+  );
+}
+
+/* ── Asset Inventory ── */
+
+function AssetInventory({
+  traderId,
+  traderStatus,
+}: {
+  traderId: string;
+  traderStatus: string;
+}) {
+  const { data: assets, isLoading } = useTraderAssets(traderId, traderStatus);
+
+  return (
+    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+      <h2 className="mb-3 text-sm font-medium text-zinc-400">
+        Asset Inventory
+      </h2>
+      {isLoading ? (
+        <p className="text-sm text-zinc-500">Loading...</p>
+      ) : !assets || assets.length === 0 ? (
+        <p className="text-sm text-zinc-500">No assets acquired yet.</p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {assets.map((asset) => (
+            <div
+              key={asset.id}
+              className="flex items-center justify-between rounded border border-zinc-700/50 bg-zinc-800/50 px-3 py-2"
+            >
+              <span className="text-sm text-zinc-300">{asset.name}</span>
+              <span className="text-sm text-green-400">
+                ${Number(asset.value_usdc).toFixed(2)}
+              </span>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -345,6 +376,32 @@ function OutcomeCard({
               </div>
             ))}
           </div>
+          {outcome.assets_gained && outcome.assets_gained.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {outcome.assets_gained.map(
+                (asset: { name: string; value_usdc: number }, i: number) => (
+                  <span
+                    key={i}
+                    className="rounded bg-green-500/10 px-2 py-1 text-xs text-green-400"
+                  >
+                    +{asset.name} (${asset.value_usdc})
+                  </span>
+                )
+              )}
+            </div>
+          )}
+          {outcome.assets_lost && outcome.assets_lost.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {outcome.assets_lost.map((name: string, i: number) => (
+                <span
+                  key={i}
+                  className="rounded bg-red-500/10 px-2 py-1 text-xs text-red-400"
+                >
+                  -{name}
+                </span>
+              ))}
+            </div>
+          )}
           <div className="mt-3 flex gap-4 border-t border-zinc-700/30 pt-3 text-xs text-zinc-500">
             <span>Rake: ${Number(outcome.rake_usdc).toFixed(2)}</span>
             <span>
@@ -403,6 +460,9 @@ const ACTIVITY_DISPLAY: Record<string, { label: string; color: string }> = {
   pause: { label: "PAUSE", color: "text-yellow-400" },
   resume: { label: "RESUME", color: "text-green-400" },
   revive: { label: "REVIVE", color: "text-purple-400" },
+  approval_required: { label: "APPROVAL", color: "text-orange-400" },
+  approved: { label: "APPROVED", color: "text-green-400" },
+  rejected: { label: "REJECTED", color: "text-red-400" },
   error: { label: "ERROR", color: "text-red-400" },
   cycle_end: { label: "DONE", color: "text-zinc-500" },
 };
@@ -506,6 +566,249 @@ function ActivityHistory({ id }: { id: string }) {
             );
           })}
         </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Mandate Configuration ── */
+
+function MandateConfig({
+  traderId,
+  mandate,
+}: {
+  traderId: string;
+  mandate: Record<string, unknown>;
+}) {
+  const configure = useConfigureMandate();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({
+    max_entry_cost_usdc:
+      mandate.max_entry_cost_usdc != null
+        ? String(mandate.max_entry_cost_usdc)
+        : "",
+    min_pot_usdc:
+      mandate.min_pot_usdc != null ? String(mandate.min_pot_usdc) : "",
+    max_pot_usdc:
+      mandate.max_pot_usdc != null ? String(mandate.max_pot_usdc) : "",
+    bankroll_pct:
+      mandate.bankroll_pct != null ? String(mandate.bankroll_pct) : "25",
+    approval_threshold_usdc:
+      mandate.approval_threshold_usdc != null
+        ? String(mandate.approval_threshold_usdc)
+        : "",
+    keywords: ((mandate.keywords as string[]) ?? []).join(", "),
+  });
+
+  function handleSave() {
+    const cleaned: Record<string, unknown> = {};
+    if (form.max_entry_cost_usdc !== "")
+      cleaned.max_entry_cost_usdc = Number(form.max_entry_cost_usdc);
+    if (form.min_pot_usdc !== "")
+      cleaned.min_pot_usdc = Number(form.min_pot_usdc);
+    if (form.max_pot_usdc !== "")
+      cleaned.max_pot_usdc = Number(form.max_pot_usdc);
+    if (form.bankroll_pct !== "")
+      cleaned.bankroll_pct = Number(form.bankroll_pct);
+    if (form.approval_threshold_usdc !== "")
+      cleaned.approval_threshold_usdc = Number(form.approval_threshold_usdc);
+    if (form.keywords.trim())
+      cleaned.keywords = form.keywords
+        .split(",")
+        .map((k) => k.trim())
+        .filter(Boolean);
+
+    configure.mutate(
+      { traderId, mandate: cleaned },
+      {
+        onSuccess: () => setEditing(false),
+      }
+    );
+  }
+
+  if (!editing) {
+    return (
+      <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-zinc-400">Mandate</h2>
+          <button
+            onClick={() => setEditing(true)}
+            className="text-xs text-zinc-400 hover:text-zinc-300"
+          >
+            Configure
+          </button>
+        </div>
+        {Object.keys(mandate).length === 0 ? (
+          <p className="text-sm text-zinc-500">
+            No mandate configured yet. Configure risk tolerance and deal filters
+            to control how this trader enters deals.
+          </p>
+        ) : (
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            {mandate.max_entry_cost_usdc !== undefined && (
+              <div>
+                <p className="text-zinc-500">Max Entry Cost</p>
+                <p className="text-zinc-50">
+                  ${String(mandate.max_entry_cost_usdc)} USDC
+                </p>
+              </div>
+            )}
+            {mandate.min_pot_usdc !== undefined && (
+              <div>
+                <p className="text-zinc-500">Min Pot</p>
+                <p className="text-zinc-50">
+                  ${String(mandate.min_pot_usdc)} USDC
+                </p>
+              </div>
+            )}
+            {mandate.max_pot_usdc !== undefined && (
+              <div>
+                <p className="text-zinc-500">Max Pot</p>
+                <p className="text-zinc-50">
+                  ${String(mandate.max_pot_usdc)} USDC
+                </p>
+              </div>
+            )}
+            {mandate.bankroll_pct !== undefined && (
+              <div>
+                <p className="text-zinc-500">Bankroll %</p>
+                <p className="text-zinc-50">{String(mandate.bankroll_pct)}%</p>
+              </div>
+            )}
+            {mandate.approval_threshold_usdc !== undefined && (
+              <div>
+                <p className="text-zinc-500">Approval Threshold</p>
+                <p className="text-zinc-50">
+                  ${String(mandate.approval_threshold_usdc)} USDC
+                </p>
+              </div>
+            )}
+            {Array.isArray(mandate.keywords) &&
+              (mandate.keywords as string[]).length > 0 && (
+                <div className="col-span-2">
+                  <p className="text-zinc-500">Keywords</p>
+                  <p className="text-zinc-50">
+                    {(mandate.keywords as string[]).join(", ")}
+                  </p>
+                </div>
+              )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-6 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+      <h2 className="mb-3 text-sm font-medium text-zinc-400">
+        Configure Mandate
+      </h2>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="mb-1 block text-xs text-zinc-500">
+            Max Entry Cost (USDC)
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.max_entry_cost_usdc}
+            onChange={(e) =>
+              setForm({ ...form, max_entry_cost_usdc: e.target.value })
+            }
+            placeholder="No limit"
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-zinc-500">
+            Min Pot (USDC)
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.min_pot_usdc}
+            onChange={(e) => setForm({ ...form, min_pot_usdc: e.target.value })}
+            placeholder="No limit"
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-zinc-500">
+            Max Pot (USDC)
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.max_pot_usdc}
+            onChange={(e) => setForm({ ...form, max_pot_usdc: e.target.value })}
+            placeholder="No limit"
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-zinc-500">
+            Bankroll % (1-100)
+          </label>
+          <input
+            type="number"
+            step="1"
+            min="1"
+            max="100"
+            value={form.bankroll_pct}
+            onChange={(e) => setForm({ ...form, bankroll_pct: e.target.value })}
+            placeholder="25"
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-zinc-500">
+            Approval Threshold (USDC)
+          </label>
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            value={form.approval_threshold_usdc}
+            onChange={(e) =>
+              setForm({ ...form, approval_threshold_usdc: e.target.value })
+            }
+            placeholder="No approval required"
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block text-xs text-zinc-500">
+            Keywords (comma-separated)
+          </label>
+          <input
+            type="text"
+            value={form.keywords}
+            onChange={(e) => setForm({ ...form, keywords: e.target.value })}
+            placeholder="e.g. oil, gold, tech"
+            className="w-full rounded border border-zinc-700 bg-zinc-800 px-3 py-2 text-sm text-zinc-50 placeholder-zinc-600 focus:border-zinc-500 focus:outline-none"
+          />
+        </div>
+      </div>
+      <div className="mt-4 flex items-center gap-3">
+        <button
+          onClick={handleSave}
+          disabled={configure.isPending}
+          className="rounded bg-green-500 px-4 py-2 text-sm font-medium text-black transition-colors hover:bg-green-400 disabled:opacity-50"
+        >
+          {configure.isPending ? "Saving..." : "Save Mandate"}
+        </button>
+        <button
+          onClick={() => setEditing(false)}
+          className="text-sm text-zinc-400 hover:text-zinc-300"
+        >
+          Cancel
+        </button>
+      </div>
+      {configure.isError && (
+        <p className="mt-2 text-xs text-red-400">{configure.error.message}</p>
       )}
     </div>
   );

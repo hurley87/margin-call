@@ -13,6 +13,7 @@ export interface Deal {
   status: string;
   created_at: string;
   on_chain_tx_hash?: string;
+  creator_address?: string;
 }
 
 interface StoryEvent {
