@@ -24,7 +24,7 @@ export function usePendingApprovals() {
       const data = await res.json();
       return (data.approvals ?? []) as PendingApproval[];
     },
-    refetchInterval: 10_000,
+    refetchInterval: 30_000,
   });
 }
 

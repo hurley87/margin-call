@@ -134,6 +134,85 @@ export async function listTraderActivity(traderId: string, limit = 50) {
   return data;
 }
 
+export interface Asset {
+  id: string;
+  trader_id: string;
+  name: string;
+  value_usdc: number;
+  source_deal_id: string | null;
+  source_outcome_id: string | null;
+  acquired_at: string;
+}
+
+export async function getTraderAssets(traderId: string): Promise<Asset[]> {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("assets")
+    .select()
+    .eq("trader_id", traderId)
+    .order("acquired_at", { ascending: false });
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function syncAssetsFromOutcome(
+  traderId: string,
+  dealId: string,
+  outcomeId: string,
+  assetsGained: { name: string; value_usdc: number }[],
+  assetsLost: string[]
+) {
+  const supabase = createServerClient();
+
+  // Add gained assets
+  if (assetsGained.length > 0) {
+    const rows = assetsGained.map((a) => ({
+      trader_id: traderId,
+      name: a.name,
+      value_usdc: a.value_usdc,
+      source_deal_id: dealId,
+      source_outcome_id: outcomeId,
+    }));
+    const { error } = await supabase.from("assets").insert(rows);
+    if (error) throw error;
+  }
+
+  // Remove lost assets (by name, oldest first) — batch fetch then batch delete
+  if (assetsLost.length > 0) {
+    const { data: candidates } = await supabase
+      .from("assets")
+      .select("id, name")
+      .eq("trader_id", traderId)
+      .in("name", assetsLost)
+      .order("acquired_at", { ascending: true });
+
+    if (candidates && candidates.length > 0) {
+      // Pick one asset per lost name (oldest first)
+      const seen = new Set<string>();
+      const toDelete: string[] = [];
+      for (const c of candidates) {
+        if (!seen.has(c.name)) {
+          seen.add(c.name);
+          toDelete.push(c.id);
+        }
+      }
+      if (toDelete.length > 0) {
+        await supabase.from("assets").delete().in("id", toDelete);
+      }
+    }
+  }
+}
+
+export async function clearTraderAssets(traderId: string) {
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("assets")
+    .delete()
+    .eq("trader_id", traderId);
+  if (error) throw error;
+}
+
 export async function updateDealAfterEntry(
   dealId: string,
   potChange: number,

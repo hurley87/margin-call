@@ -4,7 +4,7 @@ export interface ApprovalRow {
   id: string;
   trader_id: string;
   deal_id: string;
-  status: "pending" | "approved" | "rejected" | "expired";
+  status: "pending" | "approved" | "rejected" | "expired" | "consumed";
   entry_cost_usdc: number;
   reason: string | null;
   expires_at: string;
@@ -69,19 +69,21 @@ export async function listPendingApprovalsByOwner(
   })[]
 > {
   const supabase = createServerClient();
+  const now = new Date().toISOString();
 
-  // First expire any stale approvals
-  await supabase
-    .from("deal_approvals")
-    .update({ status: "expired" })
-    .eq("status", "pending")
-    .lt("expires_at", new Date().toISOString());
-
-  // Fetch pending approvals for all traders owned by this wallet
-  const { data: traders, error: tErr } = await supabase
-    .from("traders")
-    .select("id, name")
-    .eq("owner_address", ownerAddress.toLowerCase());
+  // Fetch traders and pending (non-expired) approvals in parallel
+  const [{ data: traders, error: tErr }, _] = await Promise.all([
+    supabase
+      .from("traders")
+      .select("id, name")
+      .eq("owner_address", ownerAddress.toLowerCase()),
+    // Expire stale approvals in background — fire and forget
+    supabase
+      .from("deal_approvals")
+      .update({ status: "expired" })
+      .eq("status", "pending")
+      .lt("expires_at", now),
+  ]);
 
   if (tErr) throw tErr;
   if (!traders || traders.length === 0) return [];
@@ -94,6 +96,7 @@ export async function listPendingApprovalsByOwner(
     .select()
     .in("trader_id", traderIds)
     .eq("status", "pending")
+    .gt("expires_at", now)
     .order("created_at", { ascending: false });
 
   if (aErr) throw aErr;
@@ -169,21 +172,41 @@ export async function hasPendingApproval(
   return (count ?? 0) > 0;
 }
 
-/** Check if a deal has been approved for a given trader (approved & not expired) */
-export async function hasApprovedEntry(
+/**
+ * Consume a previously approved entry exactly once.
+ *
+ * This uses a read-then-compare-and-swap update so only one cycle can claim
+ * the approval even if multiple cycles race for the same trader/deal.
+ */
+export async function consumeApprovedEntry(
   traderId: string,
   dealId: string
 ): Promise<string | null> {
   const supabase = createServerClient();
-  const { data, error } = await supabase
+  const now = new Date().toISOString();
+
+  const { data: approval, error: lookupError } = await supabase
     .from("deal_approvals")
     .select("id")
     .eq("trader_id", traderId)
     .eq("deal_id", dealId)
     .eq("status", "approved")
+    .gt("expires_at", now)
+    .order("created_at", { ascending: true })
     .limit(1)
     .maybeSingle();
 
-  if (error || !data) return null;
-  return data.id;
+  if (lookupError || !approval) return null;
+
+  const { data: consumed, error: consumeError } = await supabase
+    .from("deal_approvals")
+    .update({ status: "consumed" })
+    .eq("id", approval.id)
+    .eq("status", "approved")
+    .gt("expires_at", now)
+    .select("id")
+    .maybeSingle();
+
+  if (consumeError || !consumed) return null;
+  return consumed.id;
 }

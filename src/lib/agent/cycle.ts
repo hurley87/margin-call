@@ -7,7 +7,7 @@ import { logActivity, logActivities } from "./activity";
 import {
   createApproval,
   hasPendingApproval,
-  hasApprovedEntry,
+  consumeApprovedEntry,
 } from "@/lib/supabase/approvals";
 
 export type CycleStatus =
@@ -66,17 +66,17 @@ export async function runCycle(
 
   await logActivity(traderId, "cycle_start", "Starting trade cycle");
 
-  // Step 2: Scan open deals
-  const deals = await listOpenDeals();
+  // Step 2: Scan open deals + check balance in parallel
+  const [deals, balance] = await Promise.all([
+    listOpenDeals(),
+    getEscrowBalance(trader.token_id),
+  ]);
   await logActivity(traderId, "scan", `Found ${deals.length} open deal(s)`);
 
   if (deals.length === 0) {
     await logActivity(traderId, "cycle_end", "No open deals available");
     return { traderId, status: "no_deals", message: "No open deals" };
   }
-
-  // Step 3: Check balance
-  const balance = await getEscrowBalance(trader.token_id);
 
   // Step 4: Evaluate deals against mandate
   const mandate = (trader.mandate ?? {}) as Mandate;
@@ -116,9 +116,11 @@ export async function runCycle(
   // Step 5b: Check approval threshold
   const threshold = mandate.approval_threshold_usdc;
   if (threshold !== undefined && bestDeal.entry_cost_usdc >= threshold) {
-    // Check if already approved
-    const approvedId = await hasApprovedEntry(traderId, bestDeal.id);
-    if (!approvedId) {
+    const consumedApprovalId = await consumeApprovedEntry(
+      traderId,
+      bestDeal.id
+    );
+    if (!consumedApprovalId) {
       // Check if there's already a pending approval for this deal
       const alreadyPending = await hasPendingApproval(traderId, bestDeal.id);
       if (!alreadyPending) {
@@ -142,12 +144,14 @@ export async function runCycle(
         message: `Deal requires approval (entry $${bestDeal.entry_cost_usdc} >= threshold $${threshold})`,
       };
     }
-    // Has approval — consume it by continuing to enter
-    const supabase = createServerClient();
-    await supabase
-      .from("deal_approvals")
-      .update({ status: "approved" })
-      .eq("id", approvedId);
+
+    await logActivity(
+      traderId,
+      "approved",
+      "Consumed desk manager approval and entering deal",
+      bestDeal.id,
+      { approval_id: consumedApprovalId }
+    );
   }
 
   // Step 6: Enter the deal via the existing /api/deal/enter route

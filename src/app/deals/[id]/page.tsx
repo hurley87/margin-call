@@ -2,11 +2,8 @@
 
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import {
-  useAccount,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-} from "wagmi";
+import { usePrivy } from "@privy-io/react-auth";
+import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useDeal } from "@/hooks/use-deals";
 import {
   ESCROW_ADDRESS,
@@ -17,6 +14,8 @@ import {
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, error } = useDeal(id);
+  const { user } = usePrivy();
+  const walletAddress = user?.wallet?.address;
 
   if (isLoading) {
     return (
@@ -41,7 +40,6 @@ export default function DealDetailPage() {
   }
 
   const { deal, outcomes } = data;
-  const { address } = useAccount();
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-black px-4 py-12">
@@ -108,8 +106,9 @@ export default function DealDetailPage() {
 
           {deal.on_chain_deal_id !== undefined &&
             deal.status === "open" &&
-            address &&
-            deal.creator_address?.toLowerCase() === address.toLowerCase() && (
+            walletAddress &&
+            deal.creator_address?.toLowerCase() ===
+              walletAddress.toLowerCase() && (
               <CloseDealButton onChainDealId={deal.on_chain_deal_id} />
             )}
         </div>

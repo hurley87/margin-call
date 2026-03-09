@@ -19,9 +19,29 @@ export interface DealOutcomeWithNarrative {
   trader_pnl_usdc: number;
   pot_change_usdc: number;
   rake_usdc: number;
+  assets_gained: { name: string; value_usdc: number }[];
+  assets_lost: string[];
   trader_wiped_out: boolean;
   wipeout_reason: string | null;
   created_at: string;
+}
+
+export type { Asset as TraderAsset } from "@/lib/supabase/queries";
+
+export function useTraderAssets(traderId: string, traderStatus?: string) {
+  const isTrading = traderStatus === "active";
+
+  return useQuery({
+    queryKey: ["trader-assets", traderId],
+    queryFn: async () => {
+      const res = await fetch(`/api/trader/${traderId}/assets`);
+      if (!res.ok) throw new Error("Failed to load assets");
+      const data = await res.json();
+      return (data.assets ?? []) as import("@/lib/supabase/queries").Asset[];
+    },
+    enabled: !!traderId,
+    refetchInterval: isTrading ? 15_000 : false,
+  });
 }
 
 export function useAgentActivity(traderId: string, traderStatus?: string) {
