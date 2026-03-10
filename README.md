@@ -1,36 +1,133 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Margin Call — AI-Powered PvP Trading Game
+
+A zero-sum trading game set on 1980s Wall Street. Players act as **desk managers** — funding and configuring AI **trader agents** that autonomously enter deals. GPT-5 mini determines deal outcomes. All money flows in USDC on Base through a smart contract escrow. Traders are ERC-8004 NFTs with on-chain identity and reputation.
+
+## How It Works
+
+1. **Sign up** — Connect wallet via Privy, become a desk manager
+2. **Hire** — Mint a trader agent (ERC-8004 NFT with its own wallet)
+3. **Fund** — Deposit USDC into the escrow contract for your trader
+4. **Configure** — Set risk tolerance, deal filters, approval thresholds
+5. **Watch** — Agent autonomously scans and enters deals
+6. **Intervene** — Approve/reject big deals, adjust strategy
+7. **Cash out** — Withdraw USDC from escrow back to your wallet
+8. **Trade up** — Sell high-performing traders as NFTs
+
+### The PvP Dynamic
+
+- **Deal creators** write prompts that sound lucrative but are traps — they profit when traders lose
+- **Trader agents** evaluate deals against their mandate and try to extract value
+- **Desk managers** set strategy, write deal prompts, and intervene on high-stakes decisions
+- Every dollar gained by one party was lost by another
+
+## Tech Stack
+
+| Layer                  | Technology                                             |
+| ---------------------- | ------------------------------------------------------ |
+| **App**                | Next.js 16 (App Router), React 19, TypeScript (strict) |
+| **Styling**            | Tailwind CSS v4, shadcn/ui, class-variance-authority   |
+| **Data Fetching**      | TanStack React Query                                   |
+| **Auth / Wallet**      | Privy (wallet connect, embedded wallets)               |
+| **Smart Contracts**    | Solidity escrow contract on Base                       |
+| **Agent Identity**     | ERC-8004 (Identity + Reputation Registries on Base)    |
+| **Agent Wallets**      | ERC-6551 (Token Bound Accounts)                        |
+| **Database**           | Supabase (Postgres + Realtime)                         |
+| **AI / LLM**           | OpenAI GPT-5 mini (deal outcomes, prompt suggestions)  |
+| **Agent Runtime**      | Vercel Workflow (durable trade cycle)                  |
+| **Gasless Onboarding** | Coinbase Smart Wallets (sponsored gas on Base)         |
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Commands
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Command      | Description                                  |
+| ------------ | -------------------------------------------- |
+| `pnpm dev`   | Start dev server (Next.js on localhost:3000) |
+| `pnpm build` | Production build                             |
+| `pnpm lint`  | Run ESLint                                   |
 
-## Learn More
+## Project Structure
 
-To learn more about Next.js, take a look at the following resources:
+```
+src/
+├── app/                    # Next.js App Router
+│   ├── page.tsx            # Dashboard
+│   ├── traders/            # Trader roster + detail pages
+│   ├── deals/              # Deal detail pages
+│   ├── leaderboard/        # Rankings
+│   ├── wire/               # Market wire feed
+│   └── api/                # API routes
+│       ├── trader/         # Create, list, pause, resume, deposit, withdraw
+│       ├── deal/           # Create, enter, list, resolve
+│       ├── desk/           # Register, configure, approve
+│       ├── activity/       # Global activity feed
+│       ├── leaderboard/    # Rankings
+│       └── agent-cycle/    # Autonomous trading loop
+├── components/             # React components
+│   ├── market-wire.tsx     # Live market feed
+│   ├── feed-line.tsx       # Feed line items
+│   ├── nav.tsx             # Navigation
+│   ├── music-player.tsx    # Retro music player
+│   ├── providers/          # Auth, query, theme providers
+│   └── ui/                 # shadcn/ui components
+├── hooks/                  # TanStack Query hooks
+│   ├── use-traders.ts      # Trader state
+│   ├── use-deals.ts        # Deal state
+│   ├── use-activity-feed.ts
+│   ├── use-portfolio.ts
+│   ├── use-leaderboard.ts
+│   └── ...
+├── lib/                    # Shared libraries
+│   ├── agent/              # Agent runtime logic
+│   ├── cdp/                # Coinbase CDP wallet operations
+│   ├── contracts/          # Contract ABIs + interaction
+│   ├── llm/                # GPT-5 mini integration
+│   ├── supabase/           # DB client, queries, realtime
+│   ├── privy/              # Auth config
+│   └── rate-limit.ts       # API rate limiting
+contracts/                  # Solidity (MarginCallEscrow)
+docs/                       # Game design spec + growth strategy
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Architecture
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+```
+Desk Manager (Privy wallet)
+  │  create deals / fund traders / withdraw
+  ▼
+┌──────────────────────────────────────────┐
+│  ESCROW CONTRACT (Base)                  │
+│  Deal pots, trader balances, fees        │
+│  ERC-8004 NFT ownership = authorization  │
+└──────────────────────────────────────────┘
+  ▲                        ▲
+  │                        │
+Server (Oracle)        ERC-8004 Registries
+  │ resolveEntry()         │ Identity (NFTs)
+  │ LLM resolution         │ Reputation
+  ▼                        │
+┌──────────────────────────────────────────┐
+│  NEXT.JS APP                             │
+│  API routes + Vercel Workflow            │
+│  GPT-5 mini (deal outcomes)             │
+│  Supabase (game state + realtime)        │
+└──────────────────────────────────────────┘
+```
 
-## Deploy on Vercel
+## Revenue Model
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **5%** of every deal pot at creation
+- **10%** rake on trader winnings
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Both held in the escrow contract.
+
+## Game Design
+
+See [`docs/wall-street-agent-game.md`](docs/wall-street-agent-game.md) for the full game design spec covering money flows, wipeout conditions, LLM integration, agent runtime, and build phases.
