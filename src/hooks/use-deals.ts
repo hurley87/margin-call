@@ -14,6 +14,7 @@ export interface Deal {
   created_at: string;
   on_chain_tx_hash?: string;
   creator_address?: string;
+  source_headline?: string;
 }
 
 interface StoryEvent {
@@ -35,15 +36,7 @@ export interface DealOutcome {
 }
 
 export function useDeals() {
-  return useQuery({
-    queryKey: ["deals"],
-    queryFn: async () => {
-      const res = await fetch("/api/deal/list");
-      if (!res.ok) throw new Error("Failed to load deals");
-      const data = await res.json();
-      return (data.deals ?? []) as Deal[];
-    },
-  });
+  return useQuery(dealsQueryOptions);
 }
 
 export function useDeal(id: string) {
@@ -57,6 +50,33 @@ export function useDeal(id: string) {
         deal: data.deal as Deal,
         outcomes: (data.outcomes ?? []) as DealOutcome[],
       };
+    },
+  });
+}
+
+const dealsQueryOptions = {
+  queryKey: ["deals"] as const,
+  queryFn: async () => {
+    const res = await fetch("/api/deal/list");
+    if (!res.ok) throw new Error("Failed to load deals");
+    const data = await res.json();
+    return (data.deals ?? []) as Deal[];
+  },
+};
+
+/** Returns a map of headline text → deals created from that headline.
+ *  Shares the same ["deals"] query cache as useDeals — no duplicate fetch. */
+export function useHeadlineDeals() {
+  return useQuery({
+    ...dealsQueryOptions,
+    select: (deals) => {
+      const map: Record<string, Deal[]> = {};
+      for (const d of deals) {
+        if (!d.source_headline) continue;
+        if (!map[d.source_headline]) map[d.source_headline] = [];
+        map[d.source_headline].push(d);
+      }
+      return map;
     },
   });
 }

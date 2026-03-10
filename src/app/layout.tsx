@@ -18,6 +18,9 @@ const plexSans = IBM_Plex_Sans_Condensed({
 export const metadata: Metadata = {
   title: "MARGIN CALL // DESK_OS v2.1",
   description: "Wall Street Agent Trading Game",
+  other: {
+    "base:app_id": "69a85de978b3a616c1d0428c",
+  },
 };
 
 export default function RootLayout({

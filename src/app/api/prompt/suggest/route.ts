@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { buildPromptSuggestionMessages } from "@/lib/llm/messages";
+import {
+  promptSuggestLimit,
+  checkRateLimit,
+  getClientIdentifier,
+} from "@/lib/rate-limit";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -12,6 +17,11 @@ export async function POST(request: NextRequest) {
     if (!theme || typeof theme !== "string" || theme.trim().length === 0) {
       return NextResponse.json({ error: "theme is required" }, { status: 400 });
     }
+
+    // Rate limit: 5 req/min per client (protects OpenAI costs)
+    const rlKey = getClientIdentifier(request);
+    const limited = await checkRateLimit(promptSuggestLimit, rlKey);
+    if (limited) return limited;
 
     const messages = await buildPromptSuggestionMessages(theme.trim());
 

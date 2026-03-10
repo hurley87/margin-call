@@ -39,10 +39,10 @@ export default function DealDetailPage() {
           ERR: {error?.message ?? "DEAL NOT FOUND"}
         </p>
         <Link
-          href="/deals"
+          href="/wire"
           className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
         >
-          {"<"} BACK TO DEALS
+          {"<"} BACK TO NEWSWIRE
         </Link>
       </div>
     );
@@ -59,10 +59,10 @@ export default function DealDetailPage() {
         <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-1.5 text-xs">
           <div className="flex items-center gap-3">
             <Link
-              href="/deals"
+              href="/wire"
               className="text-[10px] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
             >
-              {"<"} DEALS
+              {"<"} NEWSWIRE
             </Link>
             <span className="text-[10px] text-[var(--t-border)]">/</span>
             {deal.on_chain_deal_id !== undefined && (

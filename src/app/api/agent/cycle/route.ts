@@ -6,6 +6,7 @@ import { getBaseUrl } from "@/lib/agent/auth";
 import { verifySIWARequest } from "@/lib/siwa/verify";
 import { createServerClient } from "@/lib/supabase/client";
 import { AGENT_LOOP_INTERVAL_MS } from "@/lib/constants";
+import { agentCycleLimit, checkRateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/agent/cycle
@@ -51,6 +52,13 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // Rate limit: 1 request per 30s per trader
+    const limited = await checkRateLimit(
+      agentCycleLimit,
+      `trader:${trader_id}`
+    );
+    if (limited) return limited;
 
     // Stamp cycle start time for deduplication
     const cycleStartedAt = new Date().toISOString();

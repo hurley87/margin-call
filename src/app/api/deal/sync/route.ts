@@ -16,7 +16,8 @@ async function upsertDeal(
   prompt: string,
   pot: bigint,
   entryCost: bigint,
-  txHash: string
+  txHash: string,
+  sourceHeadline?: string
 ) {
   const deal = await publicClient.readContract({
     address: ESCROW_ADDRESS,
@@ -31,33 +32,38 @@ async function upsertDeal(
   const netPotUsdc = Number(pot) / 1_000_000;
   const status = deal.status === 0 ? "open" : "closed";
 
-  const { error } = await supabase.from("deals").upsert(
-    {
-      on_chain_deal_id: Number(dealId),
-      creator_address: creator.toLowerCase(),
-      creator_type: "desk_manager" as const,
-      prompt,
-      pot_usdc: netPotUsdc,
-      entry_cost_usdc: entryCostUsdc,
-      fee_usdc: feeUsdc,
-      status,
-      max_extraction_percentage: 25,
-      entry_count: Number(deal.pendingEntries),
-      wipeout_count: 0,
-      on_chain_tx_hash: txHash,
-    },
-    { onConflict: "on_chain_deal_id" }
-  );
+  const { data: row, error } = await supabase
+    .from("deals")
+    .upsert(
+      {
+        on_chain_deal_id: Number(dealId),
+        creator_address: creator.toLowerCase(),
+        creator_type: "desk_manager" as const,
+        prompt,
+        pot_usdc: netPotUsdc,
+        entry_cost_usdc: entryCostUsdc,
+        fee_usdc: feeUsdc,
+        status,
+        max_extraction_percentage: 25,
+        entry_count: Number(deal.pendingEntries),
+        wipeout_count: 0,
+        on_chain_tx_hash: txHash,
+        ...(sourceHeadline ? { source_headline: sourceHeadline } : {}),
+      },
+      { onConflict: "on_chain_deal_id" }
+    )
+    .select("id")
+    .single();
 
   if (error) {
     console.error(`Failed to sync deal ${dealId}:`, error);
-    return false;
+    return null;
   }
-  return true;
+  return row.id as string;
 }
 
 /** Sync a single deal by its creation tx hash */
-async function syncByTxHash(txHash: `0x${string}`) {
+async function syncByTxHash(txHash: `0x${string}`, sourceHeadline?: string) {
   const publicClient = makePublicClient();
   const supabase = createServerClient();
 
@@ -81,7 +87,7 @@ async function syncByTxHash(txHash: `0x${string}`) {
           pot: bigint;
           entryCost: bigint;
         };
-        const ok = await upsertDeal(
+        const supabaseId = await upsertDeal(
           supabase,
           publicClient,
           args.dealId,
@@ -89,9 +95,14 @@ async function syncByTxHash(txHash: `0x${string}`) {
           args.prompt,
           args.pot,
           args.entryCost,
-          txHash
+          txHash,
+          sourceHeadline
         );
-        return { synced: ok ? 1 : 0, dealId: Number(args.dealId) };
+        return {
+          synced: supabaseId ? 1 : 0,
+          dealId: Number(args.dealId),
+          supabaseId,
+        };
       }
     } catch {
       // not our event
@@ -141,7 +152,7 @@ async function syncAll() {
       continue;
     }
 
-    const ok = await upsertDeal(
+    const supabaseId = await upsertDeal(
       supabase,
       publicClient,
       dealId,
@@ -151,7 +162,7 @@ async function syncAll() {
       entryCost,
       log.transactionHash
     );
-    if (ok) synced++;
+    if (supabaseId) synced++;
   }
 
   return { synced, total: Number(dealCount) };
@@ -201,13 +212,21 @@ async function syncDealByOnChainId(onChainDealId: number) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    const { txHash, on_chain_deal_id: onChainDealId } = body as {
+    const {
+      txHash,
+      on_chain_deal_id: onChainDealId,
+      source_headline: sourceHeadline,
+    } = body as {
       txHash?: string;
       on_chain_deal_id?: number;
+      source_headline?: string;
     };
 
     if (txHash && /^0x[a-fA-F0-9]{64}$/.test(txHash)) {
-      const result = await syncByTxHash(txHash as `0x${string}`);
+      const result = await syncByTxHash(
+        txHash as `0x${string}`,
+        sourceHeadline
+      );
       return NextResponse.json(result);
     }
 

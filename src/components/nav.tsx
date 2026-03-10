@@ -7,7 +7,7 @@ import { MusicPlayer } from "@/components/music-player";
 
 const NAV_ITEMS = [
   { href: "/", label: "DESK" },
-  { href: "/deals", label: "DEALS" },
+  { href: "/wire", label: "NEWSWIRE" },
   { href: "/leaderboard", label: "LEADERBOARD" },
 ];
 

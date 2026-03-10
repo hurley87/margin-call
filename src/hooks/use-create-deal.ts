@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useWriteContract } from "wagmi";
 import { erc20Abi, parseUnits, decodeEventLog } from "viem";
 import {
   ESCROW_ADDRESS,
@@ -17,6 +17,7 @@ interface CreateDealState {
   approveHash?: `0x${string}`;
   createHash?: `0x${string}`;
   dealId?: bigint;
+  supabaseId?: string;
   error?: string;
 }
 
@@ -27,18 +28,13 @@ export function useCreateDeal() {
 
   const { writeContractAsync: writeCreateDeal } = useWriteContract();
 
-  const { data: approveReceipt } = useWaitForTransactionReceipt({
-    hash: state.approveHash,
-    chainId: CONTRACTS_CHAIN_ID,
-  });
-
-  const { data: createReceipt } = useWaitForTransactionReceipt({
-    hash: state.createHash,
-    chainId: CONTRACTS_CHAIN_ID,
-  });
-
   const createDeal = useCallback(
-    async (prompt: string, potAmountUsdc: number, entryCostUsdc: number) => {
+    async (
+      prompt: string,
+      potAmountUsdc: number,
+      entryCostUsdc: number,
+      sourceHeadline?: string
+    ) => {
       setState({ step: "approving" });
 
       try {
@@ -104,19 +100,25 @@ export function useCreateDeal() {
         // Step 3: Sync to Supabase
         setState((s) => ({ ...s, step: "syncing", dealId }));
 
+        let supabaseId: string | undefined;
         try {
-          await fetch("/api/deal/sync", {
+          const syncRes = await fetch("/api/deal/sync", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ txHash: createHash }),
+            body: JSON.stringify({
+              txHash: createHash,
+              source_headline: sourceHeadline,
+            }),
           });
+          const syncData = await syncRes.json();
+          supabaseId = syncData.supabaseId ?? undefined;
         } catch {
           // Sync failure is non-critical
         }
 
-        setState({ step: "done", approveHash, createHash, dealId });
+        setState({ step: "done", approveHash, createHash, dealId, supabaseId });
 
-        return { dealId, createHash };
+        return { dealId, createHash, supabaseId };
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Transaction failed";
@@ -138,9 +140,8 @@ export function useCreateDeal() {
     approveHash: state.approveHash,
     createHash: state.createHash,
     dealId: state.dealId,
+    supabaseId: state.supabaseId,
     error: state.error,
     isLoading: state.step !== "idle" && state.step !== "done",
-    approveReceipt,
-    createReceipt,
   };
 }

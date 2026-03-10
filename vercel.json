@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/narrative/generate",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

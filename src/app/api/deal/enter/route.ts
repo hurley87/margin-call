@@ -11,6 +11,7 @@ import {
   updateDealAfterEntry,
   getTraderAssets,
   syncAssetsFromOutcome,
+  getLatestNarrative,
 } from "@/lib/supabase/queries";
 import { callModel } from "@/lib/llm/call-model";
 import {
@@ -40,7 +41,14 @@ import {
   escrowAbi,
   reputationRegistryAbi,
 } from "@/lib/contracts/escrow";
+import { makeOperatorWalletClient } from "@/lib/contracts/operator";
+import { makePublicClient } from "@/lib/contracts/client";
 import { randomBytes } from "crypto";
+import {
+  dealEnterLimit,
+  checkRateLimit,
+  getClientIdentifier,
+} from "@/lib/rate-limit";
 
 function generateRandomSeed(): number {
   const bytes = randomBytes(4);
@@ -68,9 +76,10 @@ async function postReputation(
   outcomeId: string
 ) {
   try {
-    const { smartAccount } = await getOrCreateTraderSmartAccount(
-      Number(tokenId)
-    );
+    // Use the operator wallet — the ERC-8004 reputation registry rejects
+    // self-feedback (the NFT owner cannot rate themselves).
+    const walletClient = makeOperatorWalletClient();
+    const publicClient = makePublicClient();
 
     // value = pnl in USDC scaled to 6 decimals (int128)
     const value = BigInt(Math.round(pnlUsdc * 1_000_000));
@@ -88,7 +97,7 @@ async function postReputation(
     });
     const feedbackHash = keccak256(toBytes(feedbackURI));
 
-    const receipt = await sendContractCall(smartAccount, {
+    const hash = await walletClient.writeContract({
       address: REPUTATION_REGISTRY_ADDRESS,
       abi: reputationRegistryAbi,
       functionName: "giveFeedback",
@@ -104,7 +113,8 @@ async function postReputation(
       ],
     });
 
-    return receipt.transactionHash;
+    await publicClient.waitForTransactionReceipt({ hash });
+    return hash;
   } catch (err) {
     console.error("Failed to post reputation:", err);
     return null;
@@ -201,6 +211,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Rate limit: 10 req/min per wallet
+    const rlKey = getClientIdentifier(request, expectedOwnerAddress);
+    const limited = await checkRateLimit(dealEnterLimit, rlKey);
+    if (limited) return limited;
+
     // ----- Fetch deal -----
     const deal = await getDeal(deal_id);
 
@@ -283,12 +298,33 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Load trader's current assets for LLM context
-    const traderAssets = await getTraderAssets(traderId);
+    // Load trader assets + latest narrative in parallel (both are LLM context)
+    const [traderAssets, latestNarrative] = await Promise.all([
+      getTraderAssets(traderId),
+      getLatestNarrative().catch((e) => {
+        console.warn("Failed to fetch narrative for deal context:", e);
+        return null;
+      }),
+    ]);
     const traderInventory = traderAssets.map((a) => ({
       name: a.name,
       value_usdc: Number(a.value_usdc),
     }));
+
+    // Extract world state from latest Market Wire narrative
+    let worldMood: string | undefined;
+    let secHeat: number | undefined;
+    let activeStorylines: string[] | undefined;
+    if (latestNarrative?.world_state) {
+      const ws = latestNarrative.world_state as {
+        mood?: string;
+        sec_heat?: number;
+        active_storylines?: string[];
+      };
+      worldMood = ws.mood;
+      secHeat = ws.sec_heat;
+      activeStorylines = ws.active_storylines;
+    }
 
     const messages = await buildDealResolutionMessages({
       dealPrompt: deal.prompt,
@@ -297,6 +333,9 @@ export async function POST(request: NextRequest) {
       portfolioBalance,
       maxValuePerWin,
       randomSeed,
+      worldMood,
+      secHeat,
+      activeStorylines,
     });
 
     const outcome = await callModel<DealOutcome>(
@@ -364,25 +403,47 @@ export async function POST(request: NextRequest) {
       const pnlUnits = usdcToUnits(outcome.balance_change_usdc);
       const rakeUnits = usdcToUnits(rakeAmount);
 
-      // Batch enterDeal + resolveEntry into a single UserOp so they
-      // execute atomically — avoids the bundler simulating resolveEntry
-      // against state where enterDeal hasn't been mined yet.
-      const receipt = await sendBatchContractCalls(smartAccount, [
-        {
+      // Re-read on-chain deal to get current pending entries count.
+      // We already fetched it earlier for validation, but the count may
+      // have changed between then and now (other traders entering).
+      const currentOnChainDeal = await getOnChainDeal(onChainDealId);
+      const pendingEntries = currentOnChainDeal
+        ? Number(currentOnChainDeal.pendingEntries)
+        : 0;
+
+      if (pendingEntries === 0) {
+        // No pending entries — safe to batch enterDeal + resolveEntry
+        // atomically so the bundler doesn't simulate resolveEntry
+        // against state where enterDeal hasn't been mined yet.
+        const receipt = await sendBatchContractCalls(smartAccount, [
+          {
+            address: ESCROW_ADDRESS,
+            abi: escrowAbi,
+            functionName: "enterDeal",
+            args: [onChainDealId, tokenId],
+          },
+          {
+            address: ESCROW_ADDRESS,
+            abi: escrowAbi,
+            functionName: "resolveEntry",
+            args: [onChainDealId, tokenId, pnlUnits, rakeUnits],
+          },
+        ]);
+        enterTxHash = receipt.transactionHash;
+        resolveTxHash = receipt.transactionHash;
+      } else {
+        // Other traders have pending (unresolved) entries in the FIFO
+        // queue. resolveEntry checks queue[0] == traderId, so we can't
+        // batch — just enter the deal now; resolution will happen once
+        // earlier entries are resolved and this trader reaches the head.
+        const enterReceipt = await sendContractCall(smartAccount, {
           address: ESCROW_ADDRESS,
           abi: escrowAbi,
           functionName: "enterDeal",
           args: [onChainDealId, tokenId],
-        },
-        {
-          address: ESCROW_ADDRESS,
-          abi: escrowAbi,
-          functionName: "resolveEntry",
-          args: [onChainDealId, tokenId, pnlUnits, rakeUnits],
-        },
-      ]);
-      enterTxHash = receipt.transactionHash;
-      resolveTxHash = receipt.transactionHash;
+        });
+        enterTxHash = enterReceipt.transactionHash;
+      }
     }
 
     // ----- Save outcome to Supabase -----

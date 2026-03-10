@@ -248,6 +248,91 @@ export async function clearTraderAssets(traderId: string) {
   if (error) throw error;
 }
 
+// --- Market Wire / Narrative queries ---
+
+export async function getLatestNarrative() {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("market_narratives")
+    .select()
+    .order("epoch", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getNarrativeHistory(limit = 10) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("market_narratives")
+    .select()
+    .order("epoch", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+export interface CreateNarrativeParams {
+  epoch: number;
+  headlines: { headline: string; body: string; category: string }[];
+  world_state: Record<string, unknown>;
+  raw_narrative: string;
+  events_ingested: unknown[];
+}
+
+export async function createNarrative(params: CreateNarrativeParams) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("market_narratives")
+    .insert(params)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
+
+export async function getRecentGameEvents(since: Date) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deal_outcomes")
+    .select("trader_pnl_usdc, trader_wiped_out, trader_id, deal_id, created_at")
+    .or(`trader_wiped_out.eq.true,trader_pnl_usdc.gt.10,trader_pnl_usdc.lt.-10`)
+    .gte("created_at", since.toISOString())
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  if (error) throw error;
+  if (!data || data.length === 0) return [];
+
+  // Fetch trader names and deal prompts
+  const traderIds = [...new Set(data.map((d) => d.trader_id))];
+  const dealIds = [...new Set(data.map((d) => d.deal_id))];
+
+  const [traderResult, dealResult] = await Promise.all([
+    supabase.from("traders").select("id, name").in("id", traderIds),
+    supabase.from("deals").select("id, prompt").in("id", dealIds),
+  ]);
+
+  if (traderResult.error) throw traderResult.error;
+  if (dealResult.error) throw dealResult.error;
+
+  const traderMap = new Map(
+    (traderResult.data ?? []).map((t) => [t.id, t.name || "Unknown Trader"])
+  );
+  const dealMap = new Map((dealResult.data ?? []).map((d) => [d.id, d.prompt]));
+
+  return data.map((outcome) => ({
+    trader_name: traderMap.get(outcome.trader_id) ?? "Unknown Trader",
+    deal_prompt: dealMap.get(outcome.deal_id) ?? "Unknown Deal",
+    trader_pnl_usdc: Number(outcome.trader_pnl_usdc),
+    trader_wiped_out: outcome.trader_wiped_out,
+  }));
+}
+
 export async function updateDealAfterEntry(
   dealId: string,
   potChange: number,

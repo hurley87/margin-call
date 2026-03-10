@@ -185,6 +185,18 @@ export function useDashboardRealtime() {
 }
 
 /**
+ * Subscribe to realtime updates for the Market Wire narrative.
+ */
+export function useNarrativeRealtime() {
+  useRealtimeInvalidation([
+    {
+      table: "market_narratives",
+      queryKeys: [["narrative"], ["narrative-history"], ["narrative-feed"]],
+    },
+  ]);
+}
+
+/**
  * Subscribe to realtime updates for the leaderboard + global activity.
  */
 export function useLeaderboardRealtime() {
