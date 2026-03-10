@@ -6,6 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useDeskManager } from "@/hooks/use-desk";
 import { usePortfolio } from "@/hooks/use-portfolio";
 import { useTraders } from "@/hooks/use-traders";
+import { useCreateTrader } from "@/hooks/use-create-trader";
 import { usePendingApprovals, useApproveReject } from "@/hooks/use-approvals";
 import { useDeals } from "@/hooks/use-deals";
 import { useDashboardRealtime } from "@/hooks/use-realtime";
@@ -136,41 +137,10 @@ function Dashboard({ displayName }: { displayName: string }) {
 
       <div className="mx-auto max-w-2xl px-4 py-4">
         {/* Trader Roster */}
-        {portfolio && portfolio.traders.length > 0 && (
-          <div className="mb-6">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-              TRADERS ({portfolio.traders.length})
-            </div>
-            <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
-              {portfolio.traders.map((t) => (
-                <Link
-                  key={t.id}
-                  href={`/traders/${t.id}`}
-                  className="flex items-center justify-between bg-[var(--t-bg)] px-3 py-2.5 text-xs transition-colors hover:bg-[var(--t-surface)]"
-                >
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`inline-block h-1.5 w-1.5 rounded-full ${
-                        t.status === "active"
-                          ? "bg-[var(--t-green)]"
-                          : t.status === "paused"
-                            ? "bg-[var(--t-amber)]"
-                            : "bg-[var(--t-red)]"
-                      }`}
-                    />
-                    <span className="text-[var(--t-text)]">{t.name}</span>
-                  </div>
-                  <div className="flex items-center gap-4 text-[var(--t-muted)]">
-                    <span>${t.escrow_usdc.toFixed(2)}</span>
-                    <span className="text-[var(--t-text)]">
-                      ${t.total_value_usdc.toFixed(2)}
-                    </span>
-                  </div>
-                </Link>
-              ))}
-            </div>
-          </div>
-        )}
+        <TraderRoster
+          portfolio={portfolio}
+          portfolioLoading={portfolioLoading}
+        />
 
         {/* Trader Filter Chips */}
         {traders && traders.length > 0 && (
@@ -262,6 +232,133 @@ function Dashboard({ displayName }: { displayName: string }) {
               ))}
             </div>
           </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ── Trader Roster ── */
+
+function TraderRoster({
+  portfolio,
+  portfolioLoading,
+}: {
+  portfolio: ReturnType<typeof usePortfolio>["data"];
+  portfolioLoading: boolean;
+}) {
+  const [hiring, setHiring] = useState(false);
+  const [name, setName] = useState("");
+  const { createTrader, isLoading, error, reset } = useCreateTrader();
+
+  const handleHire = async () => {
+    if (!name.trim()) return;
+    try {
+      await createTrader(name.trim());
+      setName("");
+      setHiring(false);
+    } catch {
+      // error is surfaced via hook state
+    }
+  };
+
+  const traders = portfolio?.traders ?? [];
+
+  return (
+    <div className="mb-6">
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+          TRADERS ({traders.length})
+        </span>
+        <button
+          onClick={() => {
+            setHiring(!hiring);
+            reset();
+          }}
+          className="text-[10px] text-[var(--t-accent)] transition-colors hover:text-[var(--t-text)]"
+        >
+          {hiring ? "[CANCEL]" : "[+ HIRE TRADER]"}
+        </button>
+      </div>
+
+      <div className="border border-[var(--t-border)]">
+        {/* Table Header */}
+        <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+          <span>Name</span>
+          <div className="flex items-center gap-4">
+            <span className="w-20 text-right">Escrow</span>
+            <span className="w-20 text-right">Total</span>
+          </div>
+        </div>
+
+        {/* Hire Trader Inline Form */}
+        {hiring && (
+          <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2.5">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--t-accent)]">{">"}</span>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleHire()}
+                placeholder="TRADER NAME"
+                maxLength={50}
+                autoFocus
+                disabled={isLoading}
+                className="flex-1 bg-transparent text-xs text-[var(--t-text)] placeholder:text-[var(--t-muted)] outline-none disabled:opacity-50"
+              />
+              <button
+                onClick={handleHire}
+                disabled={isLoading || !name.trim()}
+                className="border border-[var(--t-border)] px-2 py-1 text-[10px] text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] disabled:opacity-50"
+              >
+                {isLoading ? "HIRING..." : "HIRE"}
+              </button>
+            </div>
+            {error && (
+              <p className="mt-1 text-[10px] text-[var(--t-red)]">{error}</p>
+            )}
+          </div>
+        )}
+
+        {/* Trader Rows */}
+        {portfolioLoading ? (
+          <div className="px-3 py-4 text-center text-xs text-[var(--t-muted)]">
+            LOADING...<span className="cursor-blink">█</span>
+          </div>
+        ) : traders.length === 0 && !hiring ? (
+          <div className="px-3 py-4 text-center text-xs text-[var(--t-muted)]">
+            NO TRADERS — HIRE ONE TO BEGIN
+          </div>
+        ) : (
+          traders.map((t) => (
+            <Link
+              key={t.id}
+              href={`/traders/${t.id}`}
+              className="flex items-center justify-between border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-xs transition-colors hover:bg-[var(--t-surface)]"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${
+                    t.status === "active"
+                      ? "bg-[var(--t-green)]"
+                      : t.status === "paused"
+                        ? "bg-[var(--t-amber)]"
+                        : "bg-[var(--t-red)]"
+                  }`}
+                />
+                <span className="text-[var(--t-text)]">{t.name}</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="w-20 text-right text-[var(--t-muted)]">
+                  ${t.escrow_usdc.toFixed(2)}
+                </span>
+                <span className="w-20 text-right text-[var(--t-text)]">
+                  ${t.total_value_usdc.toFixed(2)}
+                </span>
+              </div>
+            </Link>
+          ))
         )}
       </div>
     </div>

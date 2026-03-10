@@ -7,7 +7,6 @@ import { usePendingApprovals } from "@/hooks/use-approvals";
 
 const NAV_ITEMS = [
   { href: "/", label: "FEED" },
-  { href: "/traders", label: "TRADERS" },
   { href: "/deals", label: "DEALS" },
   { href: "/leaderboard", label: "LEADERBOARD" },
   { href: "/approvals", label: "APPROVALS" },
