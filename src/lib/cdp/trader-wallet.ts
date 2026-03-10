@@ -8,6 +8,8 @@ import {
   identityRegistryAbi,
   escrowAbi,
 } from "@/lib/contracts/escrow";
+import { makeOperatorWalletClient } from "@/lib/contracts/operator";
+import { makePublicClient } from "@/lib/contracts/client";
 import { sendContractCall } from "./send-contract-call";
 
 /** The owner account type returned by CDP SDK. */
@@ -99,19 +101,24 @@ async function mintTraderNft(
 
 /**
  * Set the depositor for a trader on the escrow contract.
- * Called by the smart account (as operator) to authorize the desk manager's wallet.
+ * Called by the operator wallet (already authorized) to avoid race conditions
+ * with the smart account's addOperator registration.
  */
 export async function setDepositorOnChain(
-  smartAccount: TraderSmartAccount,
   tokenId: number,
   depositorAddress: string
 ): Promise<void> {
-  await sendContractCall(smartAccount, {
+  const walletClient = makeOperatorWalletClient();
+  const publicClient = makePublicClient();
+
+  const hash = await walletClient.writeContract({
     address: ESCROW_ADDRESS,
-    abi: escrowAbi as unknown as import("viem").Abi,
+    abi: escrowAbi,
     functionName: "setDepositor",
-    args: [BigInt(tokenId), depositorAddress],
+    args: [BigInt(tokenId), depositorAddress as `0x${string}`],
   });
+
+  await publicClient.waitForTransactionReceipt({ hash });
 }
 
 /**

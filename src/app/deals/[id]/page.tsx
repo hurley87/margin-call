@@ -24,23 +24,25 @@ export default function DealDetailPage() {
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--t-bg)]">
-        <p className="text-[var(--t-muted)]">Loading...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] font-mono">
+        <p className="text-[var(--t-muted)]">
+          LOADING...<span className="cursor-blink">█</span>
+        </p>
       </div>
     );
   }
 
   if (error || !data) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--t-bg)]">
-        <p className="text-[var(--t-red)]">
-          {error?.message ?? "Deal not found"}
+      <div className="crt-scanlines flex min-h-screen flex-col items-center justify-center gap-4 bg-[var(--t-bg)] font-mono">
+        <p className="text-sm text-[var(--t-red)]">
+          ERR: {error?.message ?? "DEAL NOT FOUND"}
         </p>
         <Link
           href="/deals"
-          className="text-sm text-[var(--t-muted)] hover:text-[var(--t-text)]"
+          className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
         >
-          Back to deals
+          {"<"} BACK TO DEALS
         </Link>
       </div>
     );
@@ -49,63 +51,100 @@ export default function DealDetailPage() {
   const { deal, outcomes } = data;
 
   return (
-    <div className="min-h-screen bg-[var(--t-bg)]">
+    <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
-      <div className="mx-auto w-full max-w-2xl px-4 py-8">
-        <div className="border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <span className="text-[10px] font-bold uppercase text-[var(--t-green)]">
-              [{deal.status.toUpperCase()}]
-            </span>
-            <span className="text-xs text-[var(--t-muted)]">
-              {new Date(deal.created_at).toLocaleDateString()}
-            </span>
+
+      {/* Sub-header */}
+      <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-1.5 text-xs">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/deals"
+              className="text-[10px] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+            >
+              {"<"} DEALS
+            </Link>
+            <span className="text-[10px] text-[var(--t-border)]">/</span>
+            {deal.on_chain_deal_id !== undefined && (
+              <span className="text-[10px] text-[var(--t-muted)]">
+                #{deal.on_chain_deal_id}
+              </span>
+            )}
+          </div>
+          <span
+            className={`text-[10px] font-bold ${
+              deal.status === "open"
+                ? "text-[var(--t-green)]"
+                : "text-[var(--t-muted)]"
+            }`}
+          >
+            [{deal.status.toUpperCase()}]
+          </span>
+        </div>
+      </div>
+
+      <div className="mx-auto w-full max-w-2xl px-4 py-4">
+        {/* Deal Info */}
+        <div className="border border-[var(--t-border)]">
+          <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+            SCENARIO
+          </div>
+          <div className="px-3 py-3">
+            <p className="text-xs leading-relaxed text-[var(--t-text)]">
+              {deal.prompt}
+            </p>
           </div>
 
-          <p className="mb-6 text-lg text-[var(--t-text)]">{deal.prompt}</p>
-
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-xs text-[var(--t-muted)]">Pot</p>
-              <p className="text-[var(--t-text)]">{deal.pot_usdc} USDC</p>
+          {/* Stats Row */}
+          <div className="flex items-center gap-0 border-t border-[var(--t-border)] text-xs">
+            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
+              <p className="text-[10px] text-[var(--t-muted)]">POT</p>
+              <p className="text-[var(--t-green)]">${deal.pot_usdc}</p>
             </div>
-            <div>
-              <p className="text-xs text-[var(--t-muted)]">Entry Cost</p>
-              <p className="text-[var(--t-text)]">
-                {deal.entry_cost_usdc} USDC
-              </p>
+            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
+              <p className="text-[10px] text-[var(--t-muted)]">ENTRY</p>
+              <p className="text-[var(--t-accent)]">${deal.entry_cost_usdc}</p>
             </div>
             {deal.fee_usdc !== undefined && deal.fee_usdc > 0 && (
-              <div>
-                <p className="text-xs text-[var(--t-muted)]">Fee (5%)</p>
-                <p className="text-[var(--t-text)]">{deal.fee_usdc} USDC</p>
+              <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
+                <p className="text-[10px] text-[var(--t-muted)]">FEE</p>
+                <p className="text-[var(--t-text)]">${deal.fee_usdc}</p>
               </div>
             )}
-            <div>
-              <p className="text-xs text-[var(--t-muted)]">Entries</p>
-              <p className="text-[var(--t-accent)]">{deal.entry_count}</p>
+            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
+              <p className="text-[10px] text-[var(--t-muted)]">ENTRIES</p>
+              <p className="text-[var(--t-text)]">{deal.entry_count}</p>
             </div>
-            <div>
-              <p className="text-xs text-[var(--t-muted)]">Wipeouts</p>
-              <p className="text-[var(--t-text)]">{deal.wipeout_count}</p>
+            <div className="flex-1 px-3 py-2.5">
+              <p className="text-[10px] text-[var(--t-muted)]">WIPEOUTS</p>
+              <p
+                className={
+                  deal.wipeout_count > 0
+                    ? "text-[var(--t-red)]"
+                    : "text-[var(--t-text)]"
+                }
+              >
+                {deal.wipeout_count}
+              </p>
             </div>
-            {deal.on_chain_deal_id !== undefined && (
-              <div>
-                <p className="text-xs text-[var(--t-muted)]">On-chain ID</p>
-                <p className="text-[var(--t-text)]">#{deal.on_chain_deal_id}</p>
-              </div>
+          </div>
+
+          {/* Links + Actions */}
+          <div className="flex items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
+            <span className="text-[10px] text-[var(--t-muted)]">
+              {new Date(deal.created_at).toLocaleDateString()}
+            </span>
+            {deal.on_chain_tx_hash && (
+              <a
+                href={`https://sepolia.basescan.org/tx/${deal.on_chain_tx_hash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
+              >
+                Creation TX
+              </a>
             )}
           </div>
-          {deal.on_chain_tx_hash && (
-            <a
-              href={`https://sepolia.basescan.org/tx/${deal.on_chain_tx_hash}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-4 inline-block text-xs text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
-            >
-              View creation tx on BaseScan
-            </a>
-          )}
 
           {deal.on_chain_deal_id !== undefined &&
             deal.status === "open" &&
@@ -119,99 +158,107 @@ export default function DealDetailPage() {
             )}
         </div>
 
-        <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-          <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
-            Outcomes
-          </h2>
+        {/* Outcomes */}
+        <div className="mt-4 border border-[var(--t-border)]">
+          <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+            OUTCOMES ({outcomes.length})
+          </div>
+
           {outcomes.length === 0 ? (
-            <p className="text-sm text-[var(--t-muted)]">
-              No outcomes yet. Outcomes will appear here as traders enter the
-              deal.
-            </p>
+            <div className="px-3 py-6 text-center text-xs text-[var(--t-muted)]">
+              NO OUTCOMES YET — waiting for traders to enter
+            </div>
           ) : (
-            <div className="flex flex-col gap-4">
-              {outcomes.map((outcome) => (
+            <div className="flex flex-col">
+              {outcomes.map((outcome, idx) => (
                 <div
                   key={outcome.id}
-                  className="border border-[var(--t-border)] bg-[var(--t-bg)] p-4"
+                  className={`border-b border-[var(--t-border)] last:border-b-0 px-3 py-3 ${
+                    outcome.trader_wiped_out
+                      ? "bg-[#D48787]/5"
+                      : "bg-[var(--t-bg)]"
+                  }`}
                 >
-                  <div className="mb-3 flex items-center justify-between">
-                    <span
-                      className={`text-sm font-medium ${
-                        outcome.trader_pnl_usdc >= 0
-                          ? "text-[var(--t-green)]"
-                          : "text-[var(--t-red)]"
-                      }`}
-                    >
-                      {outcome.trader_pnl_usdc >= 0 ? "+" : ""}
-                      {outcome.trader_pnl_usdc} USDC
-                    </span>
-                    {outcome.trader_wiped_out && (
-                      <span className="text-[10px] font-bold text-[var(--t-red)]">
-                        [WIPED OUT
-                        {outcome.wipeout_reason
-                          ? ` — ${outcome.wipeout_reason.replace("_", " ")}`
-                          : ""}
-                        ]
+                  {/* P&L Header */}
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[var(--t-muted)]">
+                        #{idx + 1}
                       </span>
-                    )}
+                      <span
+                        className={`text-xs font-bold ${
+                          outcome.trader_pnl_usdc >= 0
+                            ? "text-[var(--t-green)]"
+                            : "text-[var(--t-red)]"
+                        }`}
+                      >
+                        {outcome.trader_pnl_usdc >= 0 ? "+" : ""}$
+                        {Math.abs(outcome.trader_pnl_usdc).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {outcome.trader_wiped_out && (
+                        <span className="text-[10px] font-bold text-[var(--t-red)]">
+                          [WIPED OUT
+                          {outcome.wipeout_reason
+                            ? ` — ${outcome.wipeout_reason.replace("_", " ")}`
+                            : ""}
+                          ]
+                        </span>
+                      )}
+                      {outcome.rake_usdc > 0 && (
+                        <span className="text-[10px] text-[var(--t-muted)]">
+                          RAKE ${outcome.rake_usdc}
+                        </span>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="flex flex-col gap-2">
+                  {/* Narrative */}
+                  <div className="mt-2 flex flex-col gap-1.5">
                     {outcome.narrative.map((event, i) => (
-                      <div key={i}>
-                        <p className="text-xs font-medium uppercase text-[var(--t-muted)]">
+                      <div key={i} className="flex items-start gap-2">
+                        <span className="w-20 shrink-0 text-right text-[10px] font-bold uppercase text-[var(--t-accent)]">
                           {event.event}
-                        </p>
-                        <p className="text-sm text-[var(--t-text)]">
+                        </span>
+                        <span className="text-xs text-[var(--t-text)]">
                           {event.description}
-                        </p>
+                        </span>
                       </div>
                     ))}
                   </div>
 
-                  {outcome.assets_gained.length > 0 && (
-                    <div className="mt-3">
-                      <p className="text-xs text-[var(--t-muted)]">
-                        Assets gained:
-                      </p>
-                      <p className="text-xs text-[var(--t-green)]">
-                        {outcome.assets_gained
-                          .map((a) => `${a.name} ($${a.value_usdc})`)
-                          .join(", ")}
-                      </p>
+                  {/* Assets */}
+                  {(outcome.assets_gained.length > 0 ||
+                    outcome.assets_lost.length > 0) && (
+                    <div className="mt-2 flex items-center gap-3 text-[10px]">
+                      {outcome.assets_gained.length > 0 && (
+                        <span className="text-[var(--t-green)]">
+                          +{" "}
+                          {outcome.assets_gained
+                            .map((a) => `${a.name} ($${a.value_usdc})`)
+                            .join(", ")}
+                        </span>
+                      )}
+                      {outcome.assets_lost.length > 0 && (
+                        <span className="text-[var(--t-red)]">
+                          - {outcome.assets_lost.join(", ")}
+                        </span>
+                      )}
                     </div>
                   )}
 
-                  {outcome.assets_lost.length > 0 && (
-                    <div className="mt-1">
-                      <p className="text-xs text-[var(--t-muted)]">
-                        Assets lost:
-                      </p>
-                      <p className="text-xs text-[var(--t-red)]">
-                        {outcome.assets_lost.join(", ")}
-                      </p>
-                    </div>
-                  )}
-
-                  {outcome.rake_usdc > 0 && (
-                    <p className="mt-2 text-xs text-[var(--t-muted)]">
-                      Rake: {outcome.rake_usdc} USDC
-                    </p>
-                  )}
-
-                  <div className="mt-2 flex items-center gap-3">
-                    <p className="text-xs text-[var(--t-muted)]">
-                      {new Date(outcome.created_at).toLocaleString()}
-                    </p>
+                  {/* Footer */}
+                  <div className="mt-2 flex items-center gap-3 text-[10px] text-[var(--t-muted)]">
+                    <span>{new Date(outcome.created_at).toLocaleString()}</span>
                     {outcome.on_chain_tx_hash && (
                       <a
                         href={`https://sepolia.basescan.org/tx/${outcome.on_chain_tx_hash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-xs text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
+                        className="text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
                       >
-                        Settlement tx
+                        Settlement TX
                       </a>
                     )}
                   </div>
@@ -266,18 +313,18 @@ function CloseDealButton({
 
   if (isSuccess) {
     return (
-      <div className="mt-4">
-        <p className="text-xs text-[var(--t-green)]">
-          Deal closed successfully.
+      <div className="border-t border-[var(--t-green)]/40 bg-[var(--t-green)]/5 px-3 py-2">
+        <p className="text-[10px] text-[var(--t-green)]">
+          DEAL CLOSED SUCCESSFULLY
         </p>
         {txHash && (
           <a
             href={`https://sepolia.basescan.org/tx/${txHash}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="text-xs text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
+            className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
           >
-            View tx on BaseScan
+            View TX
           </a>
         )}
       </div>
@@ -285,23 +332,25 @@ function CloseDealButton({
   }
 
   return (
-    <div className="mt-4">
-      <button
-        onClick={handleClose}
-        disabled={isPending || isConfirming}
-        className="border border-[var(--t-border)] px-4 py-2 text-sm text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
-      >
-        {isPending
-          ? "Confirm in wallet..."
-          : isConfirming
-            ? "Closing deal..."
-            : "Close Deal"}
-      </button>
-      <p className="mt-1 text-xs text-[var(--t-muted)]">
-        Withdraw remaining pot. Requires 0 pending entries.
-      </p>
+    <div className="border-t border-[var(--t-border)] px-3 py-2">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] text-[var(--t-muted)]">
+          Withdraw remaining pot (requires 0 pending entries)
+        </p>
+        <button
+          onClick={handleClose}
+          disabled={isPending || isConfirming}
+          className="border border-[var(--t-border)] px-3 py-1 text-[10px] text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
+        >
+          {isPending
+            ? "CONFIRM IN WALLET..."
+            : isConfirming
+              ? "CLOSING..."
+              : "CLOSE DEAL"}
+        </button>
+      </div>
       {error && (
-        <p className="mt-1 text-xs text-[var(--t-red)]">
+        <p className="mt-1 text-[10px] text-[var(--t-red)]">
           {error.message.slice(0, 150)}
         </p>
       )}

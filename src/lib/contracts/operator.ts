@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createWalletClient, http } from "viem";
+import { createWalletClient, http, nonceManager } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { CONTRACTS_CHAIN } from "./escrow";
 
@@ -9,7 +9,9 @@ function buildOperatorClient() {
   if (!key) {
     throw new Error("OPERATOR_PRIVATE_KEY env var is not set");
   }
-  const account = privateKeyToAccount(key as `0x${string}`);
+  const account = privateKeyToAccount(key as `0x${string}`, {
+    nonceManager,
+  });
   return createWalletClient({
     account,
     chain: CONTRACTS_CHAIN,

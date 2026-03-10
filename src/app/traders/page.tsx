@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useTraders } from "@/hooks/use-traders";
 import { useCreateTrader } from "@/hooks/use-create-trader";
 import { Nav } from "@/components/nav";
@@ -13,16 +14,24 @@ export default function TradersPage() {
     error: createError,
     isLoading: isCreating,
   } = useCreateTrader();
+  const router = useRouter();
   const [name, setName] = useState("");
   const [showForm, setShowForm] = useState(false);
+
+  const nameTaken =
+    name.trim().length > 0 &&
+    (traders ?? []).some(
+      (t) => t.name.toLowerCase() === name.trim().toLowerCase()
+    );
 
   async function handleCreate(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
     try {
-      await createTrader(name.trim());
+      const trader = await createTrader(name.trim());
       setName("");
       setShowForm(false);
+      router.push(`/traders/${trader.id}`);
     } catch {
       // error is surfaced via hook state
     }
@@ -61,11 +70,16 @@ export default function TradersPage() {
             />
             <button
               type="submit"
-              disabled={isCreating || !name.trim()}
+              disabled={isCreating || !name.trim() || nameTaken}
               className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-6 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
             >
               {isCreating ? "Creating..." : "Create Trader"}
             </button>
+            {nameTaken && (
+              <p className="mt-3 text-sm text-[var(--t-amber)]">
+                NAME TAKEN — CHOOSE A UNIQUE NAME
+              </p>
+            )}
             {createError && (
               <p className="mt-3 text-sm text-[var(--t-red)]">{createError}</p>
             )}

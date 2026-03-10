@@ -3,20 +3,17 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
-import { usePendingApprovals } from "@/hooks/use-approvals";
+import { MusicPlayer } from "@/components/music-player";
 
 const NAV_ITEMS = [
-  { href: "/", label: "FEED" },
+  { href: "/", label: "DESK" },
   { href: "/deals", label: "DEALS" },
   { href: "/leaderboard", label: "LEADERBOARD" },
-  { href: "/approvals", label: "APPROVALS" },
 ];
 
 export function Nav() {
   const pathname = usePathname();
   const { logout } = usePrivy();
-  const { data: approvals } = usePendingApprovals();
-  const pendingCount = approvals?.length ?? 0;
 
   return (
     <nav className="sticky top-0 z-50 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
@@ -25,8 +22,6 @@ export function Nav() {
           {NAV_ITEMS.map(({ href, label }) => {
             const isActive =
               href === "/" ? pathname === "/" : pathname.startsWith(href);
-
-            const showBadge = href === "/approvals" && pendingCount > 0;
 
             return (
               <Link
@@ -39,21 +34,19 @@ export function Nav() {
                 }`}
               >
                 {label}
-                {showBadge && (
-                  <span className="ml-0.5 text-[var(--t-amber)]">
-                    ({pendingCount})
-                  </span>
-                )}
               </Link>
             );
           })}
         </div>
-        <button
-          onClick={logout}
-          className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)]"
-        >
-          [X]
-        </button>
+        <div className="flex items-center gap-3">
+          <MusicPlayer />
+          <button
+            onClick={logout}
+            className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)]"
+          >
+            [X]
+          </button>
+        </div>
       </div>
     </nav>
   );

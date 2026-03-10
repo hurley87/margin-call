@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { useDeskManager } from "@/hooks/use-desk";
 import { usePortfolio } from "@/hooks/use-portfolio";
@@ -198,12 +199,6 @@ function Dashboard({ displayName }: { displayName: string }) {
             ) : filteredActivity.length === 0 ? (
               <div className="p-8 text-center">
                 <p className="text-sm text-[var(--t-muted)]">NO ACTIVITY YET</p>
-                <Link
-                  href="/traders"
-                  className="mt-2 inline-block text-xs text-[var(--t-accent)] hover:text-[var(--t-text)]"
-                >
-                  {">"} FUND A TRADER TO BEGIN
-                </Link>
               </div>
             ) : (
               <div className="max-h-[60vh] overflow-y-auto">
@@ -247,6 +242,7 @@ function TraderRoster({
   portfolio: ReturnType<typeof usePortfolio>["data"];
   portfolioLoading: boolean;
 }) {
+  const router = useRouter();
   const [hiring, setHiring] = useState(false);
   const [name, setName] = useState("");
   const { createTrader, isLoading, error, reset } = useCreateTrader();
@@ -254,15 +250,19 @@ function TraderRoster({
   const handleHire = async () => {
     if (!name.trim()) return;
     try {
-      await createTrader(name.trim());
+      const trader = await createTrader(name.trim());
       setName("");
       setHiring(false);
+      router.push(`/traders/${trader.id}`);
     } catch {
       // error is surfaced via hook state
     }
   };
 
   const traders = portfolio?.traders ?? [];
+  const nameTaken =
+    name.trim().length > 0 &&
+    traders.some((t) => t.name.toLowerCase() === name.trim().toLowerCase());
 
   return (
     <div className="mb-6">
@@ -309,12 +309,17 @@ function TraderRoster({
               />
               <button
                 onClick={handleHire}
-                disabled={isLoading || !name.trim()}
+                disabled={isLoading || !name.trim() || nameTaken}
                 className="border border-[var(--t-border)] px-2 py-1 text-[10px] text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] disabled:opacity-50"
               >
                 {isLoading ? "HIRING..." : "HIRE"}
               </button>
             </div>
+            {nameTaken && (
+              <p className="mt-1 text-[10px] text-[var(--t-amber)]">
+                NAME TAKEN — CHOOSE A UNIQUE NAME
+              </p>
+            )}
             {error && (
               <p className="mt-1 text-[10px] text-[var(--t-red)]">{error}</p>
             )}

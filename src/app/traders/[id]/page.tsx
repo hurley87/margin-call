@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useReadContract } from "wagmi";
 import { parseUnits } from "viem";
 import { useTrader, useTraderHistory } from "@/hooks/use-traders";
-import type { TraderHistoryEvent } from "@/hooks/use-traders";
+import type { Trader, TraderHistoryEvent } from "@/hooks/use-traders";
 import {
   useSepoliaUsdcBalance,
   useDepositFlow,
@@ -19,7 +19,7 @@ import {
   useResumeTrader,
   useReviveTrader,
 } from "@/hooks/use-agent";
-import type { DealOutcomeWithNarrative, TraderAsset } from "@/hooks/use-agent";
+import type { DealOutcomeWithNarrative } from "@/hooks/use-agent";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
@@ -28,6 +28,8 @@ import {
 import { useConfigureMandate } from "@/hooks/use-approvals";
 import { useTraderRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
+
+const ZERO = BigInt(0);
 
 export default function TraderDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -74,52 +76,61 @@ export default function TraderDetailPage() {
 
   const balanceUsdc =
     escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
+  const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
+  const isNewTrader = trader.status === "paused" && unfunded;
+  const hasMandate = Object.keys(trader.mandate).length > 0;
 
   return (
     <div className="min-h-screen bg-[var(--t-bg)]">
       <Nav />
-      <div className="mx-auto w-full max-w-2xl px-4 py-8">
-        <div className="border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h1 className="text-xl font-semibold text-[var(--t-text)] font-[family-name:var(--font-plex-sans)]">
+
+      {/* Trader Header Strip */}
+      <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)]">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+            >
+              &larr;
+            </Link>
+            <h1 className="text-base font-semibold text-[var(--t-text)] font-[family-name:var(--font-plex-sans)]">
               {trader.name}
             </h1>
             <StatusBadge status={trader.status} />
           </div>
-
-          <div className="grid grid-cols-2 gap-4 text-sm">
-            <div>
-              <p className="text-xs text-[var(--t-muted)]">Token ID</p>
-              <p className="text-[var(--t-text)]">#{trader.token_id}</p>
+          <div className="flex items-center gap-4 text-xs">
+            <div className="text-right">
+              <span className="text-[var(--t-muted)]">ESCROW </span>
+              <span
+                className={
+                  unfunded ? "text-[var(--t-amber)]" : "text-[var(--t-text)]"
+                }
+              >
+                {balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."}
+              </span>
             </div>
-            <div>
-              <p className="text-xs text-[var(--t-muted)]">Escrow Balance</p>
-              <p className="text-[var(--t-text)]">
-                {balanceUsdc !== null ? `${balanceUsdc} USDC` : "..."}
-              </p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-xs text-[var(--t-muted)]">Trader Wallet</p>
-              <p className="font-mono text-xs text-[var(--t-text)]">
-                {trader.tba_address ?? "Not derived"}
-              </p>
-            </div>
-            <div className="col-span-2">
-              <p className="text-xs text-[var(--t-muted)]">Owner</p>
-              <p className="font-mono text-xs text-[var(--t-text)]">
-                {trader.owner_address}
-              </p>
-            </div>
+            <span className="text-[var(--t-muted)]">#{trader.token_id}</span>
           </div>
-
-          <AgentControls traderId={id} status={trader.status} />
         </div>
+      </div>
 
-        <ReputationSection traderId={id} traderStatus={trader.status} />
+      <div className="mx-auto w-full max-w-2xl px-4 py-6">
+        {/* Agent Controls — prominent at top */}
+        <AgentControls
+          traderId={id}
+          status={trader.status}
+          unfunded={unfunded}
+        />
 
+        {/* Onboarding Steps for newly hired unfunded trader */}
+        {isNewTrader && <SetupChecklist hasMandate={hasMandate} />}
+
+        {/* Funding — shown first when unfunded */}
         <FundingSection
           traderId={trader.token_id}
           walletUsdc={walletUsdc}
+          highlight={isNewTrader}
           onSuccess={() => {
             refetchBalance();
             fetch(`/api/trader/${id}/balance`, { method: "POST" });
@@ -128,9 +139,114 @@ export default function TraderDetailPage() {
 
         <MandateConfig traderId={id} mandate={trader.mandate} />
 
+        <ReputationSection traderId={id} traderStatus={trader.status} />
         <AssetInventory traderId={id} traderStatus={trader.status} />
         <DealOutcomes traderId={id} traderStatus={trader.status} />
+
+        {/* Technical Details — collapsible */}
+        <TraderDetails trader={trader} />
+
         <ActivityHistory id={id} />
+      </div>
+    </div>
+  );
+}
+
+/* ── Trader Technical Details (collapsible) ── */
+
+function TraderDetails({
+  trader,
+}: {
+  trader: Pick<Trader, "tba_address" | "owner_address">;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)]">
+      <button
+        onClick={() => setOpen(!open)}
+        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-[var(--t-bg)]"
+      >
+        <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+          WALLET DETAILS
+        </span>
+        <span className="text-xs text-[var(--t-muted)]">
+          {open ? "▲" : "▼"}
+        </span>
+      </button>
+      {open && (
+        <div className="border-t border-[var(--t-border)] px-4 py-3">
+          <div className="flex flex-col gap-2 text-xs">
+            <div>
+              <span className="text-[var(--t-muted)]">Trader Wallet </span>
+              <span className="font-mono text-[var(--t-text)]">
+                {trader.tba_address ?? "Not derived"}
+              </span>
+            </div>
+            <div>
+              <span className="text-[var(--t-muted)]">Owner </span>
+              <span className="font-mono text-[var(--t-text)]">
+                {trader.owner_address}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Setup Checklist ── */
+
+const SETUP_STEPS = [
+  { text: "Deposit USDC to fund the escrow", tag: "REQUIRED", active: true },
+  { text: "Configure trading mandate", tag: "OPTIONAL", active: false },
+  { text: "Activate trading", tag: null, active: false },
+] as const;
+
+function SetupChecklist({ hasMandate }: { hasMandate: boolean }) {
+  return (
+    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)]">
+      <div className="border-b border-[var(--t-border)] px-4 py-2">
+        <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+          SETUP CHECKLIST
+        </span>
+      </div>
+      <div className="flex flex-col">
+        {SETUP_STEPS.map((step, i) => {
+          const done = i === 1 && hasMandate;
+          const highlight = step.active;
+          const color = done
+            ? "border-[var(--t-green)] text-[var(--t-green)]"
+            : highlight
+              ? "border-[var(--t-amber)] text-[var(--t-amber)]"
+              : "border-[var(--t-border)] text-[var(--t-muted)]";
+          const isLast = i === SETUP_STEPS.length - 1;
+          return (
+            <div
+              key={i}
+              className={`flex items-center gap-3 px-4 py-3 ${isLast ? "" : "border-b border-[var(--t-border)]"}`}
+            >
+              <span
+                className={`flex h-5 w-5 shrink-0 items-center justify-center border text-[10px] font-bold ${color}`}
+              >
+                {i + 1}
+              </span>
+              <span
+                className={`text-sm ${highlight ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
+              >
+                {step.text}
+              </span>
+              {step.tag && (
+                <span
+                  className={`ml-auto text-[10px] ${highlight ? "text-[var(--t-amber)]" : "text-[var(--t-muted)]"}`}
+                >
+                  {step.tag}
+                </span>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -165,9 +281,11 @@ function StatusBadge({ status }: { status: string }) {
 function AgentControls({
   traderId,
   status,
+  unfunded,
 }: {
   traderId: string;
   status: string;
+  unfunded: boolean;
 }) {
   const pause = usePauseTrader();
   const resume = useResumeTrader();
@@ -196,40 +314,54 @@ function AgentControls({
   }
 
   return (
-    <div className="mt-4 flex items-center gap-3">
+    <div className="flex items-center gap-3 border border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
       {status === "active" ? (
-        <button
-          onClick={() => pause.mutate(traderId)}
-          disabled={pause.isPending}
-          className="border border-[var(--t-border)] px-4 py-2 text-sm text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] disabled:opacity-50"
-        >
-          {pause.isPending ? "Pausing..." : "Pause Trading"}
-        </button>
-      ) : (
-        <button
-          onClick={() => resume.mutate(traderId)}
-          disabled={resume.isPending}
-          className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
-        >
-          {resume.isPending ? "Resuming..." : "Start Trading"}
-        </button>
-      )}
-
-      {status === "active" && (
-        <span className="flex items-center gap-1.5 text-xs text-[var(--t-green)]">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--t-green)] opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--t-green)]" />
+        <>
+          <span className="flex items-center gap-1.5 text-xs text-[var(--t-green)]">
+            <span className="relative flex h-2 w-2">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--t-green)] opacity-75" />
+              <span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--t-green)]" />
+            </span>
+            Trading autonomously
           </span>
-          Trading autonomously
-        </span>
+          <button
+            onClick={() => pause.mutate(traderId)}
+            disabled={pause.isPending}
+            className="ml-auto border border-[var(--t-border)] px-3 py-1.5 text-xs text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] disabled:opacity-50"
+          >
+            {pause.isPending ? "PAUSING..." : "PAUSE"}
+          </button>
+        </>
+      ) : (
+        <>
+          <button
+            onClick={() => resume.mutate(traderId)}
+            disabled={resume.isPending || unfunded}
+            className="border border-[var(--t-accent)] px-4 py-1.5 text-xs font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {resume.isPending ? "ACTIVATING..." : "ACTIVATE TRADING"}
+          </button>
+          {unfunded ? (
+            <span className="text-xs text-[var(--t-amber)]">
+              Deposit USDC to enable
+            </span>
+          ) : (
+            <span className="text-xs text-[var(--t-muted)]">
+              Ready to trade
+            </span>
+          )}
+        </>
       )}
 
       {pause.isError && (
-        <p className="text-xs text-[var(--t-red)]">{pause.error.message}</p>
+        <p className="ml-auto text-xs text-[var(--t-red)]">
+          {pause.error.message}
+        </p>
       )}
       {resume.isError && (
-        <p className="text-xs text-[var(--t-red)]">{resume.error.message}</p>
+        <p className="ml-auto text-xs text-[var(--t-red)]">
+          {resume.error.message}
+        </p>
       )}
     </div>
   );
@@ -835,10 +967,12 @@ function ReputationSection({
 function FundingSection({
   traderId,
   walletUsdc,
+  highlight,
   onSuccess,
 }: {
   traderId: number;
   walletUsdc: number | undefined;
+  highlight?: boolean;
   onSuccess: () => void;
 }) {
   const [depositAmount, setDepositAmount] = useState("");
@@ -862,7 +996,7 @@ function FundingSection({
   async function handleDeposit(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseUnits(depositAmount, 6);
-    if (parsed === BigInt(0)) return;
+    if (parsed === ZERO) return;
 
     try {
       await deposit(BigInt(traderId), parsed);
@@ -876,7 +1010,7 @@ function FundingSection({
   async function handleWithdraw(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseUnits(withdrawAmount, 6);
-    if (parsed === BigInt(0)) return;
+    if (parsed === ZERO) return;
 
     try {
       await withdraw(BigInt(traderId), parsed);
@@ -888,7 +1022,9 @@ function FundingSection({
   }
 
   return (
-    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
+    <div
+      className={`mt-6 border bg-[var(--t-surface)] p-6 ${highlight ? "border-[var(--t-amber)]/40" : "border-[var(--t-border)]"}`}
+    >
       <h2 className="mb-1 text-sm font-medium text-[var(--t-muted)]">
         Fund Trader
       </h2>

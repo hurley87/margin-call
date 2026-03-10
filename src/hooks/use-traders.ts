@@ -8,7 +8,7 @@ export interface Trader {
   name: string;
   owner_address: string;
   tba_address: string | null;
-  status: string;
+  status: "active" | "paused" | "wiped_out";
   mandate: Record<string, unknown>;
   created_at: string;
   updated_at: string;

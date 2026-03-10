@@ -43,15 +43,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Check that the trader name is unique for this desk manager
+    const supabaseCheck = createServerClient();
+    const { data: existing } = await supabaseCheck
+      .from("traders")
+      .select("id")
+      .eq("owner_address", walletAddress.toLowerCase())
+      .ilike("name", name)
+      .limit(1);
+
+    if (existing && existing.length > 0) {
+      return NextResponse.json(
+        { error: "You already have a trader with that name" },
+        { status: 409 }
+      );
+    }
+
     // 1. Create CDP accounts + mint NFT server-side to CDP EOA
-    const { smartAccount, tokenId, cdpOwnerAddress, cdpWalletAddress } =
+    const { tokenId, cdpOwnerAddress, cdpWalletAddress } =
       await createTraderCdpAccounts(name);
 
     // 2. Register the Smart Account as an authorized operator on the escrow contract
     await registerTraderAsOperator(cdpWalletAddress as `0x${string}`);
 
     // 3. Set the desk manager's wallet as the depositor for this trader
-    await setDepositorOnChain(smartAccount, tokenId, walletAddress);
+    await setDepositorOnChain(tokenId, walletAddress);
 
     // 4. Derive ERC-6551 Token Bound Account address (optional, for reference)
     let tbaAddress: string;
@@ -116,7 +132,7 @@ export async function POST(request: NextRequest) {
         tba_address: tbaAddress,
         cdp_wallet_address: cdpWalletAddress,
         cdp_owner_address: cdpOwnerAddress,
-        status: "active",
+        status: "paused",
         mandate: {},
       })
       .select()
