@@ -18,3 +18,20 @@ export async function verifyPrivyToken(request: NextRequest) {
 
   return { claims, user };
 }
+
+type PrivyWalletAccount = { type: string; address?: string };
+type PrivyLikeUser = {
+  wallet?: { address?: string | null } | null;
+  linkedAccounts?: PrivyWalletAccount[] | null;
+};
+
+/**
+ * Extract the canonical wallet address from a Privy user payload.
+ */
+export function getPrivyWalletAddress(user: PrivyLikeUser): string | null {
+  const linkedWallet = user.linkedAccounts?.find(
+    (account) => account.type === "wallet" && typeof account.address === "string"
+  );
+  const walletAddress = user.wallet?.address ?? linkedWallet?.address ?? null;
+  return walletAddress;
+}

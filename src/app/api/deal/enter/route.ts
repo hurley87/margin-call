@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { keccak256, toBytes, parseUnits } from "viem";
 import { verifyPrivyToken } from "@/lib/privy/server";
 import { verifySIWARequest } from "@/lib/siwa/verify";
+import { siwaAuthMatchesTrader } from "@/lib/siwa/binding";
 import { createServerClient } from "@/lib/supabase/client";
 import { getTrader, getOwnedTrader } from "@/lib/supabase/traders";
 import {
@@ -168,6 +169,12 @@ export async function POST(request: NextRequest) {
       }
 
       const trader = await getTrader(trader_id);
+      if (!siwaAuthMatchesTrader(siwaResult, trader)) {
+        return NextResponse.json(
+          { error: "SIWA identity does not match trader" },
+          { status: 403 }
+        );
+      }
       traderId = trader.id;
       traderName = trader.name || "Anonymous Trader";
       tokenId = BigInt(trader.token_id);
