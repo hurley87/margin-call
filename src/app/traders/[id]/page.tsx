@@ -28,6 +28,7 @@ import {
 import { useConfigureMandate } from "@/hooks/use-approvals";
 import { useTraderRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
+import { authFetch } from "@/lib/api";
 
 const ZERO = BigInt(0);
 
@@ -133,7 +134,7 @@ export default function TraderDetailPage() {
           highlight={isNewTrader}
           onSuccess={() => {
             refetchBalance();
-            fetch(`/api/trader/${id}/balance`, { method: "POST" });
+            authFetch(`/api/trader/${id}/balance`, { method: "POST" });
           }}
         />
 

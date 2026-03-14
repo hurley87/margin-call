@@ -1,15 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPrivyToken } from "@/lib/privy/server";
+import { getPrivyWalletAddress, verifyPrivyToken } from "@/lib/privy/server";
 import { createServerClient } from "@/lib/supabase/client";
 
 export async function GET(request: NextRequest) {
   try {
-    await verifyPrivyToken(request);
-
-    const owner = request.nextUrl.searchParams.get("owner");
-    if (!owner) {
+    const { user } = await verifyPrivyToken(request);
+    const walletAddress = getPrivyWalletAddress(user);
+    if (!walletAddress) {
       return NextResponse.json(
-        { error: "owner query parameter is required" },
+        { error: "No wallet linked to this account" },
         { status: 400 }
       );
     }
@@ -19,7 +18,7 @@ export async function GET(request: NextRequest) {
     const { data: traders, error } = await supabase
       .from("traders")
       .select("*")
-      .eq("owner_address", owner.toLowerCase())
+      .eq("owner_address", walletAddress.toLowerCase())
       .order("created_at", { ascending: false });
 
     if (error) {

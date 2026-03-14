@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@/lib/supabase/client";
-import { getTrader } from "@/lib/supabase/traders";
+import { getOwnedTrader } from "@/lib/supabase/traders";
 import { getEscrowBalance } from "@/lib/contracts/balance";
+import { getPrivyWalletAddress, verifyPrivyToken } from "@/lib/privy/server";
 
-async function fetchOnChainBalance(id: string) {
-  const trader = await getTrader(id);
+async function fetchOnChainBalance(id: string, walletAddress: string) {
+  const trader = await getOwnedTrader(id, walletAddress);
   const balanceUsdc = await getEscrowBalance(trader.token_id);
 
   return {
@@ -16,28 +17,52 @@ async function fetchOnChainBalance(id: string) {
 }
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { user } = await verifyPrivyToken(request);
+    const walletAddress = getPrivyWalletAddress(user);
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "No wallet linked to this account" },
+        { status: 400 }
+      );
+    }
+
     const { id } = await params;
-    const result = await fetchOnChainBalance(id);
+    const result = await fetchOnChainBalance(id, walletAddress);
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to fetch balance";
     console.error("Trader balance error:", e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status =
+      message === "You do not own this trader"
+        ? 403
+        : message.includes("contains 0 rows")
+          ? 404
+          : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }
 
 /** Sync a single trader's on-chain balance to Supabase */
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { user } = await verifyPrivyToken(request);
+    const walletAddress = getPrivyWalletAddress(user);
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "No wallet linked to this account" },
+        { status: 400 }
+      );
+    }
+
     const { id } = await params;
-    const result = await fetchOnChainBalance(id);
+    const result = await fetchOnChainBalance(id, walletAddress);
 
     const supabase = createServerClient();
     const { error } = await supabase
@@ -57,6 +82,12 @@ export async function POST(
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to sync balance";
     console.error("Trader balance sync error:", e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status =
+      message === "You do not own this trader"
+        ? 403
+        : message.includes("contains 0 rows")
+          ? 404
+          : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

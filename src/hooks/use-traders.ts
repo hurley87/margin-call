@@ -21,7 +21,7 @@ export function useTraders() {
   return useQuery({
     queryKey: ["traders", walletAddress],
     queryFn: async () => {
-      const res = await authFetch(`/api/trader/list?owner=${walletAddress}`);
+      const res = await authFetch("/api/trader/list");
       if (!res.ok) throw new Error("Failed to load traders");
       const data = await res.json();
       return (data.traders ?? []) as Trader[];
@@ -56,7 +56,7 @@ export function useTraderHistory(id: string) {
   return useQuery({
     queryKey: ["trader-history", id],
     queryFn: async () => {
-      const res = await fetch(`/api/trader/${id}/history`);
+      const res = await authFetch(`/api/trader/${id}/history`);
       if (!res.ok) throw new Error("Failed to load history");
       const data = await res.json();
       return (data.events ?? []) as TraderHistoryEvent[];
