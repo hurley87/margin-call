@@ -14,6 +14,7 @@ import {
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
 import { Nav } from "@/components/nav";
+import { authFetch } from "@/lib/api";
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -290,7 +291,7 @@ function CloseDealButton({
   useEffect(() => {
     if (!isSuccess || !txHash || syncedRef.current) return;
     syncedRef.current = true;
-    fetch("/api/deal/sync", {
+    authFetch("/api/deal/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ on_chain_deal_id: onChainDealId }),
