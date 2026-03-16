@@ -15,6 +15,7 @@ import { useDeals } from "@/hooks/use-deals";
 import type { Deal } from "@/hooks/use-deals";
 import { useDashboardRealtime } from "@/hooks/use-realtime";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
+import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
@@ -103,6 +104,7 @@ function Dashboard({ displayName }: { displayName: string }) {
   const { data: approvals } = usePendingApprovals();
   const { data: deals } = useDeals();
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
+  const { balance: usdcBalance } = useUsdcBalance();
 
   const [traderFilter, setTraderFilter] = useState<string | null>(null);
 
@@ -141,7 +143,13 @@ function Dashboard({ displayName }: { displayName: string }) {
                 : `${pnl >= 0 ? "+" : ""}$${pnl.toFixed(2)}`}
             </span>
           </div>
-          <span className="text-[var(--t-muted)]">{displayName}</span>
+          <div className="flex items-center gap-4">
+            <span className="text-[var(--t-text)]">
+              <span className="text-[var(--t-muted)]">USDC </span>
+              {usdcBalance !== undefined ? `$${usdcBalance.toFixed(2)}` : "..."}
+            </span>
+            <span className="text-[var(--t-muted)]">{displayName}</span>
+          </div>
         </div>
       </div>
 
