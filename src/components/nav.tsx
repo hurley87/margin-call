@@ -17,7 +17,7 @@ export function Nav() {
 
   return (
     <nav className="sticky top-0 z-50 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
-      <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-1.5 text-[10px] tracking-wider">
+      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-2.5 text-xs tracking-wider">
         <div className="flex items-center gap-3 overflow-x-auto">
           {NAV_ITEMS.map(({ href, label }) => {
             const isActive =

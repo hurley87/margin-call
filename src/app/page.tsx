@@ -122,7 +122,7 @@ function Dashboard({ displayName }: { displayName: string }) {
 
       {/* Ticker Strip */}
       <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-1.5 text-xs">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-1.5 text-sm">
           <div className="flex items-center gap-4">
             <span className="text-[var(--t-text)]">
               <span className="text-[var(--t-muted)]">PORT </span>
@@ -145,7 +145,7 @@ function Dashboard({ displayName }: { displayName: string }) {
         </div>
       </div>
 
-      <div className="mx-auto max-w-2xl px-4 py-4">
+      <div className="mx-auto max-w-4xl px-4 py-4">
         {/* Trader Roster */}
         <TraderRoster
           portfolio={portfolio}
@@ -197,7 +197,7 @@ function Dashboard({ displayName }: { displayName: string }) {
 
         {/* Activity Feed */}
         <div className="mb-6">
-          <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+          <div className="mb-2 text-xs uppercase tracking-wider text-[var(--t-muted)]">
             LIVE FEED
             {traderFilter && traderNames[traderFilter]
               ? ` — ${traderNames[traderFilter]}`
@@ -230,7 +230,7 @@ function Dashboard({ displayName }: { displayName: string }) {
         {/* Inline Pending Approvals */}
         {approvals && approvals.length > 0 && (
           <div className="mb-6">
-            <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+            <div className="mb-2 text-xs uppercase tracking-wider text-[var(--t-muted)]">
               PENDING APPROVALS ({approvals.length})
             </div>
             <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
@@ -272,14 +272,12 @@ function TraderRoster({
   };
 
   const traders = portfolio?.traders ?? [];
-  const nameTaken =
-    name.trim().length > 0 &&
-    traders.some((t) => t.name.toLowerCase() === name.trim().toLowerCase());
+  // Name uniqueness is enforced globally by the API — no local check needed
 
   return (
     <div className="mb-6">
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+        <span className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
           TRADERS ({traders.length})
         </span>
         <button
@@ -287,7 +285,7 @@ function TraderRoster({
             setHiring(!hiring);
             reset();
           }}
-          className="text-[10px] text-[var(--t-accent)] transition-colors hover:text-[var(--t-text)]"
+          className="text-xs border border-[var(--t-border)] px-2 py-0.5 text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
         >
           {hiring ? "[CANCEL]" : "[+ HIRE TRADER]"}
         </button>
@@ -295,7 +293,7 @@ function TraderRoster({
 
       <div className="border border-[var(--t-border)]">
         {/* Table Header */}
-        <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+        <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
           <span>Name</span>
           <div className="flex items-center gap-4">
             <span className="w-20 text-right">Escrow</span>
@@ -321,19 +319,14 @@ function TraderRoster({
               />
               <button
                 onClick={handleHire}
-                disabled={isLoading || !name.trim() || nameTaken}
-                className="border border-[var(--t-border)] px-2 py-1 text-[10px] text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] disabled:opacity-50"
+                disabled={isLoading || !name.trim()}
+                className="border border-[var(--t-border)] px-2 py-1 text-xs text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] disabled:opacity-50"
               >
                 {isLoading ? "HIRING..." : "HIRE"}
               </button>
             </div>
-            {nameTaken && (
-              <p className="mt-1 text-[10px] text-[var(--t-amber)]">
-                NAME TAKEN — CHOOSE A UNIQUE NAME
-              </p>
-            )}
             {error && (
-              <p className="mt-1 text-[10px] text-[var(--t-red)]">{error}</p>
+              <p className="mt-1 text-xs text-[var(--t-red)]">{error}</p>
             )}
           </div>
         )}
@@ -344,15 +337,27 @@ function TraderRoster({
             LOADING...<span className="cursor-blink">█</span>
           </div>
         ) : traders.length === 0 && !hiring ? (
-          <div className="px-3 py-4 text-center text-xs text-[var(--t-muted)]">
-            NO TRADERS — HIRE ONE TO BEGIN
+          <div className="px-3 py-10 text-center">
+            <p className="text-sm text-[var(--t-muted)]">
+              NO TRADERS ON YOUR DESK
+            </p>
+            <button
+              onClick={() => {
+                setHiring(true);
+                reset();
+              }}
+              className="mt-4 border border-[var(--t-border)] bg-[var(--t-surface)] px-6 py-2.5 text-sm text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+            >
+              {">"} HIRE YOUR FIRST TRADER
+              <span className="cursor-blink">█</span>
+            </button>
           </div>
         ) : (
           traders.map((t) => (
             <Link
               key={t.id}
               href={`/traders/${t.id}`}
-              className="flex items-center justify-between border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-xs transition-colors hover:bg-[var(--t-surface)]"
+              className="flex items-center justify-between border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-sm transition-colors hover:bg-[var(--t-surface)]"
             >
               <div className="flex items-center gap-2">
                 <span
@@ -470,13 +475,13 @@ function MyDeals({ deals }: { deals: Deal[] }) {
 
   return (
     <div className="mb-6">
-      <div className="mb-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+      <div className="mb-2 text-xs uppercase tracking-wider text-[var(--t-muted)]">
         MY DEALS ({deals.length})
       </div>
 
       <div className="border border-[var(--t-border)]">
         {/* Table Header */}
-        <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+        <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
           <span>Scenario</span>
           <div className="flex items-center gap-4">
             <span className="w-14 text-right">Pot</span>
@@ -499,7 +504,7 @@ function MyDeals({ deals }: { deals: Deal[] }) {
           return (
             <div
               key={deal.id}
-              className="flex items-center justify-between gap-2 border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-xs"
+              className="flex items-center justify-between gap-2 border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-sm"
             >
               <Link
                 href={`/deals/${deal.id}`}

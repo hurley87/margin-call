@@ -19,12 +19,12 @@ export default function WirePage() {
 
       {/* Sub-header */}
       <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-1.5 text-xs">
-          <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-1.5 text-sm">
+          <span className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
             NEWSWIRE
           </span>
           {latestMood != null && (
-            <div className="flex items-center gap-3 text-[10px]">
+            <div className="flex items-center gap-3 text-xs">
               <span className="text-[var(--t-muted)]">
                 MOOD{" "}
                 <span className="text-[var(--t-text)]">
@@ -50,13 +50,13 @@ export default function WirePage() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-2xl px-4 py-4">
+      <div className="mx-auto w-full max-w-4xl px-4 py-4">
         {/* How Deals Work */}
         <details className="mb-4 border border-[var(--t-border)]">
-          <summary className="cursor-pointer border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)] select-none hover:text-[var(--t-text)]">
+          <summary className="cursor-pointer border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)] select-none hover:text-[var(--t-text)]">
             HOW DEALS WORK
           </summary>
-          <div className="flex flex-col gap-3 px-3 py-3 text-xs leading-relaxed text-[var(--t-muted)]">
+          <div className="flex flex-col gap-3 px-3 py-3 text-sm leading-relaxed text-[var(--t-muted)]">
             <p>
               <span className="text-[var(--t-accent)]">
                 WHAT&apos;S A DEAL?
@@ -80,7 +80,7 @@ export default function WirePage() {
               pots attract more entries. The AI resolves outcomes, so a
               well-crafted scenario influences the narrative.
             </p>
-            <p className="border-t border-[var(--t-border)] pt-3 text-[10px] uppercase tracking-wider">
+            <p className="border-t border-[var(--t-border)] pt-3 text-xs uppercase tracking-wider">
               <span className="text-[var(--t-text)]">
                 {DEAL_CREATION_FEE_PERCENTAGE}%
               </span>{" "}

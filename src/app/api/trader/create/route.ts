@@ -43,18 +43,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check that the trader name is unique for this desk manager
+    // Check that the trader name is globally unique across the game
     const supabaseCheck = createServerClient();
     const { data: existing } = await supabaseCheck
       .from("traders")
       .select("id")
-      .eq("owner_address", walletAddress.toLowerCase())
       .ilike("name", name)
       .limit(1);
 
     if (existing && existing.length > 0) {
       return NextResponse.json(
-        { error: "You already have a trader with that name" },
+        { error: "A trader with that name already exists" },
         { status: 409 }
       );
     }

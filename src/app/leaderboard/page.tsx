@@ -59,14 +59,14 @@ export default function LeaderboardPage() {
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
 
-      <div className="mx-auto max-w-2xl px-4 py-4">
+      <div className="mx-auto max-w-4xl px-4 py-4">
         {/* Leaderboard Table */}
         <div className="mb-6">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+            <span className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
               LEADERBOARD
             </span>
-            <div className="flex items-center gap-2 text-[10px]">
+            <div className="flex items-center gap-2 text-xs">
               {(["pnl", "win_rate", "total_value"] as SortKey[]).map((key) => (
                 <button
                   key={key}
@@ -102,7 +102,7 @@ export default function LeaderboardPage() {
                   <Link
                     key={t.id}
                     href={`/traders/${t.id}`}
-                    className="flex items-center gap-3 border-b border-[var(--t-border)]/30 px-3 py-2 text-xs transition-colors hover:bg-[var(--t-surface)]"
+                    className="flex items-center gap-3 border-b border-[var(--t-border)]/30 px-3 py-2.5 text-sm transition-colors hover:bg-[var(--t-surface)]"
                   >
                     <span className="w-6 shrink-0 text-right text-[var(--t-muted)]">
                       #{i + 1}
@@ -147,10 +147,10 @@ export default function LeaderboardPage() {
         {/* Global Activity Feed */}
         <div className="mb-6">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+            <span className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
               GLOBAL FEED
             </span>
-            <div className="flex items-center gap-1.5 text-[10px]">
+            <div className="flex items-center gap-1.5 text-xs">
               {(Object.keys(ACTIVITY_FILTER_TYPES) as ActivityFilter[]).map(
                 (filter) => (
                   <button

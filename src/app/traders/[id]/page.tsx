@@ -118,7 +118,7 @@ export default function TraderDetailPage() {
 
       {/* Trader Header Strip */}
       <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)]">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-3">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <Link
               href="/"
@@ -147,7 +147,10 @@ export default function TraderDetailPage() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-2xl px-4 py-6">
+      <div className="mx-auto w-full max-w-4xl px-4 py-6">
+        {/* Onboarding Steps for newly hired unfunded trader */}
+        {isNewTrader && <SetupChecklist hasMandate={hasMandate} />}
+
         {/* Agent Controls — prominent at top */}
         <AgentControls
           traderId={id}
@@ -155,10 +158,7 @@ export default function TraderDetailPage() {
           unfunded={unfunded}
         />
 
-        {/* Onboarding Steps for newly hired unfunded trader */}
-        {isNewTrader && <SetupChecklist hasMandate={hasMandate} />}
-
-        {/* Funding — shown first when unfunded */}
+        {/* Wallet management — deposit/withdraw */}
         <FundingSection
           traderId={trader.token_id}
           walletUsdc={walletUsdc}
@@ -239,7 +239,7 @@ const SETUP_STEPS = [
 
 function SetupChecklist({ hasMandate }: { hasMandate: boolean }) {
   return (
-    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)]">
+    <div className="border border-[var(--t-border)] bg-[var(--t-surface)]">
       <div className="border-b border-[var(--t-border)] px-4 py-2">
         <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
           SETUP CHECKLIST
@@ -747,6 +747,9 @@ function MandateConfig({
             {mandate.max_entry_cost_usdc !== undefined && (
               <div>
                 <p className="text-xs text-[var(--t-muted)]">Max Entry Cost</p>
+                <p className="text-[10px] text-[var(--t-muted)]/60">
+                  Maximum USDC to pay for a single deal
+                </p>
                 <p className="text-[var(--t-text)]">
                   ${String(mandate.max_entry_cost_usdc)} USDC
                 </p>
@@ -755,6 +758,9 @@ function MandateConfig({
             {mandate.min_pot_usdc !== undefined && (
               <div>
                 <p className="text-xs text-[var(--t-muted)]">Min Pot</p>
+                <p className="text-[10px] text-[var(--t-muted)]/60">
+                  Only enter deals with at least this pot
+                </p>
                 <p className="text-[var(--t-text)]">
                   ${String(mandate.min_pot_usdc)} USDC
                 </p>
@@ -763,6 +769,9 @@ function MandateConfig({
             {mandate.max_pot_usdc !== undefined && (
               <div>
                 <p className="text-xs text-[var(--t-muted)]">Max Pot</p>
+                <p className="text-[10px] text-[var(--t-muted)]/60">
+                  Skip deals where the pot exceeds this
+                </p>
                 <p className="text-[var(--t-text)]">
                   ${String(mandate.max_pot_usdc)} USDC
                 </p>
@@ -771,6 +780,9 @@ function MandateConfig({
             {mandate.bankroll_pct !== undefined && (
               <div>
                 <p className="text-xs text-[var(--t-muted)]">Bankroll %</p>
+                <p className="text-[10px] text-[var(--t-muted)]/60">
+                  % of escrow balance to risk per deal
+                </p>
                 <p className="text-[var(--t-text)]">
                   {String(mandate.bankroll_pct)}%
                 </p>
@@ -781,6 +793,9 @@ function MandateConfig({
                 <p className="text-xs text-[var(--t-muted)]">
                   Approval Threshold
                 </p>
+                <p className="text-[10px] text-[var(--t-muted)]/60">
+                  Deals above this cost need your approval
+                </p>
                 <p className="text-[var(--t-text)]">
                   ${String(mandate.approval_threshold_usdc)} USDC
                 </p>
@@ -790,6 +805,9 @@ function MandateConfig({
               (mandate.keywords as string[]).length > 0 && (
                 <div className="col-span-2">
                   <p className="text-xs text-[var(--t-muted)]">Keywords</p>
+                  <p className="text-[10px] text-[var(--t-muted)]/60">
+                    Only enter deals matching these keywords
+                  </p>
                   <p className="text-[var(--t-text)]">
                     {(mandate.keywords as string[]).join(", ")}
                   </p>
@@ -808,9 +826,12 @@ function MandateConfig({
       </h2>
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label className="mb-1 block text-xs text-[var(--t-muted)]">
+          <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
             Max Entry Cost (USDC)
           </label>
+          <p className="mb-1 text-[10px] text-[var(--t-muted)]/60">
+            Maximum USDC your trader will pay to enter a single deal
+          </p>
           <input
             type="number"
             step="0.01"
@@ -824,9 +845,12 @@ function MandateConfig({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-[var(--t-muted)]">
+          <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
             Min Pot (USDC)
           </label>
+          <p className="mb-1 text-[10px] text-[var(--t-muted)]/60">
+            Only enter deals where the pot is at least this amount
+          </p>
           <input
             type="number"
             step="0.01"
@@ -838,9 +862,12 @@ function MandateConfig({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-[var(--t-muted)]">
+          <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
             Max Pot (USDC)
           </label>
+          <p className="mb-1 text-[10px] text-[var(--t-muted)]/60">
+            Skip deals where the pot exceeds this amount
+          </p>
           <input
             type="number"
             step="0.01"
@@ -852,9 +879,12 @@ function MandateConfig({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-[var(--t-muted)]">
+          <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
             Bankroll % (1-100)
           </label>
+          <p className="mb-1 text-[10px] text-[var(--t-muted)]/60">
+            Percentage of escrow balance to risk per deal
+          </p>
           <input
             type="number"
             step="1"
@@ -867,9 +897,12 @@ function MandateConfig({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-[var(--t-muted)]">
+          <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
             Approval Threshold (USDC)
           </label>
+          <p className="mb-1 text-[10px] text-[var(--t-muted)]/60">
+            Deals above this cost require your manual approval
+          </p>
           <input
             type="number"
             step="0.01"
@@ -883,9 +916,12 @@ function MandateConfig({
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-[var(--t-muted)]">
+          <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
             Keywords (comma-separated)
           </label>
+          <p className="mb-1 text-[10px] text-[var(--t-muted)]/60">
+            Only enter deals matching these keywords (leave empty for all)
+          </p>
           <input
             type="text"
             value={form.keywords}
@@ -1067,7 +1103,7 @@ function FundingSection({
       className={`mt-6 border bg-[var(--t-surface)] p-6 ${highlight ? "border-[var(--t-amber)]/40" : "border-[var(--t-border)]"}`}
     >
       <h2 className="mb-1 text-sm font-medium text-[var(--t-muted)]">
-        Fund Trader
+        Manage Wallet
       </h2>
       {walletUsdc !== undefined && (
         <p className="mb-4 text-xs text-[var(--t-muted)]">
