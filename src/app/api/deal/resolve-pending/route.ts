@@ -5,6 +5,7 @@ import { makeOperatorWalletClient } from "@/lib/contracts/operator";
 import { makePublicClient } from "@/lib/contracts/client";
 import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
 import { getOnChainDeal } from "@/lib/contracts/on-chain";
+import { syncTraderEscrow } from "@/lib/contracts/balance";
 
 function usdcToUnits(amount: number): bigint {
   const abs = Math.abs(amount);
@@ -117,6 +118,12 @@ export async function POST(request: NextRequest) {
           .from("deal_outcomes")
           .update({ on_chain_tx_hash: hash })
           .eq("id", outcome.id);
+
+        await syncTraderEscrow(
+          outcome.trader_id,
+          tokenId,
+          "pending resolution"
+        );
 
         results.push({
           outcome_id: outcome.id,

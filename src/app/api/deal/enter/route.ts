@@ -30,7 +30,7 @@ import {
   sendContractCall,
   sendBatchContractCalls,
 } from "@/lib/cdp/send-contract-call";
-import { getEscrowBalance } from "@/lib/contracts/balance";
+import { getEscrowBalance, syncTraderEscrow } from "@/lib/contracts/balance";
 import {
   getOnChainDeal,
   getNftOwner,
@@ -481,6 +481,11 @@ export async function POST(request: NextRequest) {
 
     // Update deal stats
     await updateDealAfterEntry(deal_id, potChange, outcome.trader_wiped_out);
+
+    // Keep cached trader escrow in Supabase aligned with chain state after entry/resolve.
+    if (tokenId !== null) {
+      await syncTraderEscrow(traderId, tokenId, "deal entry");
+    }
 
     // ----- Post reputation (best effort, non-blocking) -----
     if (tokenId !== null) {

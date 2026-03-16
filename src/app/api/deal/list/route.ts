@@ -1,9 +1,19 @@
-import { NextResponse } from "next/server";
-import { listOpenDeals } from "@/lib/supabase/queries";
+import { NextRequest, NextResponse } from "next/server";
+import { listOpenDealsByCreatorAddress } from "@/lib/supabase/queries";
+import { verifyPrivyToken } from "@/lib/privy/server";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const deals = await listOpenDeals();
+    const { user } = await verifyPrivyToken(request);
+    const walletAddress = user.wallet?.address;
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "No wallet linked to this account" },
+        { status: 400 }
+      );
+    }
+
+    const deals = await listOpenDealsByCreatorAddress(walletAddress);
     return NextResponse.json({ deals });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Internal server error";

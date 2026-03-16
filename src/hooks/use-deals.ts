@@ -1,4 +1,5 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
+import { authFetch } from "@/lib/api";
 
 export interface Deal {
   id: string;
@@ -57,7 +58,7 @@ export function useDeal(id: string) {
 const dealsQueryOptions = {
   queryKey: ["deals"] as const,
   queryFn: async () => {
-    const res = await fetch("/api/deal/list");
+    const res = await authFetch("/api/deal/list");
     if (!res.ok) throw new Error("Failed to load deals");
     const data = await res.json();
     return (data.deals ?? []) as Deal[];

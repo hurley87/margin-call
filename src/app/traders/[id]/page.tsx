@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useReadContract } from "wagmi";
 import { parseUnits } from "viem";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTrader, useTraderHistory } from "@/hooks/use-traders";
 import type { Trader, TraderHistoryEvent } from "@/hooks/use-traders";
 import {
@@ -33,9 +34,11 @@ import { authFetch } from "@/lib/api";
 const ZERO = BigInt(0);
 
 export default function TraderDetailPage() {
+  const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
   useTraderRealtime(id);
   const { data: trader, isLoading, error } = useTrader(id);
+  const syncInFlightRef = useRef(false);
 
   const { data: escrowBalance, refetch: refetchBalance } = useReadContract({
     address: ESCROW_ADDRESS,
@@ -50,6 +53,36 @@ export default function TraderDetailPage() {
   });
 
   const { balance: walletUsdc } = useSepoliaUsdcBalance();
+  const balanceUsdc =
+    escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
+  const traderForLog = trader as
+    | (Trader & { escrow_balance_usdc?: number })
+    | undefined;
+  const cachedEscrowUsdc =
+    typeof traderForLog?.escrow_balance_usdc === "number"
+      ? traderForLog.escrow_balance_usdc
+      : null;
+
+  useEffect(() => {
+    if (!trader) return;
+    if (balanceUsdc === null || cachedEscrowUsdc === null) return;
+    if (Math.abs(balanceUsdc - cachedEscrowUsdc) < 0.000001) return;
+    if (syncInFlightRef.current) return;
+
+    syncInFlightRef.current = true;
+
+    void fetch(`/api/trader/${id}/balance`, { method: "POST" })
+      .then(() =>
+        Promise.all([
+          queryClient.invalidateQueries({ queryKey: ["trader", id] }),
+          queryClient.invalidateQueries({ queryKey: ["portfolio"] }),
+        ])
+      )
+      .finally(() => {
+        syncInFlightRef.current = false;
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, balanceUsdc, cachedEscrowUsdc, queryClient]);
 
   if (isLoading) {
     return (
@@ -75,8 +108,6 @@ export default function TraderDetailPage() {
     );
   }
 
-  const balanceUsdc =
-    escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
   const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
   const isNewTrader = trader.status === "paused" && unfunded;
   const hasMandate = Object.keys(trader.mandate).length > 0;
@@ -131,6 +162,7 @@ export default function TraderDetailPage() {
         <FundingSection
           traderId={trader.token_id}
           walletUsdc={walletUsdc}
+          escrowUsdc={balanceUsdc}
           highlight={isNewTrader}
           onSuccess={() => {
             refetchBalance();
@@ -968,11 +1000,13 @@ function ReputationSection({
 function FundingSection({
   traderId,
   walletUsdc,
+  escrowUsdc,
   highlight,
   onSuccess,
 }: {
   traderId: number;
   walletUsdc: number | undefined;
+  escrowUsdc: number | null;
   highlight?: boolean;
   onSuccess: () => void;
 }) {
@@ -1008,10 +1042,16 @@ function FundingSection({
     }
   }
 
+  const withdrawExceedsBalance =
+    escrowUsdc !== null &&
+    withdrawAmount !== "" &&
+    Number(withdrawAmount) > escrowUsdc;
+
   async function handleWithdraw(e: React.FormEvent) {
     e.preventDefault();
     const parsed = parseUnits(withdrawAmount, 6);
     if (parsed === ZERO) return;
+    if (withdrawExceedsBalance) return;
 
     try {
       await withdraw(BigInt(traderId), parsed);
@@ -1087,27 +1127,44 @@ function FundingSection({
 
         {/* Withdraw */}
         <form onSubmit={handleWithdraw} className="flex flex-col gap-3">
-          <label
-            htmlFor="withdrawAmount"
-            className="text-sm text-[var(--t-text)]"
-          >
-            Withdraw USDC
-          </label>
+          <div className="flex items-center justify-between">
+            <label
+              htmlFor="withdrawAmount"
+              className="text-sm text-[var(--t-text)]"
+            >
+              Withdraw USDC
+            </label>
+            {escrowUsdc !== null && escrowUsdc > 0 && (
+              <button
+                type="button"
+                onClick={() => setWithdrawAmount(String(escrowUsdc))}
+                className="text-xs text-[var(--t-accent)] hover:underline"
+              >
+                Max
+              </button>
+            )}
+          </div>
           <input
             id="withdrawAmount"
             type="number"
             step="0.01"
             min="0"
+            max={escrowUsdc ?? undefined}
             value={withdrawAmount}
             onChange={(e) => setWithdrawAmount(e.target.value)}
             placeholder="0.00"
             disabled={withdrawBusy}
             className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
           />
+          {withdrawExceedsBalance && (
+            <p className="text-xs text-[var(--t-red)]">
+              Exceeds escrow balance (${escrowUsdc?.toFixed(2)})
+            </p>
+          )}
           <button
             type="submit"
-            disabled={withdrawBusy || !withdrawAmount}
-            className="border border-[var(--t-border)] px-4 py-2 text-sm font-medium text-[var(--t-text)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] disabled:opacity-50"
+            disabled={withdrawBusy || !withdrawAmount || withdrawExceedsBalance}
+            className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
           >
             {withdrawBusy ? "Withdrawing..." : "Withdraw"}
           </button>
