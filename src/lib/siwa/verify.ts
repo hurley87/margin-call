@@ -18,6 +18,7 @@ const nonceStore = createMemorySIWANonceStore();
 const domain =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, "") ??
   "localhost:3000";
+const MAX_SIWA_AGE_MS = 5 * 60 * 1000;
 
 /**
  * Create a SIWA nonce for an agent identity challenge.
@@ -52,13 +53,23 @@ export async function verifySIWARequest(
   try {
     const fields = parseSIWAMessage(message);
 
-    if (fields.domain !== domain) {
-      console.error(
-        "[SIWA verify] Domain mismatch:",
-        fields.domain,
-        "vs",
-        domain
-      );
+    // Enforce freshness even when expirationTime isn't present.
+    const issuedAtMs = Date.parse(fields.issuedAt);
+    if (Number.isNaN(issuedAtMs) || Date.now() - issuedAtMs > MAX_SIWA_AGE_MS) {
+      return { valid: false };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const client = makePublicClient() as any;
+    const verification = await verifySIWA(
+      message,
+      signature,
+      domain,
+      { nonceStore },
+      client
+    );
+    if (!verification.valid) {
+      console.error("[SIWA verify] failed:", verification.error ?? "invalid");
       return { valid: false };
     }
 
@@ -77,19 +88,19 @@ export async function verifySIWARequest(
     // The SIWA address is the smart account (agent).
     // The recovered address is the EOA that signed.
     // Verify the EOA is authorized to act for this agent via the DB.
-    if (fields.agentId !== undefined) {
+    if (verification.agentId !== undefined) {
       const { createServerClient } = await import("@/lib/supabase/client");
       const supabase = createServerClient();
       const { data: trader } = await supabase
         .from("traders")
         .select("cdp_owner_address, cdp_wallet_address")
-        .eq("token_id", fields.agentId)
+        .eq("token_id", verification.agentId)
         .single();
 
       if (!trader) {
         console.error(
           "[SIWA verify] Trader not found for agentId:",
-          fields.agentId
+          verification.agentId
         );
         return { valid: false };
       }
@@ -106,7 +117,7 @@ export async function verifySIWARequest(
       // Check: SIWA address must be the trader's smart account (agent wallet)
       if (
         !trader.cdp_wallet_address ||
-        getAddress(fields.address) !== getAddress(trader.cdp_wallet_address)
+        getAddress(verification.address) !== getAddress(trader.cdp_wallet_address)
       ) {
         console.error("[SIWA verify] SIWA address does not match agent wallet");
         return { valid: false };
@@ -115,11 +126,12 @@ export async function verifySIWARequest(
 
     return {
       valid: true,
-      agentId: fields.agentId,
-      address: fields.address,
+      agentId: verification.agentId,
+      address: verification.address,
     };
   } catch (err) {
     console.error("[SIWA verify] failed:", err);
     return { valid: false };
   }
 }
+

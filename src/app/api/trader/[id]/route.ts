@@ -1,32 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPrivyToken } from "@/lib/privy/server";
-import { createServerClient } from "@/lib/supabase/client";
+import { getPrivyWalletAddress, verifyPrivyToken } from "@/lib/privy/server";
+import { getOwnedTrader } from "@/lib/supabase/traders";
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await verifyPrivyToken(request);
+    const { user } = await verifyPrivyToken(request);
+    const walletAddress = getPrivyWalletAddress(user);
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "No wallet linked to this account" },
+        { status: 400 }
+      );
+    }
 
     const { id } = await params;
-    const supabase = createServerClient();
-
-    const { data: trader, error } = await supabase
-      .from("traders")
-      .select("*")
-      .eq("id", id)
-      .single();
-
-    if (error) {
-      console.error("Supabase error:", error);
-      return NextResponse.json({ error: "Trader not found" }, { status: 404 });
-    }
+    const trader = await getOwnedTrader(id, walletAddress);
 
     return NextResponse.json({ trader });
   } catch (e) {
     console.error("Get trader error:", e);
     const message = e instanceof Error ? e.message : "Unauthorized";
-    return NextResponse.json({ error: message }, { status: 401 });
+    const status =
+      message === "You do not own this trader"
+        ? 403
+        : message.includes("contains 0 rows")
+          ? 404
+          : 401;
+    return NextResponse.json({ error: message }, { status });
   }
 }

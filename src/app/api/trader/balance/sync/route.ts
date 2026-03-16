@@ -1,9 +1,13 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { makePublicClient } from "@/lib/contracts/client";
 import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
 import { createServerClient } from "@/lib/supabase/client";
+export async function POST(request: NextRequest) {
+  const secret = request.headers.get("x-operator-secret");
+  if (secret !== process.env.OPERATOR_SECRET) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-export async function POST() {
   try {
     const supabase = createServerClient();
     const publicClient = makePublicClient();

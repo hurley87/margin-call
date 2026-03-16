@@ -4,7 +4,9 @@ import { runCycle } from "@/lib/agent/cycle";
 import { logActivity } from "@/lib/agent/activity";
 import { getBaseUrl } from "@/lib/agent/auth";
 import { verifySIWARequest } from "@/lib/siwa/verify";
+import { siwaAuthMatchesTrader } from "@/lib/siwa/binding";
 import { createServerClient } from "@/lib/supabase/client";
+import { getTrader } from "@/lib/supabase/traders";
 import { AGENT_LOOP_INTERVAL_MS } from "@/lib/constants";
 import { agentCycleLimit, checkRateLimit } from "@/lib/rate-limit";
 
@@ -23,22 +25,14 @@ export async function POST(request: NextRequest) {
     // Verify SIWA (Sign In With Agent) authentication
     const siwaMessageB64 = request.headers.get("x-siwa-message");
     const siwaSignature = request.headers.get("x-siwa-signature");
-    console.log(
-      "[cycle] SIWA headers present:",
-      !!siwaMessageB64,
-      !!siwaSignature
-    );
     if (!siwaMessageB64 || !siwaSignature) {
-      console.log("[cycle] Missing SIWA headers, returning 401");
       return NextResponse.json(
         { error: "Missing SIWA auth headers" },
         { status: 401 }
       );
     }
     const siwaMessage = Buffer.from(siwaMessageB64, "base64").toString("utf-8");
-    console.log("[cycle] Decoded SIWA message length:", siwaMessage.length);
     const siwaResult = await verifySIWARequest(siwaMessage, siwaSignature);
-    console.log("[cycle] SIWA result:", JSON.stringify(siwaResult));
     if (!siwaResult.valid) {
       return NextResponse.json({ error: "Invalid SIWA auth" }, { status: 401 });
     }
@@ -50,6 +44,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "trader_id is required" },
         { status: 400 }
+      );
+    }
+
+    const trader = await getTrader(trader_id);
+    if (!siwaAuthMatchesTrader(siwaResult, trader)) {
+      return NextResponse.json(
+        { error: "SIWA identity does not match trader" },
+        { status: 403 }
       );
     }
 

@@ -3,6 +3,7 @@ import { parseAbiItem, decodeEventLog } from "viem";
 import { makePublicClient } from "@/lib/contracts/client";
 import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
 import { createServerClient } from "@/lib/supabase/client";
+import { getPrivyWalletAddress, verifyPrivyToken } from "@/lib/privy/server";
 
 const DEAL_CREATED_EVENT = parseAbiItem(
   "event DealCreated(uint256 indexed dealId, address indexed creator, string prompt, uint256 pot, uint256 entryCost)"
@@ -63,7 +64,11 @@ async function upsertDeal(
 }
 
 /** Sync a single deal by its creation tx hash */
-async function syncByTxHash(txHash: `0x${string}`, sourceHeadline?: string) {
+async function syncByTxHash(
+  txHash: `0x${string}`,
+  sourceHeadline?: string,
+  expectedCreatorAddress?: string
+) {
   const publicClient = makePublicClient();
   const supabase = createServerClient();
 
@@ -87,6 +92,12 @@ async function syncByTxHash(txHash: `0x${string}`, sourceHeadline?: string) {
           pot: bigint;
           entryCost: bigint;
         };
+        if (
+          expectedCreatorAddress &&
+          args.creator.toLowerCase() !== expectedCreatorAddress.toLowerCase()
+        ) {
+          return { synced: 0, error: "Forbidden: deal creator mismatch" };
+        }
         const supabaseId = await upsertDeal(
           supabase,
           publicClient,
@@ -169,7 +180,10 @@ async function syncAll() {
 }
 
 /** Sync a single deal by on-chain ID (e.g. after closeDeal). Updates status, pot, entry count from chain. */
-async function syncDealByOnChainId(onChainDealId: number) {
+async function syncDealByOnChainId(
+  onChainDealId: number,
+  expectedCreatorAddress?: string
+) {
   const publicClient = makePublicClient();
   const supabase = createServerClient();
 
@@ -184,6 +198,24 @@ async function syncDealByOnChainId(onChainDealId: number) {
   const status = deal.status === 0 ? "open" : "closed";
   const potUsdc = Number(deal.potAmount) / 1_000_000;
   const entryCount = Number(deal.pendingEntries);
+
+  if (expectedCreatorAddress) {
+    const { data: existing, error: ownerError } = await supabase
+      .from("deals")
+      .select("creator_address")
+      .eq("on_chain_deal_id", onChainDealId)
+      .single();
+    if (ownerError || !existing) {
+      return { synced: 0, error: "Deal not found" };
+    }
+    if (
+      !existing.creator_address ||
+      existing.creator_address.toLowerCase() !==
+        expectedCreatorAddress.toLowerCase()
+    ) {
+      return { synced: 0, error: "Forbidden: deal creator mismatch" };
+    }
+  }
 
   const { data, error } = await supabase
     .from("deals")
@@ -211,6 +243,25 @@ async function syncDealByOnChainId(onChainDealId: number) {
 
 export async function POST(request: NextRequest) {
   try {
+    const operatorSecret = request.headers.get("x-operator-secret");
+    const isOperator = Boolean(
+      process.env.OPERATOR_SECRET &&
+        operatorSecret === process.env.OPERATOR_SECRET
+    );
+
+    let walletAddress: string | undefined;
+    if (!isOperator) {
+      const { user } = await verifyPrivyToken(request);
+      const linkedWallet = getPrivyWalletAddress(user);
+      if (!linkedWallet) {
+        return NextResponse.json(
+          { error: "No wallet linked to this account" },
+          { status: 400 }
+        );
+      }
+      walletAddress = linkedWallet;
+    }
+
     const body = await request.json().catch(() => ({}));
     const {
       txHash,
@@ -222,11 +273,25 @@ export async function POST(request: NextRequest) {
       source_headline?: string;
     };
 
+    if (
+      sourceHeadline !== undefined &&
+      (typeof sourceHeadline !== "string" || sourceHeadline.length > 200)
+    ) {
+      return NextResponse.json(
+        { error: "source_headline must be a string up to 200 chars" },
+        { status: 400 }
+      );
+    }
+
     if (txHash && /^0x[a-fA-F0-9]{64}$/.test(txHash)) {
       const result = await syncByTxHash(
         txHash as `0x${string}`,
-        sourceHeadline
+        sourceHeadline,
+        isOperator ? undefined : walletAddress
       );
+      if (result.error?.startsWith("Forbidden")) {
+        return NextResponse.json({ error: result.error }, { status: 403 });
+      }
       return NextResponse.json(result);
     }
 
@@ -235,15 +300,29 @@ export async function POST(request: NextRequest) {
       Number.isInteger(onChainDealId) &&
       onChainDealId >= 0
     ) {
-      const result = await syncDealByOnChainId(onChainDealId);
+      const result = await syncDealByOnChainId(
+        onChainDealId,
+        isOperator ? undefined : walletAddress
+      );
+      if (result.error === "Deal not found") {
+        return NextResponse.json({ error: result.error }, { status: 404 });
+      }
+      if (result.error?.startsWith("Forbidden")) {
+        return NextResponse.json({ error: result.error }, { status: 403 });
+      }
       return NextResponse.json(result);
+    }
+
+    if (!isOperator) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     const result = await syncAll();
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Sync failed";
+    const status = message.includes("Authorization header") ? 401 : 500;
     console.error("Deal sync error:", e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status });
   }
 }

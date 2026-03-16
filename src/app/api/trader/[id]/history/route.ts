@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { decodeEventLog, parseAbiItem, encodeEventTopics } from "viem";
 import { makePublicClient } from "@/lib/contracts/client";
 import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
-import { createServerClient } from "@/lib/supabase/client";
+import { getOwnedTrader } from "@/lib/supabase/traders";
+import { getPrivyWalletAddress, verifyPrivyToken } from "@/lib/privy/server";
 
 const DEPOSIT_EVENT = parseAbiItem(
   "event Deposit(uint256 indexed traderId, uint256 amount)"
@@ -45,22 +46,21 @@ function decodeRawLog(log: any) {
  * Returns on-chain transaction history for a trader.
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
-
-    const supabase = createServerClient();
-    const { data: trader, error: traderError } = await supabase
-      .from("traders")
-      .select("token_id")
-      .eq("id", id)
-      .single();
-
-    if (traderError || !trader) {
-      return NextResponse.json({ error: "Trader not found" }, { status: 404 });
+    const { user } = await verifyPrivyToken(request);
+    const walletAddress = getPrivyWalletAddress(user);
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "No wallet linked to this account" },
+        { status: 400 }
+      );
     }
+
+    const { id } = await params;
+    const trader = await getOwnedTrader(id, walletAddress);
 
     const tokenId = BigInt(trader.token_id);
     const traderIdTopic =
@@ -183,6 +183,12 @@ export async function GET(
   } catch (e) {
     console.error("Trader history error:", e);
     const message = e instanceof Error ? e.message : "Failed to fetch history";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status =
+      message === "You do not own this trader"
+        ? 403
+        : message.includes("contains 0 rows")
+          ? 404
+          : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

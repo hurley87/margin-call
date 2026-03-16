@@ -32,7 +32,7 @@ export function useTraderAssets(traderId: string, _traderStatus?: string) {
   return useQuery({
     queryKey: ["trader-assets", traderId],
     queryFn: async () => {
-      const res = await fetch(`/api/trader/${traderId}/assets`);
+      const res = await authFetch(`/api/trader/${traderId}/assets`);
       if (!res.ok) throw new Error("Failed to load assets");
       const data = await res.json();
       return (data.assets ?? []) as import("@/lib/supabase/queries").Asset[];
@@ -46,7 +46,7 @@ export function useAgentActivity(traderId: string, _traderStatus?: string) {
   return useQuery({
     queryKey: ["agent-activity", traderId],
     queryFn: async () => {
-      const res = await fetch(`/api/trader/${traderId}/activity`);
+      const res = await authFetch(`/api/trader/${traderId}/activity`);
       if (!res.ok) throw new Error("Failed to load activity");
       const data = await res.json();
       return (data.activity ?? []) as AgentActivity[];
@@ -60,7 +60,7 @@ export function useTraderOutcomes(traderId: string, _traderStatus?: string) {
   return useQuery({
     queryKey: ["trader-outcomes", traderId],
     queryFn: async () => {
-      const res = await fetch(`/api/trader/${traderId}/outcomes`);
+      const res = await authFetch(`/api/trader/${traderId}/outcomes`);
       if (!res.ok) throw new Error("Failed to load outcomes");
       const data = await res.json();
       return (data.outcomes ?? []) as DealOutcomeWithNarrative[];

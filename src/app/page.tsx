@@ -20,6 +20,7 @@ import {
   escrowAbi,
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
+import { authFetch } from "@/lib/api";
 import { Nav } from "@/components/nav";
 import { FeedLine } from "@/components/feed-line";
 
@@ -563,7 +564,7 @@ function InlineCloseDealButton({
   useEffect(() => {
     if (!isSuccess || !txHash || syncedRef.current) return;
     syncedRef.current = true;
-    fetch("/api/deal/sync", {
+    authFetch("/api/deal/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ on_chain_deal_id: onChainDealId }),

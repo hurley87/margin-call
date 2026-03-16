@@ -9,6 +9,7 @@ import {
   CONTRACTS_CHAIN_ID,
   escrowAbi,
 } from "@/lib/contracts/escrow";
+import { authFetch } from "@/lib/api";
 
 type CreateDealStep = "idle" | "approving" | "creating" | "syncing" | "done";
 
@@ -102,7 +103,7 @@ export function useCreateDeal() {
 
         let supabaseId: string | undefined;
         try {
-          const syncRes = await fetch("/api/deal/sync", {
+          const syncRes = await authFetch("/api/deal/sync", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
