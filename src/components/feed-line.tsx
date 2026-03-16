@@ -45,8 +45,10 @@ export function FeedLine({
 
   return (
     <div
-      className={`flex items-start gap-2 border-b border-[var(--t-border)]/30 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--t-surface)] ${
-        entry.activity_type === "wipeout" ? "bg-[#D48787]/5" : ""
+      className={`flex items-start gap-2 border-b border-[var(--t-border)] last:border-b-0 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--t-surface)] ${
+        entry.activity_type === "wipeout"
+          ? "bg-[#D48787]/5"
+          : "bg-[var(--t-bg)]"
       }`}
     >
       <span className="shrink-0 text-[var(--t-muted)]">{time}</span>

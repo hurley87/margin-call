@@ -88,6 +88,15 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="border border-[var(--t-border)] bg-[var(--t-bg)]">
+            <div className="flex items-center gap-3 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
+              <span className="w-6 shrink-0 text-right">#</span>
+              <span className="w-1.5 shrink-0" />
+              <span className="min-w-0 flex-1">Trader</span>
+              <span className="w-20 shrink-0 text-right">P&L</span>
+              <span className="w-24 shrink-0 text-right">Record</span>
+              <span className="w-10 shrink-0 text-right">Win%</span>
+              <span className="w-16 shrink-0 text-right">Value</span>
+            </div>
             {tradersLoading ? (
               <div className="p-6 text-center text-sm text-[var(--t-muted)]">
                 LOADING LEADERBOARD...<span className="cursor-blink">█</span>
@@ -102,7 +111,7 @@ export default function LeaderboardPage() {
                   <Link
                     key={t.id}
                     href={`/traders/${t.id}`}
-                    className="flex items-center gap-3 border-b border-[var(--t-border)]/30 px-3 py-2.5 text-sm transition-colors hover:bg-[var(--t-surface)]"
+                    className="flex items-center gap-3 border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-sm transition-colors hover:bg-[var(--t-surface)]"
                   >
                     <span className="w-6 shrink-0 text-right text-[var(--t-muted)]">
                       #{i + 1}
@@ -170,6 +179,12 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="border border-[var(--t-border)] bg-[var(--t-bg)]">
+            <div className="flex items-center gap-2 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
+              <span className="shrink-0">Time</span>
+              <span className="w-12 shrink-0 text-right">Type</span>
+              <span className="w-16 shrink-0">Trader</span>
+              <span className="flex-1">Message</span>
+            </div>
             {feedLoading ? (
               <div className="p-6 text-center text-sm text-[var(--t-muted)]">
                 LOADING FEED...<span className="cursor-blink">█</span>

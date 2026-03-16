@@ -212,6 +212,14 @@ function Dashboard({ displayName }: { displayName: string }) {
               : ""}
           </div>
           <div className="border border-[var(--t-border)] bg-[var(--t-bg)]">
+            <div className="flex items-center gap-2 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
+              <span className="shrink-0">Time</span>
+              <span className="w-12 shrink-0 text-right">Type</span>
+              {traderFilter === null && (
+                <span className="w-16 shrink-0">Trader</span>
+              )}
+              <span className="flex-1">Message</span>
+            </div>
             {feedLoading ? (
               <div className="p-6 text-center text-sm text-[var(--t-muted)]">
                 LOADING FEED...<span className="cursor-blink">█</span>
