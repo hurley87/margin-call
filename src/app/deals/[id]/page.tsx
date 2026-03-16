@@ -55,218 +55,224 @@ export default function DealDetailPage() {
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
 
-      {/* Sub-header */}
-      <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-1.5 text-xs">
-          <div className="flex items-center gap-3">
-            <Link
-              href="/wire"
-              className="text-[10px] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
-            >
-              {"<"} NEWSWIRE
-            </Link>
-            <span className="text-[10px] text-[var(--t-border)]">/</span>
-            {deal.on_chain_deal_id !== undefined && (
-              <span className="text-[10px] text-[var(--t-muted)]">
-                #{deal.on_chain_deal_id}
-              </span>
-            )}
-          </div>
-          <span
-            className={`text-[10px] font-bold ${
-              deal.status === "open"
-                ? "text-[var(--t-green)]"
-                : "text-[var(--t-muted)]"
-            }`}
-          >
-            [{deal.status.toUpperCase()}]
-          </span>
-        </div>
-      </div>
-
-      <div className="mx-auto w-full max-w-2xl px-4 py-4">
-        {/* Deal Info */}
-        <div className="border border-[var(--t-border)]">
-          <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-            SCENARIO
-          </div>
-          <div className="px-3 py-3">
-            <p className="text-xs leading-relaxed text-[var(--t-text)]">
-              {deal.prompt}
-            </p>
-          </div>
-
-          {/* Stats Row */}
-          <div className="flex items-center gap-0 border-t border-[var(--t-border)] text-xs">
-            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
-              <p className="text-[10px] text-[var(--t-muted)]">POT</p>
-              <p className="text-[var(--t-green)]">${deal.pot_usdc}</p>
-            </div>
-            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
-              <p className="text-[10px] text-[var(--t-muted)]">ENTRY</p>
-              <p className="text-[var(--t-accent)]">${deal.entry_cost_usdc}</p>
-            </div>
-            {deal.fee_usdc !== undefined && deal.fee_usdc > 0 && (
-              <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
-                <p className="text-[10px] text-[var(--t-muted)]">FEE</p>
-                <p className="text-[var(--t-text)]">${deal.fee_usdc}</p>
-              </div>
-            )}
-            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
-              <p className="text-[10px] text-[var(--t-muted)]">ENTRIES</p>
-              <p className="text-[var(--t-text)]">{deal.entry_count}</p>
-            </div>
-            <div className="flex-1 px-3 py-2.5">
-              <p className="text-[10px] text-[var(--t-muted)]">WIPEOUTS</p>
-              <p
-                className={
-                  deal.wipeout_count > 0
-                    ? "text-[var(--t-red)]"
-                    : "text-[var(--t-text)]"
-                }
+      <div className="mx-auto w-full max-w-4xl border-x border-[var(--t-border)]">
+        {/* Sub-header */}
+        <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)]">
+          <div className="flex items-center justify-between px-4 py-1.5">
+            <div className="flex items-center gap-3">
+              <Link
+                href="/wire"
+                className="text-xs uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
               >
-                {deal.wipeout_count}
+                {"<"} NEWSWIRE
+              </Link>
+              <span className="text-[10px] text-[var(--t-border)]">/</span>
+              {deal.on_chain_deal_id !== undefined && (
+                <span className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
+                  #{deal.on_chain_deal_id}
+                </span>
+              )}
+            </div>
+            <span
+              className={`text-[10px] font-bold ${
+                deal.status === "open"
+                  ? "text-[var(--t-green)]"
+                  : "text-[var(--t-muted)]"
+              }`}
+            >
+              [{deal.status.toUpperCase()}]
+            </span>
+          </div>
+        </div>
+
+        <div className="px-4 py-4">
+          {/* Deal Info */}
+          <div className="border border-[var(--t-border)]">
+            <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              SCENARIO
+            </div>
+            <div className="px-3 py-3">
+              <p className="text-xs leading-relaxed text-[var(--t-text)]">
+                {deal.prompt}
               </p>
             </div>
-          </div>
 
-          {/* Links + Actions */}
-          <div className="flex items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
-            <span className="text-[10px] text-[var(--t-muted)]">
-              {new Date(deal.created_at).toLocaleDateString()}
-            </span>
-            {deal.on_chain_tx_hash && (
-              <a
-                href={`https://sepolia.basescan.org/tx/${deal.on_chain_tx_hash}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
-              >
-                Creation TX
-              </a>
-            )}
-          </div>
-
-          {deal.on_chain_deal_id !== undefined &&
-            deal.status === "open" &&
-            walletAddress &&
-            deal.creator_address?.toLowerCase() ===
-              walletAddress.toLowerCase() && (
-              <CloseDealButton
-                dealId={deal.id}
-                onChainDealId={deal.on_chain_deal_id}
-              />
-            )}
-        </div>
-
-        {/* Outcomes */}
-        <div className="mt-4 border border-[var(--t-border)]">
-          <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-            OUTCOMES ({outcomes.length})
-          </div>
-
-          {outcomes.length === 0 ? (
-            <div className="px-3 py-6 text-center text-xs text-[var(--t-muted)]">
-              NO OUTCOMES YET — waiting for traders to enter
-            </div>
-          ) : (
-            <div className="flex flex-col">
-              {outcomes.map((outcome, idx) => (
-                <div
-                  key={outcome.id}
-                  className={`border-b border-[var(--t-border)] last:border-b-0 px-3 py-3 ${
-                    outcome.trader_wiped_out
-                      ? "bg-[#D48787]/5"
-                      : "bg-[var(--t-bg)]"
-                  }`}
+            {/* Stats Row */}
+            <div className="flex items-center gap-0 border-t border-[var(--t-border)] text-xs">
+              <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
+                <p className="text-[10px] text-[var(--t-muted)]">POT</p>
+                <p className="text-[var(--t-green)]">${deal.pot_usdc}</p>
+              </div>
+              <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
+                <p className="text-[10px] text-[var(--t-muted)]">ENTRY</p>
+                <p className="text-[var(--t-accent)]">
+                  ${deal.entry_cost_usdc}
+                </p>
+              </div>
+              {deal.fee_usdc !== undefined && deal.fee_usdc > 0 && (
+                <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
+                  <p className="text-[10px] text-[var(--t-muted)]">FEE</p>
+                  <p className="text-[var(--t-text)]">${deal.fee_usdc}</p>
+                </div>
+              )}
+              <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
+                <p className="text-[10px] text-[var(--t-muted)]">ENTRIES</p>
+                <p className="text-[var(--t-text)]">{deal.entry_count}</p>
+              </div>
+              <div className="flex-1 px-3 py-2.5">
+                <p className="text-[10px] text-[var(--t-muted)]">WIPEOUTS</p>
+                <p
+                  className={
+                    deal.wipeout_count > 0
+                      ? "text-[var(--t-red)]"
+                      : "text-[var(--t-text)]"
+                  }
                 >
-                  {/* P&L Header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] text-[var(--t-muted)]">
-                        #{idx + 1}
-                      </span>
-                      <span
-                        className={`text-xs font-bold ${
-                          outcome.trader_pnl_usdc >= 0
-                            ? "text-[var(--t-green)]"
-                            : "text-[var(--t-red)]"
-                        }`}
-                      >
-                        {outcome.trader_pnl_usdc >= 0 ? "+" : ""}$
-                        {Math.abs(outcome.trader_pnl_usdc).toFixed(2)}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {outcome.trader_wiped_out && (
-                        <span className="text-[10px] font-bold text-[var(--t-red)]">
-                          [WIPED OUT
-                          {outcome.wipeout_reason
-                            ? ` — ${outcome.wipeout_reason.replace("_", " ")}`
-                            : ""}
-                          ]
-                        </span>
-                      )}
-                      {outcome.rake_usdc > 0 && (
-                        <span className="text-[10px] text-[var(--t-muted)]">
-                          RAKE ${outcome.rake_usdc}
-                        </span>
-                      )}
-                    </div>
-                  </div>
+                  {deal.wipeout_count}
+                </p>
+              </div>
+            </div>
 
-                  {/* Narrative */}
-                  <div className="mt-2 flex flex-col gap-1.5">
-                    {outcome.narrative.map((event, i) => (
-                      <div key={i} className="flex items-start gap-2">
-                        <span className="w-20 shrink-0 text-right text-[10px] font-bold uppercase text-[var(--t-accent)]">
-                          {event.event}
+            {/* Links + Actions */}
+            <div className="flex items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
+              <span className="text-[10px] text-[var(--t-muted)]">
+                {new Date(deal.created_at).toLocaleDateString()}
+              </span>
+              {deal.on_chain_tx_hash && (
+                <a
+                  href={`https://sepolia.basescan.org/tx/${deal.on_chain_tx_hash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
+                >
+                  Creation TX
+                </a>
+              )}
+            </div>
+
+            {deal.on_chain_deal_id !== undefined &&
+              deal.status === "open" &&
+              walletAddress &&
+              deal.creator_address?.toLowerCase() ===
+                walletAddress.toLowerCase() && (
+                <CloseDealButton
+                  dealId={deal.id}
+                  onChainDealId={deal.on_chain_deal_id}
+                />
+              )}
+          </div>
+
+          {/* Outcomes */}
+          <div className="mt-4 border border-[var(--t-border)]">
+            <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              OUTCOMES ({outcomes.length})
+            </div>
+
+            {outcomes.length === 0 ? (
+              <div className="px-3 py-6 text-center text-xs text-[var(--t-muted)]">
+                NO OUTCOMES YET — waiting for traders to enter
+              </div>
+            ) : (
+              <div className="flex flex-col">
+                {outcomes.map((outcome, idx) => (
+                  <div
+                    key={outcome.id}
+                    className={`border-b border-[var(--t-border)] last:border-b-0 px-3 py-3 ${
+                      outcome.trader_wiped_out
+                        ? "bg-[#D48787]/5"
+                        : "bg-[var(--t-bg)]"
+                    }`}
+                  >
+                    {/* P&L Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] text-[var(--t-muted)]">
+                          #{idx + 1}
                         </span>
-                        <span className="text-xs text-[var(--t-text)]">
-                          {event.description}
+                        <span
+                          className={`text-xs font-bold ${
+                            outcome.trader_pnl_usdc >= 0
+                              ? "text-[var(--t-green)]"
+                              : "text-[var(--t-red)]"
+                          }`}
+                        >
+                          {outcome.trader_pnl_usdc >= 0 ? "+" : ""}$
+                          {Math.abs(outcome.trader_pnl_usdc).toFixed(2)}
                         </span>
                       </div>
-                    ))}
-                  </div>
+                      <div className="flex items-center gap-2">
+                        {outcome.trader_wiped_out && (
+                          <span className="text-[10px] font-bold text-[var(--t-red)]">
+                            [WIPED OUT
+                            {outcome.wipeout_reason
+                              ? ` — ${outcome.wipeout_reason.replace("_", " ")}`
+                              : ""}
+                            ]
+                          </span>
+                        )}
+                        {outcome.rake_usdc > 0 && (
+                          <span className="text-[10px] text-[var(--t-muted)]">
+                            RAKE ${outcome.rake_usdc}
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-                  {/* Assets */}
-                  {(outcome.assets_gained.length > 0 ||
-                    outcome.assets_lost.length > 0) && (
-                    <div className="mt-2 flex items-center gap-3 text-[10px]">
-                      {outcome.assets_gained.length > 0 && (
-                        <span className="text-[var(--t-green)]">
-                          +{" "}
-                          {outcome.assets_gained
-                            .map((a) => `${a.name} ($${a.value_usdc})`)
-                            .join(", ")}
-                        </span>
-                      )}
-                      {outcome.assets_lost.length > 0 && (
-                        <span className="text-[var(--t-red)]">
-                          - {outcome.assets_lost.join(", ")}
-                        </span>
+                    {/* Narrative */}
+                    <div className="mt-2 flex flex-col gap-1.5">
+                      {outcome.narrative.map((event, i) => (
+                        <div key={i} className="flex items-start gap-2">
+                          <span className="w-20 shrink-0 text-right text-[10px] font-bold uppercase text-[var(--t-accent)]">
+                            {event.event}
+                          </span>
+                          <span className="text-xs text-[var(--t-text)]">
+                            {event.description}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Assets */}
+                    {(outcome.assets_gained.length > 0 ||
+                      outcome.assets_lost.length > 0) && (
+                      <div className="mt-2 flex items-center gap-3 text-[10px]">
+                        {outcome.assets_gained.length > 0 && (
+                          <span className="text-[var(--t-green)]">
+                            +{" "}
+                            {outcome.assets_gained
+                              .map((a) => `${a.name} ($${a.value_usdc})`)
+                              .join(", ")}
+                          </span>
+                        )}
+                        {outcome.assets_lost.length > 0 && (
+                          <span className="text-[var(--t-red)]">
+                            - {outcome.assets_lost.join(", ")}
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Footer */}
+                    <div className="mt-2 flex items-center gap-3 text-[10px] text-[var(--t-muted)]">
+                      <span>
+                        {new Date(outcome.created_at).toLocaleString()}
+                      </span>
+                      {outcome.on_chain_tx_hash && (
+                        <a
+                          href={`https://sepolia.basescan.org/tx/${outcome.on_chain_tx_hash}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
+                        >
+                          Settlement TX
+                        </a>
                       )}
                     </div>
-                  )}
-
-                  {/* Footer */}
-                  <div className="mt-2 flex items-center gap-3 text-[10px] text-[var(--t-muted)]">
-                    <span>{new Date(outcome.created_at).toLocaleString()}</span>
-                    {outcome.on_chain_tx_hash && (
-                      <a
-                        href={`https://sepolia.basescan.org/tx/${outcome.on_chain_tx_hash}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
-                      >
-                        Settlement TX
-                      </a>
-                    )}
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>

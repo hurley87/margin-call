@@ -55,19 +55,6 @@ export async function listOpenDeals() {
   return data;
 }
 
-export async function listOpenDealsByCreatorAddress(creatorAddress: string) {
-  const supabase = createServerClient();
-  const { data, error } = await supabase
-    .from("deals")
-    .select()
-    .eq("status", "open")
-    .eq("creator_address", creatorAddress.toLowerCase())
-    .order("created_at", { ascending: false });
-
-  if (error) throw error;
-  return data;
-}
-
 export interface CreateDealOutcomeParams {
   deal_id: string;
   trader_id: string;
