@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSuggestPrompts } from "@/hooks/use-deals";
@@ -37,12 +37,11 @@ export function CreateDealDialog({
   balance,
 }: CreateDealDialogProps) {
   const [state, setState] = useState<DialogState>("suggestions");
-  const [suggestions, setSuggestions] = useState<string[] | null>(null);
   const [selectedPrompt, setSelectedPrompt] = useState("");
   const [potAmount, setPotAmount] = useState(MIN_POT_AMOUNT.toString());
   const [entryCost, setEntryCost] = useState(MIN_ENTRY_COST.toString());
 
-  const suggestMutation = useSuggestPrompts();
+  const suggestQuery = useSuggestPrompts(headline.headline);
   const queryClient = useQueryClient();
   const {
     createDeal,
@@ -52,25 +51,9 @@ export function CreateDealDialog({
     error: createError,
   } = useCreateDeal();
 
-  // Auto-suggest on mount (dialog is lazy-mounted, so open is always true on first render)
-  useEffect(() => {
-    if (!suggestMutation.isPending) {
-      suggestMutation.mutate(headline.headline, {
-        onSuccess: (data) => setSuggestions(data),
-      });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   const handlePickSuggestion = (prompt: string) => {
     setSelectedPrompt(prompt);
     setState("configure");
-  };
-
-  const handleRegenerate = () => {
-    suggestMutation.mutate(headline.headline, {
-      onSuccess: (data) => setSuggestions(data),
-    });
   };
 
   const potNum = parseFloat(potAmount);
@@ -122,49 +105,46 @@ export function CreateDealDialog({
 
           {/* Source headline context */}
           <div className="border-b border-[var(--t-border)] px-4 py-2">
-            <p className="text-[10px] text-[var(--t-muted)]">FROM HEADLINE:</p>
-            <p className="mt-0.5 text-xs font-bold text-[var(--t-text)]">
+            <p className="text-xs font-bold text-[var(--t-text)]">
               {headline.headline}
             </p>
+            {headline.body && (
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--t-muted)]">
+                {headline.body}
+              </p>
+            )}
           </div>
 
           {/* Suggestions state */}
           {state === "suggestions" && (
             <>
-              {suggestMutation.isPending && !suggestions ? (
+              {suggestQuery.isPending ? (
                 <div className="px-4 py-6 text-center">
                   <p className="text-xs text-[var(--t-muted)]">
                     GENERATING DEAL IDEAS...
                     <span className="cursor-blink">{"\u2588"}</span>
                   </p>
                 </div>
-              ) : suggestions ? (
+              ) : suggestQuery.data ? (
                 <>
                   <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                    DEAL IDEAS
+                    SELECT A DEAL IDEA
                   </div>
-                  <div className="flex flex-col">
-                    {suggestions.map((s, i) => (
+                  <div className="flex flex-col gap-2 p-3">
+                    {suggestQuery.data.map((s, i) => (
                       <button
                         key={i}
                         onClick={() => handlePickSuggestion(s)}
-                        className="border-b border-[var(--t-border)] px-4 py-2.5 text-left text-xs text-[var(--t-text)] transition-colors last:border-b-0 hover:bg-[var(--t-surface)] hover:text-[var(--t-accent)]"
+                        className="group flex items-center justify-between gap-3 border border-[var(--t-border)] px-4 py-3 text-left text-xs text-[var(--t-text)] transition-all hover:border-[var(--t-accent)] hover:bg-[var(--t-surface)]"
                       >
-                        <span className="text-[var(--t-accent)]">{">"}</span>{" "}
-                        {s}
+                        <span className="group-hover:text-[var(--t-accent)]">
+                          {s}
+                        </span>
+                        <span className="shrink-0 text-[10px] text-transparent transition-colors group-hover:text-[var(--t-accent)]">
+                          SELECT &rarr;
+                        </span>
                       </button>
                     ))}
-                  </div>
-                  <div className="flex items-center gap-2 border-t border-[var(--t-border)] px-4 py-2">
-                    <button
-                      onClick={handleRegenerate}
-                      disabled={suggestMutation.isPending}
-                      className="text-[10px] text-[var(--t-muted)] transition-colors hover:text-[var(--t-accent)] disabled:opacity-50"
-                    >
-                      {suggestMutation.isPending
-                        ? "GENERATING..."
-                        : "REGENERATE"}
-                    </button>
                   </div>
                 </>
               ) : (
@@ -173,7 +153,7 @@ export function CreateDealDialog({
                     Failed to load suggestions.
                   </p>
                   <button
-                    onClick={handleRegenerate}
+                    onClick={() => suggestQuery.refetch()}
                     className="mt-2 text-[10px] text-[var(--t-accent)] hover:text-[var(--t-text)]"
                   >
                     RETRY
@@ -189,7 +169,7 @@ export function CreateDealDialog({
               <textarea
                 value={selectedPrompt}
                 onChange={(e) => setSelectedPrompt(e.target.value)}
-                rows={3}
+                rows={5}
                 disabled={isCreating}
                 className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-2 py-2 text-xs leading-relaxed text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
               />

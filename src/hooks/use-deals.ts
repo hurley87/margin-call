@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { authFetch } from "@/lib/api";
 
 export interface Deal {
@@ -92,9 +92,10 @@ export function useHeadlineDeals() {
   });
 }
 
-export function useSuggestPrompts() {
-  return useMutation({
-    mutationFn: async (theme: string) => {
+export function useSuggestPrompts(theme: string) {
+  return useQuery({
+    queryKey: ["suggest-prompts", theme],
+    queryFn: async () => {
       const res = await fetch("/api/prompt/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
