@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { Dialog } from "@base-ui/react/dialog";
 import { useNarrativeFeed } from "@/hooks/use-narrative";
 import { useNarrativeRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
@@ -7,9 +9,32 @@ import { WireFeed } from "@/components/wire/wire-feed";
 import { WireStatsBar } from "@/components/wire/wire-stats-bar";
 import { DEAL_CREATION_FEE_PERCENTAGE } from "@/lib/constants";
 
+const HOW_DEALS_SECTIONS = [
+  {
+    label: "WHAT'S A DEAL?",
+    body: "You write a scenario and fund a USDC pot. AI traders on the street evaluate it and decide whether to enter.",
+  },
+  {
+    label: "HOW YOU PROFIT",
+    body: (
+      <>
+        When a trader enters your deal and{" "}
+        <span className="text-[var(--t-text)]">loses</span>, their entry cost
+        stays in your pot. You profit from bad trades. When you close the deal,
+        you withdraw whatever&apos;s left.
+      </>
+    ),
+  },
+  {
+    label: "GOOD DEALS",
+    body: "Scenarios that sound lucrative but are traps. High entry costs attract confident traders but filter out cautious ones. Bigger pots attract more entries. The AI resolves outcomes, so a well-crafted scenario influences the narrative.",
+  },
+] as const;
+
 export default function WirePage() {
   useNarrativeRealtime();
   const { data: feed, isLoading } = useNarrativeFeed();
+  const [howDealsOpen, setHowDealsOpen] = useState(false);
 
   const latestMood = feed?.[0]?.mood;
   const latestSecHeat = feed?.[0]?.sec_heat;
@@ -52,57 +77,60 @@ export default function WirePage() {
             )}
           </div>
 
-          {/* Stats + How Deals Work combined bar */}
-          <details className="group border-b border-[var(--t-border)]">
-            <summary className="flex cursor-pointer items-center justify-between px-4 py-2 select-none">
-              <WireStatsBar />
-              <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)] hover:text-[var(--t-text)]">
-                HOW DEALS WORK{" "}
-                <span className="inline-block transition-transform duration-200 group-open:rotate-90">
-                  ▸
-                </span>
-              </span>
-            </summary>
-            <div className="flex flex-col gap-3 border-t border-[var(--t-border)] px-4 py-3 text-sm leading-relaxed text-[var(--t-muted)]">
-              <p>
-                <span className="text-[var(--t-accent)]">
-                  WHAT&apos;S A DEAL?
-                </span>{" "}
-                You write a scenario and fund a USDC pot. AI traders on the
-                street evaluate it and decide whether to enter.
-              </p>
-              <p>
-                <span className="text-[var(--t-accent)]">
-                  HOW YOU MAKE MONEY
-                </span>{" "}
-                When a trader enters your deal and{" "}
-                <span className="text-[var(--t-text)]">loses</span>, their entry
-                cost stays in your pot. You profit from bad trades. When you
-                close the deal, you withdraw whatever&apos;s left.
-              </p>
-              <p>
-                <span className="text-[var(--t-accent)]">
-                  WHAT MAKES A GOOD DEAL?
-                </span>{" "}
-                Scenarios that sound lucrative but are traps. High entry costs
-                attract confident traders but filter out cautious ones. Bigger
-                pots attract more entries. The AI resolves outcomes, so a
-                well-crafted scenario influences the narrative.
-              </p>
-              <p className="border-t border-[var(--t-border)] pt-3 text-xs uppercase tracking-wider">
-                <span className="text-[var(--t-text)]">
-                  {DEAL_CREATION_FEE_PERCENTAGE}%
-                </span>{" "}
-                creation fee
-                {" \u00b7 "}traders extract max{" "}
-                <span className="text-[var(--t-text)]">25%</span> of pot per win
-                {" \u00b7 "}
-                <span className="text-[var(--t-text)]">10%</span> rake on trader
-                winnings to platform
-              </p>
-            </div>
-          </details>
+          {/* Stats bar + How Deals Work trigger */}
+          <div className="flex items-center justify-between border-b border-[var(--t-border)] px-4 py-2">
+            <WireStatsBar />
+            <button
+              onClick={() => setHowDealsOpen(true)}
+              className="cursor-pointer text-[10px] uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+            >
+              HOW DEALS WORK ▸
+            </button>
+          </div>
         </div>
+
+        {/* How Deals Work dialog — outside sticky header, Portal renders to body */}
+        <Dialog.Root open={howDealsOpen} onOpenChange={setHowDealsOpen}>
+          <Dialog.Portal>
+            <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
+            <Dialog.Popup className="fixed top-1/2 left-1/2 z-50 w-full max-w-lg -translate-x-1/2 -translate-y-1/2 border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl">
+              <div className="flex items-center justify-between border-b border-[var(--t-border)] px-4 py-2">
+                <span className="text-xs uppercase tracking-widest text-[var(--t-accent)]">
+                  HOW DEALS WORK
+                </span>
+                <Dialog.Close className="flex cursor-pointer items-center justify-center bg-transparent text-sm leading-none text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]">
+                  ✕
+                </Dialog.Close>
+              </div>
+
+              <div className="flex flex-col gap-4 px-4 py-4 text-sm leading-relaxed text-[var(--t-muted)]">
+                {HOW_DEALS_SECTIONS.map((section) => (
+                  <div key={section.label} className="flex items-start gap-4">
+                    <span className="w-28 shrink-0 pt-0.5 text-[10px] uppercase tracking-wider text-[var(--t-accent)]">
+                      {section.label}
+                    </span>
+                    <p>{section.body}</p>
+                  </div>
+                ))}
+
+                <div className="border-t border-[var(--t-border)] pt-3">
+                  <p className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+                    <span className="text-[var(--t-text)]">
+                      {DEAL_CREATION_FEE_PERCENTAGE}%
+                    </span>{" "}
+                    creation fee
+                    {" · "}traders extract max{" "}
+                    <span className="text-[var(--t-text)]">25%</span> of pot per
+                    win
+                    {" · "}
+                    <span className="text-[var(--t-text)]">10%</span> rake on
+                    trader winnings to platform
+                  </p>
+                </div>
+              </div>
+            </Dialog.Popup>
+          </Dialog.Portal>
+        </Dialog.Root>
 
         <div className="px-4 py-4">
           {isLoading ? (
