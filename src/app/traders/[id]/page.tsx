@@ -112,7 +112,6 @@ export default function TraderDetailPage() {
 
   const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
   const isNewTrader = trader.status === "paused" && unfunded;
-  const hasMandate = Object.keys(trader.mandate).length > 0;
 
   return (
     <div className="min-h-screen bg-[var(--t-bg)]">
@@ -151,7 +150,7 @@ export default function TraderDetailPage() {
 
       <div className="mx-auto w-full max-w-4xl px-4 py-6">
         {/* Onboarding Steps for newly hired unfunded trader */}
-        {isNewTrader && <SetupChecklist hasMandate={hasMandate} />}
+        {isNewTrader && <SetupChecklist />}
 
         {/* Agent Controls — prominent at top */}
         <AgentControls
@@ -235,11 +234,10 @@ function TraderDetails({
 
 const SETUP_STEPS = [
   { text: "Deposit USDC to fund the escrow", tag: "REQUIRED", active: true },
-  { text: "Configure trading mandate", tag: "OPTIONAL", active: false },
   { text: "Activate trading", tag: null, active: false },
 ] as const;
 
-function SetupChecklist({ hasMandate }: { hasMandate: boolean }) {
+function SetupChecklist() {
   return (
     <div className="border border-[var(--t-border)] bg-[var(--t-surface)]">
       <div className="border-b border-[var(--t-border)] px-4 py-2">
@@ -249,13 +247,9 @@ function SetupChecklist({ hasMandate }: { hasMandate: boolean }) {
       </div>
       <div className="flex flex-col">
         {SETUP_STEPS.map((step, i) => {
-          const done = i === 1 && hasMandate;
-          const highlight = step.active;
-          const color = done
-            ? "border-[var(--t-green)] text-[var(--t-green)]"
-            : highlight
-              ? "border-[var(--t-amber)] text-[var(--t-amber)]"
-              : "border-[var(--t-border)] text-[var(--t-muted)]";
+          const color = step.active
+            ? "border-[var(--t-amber)] text-[var(--t-amber)]"
+            : "border-[var(--t-border)] text-[var(--t-muted)]";
           const isLast = i === SETUP_STEPS.length - 1;
           return (
             <div
@@ -268,13 +262,13 @@ function SetupChecklist({ hasMandate }: { hasMandate: boolean }) {
                 {i + 1}
               </span>
               <span
-                className={`text-sm ${highlight ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
+                className={`text-sm ${step.active ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
               >
                 {step.text}
               </span>
               {step.tag && (
                 <span
-                  className={`ml-auto text-[10px] ${highlight ? "text-[var(--t-amber)]" : "text-[var(--t-muted)]"}`}
+                  className={`ml-auto text-[10px] ${step.active ? "text-[var(--t-amber)]" : "text-[var(--t-muted)]"}`}
                 >
                   {step.tag}
                 </span>

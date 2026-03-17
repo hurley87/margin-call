@@ -1,14 +1,14 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+
 import { usePrivy } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
 import { useDeskManager } from "@/hooks/use-desk";
 import { usePortfolio } from "@/hooks/use-portfolio";
 import { useTraders } from "@/hooks/use-traders";
-import { useCreateTrader } from "@/hooks/use-create-trader";
+
 import { usePendingApprovals, useApproveReject } from "@/hooks/use-approvals";
 import { useMyDeals } from "@/hooks/use-deals";
 import type { Deal } from "@/hooks/use-deals";
@@ -264,25 +264,7 @@ function TraderRoster({
   portfolio: ReturnType<typeof usePortfolio>["data"];
   portfolioLoading: boolean;
 }) {
-  const router = useRouter();
-  const [hiring, setHiring] = useState(false);
-  const [name, setName] = useState("");
-  const { createTrader, isLoading, error, reset } = useCreateTrader();
-
-  const handleHire = async () => {
-    if (!name.trim()) return;
-    try {
-      const trader = await createTrader(name.trim());
-      setName("");
-      setHiring(false);
-      router.push(`/traders/${trader.id}`);
-    } catch {
-      // error is surfaced via hook state
-    }
-  };
-
   const traders = portfolio?.traders ?? [];
-  // Name uniqueness is enforced globally by the API — no local check needed
 
   return (
     <div className="mb-6">
@@ -290,15 +272,12 @@ function TraderRoster({
         <span className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
           TRADERS ({traders.length})
         </span>
-        <button
-          onClick={() => {
-            setHiring(!hiring);
-            reset();
-          }}
+        <Link
+          href="/traders/new"
           className="text-xs border border-[var(--t-border)] px-2 py-0.5 text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
         >
-          {hiring ? "[CANCEL]" : "[+ HIRE TRADER]"}
-        </button>
+          [+ HIRE TRADER]
+        </Link>
       </div>
 
       <div className="border border-[var(--t-border)]">
@@ -311,56 +290,23 @@ function TraderRoster({
           </div>
         </div>
 
-        {/* Hire Trader Inline Form */}
-        {hiring && (
-          <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2.5">
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-[var(--t-accent)]">{">"}</span>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleHire()}
-                placeholder="TRADER NAME"
-                maxLength={50}
-                autoFocus
-                disabled={isLoading}
-                className="flex-1 bg-transparent text-xs text-[var(--t-text)] placeholder:text-[var(--t-muted)] outline-none disabled:opacity-50"
-              />
-              <button
-                onClick={handleHire}
-                disabled={isLoading || !name.trim()}
-                className="border border-[var(--t-border)] px-2 py-1 text-xs text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] disabled:opacity-50"
-              >
-                {isLoading ? "HIRING..." : "HIRE"}
-              </button>
-            </div>
-            {error && (
-              <p className="mt-1 text-xs text-[var(--t-red)]">{error}</p>
-            )}
-          </div>
-        )}
-
         {/* Trader Rows */}
         {portfolioLoading ? (
           <div className="px-3 py-4 text-center text-xs text-[var(--t-muted)]">
             LOADING...<span className="cursor-blink">█</span>
           </div>
-        ) : traders.length === 0 && !hiring ? (
+        ) : traders.length === 0 ? (
           <div className="px-3 py-10 text-center">
             <p className="text-sm text-[var(--t-muted)]">
               NO TRADERS ON YOUR DESK
             </p>
-            <button
-              onClick={() => {
-                setHiring(true);
-                reset();
-              }}
-              className="mt-4 border border-[var(--t-border)] bg-[var(--t-surface)] px-6 py-2.5 text-sm text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+            <Link
+              href="/traders/new"
+              className="mt-4 inline-block border border-[var(--t-border)] bg-[var(--t-surface)] px-6 py-2.5 text-sm text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
             >
               {">"} HIRE YOUR FIRST TRADER
               <span className="cursor-blink">█</span>
-            </button>
+            </Link>
           </div>
         ) : (
           traders.map((t) => (

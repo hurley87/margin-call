@@ -35,6 +35,12 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const name = body.name?.trim();
+    const mandate =
+      body.mandate &&
+      typeof body.mandate === "object" &&
+      !Array.isArray(body.mandate)
+        ? body.mandate
+        : {};
 
     if (!name || typeof name !== "string" || name.length > 50) {
       return NextResponse.json(
@@ -44,8 +50,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Check that the trader name is globally unique across the game
-    const supabaseCheck = createServerClient();
-    const { data: existing } = await supabaseCheck
+    const supabase = createServerClient();
+    const { data: existing } = await supabase
       .from("traders")
       .select("id")
       .ilike("name", name)
@@ -120,8 +126,6 @@ export async function POST(request: NextRequest) {
     }
 
     // 5. Store trader in Supabase
-    const supabase = createServerClient();
-
     const { data: trader, error: dbError } = await supabase
       .from("traders")
       .insert({
@@ -132,7 +136,7 @@ export async function POST(request: NextRequest) {
         cdp_wallet_address: cdpWalletAddress,
         cdp_owner_address: cdpOwnerAddress,
         status: "paused",
-        mandate: {},
+        mandate,
       })
       .select()
       .single();

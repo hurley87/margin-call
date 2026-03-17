@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
 import { authFetch } from "@/lib/api";
 import type { Trader } from "./use-traders";
+import type { Mandate } from "@/lib/agent/evaluator";
 
 export function useCreateTrader() {
   const [isLoading, setIsLoading] = useState(false);
@@ -14,7 +15,7 @@ export function useCreateTrader() {
   const walletAddress = user?.wallet?.address;
 
   const createTrader = useCallback(
-    async (name: string) => {
+    async (name: string, mandate?: Mandate) => {
       setIsLoading(true);
       setError(undefined);
 
@@ -22,7 +23,7 @@ export function useCreateTrader() {
         const res = await authFetch("/api/trader/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name }),
+          body: JSON.stringify({ name, mandate }),
         });
 
         const data = await res.json();

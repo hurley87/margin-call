@@ -132,7 +132,7 @@ export default function WirePage() {
           </Dialog.Portal>
         </Dialog.Root>
 
-        <div className="px-4 py-4">
+        <div className="px-4 pb-4">
           {isLoading ? (
             <div className="border border-[var(--t-border)] bg-[var(--t-bg)] p-8 text-center">
               <p className="text-sm text-[var(--t-muted)]">

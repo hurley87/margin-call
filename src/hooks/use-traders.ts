@@ -27,6 +27,7 @@ export function useTraders() {
       return (data.traders ?? []) as Trader[];
     },
     enabled: authenticated && !!walletAddress,
+    staleTime: 30_000,
   });
 }
 
