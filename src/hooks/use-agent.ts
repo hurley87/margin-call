@@ -15,7 +15,7 @@ export interface DealOutcomeWithNarrative {
   id: string;
   deal_id: string;
   trader_id: string;
-  narrative: { event: string; description: string }[];
+  narrative: string;
   trader_pnl_usdc: number;
   pot_change_usdc: number;
   rake_usdc: number;

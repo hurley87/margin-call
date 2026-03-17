@@ -18,16 +18,11 @@ export interface Deal {
   source_headline?: string;
 }
 
-interface StoryEvent {
-  event: string;
-  description: string;
-}
-
 export interface DealOutcome {
   id: string;
   trader_pnl_usdc: number;
   rake_usdc: number;
-  narrative: StoryEvent[];
+  narrative: string;
   trader_wiped_out: boolean;
   wipeout_reason?: string;
   assets_gained: { name: string; value_usdc: number }[];

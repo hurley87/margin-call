@@ -222,18 +222,9 @@ export default function DealDetailPage() {
                     </div>
 
                     {/* Narrative */}
-                    <div className="mt-2 flex flex-col gap-1.5">
-                      {outcome.narrative.map((event, i) => (
-                        <div key={i} className="flex items-start gap-2">
-                          <span className="w-20 shrink-0 text-right text-[10px] font-bold uppercase text-[var(--t-accent)]">
-                            {event.event}
-                          </span>
-                          <span className="text-xs text-[var(--t-text)]">
-                            {event.description}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                    <p className="mt-2 text-xs leading-relaxed text-[var(--t-text)]">
+                      {outcome.narrative}
+                    </p>
 
                     {/* Assets */}
                     {(outcome.assets_gained.length > 0 ||

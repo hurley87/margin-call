@@ -8,18 +8,13 @@ const WipeoutReasonEnum = z.enum([
   "prison",
 ]);
 
-const StoryEventSchema = z.object({
-  event: z.string(),
-  description: z.string(),
-});
-
 const AssetGainedSchema = z.object({
   name: z.string(),
   value_usdc: z.number(),
 });
 
 export const DealOutcomeSchema = z.object({
-  narrative: z.array(StoryEventSchema),
+  narrative: z.string(),
   balance_change_usdc: z.number(),
   assets_gained: z.array(AssetGainedSchema),
   assets_lost: z.array(z.string()),
@@ -28,7 +23,7 @@ export const DealOutcomeSchema = z.object({
 });
 
 export const CorrectionNarrativeSchema = z.object({
-  corrected_narrative: z.array(StoryEventSchema),
+  corrected_narrative: z.string(),
 });
 
 export const DealPromptSuggestionsSchema = z.object({

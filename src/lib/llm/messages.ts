@@ -50,7 +50,7 @@ Euphoric mood + bull play = can skew positive. Use these as soft signals, not ha
 Rules:
 - balance_change_usdc must be between -${params.portfolioBalance} and +${params.maxValuePerWin}
 - If the trader loses everything, set trader_wiped_out to true and provide a wipeout_reason
-- The narrative should be an array of 2-5 dramatic story events describing what happened
+- The narrative should be a single short paragraph (3-5 sentences) describing what happened in dramatic 1980s Wall Street style
 - Assets gained should be thematic Wall Street items (insider tips, contacts, documents, etc.)
 - Assets lost must reference items from the trader's current inventory by name`,
     },
@@ -58,7 +58,7 @@ Rules:
 }
 
 interface CorrectionParams {
-  originalNarrative: { event: string; description: string }[];
+  originalNarrative: string;
   originalBalanceChange: number;
   correctedBalanceChange: number;
   traderName: string;
@@ -78,12 +78,12 @@ export async function buildCorrectionMessages(
 TRADER: ${params.traderName}
 
 ORIGINAL NARRATIVE:
-${params.originalNarrative.map((e) => `- ${e.event}: ${e.description}`).join("\n")}
+${params.originalNarrative}
 
 ORIGINAL BALANCE CHANGE: $${params.originalBalanceChange} USDC
 CORRECTED BALANCE CHANGE: $${params.correctedBalanceChange} USDC
 
-Return the corrected narrative as an array of story events with the same structure.`,
+Return the corrected narrative as a single short paragraph.`,
     },
   ];
 }

@@ -71,13 +71,15 @@ export default function TraderDetailPage() {
 
     syncInFlightRef.current = true;
 
-    void fetch(`/api/trader/${id}/balance`, { method: "POST" })
-      .then(() =>
-        Promise.all([
+    void authFetch(`/api/trader/${id}/balance`, { method: "POST" })
+      .then((res) => {
+        if (!res.ok) throw new Error("Balance sync failed");
+        return Promise.all([
           queryClient.invalidateQueries({ queryKey: ["trader", id] }),
           queryClient.invalidateQueries({ queryKey: ["portfolio"] }),
-        ])
-      )
+        ]);
+      })
+      .catch((err) => console.error("Balance sync error:", err))
       .finally(() => {
         syncInFlightRef.current = false;
       });
@@ -534,18 +536,9 @@ function OutcomeCard({
 
       {isExpanded && outcome.narrative && (
         <div className="border-t border-[var(--t-border)] px-4 py-3">
-          <div className="flex flex-col gap-3">
-            {outcome.narrative.map((beat, i) => (
-              <div key={i}>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--t-muted)]">
-                  {beat.event}
-                </p>
-                <p className="text-sm leading-relaxed text-[var(--t-text)]">
-                  {beat.description}
-                </p>
-              </div>
-            ))}
-          </div>
+          <p className="text-sm leading-relaxed text-[var(--t-text)]">
+            {outcome.narrative}
+          </p>
           {outcome.assets_gained && outcome.assets_gained.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {outcome.assets_gained.map(
