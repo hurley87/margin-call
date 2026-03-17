@@ -3,6 +3,7 @@ import "server-only";
 import { createWalletClient, http, nonceManager } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { CONTRACTS_CHAIN } from "./escrow";
+import { baseSepoliaRpcUrl } from "./client";
 
 function buildOperatorClient() {
   const key = process.env.OPERATOR_PRIVATE_KEY;
@@ -15,7 +16,7 @@ function buildOperatorClient() {
   return createWalletClient({
     account,
     chain: CONTRACTS_CHAIN,
-    transport: http(),
+    transport: http(baseSepoliaRpcUrl),
   });
 }
 

@@ -70,12 +70,8 @@ async function mintTraderNft(
   });
 
   // Parse Transfer event from the transaction receipt to get tokenId
-  const { createPublicClient, http, decodeEventLog } = await import("viem");
-  const { baseSepolia } = await import("viem/chains");
-  const publicClient = createPublicClient({
-    chain: baseSepolia,
-    transport: http(),
-  });
+  const { decodeEventLog } = await import("viem");
+  const publicClient = makePublicClient();
 
   const receipt = await publicClient.getTransactionReceipt({
     hash: transactionHash as `0x${string}`,

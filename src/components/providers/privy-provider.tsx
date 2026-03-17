@@ -7,12 +7,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { base, baseSepolia } from "viem/chains";
 import { http } from "wagmi";
 import { BaseNetworkGuard } from "@/components/providers/base-network-guard";
+import { baseSepoliaRpcUrl } from "@/lib/contracts/client";
 import { privyConfig } from "@/lib/privy/config";
 
 const wagmiConfig = createConfig({
   chains: [baseSepolia, base],
   transports: {
-    [baseSepolia.id]: http(),
+    [baseSepolia.id]: http(baseSepoliaRpcUrl),
     [base.id]: http(),
   },
 });

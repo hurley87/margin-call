@@ -10,6 +10,7 @@ import {
   escrowAbi,
 } from "@/lib/contracts/escrow";
 import { authFetch } from "@/lib/api";
+import { makePublicClient } from "@/lib/contracts/client";
 
 type CreateDealStep = "idle" | "approving" | "creating" | "syncing" | "done";
 
@@ -54,12 +55,7 @@ export function useCreateDeal() {
         setState((s) => ({ ...s, approveHash }));
 
         // Wait for approval confirmation inline via polling
-        const { createPublicClient, http } = await import("viem");
-        const { baseSepolia } = await import("viem/chains");
-        const publicClient = createPublicClient({
-          chain: baseSepolia,
-          transport: http(),
-        });
+        const publicClient = makePublicClient();
 
         await publicClient.waitForTransactionReceipt({ hash: approveHash });
 
