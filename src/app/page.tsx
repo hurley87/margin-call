@@ -5,7 +5,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { useQueryClient } from "@tanstack/react-query";
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useDeskManager } from "@/hooks/use-desk";
 import { usePortfolio } from "@/hooks/use-portfolio";
 import { useTraders } from "@/hooks/use-traders";
@@ -16,11 +15,6 @@ import type { Deal } from "@/hooks/use-deals";
 import { useDashboardRealtime } from "@/hooks/use-realtime";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
-import {
-  ESCROW_ADDRESS,
-  escrowAbi,
-  CONTRACTS_CHAIN_ID,
-} from "@/lib/contracts/escrow";
 import { authFetch } from "@/lib/api";
 import { Nav } from "@/components/nav";
 import { FeedLine } from "@/components/feed-line";
@@ -484,9 +478,6 @@ function ApprovalCard({
 /* ── My Deals ── */
 
 function MyDeals({ deals }: { deals: Deal[] }) {
-  const { user } = usePrivy();
-  const walletAddress = user?.wallet?.address;
-
   if (deals.length === 0) return null;
 
   return (
@@ -504,19 +495,10 @@ function MyDeals({ deals }: { deals: Deal[] }) {
             <span className="w-14 text-right">Entry</span>
             <span className="w-10 text-right">Qty</span>
             <span className="w-12 text-right">Status</span>
-            <span className="w-8" />
           </div>
         </div>
 
         {deals.map((deal) => {
-          const isCreator =
-            walletAddress &&
-            deal.creator_address?.toLowerCase() === walletAddress.toLowerCase();
-          const canClose =
-            isCreator &&
-            deal.status === "open" &&
-            deal.on_chain_deal_id !== undefined;
-
           return (
             <div
               key={deal.id}
@@ -549,77 +531,11 @@ function MyDeals({ deals }: { deals: Deal[] }) {
                 >
                   [{deal.status.toUpperCase()}]
                 </span>
-                <span className="w-8 text-right">
-                  {canClose ? (
-                    <InlineCloseDealButton
-                      dealId={deal.id}
-                      onChainDealId={deal.on_chain_deal_id!}
-                    />
-                  ) : null}
-                </span>
               </div>
             </div>
           );
         })}
       </div>
     </div>
-  );
-}
-
-/* ── Inline Close Deal Button ── */
-
-function InlineCloseDealButton({
-  dealId,
-  onChainDealId,
-}: {
-  dealId: string;
-  onChainDealId: number;
-}) {
-  const queryClient = useQueryClient();
-  const syncedRef = useRef(false);
-  const { writeContract, data: txHash, isPending, error } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
-
-  useEffect(() => {
-    if (!isSuccess || !txHash || syncedRef.current) return;
-    syncedRef.current = true;
-    authFetch("/api/deal/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ on_chain_deal_id: onChainDealId }),
-    })
-      .then(() => {
-        queryClient.invalidateQueries({ queryKey: ["deals"] });
-        queryClient.invalidateQueries({ queryKey: ["my-deals"] });
-        queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
-      })
-      .catch((err) => console.error("Deal sync after close failed:", err));
-  }, [isSuccess, txHash, onChainDealId, dealId, queryClient]);
-
-  if (isSuccess) {
-    return (
-      <span className="text-[10px] text-[var(--t-green)]">{"\u2713"}</span>
-    );
-  }
-
-  return (
-    <button
-      onClick={() =>
-        writeContract({
-          address: ESCROW_ADDRESS,
-          abi: escrowAbi,
-          functionName: "closeDeal",
-          args: [BigInt(onChainDealId)],
-          chainId: CONTRACTS_CHAIN_ID,
-        })
-      }
-      disabled={isPending || isConfirming}
-      title={error ? error.message.slice(0, 100) : "Close deal"}
-      className="text-[10px] text-[var(--t-red)] transition-colors hover:text-[var(--t-text)] disabled:opacity-50"
-    >
-      {isPending ? "..." : isConfirming ? "..." : "[X]"}
-    </button>
   );
 }
