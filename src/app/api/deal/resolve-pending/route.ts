@@ -45,7 +45,8 @@ export async function POST(request: NextRequest) {
       .select(
         "id, deal_id, trader_id, trader_pnl_usdc, rake_usdc, deals!inner(on_chain_deal_id), traders!inner(token_id)"
       )
-      .is("on_chain_tx_hash", null);
+      .is("on_chain_tx_hash", null)
+      .order("created_at", { ascending: true });
 
     if (deal_id) {
       query = query.eq("deal_id", deal_id);

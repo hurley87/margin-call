@@ -179,42 +179,76 @@ async function syncAll() {
   return { synced, total: Number(dealCount) };
 }
 
-/** Sync a single deal by on-chain ID (e.g. after closeDeal). Updates status, pot, entry count from chain. */
-async function syncDealByOnChainId(
-  onChainDealId: number,
-  expectedCreatorAddress?: string
+/** Read on-chain deal state and return derived status fields. */
+async function readDealState(
+  publicClient: ReturnType<typeof makePublicClient>,
+  dealIdBigInt: bigint
 ) {
-  const publicClient = makePublicClient();
-  const supabase = createServerClient();
-
-  const dealIdBigInt = BigInt(onChainDealId);
   const deal = await publicClient.readContract({
     address: ESCROW_ADDRESS,
     abi: escrowAbi,
     functionName: "getDeal",
     args: [dealIdBigInt],
   });
+  return {
+    status: (deal.status === 0 ? "open" : "closed") as "open" | "closed",
+    potUsdc: Number(deal.potAmount) / 1_000_000,
+    entryCount: Number(deal.pendingEntries),
+  };
+}
 
-  const status = deal.status === 0 ? "open" : "closed";
-  const potUsdc = Number(deal.potAmount) / 1_000_000;
-  const entryCount = Number(deal.pendingEntries);
+/** Sync a single deal by on-chain ID (e.g. after closeDeal). Updates status, pot, entry count from chain.
+ *  Safe to call without auth — only reads chain state and writes to DB. */
+async function syncDealByOnChainId(
+  onChainDealId: number,
+  txHash?: `0x${string}`
+) {
+  const publicClient = makePublicClient();
+  const supabase = createServerClient();
 
-  if (expectedCreatorAddress) {
-    const { data: existing, error: ownerError } = await supabase
-      .from("deals")
-      .select("creator_address")
-      .eq("on_chain_deal_id", onChainDealId)
-      .single();
-    if (ownerError || !existing) {
-      return { synced: 0, error: "Deal not found" };
+  const dealIdBigInt = BigInt(onChainDealId);
+  let status: "open" | "closed";
+  let potUsdc: number;
+  let entryCount: number;
+
+  if (txHash) {
+    const receipt = await publicClient.waitForTransactionReceipt({
+      hash: txHash,
+      timeout: 30_000,
+    });
+    const hasDealClosedEvent = receipt.logs.some((log) => {
+      if (log.address.toLowerCase() !== ESCROW_ADDRESS.toLowerCase())
+        return false;
+      try {
+        const decoded = decodeEventLog({
+          abi: escrowAbi,
+          data: log.data,
+          topics: log.topics,
+        });
+        return (
+          decoded.eventName === "DealClosed" &&
+          "dealId" in decoded.args &&
+          decoded.args.dealId === dealIdBigInt
+        );
+      } catch {
+        return false;
+      }
+    });
+    if (receipt.status === "success" && hasDealClosedEvent) {
+      status = "closed";
+      potUsdc = 0;
+      entryCount = 0;
+    } else {
+      ({ status, potUsdc, entryCount } = await readDealState(
+        publicClient,
+        dealIdBigInt
+      ));
     }
-    if (
-      !existing.creator_address ||
-      existing.creator_address.toLowerCase() !==
-        expectedCreatorAddress.toLowerCase()
-    ) {
-      return { synced: 0, error: "Forbidden: deal creator mismatch" };
-    }
+  } else {
+    ({ status, potUsdc, entryCount } = await readDealState(
+      publicClient,
+      dealIdBigInt
+    ));
   }
 
   const { data, error } = await supabase
@@ -243,10 +277,42 @@ async function syncDealByOnChainId(
 
 export async function POST(request: NextRequest) {
   try {
+    const body = await request.json().catch(() => ({}));
+    const {
+      txHash,
+      on_chain_deal_id: onChainDealId,
+      source_headline: sourceHeadline,
+    } = body as {
+      txHash?: string;
+      on_chain_deal_id?: number;
+      source_headline?: string;
+    };
+
+    // syncDealByOnChainId is safe without auth — it only reads chain state
+    // and syncs to DB. This avoids silent failures when Privy tokens expire
+    // (e.g. after closeDeal tx confirms).
+    if (
+      onChainDealId !== undefined &&
+      Number.isInteger(onChainDealId) &&
+      onChainDealId >= 0
+    ) {
+      const result = await syncDealByOnChainId(
+        onChainDealId,
+        txHash && /^0x[a-fA-F0-9]{64}$/.test(txHash)
+          ? (txHash as `0x${string}`)
+          : undefined
+      );
+      if (result.error === "Deal not found") {
+        return NextResponse.json({ error: result.error }, { status: 404 });
+      }
+      return NextResponse.json(result);
+    }
+
+    // All other paths require auth
     const operatorSecret = request.headers.get("x-operator-secret");
     const isOperator = Boolean(
       process.env.OPERATOR_SECRET &&
-        operatorSecret === process.env.OPERATOR_SECRET
+      operatorSecret === process.env.OPERATOR_SECRET
     );
 
     let walletAddress: string | undefined;
@@ -261,17 +327,6 @@ export async function POST(request: NextRequest) {
       }
       walletAddress = linkedWallet;
     }
-
-    const body = await request.json().catch(() => ({}));
-    const {
-      txHash,
-      on_chain_deal_id: onChainDealId,
-      source_headline: sourceHeadline,
-    } = body as {
-      txHash?: string;
-      on_chain_deal_id?: number;
-      source_headline?: string;
-    };
 
     if (
       sourceHeadline !== undefined &&
@@ -289,24 +344,6 @@ export async function POST(request: NextRequest) {
         sourceHeadline,
         isOperator ? undefined : walletAddress
       );
-      if (result.error?.startsWith("Forbidden")) {
-        return NextResponse.json({ error: result.error }, { status: 403 });
-      }
-      return NextResponse.json(result);
-    }
-
-    if (
-      onChainDealId !== undefined &&
-      Number.isInteger(onChainDealId) &&
-      onChainDealId >= 0
-    ) {
-      const result = await syncDealByOnChainId(
-        onChainDealId,
-        isOperator ? undefined : walletAddress
-      );
-      if (result.error === "Deal not found") {
-        return NextResponse.json({ error: result.error }, { status: 404 });
-      }
       if (result.error?.startsWith("Forbidden")) {
         return NextResponse.json({ error: result.error }, { status: 403 });
       }

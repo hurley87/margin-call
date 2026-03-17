@@ -14,7 +14,6 @@ import {
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
 import { Nav } from "@/components/nav";
-import { authFetch } from "@/lib/api";
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -151,15 +150,19 @@ export default function DealDetailPage() {
             </div>
 
             {deal.on_chain_deal_id !== undefined &&
-              deal.status === "open" &&
               walletAddress &&
               deal.creator_address?.toLowerCase() ===
-                walletAddress.toLowerCase() && (
+                walletAddress.toLowerCase() &&
+              (deal.status === "open" ? (
                 <CloseDealButton
                   dealId={deal.id}
                   onChainDealId={deal.on_chain_deal_id}
                 />
-              )}
+              ) : deal.status === "closed" ? (
+                <div className="border border-green-500/30 bg-green-500/10 px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-green-400">
+                  DEAL CLOSED — pot withdrawn
+                </div>
+              ) : null)}
           </div>
 
           {/* Outcomes */}
@@ -297,10 +300,10 @@ function CloseDealButton({
   useEffect(() => {
     if (!isSuccess || !txHash || syncedRef.current) return;
     syncedRef.current = true;
-    authFetch("/api/deal/sync", {
+    fetch("/api/deal/sync", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ on_chain_deal_id: onChainDealId }),
+      body: JSON.stringify({ on_chain_deal_id: onChainDealId, txHash }),
     })
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
