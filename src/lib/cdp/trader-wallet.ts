@@ -162,8 +162,10 @@ export async function createTraderCdpAccounts(name: string): Promise<{
   });
 
   // Step 4: Transfer NFT from mint account → canonical smart account
-  // Using ERC-721 transferFrom via the mint smart account
-  await sendContractCall(mintSmartAccount, {
+  // Using ERC-721 transferFrom via the mint smart account.
+  // The CDP backend may still be reconciling the mint account's initialization
+  // state after the first UserOp, so retry with backoff on that specific error.
+  const transferArgs = {
     address: IDENTITY_REGISTRY_ADDRESS,
     abi: [
       {
@@ -180,7 +182,23 @@ export async function createTraderCdpAccounts(name: string): Promise<{
     ] as unknown as import("viem").Abi,
     functionName: "transferFrom",
     args: [mintSmartAccount.address, smartAccount.address, BigInt(tokenId)],
-  });
+  };
+
+  const MAX_RETRIES = 3;
+  for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+    try {
+      await sendContractCall(mintSmartAccount, transferArgs);
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        !msg.includes("initialize smart wallet") ||
+        attempt === MAX_RETRIES - 1
+      )
+        throw err;
+      await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
+    }
+  }
 
   return {
     owner,
