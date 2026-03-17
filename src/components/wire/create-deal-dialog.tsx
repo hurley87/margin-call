@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSuggestPrompts } from "@/hooks/use-deals";
@@ -41,6 +42,7 @@ export function CreateDealDialog({
   const [potAmount, setPotAmount] = useState(MIN_POT_AMOUNT.toString());
   const [entryCost, setEntryCost] = useState(MIN_ENTRY_COST.toString());
 
+  const router = useRouter();
   const suggestQuery = useSuggestPrompts(headline.headline);
   const queryClient = useQueryClient();
   const {
@@ -67,7 +69,7 @@ export function CreateDealDialog({
     if (!selectedPrompt.trim() || isNaN(potNum) || isNaN(entryNum)) return;
     setState("creating");
     try {
-      await createDeal(
+      const result = await createDeal(
         selectedPrompt.trim(),
         potNum,
         entryNum,
@@ -76,6 +78,9 @@ export function CreateDealDialog({
       queryClient.invalidateQueries({ queryKey: ["deals"] });
       queryClient.invalidateQueries({ queryKey: ["my-deals"] });
       onOpenChange(false);
+      router.push(
+        result?.supabaseId ? `/deals/${result.supabaseId}` : "/deals"
+      );
     } catch {
       setState("configure");
     }
@@ -169,7 +174,7 @@ export function CreateDealDialog({
               <textarea
                 value={selectedPrompt}
                 onChange={(e) => setSelectedPrompt(e.target.value)}
-                rows={5}
+                rows={10}
                 disabled={isCreating}
                 className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-2 py-2 text-xs leading-relaxed text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
               />
