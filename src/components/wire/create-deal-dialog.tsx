@@ -91,6 +91,7 @@ export function CreateDealDialog({
         headline.headline
       );
       queryClient.invalidateQueries({ queryKey: ["deals"] });
+      queryClient.invalidateQueries({ queryKey: ["my-deals"] });
       onOpenChange(false);
     } catch {
       setState("configure");

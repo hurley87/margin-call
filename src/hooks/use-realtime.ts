@@ -171,7 +171,7 @@ export function useDashboardRealtime() {
     },
     {
       table: "deals",
-      queryKeys: [["deals"], ["portfolio"]],
+      queryKeys: [["deals"], ["my-deals"], ["portfolio"]],
     },
     {
       table: "deal_approvals",

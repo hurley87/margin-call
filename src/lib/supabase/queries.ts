@@ -55,6 +55,24 @@ export async function listOpenDeals() {
   return data;
 }
 
+/**
+ * Return open deals created by the given wallet (creator_address).
+ * creatorAddress is normalized to lowercase for consistent comparison.
+ */
+export async function listOpenDealsByCreator(creatorAddress: string) {
+  const supabase = createServerClient();
+  const normalized = creatorAddress.toLowerCase();
+  const { data, error } = await supabase
+    .from("deals")
+    .select()
+    .eq("status", "open")
+    .eq("creator_address", normalized)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return data;
+}
+
 export interface CreateDealOutcomeParams {
   deal_id: string;
   trader_id: string;

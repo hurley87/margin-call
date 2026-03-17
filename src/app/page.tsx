@@ -11,7 +11,7 @@ import { usePortfolio } from "@/hooks/use-portfolio";
 import { useTraders } from "@/hooks/use-traders";
 import { useCreateTrader } from "@/hooks/use-create-trader";
 import { usePendingApprovals, useApproveReject } from "@/hooks/use-approvals";
-import { useDeals } from "@/hooks/use-deals";
+import { useMyDeals } from "@/hooks/use-deals";
 import type { Deal } from "@/hooks/use-deals";
 import { useDashboardRealtime } from "@/hooks/use-realtime";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
@@ -102,7 +102,7 @@ function Dashboard({ displayName }: { displayName: string }) {
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: traders } = useTraders();
   const { data: approvals } = usePendingApprovals();
-  const { data: deals } = useDeals();
+  const { data: deals } = useMyDeals();
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
   const { balance: usdcBalance } = useUsdcBalance();
 
@@ -592,6 +592,7 @@ function InlineCloseDealButton({
     })
       .then(() => {
         queryClient.invalidateQueries({ queryKey: ["deals"] });
+        queryClient.invalidateQueries({ queryKey: ["my-deals"] });
         queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
       })
       .catch((err) => console.error("Deal sync after close failed:", err));

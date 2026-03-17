@@ -40,6 +40,21 @@ export function useDeals() {
   return useQuery(dealsQueryOptions);
 }
 
+const myDealsQueryOptions = {
+  queryKey: ["my-deals"] as const,
+  queryFn: async () => {
+    const res = await authFetch("/api/deal/my");
+    if (!res.ok) throw new Error("Failed to load my deals");
+    const data = await res.json();
+    return (data.deals ?? []) as Deal[];
+  },
+};
+
+/** Returns only open deals created by the current user (owner-scoped). */
+export function useMyDeals() {
+  return useQuery(myDealsQueryOptions);
+}
+
 export function useDeal(id: string) {
   return useQuery({
     queryKey: ["deal", id],
