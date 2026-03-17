@@ -166,9 +166,9 @@ export default function TraderDetailPage() {
 
         <MandateConfig traderId={id} mandate={trader.mandate} />
 
-        <ReputationSection traderId={id} traderStatus={trader.status} />
-        <AssetInventory traderId={id} traderStatus={trader.status} />
-        <DealOutcomes traderId={id} traderStatus={trader.status} />
+        <ReputationSection traderId={id} />
+        <AssetInventory traderId={id} />
+        <DealOutcomes traderId={id} />
 
         <ActivityHistory id={id} />
       </div>
@@ -315,14 +315,8 @@ function AgentControls({
 
 /* ── Asset Inventory ── */
 
-function AssetInventory({
-  traderId,
-  traderStatus,
-}: {
-  traderId: string;
-  traderStatus: string;
-}) {
-  const { data: assets, isLoading } = useTraderAssets(traderId, traderStatus);
+function AssetInventory({ traderId }: { traderId: string }) {
+  const { data: assets, isLoading } = useTraderAssets(traderId);
 
   return (
     <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
@@ -354,17 +348,8 @@ function AssetInventory({
 
 /* ── Deal Outcomes with Narratives ── */
 
-function DealOutcomes({
-  traderId,
-  traderStatus,
-}: {
-  traderId: string;
-  traderStatus: string;
-}) {
-  const { data: outcomes, isLoading } = useTraderOutcomes(
-    traderId,
-    traderStatus
-  );
+function DealOutcomes({ traderId }: { traderId: string }) {
+  const { data: outcomes, isLoading } = useTraderOutcomes(traderId);
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
@@ -861,17 +846,8 @@ function MandateConfig({
 
 /* ── Reputation Section ── */
 
-function ReputationSection({
-  traderId,
-  traderStatus,
-}: {
-  traderId: string;
-  traderStatus: string;
-}) {
-  const { data: outcomes, isLoading } = useTraderOutcomes(
-    traderId,
-    traderStatus
-  );
+function ReputationSection({ traderId }: { traderId: string }) {
+  const { data: outcomes, isLoading } = useTraderOutcomes(traderId);
 
   if (isLoading || !outcomes) return null;
 

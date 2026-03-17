@@ -28,7 +28,7 @@ export interface DealOutcomeWithNarrative {
 
 export type { Asset as TraderAsset } from "@/lib/supabase/queries";
 
-export function useTraderAssets(traderId: string, _traderStatus?: string) {
+export function useTraderAssets(traderId: string) {
   return useQuery({
     queryKey: ["trader-assets", traderId],
     queryFn: async () => {
@@ -42,7 +42,7 @@ export function useTraderAssets(traderId: string, _traderStatus?: string) {
   });
 }
 
-export function useAgentActivity(traderId: string, _traderStatus?: string) {
+export function useAgentActivity(traderId: string) {
   return useQuery({
     queryKey: ["agent-activity", traderId],
     queryFn: async () => {
@@ -56,7 +56,7 @@ export function useAgentActivity(traderId: string, _traderStatus?: string) {
   });
 }
 
-export function useTraderOutcomes(traderId: string, _traderStatus?: string) {
+export function useTraderOutcomes(traderId: string) {
   return useQuery({
     queryKey: ["trader-outcomes", traderId],
     queryFn: async () => {

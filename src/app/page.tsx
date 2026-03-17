@@ -4,7 +4,6 @@ import { useState } from "react";
 import Link from "next/link";
 
 import { usePrivy } from "@privy-io/react-auth";
-import { useQueryClient } from "@tanstack/react-query";
 import { useDeskManager } from "@/hooks/use-desk";
 import { usePortfolio } from "@/hooks/use-portfolio";
 import { useTraders } from "@/hooks/use-traders";
@@ -15,7 +14,6 @@ import type { Deal } from "@/hooks/use-deals";
 import { useDashboardRealtime } from "@/hooks/use-realtime";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
-import { authFetch } from "@/lib/api";
 import { Nav } from "@/components/nav";
 import { FeedLine } from "@/components/feed-line";
 
@@ -110,8 +108,6 @@ function Dashboard({ displayName }: { displayName: string }) {
     : activity;
 
   const pnl = portfolio?.stats.total_pnl ?? 0;
-  const pendingCount = approvals?.length ?? 0;
-
   return (
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />

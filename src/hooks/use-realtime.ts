@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { createBrowserClient } from "@/lib/supabase/client";
 
@@ -29,22 +29,14 @@ function buildSubscriptionSignature(subscriptions: RealtimeSubscription[]) {
 export function useRealtimeInvalidation(subscriptions: RealtimeSubscription[]) {
   const queryClient = useQueryClient();
   const subscriptionSignature = buildSubscriptionSignature(subscriptions);
-  const stableSubscriptionsRef = useRef<{
-    signature: string;
-    subscriptions: RealtimeSubscription[];
-  } | null>(null);
 
-  if (
-    !stableSubscriptionsRef.current ||
-    stableSubscriptionsRef.current.signature !== subscriptionSignature
-  ) {
-    stableSubscriptionsRef.current = {
-      signature: subscriptionSignature,
-      subscriptions,
-    };
-  }
-
-  const stableSubscriptions = stableSubscriptionsRef.current.subscriptions;
+  // Stabilize the subscriptions array reference — only update when the
+  // serialized signature changes, so the effect doesn't re-run on every render.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableSubscriptions = useMemo(
+    () => subscriptions,
+    [subscriptionSignature]
+  );
 
   useEffect(() => {
     if (stableSubscriptions.length === 0) return;

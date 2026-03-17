@@ -72,7 +72,7 @@ export async function listPendingApprovalsByOwner(
   const now = new Date().toISOString();
 
   // Fetch traders and pending (non-expired) approvals in parallel
-  const [{ data: traders, error: tErr }, _] = await Promise.all([
+  const [{ data: traders, error: tErr }] = await Promise.all([
     supabase
       .from("traders")
       .select("id, name")
