@@ -202,8 +202,8 @@ function TraderDetails({
         onClick={() => setOpen(!open)}
         className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-[var(--t-bg)]"
       >
-        <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-          WALLET DETAILS
+        <span className="text-sm font-medium text-[var(--t-muted)]">
+          Wallet Details
         </span>
         <span className="text-xs text-[var(--t-muted)]">
           {open ? "▲" : "▼"}
