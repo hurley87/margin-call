@@ -4,15 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useReadContract } from "wagmi";
-import { parseUnits } from "viem";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTrader, useTraderHistory } from "@/hooks/use-traders";
 import type { Trader, TraderHistoryEvent } from "@/hooks/use-traders";
-import {
-  useSepoliaUsdcBalance,
-  useDepositFlow,
-  useWithdrawFlow,
-} from "@/hooks/use-escrow";
+import { useSepoliaUsdcBalance } from "@/hooks/use-escrow";
 import {
   useTraderOutcomes,
   useTraderAssets,
@@ -29,6 +24,7 @@ import {
 import { useConfigureMandate } from "@/hooks/use-approvals";
 import { useTraderRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
+import { WalletDialog } from "@/components/wire/wallet-dialog";
 import { authFetch } from "@/lib/api";
 
 const ZERO = BigInt(0);
@@ -53,6 +49,8 @@ export default function TraderDetailPage() {
   });
 
   const { balance: walletUsdc } = useSepoliaUsdcBalance();
+  const [walletOpen, setWalletOpen] = useState(false);
+  const hasAutoOpened = useRef(false);
   const balanceUsdc =
     escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
   const traderForLog = trader as
@@ -86,6 +84,17 @@ export default function TraderDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, balanceUsdc, cachedEscrowUsdc, queryClient]);
 
+  const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
+  const isNewTrader = !!trader && trader.status === "paused" && unfunded;
+
+  // Auto-open wallet dialog for new unfunded traders
+  useEffect(() => {
+    if (hasAutoOpened.current) return;
+    if (!isNewTrader) return;
+    hasAutoOpened.current = true;
+    setWalletOpen(true);
+  }, [isNewTrader]);
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--t-bg)]">
@@ -110,9 +119,6 @@ export default function TraderDetailPage() {
     );
   }
 
-  const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
-  const isNewTrader = trader.status === "paused" && unfunded;
-
   return (
     <div className="min-h-screen bg-[var(--t-bg)]">
       <Nav />
@@ -133,42 +139,29 @@ export default function TraderDetailPage() {
             <StatusBadge status={trader.status} />
           </div>
           <div className="flex items-center gap-4 text-xs">
-            <div className="text-right">
-              <span className="text-[var(--t-muted)]">ESCROW </span>
-              <span
-                className={
-                  unfunded ? "text-[var(--t-amber)]" : "text-[var(--t-text)]"
-                }
-              >
+            <button
+              onClick={() => setWalletOpen(true)}
+              className={`flex items-center gap-1 text-right transition-colors hover:text-[var(--t-accent)] ${
+                unfunded ? "text-[var(--t-amber)]" : "text-[var(--t-text)]"
+              }`}
+            >
+              <span className="text-[var(--t-muted)]">[$$]</span>
+              <span>
                 {balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."}
               </span>
-            </div>
+            </button>
             <span className="text-[var(--t-muted)]">#{trader.token_id}</span>
           </div>
         </div>
       </div>
 
       <div className="mx-auto w-full max-w-4xl px-4 py-6">
-        {/* Onboarding Steps for newly hired unfunded trader */}
-        {isNewTrader && <SetupChecklist />}
-
         {/* Agent Controls — prominent at top */}
         <AgentControls
           traderId={id}
           status={trader.status}
           unfunded={unfunded}
-        />
-
-        {/* Wallet management — deposit/withdraw */}
-        <FundingSection
-          traderId={trader.token_id}
-          walletUsdc={walletUsdc}
-          escrowUsdc={balanceUsdc}
-          highlight={isNewTrader}
-          onSuccess={() => {
-            refetchBalance();
-            authFetch(`/api/trader/${id}/balance`, { method: "POST" });
-          }}
+          onOpenWallet={() => setWalletOpen(true)}
         />
 
         <MandateConfig traderId={id} mandate={trader.mandate} />
@@ -177,106 +170,25 @@ export default function TraderDetailPage() {
         <AssetInventory traderId={id} traderStatus={trader.status} />
         <DealOutcomes traderId={id} traderStatus={trader.status} />
 
-        {/* Technical Details — collapsible */}
-        <TraderDetails trader={trader} />
-
         <ActivityHistory id={id} />
       </div>
-    </div>
-  );
-}
 
-/* ── Trader Technical Details (collapsible) ── */
-
-function TraderDetails({
-  trader,
-}: {
-  trader: Pick<Trader, "tba_address" | "owner_address">;
-}) {
-  const [open, setOpen] = useState(false);
-
-  return (
-    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)]">
-      <button
-        onClick={() => setOpen(!open)}
-        className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-[var(--t-bg)]"
-      >
-        <span className="text-sm font-medium text-[var(--t-muted)]">
-          Wallet Details
-        </span>
-        <span className="text-xs text-[var(--t-muted)]">
-          {open ? "▲" : "▼"}
-        </span>
-      </button>
-      {open && (
-        <div className="border-t border-[var(--t-border)] px-4 py-3">
-          <div className="flex flex-col gap-2 text-xs">
-            <div>
-              <span className="text-[var(--t-muted)]">Trader Wallet </span>
-              <span className="font-mono text-[var(--t-text)]">
-                {trader.tba_address ?? "Not derived"}
-              </span>
-            </div>
-            <div>
-              <span className="text-[var(--t-muted)]">Owner </span>
-              <span className="font-mono text-[var(--t-text)]">
-                {trader.owner_address}
-              </span>
-            </div>
-          </div>
-        </div>
+      {walletOpen && (
+        <WalletDialog
+          open
+          onOpenChange={setWalletOpen}
+          traderId={trader.token_id}
+          walletUsdc={walletUsdc}
+          escrowUsdc={balanceUsdc}
+          tbaAddress={trader.tba_address}
+          ownerAddress={trader.owner_address}
+          isNewTrader={isNewTrader}
+          onSuccess={() => {
+            refetchBalance();
+            authFetch(`/api/trader/${id}/balance`, { method: "POST" });
+          }}
+        />
       )}
-    </div>
-  );
-}
-
-/* ── Setup Checklist ── */
-
-const SETUP_STEPS = [
-  { text: "Deposit USDC to fund the escrow", tag: "REQUIRED", active: true },
-  { text: "Activate trading", tag: null, active: false },
-] as const;
-
-function SetupChecklist() {
-  return (
-    <div className="border border-[var(--t-border)] bg-[var(--t-surface)]">
-      <div className="border-b border-[var(--t-border)] px-4 py-2">
-        <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-          SETUP CHECKLIST
-        </span>
-      </div>
-      <div className="flex flex-col">
-        {SETUP_STEPS.map((step, i) => {
-          const color = step.active
-            ? "border-[var(--t-amber)] text-[var(--t-amber)]"
-            : "border-[var(--t-border)] text-[var(--t-muted)]";
-          const isLast = i === SETUP_STEPS.length - 1;
-          return (
-            <div
-              key={i}
-              className={`flex items-center gap-3 px-4 py-3 ${isLast ? "" : "border-b border-[var(--t-border)]"}`}
-            >
-              <span
-                className={`flex h-5 w-5 shrink-0 items-center justify-center border text-[10px] font-bold ${color}`}
-              >
-                {i + 1}
-              </span>
-              <span
-                className={`text-sm ${step.active ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
-              >
-                {step.text}
-              </span>
-              {step.tag && (
-                <span
-                  className={`ml-auto text-[10px] ${step.active ? "text-[var(--t-amber)]" : "text-[var(--t-muted)]"}`}
-                >
-                  {step.tag}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
     </div>
   );
 }
@@ -311,10 +223,12 @@ function AgentControls({
   traderId,
   status,
   unfunded,
+  onOpenWallet,
 }: {
   traderId: string;
   status: string;
   unfunded: boolean;
+  onOpenWallet: () => void;
 }) {
   const pause = usePauseTrader();
   const resume = useResumeTrader();
@@ -371,9 +285,12 @@ function AgentControls({
             {resume.isPending ? "ACTIVATING..." : "ACTIVATE TRADING"}
           </button>
           {unfunded ? (
-            <span className="text-xs text-[var(--t-amber)]">
-              Deposit USDC to enable
-            </span>
+            <button
+              onClick={onOpenWallet}
+              className="text-xs text-[var(--t-amber)] transition-colors hover:text-[var(--t-accent)]"
+            >
+              Deposit USDC to enable &rarr;
+            </button>
           ) : (
             <span className="text-xs text-[var(--t-muted)]">
               Ready to trade
@@ -1013,204 +930,6 @@ function ReputationSection({
           </p>
           <p className="text-xs text-[var(--t-muted)]">Total P&L</p>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/* ── Funding Section ── */
-
-function FundingSection({
-  traderId,
-  walletUsdc,
-  escrowUsdc,
-  highlight,
-  onSuccess,
-}: {
-  traderId: number;
-  walletUsdc: number | undefined;
-  escrowUsdc: number | null;
-  highlight?: boolean;
-  onSuccess: () => void;
-}) {
-  const [depositAmount, setDepositAmount] = useState("");
-  const [withdrawAmount, setWithdrawAmount] = useState("");
-
-  const {
-    deposit,
-    reset: resetDeposit,
-    step: depositStep,
-    error: depositError,
-    isLoading: isDepositBusy,
-  } = useDepositFlow();
-  const {
-    withdraw,
-    reset: resetWithdraw,
-    busy: withdrawBusy,
-    done: withdrawDone,
-    error: withdrawError,
-  } = useWithdrawFlow();
-
-  async function handleDeposit(e: React.FormEvent) {
-    e.preventDefault();
-    const parsed = parseUnits(depositAmount, 6);
-    if (parsed === ZERO) return;
-
-    try {
-      await deposit(BigInt(traderId), parsed);
-      setDepositAmount("");
-      onSuccess();
-    } catch {
-      // error surfaced via hook state
-    }
-  }
-
-  const withdrawExceedsBalance =
-    escrowUsdc !== null &&
-    withdrawAmount !== "" &&
-    Number(withdrawAmount) > escrowUsdc;
-
-  async function handleWithdraw(e: React.FormEvent) {
-    e.preventDefault();
-    const parsed = parseUnits(withdrawAmount, 6);
-    if (parsed === ZERO) return;
-    if (withdrawExceedsBalance) return;
-
-    try {
-      await withdraw(BigInt(traderId), parsed);
-      setWithdrawAmount("");
-      onSuccess();
-    } catch {
-      // error surfaced via hook state
-    }
-  }
-
-  return (
-    <div
-      className={`mt-6 border bg-[var(--t-surface)] p-6 ${highlight ? "border-[var(--t-amber)]/40" : "border-[var(--t-border)]"}`}
-    >
-      <h2 className="mb-1 text-sm font-medium text-[var(--t-muted)]">
-        Manage Wallet
-      </h2>
-      {walletUsdc !== undefined && (
-        <p className="mb-4 text-xs text-[var(--t-muted)]">
-          Wallet balance: {walletUsdc} USDC (Base Sepolia)
-        </p>
-      )}
-
-      <div className="grid gap-6 sm:grid-cols-2">
-        {/* Deposit */}
-        <form onSubmit={handleDeposit} className="flex flex-col gap-3">
-          <label
-            htmlFor="depositAmount"
-            className="text-sm text-[var(--t-text)]"
-          >
-            Deposit USDC
-          </label>
-          <input
-            id="depositAmount"
-            type="number"
-            step="0.01"
-            min="0"
-            value={depositAmount}
-            onChange={(e) => setDepositAmount(e.target.value)}
-            placeholder="0.00"
-            disabled={isDepositBusy}
-            className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
-          />
-          <button
-            type="submit"
-            disabled={isDepositBusy || !depositAmount}
-            className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
-          >
-            {depositStep === "approving"
-              ? "Approving USDC..."
-              : depositStep === "depositing"
-                ? "Depositing..."
-                : "Deposit"}
-          </button>
-          {depositStep === "done" && (
-            <p className="text-xs text-[var(--t-green)]">Deposit confirmed.</p>
-          )}
-          {depositError && (
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-[var(--t-red)]">
-                {depositError.slice(0, 120)}
-              </p>
-              <button
-                type="button"
-                onClick={resetDeposit}
-                className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-        </form>
-
-        {/* Withdraw */}
-        <form onSubmit={handleWithdraw} className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <label
-              htmlFor="withdrawAmount"
-              className="text-sm text-[var(--t-text)]"
-            >
-              Withdraw USDC
-            </label>
-            {escrowUsdc !== null && escrowUsdc > 0 && (
-              <button
-                type="button"
-                onClick={() => setWithdrawAmount(String(escrowUsdc))}
-                className="text-xs text-[var(--t-accent)] hover:underline"
-              >
-                Max
-              </button>
-            )}
-          </div>
-          <input
-            id="withdrawAmount"
-            type="number"
-            step="0.01"
-            min="0"
-            max={escrowUsdc ?? undefined}
-            value={withdrawAmount}
-            onChange={(e) => setWithdrawAmount(e.target.value)}
-            placeholder="0.00"
-            disabled={withdrawBusy}
-            className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
-          />
-          {withdrawExceedsBalance && (
-            <p className="text-xs text-[var(--t-red)]">
-              Exceeds escrow balance (${escrowUsdc?.toFixed(2)})
-            </p>
-          )}
-          <button
-            type="submit"
-            disabled={withdrawBusy || !withdrawAmount || withdrawExceedsBalance}
-            className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
-          >
-            {withdrawBusy ? "Withdrawing..." : "Withdraw"}
-          </button>
-          {withdrawDone && (
-            <p className="text-xs text-[var(--t-green)]">
-              Withdrawal confirmed.
-            </p>
-          )}
-          {withdrawError && (
-            <div className="flex items-center gap-2">
-              <p className="text-xs text-[var(--t-red)]">
-                {withdrawError.slice(0, 120)}
-              </p>
-              <button
-                type="button"
-                onClick={resetWithdraw}
-                className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
-              >
-                Retry
-              </button>
-            </div>
-          )}
-        </form>
       </div>
     </div>
   );
