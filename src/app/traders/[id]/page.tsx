@@ -87,13 +87,14 @@ export default function TraderDetailPage() {
   const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
   const isNewTrader = !!trader && trader.status === "paused" && unfunded;
 
-  // Auto-open wallet dialog for new unfunded traders
+  // Auto-open wallet dialog for new unfunded traders with no wallet balance
   useEffect(() => {
     if (hasAutoOpened.current) return;
     if (!isNewTrader) return;
+    if (walletUsdc === undefined || walletUsdc > 0) return;
     hasAutoOpened.current = true;
     setWalletOpen(true);
-  }, [isNewTrader]);
+  }, [isNewTrader, walletUsdc]);
 
   if (isLoading) {
     return (

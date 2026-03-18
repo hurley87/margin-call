@@ -69,12 +69,12 @@ export async function GET(
     const publicClient = makePublicClient();
     const currentBlock = await publicClient.getBlockNumber();
 
-    const scanRange = BigInt(50_000);
+    const scanRange = BigInt(5_000);
     const fromBlock =
       currentBlock > scanRange ? currentBlock - scanRange : BigInt(0);
 
     const events: HistoryEvent[] = [];
-    const chunkSize = BigInt(10_000);
+    const chunkSize = BigInt(1_000);
 
     // Process chunks sequentially to avoid RPC rate limiting
     for (
