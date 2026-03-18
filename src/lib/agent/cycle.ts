@@ -1,7 +1,6 @@
 import { createServerClient } from "@/lib/supabase/client";
 import { listOpenDeals, clearTraderAssets } from "@/lib/supabase/queries";
 import { getTrader } from "@/lib/supabase/traders";
-import { getEscrowBalance } from "@/lib/contracts/balance";
 import { evaluateDeals, pickBestDeal, type Mandate } from "./evaluator";
 import { logActivity, logActivities } from "./activity";
 import {
@@ -68,11 +67,9 @@ export async function runCycle(
 
   await logActivity(traderId, "cycle_start", "Starting trade cycle");
 
-  // Step 2: Scan open deals + check balance in parallel
-  const [deals, balance] = await Promise.all([
-    listOpenDeals(),
-    getEscrowBalance(trader.token_id),
-  ]);
+  // Step 2: Scan open deals + use cached balance
+  const deals = await listOpenDeals();
+  const balance = trader.escrow_balance_usdc;
   await logActivity(traderId, "scan", `Found ${deals.length} open deal(s)`);
 
   if (deals.length === 0) {

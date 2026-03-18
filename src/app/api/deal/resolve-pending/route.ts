@@ -6,6 +6,7 @@ import { makePublicClient } from "@/lib/contracts/client";
 import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
 import { getOnChainDeal } from "@/lib/contracts/on-chain";
 import { syncTraderEscrow } from "@/lib/contracts/balance";
+import { createTraderTransaction } from "@/lib/supabase/queries";
 
 function usdcToUnits(amount: number): bigint {
   const abs = Math.abs(amount);
@@ -125,6 +126,17 @@ export async function POST(request: NextRequest) {
           tokenId,
           "pending resolution"
         );
+
+        // Record resolve transaction
+        createTraderTransaction({
+          trader_id: outcome.trader_id,
+          type: "resolve",
+          tx_hash: hash,
+          deal_id: outcome.deal_id,
+          on_chain_deal_id: deal.on_chain_deal_id,
+          pnl_usdc: Number(outcome.trader_pnl_usdc),
+          rake_usdc: Number(outcome.rake_usdc),
+        }).catch((err) => console.error("Failed to record resolve txn:", err));
 
         results.push({
           outcome_id: outcome.id,

@@ -351,6 +351,49 @@ export async function getRecentGameEvents(since: Date) {
   }));
 }
 
+// --- Trader Transactions ---
+
+export interface CreateTraderTransactionParams {
+  trader_id: string;
+  type: "deposit" | "withdrawal" | "enter" | "resolve";
+  tx_hash: string;
+  block_number?: number;
+  amount_usdc?: number;
+  deal_id?: string;
+  on_chain_deal_id?: number;
+  pnl_usdc?: number;
+  rake_usdc?: number;
+}
+
+export async function createTraderTransaction(
+  params: CreateTraderTransactionParams
+) {
+  const supabase = createServerClient();
+  const { error } = await supabase
+    .from("trader_transactions")
+    .upsert(params, {
+      onConflict: "trader_id,tx_hash,type",
+      ignoreDuplicates: true,
+    });
+
+  if (error) {
+    console.error("Failed to insert trader transaction:", error);
+  }
+}
+
+export async function listTraderTransactions(traderId: string, limit = 50) {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("trader_transactions")
+    .select()
+    .eq("trader_id", traderId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data;
+}
+
 export async function updateDealAfterEntry(
   dealId: string,
   potChange: number,

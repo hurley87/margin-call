@@ -7,6 +7,7 @@ import { createServerClient } from "@/lib/supabase/client";
 import { getTrader, getOwnedTrader } from "@/lib/supabase/traders";
 import {
   createDealOutcome,
+  createTraderTransaction,
   getDeal,
   getExistingDealOutcome,
   updateDealAfterEntry,
@@ -146,6 +147,8 @@ export async function POST(request: NextRequest) {
     let tokenId: bigint | null = null;
     /** Expected on-chain NFT owner when tokenId is set; used to verify before operator write. */
     let expectedOwnerAddress: string | null = null;
+    /** Cached escrow balance from Supabase — used for LLM portfolio context. */
+    let cachedBalanceUsdc: number | null = null;
 
     if (_agent_cycle && trader_id) {
       // Agent cycle call — verify SIWA (Sign In With Agent) auth
@@ -179,6 +182,7 @@ export async function POST(request: NextRequest) {
       traderName = trader.name || "Anonymous Trader";
       tokenId = BigInt(trader.token_id);
       expectedOwnerAddress = trader.cdp_wallet_address ?? trader.owner_address;
+      cachedBalanceUsdc = trader.escrow_balance_usdc;
     } else {
       // Normal user request — verify Privy token
       const { user } = await verifyPrivyToken(request);
@@ -198,6 +202,7 @@ export async function POST(request: NextRequest) {
         tokenId = BigInt(trader.token_id);
         expectedOwnerAddress =
           trader.cdp_wallet_address ?? trader.owner_address;
+        cachedBalanceUsdc = trader.escrow_balance_usdc;
       } else {
         // Legacy: use desk_manager as trader
         const { data: dm, error: dmError } = await supabase
@@ -295,14 +300,10 @@ export async function POST(request: NextRequest) {
     const randomSeed = generateRandomSeed();
     const maxValuePerWin = deal.pot_usdc * (MAX_EXTRACTION_PERCENTAGE / 100);
 
-    // Read on-chain balance for portfolio context when available
+    // Use cached Supabase balance for portfolio context (LLM narrative only)
     let portfolioBalance = deal.entry_cost_usdc;
-    if (tokenId !== null) {
-      try {
-        portfolioBalance = await getEscrowBalance(tokenId);
-      } catch {
-        // Fall back to entry cost as proxy
-      }
+    if (cachedBalanceUsdc !== null) {
+      portfolioBalance = cachedBalanceUsdc;
     }
 
     // Load trader assets + latest narrative in parallel (both are LLM context)
@@ -467,6 +468,30 @@ export async function POST(request: NextRequest) {
       wipeout_reason: outcome.wipeout_reason ?? undefined,
       on_chain_tx_hash: resolveTxHash ?? undefined,
     });
+
+    // Record transactions
+    const chainDealId =
+      onChainDealId !== null ? Number(onChainDealId) : undefined;
+    if (enterTxHash) {
+      createTraderTransaction({
+        trader_id: traderId,
+        type: "enter",
+        tx_hash: enterTxHash,
+        deal_id: deal_id,
+        on_chain_deal_id: chainDealId,
+      }).catch((err) => console.error("Failed to record enter txn:", err));
+    }
+    if (resolveTxHash) {
+      createTraderTransaction({
+        trader_id: traderId,
+        type: "resolve",
+        tx_hash: resolveTxHash,
+        deal_id: deal_id,
+        on_chain_deal_id: chainDealId,
+        pnl_usdc: traderPnl,
+        rake_usdc: rakeAmount,
+      }).catch((err) => console.error("Failed to record resolve txn:", err));
+    }
 
     // Sync assets gained/lost
     if (outcome.assets_gained.length > 0 || outcome.assets_lost.length > 0) {

@@ -11,6 +11,8 @@ interface WalletDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   traderId: number;
+  /** Supabase UUID for the trader (used to record transactions) */
+  supabaseId?: string;
   walletUsdc: number | undefined;
   escrowUsdc: number | null;
   tbaAddress: string | null;
@@ -23,6 +25,7 @@ export function WalletDialog({
   open,
   onOpenChange,
   traderId,
+  supabaseId,
   walletUsdc,
   escrowUsdc,
   tbaAddress,
@@ -59,7 +62,7 @@ export function WalletDialog({
     if (parsed === ZERO) return;
 
     try {
-      await deposit(BigInt(traderId), parsed);
+      await deposit(BigInt(traderId), parsed, supabaseId);
       setAmount("");
       onSuccess();
     } catch {
@@ -77,7 +80,7 @@ export function WalletDialog({
     if (withdrawExceedsBalance) return;
 
     try {
-      await withdraw(BigInt(traderId), parsed);
+      await withdraw(BigInt(traderId), parsed, supabaseId);
       setAmount("");
       onSuccess();
     } catch {

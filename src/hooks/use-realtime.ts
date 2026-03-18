@@ -145,6 +145,11 @@ export function useTraderRealtime(traderId: string) {
       filter: `trader_id=eq.${traderId}`,
       queryKeys: [["trader-assets", traderId]],
     },
+    {
+      table: "trader_transactions",
+      filter: `trader_id=eq.${traderId}`,
+      queryKeys: [["trader-history", traderId]],
+    },
   ]);
 }
 

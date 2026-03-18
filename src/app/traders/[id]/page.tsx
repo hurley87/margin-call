@@ -179,6 +179,7 @@ export default function TraderDetailPage() {
           open
           onOpenChange={setWalletOpen}
           traderId={trader.token_id}
+          supabaseId={id}
           walletUsdc={walletUsdc}
           escrowUsdc={balanceUsdc}
           tbaAddress={trader.tba_address}
