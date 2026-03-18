@@ -44,7 +44,7 @@ export function Nav() {
             onClick={logout}
             className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)]"
           >
-            [X]
+            LOGOUT
           </button>
         </div>
       </div>
