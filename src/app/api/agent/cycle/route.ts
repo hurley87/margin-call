@@ -95,7 +95,8 @@ export async function POST(request: NextRequest) {
         if (
           !trader ||
           trader.status !== "active" ||
-          trader.last_cycle_at !== cycleStartedAt
+          new Date(trader.last_cycle_at).getTime() !==
+            new Date(cycleStartedAt).getTime()
         ) {
           return; // Another cycle took over, or trader was paused/wiped
         }
