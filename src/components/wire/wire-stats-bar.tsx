@@ -20,14 +20,17 @@ export function WireStatsBar() {
   if (!stats) return null;
 
   return (
-    <span className="text-[11px] tracking-wider text-[var(--t-muted)]">
-      <span className="text-[var(--t-text)]">{stats.count}</span> ACTIVE{" "}
-      {stats.count === 1 ? "DEAL" : "DEALS"} ·{" "}
-      <span className="text-[var(--t-green)]">
-        ${stats.totalPot.toFixed(2)}
-      </span>{" "}
-      IN POTS ·{" "}
-      <span className="text-[var(--t-text)]">{stats.totalEntries}</span> ENTRIES
-    </span>
+    <div className="border-b border-[var(--t-border)] px-4 py-2">
+      <span className="text-[11px] tracking-wider text-[var(--t-muted)]">
+        <span className="text-[var(--t-text)]">{stats.count}</span> ACTIVE{" "}
+        {stats.count === 1 ? "DEAL" : "DEALS"} ·{" "}
+        <span className="text-[var(--t-green)]">
+          ${stats.totalPot.toFixed(2)}
+        </span>{" "}
+        IN POTS ·{" "}
+        <span className="text-[var(--t-text)]">{stats.totalEntries}</span>{" "}
+        ENTRIES
+      </span>
+    </div>
   );
 }

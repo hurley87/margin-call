@@ -11,7 +11,7 @@ export default function TradersPage() {
     <div className="min-h-screen bg-[var(--t-bg)]">
       <Nav />
       <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
-        <div className="mx-auto flex max-w-2xl items-center justify-between px-4 py-1.5 text-xs">
+        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-1.5 text-xs">
           <span className="text-[var(--t-text)]">MY TRADERS</span>
           <Link
             href="/traders/new"
@@ -21,7 +21,7 @@ export default function TradersPage() {
           </Link>
         </div>
       </div>
-      <div className="mx-auto w-full max-w-2xl px-4 py-4">
+      <div className="mx-auto w-full max-w-4xl px-4 py-4">
         {isLoading ? (
           <p className="text-[var(--t-muted)]">Loading traders...</p>
         ) : error ? (
