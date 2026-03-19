@@ -113,7 +113,7 @@ function Dashboard({ displayName }: { displayName: string }) {
       <Nav />
 
       {/* Ticker Strip */}
-      <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
+      <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)]">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-1.5 text-sm">
           <div className="flex items-center gap-4">
             <span className="text-[var(--t-text)]">
@@ -143,7 +143,7 @@ function Dashboard({ displayName }: { displayName: string }) {
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl px-4 py-4">
+      <div className="mx-auto w-full max-w-4xl px-4 py-4">
         {/* Trader Roster */}
         <TraderRoster
           portfolio={portfolio}
