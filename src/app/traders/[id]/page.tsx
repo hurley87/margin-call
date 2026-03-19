@@ -121,11 +121,11 @@ export default function TraderDetailPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--t-bg)]">
+    <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
 
       {/* Trader Header Strip */}
-      <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)]">
+      <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
           <div className="flex items-center gap-3">
             <Link
