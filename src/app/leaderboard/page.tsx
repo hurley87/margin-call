@@ -59,7 +59,7 @@ export default function LeaderboardPage() {
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
 
-      <div className="mx-auto max-w-4xl px-4 py-4">
+      <div className="mx-auto w-full max-w-4xl px-4 py-4">
         {/* Leaderboard Table */}
         <div className="mb-6">
           <div className="mb-2 flex items-center justify-between">
