@@ -8,14 +8,14 @@ export default function TradersPage() {
   const { data: traders, isLoading, error } = useTraders();
 
   return (
-    <div className="min-h-screen bg-[var(--t-bg)]">
+    <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
-      <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
+      <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)]">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-1.5 text-xs">
           <span className="text-[var(--t-text)]">MY TRADERS</span>
           <Link
             href="/traders/new"
-            className="text-[var(--t-accent)] transition-colors hover:text-[var(--t-text)]"
+            className="border border-[var(--t-border)] px-2 py-0.5 text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
           >
             [+ NEW]
           </Link>
