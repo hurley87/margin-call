@@ -106,9 +106,9 @@ export default function NewTraderWizard() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--t-bg)]">
+    <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
-      <div className="border-b border-[var(--t-border)] bg-[var(--t-bg)]">
+      <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)]">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-1.5 text-xs">
           <Link
             href="/traders"
