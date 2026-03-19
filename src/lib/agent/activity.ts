@@ -1,4 +1,5 @@
 import { createServerClient } from "@/lib/supabase/client";
+import type { Json } from "@/lib/supabase/database.types";
 
 export type ActivityType =
   | "cycle_start"
@@ -23,7 +24,7 @@ interface ActivityEntry {
   activity_type: ActivityType;
   message: string;
   deal_id?: string | null;
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, Json>;
 }
 
 const supabase = createServerClient();
@@ -33,7 +34,7 @@ export async function logActivity(
   activityType: ActivityType,
   message: string,
   dealId?: string,
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, Json>
 ) {
   const { error } = await supabase.from("agent_activity_log").insert({
     trader_id: traderId,

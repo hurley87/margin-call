@@ -1,4 +1,5 @@
 import { createServerClient } from "./client";
+import type { Json } from "./database.types";
 
 export interface CreateDealParams {
   creator_id: string;
@@ -23,6 +24,13 @@ export async function createDeal(params: CreateDealParams) {
       pot_usdc: params.pot_usdc,
       entry_cost_usdc: params.entry_cost_usdc,
       max_extraction_percentage: params.max_extraction_percentage ?? 25,
+      ...(params.on_chain_deal_id != null && {
+        on_chain_deal_id: params.on_chain_deal_id,
+      }),
+      ...(params.fee_usdc != null && { fee_usdc: params.fee_usdc }),
+      ...(params.on_chain_tx_hash && {
+        on_chain_tx_hash: params.on_chain_tx_hash,
+      }),
     })
     .select()
     .single();
@@ -76,12 +84,12 @@ export async function listOpenDealsByCreator(creatorAddress: string) {
 export interface CreateDealOutcomeParams {
   deal_id: string;
   trader_id: string;
-  narrative: string;
+  narrative: Json;
   trader_pnl_usdc: number;
   pot_change_usdc: number;
   rake_usdc: number;
-  assets_gained: { name: string; value_usdc: number }[];
-  assets_lost: string[];
+  assets_gained: Json;
+  assets_lost: Json;
   trader_wiped_out: boolean;
   wipeout_reason?: string;
   on_chain_tx_hash?: string;
@@ -295,10 +303,10 @@ export async function getNarrativeHistory(limit = 10) {
 
 export interface CreateNarrativeParams {
   epoch: number;
-  headlines: { headline: string; body: string; category: string }[];
-  world_state: Record<string, unknown>;
+  headlines: Json;
+  world_state: Json;
   raw_narrative: string;
-  events_ingested: unknown[];
+  events_ingested: Json;
 }
 
 export async function createNarrative(params: CreateNarrativeParams) {
@@ -369,12 +377,10 @@ export async function createTraderTransaction(
   params: CreateTraderTransactionParams
 ) {
   const supabase = createServerClient();
-  const { error } = await supabase
-    .from("trader_transactions")
-    .upsert(params, {
-      onConflict: "trader_id,tx_hash,type",
-      ignoreDuplicates: true,
-    });
+  const { error } = await supabase.from("trader_transactions").upsert(params, {
+    onConflict: "trader_id,tx_hash,type",
+    ignoreDuplicates: true,
+  });
 
   if (error) {
     console.error("Failed to insert trader transaction:", error);
@@ -400,7 +406,9 @@ export async function updateDealAfterEntry(
   wipeout: boolean
 ) {
   const supabase = createServerClient();
-  const { error } = await supabase.rpc("update_deal_after_entry", {
+  // RPC not in generated types — cast to bypass. Fallback below handles failure.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error } = await (supabase.rpc as any)("update_deal_after_entry", {
     p_deal_id: dealId,
     p_pot_change: potChange,
     p_wipeout: wipeout,

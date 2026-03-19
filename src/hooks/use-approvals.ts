@@ -5,10 +5,12 @@ export interface PendingApproval {
   id: string;
   trader_id: string;
   deal_id: string;
+  desk_manager_id: string;
   status: string;
   entry_cost_usdc: number;
-  reason: string | null;
+  pot_usdc: number;
   expires_at: string;
+  resolved_at: string | null;
   created_at: string;
   trader_name: string;
   deal_prompt: string;

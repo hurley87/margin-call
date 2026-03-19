@@ -8,8 +8,13 @@ export interface Trader {
   name: string;
   owner_address: string;
   tba_address: string | null;
+  cdp_wallet_address: string | null;
+  cdp_owner_address: string | null;
+  cdp_account_name: string | null;
   status: "active" | "paused" | "wiped_out";
   mandate: Record<string, unknown>;
+  escrow_balance_usdc: number;
+  last_cycle_at: string | null;
   created_at: string;
   updated_at: string;
 }

@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
         if (
           !trader ||
           trader.status !== "active" ||
+          !trader.last_cycle_at ||
           new Date(trader.last_cycle_at).getTime() !==
             new Date(cycleStartedAt).getTime()
         ) {

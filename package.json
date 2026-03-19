@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "db:types": "npx supabase gen types --project-id onnxgjahctckjuoqwdxt --schema public > src/lib/supabase/database.types.ts",
     "prepare": "husky"
   },
   "dependencies": {

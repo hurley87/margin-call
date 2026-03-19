@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect } from "react";
+import { useMutation } from "@tanstack/react-query";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
@@ -14,6 +15,7 @@ import {
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
 import { Nav } from "@/components/nav";
+import { NarrativeRenderer } from "@/components/narrative-renderer";
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -223,9 +225,9 @@ export default function DealDetailPage() {
                       </div>
 
                       {/* Narrative */}
-                      <p className="mt-2 text-xs leading-relaxed text-[var(--t-text)]">
-                        {outcome.narrative}
-                      </p>
+                      <div className="mt-2 text-xs leading-relaxed text-[var(--t-text)]">
+                        <NarrativeRenderer narrative={outcome.narrative} />
+                      </div>
 
                       {/* Assets */}
                       {(outcome.assets_gained.length > 0 ||
@@ -289,20 +291,32 @@ function CloseDealButton({
     hash: txHash,
   });
 
-  // After close confirms, sync deal status from chain and refetch (once)
+  const syncMutation = useMutation({
+    mutationFn: async ({
+      onChainId,
+      hash,
+    }: {
+      onChainId: number;
+      hash: string;
+    }) => {
+      const res = await fetch("/api/deal/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ on_chain_deal_id: onChainId, txHash: hash }),
+      });
+      if (!res.ok) throw new Error("Sync failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
+    },
+  });
+
+  // After close confirms, sync deal status from chain (once)
   useEffect(() => {
     if (!isSuccess || !txHash || syncedRef.current) return;
     syncedRef.current = true;
-    fetch("/api/deal/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ on_chain_deal_id: onChainDealId, txHash }),
-    })
-      .then(() => {
-        queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
-      })
-      .catch((err) => console.error("Deal sync after close failed:", err));
-  }, [isSuccess, txHash, onChainDealId, dealId, queryClient]);
+    syncMutation.mutate({ onChainId: onChainDealId, hash: txHash });
+  }, [isSuccess, txHash, onChainDealId, syncMutation]);
 
   function handleClose() {
     writeContract({

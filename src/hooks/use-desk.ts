@@ -8,6 +8,7 @@ export interface DeskManager {
   display_name: string;
   settings: Record<string, unknown>;
   created_at: string;
+  updated_at: string;
 }
 
 export function useDeskManager() {

@@ -18,6 +18,7 @@ export async function GET(request: NextRequest) {
     const narratives = await getNarrativeHistory(epochs);
 
     const feed: FeedHeadline[] = [];
+    const now = new Date().toISOString();
     for (const n of narratives) {
       const headlines = (n.headlines ?? []) as {
         headline: string;
@@ -34,7 +35,7 @@ export async function GET(request: NextRequest) {
           body: h.body,
           category: h.category,
           epoch: n.epoch,
-          created_at: n.created_at,
+          created_at: n.created_at ?? now,
           mood: ws.mood ?? "unknown",
           sec_heat: ws.sec_heat ?? 0,
         });

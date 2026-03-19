@@ -4,26 +4,33 @@ export interface ApprovalRow {
   id: string;
   trader_id: string;
   deal_id: string;
+  desk_manager_id: string;
   status: "pending" | "approved" | "rejected" | "expired" | "consumed";
   entry_cost_usdc: number;
-  reason: string | null;
+  pot_usdc: number;
   expires_at: string;
+  resolved_at: string | null;
   created_at: string;
-  updated_at: string;
 }
 
-export async function createApproval(
-  traderId: string,
-  dealId: string,
-  entryCostUsdc: number
-): Promise<ApprovalRow> {
+export async function createApproval(params: {
+  traderId: string;
+  dealId: string;
+  deskManagerId: string;
+  entryCostUsdc: number;
+  potUsdc: number;
+}): Promise<ApprovalRow> {
   const supabase = createServerClient();
+  const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
   const { data, error } = await supabase
     .from("deal_approvals")
     .insert({
-      trader_id: traderId,
-      deal_id: dealId,
-      entry_cost_usdc: entryCostUsdc,
+      trader_id: params.traderId,
+      deal_id: params.dealId,
+      desk_manager_id: params.deskManagerId,
+      entry_cost_usdc: params.entryCostUsdc,
+      pot_usdc: params.potUsdc,
+      expires_at: expiresAt,
     })
     .select()
     .single();
@@ -124,33 +131,30 @@ export async function listPendingApprovalsByOwner(
 
 export async function resolveApproval(
   id: string,
-  status: "approved" | "rejected",
-  reason?: string
+  status: "approved" | "rejected"
 ): Promise<ApprovalRow> {
   const supabase = createServerClient();
+  const now = new Date().toISOString();
 
-  // Check if still pending and not expired
-  const approval = await getApproval(id);
-  if (approval.status !== "pending") {
-    throw new Error(`Approval is already ${approval.status}`);
-  }
-  if (new Date(approval.expires_at) < new Date()) {
-    // Auto-expire
-    await supabase
-      .from("deal_approvals")
-      .update({ status: "expired" })
-      .eq("id", id);
-    throw new Error("Approval has expired");
-  }
-
+  // Atomic conditional update — only resolves if still pending and not expired
   const { data, error } = await supabase
     .from("deal_approvals")
-    .update({ status, reason: reason ?? null })
+    .update({ status, resolved_at: now })
     .eq("id", id)
+    .eq("status", "pending")
+    .gt("expires_at", now)
     .select()
     .single();
 
-  if (error) throw error;
+  if (error || !data) {
+    // Determine why it failed for a descriptive error
+    const current = await getApproval(id);
+    if (current.status !== "pending") {
+      throw new Error(`Approval is already ${current.status}`);
+    }
+    throw new Error("Approval has expired");
+  }
+
   return data as ApprovalRow;
 }
 

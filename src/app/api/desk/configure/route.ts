@@ -3,6 +3,7 @@ import { verifyPrivyToken } from "@/lib/privy/server";
 import { createServerClient } from "@/lib/supabase/client";
 import { getOwnedTrader } from "@/lib/supabase/traders";
 import type { Mandate } from "@/lib/agent/evaluator";
+import type { Json } from "@/lib/supabase/database.types";
 
 const MANDATE_KEYS: (keyof Mandate)[] = [
   "max_entry_cost_usdc",
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
     await getOwnedTrader(trader_id, walletAddress);
 
     // Validate mandate fields
-    const cleaned: Record<string, unknown> = {};
+    const cleaned: Record<string, Json> = {};
     for (const key of MANDATE_KEYS) {
       if (key in mandate) {
         const val = mandate[key];

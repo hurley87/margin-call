@@ -123,7 +123,21 @@ export async function runCycle(
       // Check if there's already a pending approval for this deal
       const alreadyPending = await hasPendingApproval(traderId, bestDeal.id);
       if (!alreadyPending) {
-        await createApproval(traderId, bestDeal.id, bestDeal.entry_cost_usdc);
+        // Look up the desk manager for this trader
+        const supabase = createServerClient();
+        const { data: deskMgr } = await supabase
+          .from("desk_managers")
+          .select("id")
+          .eq("wallet_address", trader.owner_address)
+          .single();
+
+        await createApproval({
+          traderId,
+          dealId: bestDeal.id,
+          deskManagerId: deskMgr?.id ?? trader.owner_address,
+          entryCostUsdc: bestDeal.entry_cost_usdc,
+          potUsdc: bestDeal.pot_usdc,
+        });
       }
       await logActivity(
         traderId,

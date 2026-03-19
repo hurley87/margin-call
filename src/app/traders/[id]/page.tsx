@@ -16,6 +16,7 @@ import {
   useReviveTrader,
 } from "@/hooks/use-agent";
 import type { DealOutcomeWithNarrative } from "@/hooks/use-agent";
+import { NarrativeRenderer } from "@/components/narrative-renderer";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
@@ -434,9 +435,9 @@ function OutcomeCard({
 
       {isExpanded && outcome.narrative && (
         <div className="border-t border-[var(--t-border)] px-4 py-3">
-          <p className="text-sm leading-relaxed text-[var(--t-text)]">
-            {outcome.narrative}
-          </p>
+          <div className="text-sm leading-relaxed text-[var(--t-text)]">
+            <NarrativeRenderer narrative={outcome.narrative} />
+          </div>
           {outcome.assets_gained && outcome.assets_gained.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {outcome.assets_gained.map(

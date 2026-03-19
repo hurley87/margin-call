@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import type { Json } from "@/lib/supabase/database.types";
 import {
   getLatestNarrative,
   createNarrative,
@@ -59,9 +60,9 @@ export async function POST(request: NextRequest) {
     const narrative = await createNarrative({
       epoch: nextEpoch,
       headlines: result.headlines,
-      world_state: result.world_state as unknown as Record<string, unknown>,
+      world_state: result.world_state as unknown as Json,
       raw_narrative: result.raw_narrative,
-      events_ingested: gameEvents,
+      events_ingested: gameEvents as unknown as Json,
     });
 
     return NextResponse.json({ narrative });

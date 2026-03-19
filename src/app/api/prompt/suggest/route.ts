@@ -6,11 +6,15 @@ import {
   checkRateLimit,
   getClientIdentifier,
 } from "@/lib/rate-limit";
+import { verifyPrivyToken } from "@/lib/privy/server";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(request: NextRequest) {
   try {
+    // Require auth to protect OpenAI spend
+    await verifyPrivyToken(request);
+
     const body = await request.json();
     const { theme } = body as { theme?: string };
 

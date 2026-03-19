@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     await getOwnedTrader(approval.trader_id, walletAddress);
 
     const status = action === "approve" ? "approved" : "rejected";
-    const updated = await resolveApproval(approval_id, status, reason);
+    const updated = await resolveApproval(approval_id, status);
 
     const activityType = action === "approve" ? "approved" : "rejected";
     await logActivity(

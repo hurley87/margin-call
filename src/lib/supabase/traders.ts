@@ -12,6 +12,7 @@ export interface TraderRow {
   status: "active" | "paused" | "wiped_out";
   mandate: Record<string, unknown>;
   escrow_balance_usdc: number;
+  last_cycle_at: string | null;
   created_at: string;
   updated_at: string;
 }

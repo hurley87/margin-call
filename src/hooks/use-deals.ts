@@ -3,6 +3,8 @@ import { authFetch } from "@/lib/api";
 
 export interface Deal {
   id: string;
+  creator_id?: string;
+  creator_type: "desk_manager" | "agent";
   on_chain_deal_id?: number;
   prompt: string;
   pot_usdc: number;
@@ -13,6 +15,7 @@ export interface Deal {
   wipeout_count: number;
   status: string;
   created_at: string;
+  updated_at: string;
   on_chain_tx_hash?: string;
   creator_address?: string;
   source_headline?: string;
@@ -20,9 +23,12 @@ export interface Deal {
 
 export interface DealOutcome {
   id: string;
+  deal_id: string;
+  trader_id: string;
   trader_pnl_usdc: number;
+  pot_change_usdc: number;
   rake_usdc: number;
-  narrative: string;
+  narrative: string | { event: string; description: string }[];
   trader_wiped_out: boolean;
   wipeout_reason?: string;
   assets_gained: { name: string; value_usdc: number }[];
@@ -96,7 +102,7 @@ export function useSuggestPrompts(theme: string) {
   return useQuery({
     queryKey: ["suggest-prompts", theme],
     queryFn: async () => {
-      const res = await fetch("/api/prompt/suggest", {
+      const res = await authFetch("/api/prompt/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme }),
