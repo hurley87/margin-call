@@ -55,7 +55,7 @@ export default function DealDetailPage() {
       <Nav />
 
       <div className="mx-auto w-full max-w-4xl px-4">
-        <div className="border-x border-b border-[var(--t-border)]">
+        <div className="border-x border-[var(--t-border)]">
           {/* Sub-header */}
           <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)]">
             <div className="flex items-center justify-between px-4 py-1.5">
