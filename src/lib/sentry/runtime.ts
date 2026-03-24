@@ -32,7 +32,8 @@ export function resolveSentryEnvironment(nodeEnv: string | undefined): string {
 function isLocalhostUrl(url: string): boolean {
   try {
     const parsedUrl = new URL(url);
-    return LOCALHOST_HOSTNAMES.has(parsedUrl.hostname);
+    const normalizedHostname = parsedUrl.hostname.replace(/^\[(.*)\]$/, "$1");
+    return LOCALHOST_HOSTNAMES.has(normalizedHostname);
   } catch {
     return false;
   }
