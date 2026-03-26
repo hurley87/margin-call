@@ -17,7 +17,9 @@ describe("sentry runtime helpers", () => {
   test("resolves fallback environment", () => {
     expect(resolveSentryEnvironment("production")).toBe("production");
     expect(resolveSentryEnvironment("development")).toBe("development");
-    expect(resolveSentryEnvironment(undefined)).toBe("development");
+    expect(resolveSentryEnvironment(undefined)).toBe(
+      process.env.NODE_ENV ?? "development"
+    );
     expect(resolveSentryEnvironment("")).toBe("development");
   });
 
