@@ -1,9 +1,29 @@
 import * as Sentry from "@sentry/nextjs";
+import {
+  isSentryEnabled,
+  resolveSentryEnvironment,
+  shouldDropSentryEvent,
+} from "./src/lib/sentry/runtime";
+
+const nodeEnv = process.env.NODE_ENV;
+const isEnabled = isSentryEnabled(nodeEnv);
 
 Sentry.init({
   dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  tracesSampleRate: 1,
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
+  enabled: isEnabled,
+  environment: resolveSentryEnvironment(nodeEnv),
+  tracesSampleRate: isEnabled ? 1 : 0,
+  replaysSessionSampleRate: isEnabled ? 0.1 : 0,
+  replaysOnErrorSampleRate: isEnabled ? 1.0 : 0,
   integrations: [Sentry.replayIntegration()],
+  beforeSend(event) {
+    const eventUrl =
+      typeof event.request?.url === "string" ? event.request.url : undefined;
+
+    if (shouldDropSentryEvent(eventUrl)) {
+      return null;
+    }
+
+    return event;
+  },
 });
