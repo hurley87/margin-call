@@ -35,10 +35,11 @@ export function shouldDropSentryEvent(url: string | undefined): boolean {
 
   try {
     const { hostname } = new URL(url);
+    const normalizedHostname = hostname.replace(/^\[(.*)\]$/, "$1");
     return (
-      LOCALHOST_HOSTNAMES.has(hostname) ||
-      hostname.endsWith(".localhost") ||
-      hostname.endsWith(".local")
+      LOCALHOST_HOSTNAMES.has(normalizedHostname) ||
+      normalizedHostname.endsWith(".localhost") ||
+      normalizedHostname.endsWith(".local")
     );
   } catch {
     return false;
