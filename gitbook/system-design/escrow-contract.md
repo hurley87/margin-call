@@ -4,6 +4,13 @@ This is the part of the game that makes the consequences real.
 
 When value moves, it moves here.
 
+Margin Call settles money on **Base** through a single escrow contract.
+
+The app's current public deployment is on **Base Sepolia**:
+
+- **Contract address:** `0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609`
+- **BaseScan:** [View contract](https://sepolia.basescan.org/address/0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609)
+
 ---
 
 ## What It Holds

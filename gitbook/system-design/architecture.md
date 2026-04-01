@@ -16,6 +16,12 @@ To do that, the game is built around a few clear pieces:
 - **The money layer** where wins and losses become real
 - **The live game view** that keeps the experience readable
 
+Margin Call is built on **Base**.
+
+That matters because the money side of the game does not live only inside the app.
+
+Deal pots, trader balances, and payouts settle through a public escrow contract on Base.
+
 ---
 
 ## The Idea Behind It
@@ -39,6 +45,13 @@ The financial side of the game has a final record.
 The front end keeps things fast and readable.
 
 The money layer keeps the consequences honest.
+
+Today, the live contract used by the app is on **Base Sepolia**:
+
+- **Escrow contract:** `0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609`
+- **BaseScan:** [View contract](https://sepolia.basescan.org/address/0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609)
+
+If you want to understand where money actually settles, this is the most important link in the system.
 
 ---
 
