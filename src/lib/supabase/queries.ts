@@ -400,6 +400,182 @@ export async function listTraderTransactions(traderId: string, limit = 50) {
   return data;
 }
 
+// --- Agent deal selection context ---
+
+export interface DealOutcomeDealStats {
+  dealId: string;
+  outcomeCount: number;
+  wins: number;
+  losses: number;
+  wipeouts: number;
+}
+
+/** Per-deal aggregates from deal_outcomes (for LLM + UI). */
+export async function getDealOutcomeStatsByDealIds(
+  dealIds: string[]
+): Promise<Map<string, DealOutcomeDealStats>> {
+  if (dealIds.length === 0) return new Map();
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deal_outcomes")
+    .select("deal_id, trader_pnl_usdc, trader_wiped_out")
+    .in("deal_id", dealIds);
+
+  if (error) throw error;
+
+  const map = new Map<string, DealOutcomeDealStats>();
+  for (const row of data ?? []) {
+    const id = row.deal_id;
+    const cur = map.get(id) ?? {
+      dealId: id,
+      outcomeCount: 0,
+      wins: 0,
+      losses: 0,
+      wipeouts: 0,
+    };
+    cur.outcomeCount += 1;
+    if (row.trader_wiped_out) cur.wipeouts += 1;
+    else if (Number(row.trader_pnl_usdc) > 0) cur.wins += 1;
+    else cur.losses += 1;
+    map.set(id, cur);
+  }
+  return map;
+}
+
+export interface CreatorDealAggStats {
+  dealCount: number;
+  totalEntries: number;
+  totalWipeoutsOnDeals: number;
+}
+
+/** Roll up deal creator history (trap-rate signal) across all their deals. */
+export async function getCreatorDealAggregates(
+  creatorIds: (string | null)[]
+): Promise<Map<string, CreatorDealAggStats>> {
+  const ids = [...new Set(creatorIds.filter((x): x is string => Boolean(x)))];
+  if (ids.length === 0) return new Map();
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deals")
+    .select("creator_id, entry_count, wipeout_count")
+    .in("creator_id", ids);
+
+  if (error) throw error;
+
+  const map = new Map<string, CreatorDealAggStats>();
+  for (const row of data ?? []) {
+    if (!row.creator_id) continue;
+    const cur = map.get(row.creator_id) ?? {
+      dealCount: 0,
+      totalEntries: 0,
+      totalWipeoutsOnDeals: 0,
+    };
+    cur.dealCount += 1;
+    cur.totalEntries += row.entry_count ?? 0;
+    cur.totalWipeoutsOnDeals += row.wipeout_count ?? 0;
+    map.set(row.creator_id, cur);
+  }
+  return map;
+}
+
+export async function getDeskManagerDisplayByIds(
+  ids: string[]
+): Promise<
+  Map<string, { display_name: string | null; wallet_address: string }>
+> {
+  if (ids.length === 0) return new Map();
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("desk_managers")
+    .select("id, display_name, wallet_address")
+    .in("id", ids);
+
+  if (error) throw error;
+
+  return new Map(
+    (data ?? []).map((d) => [
+      d.id,
+      { display_name: d.display_name, wallet_address: d.wallet_address },
+    ])
+  );
+}
+
+export async function listTraderIdsByOwnerExcept(
+  ownerAddress: string,
+  excludeTraderId: string
+): Promise<string[]> {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("traders")
+    .select("id")
+    .eq("owner_address", ownerAddress.toLowerCase())
+    .neq("id", excludeTraderId);
+
+  if (error) throw error;
+  return (data ?? []).map((r) => r.id);
+}
+
+export async function getDealIdsEnteredRecentlyByTraders(
+  traderIds: string[],
+  dealIds: string[],
+  sinceIso: string
+): Promise<Set<string>> {
+  if (traderIds.length === 0 || dealIds.length === 0) return new Set();
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deal_outcomes")
+    .select("deal_id")
+    .in("trader_id", traderIds)
+    .in("deal_id", dealIds)
+    .gte("created_at", sinceIso);
+
+  if (error) throw error;
+  return new Set((data ?? []).map((r) => r.deal_id));
+}
+
+export async function listRecentOutcomesForTrader(
+  traderId: string,
+  limit = 5
+): Promise<
+  {
+    trader_pnl_usdc: number;
+    trader_wiped_out: boolean;
+    created_at: string;
+  }[]
+> {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deal_outcomes")
+    .select("trader_pnl_usdc, trader_wiped_out, created_at")
+    .eq("trader_id", traderId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+  return data ?? [];
+}
+
+/** Active traders whose last cycle started long enough ago to run again (cron fan-out). */
+export async function listActiveTraderIdsStaleForCron(
+  staleBefore: Date
+): Promise<string[]> {
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("traders")
+    .select("id, last_cycle_at")
+    .eq("status", "active");
+
+  if (error) throw error;
+
+  const threshold = staleBefore.getTime();
+  return (data ?? [])
+    .filter((t) => {
+      if (!t.last_cycle_at) return true;
+      return new Date(t.last_cycle_at).getTime() < threshold;
+    })
+    .map((t) => t.id);
+}
+
 export async function updateDealAfterEntry(
   dealId: string,
   potChange: number,

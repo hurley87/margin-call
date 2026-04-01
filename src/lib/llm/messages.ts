@@ -164,3 +164,59 @@ Remember: advance storylines, introduce new threads, and make the world feel ali
     },
   ];
 }
+
+const DEAL_EVALUATION_SYSTEM = `You are the judgment layer for a 1980s Wall Street autonomous trader. The desk has already filtered deals by hard risk rules (mandate). Your job is to rank which ONE deal the trader should enter next, or refuse all.
+
+You must:
+- Only reference deal IDs that appear in the DEALS JSON array.
+- Follow the trader PERSONALITY when weighing risk vs reward.
+- Treat deal creator statistics as a trap signal: many wipeouts across their deals suggests hostile prompts.
+- Use per-deal resolved outcome counts (wins/losses/wipeouts) as market feedback on that specific opportunity.
+- The pot/entry ratio is one signal among many, not the only objective.
+
+Output structured JSON: ranked_deal_ids (best first), skip_all (if true, enter nothing), and reasoning (concise, in-universe trader voice).`;
+
+export interface DealEvaluationMessageDeal {
+  id: string;
+  prompt: string;
+  pot_usdc: number;
+  entry_cost_usdc: number;
+  deal_table_entry_count: number;
+  deal_table_wipeout_count: number;
+  resolved_outcomes: number;
+  resolved_wins: number;
+  resolved_losses: number;
+  resolved_wipeouts: number;
+  creator_label: string;
+  creator_total_deals: number;
+  creator_total_trader_entries: number;
+  creator_total_wipeouts_on_deals: number;
+}
+
+export function buildDealEvaluationMessages(params: {
+  traderName: string;
+  escrowBalanceUsdc: number;
+  personality: string;
+  recentOutcomesSummary: string;
+  inventorySummary: string;
+  deals: DealEvaluationMessageDeal[];
+}): ChatCompletionMessageParam[] {
+  return [
+    { role: "system", content: DEAL_EVALUATION_SYSTEM },
+    {
+      role: "user",
+      content: `TRADER: ${params.traderName}
+ESCROW BALANCE (USDC): ${params.escrowBalanceUsdc.toFixed(2)}
+PERSONALITY: ${params.personality}
+
+RECENT OUTCOMES (this trader): ${params.recentOutcomesSummary}
+
+INVENTORY: ${params.inventorySummary}
+
+DEALS (mandate-eligible, JSON):
+${JSON.stringify(params.deals, null, 2)}
+
+Rank deal IDs from most desirable to enter first. If none are acceptable, set skip_all to true and explain why.`,
+    },
+  ];
+}

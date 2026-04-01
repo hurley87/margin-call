@@ -41,6 +41,20 @@ export async function POST(request: NextRequest) {
       !Array.isArray(body.mandate)
         ? body.mandate
         : {};
+    const { personality: personalityRaw } = body;
+    if (personalityRaw != null && typeof personalityRaw !== "string") {
+      return NextResponse.json(
+        { error: "personality must be a string" },
+        { status: 400 }
+      );
+    }
+    if (typeof personalityRaw === "string" && personalityRaw.length > 2000) {
+      return NextResponse.json(
+        { error: "personality must be at most 2000 characters" },
+        { status: 400 }
+      );
+    }
+    const personality: string | null = personalityRaw?.trim() || null;
 
     if (!name || typeof name !== "string" || name.length > 50) {
       return NextResponse.json(
@@ -137,6 +151,7 @@ export async function POST(request: NextRequest) {
         cdp_owner_address: cdpOwnerAddress,
         status: "paused",
         mandate,
+        personality,
       })
       .select()
       .single();

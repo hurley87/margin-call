@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useReadContract } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTrader, useTraderHistory } from "@/hooks/use-traders";
-import type { Trader, TraderHistoryEvent } from "@/hooks/use-traders";
+import type { TraderHistoryEvent } from "@/hooks/use-traders";
 import { useSepoliaUsdcBalance } from "@/hooks/use-escrow";
 import {
   useTraderOutcomes,
@@ -54,12 +54,9 @@ export default function TraderDetailPage() {
   const hasAutoOpened = useRef(false);
   const balanceUsdc =
     escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
-  const traderForLog = trader as
-    | (Trader & { escrow_balance_usdc?: number })
-    | undefined;
   const cachedEscrowUsdc =
-    typeof traderForLog?.escrow_balance_usdc === "number"
-      ? traderForLog.escrow_balance_usdc
+    typeof trader?.escrow_balance_usdc === "number"
+      ? trader.escrow_balance_usdc
       : null;
 
   useEffect(() => {
@@ -166,7 +163,11 @@ export default function TraderDetailPage() {
           onOpenWallet={() => setWalletOpen(true)}
         />
 
-        <MandateConfig traderId={id} mandate={trader.mandate} />
+        <MandateConfig
+          traderId={id}
+          mandate={trader.mandate}
+          personality={trader.personality ?? null}
+        />
 
         <ReputationSection traderId={id} />
         <AssetInventory traderId={id} />
@@ -564,16 +565,11 @@ function ActivityHistory({ id }: { id: string }) {
 
 /* ── Mandate Configuration ── */
 
-function MandateConfig({
-  traderId,
-  mandate,
-}: {
-  traderId: string;
-  mandate: Record<string, unknown>;
-}) {
-  const configure = useConfigureMandate();
-  const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState({
+function mandateFormDefaults(
+  mandate: Record<string, unknown>,
+  personality: string | null
+) {
+  return {
     max_entry_cost_usdc:
       mandate.max_entry_cost_usdc != null
         ? String(mandate.max_entry_cost_usdc)
@@ -589,7 +585,25 @@ function MandateConfig({
         ? String(mandate.approval_threshold_usdc)
         : "",
     keywords: ((mandate.keywords as string[]) ?? []).join(", "),
-  });
+    personality: personality ?? "",
+    llm_deal_selection: mandate.llm_deal_selection !== false,
+  };
+}
+
+function MandateConfig({
+  traderId,
+  mandate,
+  personality,
+}: {
+  traderId: string;
+  mandate: Record<string, unknown>;
+  personality: string | null;
+}) {
+  const configure = useConfigureMandate();
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(() =>
+    mandateFormDefaults(mandate, personality)
+  );
 
   function handleSave() {
     const cleaned: Record<string, unknown> = {};
@@ -609,12 +623,24 @@ function MandateConfig({
         .map((k) => k.trim())
         .filter(Boolean);
 
+    cleaned.llm_deal_selection = form.llm_deal_selection;
+
     configure.mutate(
-      { traderId, mandate: cleaned },
+      {
+        traderId,
+        mandate: cleaned,
+        personality:
+          form.personality.trim() === "" ? null : form.personality.trim(),
+      },
       {
         onSuccess: () => setEditing(false),
       }
     );
+  }
+
+  function openEdit() {
+    setForm(mandateFormDefaults(mandate, personality));
+    setEditing(true);
   }
 
   if (!editing) {
@@ -623,12 +649,33 @@ function MandateConfig({
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-medium text-[var(--t-muted)]">Mandate</h2>
           <button
-            onClick={() => setEditing(true)}
+            type="button"
+            onClick={openEdit}
             className="text-xs text-[var(--t-muted)] hover:text-[var(--t-text)]"
           >
             Configure
           </button>
         </div>
+        {(personality?.trim() || mandate.llm_deal_selection === false) && (
+          <div className="mb-4 space-y-2 text-sm">
+            {personality?.trim() && (
+              <div>
+                <p className="text-xs text-[var(--t-muted)]">Personality</p>
+                <p className="text-[10px] text-[var(--t-muted)]/60">
+                  Injected into AI deal selection
+                </p>
+                <p className="whitespace-pre-wrap text-[var(--t-text)]">
+                  {personality}
+                </p>
+              </div>
+            )}
+            {mandate.llm_deal_selection === false && (
+              <p className="text-xs text-[var(--t-amber)]">
+                LLM deal selection is off — using pot/entry ratio only.
+              </p>
+            )}
+          </div>
+        )}
         {Object.keys(mandate).length === 0 ? (
           <p className="text-sm text-[var(--t-muted)]">
             No mandate configured yet. Configure risk tolerance and deal filters
@@ -819,6 +866,40 @@ function MandateConfig({
             value={form.keywords}
             onChange={(e) => setForm({ ...form, keywords: e.target.value })}
             placeholder="e.g. oil, gold, tech"
+            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+          />
+        </div>
+        <div className="col-span-2">
+          <label className="mb-0.5 flex items-center gap-2 text-xs text-[var(--t-muted)]">
+            <input
+              type="checkbox"
+              checked={form.llm_deal_selection}
+              onChange={(e) =>
+                setForm({ ...form, llm_deal_selection: e.target.checked })
+              }
+              className="border-[var(--t-border)]"
+            />
+            Use GPT for deal selection (vs. pot/entry ratio only)
+          </label>
+          <p className="mt-1 text-[10px] text-[var(--t-muted)]/60">
+            When enabled, the model ranks eligible deals using prompts, creator
+            history, and outcome stats. Requires OPENAI_API_KEY on the server.
+          </p>
+        </div>
+        <div className="col-span-2">
+          <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
+            Personality / strategy (optional)
+          </label>
+          <p className="mb-1 text-[10px] text-[var(--t-muted)]/60">
+            Short instructions for how this trader judges deals (risk posture,
+            skepticism of trap deals, etc.). Max 2000 characters.
+          </p>
+          <textarea
+            value={form.personality}
+            onChange={(e) => setForm({ ...form, personality: e.target.value })}
+            rows={4}
+            maxLength={2000}
+            placeholder="e.g. Cautious: avoid large pots from unknown creators…"
             className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
           />
         </div>

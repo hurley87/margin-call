@@ -71,9 +71,11 @@ export function useConfigureMandate() {
     mutationFn: async ({
       traderId,
       mandate,
+      personality,
     }: {
       traderId: string;
       mandate: Record<string, unknown>;
+      personality?: string | null;
     }) => {
       const res = await authFetch("/api/desk/configure", {
         method: "POST",
@@ -81,6 +83,7 @@ export function useConfigureMandate() {
         body: JSON.stringify({
           trader_id: traderId,
           mandate,
+          ...(personality !== undefined ? { personality } : {}),
         }),
       });
       if (!res.ok) {

@@ -18,4 +18,13 @@ export const MIN_POT_AMOUNT = 5; // 5 USDC
 export const MIN_ENTRY_COST = 1; // 1 USDC
 
 // Agent runtime
-export const AGENT_LOOP_INTERVAL_MS = 30_000; // 30 seconds
+export const AGENT_LOOP_INTERVAL_MS = 30_000; // 30 seconds (target spacing between cycles)
+
+/** Skip deals another trader on the same desk (same owner) entered within this window. */
+export const DESK_DEAL_DEDUP_HOURS = 24;
+
+/**
+ * Cron scheduler kicks traders whose last cycle started before this threshold.
+ * Vercel cron minimum is ~1 minute; use ~50s so a 1-minute cron reliably picks up idle traders.
+ */
+export const AGENT_CRON_STALE_MS = 50_000;

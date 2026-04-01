@@ -11,6 +11,7 @@ export interface TraderRow {
   cdp_account_name: string | null;
   status: "active" | "paused" | "wiped_out";
   mandate: Record<string, unknown>;
+  personality: string | null;
   escrow_balance_usdc: number;
   last_cycle_at: string | null;
   created_at: string;

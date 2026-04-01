@@ -12,6 +12,7 @@ const MANDATE_KEYS: (keyof Mandate)[] = [
   "bankroll_pct",
   "keywords",
   "approval_threshold_usdc",
+  "llm_deal_selection",
 ];
 
 export async function POST(request: NextRequest) {
@@ -26,11 +27,24 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { trader_id, mandate } = body;
+    const { trader_id, mandate, personality } = body;
 
     if (!trader_id || !mandate || typeof mandate !== "object") {
       return NextResponse.json(
         { error: "trader_id and mandate are required" },
+        { status: 400 }
+      );
+    }
+
+    if (personality != null && typeof personality !== "string") {
+      return NextResponse.json(
+        { error: "personality must be a string or null" },
+        { status: 400 }
+      );
+    }
+    if (typeof personality === "string" && personality.length > 2000) {
+      return NextResponse.json(
+        { error: "personality must be at most 2000 characters" },
         { status: 400 }
       );
     }
@@ -63,6 +77,14 @@ export async function POST(request: NextRequest) {
             );
           }
           cleaned[key] = num;
+        } else if (key === "llm_deal_selection") {
+          if (typeof val !== "boolean") {
+            return NextResponse.json(
+              { error: "llm_deal_selection must be a boolean" },
+              { status: 400 }
+            );
+          }
+          cleaned[key] = val;
         } else {
           // Numeric fields — allow null to clear
           if (val === null || val === undefined) continue;
@@ -79,9 +101,14 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createServerClient();
+    const updatePayload: Record<string, unknown> = { mandate: cleaned };
+    if (personality !== undefined) {
+      updatePayload.personality = personality?.trim() || null;
+    }
+
     const { data: updated, error: updateError } = await supabase
       .from("traders")
-      .update({ mandate: cleaned })
+      .update(updatePayload)
       .eq("id", trader_id)
       .select()
       .single();

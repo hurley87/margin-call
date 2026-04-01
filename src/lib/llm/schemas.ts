@@ -67,3 +67,12 @@ export type DealPromptSuggestions = z.infer<typeof DealPromptSuggestionsSchema>;
 export type NarrativeHeadline = z.infer<typeof NarrativeHeadlineSchema>;
 export type WorldState = z.infer<typeof WorldStateSchema>;
 export type NarrativeEpoch = z.infer<typeof NarrativeEpochSchema>;
+
+/** LLM ranks which mandate-eligible deal the trader should enter (Margin Call agent selection). */
+export const DealEvaluationSchema = z.object({
+  ranked_deal_ids: z.array(z.string()).max(30),
+  skip_all: z.boolean(),
+  reasoning: z.string().max(2000),
+});
+
+export type DealEvaluation = z.infer<typeof DealEvaluationSchema>;

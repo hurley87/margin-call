@@ -481,6 +481,7 @@ export type Database = {
           mandate: Json;
           name: string;
           owner_address: string;
+          personality: string | null;
           status: string;
           tba_address: string | null;
           token_id: number;
@@ -497,6 +498,7 @@ export type Database = {
           mandate?: Json;
           name: string;
           owner_address: string;
+          personality?: string | null;
           status?: string;
           tba_address?: string | null;
           token_id: number;
@@ -513,6 +515,7 @@ export type Database = {
           mandate?: Json;
           name?: string;
           owner_address?: string;
+          personality?: string | null;
           status?: string;
           tba_address?: string | null;
           token_id?: number;

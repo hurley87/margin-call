@@ -20,6 +20,7 @@ Standard commands are in `package.json` scripts and documented in `CLAUDE.md`:
 - The dev server starts without any external service credentials. Without `NEXT_PUBLIC_PRIVY_APP_ID`, the PrivyProvider gracefully degrades (wraps children in only a `QueryClientProvider`), but `usePrivy()` on the home page will show the unauthenticated state (CONNECT_WALLET screen). Full functionality requires Privy, Supabase, OpenAI, and CDP credentials in `.env.local` (see `.env.example`).
 - Upstash Redis is optional; the rate limiter falls back to in-memory when env vars are missing.
 - Sentry source map uploads are disabled when `SENTRY_AUTH_TOKEN` is absent.
+- **Agent trade loop:** Production uses Vercel Cron (`/api/agent/scheduler` with `CRON_SECRET`). Locally, resuming a trader still kicks one cycle immediately; call `POST /api/agent/scheduler` with `Authorization: Bearer $CRON_SECRET` (or wait for the next resume) to run additional cycles. Apply Supabase migration `024_trader_personality.sql` for the `personality` column.
 
 ### Build scripts (pnpm)
 

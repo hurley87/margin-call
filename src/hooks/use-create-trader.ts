@@ -15,7 +15,7 @@ export function useCreateTrader() {
   const walletAddress = user?.wallet?.address;
 
   const createTrader = useCallback(
-    async (name: string, mandate?: Mandate) => {
+    async (name: string, mandate?: Mandate, personality?: string | null) => {
       setIsLoading(true);
       setError(undefined);
 
@@ -23,7 +23,13 @@ export function useCreateTrader() {
         const res = await authFetch("/api/trader/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name, mandate }),
+          body: JSON.stringify({
+            name,
+            mandate,
+            ...(personality !== undefined && personality !== ""
+              ? { personality }
+              : {}),
+          }),
         });
 
         const data = await res.json();

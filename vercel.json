@@ -3,6 +3,10 @@
     {
       "path": "/api/narrative/generate",
       "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/agent/scheduler",
+      "schedule": "* * * * *"
     }
   ]
 }

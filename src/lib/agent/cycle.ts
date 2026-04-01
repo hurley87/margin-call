@@ -1,7 +1,11 @@
 import { createServerClient } from "@/lib/supabase/client";
 import { listOpenDeals, clearTraderAssets } from "@/lib/supabase/queries";
 import { getTrader } from "@/lib/supabase/traders";
-import { evaluateDeals, pickBestDeal, type Mandate } from "./evaluator";
+import { evaluateDeals, type Mandate } from "./evaluator";
+import {
+  excludeDealsForDeskDedup,
+  selectDealForTrader,
+} from "./deal-selection";
 import { logActivity, logActivities } from "./activity";
 import {
   createApproval,
@@ -44,7 +48,6 @@ export async function runCycle(
   traderId: string,
   baseUrl: string
 ): Promise<CycleResult> {
-  // Step 1: Get trader
   let trader;
   try {
     trader = await getTrader(traderId);
@@ -67,7 +70,7 @@ export async function runCycle(
 
   await logActivity(traderId, "cycle_start", "Starting trade cycle");
 
-  // Step 2: Scan open deals + use cached balance
+  // Scan open deals + use cached balance
   const deals = await listOpenDeals();
   const balance = trader.escrow_balance_usdc;
   await logActivity(traderId, "scan", `Found ${deals.length} open deal(s)`);
@@ -77,7 +80,7 @@ export async function runCycle(
     return { traderId, status: "no_deals", message: "No open deals" };
   }
 
-  // Step 4: Evaluate deals against mandate
+  // Evaluate deals against mandate
   const mandate = (trader.mandate ?? {}) as Mandate;
   const { eligible, skipped } = evaluateDeals(deals, mandate, balance);
 
@@ -101,18 +104,67 @@ export async function runCycle(
     { eligible_count: eligible.length, skipped_count: skipped.length, balance }
   );
 
-  // Step 5: Pick best deal
-  const bestDeal = pickBestDeal(eligible);
+  // Same-desk dedup — avoid piling into deals siblings entered recently
+  const { filtered: dedupedEligible, excludedIds: deskDedupExcluded } =
+    await excludeDealsForDeskDedup(eligible, traderId, trader.owner_address);
+
+  if (deskDedupExcluded.length > 0) {
+    await logActivity(
+      traderId,
+      "skip",
+      `Desk dedup: skipped ${deskDedupExcluded.length} deal(s) entered by another trader on this desk in the last window`,
+      undefined,
+      { desk_dedup_excluded_deal_ids: deskDedupExcluded }
+    );
+  }
+
+  if (dedupedEligible.length === 0) {
+    await logActivity(
+      traderId,
+      "cycle_end",
+      "No eligible deals after desk deduplication"
+    );
+    return {
+      traderId,
+      status: "skipped_all",
+      message: "No eligible deals after desk deduplication",
+    };
+  }
+
+  const useLlm =
+    mandate.llm_deal_selection !== false && Boolean(process.env.OPENAI_API_KEY);
+
+  const selection = await selectDealForTrader(dedupedEligible, {
+    traderId,
+    traderName: trader.name,
+    escrowBalanceUsdc: balance,
+    personality: trader.personality,
+    useLlm,
+  });
+
+  await logActivity(
+    traderId,
+    "evaluate",
+    `Deal selection (${selection.method}): ${selection.reasoning.slice(0, 500)}`,
+    selection.deal?.id,
+    { selection_method: selection.method }
+  );
+
+  const bestDeal = selection.deal;
   if (!bestDeal) {
     await logActivity(
       traderId,
       "cycle_end",
-      "No eligible deals after filtering"
+      "No deal chosen after ranking (skip all or LLM skip)"
     );
-    return { traderId, status: "skipped_all", message: "No eligible deals" };
+    return {
+      traderId,
+      status: "skipped_all",
+      message: "No deal selected after evaluation",
+    };
   }
 
-  // Step 5b: Check approval threshold
+  // Check approval threshold
   const threshold = mandate.approval_threshold_usdc;
   if (threshold !== undefined && bestDeal.entry_cost_usdc >= threshold) {
     const consumedApprovalId = await consumeApprovedEntry(
@@ -167,7 +219,7 @@ export async function runCycle(
     );
   }
 
-  // Step 6: Enter the deal via the existing /api/deal/enter route
+  // Enter the deal via the existing /api/deal/enter route
   await logActivity(
     traderId,
     "enter",

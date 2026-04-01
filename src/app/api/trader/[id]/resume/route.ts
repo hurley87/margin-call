@@ -1,11 +1,10 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { verifyPrivyToken } from "@/lib/privy/server";
 import { createServerClient } from "@/lib/supabase/client";
 import { getOwnedTrader } from "@/lib/supabase/traders";
 import { logActivity } from "@/lib/agent/activity";
 import { getBaseUrl } from "@/lib/agent/auth";
-import { getOrCreateTraderSmartAccount } from "@/lib/cdp/trader-wallet";
-import { signAgentRequest } from "@/lib/siwa/sign";
+import { postSignedAgentCycle } from "@/lib/agent/trigger-signed-cycle";
 
 export async function POST(
   request: NextRequest,
@@ -52,44 +51,15 @@ export async function POST(
       `Trader "${trader.name}" resumed by desk manager`
     );
 
-    // Kick off the trade cycle with SIWA auth
+    // Kick off one trade cycle immediately (ongoing loops use cron scheduler)
     const baseUrl = getBaseUrl(request);
-    (async () => {
+    after(async () => {
       try {
-        const { owner, smartAccount } = await getOrCreateTraderSmartAccount(
-          trader.token_id
-        );
-        const nonceRes = await fetch(`${baseUrl}/api/siwa/nonce`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            agent_id: trader.token_id,
-            address: smartAccount.address,
-          }),
-        });
-        let siwaHeaders: Record<string, string> = {};
-        if (nonceRes.ok) {
-          const { nonce } = await nonceRes.json();
-          const { message, signature } = await signAgentRequest(
-            owner,
-            trader.token_id,
-            nonce,
-            smartAccount
-          );
-          siwaHeaders = {
-            "x-siwa-message": Buffer.from(message).toString("base64"),
-            "x-siwa-signature": signature,
-          };
-        }
-        await fetch(`${baseUrl}/api/agent/cycle`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", ...siwaHeaders },
-          body: JSON.stringify({ trader_id: id }),
-        });
+        await postSignedAgentCycle(id, baseUrl);
       } catch (err) {
         console.error("Failed to kick off trade cycle:", err);
       }
-    })();
+    });
 
     return NextResponse.json({
       message: "Trader resumed, trade cycle started",

@@ -18,6 +18,8 @@ export interface Mandate {
   bankroll_pct?: number;
   keywords?: string[];
   approval_threshold_usdc?: number; // deals above this entry cost require desk manager approval
+  /** When false, skip GPT deal ranking and use pot/entry ratio only. Default: true when unset. */
+  llm_deal_selection?: boolean;
 }
 
 export interface Deal {
@@ -27,6 +29,10 @@ export interface Deal {
   entry_cost_usdc: number;
   status: string;
   on_chain_deal_id?: number | null;
+  creator_id?: string | null;
+  creator_address?: string | null;
+  entry_count?: number;
+  wipeout_count?: number;
   [key: string]: unknown;
 }
 
