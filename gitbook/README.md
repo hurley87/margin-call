@@ -1,13 +1,63 @@
+# Margin Call
+
+**An AI trading game about nerve, traps, and surviving the floor.**
+
+You do not play as a lone genius trader.
+
+You run a desk.
+
+You hire traders, give them rules, send them into the market, and decide when to step in.
+
+Other players are doing the same thing.
+
+They are also writing deals designed to make your traders look foolish.
+
+Every win comes from someone else's mistake.
+
 ---
-icon: hand-wave
+
+## The Game in 30 Seconds
+
+1. **Connect your wallet** and become a desk manager
+2. **Create a trader** with its own identity and bankroll
+3. **Fund the trader** and set its risk rules
+4. **Let it trade** while you watch the floor
+5. **Step in** when a deal feels too big or too dangerous
+6. **Write your own deals** to bait rival desks
+7. **Build a reputation** through wins, losses, and close calls
+8. **Cash out or trade up** if your desk survives long enough
+
 ---
 
-# Welcome
+## Why This Game Is Different
 
-Welcome to the GitBook starter template! Here you'll get an overview of all the amazing features GitBook offers to help you build beautiful, interactive documentation.
+Most AI games ask one question:
 
-You'll see some of the best parts of GitBook in action — and find help on how you can turn this template into your own.
+"How smart is the bot?"
 
-### Jump right in
+Margin Call asks a better one:
 
-<table data-view="cards"><thead><tr><th></th><th></th><th></th><th data-hidden data-card-cover data-type="files"></th><th data-hidden></th><th data-hidden data-card-target data-type="content-ref"></th></tr></thead><tbody><tr><td><h4><i class="fa-bolt">:bolt:</i></h4></td><td><strong>Quickstart</strong></td><td>Create your first site</td><td></td><td></td><td><a href="getting-started/quickstart.md">quickstart.md</a></td></tr><tr><td><h4><i class="fa-leaf">:leaf:</i></h4></td><td><strong>Editor basics</strong></td><td>Learn the basics of GitBook</td><td></td><td></td><td><a href="https://github.com/GitbookIO/gitbook-templates/blob/main/product-docs/broken-reference/README.md">https://github.com/GitbookIO/gitbook-templates/blob/main/product-docs/broken-reference/README.md</a></td></tr><tr><td><h4><i class="fa-globe-pointer">:globe-pointer:</i></h4></td><td><strong>Publish your docs</strong></td><td>Share your docs online</td><td></td><td></td><td><a href="getting-started/publish-your-docs.md">publish-your-docs.md</a></td></tr></tbody></table>
+"Can you run the meanest desk on the street?"
+
+This is a game about judgment under pressure.
+
+Your edge comes from discipline, timing, bluff-reading, and knowing when not to chase.
+
+The dream is not controlling every move.
+
+The dream is building a machine that can survive without you, until the moment it can't.
+
+> Intelligence in markets is institutional before it is individual.
+
+---
+
+## Quick Links
+
+|                                               |                                                 |
+| --------------------------------------------- | ----------------------------------------------- |
+| [How to Play](game/how-to-play.md)            | Start your desk and survive your first trades   |
+| [Traders](game/traders.md)                    | Meet the agents who take the risks              |
+| [Deals](game/deals.md)                        | Learn why the best opportunities are often bait |
+| [Fee Structure](economy/fee-structure.md)     | See how the game takes its cut                  |
+| [Architecture](system-design/architecture.md) | Understand the big picture without the weeds    |
+| [Roadmap](roadmap.md)                         | Where Margin Call goes next                     |

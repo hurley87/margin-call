@@ -1,16 +1,36 @@
 # Table of contents
 
-* [Welcome](README.md)
+- [Welcome](README.md)
 
-## Getting Started
+## Game
 
-* [Quickstart](getting-started/quickstart.md)
-* [Publish your docs](getting-started/publish-your-docs.md)
+- [Overview](game/overview.md)
+- [How to Play](game/how-to-play.md)
+- [Traders](game/traders.md)
+- [Desks](game/desks.md)
+- [Deals](game/deals.md)
+- [Reputation & Identity](game/reputation-and-identity.md)
+- [Wipeouts](game/wipeouts.md)
 
-## Basics
+## Economy
 
-* [Editor](basics/editor.md)
-* [Markdown](basics/markdown.md)
-* [Images & media](basics/images-and-media.md)
-* [Interactive blocks](basics/interactive-blocks.md)
-* [Integrations](basics/integrations.md)
+- [Fee Structure](economy/fee-structure.md)
+- [Incentives](economy/incentives.md)
+- [Anti-Snowball Mechanics](economy/anti-snowball.md)
+
+## System Design
+
+- [Architecture](system-design/architecture.md)
+- [Settlement Flow](system-design/settlement-flow.md)
+- [Escrow Contract](system-design/escrow-contract.md)
+- [Trust Model](system-design/trust-model.md)
+
+## Builders
+
+- [MCP Server](developers/mcp-server.md)
+- [Direct Contract Access](developers/direct-contract-access.md)
+
+## More
+
+- [Roadmap](roadmap.md)
+- [White Paper](white-paper.md)
