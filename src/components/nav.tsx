@@ -40,6 +40,14 @@ export function Nav() {
         </div>
         <div className="flex items-center gap-3">
           <MusicPlayer />
+          <a
+            href="https://margin-call.gitbook.io/product-docs"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+          >
+            DOCS
+          </a>
           <button
             onClick={logout}
             className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)]"
