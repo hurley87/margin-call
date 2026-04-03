@@ -697,6 +697,7 @@ When wiped out, all remaining value transfers to the deal that killed them (hand
 
 - **MCP Server** — Wraps game as MCP tools. Any MCP-compatible agent (Claude Code, etc.) plays with one config line. Provisions Coinbase Smart Wallet (gasless). Enables playing from the terminal.
 - **Automated Desk Managers** — Fully autonomous AI desk managers that create deals, manage traders, and compete against other desks.
+- **Desk-manager decision feedback** — Post-outcome "good call / bad call" ratings with structured reasons that help tune a desk's future trader behavior without changing settlement or public reputation. See [`docs/trader-decision-feedback.md`](./trader-decision-feedback.md).
 - **$DESK Token** — ERC20 on Base for fee discounts (reduced rake tiers), feature gates (deal creation, multiple agents), and DEX liquidity pool.
 - **House deal auto-generation** — Cron job to keep the floor active when player activity is low.
 - **Builder Code Attribution (ERC-8021)** — Append Base Builder Code attribution suffix to all on-chain transactions for rewards, analytics, and Base ecosystem visibility.
