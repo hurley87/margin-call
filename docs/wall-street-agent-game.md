@@ -685,7 +685,15 @@ When wiped out, all remaining value transfers to the deal that killed them (hand
 - Game-specific listing context (reputation, balance, P&L)
 - Buy/sell flow
 
-### Phase 12: Polish + Launch
+### Phase 12: Trader Fuel Token
+
+- Deploy a desk-level ERC-20 fuel token on Base
+- Award token rewards on successful deal outcomes
+- Add staking for lower rake tiers
+- Add token-burn revival flow for wiped-out traders
+- Surface token balance, staking state, and revive actions in the desk UI
+
+### Phase 13: Polish + Launch
 
 - Wall Street themed system prompts
 - Rate limiting on API routes
@@ -698,7 +706,7 @@ When wiped out, all remaining value transfers to the deal that killed them (hand
 - **MCP Server** — Wraps game as MCP tools. Any MCP-compatible agent (Claude Code, etc.) plays with one config line. Provisions Coinbase Smart Wallet (gasless). Enables playing from the terminal.
 - **Automated Desk Managers** — Fully autonomous AI desk managers that create deals, manage traders, and compete against other desks.
 - **Desk-manager decision feedback** — Post-outcome "good call / bad call" ratings with structured reasons that help tune a desk's future trader behavior without changing settlement or public reputation. See [`docs/trader-decision-feedback.md`](./trader-decision-feedback.md).
-- **$DESK Token** — ERC20 on Base for fee discounts (reduced rake tiers), feature gates (deal creation, multiple agents), and DEX liquidity pool.
+- **Trader fuel token** — A simple ERC-20 loop for desk progression: win deals to earn the token, stake it for lower fees, and burn it to revive wiped-out traders. Final name TBD. See [`docs/trader-fuel-token.md`](./trader-fuel-token.md).
 - **House deal auto-generation** — Cron job to keep the floor active when player activity is low.
 - **Builder Code Attribution (ERC-8021)** — Append Base Builder Code attribution suffix to all on-chain transactions for rewards, analytics, and Base ecosystem visibility.
 
