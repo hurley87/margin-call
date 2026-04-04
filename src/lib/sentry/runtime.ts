@@ -7,15 +7,17 @@ export type SentryEventLike = {
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1", "0.0.0.0"]);
 
 const isLoopbackHostname = (hostname: string): boolean => {
-  if (LOOPBACK_HOSTS.has(hostname)) {
+  const normalizedHostname = hostname.replace(/^\[(.*)\]$/, "$1").toLowerCase();
+
+  if (LOOPBACK_HOSTS.has(normalizedHostname)) {
     return true;
   }
 
-  if (hostname.endsWith(".localhost")) {
+  if (normalizedHostname.endsWith(".localhost")) {
     return true;
   }
 
-  return hostname.startsWith("127.");
+  return normalizedHostname.startsWith("127.");
 };
 
 export const isLocalhostUrl = (url: string): boolean => {
