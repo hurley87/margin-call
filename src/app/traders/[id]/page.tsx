@@ -27,6 +27,7 @@ import { useTraderRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
 import { authFetch } from "@/lib/api";
+import { shortAssetLabel } from "@/lib/format-asset-label";
 
 const ZERO = BigInt(0);
 
@@ -338,7 +339,9 @@ function AssetInventory({ traderId }: { traderId: string }) {
               key={asset.id}
               className="flex items-center justify-between bg-[var(--t-bg)] px-3 py-2"
             >
-              <span className="text-sm text-[var(--t-text)]">{asset.name}</span>
+              <span className="text-sm text-[var(--t-text)]">
+                {shortAssetLabel(asset.name)}
+              </span>
               <span className="text-sm text-[var(--t-green)]">
                 ${Number(asset.value_usdc).toFixed(2)}
               </span>
@@ -447,7 +450,7 @@ function OutcomeCard({
                     key={i}
                     className="border border-[var(--t-green)]/30 px-2 py-1 text-xs text-[var(--t-green)]"
                   >
-                    +{asset.name} (${asset.value_usdc})
+                    +{shortAssetLabel(asset.name)} (${asset.value_usdc})
                   </span>
                 )
               )}
@@ -460,7 +463,7 @@ function OutcomeCard({
                   key={i}
                   className="border border-[var(--t-red)]/30 px-2 py-1 text-xs text-[var(--t-red)]"
                 >
-                  -{name}
+                  -{shortAssetLabel(name)}
                 </span>
               ))}
             </div>

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { shortAssetLabel } from "@/lib/format-asset-label";
 
 const WipeoutReasonEnum = z.enum([
   "margin_call",
@@ -9,7 +10,7 @@ const WipeoutReasonEnum = z.enum([
 ]);
 
 const AssetGainedSchema = z.object({
-  name: z.string(),
+  name: z.string().transform((s) => shortAssetLabel(s, 3)),
   value_usdc: z.number(),
 });
 

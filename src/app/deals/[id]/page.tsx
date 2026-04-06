@@ -16,6 +16,7 @@ import {
 } from "@/lib/contracts/escrow";
 import { Nav } from "@/components/nav";
 import { NarrativeRenderer } from "@/components/narrative-renderer";
+import { shortAssetLabel } from "@/lib/format-asset-label";
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -237,13 +238,19 @@ export default function DealDetailPage() {
                             <span className="text-[var(--t-green)]">
                               +{" "}
                               {outcome.assets_gained
-                                .map((a) => `${a.name} ($${a.value_usdc})`)
+                                .map(
+                                  (a) =>
+                                    `${shortAssetLabel(a.name)} ($${a.value_usdc})`
+                                )
                                 .join(", ")}
                             </span>
                           )}
                           {outcome.assets_lost.length > 0 && (
                             <span className="text-[var(--t-red)]">
-                              - {outcome.assets_lost.join(", ")}
+                              -{" "}
+                              {outcome.assets_lost
+                                .map((n) => shortAssetLabel(n))
+                                .join(", ")}
                             </span>
                           )}
                         </div>
