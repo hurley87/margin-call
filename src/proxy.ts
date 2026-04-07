@@ -4,7 +4,7 @@ import { Redis } from "@upstash/redis";
 
 // ---------------------------------------------------------------------------
 // Rate limiters for broad route groups (desk/*, trader/*)
-// These run in Next.js middleware (Edge runtime) before the route handler.
+// These run in Next.js proxy before the route handler.
 // ---------------------------------------------------------------------------
 
 const hasRedis =
@@ -32,7 +32,7 @@ const traderLimiter = createLimiter("rl:trader", 30, "1 m");
 // ---------------------------------------------------------------------------
 
 function getIdentifier(request: NextRequest): string {
-  // Try to extract wallet from Bearer token isn't feasible in middleware
+  // Try to extract wallet from Bearer token isn't feasible in proxy
   // (Privy verification is async and heavy). Key by IP instead — the
   // per-route handlers already do wallet-level checks for sensitive routes.
   const forwarded = request.headers.get("x-forwarded-for");
@@ -60,10 +60,10 @@ function rateLimitResponse(reset: number, limit: number): NextResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Middleware
+// Proxy
 // ---------------------------------------------------------------------------
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const identifier = getIdentifier(request);
 
@@ -82,7 +82,7 @@ export async function middleware(request: NextRequest) {
       return rateLimitResponse(reset, limit);
     }
 
-    // Attach rate limit info as headers on the forwarded request
+    // Attach rate limit info as headers on the forwarded request.
     const response = NextResponse.next();
     response.headers.set("X-RateLimit-Limit", String(limit));
     response.headers.set("X-RateLimit-Remaining", String(remaining));
