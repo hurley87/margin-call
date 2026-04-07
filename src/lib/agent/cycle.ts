@@ -1,5 +1,9 @@
 import { createServerClient } from "@/lib/supabase/client";
-import { listOpenDeals, clearTraderAssets } from "@/lib/supabase/queries";
+import {
+  listOpenDeals,
+  clearTraderAssets,
+  getResolvedDealIdsForTrader,
+} from "@/lib/supabase/queries";
 import { getTrader } from "@/lib/supabase/traders";
 import { evaluateDeals, type Mandate } from "./evaluator";
 import {
@@ -82,7 +86,23 @@ export async function runCycle(
 
   // Evaluate deals against mandate
   const mandate = (trader.mandate ?? {}) as Mandate;
-  const { eligible, skipped } = evaluateDeals(deals, mandate, balance);
+  const resolvedDealIds = await getResolvedDealIdsForTrader(
+    traderId,
+    deals.map((deal) => deal.id)
+  );
+  const freshDeals = deals.filter((deal) => !resolvedDealIds.has(deal.id));
+  const alreadyResolved = deals
+    .filter((deal) => resolvedDealIds.has(deal.id))
+    .map((deal) => ({
+      deal,
+      reason: "deal already resolved by this trader",
+    }));
+  const { eligible, skipped: mandateSkipped } = evaluateDeals(
+    freshDeals,
+    mandate,
+    balance
+  );
+  const skipped = [...alreadyResolved, ...mandateSkipped];
 
   // Batch-log all skipped deals in one query
   if (skipped.length > 0) {
@@ -272,6 +292,26 @@ export async function runCycle(
       const err = await enterRes
         .json()
         .catch(() => ({ error: "Unknown error" }));
+      if (enterRes.status === 409) {
+        await logActivity(
+          traderId,
+          "skip",
+          err.error ?? "Deal already entered by this trader",
+          bestDeal.id,
+          { status: enterRes.status }
+        );
+        await logActivity(
+          traderId,
+          "cycle_end",
+          "Cycle ended — duplicate deal prevented"
+        );
+        return {
+          traderId,
+          status: "skipped_all",
+          dealId: bestDeal.id,
+          message: err.error ?? "Deal already entered by this trader",
+        };
+      }
       await logActivity(
         traderId,
         "error",

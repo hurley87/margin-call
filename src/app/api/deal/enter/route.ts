@@ -57,6 +57,17 @@ function generateRandomSeed(): number {
   return bytes.readUInt32BE() / 0xffffffff;
 }
 
+function isPostgresDuplicateError(
+  error: unknown
+): error is { code: string; constraint?: string } {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof error.code === "string"
+  );
+}
+
 /** Convert USDC amount (human-readable) to on-chain 6-decimal BigInt */
 function usdcToUnits(amount: number): bigint {
   // Use parseUnits for precision, but handle negative values
@@ -235,6 +246,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Deal is not open" }, { status: 400 });
     }
 
+    const existing = await getExistingDealOutcome(deal_id, traderId);
+    if (existing) {
+      return NextResponse.json(
+        {
+          error: "Trader has already entered this deal",
+          outcome_id: existing.id,
+        },
+        { status: 409 }
+      );
+    }
+
     const onChainDealId =
       deal.on_chain_deal_id !== null && deal.on_chain_deal_id !== undefined
         ? BigInt(deal.on_chain_deal_id)
@@ -242,23 +264,6 @@ export async function POST(request: NextRequest) {
 
     // ----- Idempotency and on-chain checks (before LLM / operator writes) -----
     if (onChainDealId !== null && tokenId !== null) {
-      const existing = await getExistingDealOutcome(deal_id, traderId);
-      if (existing) {
-        return NextResponse.json({
-          outcome: existing,
-          summary: {
-            balance_change:
-              Number(existing.trader_pnl_usdc ?? 0) +
-              Number(existing.rake_usdc ?? 0),
-            rake: Number(existing.rake_usdc ?? 0),
-            net_pnl: Number(existing.trader_pnl_usdc ?? 0),
-            wiped_out: Boolean(existing.trader_wiped_out),
-            enter_tx_hash: null,
-            resolve_tx_hash: existing.on_chain_tx_hash ?? null,
-          },
-        });
-      }
-
       const onChainDeal = await getOnChainDeal(onChainDealId);
       if (!onChainDeal || onChainDeal.status !== DEAL_STATUS_OPEN) {
         return NextResponse.json(
@@ -538,6 +543,16 @@ export async function POST(request: NextRequest) {
     });
   } catch (e) {
     console.error("Deal entry error:", e);
+    if (
+      isPostgresDuplicateError(e) &&
+      e.code === "23505" &&
+      e.constraint === "deal_outcomes_trader_id_deal_id_unique"
+    ) {
+      return NextResponse.json(
+        { error: "Trader has already entered this deal" },
+        { status: 409 }
+      );
+    }
     const message = e instanceof Error ? e.message : "Internal server error";
     const status = message.includes("not found") ? 404 : 500;
     return NextResponse.json({ error: message }, { status });

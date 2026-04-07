@@ -24,6 +24,21 @@ export interface DealSelectionResult {
   method: DealSelectionMethod;
 }
 
+function formatDealLabel(deal: Deal) {
+  const normalizedPrompt = deal.prompt.replace(/\s+/g, " ").trim();
+  if (normalizedPrompt.length <= 72) {
+    return `"${normalizedPrompt}"`;
+  }
+
+  return `"${normalizedPrompt.slice(0, 69)}..."`;
+}
+
+function replaceDealIdsWithLabels(reasoning: string, deals: Deal[]) {
+  return deals.reduce((message, deal) => {
+    return message.replaceAll(deal.id, formatDealLabel(deal));
+  }, reasoning);
+}
+
 function ratioFallback(eligible: Deal[]): DealSelectionResult {
   if (eligible.length === 0) {
     return { deal: null, reasoning: "No eligible deals", method: "skip" };
@@ -35,7 +50,7 @@ function ratioFallback(eligible: Deal[]): DealSelectionResult {
   });
   return {
     deal: best,
-    reasoning: `Highest pot/entry ratio among mandate-eligible deals (${best.id}).`,
+    reasoning: `Highest pot/entry ratio among mandate-eligible deals: ${formatDealLabel(best)}.`,
     method: "ratio",
   };
 }
@@ -233,7 +248,10 @@ export async function selectDealForTrader(
     if (evaluation.skip_all || evaluation.ranked_deal_ids.length === 0) {
       return {
         deal: null,
-        reasoning: evaluation.reasoning || "Model chose to skip all deals.",
+        reasoning: replaceDealIdsWithLabels(
+          evaluation.reasoning || "Model chose to skip all deals.",
+          eligible
+        ),
         method: "llm",
       };
     }
@@ -242,14 +260,17 @@ export async function selectDealForTrader(
     if (!chosen) {
       return {
         deal: null,
-        reasoning: `${evaluation.reasoning} (no ranked ID matched eligible list; treating as skip).`,
+        reasoning: `${replaceDealIdsWithLabels(
+          evaluation.reasoning,
+          eligible
+        )} (no ranked ID matched eligible list; treating as skip).`,
         method: "llm",
       };
     }
 
     return {
       deal: chosen,
-      reasoning: evaluation.reasoning,
+      reasoning: replaceDealIdsWithLabels(evaluation.reasoning, eligible),
       method: "llm",
     };
   } catch (err) {

@@ -140,6 +140,29 @@ export async function getExistingDealOutcome(
   return data as { id: string; [key: string]: unknown } | null;
 }
 
+/**
+ * Return deal ids that already have an outcome for this trader.
+ */
+export async function getResolvedDealIdsForTrader(
+  traderId: string,
+  dealIds: string[]
+): Promise<Set<string>> {
+  if (dealIds.length === 0) {
+    return new Set();
+  }
+
+  const supabase = createServerClient();
+  const { data, error } = await supabase
+    .from("deal_outcomes")
+    .select("deal_id")
+    .eq("trader_id", traderId)
+    .in("deal_id", dealIds);
+
+  if (error) throw error;
+
+  return new Set((data ?? []).map((row) => row.deal_id).filter(Boolean));
+}
+
 export async function getActiveSystemPrompt(name: string): Promise<string> {
   const supabase = createServerClient();
   const { data, error } = await supabase

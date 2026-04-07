@@ -46,7 +46,9 @@ export function useAgentActivity(traderId: string) {
   return useQuery({
     queryKey: ["agent-activity", traderId],
     queryFn: async () => {
-      const res = await authFetch(`/api/trader/${traderId}/activity`);
+      const res = await fetch(`/api/trader/${traderId}/activity`, {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error("Failed to load activity");
       const data = await res.json();
       return (data.activity ?? []) as AgentActivity[];
@@ -60,7 +62,9 @@ export function useTraderOutcomes(traderId: string) {
   return useQuery({
     queryKey: ["trader-outcomes", traderId],
     queryFn: async () => {
-      const res = await authFetch(`/api/trader/${traderId}/outcomes`);
+      const res = await fetch(`/api/trader/${traderId}/outcomes`, {
+        cache: "no-store",
+      });
       if (!res.ok) throw new Error("Failed to load outcomes");
       const data = await res.json();
       return (data.outcomes ?? []) as DealOutcomeWithNarrative[];

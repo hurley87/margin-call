@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { FeedLine } from "@/components/feed-line";
 import { useAgentActivity } from "@/hooks/use-agent";
 
@@ -7,13 +8,24 @@ interface TraderActivityPanelProps {
   traderId: string;
 }
 
+const ACTIVITY_PAGE_SIZE = 10;
+
 export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
+  const [visibleCount, setVisibleCount] = useState(ACTIVITY_PAGE_SIZE);
   const {
     data: activity,
     isLoading,
     isError,
     error,
   } = useAgentActivity(traderId);
+  const totalCount = activity?.length ?? 0;
+  const visibleActivity = activity?.slice(0, visibleCount) ?? [];
+  const hasMore = visibleCount < totalCount;
+  const canShowLess = visibleCount > ACTIVITY_PAGE_SIZE;
+
+  useEffect(() => {
+    setVisibleCount(ACTIVITY_PAGE_SIZE);
+  }, [traderId]);
 
   return (
     <section>
@@ -25,7 +37,9 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
             </h2>
           </div>
           <span className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-[var(--t-accent)]">
-            {activity?.length ?? 0} Events
+            {totalCount > ACTIVITY_PAGE_SIZE
+              ? `${visibleActivity.length}/${totalCount} Events`
+              : `${totalCount} Events`}
           </span>
         </div>
       </div>
@@ -55,17 +69,48 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
           </p>
         </div>
       ) : (
-        <div className="max-h-[60vh] overflow-y-auto lg:max-h-[calc(100svh-12rem)]">
-          {activity.map((entry) => (
-            <FeedLine
-              key={entry.id}
-              entry={entry}
-              traderName=""
-              showTrader={false}
-              wrapMessage
-            />
-          ))}
-        </div>
+        <>
+          <div className="max-h-[60vh] overflow-y-auto lg:max-h-[calc(100svh-12rem)]">
+            {visibleActivity.map((entry) => (
+              <FeedLine
+                key={entry.id}
+                entry={entry}
+                traderName=""
+                showTrader={false}
+                wrapMessage
+              />
+            ))}
+          </div>
+          {(hasMore || canShowLess) && (
+            <div className="flex items-center justify-between gap-3 border-t border-[var(--t-border)]/80 pt-3">
+              <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+                Showing newest first
+              </p>
+              <div className="flex items-center gap-2">
+                {canShowLess && (
+                  <button
+                    type="button"
+                    onClick={() => setVisibleCount(ACTIVITY_PAGE_SIZE)}
+                    className="border border-[var(--t-border)] px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
+                  >
+                    Show Latest 10
+                  </button>
+                )}
+                {hasMore && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setVisibleCount((count) => count + ACTIVITY_PAGE_SIZE)
+                    }
+                    className="border border-[var(--t-border)] px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+                  >
+                    Load 10 More
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </section>
   );
