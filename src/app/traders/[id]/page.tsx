@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useReadContract } from "wagmi";
@@ -25,11 +25,57 @@ import {
 import { useConfigureMandate } from "@/hooks/use-approvals";
 import { useTraderRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
+import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
 import { authFetch } from "@/lib/api";
 import { shortAssetLabel } from "@/lib/format-asset-label";
 
 const ZERO = BigInt(0);
+const TRADER_SECTION_CLASS =
+  "mt-6 border-t border-[var(--t-border)]/80 pt-6 first:mt-0 first:border-t-0 first:pt-0";
+const TRADER_SECTION_TITLE_CLASS =
+  "text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]";
+
+function CollapsibleSection({
+  title,
+  children,
+  action,
+  defaultOpen = false,
+  canCollapse = true,
+}: {
+  title: string;
+  children: ReactNode;
+  action?: ReactNode;
+  defaultOpen?: boolean;
+  canCollapse?: boolean;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+
+  return (
+    <section className={TRADER_SECTION_CLASS}>
+      <div className="flex items-center gap-3">
+        {canCollapse ? (
+          <button
+            type="button"
+            onClick={() => setIsOpen((prev) => !prev)}
+            className="flex min-w-0 flex-1 items-center justify-between gap-4 text-left"
+          >
+            <h2 className={TRADER_SECTION_TITLE_CLASS}>{title}</h2>
+            <span className="shrink-0 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]">
+              {isOpen ? "Hide" : "Show"}
+            </span>
+          </button>
+        ) : (
+          <div className="flex-1">
+            <h2 className={TRADER_SECTION_TITLE_CLASS}>{title}</h2>
+          </div>
+        )}
+        {action}
+      </div>
+      {isOpen && <div className="mt-3">{children}</div>}
+    </section>
+  );
+}
 
 export default function TraderDetailPage() {
   const queryClient = useQueryClient();
@@ -121,24 +167,24 @@ export default function TraderDetailPage() {
 
   return (
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
-      <Nav />
+      <Nav containerClassName="max-w-[1600px]" />
 
       {/* Trader Header Strip */}
       <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-0 items-center gap-3">
             <Link
               href="/"
               className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
             >
               &larr;
             </Link>
-            <h1 className="text-base font-semibold text-[var(--t-text)] font-[family-name:var(--font-plex-sans)]">
+            <h1 className="truncate text-base font-semibold text-[var(--t-text)] font-[family-name:var(--font-plex-sans)]">
               {trader.name}
             </h1>
             <StatusBadge status={trader.status} />
           </div>
-          <div className="flex items-center gap-4 text-xs">
+          <div className="flex shrink-0 items-center gap-4 text-xs">
             <button
               onClick={() => setWalletOpen(true)}
               className={`flex items-center gap-1 text-right transition-colors hover:text-[var(--t-accent)] ${
@@ -155,26 +201,32 @@ export default function TraderDetailPage() {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-4xl px-4 py-6">
-        {/* Agent Controls — prominent at top */}
-        <AgentControls
-          traderId={id}
-          status={trader.status}
-          unfunded={unfunded}
-          onOpenWallet={() => setWalletOpen(true)}
-        />
+      <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
+        <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-12">
+          <div className="min-w-0">
+            <AgentControls
+              traderId={id}
+              status={trader.status}
+              unfunded={unfunded}
+              onOpenWallet={() => setWalletOpen(true)}
+            />
 
-        <MandateConfig
-          traderId={id}
-          mandate={trader.mandate}
-          personality={trader.personality ?? null}
-        />
+            <MandateConfig
+              traderId={id}
+              mandate={trader.mandate}
+              personality={trader.personality ?? null}
+            />
 
-        <ReputationSection traderId={id} />
-        <AssetInventory traderId={id} />
-        <DealOutcomes traderId={id} />
+            <ReputationSection traderId={id} />
+            <AssetInventory traderId={id} />
+            <DealOutcomes traderId={id} />
+            <ActivityHistory id={id} />
+          </div>
 
-        <ActivityHistory id={id} />
+          <aside className="min-w-0 lg:sticky lg:top-[89px] lg:self-start lg:border-l lg:border-[var(--t-border)]/80 lg:pl-8 xl:pl-10">
+            <TraderActivityPanel traderId={id} />
+          </aside>
+        </div>
       </div>
 
       {walletOpen && (
@@ -262,7 +314,7 @@ function AgentControls({
   }
 
   return (
-    <div className="flex items-center gap-3 border border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
+    <div className="flex flex-wrap items-center gap-3">
       {status === "active" ? (
         <>
           <span className="flex items-center gap-1.5 text-xs text-[var(--t-green)]">
@@ -324,10 +376,7 @@ function AssetInventory({ traderId }: { traderId: string }) {
   const { data: assets, isLoading } = useTraderAssets(traderId);
 
   return (
-    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
-        Asset Inventory
-      </h2>
+    <CollapsibleSection title="Asset Inventory">
       {isLoading ? (
         <p className="text-sm text-[var(--t-muted)]">Loading...</p>
       ) : !assets || assets.length === 0 ? (
@@ -349,7 +398,7 @@ function AssetInventory({ traderId }: { traderId: string }) {
           ))}
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -360,10 +409,7 @@ function DealOutcomes({ traderId }: { traderId: string }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
   return (
-    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
-        Deal Outcomes
-      </h2>
+    <CollapsibleSection title="Deal Outcomes">
       {isLoading ? (
         <p className="text-sm text-[var(--t-muted)]">Loading...</p>
       ) : !outcomes || outcomes.length === 0 ? (
@@ -382,7 +428,7 @@ function DealOutcomes({ traderId }: { traderId: string }) {
           ))}
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -524,10 +570,7 @@ function ActivityHistory({ id }: { id: string }) {
   const { data: events, isLoading } = useTraderHistory(id);
 
   return (
-    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
-        On-Chain History
-      </h2>
+    <CollapsibleSection title="On-Chain History">
       {isLoading ? (
         <p className="text-sm text-[var(--t-muted)]">Loading...</p>
       ) : !events || events.length === 0 ? (
@@ -562,7 +605,7 @@ function ActivityHistory({ id }: { id: string }) {
           })}
         </div>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -648,9 +691,10 @@ function MandateConfig({
 
   if (!editing) {
     return (
-      <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-[var(--t-muted)]">Mandate</h2>
+      <CollapsibleSection
+        title="Mandate"
+        defaultOpen
+        action={
           <button
             type="button"
             onClick={openEdit}
@@ -658,7 +702,8 @@ function MandateConfig({
           >
             Configure
           </button>
-        </div>
+        }
+      >
         {(personality?.trim() || mandate.llm_deal_selection === false) && (
           <div className="mb-4 space-y-2 text-sm">
             {personality?.trim() && (
@@ -757,15 +802,16 @@ function MandateConfig({
               )}
           </div>
         )}
-      </div>
+      </CollapsibleSection>
     );
   }
 
   return (
-    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
-        Configure Mandate
-      </h2>
+    <CollapsibleSection
+      title="Configure Mandate"
+      defaultOpen
+      canCollapse={false}
+    >
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
@@ -927,7 +973,7 @@ function MandateConfig({
           {configure.error.message}
         </p>
       )}
-    </div>
+    </CollapsibleSection>
   );
 }
 
@@ -953,10 +999,7 @@ function ReputationSection({ traderId }: { traderId: string }) {
   if (totalDeals === 0) return null;
 
   return (
-    <div className="mt-6 border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-      <h2 className="mb-3 text-sm font-medium text-[var(--t-muted)]">
-        Reputation
-      </h2>
+    <CollapsibleSection title="Reputation" defaultOpen>
       <div className="grid grid-cols-3 gap-4 text-center sm:grid-cols-6">
         <div>
           <p className="text-lg font-semibold text-[var(--t-text)]">
@@ -994,6 +1037,6 @@ function ReputationSection({ traderId }: { traderId: string }) {
           <p className="text-xs text-[var(--t-muted)]">Total P&L</p>
         </div>
       </div>
-    </div>
+    </CollapsibleSection>
   );
 }

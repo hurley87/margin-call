@@ -23,10 +23,12 @@ export function FeedLine({
   entry,
   traderName,
   showTrader,
+  wrapMessage = false,
 }: {
   entry: AgentActivity;
   traderName: string;
   showTrader: boolean;
+  wrapMessage?: boolean;
 }) {
   const display = FEED_DISPLAY[entry.activity_type] ?? {
     label: entry.activity_type.toUpperCase(),
@@ -61,7 +63,9 @@ export function FeedLine({
         </span>
       )}
       <span
-        className={`flex-1 truncate ${isHighEvent ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
+        className={`min-w-0 flex-1 ${
+          wrapMessage ? "break-words whitespace-normal" : "truncate"
+        } ${isHighEvent ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
       >
         {entry.message}
       </span>

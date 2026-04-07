@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { MusicPlayer } from "@/components/music-player";
+import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
   { href: "/", label: "DESK" },
@@ -11,13 +12,22 @@ const NAV_ITEMS = [
   { href: "/leaderboard", label: "LEADERBOARD" },
 ];
 
-export function Nav() {
+interface NavProps {
+  containerClassName?: string;
+}
+
+export function Nav({ containerClassName }: NavProps) {
   const pathname = usePathname();
   const { logout } = usePrivy();
 
   return (
     <nav className="sticky top-0 z-50 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
-      <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-2.5 text-xs tracking-wider">
+      <div
+        className={cn(
+          "mx-auto flex max-w-4xl items-center justify-between px-4 py-2.5 text-xs tracking-wider",
+          containerClassName
+        )}
+      >
         <div className="flex items-center gap-3 overflow-x-auto">
           {NAV_ITEMS.map(({ href, label }) => {
             const isActive =
