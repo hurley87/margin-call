@@ -588,10 +588,10 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (e) {
-    console.error("Deal entry error:", e);
     if (e instanceof RequestBodyValidationError) {
       return NextResponse.json({ error: e.message }, { status: 400 });
     }
+    console.error("Deal entry error:", e);
     if (
       isPostgresDuplicateError(e) &&
       e.code === "23505" &&
