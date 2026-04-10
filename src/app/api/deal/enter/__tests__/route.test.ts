@@ -90,14 +90,16 @@ const mockCreateDealOutcome = vi.mocked(createDealOutcome);
 const mockCheckRateLimit = vi.mocked(checkRateLimit);
 const mockGetClientIdentifier = vi.mocked(getClientIdentifier);
 
-function createRequest() {
+function createRequest(bodyOverride?: string) {
   return new NextRequest("http://localhost/api/deal/enter", {
     method: "POST",
     headers: { authorization: "Bearer fake-token" },
-    body: JSON.stringify({
-      deal_id: "deal-123",
-      trader_id: "trader-123",
-    }),
+    body:
+      bodyOverride ??
+      JSON.stringify({
+        deal_id: "deal-123",
+        trader_id: "trader-123",
+      }),
   });
 }
 
@@ -140,5 +142,40 @@ describe("POST /api/deal/enter", () => {
       outcome_id: "outcome-123",
     });
     expect(mockCreateDealOutcome).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when JSON body is malformed", async () => {
+    const response = await POST(createRequest("{bad-json"));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "Invalid JSON body" });
+    expect(mockVerifyPrivyToken).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when JSON body is not an object", async () => {
+    const response = await POST(createRequest(JSON.stringify(["deal-123"])));
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "JSON body must be an object" });
+    expect(mockVerifyPrivyToken).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when _agent_cycle is not a boolean", async () => {
+    const response = await POST(
+      createRequest(
+        JSON.stringify({
+          deal_id: "deal-123",
+          trader_id: "trader-123",
+          _agent_cycle: "true",
+        })
+      )
+    );
+    const body = await response.json();
+
+    expect(response.status).toBe(400);
+    expect(body).toEqual({ error: "_agent_cycle must be a boolean" });
+    expect(mockVerifyPrivyToken).not.toHaveBeenCalled();
   });
 });
