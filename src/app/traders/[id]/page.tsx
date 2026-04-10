@@ -211,13 +211,13 @@ export default function TraderDetailPage() {
               onOpenWallet={() => setWalletOpen(true)}
             />
 
+            <ReputationSection traderId={id} />
+
             <MandateConfig
               traderId={id}
               mandate={trader.mandate}
               personality={trader.personality ?? null}
             />
-
-            <ReputationSection traderId={id} />
             <AssetInventory traderId={id} />
             <DealOutcomes traderId={id} />
             <ActivityHistory id={id} />
