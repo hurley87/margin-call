@@ -195,18 +195,39 @@ export async function runCycle(
       // Check if there's already a pending approval for this deal
       const alreadyPending = await hasPendingApproval(traderId, bestDeal.id);
       if (!alreadyPending) {
-        // Look up the desk manager for this trader
+        // Look up the desk manager for this trader (wallet casing may differ from DB)
         const supabase = createServerClient();
         const { data: deskMgr } = await supabase
           .from("desk_managers")
           .select("id")
-          .eq("wallet_address", trader.owner_address)
-          .single();
+          .ilike("wallet_address", trader.owner_address)
+          .maybeSingle();
+
+        if (!deskMgr?.id) {
+          await logActivity(
+            traderId,
+            "error",
+            "Deal needs approval but no desk_managers row matches this trader's owner_address — complete desk registration first",
+            bestDeal.id
+          );
+          await logActivity(
+            traderId,
+            "cycle_end",
+            "Cycle ended — cannot create approval without a registered desk manager"
+          );
+          return {
+            traderId,
+            status: "error",
+            dealId: bestDeal.id,
+            message:
+              "Approval required but your wallet is not registered as a desk manager. Open the app and complete desk registration, then retry.",
+          };
+        }
 
         await createApproval({
           traderId,
           dealId: bestDeal.id,
-          deskManagerId: deskMgr?.id ?? trader.owner_address,
+          deskManagerId: deskMgr.id,
           entryCostUsdc: bestDeal.entry_cost_usdc,
           potUsdc: bestDeal.pot_usdc,
         });
