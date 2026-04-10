@@ -204,6 +204,7 @@ export default function TraderDetailPage() {
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
         <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-12">
           <div className="min-w-0">
+            <ReputationSection traderId={id} />
             <AgentControls
               traderId={id}
               status={trader.status}
@@ -216,8 +217,6 @@ export default function TraderDetailPage() {
               mandate={trader.mandate}
               personality={trader.personality ?? null}
             />
-
-            <ReputationSection traderId={id} />
             <AssetInventory traderId={id} />
             <DealOutcomes traderId={id} />
             <ActivityHistory id={id} />
@@ -692,6 +691,7 @@ function MandateConfig({
   if (!editing) {
     return (
       <CollapsibleSection
+        key="mandate-view"
         title="Mandate"
         defaultOpen
         action={
@@ -808,6 +808,7 @@ function MandateConfig({
 
   return (
     <CollapsibleSection
+      key="mandate-edit"
       title="Configure Mandate"
       defaultOpen
       canCollapse={false}
@@ -999,7 +1000,7 @@ function ReputationSection({ traderId }: { traderId: string }) {
   if (totalDeals === 0) return null;
 
   return (
-    <CollapsibleSection title="Reputation" defaultOpen>
+    <section className={`${TRADER_SECTION_CLASS} mb-4`}>
       <div className="grid grid-cols-3 gap-4 text-center sm:grid-cols-6">
         <div>
           <p className="text-lg font-semibold text-[var(--t-text)]">
@@ -1037,6 +1038,6 @@ function ReputationSection({ traderId }: { traderId: string }) {
           <p className="text-xs text-[var(--t-muted)]">Total P&L</p>
         </div>
       </div>
-    </CollapsibleSection>
+    </section>
   );
 }
