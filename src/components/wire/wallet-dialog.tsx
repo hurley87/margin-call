@@ -7,6 +7,12 @@ import { useDepositFlow, useWithdrawFlow } from "@/hooks/use-escrow";
 
 const ZERO = BigInt(0);
 
+/** USDC micros for inputs + Max; avoids float noise and matches `parseUnits(_, 6)`. */
+function usdcToInputString(usdc: number): string {
+  const micros = Math.round(usdc * 1_000_000);
+  return (micros / 1_000_000).toFixed(6).replace(/\.?0+$/, "") || "0";
+}
+
 interface WalletDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -71,7 +77,17 @@ export function WalletDialog({
   }
 
   const withdrawExceedsBalance =
-    escrowUsdc !== null && amount !== "" && Number(amount) > escrowUsdc;
+    escrowUsdc !== null &&
+    amount !== "" &&
+    (() => {
+      try {
+        return (
+          parseUnits(amount, 6) > parseUnits(usdcToInputString(escrowUsdc), 6)
+        );
+      } catch {
+        return false;
+      }
+    })();
 
   async function handleWithdraw(e: React.FormEvent) {
     e.preventDefault();
@@ -155,7 +171,7 @@ export function WalletDialog({
               <div className="flex items-center gap-2">
                 <input
                   type="number"
-                  step="0.01"
+                  step="0.000001"
                   min="0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
@@ -166,7 +182,7 @@ export function WalletDialog({
                 {walletUsdc !== undefined && walletUsdc > 0 && (
                   <button
                     type="button"
-                    onClick={() => setAmount(String(walletUsdc))}
+                    onClick={() => setAmount(usdcToInputString(walletUsdc))}
                     className="shrink-0 text-xs text-[var(--t-accent)] hover:underline"
                   >
                     Max
@@ -217,9 +233,8 @@ export function WalletDialog({
               <div className="flex items-center gap-2">
                 <input
                   type="number"
-                  step="0.01"
+                  step="0.000001"
                   min="0"
-                  max={escrowUsdc ?? undefined}
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00 USDC"
@@ -229,7 +244,7 @@ export function WalletDialog({
                 {escrowUsdc !== null && escrowUsdc > 0 && (
                   <button
                     type="button"
-                    onClick={() => setAmount(String(escrowUsdc))}
+                    onClick={() => setAmount(usdcToInputString(escrowUsdc))}
                     className="shrink-0 text-xs text-[var(--t-accent)] hover:underline"
                   >
                     Max

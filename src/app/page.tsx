@@ -108,6 +108,9 @@ function Dashboard({ displayName }: { displayName: string }) {
     : activity;
 
   const pnl = portfolio?.stats.total_pnl ?? 0;
+  const totalAssetValueUsdc =
+    portfolio?.traders.reduce((sum, t) => sum + t.asset_value_usdc, 0) ?? 0;
+
   return (
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
@@ -115,17 +118,21 @@ function Dashboard({ displayName }: { displayName: string }) {
       {/* Ticker Strip */}
       <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)]">
         <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-1.5 text-sm">
-          <div className="flex items-center gap-4">
-            <span className="text-[var(--t-text)]">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 sm:gap-x-4">
+            <span className="shrink-0 text-[var(--t-text)]">
               <span className="text-[var(--t-muted)]">PORT </span>
               {portfolioLoading
                 ? "..."
                 : `$${(portfolio?.total_value_usdc ?? 0).toFixed(2)}`}
             </span>
+            <span className="shrink-0 text-[var(--t-text)]">
+              <span className="text-[var(--t-muted)]">ASSETS </span>
+              {portfolioLoading ? "..." : `$${totalAssetValueUsdc.toFixed(2)}`}
+            </span>
             <span
-              className={
+              className={`shrink-0 ${
                 pnl >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]"
-              }
+              }`}
             >
               <span className="text-[var(--t-muted)]">P&L </span>
               {portfolioLoading
@@ -280,9 +287,16 @@ function TraderRoster({
         {/* Table Header */}
         <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
           <span>Name</span>
-          <div className="flex items-center gap-4">
-            <span className="w-20 text-right">Escrow</span>
-            <span className="w-20 text-right">Total</span>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <span className="w-[4.5rem] shrink-0 text-right sm:w-20">
+              Escrow
+            </span>
+            <span className="w-[4.5rem] shrink-0 text-right sm:w-20">
+              Assets
+            </span>
+            <span className="w-[4.5rem] shrink-0 text-right sm:w-20">
+              Total
+            </span>
           </div>
         </div>
 
@@ -323,11 +337,14 @@ function TraderRoster({
                 />
                 <span className="text-[var(--t-text)]">{t.name}</span>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="w-20 text-right text-[var(--t-muted)]">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <span className="w-[4.5rem] shrink-0 text-right text-[var(--t-muted)] sm:w-20">
                   ${t.escrow_usdc.toFixed(2)}
                 </span>
-                <span className="w-20 text-right text-[var(--t-text)]">
+                <span className="w-[4.5rem] shrink-0 text-right text-[var(--t-muted)] sm:w-20">
+                  ${t.asset_value_usdc.toFixed(2)}
+                </span>
+                <span className="w-[4.5rem] shrink-0 text-right text-[var(--t-text)] sm:w-20">
                   ${t.total_value_usdc.toFixed(2)}
                 </span>
               </div>
