@@ -99,7 +99,7 @@ export async function buildPromptSuggestionMessages(
       role: "user",
       content: `A desk manager wants to create a new deal on the trading floor. They gave the theme: "${theme}"
 
-Generate exactly 3 deal prompt suggestions. Each should be a vivid, 1-2 sentence scenario set on 1980s Wall Street that could be used as a deal prompt. Make them sound like rumors, tips, or opportunities that would tempt a greedy trader. Mix in risk — some should sound too good to be true.`,
+Generate exactly 3 deal prompt suggestions. Each must be a single sentence, max ~28 words (~180 characters), 1980s Wall Street — rumor, tip, or sketchy opportunity that tempts a greedy trader, with one clear risk or catch. Ticker-wire tone: no scene-setting, no second sentence, no list-like run-ons.`,
     },
   ];
 }
