@@ -52,6 +52,56 @@ import {
   getClientIdentifier,
 } from "@/lib/rate-limit";
 
+class RequestBodyValidationError extends Error {}
+
+interface DealEnterRequestBody {
+  deal_id?: string;
+  trader_id?: string;
+  _agent_cycle?: boolean;
+}
+
+async function parseDealEnterRequestBody(
+  request: NextRequest
+): Promise<DealEnterRequestBody> {
+  let parsedBody: unknown;
+  try {
+    parsedBody = await request.json();
+  } catch {
+    throw new RequestBodyValidationError("Invalid JSON body");
+  }
+
+  if (
+    typeof parsedBody !== "object" ||
+    parsedBody === null ||
+    Array.isArray(parsedBody)
+  ) {
+    throw new RequestBodyValidationError("JSON body must be an object");
+  }
+
+  const { deal_id, trader_id, _agent_cycle } = parsedBody as Record<
+    string,
+    unknown
+  >;
+
+  if (deal_id !== undefined && typeof deal_id !== "string") {
+    throw new RequestBodyValidationError("deal_id must be a string");
+  }
+
+  if (trader_id !== undefined && typeof trader_id !== "string") {
+    throw new RequestBodyValidationError("trader_id must be a string");
+  }
+
+  if (_agent_cycle !== undefined && typeof _agent_cycle !== "boolean") {
+    throw new RequestBodyValidationError("_agent_cycle must be a boolean");
+  }
+
+  return {
+    deal_id,
+    trader_id,
+    _agent_cycle,
+  };
+}
+
 function generateRandomSeed(): number {
   const bytes = randomBytes(4);
   return bytes.readUInt32BE() / 0xffffffff;
@@ -136,12 +186,8 @@ async function postReputation(
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const { deal_id, trader_id, _agent_cycle } = body as {
-      deal_id?: string;
-      trader_id?: string;
-      _agent_cycle?: boolean;
-    };
+    const { deal_id, trader_id, _agent_cycle } =
+      await parseDealEnterRequestBody(request);
 
     if (!deal_id) {
       return NextResponse.json(
@@ -542,6 +588,9 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (e) {
+    if (e instanceof RequestBodyValidationError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
     console.error("Deal entry error:", e);
     if (
       isPostgresDuplicateError(e) &&
