@@ -691,19 +691,7 @@ function MandateConfig({
 
   if (!editing) {
     return (
-      <CollapsibleSection
-        title="Mandate"
-        defaultOpen
-        action={
-          <button
-            type="button"
-            onClick={openEdit}
-            className="text-xs text-[var(--t-muted)] hover:text-[var(--t-text)]"
-          >
-            Configure
-          </button>
-        }
-      >
+      <CollapsibleSection key="mandate-view" title="Mandate" defaultOpen>
         {(personality?.trim() || mandate.llm_deal_selection === false) && (
           <div className="mb-4 space-y-2 text-sm">
             {personality?.trim() && (
@@ -802,12 +790,22 @@ function MandateConfig({
               )}
           </div>
         )}
+        <div className="mt-4 flex justify-end border-t border-[var(--t-border)]/60 pt-4">
+          <button
+            type="button"
+            onClick={openEdit}
+            className="border border-[var(--t-border)] px-3 py-1.5 text-xs text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+          >
+            Configure mandate
+          </button>
+        </div>
       </CollapsibleSection>
     );
   }
 
   return (
     <CollapsibleSection
+      key="mandate-edit"
       title="Configure Mandate"
       defaultOpen
       canCollapse={false}
