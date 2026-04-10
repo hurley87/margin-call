@@ -691,7 +691,7 @@ function MandateConfig({
 
   if (!editing) {
     return (
-      <CollapsibleSection key="mandate-view" title="Mandate" defaultOpen>
+      <CollapsibleSection key="mandate-view" title="Mandate">
         {(personality?.trim() || mandate.llm_deal_selection === false) && (
           <div className="mb-4 space-y-2 text-sm">
             {personality?.trim() && (
@@ -997,7 +997,7 @@ function ReputationSection({ traderId }: { traderId: string }) {
   if (totalDeals === 0) return null;
 
   return (
-    <CollapsibleSection title="Reputation" defaultOpen>
+    <section className={`${TRADER_SECTION_CLASS} mb-4`}>
       <div className="grid grid-cols-3 gap-4 text-center sm:grid-cols-6">
         <div>
           <p className="text-lg font-semibold text-[var(--t-text)]">
@@ -1035,6 +1035,6 @@ function ReputationSection({ traderId }: { traderId: string }) {
           <p className="text-xs text-[var(--t-muted)]">Total P&L</p>
         </div>
       </div>
-    </CollapsibleSection>
+    </section>
   );
 }
