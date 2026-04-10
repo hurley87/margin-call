@@ -204,13 +204,13 @@ export default function TraderDetailPage() {
       <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
         <div className="grid items-start gap-8 lg:grid-cols-2 lg:gap-10 xl:gap-12">
           <div className="min-w-0">
-            <ReputationSection traderId={id} />
             <AgentControls
               traderId={id}
               status={trader.status}
               unfunded={unfunded}
               onOpenWallet={() => setWalletOpen(true)}
             />
+            <ReputationSection traderId={id} />
 
             <MandateConfig
               traderId={id}
@@ -693,7 +693,6 @@ function MandateConfig({
       <CollapsibleSection
         key="mandate-view"
         title="Mandate"
-        defaultOpen
         action={
           <button
             type="button"
@@ -1000,7 +999,7 @@ function ReputationSection({ traderId }: { traderId: string }) {
   if (totalDeals === 0) return null;
 
   return (
-    <section className={`${TRADER_SECTION_CLASS} mb-4`}>
+    <section className={TRADER_SECTION_CLASS}>
       <div className="grid grid-cols-3 gap-4 text-center sm:grid-cols-6">
         <div>
           <p className="text-lg font-semibold text-[var(--t-text)]">
