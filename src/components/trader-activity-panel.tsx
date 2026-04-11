@@ -1,8 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { FeedLine } from "@/components/feed-line";
+import { useMemo, useState } from "react";
+import {
+  FeedLine,
+  buildApprovalIdByEntryId,
+  buildReviewCtaEntryIds,
+  getFeedGridClass,
+} from "@/components/feed-line";
+import { DealApprovalDialog } from "@/components/deal-approval-dialog";
 import { useAgentActivity } from "@/hooks/use-agent";
+import { usePendingApprovals } from "@/hooks/use-approvals";
 
 interface TraderActivityPanelProps {
   traderId: string;
@@ -12,20 +19,32 @@ const ACTIVITY_PAGE_SIZE = 10;
 
 export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
   const [visibleCount, setVisibleCount] = useState(ACTIVITY_PAGE_SIZE);
+  const [approvalCtx, setApprovalCtx] = useState<{
+    traderId: string;
+    dealId: string | null;
+  } | null>(null);
   const {
     data: activity,
     isLoading,
     isError,
     error,
   } = useAgentActivity(traderId);
+  const { data: pendingApprovals } = usePendingApprovals();
+  const approvalIdByEntryId = useMemo(() => {
+    return buildApprovalIdByEntryId(
+      activity ?? [],
+      pendingApprovals ?? [],
+      traderId
+    );
+  }, [activity, pendingApprovals, traderId]);
+  const reviewCtaEntryIds = useMemo(
+    () => buildReviewCtaEntryIds(activity ?? []),
+    [activity]
+  );
   const totalCount = activity?.length ?? 0;
   const visibleActivity = activity?.slice(0, visibleCount) ?? [];
   const hasMore = visibleCount < totalCount;
   const canShowLess = visibleCount > ACTIVITY_PAGE_SIZE;
-
-  useEffect(() => {
-    setVisibleCount(ACTIVITY_PAGE_SIZE);
-  }, [traderId]);
 
   return (
     <section>
@@ -44,10 +63,13 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
         </div>
       </div>
 
-      <div className="flex items-center gap-2 border-y border-[var(--t-border)]/80 py-2 text-xs uppercase tracking-wider text-[var(--t-muted)]">
-        <span className="shrink-0">Time</span>
-        <span className="w-12 shrink-0 text-right">Type</span>
-        <span className="flex-1">Message</span>
+      <div
+        className={`${getFeedGridClass(false)} border-y border-[var(--t-border)]/80 py-2 text-xs uppercase tracking-wider text-[var(--t-muted)]`}
+      >
+        <span>Time</span>
+        <span>Type</span>
+        <span className="min-w-0">Message</span>
+        <span aria-hidden />
       </div>
 
       {isLoading ? (
@@ -78,6 +100,9 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
                 traderName=""
                 showTrader={false}
                 wrapMessage
+                onReviewApproval={(ctx) => setApprovalCtx(ctx)}
+                reviewCtaEntryIds={reviewCtaEntryIds}
+                approvalIdByEntryId={approvalIdByEntryId}
               />
             ))}
           </div>
@@ -112,6 +137,15 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
           )}
         </>
       )}
+
+      <DealApprovalDialog
+        open={approvalCtx !== null}
+        onOpenChange={(open) => {
+          if (!open) setApprovalCtx(null);
+        }}
+        traderId={approvalCtx?.traderId ?? traderId}
+        dealId={approvalCtx?.dealId ?? null}
+      />
     </section>
   );
 }

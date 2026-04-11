@@ -241,7 +241,8 @@ export async function runCycle(
       await logActivity(
         traderId,
         "cycle_end",
-        "Cycle paused — awaiting desk manager approval"
+        "Cycle paused — awaiting desk manager approval",
+        bestDeal.id
       );
       return {
         traderId,

@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePrivy } from "@privy-io/react-auth";
 import { authFetch } from "@/lib/api";
 
 export interface PendingApproval {
@@ -18,6 +19,8 @@ export interface PendingApproval {
 }
 
 export function usePendingApprovals() {
+  const { authenticated } = usePrivy();
+
   return useQuery({
     queryKey: ["pending-approvals"],
     queryFn: async () => {
@@ -26,7 +29,11 @@ export function usePendingApprovals() {
       const data = await res.json();
       return (data.approvals ?? []) as PendingApproval[];
     },
-    // Realtime subscriptions handle live updates — no polling needed
+    enabled: authenticated,
+    // Do not inherit the global 30s staleTime — new rows are inserted server-side
+    // and Realtime may not invalidate if RLS blocks replica events for anon clients.
+    staleTime: 0,
+    refetchInterval: 8_000,
   });
 }
 

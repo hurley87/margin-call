@@ -6,7 +6,7 @@ import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { useGlobalActivity } from "@/hooks/use-global-activity";
 import { useLeaderboardRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
-import { FeedLine } from "@/components/feed-line";
+import { FeedLine, getFeedGridClass } from "@/components/feed-line";
 import type { LeaderboardTrader } from "@/lib/supabase/leaderboard";
 
 type SortKey = "pnl" | "win_rate" | "total_value";
@@ -179,11 +179,14 @@ export default function LeaderboardPage() {
           </div>
 
           <div className="border border-[var(--t-border)] bg-[var(--t-bg)]">
-            <div className="flex items-center gap-2 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
-              <span className="shrink-0">Time</span>
-              <span className="w-12 shrink-0 text-right">Type</span>
-              <span className="w-16 shrink-0">Trader</span>
-              <span className="flex-1">Message</span>
+            <div
+              className={`${getFeedGridClass(true)} border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]`}
+            >
+              <span>Time</span>
+              <span>Type</span>
+              <span>Trader</span>
+              <span className="min-w-0">Message</span>
+              <span aria-hidden />
             </div>
             {feedLoading ? (
               <div className="p-6 text-center text-sm text-[var(--t-muted)]">

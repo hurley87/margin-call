@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import { usePrivy } from "@privy-io/react-auth";
@@ -8,14 +8,21 @@ import { useDeskManager } from "@/hooks/use-desk";
 import { usePortfolio } from "@/hooks/use-portfolio";
 import { useTraders } from "@/hooks/use-traders";
 
-import { usePendingApprovals, useApproveReject } from "@/hooks/use-approvals";
+import { usePendingApprovals } from "@/hooks/use-approvals";
 import { useMyDeals } from "@/hooks/use-deals";
 import type { Deal } from "@/hooks/use-deals";
 import { useDashboardRealtime } from "@/hooks/use-realtime";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import { Nav } from "@/components/nav";
-import { FeedLine } from "@/components/feed-line";
+import {
+  FeedLine,
+  buildApprovalIdByEntryId,
+  buildReviewCtaEntryIds,
+  getFeedGridClass,
+} from "@/components/feed-line";
+import { PendingApprovalCard } from "@/components/pending-approval-card";
+import { DealApprovalDialog } from "@/components/deal-approval-dialog";
 
 export default function Home() {
   const { ready, authenticated, login, logout } = usePrivy();
@@ -99,13 +106,28 @@ function Dashboard({ displayName }: { displayName: string }) {
   const { balance: usdcBalance } = useUsdcBalance();
 
   const [traderFilter, setTraderFilter] = useState<string | null>(null);
+  const [approvalCtx, setApprovalCtx] = useState<{
+    traderId: string;
+    dealId: string | null;
+  } | null>(null);
 
-  const activity = feedData?.activity ?? [];
+  const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
   const traderNames = feedData?.traderNames ?? {};
 
-  const filteredActivity = traderFilter
-    ? activity.filter((a) => a.trader_id === traderFilter)
-    : activity;
+  const filteredActivity = useMemo(() => {
+    if (!traderFilter) return activity;
+    const tf = traderFilter.toLowerCase();
+    return activity.filter((a) => a.trader_id.toLowerCase() === tf);
+  }, [activity, traderFilter]);
+
+  const approvalIdByEntryId = useMemo(() => {
+    return buildApprovalIdByEntryId(filteredActivity, approvals ?? []);
+  }, [approvals, filteredActivity]);
+
+  const reviewCtaEntryIds = useMemo(
+    () => buildReviewCtaEntryIds(filteredActivity),
+    [filteredActivity]
+  );
 
   const pnl = portfolio?.stats.total_pnl ?? 0;
   const totalAssetValueUsdc =
@@ -160,6 +182,20 @@ function Dashboard({ displayName }: { displayName: string }) {
         {/* My Deals */}
         <MyDeals deals={deals ?? []} />
 
+        {/* Pending approvals: above feed so desk managers see action items first */}
+        {approvals && approvals.length > 0 && (
+          <div className="mb-6">
+            <div className="mb-2 text-xs uppercase tracking-wider text-[var(--t-amber)]">
+              PENDING APPROVALS ({approvals.length})
+            </div>
+            <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
+              {approvals.map((a) => (
+                <PendingApprovalCard key={a.id} approval={a} />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Trader Filter Chips */}
         {traders && traders.length > 0 && (
           <div className="mb-4 flex items-center gap-2 overflow-x-auto text-xs">
@@ -209,13 +245,14 @@ function Dashboard({ displayName }: { displayName: string }) {
               : ""}
           </div>
           <div className="border border-[var(--t-border)] bg-[var(--t-bg)]">
-            <div className="flex items-center gap-2 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
-              <span className="shrink-0">Time</span>
-              <span className="w-12 shrink-0 text-right">Type</span>
-              {traderFilter === null && (
-                <span className="w-16 shrink-0">Trader</span>
-              )}
-              <span className="flex-1">Message</span>
+            <div
+              className={`${getFeedGridClass(traderFilter === null)} border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]`}
+            >
+              <span>Time</span>
+              <span>Type</span>
+              {traderFilter === null && <span>Trader</span>}
+              <span className="min-w-0">Message</span>
+              <span aria-hidden />
             </div>
             {feedLoading ? (
               <div className="p-6 text-center text-sm text-[var(--t-muted)]">
@@ -233,27 +270,25 @@ function Dashboard({ displayName }: { displayName: string }) {
                     entry={entry}
                     traderName={traderNames[entry.trader_id] ?? "???"}
                     showTrader={traderFilter === null}
+                    onReviewApproval={(ctx) => setApprovalCtx(ctx)}
+                    reviewCtaEntryIds={reviewCtaEntryIds}
+                    approvalIdByEntryId={approvalIdByEntryId}
                   />
                 ))}
               </div>
             )}
           </div>
         </div>
-
-        {/* Inline Pending Approvals */}
-        {approvals && approvals.length > 0 && (
-          <div className="mb-6">
-            <div className="mb-2 text-xs uppercase tracking-wider text-[var(--t-muted)]">
-              PENDING APPROVALS ({approvals.length})
-            </div>
-            <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
-              {approvals.map((a) => (
-                <ApprovalCard key={a.id} approval={a} />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
+
+      <DealApprovalDialog
+        open={approvalCtx !== null}
+        onOpenChange={(open) => {
+          if (!open) setApprovalCtx(null);
+        }}
+        traderId={approvalCtx?.traderId ?? null}
+        dealId={approvalCtx?.dealId ?? null}
+      />
     </div>
   );
 }
@@ -350,84 +385,6 @@ function TraderRoster({
               </div>
             </Link>
           ))
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ── Approval Card ── */
-
-function ApprovalCard({
-  approval,
-}: {
-  approval: {
-    id: string;
-    trader_name: string;
-    deal_prompt: string;
-    entry_cost_usdc: number;
-    deal_pot_usdc: number;
-    expires_at: string;
-  };
-}) {
-  const { mutate, isPending } = useApproveReject();
-  const expiresAt = new Date(approval.expires_at);
-  const now = new Date();
-  const minutesLeft = Math.max(
-    0,
-    Math.round((expiresAt.getTime() - now.getTime()) / 60000)
-  );
-  const isExpired = minutesLeft <= 0;
-
-  return (
-    <div className="bg-[var(--t-bg)] px-3 py-3">
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-xs">
-            <span className="text-[var(--t-accent)]">
-              {approval.trader_name}
-            </span>
-            <span className="text-[var(--t-muted)]">
-              ${approval.entry_cost_usdc.toFixed(2)} into $
-              {approval.deal_pot_usdc.toFixed(2)} pot
-            </span>
-            <span
-              className={`text-[10px] ${
-                isExpired
-                  ? "text-[var(--t-red)]"
-                  : minutesLeft < 5
-                    ? "text-[var(--t-red)]"
-                    : "text-[var(--t-amber)]"
-              }`}
-            >
-              {isExpired ? "EXPIRED" : `${minutesLeft}m`}
-            </span>
-          </div>
-          <p className="mt-1 truncate text-xs text-[var(--t-muted)]">
-            {approval.deal_prompt}
-          </p>
-        </div>
-        {!isExpired && (
-          <div className="flex shrink-0 items-center gap-2 text-[10px]">
-            <button
-              onClick={() =>
-                mutate({ approvalId: approval.id, action: "approve" })
-              }
-              disabled={isPending}
-              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] disabled:opacity-50"
-            >
-              APPROVE
-            </button>
-            <button
-              onClick={() =>
-                mutate({ approvalId: approval.id, action: "reject" })
-              }
-              disabled={isPending}
-              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
-            >
-              DENY
-            </button>
-          </div>
         )}
       </div>
     </div>

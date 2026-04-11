@@ -22,10 +22,14 @@ import {
   escrowAbi,
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
-import { useConfigureMandate } from "@/hooks/use-approvals";
+import {
+  useConfigureMandate,
+  usePendingApprovals,
+} from "@/hooks/use-approvals";
 import { useTraderRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
+import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
 import { authFetch } from "@/lib/api";
 import { shortAssetLabel } from "@/lib/format-asset-label";
@@ -210,6 +214,7 @@ export default function TraderDetailPage() {
               unfunded={unfunded}
               onOpenWallet={() => setWalletOpen(true)}
             />
+            <TraderPendingApprovals traderId={id} />
             <ReputationSection traderId={id} />
             <MandateConfig
               traderId={id}
@@ -222,7 +227,7 @@ export default function TraderDetailPage() {
           </div>
 
           <aside className="min-w-0 lg:sticky lg:top-[89px] lg:self-start lg:border-l lg:border-[var(--t-border)]/80 lg:pl-8 xl:pl-10">
-            <TraderActivityPanel traderId={id} />
+            <TraderActivityPanel key={id} traderId={id} />
           </aside>
         </div>
       </div>
@@ -249,6 +254,30 @@ export default function TraderDetailPage() {
 }
 
 /* ── Status Badge ── */
+
+function TraderPendingApprovals({ traderId }: { traderId: string }) {
+  const { data: approvals } = usePendingApprovals();
+  const pending = (approvals ?? []).filter((a) => a.trader_id === traderId);
+  if (pending.length === 0) return null;
+
+  return (
+    <div className="mt-4 border border-[var(--t-amber)]/50 bg-[var(--t-amber)]/[0.07] px-4 py-3">
+      <h2 className="text-xs uppercase tracking-[0.2em] text-[var(--t-amber)]">
+        Pending deal approval{pending.length > 1 ? "s" : ""}
+      </h2>
+      <p className="mt-1 text-[11px] text-[var(--t-muted)]">
+        Approve or deny so this trader can enter the deal, or use{" "}
+        <span className="text-[var(--t-text)]">Review</span> on the activity
+        lines below.
+      </p>
+      <div className="mt-3 flex flex-col gap-[1px] bg-[var(--t-border)]">
+        {pending.map((a) => (
+          <PendingApprovalCard key={a.id} approval={a} />
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function StatusBadge({ status }: { status: string }) {
   const styles: Record<string, string> = {

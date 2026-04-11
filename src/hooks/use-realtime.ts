@@ -150,6 +150,10 @@ export function useTraderRealtime(traderId: string) {
       filter: `trader_id=eq.${traderId}`,
       queryKeys: [["trader-history", traderId]],
     },
+    {
+      table: "deal_approvals",
+      queryKeys: [["pending-approvals"]],
+    },
   ]);
 }
 
