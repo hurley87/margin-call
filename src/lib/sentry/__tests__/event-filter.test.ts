@@ -21,9 +21,16 @@ describe("resolveSentryEnvironment", () => {
 
   it("falls back to node env and then development", () => {
     expect(resolveSentryEnvironment("test")).toBe("test");
-    expect(resolveSentryEnvironment(undefined, undefined, undefined)).toBe(
-      "development"
-    );
+
+    const previousNodeEnv = process.env.NODE_ENV;
+    try {
+      delete process.env.NODE_ENV;
+      expect(resolveSentryEnvironment(undefined, undefined, undefined)).toBe(
+        "development"
+      );
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 });
 
