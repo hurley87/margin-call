@@ -7,15 +7,22 @@ const LOCAL_HOSTNAMES = new Set(["localhost", "127.0.0.1", "::1"]);
  * Resolve a stable Sentry environment value across local, preview, and production runtimes.
  */
 export function resolveSentryEnvironment(
-  nodeEnv: string | undefined = process.env.NODE_ENV,
-  vercelEnv: string | undefined = process.env.VERCEL_ENV,
+  nodeEnv: string | undefined,
+  vercelEnv: string | undefined,
 ): string {
-  if (vercelEnv === "production") {
+  const effectiveNodeEnv = nodeEnv ?? process.env.NODE_ENV;
+  const effectiveVercelEnv = vercelEnv ?? process.env.VERCEL_ENV;
+
+  if (effectiveVercelEnv === "production") {
     return "vercel-production";
   }
 
-  if (nodeEnv && nodeEnv.length > 0) {
-    return nodeEnv;
+  if (effectiveNodeEnv === "test") {
+    return "development";
+  }
+
+  if (effectiveNodeEnv && effectiveNodeEnv.length > 0) {
+    return effectiveNodeEnv;
   }
 
   return "development";
@@ -38,7 +45,11 @@ export function isLocalUrl(rawUrl: string | undefined): boolean {
 
   try {
     const parsedUrl = new URL(rawUrl);
-    return LOCAL_HOSTNAMES.has(parsedUrl.hostname);
+    const normalizedHostname = parsedUrl.hostname
+      .replace(/^\[/, "")
+      .replace(/\]$/, "");
+
+    return LOCAL_HOSTNAMES.has(normalizedHostname);
   } catch {
     return false;
   }
