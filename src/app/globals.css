@@ -201,6 +201,36 @@
   animation: desk-float 12s ease-in-out infinite;
 }
 
+/* ── CRT panel framing for the trading desk dashboard ── */
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--t-border);
+  background: var(--t-panel);
+  min-height: 0;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-bottom: 1px solid var(--t-border);
+  background: var(--t-surface);
+  padding: 0.4rem 0.6rem;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--t-accent);
+}
+
+.panel-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
