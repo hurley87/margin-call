@@ -23,6 +23,7 @@ import {
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { DealApprovalDialog } from "@/components/deal-approval-dialog";
+import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 
 export default function Home() {
   const { ready, authenticated, login, logout } = usePrivy();
@@ -90,7 +91,12 @@ export default function Home() {
     );
   }
 
-  return <Dashboard displayName={deskManager.display_name} />;
+  return (
+    <>
+      <Dashboard displayName={deskManager.display_name} />
+      {process.env.NODE_ENV === "development" && <ConvexIdentityDebug />}
+    </>
+  );
 }
 
 /* ── Dashboard ── */
