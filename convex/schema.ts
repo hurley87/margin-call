@@ -130,11 +130,14 @@ export default defineSchema({
     message: v.string(),
     dealId: v.optional(v.id("deals")),
     metadata: v.optional(v.any()),
+    // Stable dedupe key: (traderId, dealId, activityType, correlationId) or explicit eventId
+    dedupeKey: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("byTrader", ["traderId"])
     .index("byTraderAndCreatedAt", ["traderId", "createdAt"])
-    .index("byActivityType", ["activityType"]),
+    .index("byActivityType", ["activityType"])
+    .index("byDedupeKey", ["dedupeKey"]),
 
   traderTransactions: defineTable({
     traderId: v.id("traders"),
