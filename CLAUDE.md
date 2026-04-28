@@ -16,7 +16,7 @@ Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s W
 
 - **Framework:** Next.js 16 (App Router) with React 19, TypeScript (strict mode)
 - **Styling:** Tailwind CSS v4 with `tw-animate-css`, `class-variance-authority`, `tailwind-merge`, `clsx`
-- **Data Fetching:** `@tanstack/react-query` for all client-side data fetching
+- **Data Fetching:** Convex hooks (`useQuery`/`useMutation`/`useAction` from `convex/react`) for all Convex-backed state. Plain `useEffect` + `fetch` for legacy API routes not yet on Convex.
 - **UI Components:** Base UI (`@base-ui/react`) + shadcn/ui pattern, Lucide icons
 - **Package Manager:** pnpm (workspace enabled)
 - **Path alias:** `@/*` maps to `./src/*`
@@ -47,5 +47,5 @@ Scan deals → evaluate against mandate → check approval threshold → enter d
 
 - Fonts: Geist Sans + Geist Mono via `next/font/google` (CSS variables `--font-geist-sans`, `--font-geist-mono`)
 - ESLint flat config (`eslint.config.mjs`) with `eslint-config-next` core-web-vitals + TypeScript
-- Use TanStack Query (`useQuery`/`useMutation`) for all client-side data fetching. Do not use `useEffect` + `fetch()`. Query hooks live in `src/hooks/`.
-- **Convex-backed state must use Convex hooks** (`useQuery`/`useMutation`/`useAction` from `convex/react`). TanStack Query is forbidden for Convex-backed state.
+- Use Convex hooks (`useQuery`/`useMutation`/`useAction` from `convex/react`) for all Convex-backed state. TanStack Query is **forbidden** for Convex-backed state — it has been removed from the project.
+- For legacy Supabase/REST routes not yet on Convex, use plain `useEffect` + `fetch` (no TanStack). Query hooks live in `src/hooks/`.
