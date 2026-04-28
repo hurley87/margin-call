@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
 import { authFetch } from "@/lib/api";
 import type { Trader } from "./use-traders";
@@ -10,9 +9,7 @@ import type { Mandate } from "@/lib/agent/evaluator";
 export function useCreateTrader() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | undefined>();
-  const queryClient = useQueryClient();
   const { user } = usePrivy();
-  const walletAddress = user?.wallet?.address;
 
   const createTrader = useCallback(
     async (name: string, mandate?: Mandate, personality?: string | null) => {
@@ -36,15 +33,8 @@ export function useCreateTrader() {
         if (!res.ok) throw new Error(data.error || "Failed to create trader");
 
         const newTrader = data.trader as Trader;
-
-        // Optimistically prepend the new trader so the list updates instantly
-        if (walletAddress) {
-          queryClient.setQueryData<Trader[]>(
-            ["traders", walletAddress],
-            (old) => (old ? [newTrader, ...old] : [newTrader])
-          );
-        }
-
+        // Convex subscription on traders.listByDesk will update automatically —
+        // no cache invalidation needed.
         return newTrader;
       } catch (err) {
         const message =
@@ -55,7 +45,8 @@ export function useCreateTrader() {
         setIsLoading(false);
       }
     },
-    [queryClient, walletAddress]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [user?.wallet?.address]
   );
 
   const reset = useCallback(() => {

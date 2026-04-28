@@ -1,5 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
-import { usePrivy } from "@privy-io/react-auth";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { authFetch } from "@/lib/api";
 
 export interface Trader {
@@ -20,33 +24,82 @@ export interface Trader {
   updated_at: string;
 }
 
-export function useTraders() {
-  const { user, authenticated } = usePrivy();
-  const walletAddress = user?.wallet?.address;
-
-  return useQuery({
-    queryKey: ["traders", walletAddress],
-    queryFn: async () => {
-      const res = await authFetch("/api/trader/list");
-      if (!res.ok) throw new Error("Failed to load traders");
-      const data = await res.json();
-      return (data.traders ?? []) as Trader[];
-    },
-    enabled: authenticated && !!walletAddress,
-    staleTime: 30_000,
-  });
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapConvexTrader(t: Record<string, any>): Trader {
+  return {
+    id: t._id,
+    token_id: t.tokenId ?? 0,
+    name: t.name,
+    owner_address: t.ownerSubject ?? "",
+    tba_address: null,
+    cdp_wallet_address: t.cdpWalletAddress ?? null,
+    cdp_owner_address: t.cdpOwnerAddress ?? null,
+    cdp_account_name: t.cdpAccountName ?? null,
+    status: t.status,
+    mandate: (t.mandate as Record<string, unknown>) ?? {},
+    personality: t.personality ?? null,
+    escrow_balance_usdc: t.escrowBalanceUsdc ?? 0,
+    last_cycle_at: t.lastCycleAt ? new Date(t.lastCycleAt).toISOString() : null,
+    created_at: new Date(t.createdAt).toISOString(),
+    updated_at: new Date(t.updatedAt).toISOString(),
+  };
 }
 
-export function useTrader(id: string) {
-  return useQuery({
-    queryKey: ["trader", id],
-    queryFn: async () => {
-      const res = await authFetch(`/api/trader/${id}`);
-      if (!res.ok) throw new Error("Trader not found");
-      const data = await res.json();
-      return data.trader as Trader;
-    },
-  });
+/**
+ * Reactive list of traders owned by the authenticated desk manager.
+ * Backed by Convex subscription — live updates without polling.
+ */
+export function useTraders(): {
+  data: Trader[] | undefined;
+  isLoading: boolean;
+  error: Error | null;
+} {
+  const result = useQuery(api.traders.listByDesk);
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, error: null };
+  }
+
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: (result as any[]).map(mapConvexTrader),
+    isLoading: false,
+    error: null,
+  };
+}
+
+/**
+ * Reactive single trader by id.
+ * Backed by Convex subscription — live updates without polling.
+ */
+export function useTrader(id: string): {
+  data: Trader | undefined;
+  isLoading: boolean;
+  error: Error | null;
+} {
+  const result = useQuery(
+    api.traders.getById,
+    id ? { traderId: id as Id<"traders"> } : "skip"
+  );
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, error: null };
+  }
+
+  if (result === null) {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: new Error("Trader not found"),
+    };
+  }
+
+  return {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    data: mapConvexTrader(result as any),
+    isLoading: false,
+    error: null,
+  };
 }
 
 export interface TraderHistoryEvent {
@@ -59,14 +112,42 @@ export interface TraderHistoryEvent {
   rake?: number;
 }
 
-export function useTraderHistory(id: string) {
-  return useQuery({
-    queryKey: ["trader-history", id],
-    queryFn: async () => {
-      const res = await authFetch(`/api/trader/${id}/history`);
-      if (!res.ok) throw new Error("Failed to load history");
-      const data = await res.json();
-      return (data.events ?? []) as TraderHistoryEvent[];
-    },
-  });
+/**
+ * Fetch on-chain trader history from the legacy API route.
+ * Not Convex-backed — plain fetch, no TanStack Query.
+ */
+export function useTraderHistory(id: string): {
+  data: TraderHistoryEvent[] | undefined;
+  isLoading: boolean;
+} {
+  const [state, setState] = useState<{
+    data: TraderHistoryEvent[] | undefined;
+    isLoading: boolean;
+  }>({ data: undefined, isLoading: !!id });
+
+  useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
+    authFetch(`/api/trader/${id}/history`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Failed to load history");
+        return res.json();
+      })
+      .then((json) => {
+        if (!cancelled) {
+          setState({
+            data: (json.events ?? []) as TraderHistoryEvent[],
+            isLoading: false,
+          });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setState((s) => ({ ...s, isLoading: false }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  return state;
 }
