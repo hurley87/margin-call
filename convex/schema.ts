@@ -27,6 +27,9 @@ export default defineSchema({
     personality: v.optional(v.string()),
     escrowBalanceUsdc: v.optional(v.number()),
     lastCycleAt: v.optional(v.number()),
+    // Cycle lease fields for idempotent, non-overlapping agent cycles (issue #85)
+    cycleLeaseUntil: v.optional(v.number()),
+    cycleGeneration: v.optional(v.number()),
     // CDP wallet pipeline
     walletStatus: v.union(
       v.literal("pending"),
@@ -127,11 +130,14 @@ export default defineSchema({
     message: v.string(),
     dealId: v.optional(v.id("deals")),
     metadata: v.optional(v.any()),
+    // Stable dedupe key: (traderId, dealId, activityType, correlationId) or explicit eventId
+    dedupeKey: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("byTrader", ["traderId"])
     .index("byTraderAndCreatedAt", ["traderId", "createdAt"])
-    .index("byActivityType", ["activityType"]),
+    .index("byActivityType", ["activityType"])
+    .index("byDedupeKey", ["dedupeKey"]),
 
   traderTransactions: defineTable({
     traderId: v.id("traders"),

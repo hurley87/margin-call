@@ -8,10 +8,20 @@
  * @module
  */
 
+import type * as agentActivityLog from "../agentActivityLog.js";
+import type * as assets from "../assets.js";
+import type * as dealApprovals from "../dealApprovals.js";
+import type * as dealOutcomes from "../dealOutcomes.js";
+import type * as deals from "../deals.js";
 import type * as deskManagers from "../deskManagers.js";
+import type * as marketNarratives from "../marketNarratives.js";
 import type * as me from "../me.js";
+import type * as systemPrompts from "../systemPrompts.js";
 import type * as traders from "../traders.js";
 import type * as wallet from "../wallet.js";
+import type * as agent_cycle from "../agent/cycle.js";
+import type * as agent_internal from "../agent/internal.js";
+import type * as agent_scheduler from "../agent/scheduler.js";
 
 import type {
   ApiFromModules,
@@ -20,10 +30,20 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agentActivityLog: typeof agentActivityLog;
+  assets: typeof assets;
+  dealApprovals: typeof dealApprovals;
+  dealOutcomes: typeof dealOutcomes;
+  deals: typeof deals;
   deskManagers: typeof deskManagers;
+  marketNarratives: typeof marketNarratives;
   me: typeof me;
+  systemPrompts: typeof systemPrompts;
   traders: typeof traders;
   wallet: typeof wallet;
+  "agent/cycle": typeof agent_cycle;
+  "agent/internal": typeof agent_internal;
+  "agent/scheduler": typeof agent_scheduler;
 }>;
 
 /**
