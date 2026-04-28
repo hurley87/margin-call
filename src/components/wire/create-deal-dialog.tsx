@@ -78,9 +78,7 @@ export function CreateDealDialog({
       queryClient.invalidateQueries({ queryKey: ["deals"] });
       queryClient.invalidateQueries({ queryKey: ["my-deals"] });
       onOpenChange(false);
-      router.push(
-        result?.supabaseId ? `/deals/${result.supabaseId}` : "/deals"
-      );
+      router.push("/deals");
     } catch {
       setState("configure");
     }

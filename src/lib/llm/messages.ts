@@ -1,5 +1,5 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { getActiveSystemPrompt } from "@/lib/supabase/queries";
+import { getActiveSystemPrompt } from "@/lib/convex/system-prompts";
 
 interface DealResolutionParams {
   dealPrompt: string;
