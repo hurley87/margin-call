@@ -150,3 +150,62 @@ export const applyWalletError = internalMutation({
     });
   },
 });
+
+/**
+ * Internal: apply a PnL outcome to a trader's escrow balance.
+ * CAS on traderId: reads current balance, applies delta, clamps to zero.
+ * If wipedOut is true, transitions status → "wiped_out".
+ * Idempotent: same outcomeId returns without re-applying.
+ */
+export const applyOutcomeBalance = internalMutation({
+  args: {
+    traderId: v.id("traders"),
+    pnlUsdc: v.number(),
+    wipedOut: v.boolean(),
+    /** Outcome document id used for idempotency key; stored as outcomeAppliedId. */
+    outcomeId: v.id("dealOutcomes"),
+  },
+  handler: async (ctx, { traderId, pnlUsdc, wipedOut, outcomeId }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return;
+
+    // Idempotency: if this outcome was already applied, no-op
+    if ((trader as Record<string, unknown>).lastOutcomeId === outcomeId) return;
+
+    const currentBalance = trader.escrowBalanceUsdc ?? 0;
+    const newBalance = Math.max(0, currentBalance + pnlUsdc);
+
+    const patch: Record<string, unknown> = {
+      escrowBalanceUsdc: newBalance,
+      lastOutcomeId: outcomeId,
+      updatedAt: Date.now(),
+    };
+
+    if (wipedOut) {
+      patch.status = "wiped_out";
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await ctx.db.patch(traderId, patch as any);
+  },
+});
+
+/**
+ * Internal: list traders on the same desk (same deskManagerId) excluding
+ * the given traderId. Used for desk dedup in deal selection.
+ */
+export const listSiblingTraderIds = internalQuery({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    excludeTraderId: v.id("traders"),
+  },
+  handler: async (ctx, { deskManagerId, excludeTraderId }) => {
+    const traders = await ctx.db
+      .query("traders")
+      .withIndex("byDeskManager", (q) => q.eq("deskManagerId", deskManagerId))
+      .collect();
+    return traders
+      .filter((t) => t._id !== excludeTraderId)
+      .map((t) => t._id as string);
+  },
+});
