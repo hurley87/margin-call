@@ -11,7 +11,6 @@ import { useTraders } from "@/hooks/use-traders";
 import { usePendingApprovals } from "@/hooks/use-approvals";
 import { useMyDeals } from "@/hooks/use-deals";
 import type { Deal } from "@/hooks/use-deals";
-import { useDashboardRealtime } from "@/hooks/use-realtime";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import { Nav } from "@/components/nav";
@@ -102,7 +101,6 @@ export default function Home() {
 /* ── Dashboard ── */
 
 function Dashboard({ displayName }: { displayName: string }) {
-  useDashboardRealtime();
 
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: traders } = useTraders();

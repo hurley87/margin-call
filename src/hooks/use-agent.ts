@@ -1,5 +1,18 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { authFetch } from "@/lib/api";
+"use client";
+
+/**
+ * Agent activity hooks — migrated to Convex.
+ *
+ * NOTE: usePauseTrader / useResumeTrader / useReviveTrader have no Convex
+ * mutations yet. They are stubbed here and flagged for human follow-up.
+ * See PR #103.
+ */
+
+import { useQuery as useConvexQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+
+// ── Types (kept snake_case for UI compatibility) ──────────────────────────────
 
 export interface AgentActivity {
   id: string;
@@ -26,96 +39,158 @@ export interface DealOutcomeWithNarrative {
   created_at: string;
 }
 
-export interface TraderAsset {
-  id: string;
-  trader_id: string;
-  name: string;
-  value_usdc: number;
-  source_deal_id: string | null;
-  source_outcome_id: string | null;
-  acquired_at: string;
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+type RawActivity = {
+  _id: string;
+  traderId: string;
+  activityType: string;
+  message: string;
+  dealId?: string;
+  metadata?: unknown;
+  createdAt: number;
+};
+
+function toAgentActivity(doc: RawActivity): AgentActivity {
+  return {
+    id: doc._id,
+    trader_id: doc.traderId,
+    activity_type: doc.activityType,
+    message: doc.message,
+    deal_id: doc.dealId ?? null,
+    metadata: (doc.metadata as Record<string, unknown>) ?? {},
+    created_at: new Date(doc.createdAt).toISOString(),
+  };
 }
 
-export function useTraderAssets(traderId: string) {
-  return useQuery({
-    queryKey: ["trader-assets", traderId],
-    queryFn: async () => {
-      const res = await authFetch(`/api/trader/${traderId}/assets`);
-      if (!res.ok) throw new Error("Failed to load assets");
-      const data = await res.json();
-      return (data.assets ?? []) as TraderAsset[];
-    },
-    enabled: !!traderId,
-    // Realtime subscriptions handle live updates — no polling needed
-  });
+type RawOutcome = {
+  _id: string;
+  dealId: string;
+  traderId: string;
+  narrative?: unknown;
+  traderPnlUsdc?: number;
+  potChangeUsdc?: number;
+  rakeUsdc?: number;
+  assetsGained?: unknown;
+  assetsLost?: unknown;
+  traderWipedOut?: boolean;
+  wipeoutReason?: string;
+  createdAt: number;
+};
+
+function toOutcome(doc: RawOutcome): DealOutcomeWithNarrative {
+  return {
+    id: doc._id,
+    deal_id: doc.dealId,
+    trader_id: doc.traderId,
+    narrative: (doc.narrative as DealOutcomeWithNarrative["narrative"]) ?? "",
+    trader_pnl_usdc: doc.traderPnlUsdc ?? 0,
+    pot_change_usdc: doc.potChangeUsdc ?? 0,
+    rake_usdc: doc.rakeUsdc ?? 0,
+    assets_gained:
+      (doc.assetsGained as { name: string; value_usdc: number }[]) ?? [],
+    assets_lost: (doc.assetsLost as string[]) ?? [],
+    trader_wiped_out: doc.traderWipedOut ?? false,
+    wipeout_reason: doc.wipeoutReason ?? null,
+    created_at: new Date(doc.createdAt).toISOString(),
+  };
 }
 
+// ── Hooks ──────────────────────────────────────────────────────────────────
+
+/** List agent activity log entries for a specific trader. Reactive via Convex. */
 export function useAgentActivity(traderId: string) {
-  return useQuery({
-    queryKey: ["agent-activity", traderId],
-    queryFn: async () => {
-      const res = await fetch(`/api/trader/${traderId}/activity`, {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("Failed to load activity");
-      const data = await res.json();
-      return (data.activity ?? []) as AgentActivity[];
-    },
-    enabled: !!traderId,
-    // Realtime subscriptions handle live updates — no polling needed
-  });
+  const result = useConvexQuery(
+    api.agentActivityLog.listByTrader,
+    traderId ? { traderId: traderId as Id<"traders"> } : "skip"
+  );
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, isError: false, error: null };
+  }
+
+  const data = (result as RawActivity[]).map(toAgentActivity);
+
+  return { data, isLoading: false, isError: false, error: null };
 }
 
+/** List deal outcomes for a specific trader. Reactive via Convex. */
 export function useTraderOutcomes(traderId: string) {
-  return useQuery({
-    queryKey: ["trader-outcomes", traderId],
-    queryFn: async () => {
-      const res = await fetch(`/api/trader/${traderId}/outcomes`, {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error("Failed to load outcomes");
-      const data = await res.json();
-      return (data.outcomes ?? []) as DealOutcomeWithNarrative[];
-    },
-    enabled: !!traderId,
-    // Realtime subscriptions handle live updates — no polling needed
-  });
+  const result = useConvexQuery(
+    api.dealOutcomes.listByTrader,
+    traderId ? { traderId: traderId as Id<"traders"> } : "skip"
+  );
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true };
+  }
+
+  const data = (result as RawOutcome[]).map(toOutcome);
+
+  return { data, isLoading: false };
 }
 
-function useTraderStatusMutation(action: "pause" | "resume" | "revive") {
-  const queryClient = useQueryClient();
+type RawAsset = {
+  _id: string;
+  name: string;
+  valueUsdc?: number;
+};
 
-  return useMutation({
-    mutationFn: async (traderId: string) => {
-      const res = await authFetch(`/api/trader/${traderId}/${action}`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? `Failed to ${action}`);
-      }
-      return res.json();
-    },
-    onSuccess: (_data, traderId) => {
-      queryClient.invalidateQueries({ queryKey: ["trader", traderId] });
-      queryClient.invalidateQueries({
-        queryKey: ["agent-activity", traderId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["trader-outcomes", traderId],
-      });
-    },
-  });
+/** List assets for a specific trader. Reactive via Convex. */
+export function useTraderAssets(traderId: string) {
+  const result = useConvexQuery(
+    api.assets.listByTrader,
+    traderId ? { traderId: traderId as Id<"traders"> } : "skip"
+  );
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true };
+  }
+
+  const data = (result as RawAsset[]).map((doc) => ({
+    id: doc._id,
+    name: doc.name,
+    value_usdc: doc.valueUsdc ?? 0,
+    trader_id: traderId,
+  }));
+
+  return { data, isLoading: false };
 }
 
+// ── Stubbed mutations (no Convex replacements yet — flagged #103) ──────────
+
+/** @deprecated No Convex mutation for pause yet. Stub — no-op. Flag: PR #103. */
 export function usePauseTrader() {
-  return useTraderStatusMutation("pause");
+  return {
+    mutate: (_traderId: string) => {
+      console.warn("usePauseTrader: no Convex mutation yet — see PR #103");
+    },
+    isPending: false,
+    isError: false,
+    error: null as Error | null,
+  };
 }
 
+/** @deprecated No Convex mutation for resume yet. Stub — no-op. Flag: PR #103. */
 export function useResumeTrader() {
-  return useTraderStatusMutation("resume");
+  return {
+    mutate: (_traderId: string) => {
+      console.warn("useResumeTrader: no Convex mutation yet — see PR #103");
+    },
+    isPending: false,
+    isError: false,
+    error: null as Error | null,
+  };
 }
 
+/** @deprecated No Convex mutation for revive yet. Stub — no-op. Flag: PR #103. */
 export function useReviveTrader() {
-  return useTraderStatusMutation("revive");
+  return {
+    mutate: (_traderId: string) => {
+      console.warn("useReviveTrader: no Convex mutation yet — see PR #103");
+    },
+    isPending: false,
+    isError: false,
+    error: null as Error | null,
+  };
 }

@@ -1,6 +1,17 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { usePrivy } from "@privy-io/react-auth";
-import { authFetch } from "@/lib/api";
+"use client";
+
+/**
+ * Approvals hooks — migrated to Convex.
+ *
+ * NOTE: useConfigureMandate has no Convex mutation yet — stubbed and flagged.
+ * See PR #103.
+ */
+
+import { useQuery as useConvexQuery, useMutation as useConvexMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+
+// ── Types (kept snake_case for UI compatibility) ──────────────────────────────
 
 export interface PendingApproval {
   id: string;
@@ -18,30 +29,61 @@ export interface PendingApproval {
   deal_pot_usdc: number;
 }
 
-export function usePendingApprovals() {
-  const { authenticated } = usePrivy();
+type RawApproval = {
+  _id: string;
+  traderId: string;
+  dealId: string;
+  deskManagerId: string;
+  status: string;
+  entryCostUsdc: number;
+  potUsdc: number;
+  expiresAt: number;
+  resolvedAt?: number;
+  createdAt: number;
+  traderName: string;
+  dealPrompt: string;
+  dealPotUsdc: number;
+};
 
-  return useQuery({
-    queryKey: ["pending-approvals"],
-    queryFn: async () => {
-      const res = await authFetch("/api/desk/approvals");
-      if (!res.ok) throw new Error("Failed to load approvals");
-      const data = await res.json();
-      return (data.approvals ?? []) as PendingApproval[];
-    },
-    enabled: authenticated,
-    // Do not inherit the global 30s staleTime — new rows are inserted server-side
-    // and Realtime may not invalidate if RLS blocks replica events for anon clients.
-    staleTime: 0,
-    refetchInterval: 8_000,
-  });
+function toPendingApproval(doc: RawApproval): PendingApproval {
+  return {
+    id: doc._id,
+    trader_id: doc.traderId,
+    deal_id: doc.dealId,
+    desk_manager_id: doc.deskManagerId,
+    status: doc.status,
+    entry_cost_usdc: doc.entryCostUsdc,
+    pot_usdc: doc.potUsdc,
+    expires_at: new Date(doc.expiresAt).toISOString(),
+    resolved_at: doc.resolvedAt ? new Date(doc.resolvedAt).toISOString() : null,
+    created_at: new Date(doc.createdAt).toISOString(),
+    trader_name: doc.traderName,
+    deal_prompt: doc.dealPrompt,
+    deal_pot_usdc: doc.dealPotUsdc,
+  };
 }
 
-export function useApproveReject() {
-  const queryClient = useQueryClient();
+// ── Hooks ──────────────────────────────────────────────────────────────────
 
-  return useMutation({
-    mutationFn: async ({
+/** List pending approvals for the authenticated desk manager. Reactive via Convex. */
+export function usePendingApprovals() {
+  const result = useConvexQuery(api.dealApprovals.listPending);
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, isError: false };
+  }
+
+  const data = (result as RawApproval[]).map(toPendingApproval);
+  return { data, isLoading: false, isError: false };
+}
+
+/** Approve or reject a pending deal approval via Convex. */
+export function useApproveReject() {
+  const approve = useConvexMutation(api.dealApprovals.approve);
+  const reject = useConvexMutation(api.dealApprovals.reject);
+
+  return {
+    mutate: async ({
       approvalId,
       action,
       reason,
@@ -50,59 +92,35 @@ export function useApproveReject() {
       action: "approve" | "reject";
       reason?: string;
     }) => {
-      const res = await authFetch("/api/desk/approve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          approval_id: approvalId,
-          action,
+      if (action === "approve") {
+        await approve({ approvalId: approvalId as Id<"dealApprovals"> });
+      } else {
+        await reject({
+          approvalId: approvalId as Id<"dealApprovals">,
           reason,
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? `Failed to ${action}`);
+        });
       }
-      return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pending-approvals"] });
-    },
-  });
+    isPending: false,
+  };
 }
 
+/** @deprecated No Convex mutation for configure yet. Stub — no-op. Flag: PR #103. */
 export function useConfigureMandate() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async ({
-      traderId,
-      mandate,
-      personality,
-    }: {
-      traderId: string;
-      mandate: Record<string, unknown>;
-      personality?: string | null;
-    }) => {
-      const res = await authFetch("/api/desk/configure", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          trader_id: traderId,
-          mandate,
-          ...(personality !== undefined ? { personality } : {}),
-        }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? "Failed to update mandate");
-      }
-      return res.json();
+  return {
+    mutate: (
+      _params: {
+        traderId: string;
+        mandate: Record<string, unknown>;
+        personality?: string | null;
+      },
+      _options?: { onSuccess?: () => void }
+    ) => {
+      console.warn("useConfigureMandate: no Convex mutation yet — see PR #103");
+      _options?.onSuccess?.();
     },
-    onSuccess: (_data, variables) => {
-      queryClient.invalidateQueries({
-        queryKey: ["trader", variables.traderId],
-      });
-    },
-  });
+    isPending: false,
+    isError: false,
+    error: null as Error | null,
+  };
 }
