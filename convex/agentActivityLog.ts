@@ -83,6 +83,36 @@ export const listForDesk = query({
   },
 });
 
+/**
+ * Public: global activity feed — all activity across all traders.
+ * Auth-checked (any authenticated user may view the global feed).
+ * Returns newest-first, up to `limit` entries, with a traderNames map.
+ */
+export const listGlobal = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit = 200 }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return { activity: [], traderNames: {} };
+
+    const allActivity = await ctx.db
+      .query("agentActivityLog")
+      .order("desc")
+      .take(Math.min(limit, 500));
+
+    // Build traderNames map from referenced traders
+    const traderIdSet = new Set(allActivity.map((a) => a.traderId));
+    const traderNames: Record<string, string> = {};
+    await Promise.all(
+      Array.from(traderIdSet).map(async (tid) => {
+        const t = await ctx.db.get(tid);
+        if (t) traderNames[t._id] = t.name;
+      })
+    );
+
+    return { activity: allActivity, traderNames };
+  },
+});
+
 // ── Internal queries ───────────────────────────────────────────────────────
 
 /** Internal: check if an activity entry with this dedupe key already exists. */

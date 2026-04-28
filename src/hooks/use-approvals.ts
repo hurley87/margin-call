@@ -1,13 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import {
   useQuery as useConvexQuery,
   useMutation as useConvexMutation,
 } from "convex/react";
-import {
-  useMutation as useTanstackMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { authFetch } from "@/lib/api";
@@ -81,7 +78,6 @@ export function useApproveReject() {
   const reject = useConvexMutation(api.dealApprovals.reject);
 
   // Convex useMutation returns the function directly — no pending state tracked here.
-  // Convex handles optimistic updates internally.
   const isPending = false;
 
   function mutate({
@@ -106,14 +102,15 @@ export function useApproveReject() {
 
 /**
  * Configure a trader's mandate/personality.
- * Still backed by the API route (Convex trader CRUD for mandate is handled in #89 cleanup).
- * Kept here for backward compat until full TanStack removal.
+ * Calls the /api/desk/configure route (no TanStack Query — plain fetch).
  */
 export function useConfigureMandate() {
-  const queryClient = useQueryClient();
+  const [isPending, setIsPending] = useState(false);
+  const [isError, setIsError] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useTanstackMutation({
-    mutationFn: async ({
+  async function mutate(
+    {
       traderId,
       mandate,
       personality,
@@ -121,7 +118,13 @@ export function useConfigureMandate() {
       traderId: string;
       mandate: Record<string, unknown>;
       personality?: string | null;
-    }) => {
+    },
+    options?: { onSuccess?: () => void }
+  ) {
+    setIsPending(true);
+    setIsError(false);
+    setError(null);
+    try {
       const res = await authFetch("/api/desk/configure", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -135,19 +138,18 @@ export function useConfigureMandate() {
         const data = await res.json();
         throw new Error(data.error ?? "Failed to update mandate");
       }
-      return res.json();
-    },
-    onSuccess: (
-      _data: unknown,
-      variables: {
-        traderId: string;
-        mandate: Record<string, unknown>;
-        personality?: string | null;
-      }
-    ) => {
-      queryClient.invalidateQueries({
-        queryKey: ["trader", variables.traderId],
-      });
-    },
-  });
+      const result = await res.json();
+      options?.onSuccess?.();
+      return result;
+    } catch (err) {
+      const e = err instanceof Error ? err : new Error("Failed to update mandate");
+      setIsError(true);
+      setError(e);
+      throw e;
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return { mutate, isPending, isError, error };
 }
