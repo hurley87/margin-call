@@ -106,12 +106,22 @@ export function useAgentActivity(traderId: string) {
   );
 
   if (result === undefined) {
-    return { data: undefined, isLoading: true, isError: false, error: null };
+    return {
+      data: undefined,
+      isLoading: true,
+      isError: false,
+      error: null as Error | null,
+    };
   }
 
   const data = (result as RawActivity[]).map(toAgentActivity);
 
-  return { data, isLoading: false, isError: false, error: null };
+  return {
+    data,
+    isLoading: false,
+    isError: false,
+    error: null as Error | null,
+  };
 }
 
 /** List deal outcomes for a specific trader. Reactive via Convex. */
@@ -159,15 +169,17 @@ export function useTraderAssets(traderId: string) {
 
 // ── Stubbed mutations (no Convex replacements yet — flagged #103) ──────────
 
+const _stubError = new Error("No Convex mutation yet — see PR #103");
+
 /** @deprecated No Convex mutation for pause yet. Stub — no-op. Flag: PR #103. */
 export function usePauseTrader() {
   return {
     mutate: (_traderId: string) => {
       console.warn("usePauseTrader: no Convex mutation yet — see PR #103");
     },
-    isPending: false,
-    isError: false,
-    error: null as Error | null,
+    isPending: false as boolean,
+    isError: false as boolean,
+    error: _stubError,
   };
 }
 
@@ -177,9 +189,9 @@ export function useResumeTrader() {
     mutate: (_traderId: string) => {
       console.warn("useResumeTrader: no Convex mutation yet — see PR #103");
     },
-    isPending: false,
-    isError: false,
-    error: null as Error | null,
+    isPending: false as boolean,
+    isError: false as boolean,
+    error: _stubError,
   };
 }
 
@@ -189,8 +201,8 @@ export function useReviveTrader() {
     mutate: (_traderId: string) => {
       console.warn("useReviveTrader: no Convex mutation yet — see PR #103");
     },
-    isPending: false,
-    isError: false,
-    error: null as Error | null,
+    isPending: false as boolean,
+    isError: false as boolean,
+    error: _stubError,
   };
 }

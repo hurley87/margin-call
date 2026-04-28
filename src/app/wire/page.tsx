@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { useNarrativeFeed } from "@/hooks/use-narrative";

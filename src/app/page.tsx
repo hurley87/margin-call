@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useMemo, useState } from "react";
 import Link from "next/link";
 
@@ -101,7 +103,6 @@ export default function Home() {
 /* ── Dashboard ── */
 
 function Dashboard({ displayName }: { displayName: string }) {
-
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: traders } = useTraders();
   const { data: approvals } = usePendingApprovals();

@@ -25,7 +25,7 @@ export function useGlobalActivity(): {
   data: GlobalActivityData | undefined;
   isLoading: boolean;
 } {
-  const result = useConvexQuery(api.agentActivityLog.listForDesk);
+  const result = useConvexQuery(api.agentActivityLog.listForDesk, {});
 
   if (result === undefined) {
     return { data: undefined, isLoading: true };

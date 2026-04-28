@@ -7,7 +7,10 @@
  * See PR #103.
  */
 
-import { useQuery as useConvexQuery, useMutation as useConvexMutation } from "convex/react";
+import {
+  useQuery as useConvexQuery,
+  useMutation as useConvexMutation,
+} from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -119,8 +122,8 @@ export function useConfigureMandate() {
       console.warn("useConfigureMandate: no Convex mutation yet — see PR #103");
       _options?.onSuccess?.();
     },
-    isPending: false,
-    isError: false,
-    error: null as Error | null,
+    isPending: false as boolean,
+    isError: false as boolean,
+    error: new Error("No Convex mutation yet — see PR #103"),
   };
 }

@@ -2,8 +2,6 @@ import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 const MODEL = "gpt-5-mini";
 const TIMEOUT_MS = 30_000;
 
@@ -23,6 +21,8 @@ export async function callModel<T>(
   schema: any,
   schemaName: string
 ): Promise<T> {
+  // Initialise lazily so the module evaluates without OPENAI_API_KEY at build time.
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   try {
     const completion = await client.chat.completions.parse(
       {

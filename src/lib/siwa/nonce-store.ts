@@ -15,7 +15,7 @@ export function createConvexNonceStore(): SIWANonceStore {
       const expiresAt = Date.now() + ttlMs;
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (await convex.mutation(internal.siwaNonces.issue as any, {
+        return (await convex.mutation((internal as any).siwaNonces.issue, {
           nonce,
           expiresAt,
         })) as boolean;
@@ -29,7 +29,7 @@ export function createConvexNonceStore(): SIWANonceStore {
       const convex = createConvexAdminClient();
       try {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        return (await convex.mutation(internal.siwaNonces.consume as any, {
+        return (await convex.mutation((internal as any).siwaNonces.consume, {
           nonce,
         })) as boolean;
       } catch (err) {

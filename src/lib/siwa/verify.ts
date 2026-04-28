@@ -99,7 +99,7 @@ export async function verifySIWARequest(
     const [nonceOk, trader] = await Promise.all([
       nonceStore.consume(fields.nonce),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      convex.query(internal.siwaNonces.findTraderByTokenId as any, {
+      convex.query((internal as any).siwaNonces.findTraderByTokenId, {
         tokenId: fields.agentId,
       }) as Promise<{
         _id: string;
