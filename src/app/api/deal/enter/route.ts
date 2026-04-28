@@ -130,7 +130,6 @@ export async function POST(request: NextRequest) {
     // Helper: call an internal Convex query via the admin client.
     // ConvexHttpClient.query() types restrict to public functions, but
     // setAdminAuth() grants internal access at runtime.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const callInternal = (fn: unknown, args: unknown) =>
       (
         convex as unknown as {

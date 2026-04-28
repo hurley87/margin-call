@@ -69,7 +69,7 @@ export function CreateDealDialog({
     if (!selectedPrompt.trim() || isNaN(potNum) || isNaN(entryNum)) return;
     setState("creating");
     try {
-      const result = await createDeal(
+      await createDeal(
         selectedPrompt.trim(),
         potNum,
         entryNum,

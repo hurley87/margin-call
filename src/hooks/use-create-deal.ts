@@ -33,7 +33,7 @@ export function useCreateDeal() {
       prompt: string,
       potAmountUsdc: number,
       entryCostUsdc: number,
-      _sourceHeadline?: string
+      _sourceHeadline?: string // reserved for future on-chain sourceHeadline support
     ) => {
       setState({ step: "approving" });
 
