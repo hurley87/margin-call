@@ -170,12 +170,12 @@ export const applyOutcomeBalance = internalMutation({
     if (!trader) return;
 
     // Idempotency: if this outcome was already applied, no-op
-    if ((trader as Record<string, unknown>).lastOutcomeId === outcomeId) return;
+    if (trader.lastOutcomeId === outcomeId) return;
 
     const currentBalance = trader.escrowBalanceUsdc ?? 0;
     const newBalance = Math.max(0, currentBalance + pnlUsdc);
 
-    const patch: Record<string, unknown> = {
+    const patch: Parameters<typeof ctx.db.patch<"traders">>[1] = {
       escrowBalanceUsdc: newBalance,
       lastOutcomeId: outcomeId,
       updatedAt: Date.now(),
@@ -185,8 +185,7 @@ export const applyOutcomeBalance = internalMutation({
       patch.status = "wiped_out";
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await ctx.db.patch(traderId, patch as any);
+    await ctx.db.patch(traderId, patch);
   },
 });
 

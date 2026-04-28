@@ -44,6 +44,9 @@ export default defineSchema({
     cdpAccountName: v.optional(v.string()),
     tokenId: v.optional(v.number()),
     tbaAddress: v.optional(v.string()),
+    // Idempotency key for applyOutcomeBalance: stores the last applied outcomeId
+    // to prevent double-applying PnL on retries.
+    lastOutcomeId: v.optional(v.id("dealOutcomes")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
