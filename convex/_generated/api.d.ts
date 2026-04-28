@@ -8,7 +8,10 @@
  * @module
  */
 
+import type * as deskManagers from "../deskManagers.js";
 import type * as me from "../me.js";
+import type * as traders from "../traders.js";
+import type * as wallet from "../wallet.js";
 
 import type {
   ApiFromModules,
@@ -17,7 +20,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  deskManagers: typeof deskManagers;
   me: typeof me;
+  traders: typeof traders;
+  wallet: typeof wallet;
 }>;
 
 /**

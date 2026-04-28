@@ -3,8 +3,10 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { useTraders } from "@/hooks/use-traders";
-import { useCreateTrader } from "@/hooks/use-create-trader";
+import {
+  useConvexTraders,
+  useConvexCreateTrader,
+} from "@/hooks/use-convex-traders";
 import { Nav } from "@/components/nav";
 import type { Mandate } from "@/lib/agent/evaluator";
 
@@ -56,16 +58,14 @@ const STEP_TITLES = [
 
 export default function NewTraderWizard() {
   const router = useRouter();
-  const { data: traders } = useTraders();
-  const {
-    createTrader,
-    isLoading: isCreating,
-    error: createError,
-  } = useCreateTrader();
+  const traders = useConvexTraders();
+  const createTrader = useConvexCreateTrader();
 
   const [step, setStep] = useState<number>(STEPS.NAME);
   const [name, setName] = useState("");
   const [mandate, setMandate] = useState<Mandate>({});
+  const [isCreating, setIsCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | undefined>();
 
   const trimmedName = name.trim();
   const nameTaken =
@@ -97,11 +97,20 @@ export default function NewTraderWizard() {
     if (value !== null) finalMandate.approval_threshold_usdc = value;
     else delete finalMandate.approval_threshold_usdc;
 
+    setIsCreating(true);
+    setCreateError(undefined);
     try {
-      const trader = await createTrader(trimmedName, finalMandate);
-      router.push(`/traders/${trader.id}`);
-    } catch {
-      // error is surfaced via hook state
+      const traderId = await createTrader({
+        name: trimmedName,
+        mandate: finalMandate,
+      });
+      router.push(`/traders/${traderId}`);
+    } catch (err) {
+      setCreateError(
+        err instanceof Error ? err.message : "Failed to create trader"
+      );
+    } finally {
+      setIsCreating(false);
     }
   }
 
@@ -208,7 +217,7 @@ export default function NewTraderWizard() {
               />
               {isCreating && (
                 <p className="mt-4 text-sm text-[var(--t-muted)]">
-                  Creating trader...
+                  Creating trader... wallet provisioning will complete shortly.
                 </p>
               )}
               {createError && (
