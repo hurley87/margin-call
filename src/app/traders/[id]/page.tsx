@@ -4,7 +4,6 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useReadContract } from "wagmi";
-import { useQueryClient } from "@tanstack/react-query";
 import { useTrader, useTraderHistory } from "@/hooks/use-traders";
 import type { TraderHistoryEvent } from "@/hooks/use-traders";
 import { useSepoliaUsdcBalance } from "@/hooks/use-escrow";
@@ -26,7 +25,6 @@ import {
   useConfigureMandate,
   usePendingApprovals,
 } from "@/hooks/use-approvals";
-import { useTraderRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
@@ -82,9 +80,7 @@ function CollapsibleSection({
 }
 
 export default function TraderDetailPage() {
-  const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
-  useTraderRealtime(id);
   const { data: trader, isLoading, error } = useTrader(id);
   const syncInFlightRef = useRef(false);
 
@@ -121,17 +117,14 @@ export default function TraderDetailPage() {
     void authFetch(`/api/trader/${id}/balance`, { method: "POST" })
       .then((res) => {
         if (!res.ok) throw new Error("Balance sync failed");
-        return Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["trader", id] }),
-          queryClient.invalidateQueries({ queryKey: ["portfolio"] }),
-        ]);
+        // Convex subscription on traders.getById will reflect the updated balance automatically
       })
       .catch((err) => console.error("Balance sync error:", err))
       .finally(() => {
         syncInFlightRef.current = false;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, balanceUsdc, cachedEscrowUsdc, queryClient]);
+  }, [id, balanceUsdc, cachedEscrowUsdc]);
 
   const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
   const isNewTrader = !!trader && trader.status === "paused" && unfunded;
@@ -331,7 +324,7 @@ function AgentControls({
         >
           {revive.isPending ? "Reviving..." : "Revive Trader"}
         </button>
-        {revive.isError && (
+        {revive.isError && revive.error && (
           <p className="mt-2 text-xs text-[var(--t-red)]">
             {revive.error.message}
           </p>
@@ -383,12 +376,12 @@ function AgentControls({
         </>
       )}
 
-      {pause.isError && (
+      {pause.isError && pause.error && (
         <p className="ml-auto text-xs text-[var(--t-red)]">
           {pause.error.message}
         </p>
       )}
-      {resume.isError && (
+      {resume.isError && resume.error && (
         <p className="ml-auto text-xs text-[var(--t-red)]">
           {resume.error.message}
         </p>
@@ -993,7 +986,7 @@ function MandateConfig({
           Cancel
         </button>
       </div>
-      {configure.isError && (
+      {configure.isError && configure.error && (
         <p className="mt-2 text-xs text-[var(--t-red)]">
           {configure.error.message}
         </p>
