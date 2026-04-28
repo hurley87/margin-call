@@ -48,3 +48,4 @@ Scan deals → evaluate against mandate → check approval threshold → enter d
 - Fonts: Geist Sans + Geist Mono via `next/font/google` (CSS variables `--font-geist-sans`, `--font-geist-mono`)
 - ESLint flat config (`eslint.config.mjs`) with `eslint-config-next` core-web-vitals + TypeScript
 - Use TanStack Query (`useQuery`/`useMutation`) for all client-side data fetching. Do not use `useEffect` + `fetch()`. Query hooks live in `src/hooks/`.
+- **Convex-backed state must use Convex hooks** (`useQuery`/`useMutation`/`useAction` from `convex/react`). TanStack Query is forbidden for Convex-backed state.

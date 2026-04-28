@@ -9,6 +9,7 @@ import { http } from "wagmi";
 import { BaseNetworkGuard } from "@/components/providers/base-network-guard";
 import { baseSepoliaRpcUrl } from "@/lib/contracts/client";
 import { privyConfig } from "@/lib/privy/config";
+import { ConvexClientProvider } from "@/components/providers/convex-provider";
 
 const wagmiConfig = createConfig({
   chains: [baseSepolia, base],
@@ -39,8 +40,10 @@ export function PrivyProvider({ children }: { children: React.ReactNode }) {
     <BasePrivyProvider appId={appId} config={privyConfig}>
       <QueryClientProvider client={queryClient}>
         <WagmiProvider config={wagmiConfig}>
-          <BaseNetworkGuard />
-          {children}
+          <ConvexClientProvider>
+            <BaseNetworkGuard />
+            {children}
+          </ConvexClientProvider>
         </WagmiProvider>
       </QueryClientProvider>
     </BasePrivyProvider>
