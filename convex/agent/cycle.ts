@@ -9,6 +9,135 @@ import { selectDeal } from "./dealSelection";
 import { resolveOutcome } from "./outcomeResolver";
 import type { Mandate } from "./_types";
 
+// ── x402 deal-entry helper ───────────────────────────────────────────────────
+
+/**
+ * Call the Next.js /api/deal/enter route with SIWA authentication.
+ *
+ * Design:
+ *  - The Convex action calls Next.js over HTTP; Next.js owns the x402
+ *    verification and the Convex recordVerifiedEntry write. The cycle never
+ *    directly writes paid/verified/settled state to Convex.
+ *  - SIWA signing: the cycle holds CDP env vars and can instantiate the CDP
+ *    SDK to get the trader's accounts, sign the SIWA message, and pass the
+ *    auth headers to /api/deal/enter — identical to the legacy Next.js cycle.
+ *  - Idempotency: /api/deal/enter calls recordVerifiedEntry which is a CAS on
+ *    paymentId (enterTxHash ?? noop:<traderId>:<dealId>). Duplicate callbacks
+ *    from a retry or a crashed cycle return the existing record without error.
+ *
+ * @param traderId  Convex trader id string
+ * @param tokenId   ERC-8004 token id (used as agent identity in SIWA)
+ * @param dealId    Convex deal id string
+ * @param baseUrl   NEXT_PUBLIC_APP_URL (e.g. https://app.example.com)
+ * @returns         The parsed JSON response from /api/deal/enter
+ */
+async function callDealEnter(
+  traderId: string,
+  tokenId: number,
+  dealId: string,
+  baseUrl: string
+): Promise<{
+  outcome: {
+    trader_pnl_usdc: number;
+    rake_usdc: number;
+    narrative: string;
+    trader_wiped_out: boolean;
+    wipeout_reason: string | null;
+    payment_id: string;
+  };
+}> {
+  // ── 1. Get CDP accounts (matches `getOrCreateTraderSmartAccount` pattern) ─
+  const { CdpClient } = await import("@coinbase/cdp-sdk");
+  const cdp = new CdpClient({
+    apiKeyId: process.env.CDP_API_KEY_ID,
+    apiKeySecret: process.env.CDP_API_KEY_SECRET,
+    walletSecret: process.env.CDP_WALLET_SECRET,
+  });
+
+  const owner = await cdp.evm.getOrCreateAccount({ name: `trader-${tokenId}` });
+  const smartAccount = await cdp.evm.getOrCreateSmartAccount({
+    name: `trader-sa-${tokenId}`,
+    owner,
+  });
+
+  // ── 2. Fetch SIWA nonce for this agent identity ────────────────────────────
+  const nonceRes = await fetch(`${baseUrl}/api/siwa/nonce`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agent_id: tokenId, address: smartAccount.address }),
+  });
+
+  if (!nonceRes.ok) {
+    throw new Error(
+      `[cycle] SIWA nonce fetch failed: ${nonceRes.status} ${await nonceRes.text()}`
+    );
+  }
+  const { nonce } = (await nonceRes.json()) as { nonce: string };
+
+  // ── 3. Sign SIWA message ───────────────────────────────────────────────────
+  // Inline the signSIWAMessage call rather than importing from src/ (server-only).
+  const { signSIWAMessage } = await import("@buildersgarden/siwa/siwa");
+  const domain = baseUrl.replace(/^https?:\/\//, "");
+
+  // CONTRACTS_CHAIN_ID is only accessible from src/; read the env var directly.
+  const chainId = Number(
+    process.env.CONTRACTS_CHAIN_ID ??
+      process.env.NEXT_PUBLIC_CHAIN_ID ??
+      "84532" // Base Sepolia fallback
+  );
+  const identityRegistryAddress =
+    process.env.IDENTITY_REGISTRY_ADDRESS ??
+    "0x0000000000000000000000000000000000000000";
+
+  const signer = {
+    getAddress: async () => smartAccount.address as `0x${string}`,
+    signMessage: async (message: string) =>
+      owner.signMessage({ message }) as Promise<`0x${string}`>,
+  };
+
+  const { message, signature } = await signSIWAMessage(
+    {
+      domain,
+      uri: baseUrl,
+      agentId: tokenId,
+      agentRegistry: `eip155:${chainId}:${identityRegistryAddress}`,
+      chainId,
+      nonce,
+      issuedAt: new Date().toISOString(),
+    },
+    signer
+  );
+
+  // ── 4. POST /api/deal/enter with SIWA auth headers ─────────────────────────
+  const enterRes = await fetch(`${baseUrl}/api/deal/enter`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-siwa-message": Buffer.from(message).toString("base64"),
+      "x-siwa-signature": signature,
+    },
+    body: JSON.stringify({
+      deal_id: dealId,
+      trader_id: traderId,
+      _agent_cycle: true,
+    }),
+  });
+
+  if (!enterRes.ok) {
+    const errBody = await enterRes
+      .json()
+      .catch(() => ({ error: "Unknown error" }));
+    const err = new Error(
+      `[cycle] /api/deal/enter failed: ${enterRes.status} – ${errBody.error ?? "unknown"}`
+    );
+    // Attach the HTTP status so callers can distinguish 409 (duplicate)
+    (err as Error & { httpStatus: number }).httpStatus = enterRes.status;
+    throw err;
+  }
+
+  return enterRes.json();
+}
+
 /**
  * Idempotent cycle action for a single trader agent.
  *
@@ -218,10 +347,82 @@ export const cycle = internalAction({
         correlationId,
       });
 
-      // NOTE (#87): x402 on-chain deal-entry HTTP call goes here.
-      // For now we proceed directly to outcome resolution (simulated entry).
+      // ── 7. x402 deal entry via Next.js HTTP boundary ──────────────────────
+      // The cycle does NOT write paid/verified state directly to Convex.
+      // It calls /api/deal/enter over HTTP; Next.js verifies the x402 payment
+      // and then calls internal.deals.recordVerifiedEntry (single writer path).
+      // Idempotency: recordVerifiedEntry is a CAS on paymentId, so duplicate
+      // retries (e.g. after a cycle crash) are safe and return the existing id.
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+      const traderTokenId = trader.tokenId;
 
-      // ── 7. Outcome resolution ──────────────────────────────────────────────
+      let entryPaymentId: string | undefined;
+
+      if (traderTokenId !== undefined) {
+        try {
+          const entryResult = await callDealEnter(
+            traderId as string,
+            traderTokenId,
+            bestDeal.id,
+            appUrl
+          );
+          entryPaymentId = entryResult.outcome.payment_id;
+
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "enter",
+            message: `x402 deal entry complete (paymentId=${entryPaymentId}, pnl=$${entryResult.outcome.trader_pnl_usdc.toFixed(2)})`,
+            dealId: dealId as never,
+            metadata: { payment_id: entryPaymentId },
+            correlationId,
+          });
+        } catch (enterErr) {
+          const httpStatus = (enterErr as Error & { httpStatus?: number })
+            .httpStatus;
+
+          if (httpStatus === 409) {
+            // Duplicate entry — deal already entered by this trader; skip cycle
+            await ctx.runMutation(internal.agentActivityLog.append, {
+              traderId,
+              activityType: "skip",
+              message: "Deal already entered (duplicate); skipping cycle",
+              dealId: dealId as never,
+              correlationId,
+            });
+            await ctx.runMutation(internal.agentActivityLog.append, {
+              traderId,
+              activityType: "cycle_end",
+              message: "Cycle ended — duplicate deal entry prevented",
+              correlationId,
+            });
+            await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+              traderId,
+              generation,
+              lastCycleAt: Date.now(),
+            });
+            return;
+          }
+
+          // Non-409 error: log and re-throw so the lease is released
+          const msg =
+            enterErr instanceof Error ? enterErr.message : String(enterErr);
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "error",
+            message: `x402 deal entry failed: ${msg.slice(0, 500)}`,
+            dealId: dealId as never,
+            correlationId,
+          });
+          throw enterErr;
+        }
+      } else {
+        // tokenId not set — wallet not fully ready; skip the on-chain step
+        console.warn(
+          `[cycle] trader ${traderId} has no tokenId — skipping x402 entry`
+        );
+      }
+
+      // ── 8. Outcome resolution ──────────────────────────────────────────────
       // Check idempotency: if outcome already exists for (traderId, dealId), skip LLM
       const existingOutcome = await ctx.runQuery(
         internal.dealOutcomes.findByTraderAndDeal,
@@ -274,7 +475,7 @@ export const cycle = internalAction({
         })) as string;
       }
 
-      // ── 8. Apply PnL to trader balance (single-writer, idempotent) ─────────
+      // ── 9. Apply PnL to trader balance (single-writer, idempotent) ─────────
       await ctx.runMutation(internal.traders.applyOutcomeBalance, {
         traderId,
         pnlUsdc: traderPnlUsdc,
@@ -282,7 +483,7 @@ export const cycle = internalAction({
         outcomeId: outcomeId as never,
       });
 
-      // ── 9. Log outcome ─────────────────────────────────────────────────────
+      // ── 10. Log outcome ────────────────────────────────────────────────────
       const activityType = traderWipedOut
         ? "wipeout"
         : traderPnlUsdc >= 0
@@ -302,7 +503,7 @@ export const cycle = internalAction({
         correlationId,
       });
 
-      // ── 10. Mark complete (updates lastCycleAt, releases lease) ───────────
+      // ── 11. Mark complete (updates lastCycleAt, releases lease) ──────────
       const cycleEndMessage = traderWipedOut
         ? "Trader wiped out — cycle ended"
         : "Cycle complete";
