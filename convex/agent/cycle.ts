@@ -151,24 +151,62 @@ export const cycle = internalAction({
       // ── 5. Approval gate ───────────────────────────────────────────────────
       const threshold = mandate.approval_threshold_usdc;
       if (threshold !== undefined && bestDeal.entry_cost_usdc >= threshold) {
-        // Check if there's an approved (consumed-ready) approval
-        const existingApproval = await ctx.runQuery(
-          internal.dealApprovals.findPendingByTraderAndDeal,
-          { traderId, dealId: dealId as never }
-        );
+        const [pendingApproval, approvedApproval] = await Promise.all([
+          ctx.runQuery(internal.dealApprovals.findPendingByTraderAndDeal, {
+            traderId,
+            dealId: dealId as never,
+          }),
+          ctx.runQuery(internal.dealApprovals.findApprovedByTraderAndDeal, {
+            traderId,
+            dealId: dealId as never,
+          }),
+        ]);
 
-        if (!existingApproval || existingApproval.status !== "approved") {
-          // Request approval if no pending approval exists
-          if (!existingApproval) {
-            await ctx.runMutation(internal.dealApprovals.request, {
-              traderId,
-              dealId: dealId as never,
-              deskManagerId: trader.deskManagerId,
-              entryCostUsdc: bestDeal.entry_cost_usdc,
-              potUsdc: bestDeal.pot_usdc,
-              expiresAt: Date.now() + APPROVAL_EXPIRY_MS,
-            });
-          }
+        if (approvedApproval) {
+          await ctx.runMutation(internal.dealApprovals.consume, {
+            approvalId: approvedApproval._id,
+          });
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "approved",
+            message: "Consumed desk manager approval and entering deal",
+            dealId: dealId as never,
+            metadata: { approval_id: approvedApproval._id },
+            correlationId,
+          });
+        } else if (pendingApproval) {
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "approval_required",
+            message: `Deal requires approval: entry $${bestDeal.entry_cost_usdc} >= threshold $${threshold} (pending)`,
+            dealId: dealId as never,
+            correlationId,
+          });
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "cycle_end",
+            message: "Cycle paused — awaiting desk manager approval",
+            dealId: dealId as never,
+            correlationId,
+          });
+          await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+            traderId,
+            generation,
+            lastCycleAt: Date.now(),
+          });
+          console.log(
+            `[cycle] awaiting approval for ${traderId} deal=${bestDeal.id}`
+          );
+          return;
+        } else {
+          await ctx.runMutation(internal.dealApprovals.request, {
+            traderId,
+            dealId: dealId as never,
+            deskManagerId: trader.deskManagerId,
+            entryCostUsdc: bestDeal.entry_cost_usdc,
+            potUsdc: bestDeal.pot_usdc,
+            expiresAt: Date.now() + APPROVAL_EXPIRY_MS,
+          });
 
           await ctx.runMutation(internal.agentActivityLog.append, {
             traderId,
@@ -194,19 +232,6 @@ export const cycle = internalAction({
           );
           return;
         }
-
-        // Approval exists and is approved — consume it
-        await ctx.runMutation(internal.dealApprovals.consume, {
-          approvalId: existingApproval._id,
-        });
-        await ctx.runMutation(internal.agentActivityLog.append, {
-          traderId,
-          activityType: "approved",
-          message: "Consumed desk manager approval and entering deal",
-          dealId: dealId as never,
-          metadata: { approval_id: existingApproval._id },
-          correlationId,
-        });
       }
 
       // ── 6. Log deal entry ──────────────────────────────────────────────────

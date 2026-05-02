@@ -5,6 +5,7 @@ import {
   query,
 } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
 /** Public: list traders owned by the calling desk manager. */
@@ -162,20 +163,24 @@ export const applyOutcomeBalance = internalMutation({
     traderId: v.id("traders"),
     pnlUsdc: v.number(),
     wipedOut: v.boolean(),
-    /** Outcome document id used for idempotency key; stored as outcomeAppliedId. */
+    /** Outcome document id — idempotency key; persisted as lastOutcomeId. */
     outcomeId: v.id("dealOutcomes"),
   },
   handler: async (ctx, { traderId, pnlUsdc, wipedOut, outcomeId }) => {
     const trader = await ctx.db.get(traderId);
     if (!trader) return;
 
-    // Idempotency: if this outcome was already applied, no-op
-    if ((trader as Record<string, unknown>).lastOutcomeId === outcomeId) return;
+    if (trader.lastOutcomeId === outcomeId) return;
 
     const currentBalance = trader.escrowBalanceUsdc ?? 0;
     const newBalance = Math.max(0, currentBalance + pnlUsdc);
 
-    const patch: Record<string, unknown> = {
+    const patch: Partial<
+      Pick<
+        Doc<"traders">,
+        "escrowBalanceUsdc" | "lastOutcomeId" | "updatedAt" | "status"
+      >
+    > = {
       escrowBalanceUsdc: newBalance,
       lastOutcomeId: outcomeId,
       updatedAt: Date.now(),
@@ -185,8 +190,7 @@ export const applyOutcomeBalance = internalMutation({
       patch.status = "wiped_out";
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await ctx.db.patch(traderId, patch as any);
+    await ctx.db.patch(traderId, patch);
   },
 });
 

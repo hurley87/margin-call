@@ -180,12 +180,35 @@ export const findPendingByTraderAndDeal = internalQuery({
   },
 });
 
+/** Internal: find an approved (desk-signed-off) row for (traderId, dealId), newest first. */
+export const findApprovedByTraderAndDeal = internalQuery({
+  args: { traderId: v.id("traders"), dealId: v.id("deals") },
+  handler: async (ctx, { traderId, dealId }) => {
+    const results = await ctx.db
+      .query("dealApprovals")
+      .withIndex("byTrader", (q) => q.eq("traderId", traderId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("dealId"), dealId),
+          q.eq(q.field("status"), "approved")
+        )
+      )
+      .collect();
+    if (results.length === 0) return null;
+    results.sort(
+      (a, b) => (b.resolvedAt ?? b.createdAt) - (a.resolvedAt ?? a.createdAt)
+    );
+    return results[0] ?? null;
+  },
+});
+
 // ── Internal mutations (called by cycle) ───────────────────────────────────
 
 /**
  * Internal: request an approval from the cycle.
  * Creates a new pending approval for (traderId, dealId).
  * If one already exists in pending state for this pair, returns the existing id (idempotent).
+ * If an approved row exists (cycle not yet consumed), returns that id — does not insert a duplicate pending.
  */
 export const request = internalMutation({
   args: {
@@ -197,18 +220,17 @@ export const request = internalMutation({
     expiresAt: v.number(),
   },
   handler: async (ctx, args) => {
-    // Idempotency: if already pending for this (traderId, dealId), return existing
-    const existing = await ctx.db
+    const rows = await ctx.db
       .query("dealApprovals")
       .withIndex("byTrader", (q) => q.eq("traderId", args.traderId))
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("dealId"), args.dealId),
-          q.eq(q.field("status"), "pending")
-        )
-      )
+      .filter((q) => q.eq(q.field("dealId"), args.dealId))
       .collect();
-    if (existing.length > 0) return existing[0]._id;
+
+    const pending = rows.find((r) => r.status === "pending");
+    if (pending) return pending._id;
+
+    const approved = rows.find((r) => r.status === "approved");
+    if (approved) return approved._id;
 
     return ctx.db.insert("dealApprovals", {
       ...args,
