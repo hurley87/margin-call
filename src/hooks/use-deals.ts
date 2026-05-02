@@ -1,4 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
+import { useQuery as useConvexQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import { authFetch } from "@/lib/api";
 
 export interface Deal {
@@ -37,23 +39,81 @@ export interface DealOutcome {
   on_chain_tx_hash?: string;
 }
 
-export function useDeals() {
-  return useQuery(dealsQueryOptions);
+/**
+ * Returns all deals (any status) visible to the authenticated user.
+ * Backed by Convex subscription — live updates without polling.
+ */
+export function useDeals(): {
+  data: Deal[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const result = useConvexQuery(api.deals.list);
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, isError: false };
+  }
+
+  const data: Deal[] = result.map((deal) => ({
+    id: deal._id,
+    creator_id: deal.creatorDeskManagerId,
+    creator_type: deal.creatorType,
+    on_chain_deal_id: deal.onChainDealId,
+    prompt: deal.prompt,
+    pot_usdc: deal.potUsdc,
+    entry_cost_usdc: deal.entryCostUsdc,
+    fee_usdc: deal.feeUsdc,
+    max_extraction_percentage: deal.maxExtractionPercentage ?? 0,
+    entry_count: deal.entryCount ?? 0,
+    wipeout_count: deal.wipeoutCount ?? 0,
+    status: deal.status,
+    created_at: new Date(deal.createdAt).toISOString(),
+    updated_at: new Date(deal.updatedAt).toISOString(),
+    on_chain_tx_hash: deal.onChainTxHash,
+    creator_address: deal.creatorAddress,
+    source_headline: deal.sourceHeadline,
+  }));
+
+  return { data, isLoading: false, isError: false };
 }
 
-const myDealsQueryOptions = {
-  queryKey: ["my-deals"] as const,
-  queryFn: async () => {
-    const res = await authFetch("/api/deal/my");
-    if (!res.ok) throw new Error("Failed to load my deals");
-    const data = await res.json();
-    return (data.deals ?? []) as Deal[];
-  },
-};
+/**
+ * Returns deals created by the current desk manager.
+ * Backed by Convex subscription — live updates without polling.
+ */
+export function useMyDeals(): {
+  data: Deal[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const result = useConvexQuery(api.deals.listMine);
 
-/** Returns only open deals created by the current user (owner-scoped). */
-export function useMyDeals() {
-  return useQuery(myDealsQueryOptions);
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, isError: false };
+  }
+
+  // Map Convex camelCase → legacy snake_case Deal interface
+  const data: Deal[] = result.map((deal) => ({
+    id: deal._id,
+    creator_id: deal.creatorDeskManagerId,
+    creator_type: deal.creatorType,
+    on_chain_deal_id: deal.onChainDealId,
+    prompt: deal.prompt,
+    pot_usdc: deal.potUsdc,
+    entry_cost_usdc: deal.entryCostUsdc,
+    fee_usdc: deal.feeUsdc,
+    max_extraction_percentage: deal.maxExtractionPercentage ?? 0,
+    entry_count: deal.entryCount ?? 0,
+    wipeout_count: deal.wipeoutCount ?? 0,
+    status: deal.status,
+    created_at: new Date(deal.createdAt).toISOString(),
+    updated_at: new Date(deal.updatedAt).toISOString(),
+    on_chain_tx_hash: deal.onChainTxHash,
+    creator_address: deal.creatorAddress,
+    source_headline: deal.sourceHeadline,
+  }));
+
+  return { data, isLoading: false, isError: false };
 }
 
 export function useDeal(id: string) {
@@ -71,31 +131,27 @@ export function useDeal(id: string) {
   });
 }
 
-const dealsQueryOptions = {
-  queryKey: ["deals"] as const,
-  queryFn: async () => {
-    const res = await authFetch("/api/deal/list");
-    if (!res.ok) throw new Error("Failed to load deals");
-    const data = await res.json();
-    return (data.deals ?? []) as Deal[];
-  },
-};
+/**
+ * Returns a map of headline text → deals created from that headline.
+ * Backed by Convex subscription.
+ */
+export function useHeadlineDeals(): {
+  data: Record<string, Deal[]> | undefined;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const { data: deals, isLoading, isError } = useDeals();
 
-/** Returns a map of headline text → deals created from that headline.
- *  Shares the same ["deals"] query cache as useDeals — no duplicate fetch. */
-export function useHeadlineDeals() {
-  return useQuery({
-    ...dealsQueryOptions,
-    select: (deals) => {
-      const map: Record<string, Deal[]> = {};
-      for (const d of deals) {
-        if (!d.source_headline) continue;
-        if (!map[d.source_headline]) map[d.source_headline] = [];
-        map[d.source_headline].push(d);
-      }
-      return map;
-    },
-  });
+  if (!deals) return { data: undefined, isLoading, isError };
+
+  const map: Record<string, Deal[]> = {};
+  for (const d of deals) {
+    if (!d.source_headline) continue;
+    if (!map[d.source_headline]) map[d.source_headline] = [];
+    map[d.source_headline].push(d);
+  }
+
+  return { data: map, isLoading: false, isError: false };
 }
 
 export function useSuggestPrompts(theme: string) {

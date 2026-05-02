@@ -26,6 +26,8 @@ export default defineSchema({
     mandate: v.optional(v.any()),
     personality: v.optional(v.string()),
     escrowBalanceUsdc: v.optional(v.number()),
+    /** Last deal outcome applied to escrow (idempotency for applyOutcomeBalance). */
+    lastOutcomeId: v.optional(v.id("dealOutcomes")),
     lastCycleAt: v.optional(v.number()),
     // Cycle lease fields for idempotent, non-overlapping agent cycles (issue #85)
     cycleLeaseUntil: v.optional(v.number()),
@@ -44,9 +46,6 @@ export default defineSchema({
     cdpAccountName: v.optional(v.string()),
     tokenId: v.optional(v.number()),
     tbaAddress: v.optional(v.string()),
-    // Idempotency key for applyOutcomeBalance: stores the last applied outcomeId
-    // to prevent double-applying PnL on retries.
-    lastOutcomeId: v.optional(v.id("dealOutcomes")),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

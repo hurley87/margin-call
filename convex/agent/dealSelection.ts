@@ -55,7 +55,15 @@ function ratioFallback(eligible: Deal[]): DealSelectionResult {
   if (eligible.length === 0) {
     return { deal: null, reasoning: "No eligible deals", method: "skip" };
   }
-  const best = eligible.reduce((a, b) =>
+  const positiveEntry = eligible.filter((d) => d.entry_cost_usdc > 0);
+  if (positiveEntry.length === 0) {
+    return {
+      deal: null,
+      reasoning: "No mandate-eligible deals with positive entry cost",
+      method: "skip",
+    };
+  }
+  const best = positiveEntry.reduce((a, b) =>
     b.pot_usdc / b.entry_cost_usdc > a.pot_usdc / a.entry_cost_usdc ? b : a
   );
   return {
