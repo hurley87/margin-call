@@ -16,4 +16,15 @@ crons.interval(
   internal.agent.scheduler.scheduler
 );
 
+/**
+ * Purge abandoned SIWA nonces. Valid nonces are consumed immediately; this
+ * cron only cleans up expired rows from auth flows that were never completed.
+ */
+crons.hourly(
+  "purge expired siwa nonces",
+  { minuteUTC: 0 },
+  internal.siwaNonces.cleanup,
+  {}
+);
+
 export default crons;
