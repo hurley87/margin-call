@@ -16,7 +16,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../schema";
 import { internal } from "../_generated/api";
-import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./_setup";
 
 const modules = import.meta.glob("../**/*.ts");
 

@@ -8,7 +8,8 @@ import {
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
 import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
-import { createServerClient } from "@/lib/supabase/client";
+import { createConvexAdminClient } from "@/lib/convex/server-client";
+import { internal } from "../../../convex/_generated/api";
 
 const nonceStore = createConvexNonceStore();
 
@@ -40,8 +41,8 @@ export async function createNonce(agentId: number, address: string) {
  * The SIWA address is the smart account (agent identity / NFT owner).
  * The EOA produces the signature. We recover the EOA address and verify:
  * 1. The signature is valid (ecRecover)
- * 2. The recovered EOA is the authorized key for this agent (cdp_owner_address in DB)
- * 3. The smart account (SIWA address) matches cdp_wallet_address in DB
+ * 2. The recovered EOA is the authorized key for this agent (cdpOwnerAddress in Convex)
+ * 3. The smart account (SIWA address) matches cdpWalletAddress in Convex
  */
 export async function verifySIWARequest(
   message: string,
@@ -93,15 +94,18 @@ export async function verifySIWARequest(
       return { valid: false };
     }
 
-    // 5. Nonce consumption + DB trader lookup in parallel (independent I/O)
-    const supabase = createServerClient();
-    const [nonceOk, { data: trader }] = await Promise.all([
+    // 5. Nonce consumption + Convex trader lookup in parallel (independent I/O)
+    const convex = createConvexAdminClient();
+    const [nonceOk, trader] = await Promise.all([
       nonceStore.consume(fields.nonce),
-      supabase
-        .from("traders")
-        .select("cdp_owner_address, cdp_wallet_address")
-        .eq("token_id", fields.agentId)
-        .single(),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      convex.query(internal.siwaNonces.findTraderByTokenId as any, {
+        tokenId: fields.agentId,
+      }) as Promise<{
+        _id: string;
+        cdpOwnerAddress?: string;
+        cdpWalletAddress?: string;
+      } | null>,
     ]);
 
     if (!nonceOk) {
@@ -119,8 +123,8 @@ export async function verifySIWARequest(
 
     // Check: recovered EOA must be the trader's CDP owner
     if (
-      !trader.cdp_owner_address ||
-      getAddress(recoveredAddress) !== getAddress(trader.cdp_owner_address)
+      !trader.cdpOwnerAddress ||
+      getAddress(recoveredAddress) !== getAddress(trader.cdpOwnerAddress)
     ) {
       console.error("[SIWA verify] Signer is not the agent's authorized key");
       return { valid: false };
@@ -128,8 +132,8 @@ export async function verifySIWARequest(
 
     // Check: SIWA address must be the trader's smart account (agent wallet)
     if (
-      !trader.cdp_wallet_address ||
-      getAddress(fields.address) !== getAddress(trader.cdp_wallet_address)
+      !trader.cdpWalletAddress ||
+      getAddress(fields.address) !== getAddress(trader.cdpWalletAddress)
     ) {
       console.error("[SIWA verify] SIWA address does not match agent wallet");
       return { valid: false };

@@ -5,7 +5,6 @@ import { useWriteContract, useReadContract } from "wagmi";
 import { erc20Abi } from "viem";
 import { usePrivy } from "@privy-io/react-auth";
 import { makePublicClient } from "@/lib/contracts/client";
-import { authFetch } from "@/lib/api";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
@@ -41,29 +40,13 @@ interface DepositState {
   error?: string;
 }
 
-function recordTransaction(
-  supabaseId: string,
-  type: "deposit" | "withdrawal",
-  txHash: string,
-  amount: bigint
-) {
-  const amountUsdc = Number(amount) / 1_000_000;
-  authFetch(`/api/trader/${supabaseId}/transactions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ type, tx_hash: txHash, amount_usdc: amountUsdc }),
-  }).catch((err) =>
-    console.error(`Failed to record ${type} transaction:`, err)
-  );
-}
-
 /** Approve USDC then deposit into escrow. Awaits 2 confirmations. */
 export function useDepositFlow() {
   const [state, setState] = useState<DepositState>({ step: "idle" });
   const { writeContractAsync } = useWriteContract();
 
   const deposit = useCallback(
-    async (traderId: bigint, amount: bigint, supabaseId?: string) => {
+    async (traderId: bigint, amount: bigint) => {
       setState({ step: "approving" });
 
       try {
@@ -93,10 +76,6 @@ export function useDepositFlow() {
           hash: depositHash,
           confirmations: 2,
         });
-
-        if (supabaseId) {
-          recordTransaction(supabaseId, "deposit", depositHash, amount);
-        }
 
         setState({ step: "done" });
       } catch (err) {
@@ -134,7 +113,7 @@ export function useWithdrawFlow() {
   const { writeContractAsync } = useWriteContract();
 
   const withdraw = useCallback(
-    async (traderId: bigint, amount: bigint, supabaseId?: string) => {
+    async (traderId: bigint, amount: bigint) => {
       setState({ busy: true, done: false });
 
       try {
@@ -152,10 +131,6 @@ export function useWithdrawFlow() {
           hash,
           confirmations: 2,
         });
-
-        if (supabaseId) {
-          recordTransaction(supabaseId, "withdrawal", hash, amount);
-        }
 
         setState({ busy: false, done: true });
       } catch (err) {

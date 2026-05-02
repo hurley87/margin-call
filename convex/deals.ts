@@ -157,6 +157,21 @@ export const incrementEntryCount = internalMutation({
 // ── Internal query: look up a verified entry by paymentId ─────────────────
 
 /**
+ * Internal: find a verified deal entry by traderId + dealId.
+ * Used by the x402 route for idempotency (duplicate entry check).
+ */
+export const findEntryByTraderAndDeal = internalQuery({
+  args: { traderId: v.string(), dealId: v.id("deals") },
+  handler: async (ctx, { traderId, dealId }) =>
+    ctx.db
+      .query("dealEntries")
+      .withIndex("byTraderAndDeal", (q) =>
+        q.eq("traderId", traderId).eq("dealId", dealId)
+      )
+      .first(),
+});
+
+/**
  * Internal: find a verified deal entry by payment id.
  * Used by the route to check idempotency before inserting.
  */

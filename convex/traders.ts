@@ -202,6 +202,59 @@ export const applyOutcomeBalance = internalMutation({
 });
 
 /**
+ * Internal: update a trader's cached escrow balance.
+ * Called from the x402 deal/enter route after on-chain resolution to keep
+ * the Convex record aligned with chain state.
+ */
+export const updateEscrowBalance = internalMutation({
+  args: { traderId: v.id("traders"), escrowBalanceUsdc: v.number() },
+  handler: async (ctx, { traderId, escrowBalanceUsdc }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return;
+    await ctx.db.patch(traderId, {
+      escrowBalanceUsdc,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Internal: find a trader by ERC-8004 tokenId.
+ * Used by the x402 deal/enter route to look up the trader from SIWA auth.
+ */
+export const getByTokenIdInternal = internalQuery({
+  args: { tokenId: v.number() },
+  handler: async (ctx, { tokenId }) => {
+    const traders = await ctx.db.query("traders").collect();
+    return traders.find((t) => t.tokenId === tokenId) ?? null;
+  },
+});
+
+/**
+ * Internal: load trader by Convex id and verify it is owned by the given
+ * wallet address (cdpWalletAddress or owner lookup via deskManager).
+ * Used by the x402 deal/enter route for Privy user ownership checks.
+ */
+export const getByIdForOwnerInternal = internalQuery({
+  args: { traderId: v.id("traders"), walletAddress: v.string() },
+  handler: async (ctx, { traderId, walletAddress }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return null;
+    // Ownership: check cdpWalletAddress (agent wallet) or deskManager walletAddress
+    if (
+      trader.cdpWalletAddress?.toLowerCase() === walletAddress.toLowerCase()
+    ) {
+      return trader;
+    }
+    const dm = await ctx.db.get(trader.deskManagerId);
+    if (dm?.walletAddress?.toLowerCase() === walletAddress.toLowerCase()) {
+      return trader;
+    }
+    return null;
+  },
+});
+
+/**
  * Internal: list traders on the same desk (same deskManagerId) excluding
  * the given traderId. Used for desk dedup in deal selection.
  */

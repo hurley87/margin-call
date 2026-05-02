@@ -29,7 +29,15 @@ export interface DealOutcomeWithNarrative {
   created_at: string;
 }
 
-export type { Asset as TraderAsset } from "@/lib/supabase/queries";
+export interface TraderAsset {
+  id: string;
+  trader_id: string;
+  name: string;
+  value_usdc: number;
+  source_deal_id: string | null;
+  source_outcome_id: string | null;
+  acquired_at: string;
+}
 
 export function useTraderAssets(traderId: string) {
   return useQuery({
@@ -38,7 +46,7 @@ export function useTraderAssets(traderId: string) {
       const res = await authFetch(`/api/trader/${traderId}/assets`);
       if (!res.ok) throw new Error("Failed to load assets");
       const data = await res.json();
-      return (data.assets ?? []) as import("@/lib/supabase/queries").Asset[];
+      return (data.assets ?? []) as TraderAsset[];
     },
     enabled: !!traderId,
     // Realtime subscriptions handle live updates — no polling needed

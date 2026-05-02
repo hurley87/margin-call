@@ -16,7 +16,6 @@ import type { FeedHeadline } from "@/hooks/use-narrative";
 const STEP_LABELS: Record<string, string> = {
   approving: "APPROVING USDC SPEND...",
   creating: "CREATING DEAL ON-CHAIN...",
-  syncing: "SYNCING DEAL TO DATABASE...",
   done: "DEAL CREATED SUCCESSFULLY",
 };
 
@@ -69,7 +68,7 @@ export function CreateDealDialog({
     if (!selectedPrompt.trim() || isNaN(potNum) || isNaN(entryNum)) return;
     setState("creating");
     try {
-      const result = await createDeal(
+      await createDeal(
         selectedPrompt.trim(),
         potNum,
         entryNum,
@@ -78,9 +77,7 @@ export function CreateDealDialog({
       queryClient.invalidateQueries({ queryKey: ["deals"] });
       queryClient.invalidateQueries({ queryKey: ["my-deals"] });
       onOpenChange(false);
-      router.push(
-        result?.supabaseId ? `/deals/${result.supabaseId}` : "/deals"
-      );
+      router.push("/deals");
     } catch {
       setState("configure");
     }
@@ -269,9 +266,7 @@ export function CreateDealDialog({
                             ? "33%"
                             : step === "creating"
                               ? "66%"
-                              : step === "syncing"
-                                ? "90%"
-                                : "100%",
+                              : "100%",
                       }}
                     />
                   </div>

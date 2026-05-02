@@ -9,17 +9,15 @@ import {
   CONTRACTS_CHAIN_ID,
   escrowAbi,
 } from "@/lib/contracts/escrow";
-import { authFetch } from "@/lib/api";
 import { makePublicClient } from "@/lib/contracts/client";
 
-type CreateDealStep = "idle" | "approving" | "creating" | "syncing" | "done";
+type CreateDealStep = "idle" | "approving" | "creating" | "done";
 
 interface CreateDealState {
   step: CreateDealStep;
   approveHash?: `0x${string}`;
   createHash?: `0x${string}`;
   dealId?: bigint;
-  supabaseId?: string;
   error?: string;
 }
 
@@ -35,7 +33,7 @@ export function useCreateDeal() {
       prompt: string,
       potAmountUsdc: number,
       entryCostUsdc: number,
-      sourceHeadline?: string
+      _sourceHeadline?: string // reserved for future on-chain sourceHeadline support
     ) => {
       setState({ step: "approving" });
 
@@ -54,9 +52,7 @@ export function useCreateDeal() {
 
         setState((s) => ({ ...s, approveHash }));
 
-        // Wait for approval confirmation inline via polling
         const publicClient = makePublicClient();
-
         await publicClient.waitForTransactionReceipt({ hash: approveHash });
 
         // Step 2: Call createDeal on escrow
@@ -94,28 +90,9 @@ export function useCreateDeal() {
           }
         }
 
-        // Step 3: Sync to Supabase
-        setState((s) => ({ ...s, step: "syncing", dealId }));
+        setState({ step: "done", approveHash, createHash, dealId });
 
-        let supabaseId: string | undefined;
-        try {
-          const syncRes = await authFetch("/api/deal/sync", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              txHash: createHash,
-              source_headline: sourceHeadline,
-            }),
-          });
-          const syncData = await syncRes.json();
-          supabaseId = syncData.supabaseId ?? undefined;
-        } catch {
-          // Sync failure is non-critical
-        }
-
-        setState({ step: "done", approveHash, createHash, dealId, supabaseId });
-
-        return { dealId, createHash, supabaseId };
+        return { dealId, createHash };
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Transaction failed";
@@ -137,7 +114,6 @@ export function useCreateDeal() {
     approveHash: state.approveHash,
     createHash: state.createHash,
     dealId: state.dealId,
-    supabaseId: state.supabaseId,
     error: state.error,
     isLoading: state.step !== "idle" && state.step !== "done",
   };

@@ -95,3 +95,21 @@ export const cleanup = internalMutation({
     return { deleted: expired.length };
   },
 });
+
+/**
+ * Internal: find a trader by tokenId (ERC-8004 token id).
+ * Convenience query for SIWA verification without auth.
+ */
+export const findTraderByTokenId = internalQuery({
+  args: { tokenId: v.number() },
+  handler: async (ctx, { tokenId }) => {
+    const traders = await ctx.db.query("traders").collect();
+    const trader = traders.find((t) => t.tokenId === tokenId);
+    if (!trader) return null;
+    return {
+      _id: trader._id,
+      cdpOwnerAddress: trader.cdpOwnerAddress,
+      cdpWalletAddress: trader.cdpWalletAddress,
+    };
+  },
+});
