@@ -8,6 +8,10 @@
  * @module
  */
 
+import type * as agentActivityLog from "../agentActivityLog.js";
+import type * as dealApprovals from "../dealApprovals.js";
+import type * as dealOutcomes from "../dealOutcomes.js";
+import type * as deals from "../deals.js";
 import type * as deskManagers from "../deskManagers.js";
 import type * as me from "../me.js";
 import type * as traders from "../traders.js";
@@ -20,6 +24,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  agentActivityLog: typeof agentActivityLog;
+  dealApprovals: typeof dealApprovals;
+  dealOutcomes: typeof dealOutcomes;
+  deals: typeof deals;
   deskManagers: typeof deskManagers;
   me: typeof me;
   traders: typeof traders;
