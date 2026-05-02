@@ -31,12 +31,7 @@ import type { Mandate } from "./_types";
  * @param baseUrl   NEXT_PUBLIC_APP_URL (e.g. https://app.example.com)
  * @returns         The parsed JSON response from /api/deal/enter
  */
-async function callDealEnter(
-  traderId: string,
-  tokenId: number,
-  dealId: string,
-  baseUrl: string
-): Promise<{
+type DealEnterResponse = {
   outcome: {
     trader_pnl_usdc: number;
     rake_usdc: number;
@@ -45,7 +40,26 @@ async function callDealEnter(
     wipeout_reason: string | null;
     payment_id: string;
   };
-}> {
+};
+
+function errorMessageFromUnknownBody(body: unknown): string {
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "error" in body &&
+    typeof (body as { error: unknown }).error === "string"
+  ) {
+    return (body as { error: string }).error;
+  }
+  return "unknown";
+}
+
+async function callDealEnter(
+  traderId: string,
+  tokenId: number,
+  dealId: string,
+  baseUrl: string
+): Promise<DealEnterResponse> {
   // ── 1. Get CDP accounts (matches `getOrCreateTraderSmartAccount` pattern) ─
   const { CdpClient } = await import("@coinbase/cdp-sdk");
   const cdp = new CdpClient({
@@ -124,18 +138,23 @@ async function callDealEnter(
   });
 
   if (!enterRes.ok) {
-    const errBody = await enterRes
-      .json()
-      .catch(() => ({ error: "Unknown error" }));
+    let errDetail = "unknown";
+    try {
+      const errBody: unknown = await enterRes.json();
+      errDetail = errorMessageFromUnknownBody(errBody);
+    } catch {
+      errDetail = "Unknown error";
+    }
     const err = new Error(
-      `[cycle] /api/deal/enter failed: ${enterRes.status} – ${errBody.error ?? "unknown"}`
+      `[cycle] /api/deal/enter failed: ${enterRes.status} – ${errDetail}`
     );
     // Attach the HTTP status so callers can distinguish 409 (duplicate)
     (err as Error & { httpStatus: number }).httpStatus = enterRes.status;
     throw err;
   }
 
-  return enterRes.json();
+  const body: unknown = await enterRes.json();
+  return body as DealEnterResponse;
 }
 
 /**
