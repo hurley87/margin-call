@@ -80,10 +80,16 @@ export const create = mutation({
       updatedAt: now,
     });
 
-    // Schedule wallet creation as an internal action (no CDP inside mutations)
-    await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
-      traderId,
-    });
+    // Schedule wallet creation as an internal action (no CDP inside mutations).
+    // Vitest sets MARGIN_CALL_CONVEX_TEST_SKIP_WALLET_SCHEDULE (see vitest.config.ts):
+    // convex-test runs scheduled actions without a full transaction context, so
+    // createForTrader's ctx.runQuery fails with "Transaction not started" and
+    // spams stderr — behavior tests seed traders directly or use markCreating instead.
+    if (process.env.MARGIN_CALL_CONVEX_TEST_SKIP_WALLET_SCHEDULE !== "1") {
+      await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
+        traderId,
+      });
+    }
 
     return traderId;
   },
@@ -170,6 +176,7 @@ export const applyOutcomeBalance = internalMutation({
     const trader = await ctx.db.get(traderId);
     if (!trader) return;
 
+    // Idempotency: if this outcome was already applied, no-op
     if (trader.lastOutcomeId === outcomeId) return;
 
     const currentBalance = trader.escrowBalanceUsdc ?? 0;
