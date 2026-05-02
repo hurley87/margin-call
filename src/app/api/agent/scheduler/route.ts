@@ -7,10 +7,25 @@ import { AGENT_CRON_STALE_MS } from "@/lib/constants";
 /**
  * POST /api/agent/scheduler
  *
- * Vercel Cron: fans out signed agent cycles for active traders whose last cycle
- * started longer ago than AGENT_CRON_STALE_MS. Replaces fragile self-POST + after() chains.
+ * LEGACY — guarded by LEGACY_AGENT_LOOP=1 env flag (issue #85).
+ * The Convex cron + internal.agent.scheduler action is now the canonical path.
+ * This route is kept to avoid breaking existing Vercel Cron config until the
+ * full removal tracked in issue #91.
+ *
+ * To re-enable: set LEGACY_AGENT_LOOP=1 in your environment.
+ * Default: disabled (returns 503).
  */
 export async function POST(request: NextRequest) {
+  if (process.env.LEGACY_AGENT_LOOP !== "1") {
+    return NextResponse.json(
+      {
+        error:
+          "Legacy agent loop is disabled. Set LEGACY_AGENT_LOOP=1 to re-enable. " +
+          "The Convex-native cron (convex/crons.ts) is now the active scheduler.",
+      },
+      { status: 503 }
+    );
+  }
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {
     return NextResponse.json(

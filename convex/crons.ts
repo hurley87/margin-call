@@ -15,4 +15,17 @@ crons.hourly(
   {}
 );
 
+/**
+ * Agent scheduler cron — fires every 1 minute (Convex minimum; PRD target is
+ * 30 s but the platform constraint is 1 m on most plans).
+ *
+ * Calls internal.agent.scheduler which queries stale active traders and fans
+ * out one cycle action per trader via ctx.scheduler.runAfter(0, ...).
+ */
+crons.interval(
+  "agent-scheduler",
+  { minutes: 1 },
+  internal.agent.scheduler.scheduler
+);
+
 export default crons;
