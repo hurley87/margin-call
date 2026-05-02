@@ -21,11 +21,13 @@ export const listPending = query({
       .unique();
     if (!dm) return [];
 
+    const now = Date.now();
     const approvals = await ctx.db
       .query("dealApprovals")
       .withIndex("byDeskManagerAndStatus", (q) =>
         q.eq("deskManagerId", dm._id).eq("status", "pending")
       )
+      .filter((q) => q.gt(q.field("expiresAt"), now))
       .order("desc")
       .collect();
 
@@ -93,6 +95,8 @@ export const approve = mutation({
     if (approval.deskManagerId !== dm._id)
       throw new Error("Not authorized for this approval");
 
+    const now = Date.now();
+
     // Idempotency: already approved → no-op
     if (approval.status === "approved") return approval;
 
@@ -102,12 +106,20 @@ export const approve = mutation({
       return approval;
     }
 
+    if (approval.expiresAt <= now) {
+      await ctx.db.patch(approvalId, {
+        status: "expired",
+        resolvedAt: now,
+      });
+      return { ...approval, status: "expired", resolvedAt: now };
+    }
+
     await ctx.db.patch(approvalId, {
       status: "approved",
-      resolvedAt: Date.now(),
+      resolvedAt: now,
     });
 
-    return { ...approval, status: "approved" };
+    return { ...approval, status: "approved", resolvedAt: now };
   },
 });
 
@@ -137,6 +149,8 @@ export const reject = mutation({
     if (approval.deskManagerId !== dm._id)
       throw new Error("Not authorized for this approval");
 
+    const now = Date.now();
+
     // Idempotency: already rejected → no-op
     if (approval.status === "rejected") return approval;
 
@@ -145,12 +159,20 @@ export const reject = mutation({
       return approval;
     }
 
+    if (approval.expiresAt <= now) {
+      await ctx.db.patch(approvalId, {
+        status: "expired",
+        resolvedAt: now,
+      });
+      return { ...approval, status: "expired", resolvedAt: now };
+    }
+
     await ctx.db.patch(approvalId, {
       status: "rejected",
-      resolvedAt: Date.now(),
+      resolvedAt: now,
     });
 
-    return { ...approval, status: "rejected" };
+    return { ...approval, status: "rejected", resolvedAt: now };
   },
 });
 
@@ -166,13 +188,15 @@ export const loadInternal = internalQuery({
 export const findPendingByTraderAndDeal = internalQuery({
   args: { traderId: v.id("traders"), dealId: v.id("deals") },
   handler: async (ctx, { traderId, dealId }) => {
+    const now = Date.now();
     const results = await ctx.db
       .query("dealApprovals")
       .withIndex("byTrader", (q) => q.eq("traderId", traderId))
       .filter((q) =>
         q.and(
           q.eq(q.field("dealId"), dealId),
-          q.eq(q.field("status"), "pending")
+          q.eq(q.field("status"), "pending"),
+          q.gt(q.field("expiresAt"), now)
         )
       )
       .collect();
@@ -197,6 +221,7 @@ export const request = internalMutation({
     expiresAt: v.number(),
   },
   handler: async (ctx, args) => {
+    const now = Date.now();
     // Idempotency: if already pending for this (traderId, dealId), return existing
     const existing = await ctx.db
       .query("dealApprovals")
@@ -204,7 +229,8 @@ export const request = internalMutation({
       .filter((q) =>
         q.and(
           q.eq(q.field("dealId"), args.dealId),
-          q.eq(q.field("status"), "pending")
+          q.eq(q.field("status"), "pending"),
+          q.gt(q.field("expiresAt"), now)
         )
       )
       .collect();
@@ -214,7 +240,7 @@ export const request = internalMutation({
       ...args,
       status: "pending",
       resolvedAt: undefined,
-      createdAt: Date.now(),
+      createdAt: now,
     });
   },
 });
@@ -229,9 +255,17 @@ export const consume = internalMutation({
     const approval = await ctx.db.get(approvalId);
     if (!approval) return;
     if (approval.status !== "approved") return; // only consume if approved
+    const now = Date.now();
+    if (approval.expiresAt <= now) {
+      await ctx.db.patch(approvalId, {
+        status: "expired",
+        resolvedAt: now,
+      });
+      return;
+    }
     await ctx.db.patch(approvalId, {
       status: "consumed",
-      resolvedAt: Date.now(),
+      resolvedAt: now,
     });
   },
 });
