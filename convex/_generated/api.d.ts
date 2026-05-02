@@ -29,6 +29,7 @@ import type * as leaderboard from "../leaderboard.js";
 import type * as marketNarratives from "../marketNarratives.js";
 import type * as me from "../me.js";
 import type * as narrative from "../narrative.js";
+import type * as siwaNonces from "../siwaNonces.js";
 import type * as systemPrompts from "../systemPrompts.js";
 import type * as traders from "../traders.js";
 import type * as wallet from "../wallet.js";
@@ -61,6 +62,7 @@ declare const fullApi: ApiFromModules<{
   marketNarratives: typeof marketNarratives;
   me: typeof me;
   narrative: typeof narrative;
+  siwaNonces: typeof siwaNonces;
   systemPrompts: typeof systemPrompts;
   traders: typeof traders;
   wallet: typeof wallet;

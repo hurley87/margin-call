@@ -26,6 +26,8 @@ export default defineSchema({
     mandate: v.optional(v.any()),
     personality: v.optional(v.string()),
     escrowBalanceUsdc: v.optional(v.number()),
+    /** Last deal outcome applied to escrow (idempotency for applyOutcomeBalance). */
+    lastOutcomeId: v.optional(v.id("dealOutcomes")),
     lastCycleAt: v.optional(v.number()),
     // Cycle lease fields for idempotent, non-overlapping agent cycles (issue #85)
     cycleLeaseUntil: v.optional(v.number()),
@@ -80,6 +82,35 @@ export default defineSchema({
     .index("byCreator", ["creatorDeskManagerId"])
     .index("byOnChainDealId", ["onChainDealId"])
     .index("byCreatedAt", ["createdAt"]),
+
+  /**
+   * Verified x402 deal entries (#87).
+   * Populated exclusively via the internal mutation `deals.recordVerifiedEntry`.
+   * No public mutation may set paid/verified/settled flags.
+   * `paymentId` is the idempotency key (x402 settlement / request id).
+   */
+  dealEntries: defineTable({
+    // Idempotency key — x402 settlement id / payment id / request id.
+    paymentId: v.string(),
+    dealId: v.id("deals"),
+    // traderId is a string to accommodate both Convex-native traders and
+    // legacy Supabase trader ids during the migration window.
+    traderId: v.string(),
+    entryCostUsdc: v.number(),
+    // x402 settlement metadata
+    enterTxHash: v.optional(v.string()),
+    resolveTxHash: v.optional(v.string()),
+    onChainDealId: v.optional(v.number()),
+    // outcome snapshot recorded at entry time
+    traderPnlUsdc: v.optional(v.number()),
+    rakeUsdc: v.optional(v.number()),
+    traderWipedOut: v.optional(v.boolean()),
+    createdAt: v.number(),
+  })
+    .index("byPaymentId", ["paymentId"])
+    .index("byDeal", ["dealId"])
+    .index("byTrader", ["traderId"])
+    .index("byTraderAndDeal", ["traderId", "dealId"]),
 
   dealOutcomes: defineTable({
     dealId: v.id("deals"),

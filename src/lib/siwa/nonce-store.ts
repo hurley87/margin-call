@@ -1,48 +1,45 @@
 import "server-only";
 
 import type { SIWANonceStore } from "@buildersgarden/siwa/nonce-store";
-import { createServerClient } from "@/lib/supabase/client";
+import { createConvexAdminClient } from "@/lib/convex/server-client";
+import { internal } from "../../../convex/_generated/api";
 
 /**
- * Supabase-backed SIWA nonce store.
- * Works across serverless invocations (unlike the in-memory store).
+ * Convex-backed SIWA nonce store.
+ *
+ * Retention policy:
+ *   - Nonces are inserted with the TTL supplied by the SIWA library (default 5 min).
+ *   - `consume` deletes the row immediately on first use; subsequent calls return false.
+ *   - An hourly Convex cron (convex/crons.ts) purges any rows that were issued but
+ *     never consumed (e.g. abandoned auth flows).
  */
-export function createSupabaseNonceStore(): SIWANonceStore {
+export function createConvexNonceStore(): SIWANonceStore {
   return {
     async issue(nonce: string, ttlMs: number): Promise<boolean> {
-      const supabase = createServerClient();
-      const expiresAt = new Date(Date.now() + ttlMs).toISOString();
+      const convex = createConvexAdminClient();
+      const expiresAt = Date.now() + ttlMs;
 
-      const { error } = await supabase
-        .from("siwa_nonces")
-        .insert({ nonce, expires_at: expiresAt });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const inserted = await (convex as any).mutation(
+        internal.siwaNonces.issue,
+        { nonce, expiresAt }
+      );
 
-      if (error) {
-        // Unique constraint violation → nonce already exists
-        if (error.code === "23505") return false;
-        console.error("[SIWA nonce] issue error:", error.message);
-        return false;
-      }
-      return true;
+      return inserted as boolean;
     },
 
     async consume(nonce: string): Promise<boolean> {
-      const supabase = createServerClient();
+      const convex = createConvexAdminClient();
 
-      // Atomically delete the nonce if it exists and hasn't expired
-      const { data, error } = await supabase
-        .from("siwa_nonces")
-        .delete()
-        .eq("nonce", nonce)
-        .gte("expires_at", new Date().toISOString())
-        .select("nonce");
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const result = await (convex as any).mutation(
+        internal.siwaNonces.consume,
+        { nonce }
+      );
 
-      if (error) {
-        console.error("[SIWA nonce] consume error:", error.message);
-        return false;
-      }
-
-      return data !== null && data.length > 0;
+      // "ok" → nonce was valid and has been consumed
+      // "expired" | "notFound" → treat as invalid
+      return (result as string) === "ok";
     },
   };
 }
