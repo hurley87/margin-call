@@ -16,7 +16,6 @@ import type { FeedHeadline } from "@/hooks/use-narrative";
 const STEP_LABELS: Record<string, string> = {
   approving: "APPROVING USDC SPEND...",
   creating: "CREATING DEAL ON-CHAIN...",
-  syncing: "SYNCING DEAL TO DATABASE...",
   done: "DEAL CREATED SUCCESSFULLY",
 };
 
@@ -267,9 +266,7 @@ export function CreateDealDialog({
                             ? "33%"
                             : step === "creating"
                               ? "66%"
-                              : step === "syncing"
-                                ? "90%"
-                                : "100%",
+                              : "100%",
                       }}
                     />
                   </div>

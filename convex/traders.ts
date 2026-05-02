@@ -5,6 +5,7 @@ import {
   query,
 } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
 /** Public: list traders owned by the calling desk manager. */
@@ -79,10 +80,16 @@ export const create = mutation({
       updatedAt: now,
     });
 
-    // Schedule wallet creation as an internal action (no CDP inside mutations)
-    await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
-      traderId,
-    });
+    // Schedule wallet creation as an internal action (no CDP inside mutations).
+    // Vitest sets MARGIN_CALL_CONVEX_TEST_SKIP_WALLET_SCHEDULE (see vitest.config.ts):
+    // convex-test runs scheduled actions without a full transaction context, so
+    // createForTrader's ctx.runQuery fails with "Transaction not started" and
+    // spams stderr — behavior tests seed traders directly or use markCreating instead.
+    if (process.env.MARGIN_CALL_CONVEX_TEST_SKIP_WALLET_SCHEDULE !== "1") {
+      await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
+        traderId,
+      });
+    }
 
     return traderId;
   },
@@ -162,7 +169,7 @@ export const applyOutcomeBalance = internalMutation({
     traderId: v.id("traders"),
     pnlUsdc: v.number(),
     wipedOut: v.boolean(),
-    /** Outcome document id used for idempotency key; stored as outcomeAppliedId. */
+    /** Outcome document id — idempotency key; persisted as lastOutcomeId. */
     outcomeId: v.id("dealOutcomes"),
   },
   handler: async (ctx, { traderId, pnlUsdc, wipedOut, outcomeId }) => {
@@ -175,7 +182,12 @@ export const applyOutcomeBalance = internalMutation({
     const currentBalance = trader.escrowBalanceUsdc ?? 0;
     const newBalance = Math.max(0, currentBalance + pnlUsdc);
 
-    const patch: Parameters<typeof ctx.db.patch<"traders">>[1] = {
+    const patch: Partial<
+      Pick<
+        Doc<"traders">,
+        "escrowBalanceUsdc" | "lastOutcomeId" | "updatedAt" | "status"
+      >
+    > = {
       escrowBalanceUsdc: newBalance,
       lastOutcomeId: outcomeId,
       updatedAt: Date.now(),

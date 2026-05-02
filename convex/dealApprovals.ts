@@ -31,7 +31,6 @@ export const listPending = query({
       .order("desc")
       .collect();
 
-    // Join in trader name and deal prompt for UI display
     const result = await Promise.all(
       approvals.map(async (approval) => {
         const [trader, deal] = await Promise.all([
@@ -97,12 +96,9 @@ export const approve = mutation({
 
     const now = Date.now();
 
-    // Idempotency: already approved → no-op
     if (approval.status === "approved") return approval;
 
-    // Validate from-state: only pending can be approved
     if (approval.status !== "pending") {
-      // Expired, rejected, consumed — return current state without error
       return approval;
     }
 
@@ -151,10 +147,8 @@ export const reject = mutation({
 
     const now = Date.now();
 
-    // Idempotency: already rejected → no-op
     if (approval.status === "rejected") return approval;
 
-    // Validate from-state: only pending can be rejected
     if (approval.status !== "pending") {
       return approval;
     }
@@ -184,7 +178,7 @@ export const loadInternal = internalQuery({
   handler: async (ctx, { approvalId }) => ctx.db.get(approvalId),
 });
 
-/** Internal: find an existing approval for (traderId, dealId) in pending state. */
+/** Internal: find an existing approval for (traderId, dealId) in pending state (not expired). */
 export const findPendingByTraderAndDeal = internalQuery({
   args: { traderId: v.id("traders"), dealId: v.id("deals") },
   handler: async (ctx, { traderId, dealId }) => {
@@ -204,12 +198,34 @@ export const findPendingByTraderAndDeal = internalQuery({
   },
 });
 
+/** Internal: find an approved (desk-signed-off) row for (traderId, dealId), newest first. */
+export const findApprovedByTraderAndDeal = internalQuery({
+  args: { traderId: v.id("traders"), dealId: v.id("deals") },
+  handler: async (ctx, { traderId, dealId }) => {
+    const results = await ctx.db
+      .query("dealApprovals")
+      .withIndex("byTrader", (q) => q.eq("traderId", traderId))
+      .filter((q) =>
+        q.and(
+          q.eq(q.field("dealId"), dealId),
+          q.eq(q.field("status"), "approved")
+        )
+      )
+      .collect();
+    if (results.length === 0) return null;
+    results.sort(
+      (a, b) => (b.resolvedAt ?? b.createdAt) - (a.resolvedAt ?? a.createdAt)
+    );
+    return results[0] ?? null;
+  },
+});
+
 // ── Internal mutations (called by cycle) ───────────────────────────────────
 
 /**
  * Internal: request an approval from the cycle.
- * Creates a new pending approval for (traderId, dealId).
- * If one already exists in pending state for this pair, returns the existing id (idempotent).
+ * Returns existing non-expired pending id, or approved id (cycle not yet consumed),
+ * else inserts a new pending row.
  */
 export const request = internalMutation({
   args: {
@@ -222,19 +238,19 @@ export const request = internalMutation({
   },
   handler: async (ctx, args) => {
     const now = Date.now();
-    // Idempotency: if already pending for this (traderId, dealId), return existing
-    const existing = await ctx.db
+    const rows = await ctx.db
       .query("dealApprovals")
       .withIndex("byTrader", (q) => q.eq("traderId", args.traderId))
-      .filter((q) =>
-        q.and(
-          q.eq(q.field("dealId"), args.dealId),
-          q.eq(q.field("status"), "pending"),
-          q.gt(q.field("expiresAt"), now)
-        )
-      )
+      .filter((q) => q.eq(q.field("dealId"), args.dealId))
       .collect();
-    if (existing.length > 0) return existing[0]._id;
+
+    const pendingValid = rows.find(
+      (r) => r.status === "pending" && r.expiresAt > now
+    );
+    if (pendingValid) return pendingValid._id;
+
+    const approved = rows.find((r) => r.status === "approved");
+    if (approved) return approved._id;
 
     return ctx.db.insert("dealApprovals", {
       ...args,
@@ -247,14 +263,14 @@ export const request = internalMutation({
 
 /**
  * Internal: mark approval as consumed (deal was entered after approval).
- * CAS: only transitions approved → consumed.
+ * CAS: only transitions approved → consumed (or expired if past expiresAt).
  */
 export const consume = internalMutation({
   args: { approvalId: v.id("dealApprovals") },
   handler: async (ctx, { approvalId }) => {
     const approval = await ctx.db.get(approvalId);
     if (!approval) return;
-    if (approval.status !== "approved") return; // only consume if approved
+    if (approval.status !== "approved") return;
     const now = Date.now();
     if (approval.expiresAt <= now) {
       await ctx.db.patch(approvalId, {
