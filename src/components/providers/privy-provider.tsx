@@ -25,27 +25,25 @@ export function PrivyProvider({ children }: { children: React.ReactNode }) {
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { staleTime: 30_000, retry: 1 },
+          queries: { staleTime: 60_000 },
         },
       })
   );
 
   if (!appId) {
-    return (
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    );
+    return <>{children}</>;
   }
 
   return (
-    <BasePrivyProvider appId={appId} config={privyConfig}>
-      <QueryClientProvider client={queryClient}>
+    <QueryClientProvider client={queryClient}>
+      <BasePrivyProvider appId={appId} config={privyConfig}>
         <WagmiProvider config={wagmiConfig}>
           <ConvexClientProvider>
             <BaseNetworkGuard />
             {children}
           </ConvexClientProvider>
         </WagmiProvider>
-      </QueryClientProvider>
-    </BasePrivyProvider>
+      </BasePrivyProvider>
+    </QueryClientProvider>
   );
 }

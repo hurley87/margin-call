@@ -7,10 +7,10 @@ import {
   IDENTITY_REGISTRY_ADDRESS,
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
-import { createSupabaseNonceStore } from "@/lib/siwa/nonce-store";
+import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
 import { createServerClient } from "@/lib/supabase/client";
 
-const nonceStore = createSupabaseNonceStore();
+const nonceStore = createConvexNonceStore();
 
 const domain =
   process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, "") ??

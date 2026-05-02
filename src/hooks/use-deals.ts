@@ -1,6 +1,9 @@
-import { useQuery } from "@tanstack/react-query";
+"use client";
+
+import { useEffect, useState } from "react";
 import { useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { authFetch } from "@/lib/api";
 
 export interface Deal {
@@ -39,22 +42,9 @@ export interface DealOutcome {
   on_chain_tx_hash?: string;
 }
 
-/**
- * Returns all deals (any status) visible to the authenticated user.
- * Backed by Convex subscription — live updates without polling.
- */
-export function useDeals(): {
-  data: Deal[] | undefined;
-  isLoading: boolean;
-  isError: boolean;
-} {
-  const result = useConvexQuery(api.deals.list);
-
-  if (result === undefined) {
-    return { data: undefined, isLoading: true, isError: false };
-  }
-
-  const data: Deal[] = result.map((deal) => ({
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapConvexDeal(deal: Record<string, any>): Deal {
+  return {
     id: deal._id,
     creator_id: deal.creatorDeskManagerId,
     creator_type: deal.creatorType,
@@ -72,9 +62,26 @@ export function useDeals(): {
     on_chain_tx_hash: deal.onChainTxHash,
     creator_address: deal.creatorAddress,
     source_headline: deal.sourceHeadline,
-  }));
+  };
+}
 
-  return { data, isLoading: false, isError: false };
+/**
+ * Returns all deals (any status) visible to the authenticated user.
+ * Backed by Convex subscription — live updates without polling.
+ */
+export function useDeals(): {
+  data: Deal[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const result = useConvexQuery(api.deals.list);
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, isError: false };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { data: (result as any[]).map(mapConvexDeal), isLoading: false, isError: false };
 }
 
 /**
@@ -92,43 +99,57 @@ export function useMyDeals(): {
     return { data: undefined, isLoading: true, isError: false };
   }
 
-  // Map Convex camelCase → legacy snake_case Deal interface
-  const data: Deal[] = result.map((deal) => ({
-    id: deal._id,
-    creator_id: deal.creatorDeskManagerId,
-    creator_type: deal.creatorType,
-    on_chain_deal_id: deal.onChainDealId,
-    prompt: deal.prompt,
-    pot_usdc: deal.potUsdc,
-    entry_cost_usdc: deal.entryCostUsdc,
-    fee_usdc: deal.feeUsdc,
-    max_extraction_percentage: deal.maxExtractionPercentage ?? 0,
-    entry_count: deal.entryCount ?? 0,
-    wipeout_count: deal.wipeoutCount ?? 0,
-    status: deal.status,
-    created_at: new Date(deal.createdAt).toISOString(),
-    updated_at: new Date(deal.updatedAt).toISOString(),
-    on_chain_tx_hash: deal.onChainTxHash,
-    creator_address: deal.creatorAddress,
-    source_headline: deal.sourceHeadline,
-  }));
-
-  return { data, isLoading: false, isError: false };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return { data: (result as any[]).map(mapConvexDeal), isLoading: false, isError: false };
 }
 
-export function useDeal(id: string) {
-  return useQuery({
-    queryKey: ["deal", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/deal/${id}`);
-      if (!res.ok) throw new Error("Deal not found");
-      const data = await res.json();
-      return {
-        deal: data.deal as Deal,
-        outcomes: (data.outcomes ?? []) as DealOutcome[],
-      };
-    },
-  });
+/**
+ * Returns a single deal with its outcomes.
+ * Deal backed by Convex subscription; outcomes fetched from Convex separately.
+ */
+export function useDeal(id: string): {
+  data: { deal: Deal; outcomes: DealOutcome[] } | undefined;
+  isLoading: boolean;
+  error: Error | null;
+} {
+  const dealResult = useConvexQuery(
+    api.deals.getById,
+    id ? { dealId: id as Id<"deals"> } : "skip"
+  );
+  const outcomesResult = useConvexQuery(
+    api.dealOutcomes.listByDeal,
+    id ? { dealId: id as Id<"deals"> } : "skip"
+  );
+
+  if (dealResult === undefined || outcomesResult === undefined) {
+    return { data: undefined, isLoading: true, error: null };
+  }
+
+  if (dealResult === null) {
+    return { data: undefined, isLoading: false, error: new Error("Deal not found") };
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const deal = mapConvexDeal(dealResult as any);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const outcomes: DealOutcome[] = (outcomesResult as any[]).map((o) => ({
+    id: o._id,
+    deal_id: o.dealId,
+    trader_id: o.traderId,
+    trader_pnl_usdc: o.traderPnlUsdc ?? 0,
+    pot_change_usdc: o.potChangeUsdc ?? 0,
+    rake_usdc: o.rakeUsdc ?? 0,
+    narrative: o.narrative ?? "",
+    trader_wiped_out: o.traderWipedOut ?? false,
+    wipeout_reason: o.wipeoutReason,
+    assets_gained: o.assetsGained ?? [],
+    assets_lost: o.assetsLost ?? [],
+    created_at: new Date(o.createdAt).toISOString(),
+    on_chain_tx_hash: o.onChainTxHash,
+  }));
+
+  return { data: { deal, outcomes }, isLoading: false, error: null };
 }
 
 /**
@@ -154,18 +175,50 @@ export function useHeadlineDeals(): {
   return { data: map, isLoading: false, isError: false };
 }
 
-export function useSuggestPrompts(theme: string) {
-  return useQuery({
-    queryKey: ["suggest-prompts", theme],
-    queryFn: async () => {
-      const res = await authFetch("/api/prompt/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme }),
+/**
+ * Suggest deal prompts for a given theme.
+ * Not Convex-backed — plain fetch.
+ */
+export function useSuggestPrompts(theme: string): {
+  data: string[] | undefined;
+  isPending: boolean;
+  isError: boolean;
+  refetch: () => void;
+} {
+  const [data, setData] = useState<string[] | undefined>(undefined);
+  const [isPending, setIsPending] = useState(!!theme);
+  const [isError, setIsError] = useState(false);
+  const [rev, setRev] = useState(0);
+
+  useEffect(() => {
+    if (!theme) return;
+    let cancelled = false;
+    setIsPending(true);
+    setIsError(false);
+    authFetch("/api/prompt/suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme }),
+    })
+      .then((res) => res.json().then((json) => ({ ok: res.ok, json })))
+      .then(({ ok, json }) => {
+        if (!cancelled) {
+          if (!ok) throw new Error(json.error || "Failed to suggest prompts");
+          setData(json.suggestions as string[]);
+          setIsPending(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setIsError(true);
+          setIsPending(false);
+        }
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to suggest prompts");
-      return data.suggestions as string[];
-    },
-  });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [theme, rev]);
+
+  return { data, isPending, isError, refetch: () => setRev((r) => r + 1) };
 }

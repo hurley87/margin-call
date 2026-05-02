@@ -1,28 +1,38 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { authFetch } from "@/lib/api";
-import type { DeskManager } from "./use-desk";
+"use client";
+
+import { useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 interface UpdateSettingsInput {
   display_name?: string;
   settings?: Record<string, unknown>;
 }
 
+/**
+ * Update desk manager display name / settings via Convex mutation.
+ */
 export function useUpdateSettings() {
-  const queryClient = useQueryClient();
+  const upsert = useMutation(api.deskManagers.upsertMe);
+  const [isPending, setIsPending] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useMutation({
-    mutationFn: async (input: UpdateSettingsInput) => {
-      const res = await authFetch("/api/desk/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
+  async function mutate(input: UpdateSettingsInput) {
+    setIsPending(true);
+    setError(null);
+    try {
+      await upsert({
+        displayName: input.display_name,
+        settings: input.settings,
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update settings");
-      return data.deskManager as DeskManager;
-    },
-    onSuccess: (deskManager) => {
-      queryClient.setQueryData(["desk", "register"], deskManager);
-    },
-  });
+    } catch (err) {
+      setError(
+        err instanceof Error ? err : new Error("Failed to update settings")
+      );
+    } finally {
+      setIsPending(false);
+    }
+  }
+
+  return { mutate, isPending, error };
 }

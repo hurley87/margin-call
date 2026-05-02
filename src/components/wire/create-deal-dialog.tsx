@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { useQueryClient } from "@tanstack/react-query";
 import { useSuggestPrompts } from "@/hooks/use-deals";
 import { useCreateDeal } from "@/hooks/use-create-deal";
 import {
@@ -44,7 +43,6 @@ export function CreateDealDialog({
 
   const router = useRouter();
   const suggestQuery = useSuggestPrompts(headline.headline);
-  const queryClient = useQueryClient();
   const {
     createDeal,
     reset: resetCreateDeal,
@@ -75,8 +73,7 @@ export function CreateDealDialog({
         entryNum,
         headline.headline
       );
-      queryClient.invalidateQueries({ queryKey: ["deals"] });
-      queryClient.invalidateQueries({ queryKey: ["my-deals"] });
+      // Convex subscription on deals.list / deals.listMine updates automatically
       onOpenChange(false);
       router.push(
         result?.supabaseId ? `/deals/${result.supabaseId}` : "/deals"

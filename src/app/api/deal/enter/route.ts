@@ -6,15 +6,13 @@ import { siwaAuthMatchesTrader } from "@/lib/siwa/binding";
 import { createServerClient } from "@/lib/supabase/client";
 import { getTrader, getOwnedTrader } from "@/lib/supabase/traders";
 import {
-  createDealOutcome,
-  createTraderTransaction,
   getDeal,
   getExistingDealOutcome,
-  updateDealAfterEntry,
   getTraderAssets,
-  syncAssetsFromOutcome,
   getLatestNarrative,
 } from "@/lib/supabase/queries";
+import { createConvexAdminClient } from "@/lib/convex/server-client";
+import { internal } from "../../../../../convex/_generated/api";
 import { callModel } from "@/lib/llm/call-model";
 import {
   buildDealResolutionMessages,
@@ -459,58 +457,47 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ----- Save outcome to Supabase -----
-    const dealOutcome = await createDealOutcome({
-      deal_id,
-      trader_id: traderId,
-      narrative: outcome.narrative,
-      trader_pnl_usdc: traderPnl,
-      pot_change_usdc: potChange,
-      rake_usdc: rakeAmount,
-      assets_gained: outcome.assets_gained,
-      assets_lost: outcome.assets_lost,
-      trader_wiped_out: outcome.trader_wiped_out,
-      wipeout_reason: outcome.wipeout_reason ?? undefined,
-      on_chain_tx_hash: resolveTxHash ?? undefined,
-    });
-
-    // Record transactions
+    // ----- Record verified entry in Convex (single writer path, idempotent) -----
+    // paymentId is derived from the on-chain enter tx hash when available,
+    // otherwise from a deterministic key scoped to (traderId, dealId).
+    // This is the ONLY path that writes paid/verified entry state to Convex;
+    // no public mutation accepts these fields from client input.
+    const paymentId = enterTxHash ?? `noop:${traderId}:${deal_id}`;
     const chainDealId =
       onChainDealId !== null ? Number(onChainDealId) : undefined;
-    if (enterTxHash) {
-      createTraderTransaction({
-        trader_id: traderId,
-        type: "enter",
-        tx_hash: enterTxHash,
-        deal_id: deal_id,
-        on_chain_deal_id: chainDealId,
-      }).catch((err) => console.error("Failed to record enter txn:", err));
-    }
-    if (resolveTxHash) {
-      createTraderTransaction({
-        trader_id: traderId,
-        type: "resolve",
-        tx_hash: resolveTxHash,
-        deal_id: deal_id,
-        on_chain_deal_id: chainDealId,
-        pnl_usdc: traderPnl,
-        rake_usdc: rakeAmount,
-      }).catch((err) => console.error("Failed to record resolve txn:", err));
-    }
 
-    // Sync assets gained/lost
-    if (outcome.assets_gained.length > 0 || outcome.assets_lost.length > 0) {
-      await syncAssetsFromOutcome(
+    try {
+      const convex = createConvexAdminClient();
+      // The admin client calls an internalMutation via the deploy key.
+      // ConvexHttpClient.mutation() types restrict to public functions, but
+      // setAdminAuth() grants internal access at runtime. We cast the internal
+      // function reference to the public variant to satisfy the TypeScript
+      // overload while keeping the runtime behaviour correct.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const recordFn = internal.deals.recordVerifiedEntry as any;
+      await convex.mutation(recordFn, {
+        paymentId,
+        // deal_id is a Convex Id<"deals"> serialised as a plain string from
+        // the request body — safe to cast here.
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        dealId: deal_id as any,
         traderId,
-        deal_id,
-        dealOutcome.id,
-        outcome.assets_gained,
-        outcome.assets_lost
+        entryCostUsdc: deal.entry_cost_usdc,
+        enterTxHash: enterTxHash ?? undefined,
+        resolveTxHash: resolveTxHash ?? undefined,
+        onChainDealId: chainDealId,
+        traderPnlUsdc: traderPnl,
+        rakeUsdc: rakeAmount,
+        traderWipedOut: outcome.trader_wiped_out,
+      });
+    } catch (convexErr) {
+      // Log but don't fail the request — Supabase is still the authoritative
+      // store during the migration window (#91 removes Supabase fully).
+      console.error(
+        "[deal/enter] Convex recordVerifiedEntry failed:",
+        convexErr
       );
     }
-
-    // Update deal stats
-    await updateDealAfterEntry(deal_id, potChange, outcome.trader_wiped_out);
 
     // Keep cached trader escrow in Supabase aligned with chain state after entry/resolve.
     if (tokenId !== null) {
@@ -519,19 +506,31 @@ export async function POST(request: NextRequest) {
 
     // ----- Post reputation (best effort, non-blocking) -----
     if (tokenId !== null) {
-      // Fire and forget — don't block the response
+      // Fire and forget — don't block the response.
+      // Use paymentId as the stable outcome reference (replaces Supabase outcome id).
       postReputation(
         traderId,
         tokenId,
         traderPnl,
         outcome.trader_wiped_out,
         deal_id,
-        dealOutcome.id
+        paymentId
       ).catch((err) => console.error("Reputation post failed:", err));
     }
 
     return NextResponse.json({
-      outcome: dealOutcome,
+      outcome: {
+        trader_pnl_usdc: traderPnl,
+        rake_usdc: rakeAmount,
+        pot_change_usdc: potChange,
+        narrative: outcome.narrative,
+        assets_gained: outcome.assets_gained,
+        assets_lost: outcome.assets_lost,
+        trader_wiped_out: outcome.trader_wiped_out,
+        wipeout_reason: outcome.wipeout_reason ?? null,
+        on_chain_tx_hash: resolveTxHash ?? null,
+        payment_id: paymentId,
+      },
       summary: {
         balance_change: outcome.balance_change_usdc,
         rake: rakeAmount,
