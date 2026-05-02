@@ -1,7 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+"use client";
+
+/**
+ * Deal hooks — migrated to Convex.
+ *
+ * useSuggestPrompts still calls /api/prompt/suggest (kept route).
+ */
+
 import { useQuery as useConvexQuery } from "convex/react";
+import { useQuery } from "@tanstack/react-query";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import { authFetch } from "@/lib/api";
+
+// ── Types (kept snake_case for UI compatibility) ──────────────────────────────
 
 export interface Deal {
   id: string;
@@ -39,111 +50,107 @@ export interface DealOutcome {
   on_chain_tx_hash?: string;
 }
 
-/**
- * Returns all deals (any status) visible to the authenticated user.
- * Backed by Convex subscription — live updates without polling.
- */
-export function useDeals(): {
-  data: Deal[] | undefined;
-  isLoading: boolean;
-  isError: boolean;
-} {
+type RawDeal = {
+  _id: string;
+  creatorDeskManagerId?: string;
+  creatorAddress?: string;
+  creatorType: "desk_manager" | "agent";
+  onChainDealId?: number;
+  prompt: string;
+  potUsdc: number;
+  entryCostUsdc: number;
+  feeUsdc?: number;
+  maxExtractionPercentage?: number;
+  entryCount?: number;
+  wipeoutCount?: number;
+  status: string;
+  onChainTxHash?: string;
+  sourceHeadline?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+function toDeal(doc: RawDeal): Deal {
+  return {
+    id: doc._id,
+    creator_id: doc.creatorDeskManagerId,
+    creator_type: doc.creatorType,
+    on_chain_deal_id: doc.onChainDealId,
+    prompt: doc.prompt,
+    pot_usdc: doc.potUsdc,
+    entry_cost_usdc: doc.entryCostUsdc,
+    fee_usdc: doc.feeUsdc,
+    max_extraction_percentage: doc.maxExtractionPercentage ?? 100,
+    entry_count: doc.entryCount ?? 0,
+    wipeout_count: doc.wipeoutCount ?? 0,
+    status: doc.status,
+    created_at: new Date(doc.createdAt).toISOString(),
+    updated_at: new Date(doc.updatedAt).toISOString(),
+    on_chain_tx_hash: doc.onChainTxHash,
+    creator_address: doc.creatorAddress,
+    source_headline: doc.sourceHeadline,
+  };
+}
+
+// ── Hooks ──────────────────────────────────────────────────────────────────
+
+/** List all deals. Reactive via Convex. */
+export function useDeals() {
   const result = useConvexQuery(api.deals.list);
 
   if (result === undefined) {
-    return { data: undefined, isLoading: true, isError: false };
+    return { data: undefined, isLoading: true };
   }
 
-  const data: Deal[] = result.map((deal) => ({
-    id: deal._id,
-    creator_id: deal.creatorDeskManagerId,
-    creator_type: deal.creatorType,
-    on_chain_deal_id: deal.onChainDealId,
-    prompt: deal.prompt,
-    pot_usdc: deal.potUsdc,
-    entry_cost_usdc: deal.entryCostUsdc,
-    fee_usdc: deal.feeUsdc,
-    max_extraction_percentage: deal.maxExtractionPercentage ?? 0,
-    entry_count: deal.entryCount ?? 0,
-    wipeout_count: deal.wipeoutCount ?? 0,
-    status: deal.status,
-    created_at: new Date(deal.createdAt).toISOString(),
-    updated_at: new Date(deal.updatedAt).toISOString(),
-    on_chain_tx_hash: deal.onChainTxHash,
-    creator_address: deal.creatorAddress,
-    source_headline: deal.sourceHeadline,
-  }));
-
-  return { data, isLoading: false, isError: false };
+  return { data: (result as RawDeal[]).map(toDeal), isLoading: false };
 }
 
-/**
- * Returns deals created by the current desk manager.
- * Backed by Convex subscription — live updates without polling.
- */
-export function useMyDeals(): {
-  data: Deal[] | undefined;
-  isLoading: boolean;
-  isError: boolean;
-} {
+/** List deals created by the current desk manager. Reactive via Convex. */
+export function useMyDeals() {
   const result = useConvexQuery(api.deals.listMine);
 
   if (result === undefined) {
-    return { data: undefined, isLoading: true, isError: false };
+    return { data: undefined, isLoading: true };
   }
 
-  // Map Convex camelCase → legacy snake_case Deal interface
-  const data: Deal[] = result.map((deal) => ({
-    id: deal._id,
-    creator_id: deal.creatorDeskManagerId,
-    creator_type: deal.creatorType,
-    on_chain_deal_id: deal.onChainDealId,
-    prompt: deal.prompt,
-    pot_usdc: deal.potUsdc,
-    entry_cost_usdc: deal.entryCostUsdc,
-    fee_usdc: deal.feeUsdc,
-    max_extraction_percentage: deal.maxExtractionPercentage ?? 0,
-    entry_count: deal.entryCount ?? 0,
-    wipeout_count: deal.wipeoutCount ?? 0,
-    status: deal.status,
-    created_at: new Date(deal.createdAt).toISOString(),
-    updated_at: new Date(deal.updatedAt).toISOString(),
-    on_chain_tx_hash: deal.onChainTxHash,
-    creator_address: deal.creatorAddress,
-    source_headline: deal.sourceHeadline,
-  }));
-
-  return { data, isLoading: false, isError: false };
+  return { data: (result as RawDeal[]).map(toDeal), isLoading: false };
 }
 
+/** Get a single deal by id. Reactive via Convex. */
 export function useDeal(id: string) {
-  return useQuery({
-    queryKey: ["deal", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/deal/${id}`);
-      if (!res.ok) throw new Error("Deal not found");
-      const data = await res.json();
-      return {
-        deal: data.deal as Deal,
-        outcomes: (data.outcomes ?? []) as DealOutcome[],
-      };
-    },
-  });
+  const result = useConvexQuery(
+    api.deals.getById,
+    id ? { dealId: id as Id<"deals"> } : "skip"
+  );
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, error: null };
+  }
+
+  if (result === null) {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: new Error("Deal not found"),
+    };
+  }
+
+  return {
+    data: { deal: toDeal(result as RawDeal), outcomes: [] as DealOutcome[] },
+    isLoading: false,
+    error: null,
+  };
 }
 
-/**
- * Returns a map of headline text → deals created from that headline.
- * Backed by Convex subscription.
- */
-export function useHeadlineDeals(): {
-  data: Record<string, Deal[]> | undefined;
-  isLoading: boolean;
-  isError: boolean;
-} {
-  const { data: deals, isLoading, isError } = useDeals();
+/** Returns a map of headline text → deals from that headline. Reactive via Convex. */
+export function useHeadlineDeals() {
+  const result = useConvexQuery(api.deals.list);
 
-  if (!deals) return { data: undefined, isLoading, isError };
+  if (result === undefined) {
+    return { data: undefined, isLoading: true };
+  }
 
+  const deals = (result as RawDeal[]).map(toDeal);
   const map: Record<string, Deal[]> = {};
   for (const d of deals) {
     if (!d.source_headline) continue;
@@ -151,9 +158,10 @@ export function useHeadlineDeals(): {
     map[d.source_headline].push(d);
   }
 
-  return { data: map, isLoading: false, isError: false };
+  return { data: map, isLoading: false };
 }
 
+/** Suggest deal prompts from /api/prompt/suggest (kept route). Uses TanStack Query. */
 export function useSuggestPrompts(theme: string) {
   return useQuery({
     queryKey: ["suggest-prompts", theme],

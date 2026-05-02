@@ -1,10 +1,11 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import { useState } from "react";
 import Link from "next/link";
 import { useLeaderboard } from "@/hooks/use-leaderboard";
 import { useGlobalActivity } from "@/hooks/use-global-activity";
-import { useLeaderboardRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
 import { FeedLine, getFeedGridClass } from "@/components/feed-line";
 import type { LeaderboardTrader } from "@/hooks/use-leaderboard";
@@ -37,8 +38,6 @@ function sortTraders(
 }
 
 export default function LeaderboardPage() {
-  useLeaderboardRealtime();
-
   const { data: traders, isLoading: tradersLoading } = useLeaderboard();
   const { data: feedData, isLoading: feedLoading } = useGlobalActivity();
 

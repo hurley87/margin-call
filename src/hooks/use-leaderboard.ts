@@ -1,4 +1,15 @@
-import { useQuery } from "@tanstack/react-query";
+"use client";
+
+/**
+ * Leaderboard hook — no Convex aggregate query yet.
+ *
+ * The old /api/leaderboard computed aggregate P&L, win rates, etc. server-side.
+ * No Convex equivalent exists. Stubbed to return empty data.
+ * Flagged for PR #103 follow-up.
+ *
+ * The leaderboard page will show "no data" until a Convex leaderboard query
+ * is added.
+ */
 
 export interface LeaderboardTrader {
   id: string;
@@ -14,14 +25,10 @@ export interface LeaderboardTrader {
   total_value: number;
 }
 
+/** @deprecated No Convex leaderboard query yet. Returns empty. Flag: PR #103. */
 export function useLeaderboard() {
-  return useQuery({
-    queryKey: ["leaderboard"],
-    queryFn: async () => {
-      const res = await fetch("/api/leaderboard");
-      if (!res.ok) throw new Error("Failed to load leaderboard");
-      const data = await res.json();
-      return (data.traders ?? []) as LeaderboardTrader[];
-    },
-  });
+  return {
+    data: [] as LeaderboardTrader[],
+    isLoading: false,
+  };
 }

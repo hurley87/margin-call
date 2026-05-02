@@ -1,5 +1,7 @@
 "use client";
 
+export const dynamic = "force-dynamic";
+
 import Link from "next/link";
 import { useConvexTraders } from "@/hooks/use-convex-traders";
 import { Nav } from "@/components/nav";
