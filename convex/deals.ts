@@ -153,3 +153,75 @@ export const incrementEntryCount = internalMutation({
     });
   },
 });
+
+// ── Internal query: look up a verified entry by paymentId ─────────────────
+
+/**
+ * Internal: find a verified deal entry by payment id.
+ * Used by the route to check idempotency before inserting.
+ */
+export const findEntryByPaymentId = internalQuery({
+  args: { paymentId: v.string() },
+  handler: async (ctx, { paymentId }) =>
+    ctx.db
+      .query("dealEntries")
+      .withIndex("byPaymentId", (q) => q.eq("paymentId", paymentId))
+      .unique(),
+});
+
+/**
+ * Internal: record a verified x402 deal entry.
+ *
+ * This is the **single writer path** for marking a deal entry as paid/verified.
+ * It must only be called from Next.js API routes after payment has been
+ * verified at the HTTP boundary — never from client-side code.
+ *
+ * Idempotency: if a `dealEntries` row already exists for `paymentId`, this
+ * mutation returns the existing id without creating a duplicate. Duplicate
+ * settlement callbacks are safe to replay.
+ *
+ * Security: no public `mutation` export accepts `verified`, `paid`,
+ * `settled`, or `paymentId` flags from untrusted client input.
+ */
+export const recordVerifiedEntry = internalMutation({
+  args: {
+    // Idempotency key — x402 settlement id, payment id, or request id.
+    paymentId: v.string(),
+    dealId: v.id("deals"),
+    // String to support both Convex trader ids and legacy Supabase ids.
+    traderId: v.string(),
+    entryCostUsdc: v.number(),
+    // Settlement / on-chain metadata (all optional)
+    enterTxHash: v.optional(v.string()),
+    resolveTxHash: v.optional(v.string()),
+    onChainDealId: v.optional(v.number()),
+    // Outcome snapshot captured at entry time
+    traderPnlUsdc: v.optional(v.number()),
+    rakeUsdc: v.optional(v.number()),
+    traderWipedOut: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    // CAS guard: one verified entry per paymentId
+    const existing = await ctx.db
+      .query("dealEntries")
+      .withIndex("byPaymentId", (q) => q.eq("paymentId", args.paymentId))
+      .unique();
+    if (existing) return existing._id;
+
+    const id = await ctx.db.insert("dealEntries", {
+      ...args,
+      createdAt: Date.now(),
+    });
+
+    // Also increment entryCount on the parent deal (best-effort)
+    const deal = await ctx.db.get(args.dealId);
+    if (deal) {
+      await ctx.db.patch(args.dealId, {
+        entryCount: (deal.entryCount ?? 0) + 1,
+        updatedAt: Date.now(),
+      });
+    }
+
+    return id;
+  },
+});
