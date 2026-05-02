@@ -15,7 +15,6 @@ import type { FeedHeadline } from "@/hooks/use-narrative";
 const STEP_LABELS: Record<string, string> = {
   approving: "APPROVING USDC SPEND...",
   creating: "CREATING DEAL ON-CHAIN...",
-  syncing: "SYNCING DEAL TO DATABASE...",
   done: "DEAL CREATED SUCCESSFULLY",
 };
 

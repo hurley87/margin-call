@@ -19,7 +19,7 @@ import schema from "../schema";
 import { internal, api } from "../_generated/api";
 import { evaluateDeals } from "../agent/_evaluator";
 import type { Mandate, Deal } from "../agent/_types";
-import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./_setup";
 
 const modules = import.meta.glob("../**/*.ts");
 

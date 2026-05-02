@@ -4,6 +4,18 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 /**
+ * Purge expired SIWA nonces every hour.
+ * Nonces have a short TTL (default 5 min); this is a safety net for any
+ * that were issued but never consumed (e.g. abandoned auth flows).
+ */
+crons.hourly(
+  "purge expired siwa nonces",
+  { minuteUTC: 0 },
+  internal.siwaNonces.cleanup,
+  {}
+);
+
+/**
  * Agent scheduler cron — fires every 1 minute (Convex minimum; PRD target is
  * 30 s but the platform constraint is 1 m on most plans).
  *
@@ -14,6 +26,17 @@ crons.interval(
   "agent-scheduler",
   { minutes: 1 },
   internal.agent.scheduler.scheduler
+);
+
+/**
+ * Purge abandoned SIWA nonces. Valid nonces are consumed immediately; this
+ * cron only cleans up expired rows from auth flows that were never completed.
+ */
+crons.hourly(
+  "purge expired siwa nonces",
+  { minuteUTC: 0 },
+  internal.siwaNonces.cleanup,
+  {}
 );
 
 export default crons;

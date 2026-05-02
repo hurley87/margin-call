@@ -124,7 +124,6 @@ export const apply = internalMutation({
     onChainTxHash: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
-    // CAS guard: one resolved outcome per (traderId, dealId)
     const existing = await ctx.db
       .query("dealOutcomes")
       .withIndex("byTraderAndDeal", (q) =>

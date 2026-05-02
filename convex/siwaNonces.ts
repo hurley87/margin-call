@@ -2,13 +2,21 @@ import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 
 /**
- * Internal: issue a new SIWA nonce.
- * Returns true on success, false if the nonce already exists (unique guard).
+ * SIWA nonce retention policy:
+ *   - Nonces are issued with a caller-supplied TTL (typically 5 minutes per SIWA spec).
+ *   - A Convex cron (convex/crons.ts) runs `cleanup` every hour to purge expired rows.
+ *   - `consume` deletes the row atomically; a second call returns null (idempotent).
  */
+
+/** Internal: insert a new nonce row. Returns false if the nonce already exists (idempotent). */
 export const issue = internalMutation({
-  args: { nonce: v.string(), expiresAt: v.number() },
+  args: {
+    nonce: v.string(),
+    /** Unix timestamp (ms) when this nonce expires. */
+    expiresAt: v.number(),
+  },
   handler: async (ctx, { nonce, expiresAt }) => {
-    // Idempotency guard: unique nonce
+    // Idempotency: if the nonce is already stored just return true
     const existing = await ctx.db
       .query("siwaNonces")
       .withIndex("byNonce", (q) => q.eq("nonce", nonce))
@@ -25,26 +33,66 @@ export const issue = internalMutation({
 });
 
 /**
- * Internal: consume a SIWA nonce (atomic delete-if-valid).
- * Returns true if the nonce existed, was unexpired, and was deleted.
+ * Internal: read the nonce row without side-effects.
+ * Returns null if not found or already expired.
  */
-export const consume = internalMutation({
+export const find = internalQuery({
   args: { nonce: v.string() },
   handler: async (ctx, { nonce }) => {
     const row = await ctx.db
       .query("siwaNonces")
       .withIndex("byNonce", (q) => q.eq("nonce", nonce))
       .unique();
+    if (!row) return null;
+    if (row.expiresAt < Date.now()) return null;
+    return row;
+  },
+});
 
-    if (!row) return false;
-    if (row.expiresAt < Date.now()) {
-      // Expired — delete but report invalid
-      await ctx.db.delete(row._id);
-      return false;
-    }
+/**
+ * Internal: atomically validate and delete a nonce.
+ *
+ * Returns:
+ *   "ok"               — nonce existed, was valid, and has been deleted
+ *   "expired"          — nonce existed but its TTL had passed (row deleted as a side-effect)
+ *   "notFound"         — nonce never existed or was already consumed
+ *
+ * This is idempotent: a second call on the same nonce always returns "notFound".
+ */
+export const consume = internalMutation({
+  args: { nonce: v.string() },
+  handler: async (ctx, { nonce }): Promise<"ok" | "expired" | "notFound"> => {
+    const row = await ctx.db
+      .query("siwaNonces")
+      .withIndex("byNonce", (q) => q.eq("nonce", nonce))
+      .unique();
 
+    if (!row) return "notFound";
+
+    // Always delete — whether valid or expired — so the row is consumed exactly once
     await ctx.db.delete(row._id);
-    return true;
+
+    if (row.expiresAt < Date.now()) return "expired";
+    return "ok";
+  },
+});
+
+/**
+ * Internal: delete all rows whose expiresAt is in the past.
+ * Called by the hourly cron in convex/crons.ts.
+ * Safe to run concurrently; each row is deleted at most once.
+ */
+export const cleanup = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const expired = await ctx.db
+      .query("siwaNonces")
+      .withIndex("byExpiresAt", (q) => q.lt("expiresAt", now))
+      .collect();
+
+    await Promise.all(expired.map((row) => ctx.db.delete(row._id)));
+    return { deleted: expired.length };
   },
 });
 

@@ -4,19 +4,34 @@ import { useQuery, useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
-/** List pending approvals for the authenticated desk manager. Reactive. */
+/**
+ * Reactive list of pending deal approvals for the authenticated desk manager.
+ * Updates live via Convex subscription — no polling or cache invalidation needed.
+ */
 export function useConvexPendingApprovals() {
   return useQuery(api.dealApprovals.listPending);
 }
 
-/** Approve a pending deal approval. */
+/**
+ * Get a single approval by id (auth-checked, reactive).
+ */
+export function useConvexApproval(approvalId: Id<"dealApprovals"> | undefined) {
+  return useQuery(
+    api.dealApprovals.getById,
+    approvalId ? { approvalId } : "skip"
+  );
+}
+
+/**
+ * Approve a pending deal approval (idempotent).
+ */
 export function useConvexApprove() {
   return useMutation(api.dealApprovals.approve);
 }
 
-/** Reject a pending deal approval. */
+/**
+ * Reject a pending deal approval (idempotent).
+ */
 export function useConvexReject() {
   return useMutation(api.dealApprovals.reject);
 }
-
-export type { Id };

@@ -1,39 +1,50 @@
 "use client";
 
-import { ConvexReactClient, ConvexProvider } from "convex/react";
-import { ConvexProviderWithAuth } from "convex/react";
+import { useCallback, useMemo } from "react";
+import {
+  ConvexProvider,
+  ConvexReactClient,
+  ConvexProviderWithAuth,
+} from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 
-// Use a placeholder URL when NEXT_PUBLIC_CONVEX_URL is not set (e.g. build time).
-// ConvexReactClient with a dummy URL will not connect but prevents Convex hooks
-// from throwing "Could not find Convex client" during SSR prerendering.
-const convexUrl =
-  process.env.NEXT_PUBLIC_CONVEX_URL ?? "https://placeholder.convex.cloud";
+const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL ?? "";
 
-const convex = new ConvexReactClient(convexUrl);
+const convex = convexUrl ? new ConvexReactClient(convexUrl) : null;
+
+/** Used when Privy is unavailable (e.g. build) so Convex hooks have a client. */
+const unauthConvex = new ConvexReactClient(
+  convexUrl || "https://placeholder.convex.cloud"
+);
 
 function usePrivyAuth() {
   const { ready, authenticated, getAccessToken } = usePrivy();
-  return {
-    isLoading: !ready,
-    isAuthenticated: authenticated,
-    fetchAccessToken: async ({
-      forceRefreshToken,
-    }: {
-      forceRefreshToken: boolean;
-    }) => {
-      void forceRefreshToken;
-      return getAccessToken();
-    },
-  };
+
+  // Stable references — Convex compares the auth object's identity to decide
+  // whether auth changed. A new function or object every render triggers a
+  // reconnect storm.
+  const fetchAccessToken = useCallback(
+    async ({ forceRefreshToken: _ }: { forceRefreshToken: boolean }) =>
+      getAccessToken(),
+    [getAccessToken]
+  );
+
+  return useMemo(
+    () => ({
+      isLoading: !ready,
+      isAuthenticated: authenticated,
+      fetchAccessToken,
+    }),
+    [ready, authenticated, fetchAccessToken]
+  );
 }
 
-/** Full Convex provider with Privy auth bridge (used when Privy is available). */
 export function ConvexClientProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  if (!convex) return <>{children}</>;
   return (
     <ConvexProviderWithAuth client={convex} useAuth={usePrivyAuth}>
       {children}
@@ -43,13 +54,12 @@ export function ConvexClientProvider({
 
 /**
  * Unauthenticated Convex provider — used when Privy is not configured
- * (e.g. during Next.js build-time SSR with no env vars).
- * Convex hooks will return undefined/loading state instead of throwing.
+ * (e.g. Next.js build-time SSR with no env vars).
  */
 export function ConvexUnauthProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <ConvexProvider client={convex}>{children}</ConvexProvider>;
+  return <ConvexProvider client={unauthConvex}>{children}</ConvexProvider>;
 }

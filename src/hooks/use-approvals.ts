@@ -1,10 +1,8 @@
 "use client";
 
 /**
- * Approvals hooks — migrated to Convex.
- *
- * NOTE: useConfigureMandate has no Convex mutation yet — stubbed and flagged.
- * See PR #103.
+ * Approvals hooks — Convex-backed list + approve/reject.
+ * useConfigureMandate is stubbed: /api/desk/configure was removed; Convex mandate mutation TBD.
  */
 
 import {
@@ -14,7 +12,7 @@ import {
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
-// ── Types (kept snake_case for UI compatibility) ──────────────────────────────
+// ── Types (snake_case to match existing component interface) ──────────────
 
 export interface PendingApproval {
   id: string;
@@ -32,83 +30,76 @@ export interface PendingApproval {
   deal_pot_usdc: number;
 }
 
-type RawApproval = {
-  _id: string;
-  traderId: string;
-  dealId: string;
-  deskManagerId: string;
-  status: string;
-  entryCostUsdc: number;
-  potUsdc: number;
-  expiresAt: number;
-  resolvedAt?: number;
-  createdAt: number;
-  traderName: string;
-  dealPrompt: string;
-  dealPotUsdc: number;
-};
+// ── Hooks ─────────────────────────────────────────────────────────────────
 
-function toPendingApproval(doc: RawApproval): PendingApproval {
+/**
+ * Reactive list of pending approvals for the authenticated desk manager.
+ * Backed by Convex subscription — updates live without polling or cache invalidation.
+ */
+export function usePendingApprovals(): {
+  data: PendingApproval[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const result = useConvexQuery(api.dealApprovals.listPending);
+
+  const mapped: PendingApproval[] | undefined =
+    result === undefined
+      ? undefined
+      : result.map((a) => ({
+          id: a._id,
+          trader_id: a.traderId,
+          deal_id: a.dealId,
+          desk_manager_id: a.deskManagerId,
+          status: a.status,
+          entry_cost_usdc: a.entryCostUsdc,
+          pot_usdc: a.potUsdc,
+          expires_at: new Date(a.expiresAt).toISOString(),
+          resolved_at: a.resolvedAt
+            ? new Date(a.resolvedAt).toISOString()
+            : null,
+          created_at: new Date(a.createdAt).toISOString(),
+          trader_name: a.traderName,
+          deal_prompt: a.dealPrompt,
+          deal_pot_usdc: a.dealPotUsdc,
+        }));
+
   return {
-    id: doc._id,
-    trader_id: doc.traderId,
-    deal_id: doc.dealId,
-    desk_manager_id: doc.deskManagerId,
-    status: doc.status,
-    entry_cost_usdc: doc.entryCostUsdc,
-    pot_usdc: doc.potUsdc,
-    expires_at: new Date(doc.expiresAt).toISOString(),
-    resolved_at: doc.resolvedAt ? new Date(doc.resolvedAt).toISOString() : null,
-    created_at: new Date(doc.createdAt).toISOString(),
-    trader_name: doc.traderName,
-    deal_prompt: doc.dealPrompt,
-    deal_pot_usdc: doc.dealPotUsdc,
+    data: mapped,
+    isLoading: result === undefined,
+    isError: false,
   };
 }
 
-// ── Hooks ──────────────────────────────────────────────────────────────────
-
-/** List pending approvals for the authenticated desk manager. Reactive via Convex. */
-export function usePendingApprovals() {
-  const result = useConvexQuery(api.dealApprovals.listPending);
-
-  if (result === undefined) {
-    return { data: undefined, isLoading: true, isError: false };
-  }
-
-  const data = (result as RawApproval[]).map(toPendingApproval);
-  return { data, isLoading: false, isError: false };
-}
-
-/** Approve or reject a pending deal approval via Convex. */
+/**
+ * Approve/reject a deal approval — backed by Convex mutations (idempotent).
+ */
 export function useApproveReject() {
   const approve = useConvexMutation(api.dealApprovals.approve);
   const reject = useConvexMutation(api.dealApprovals.reject);
 
-  return {
-    mutate: async ({
-      approvalId,
-      action,
-      reason,
-    }: {
-      approvalId: string;
-      action: "approve" | "reject";
-      reason?: string;
-    }) => {
-      if (action === "approve") {
-        await approve({ approvalId: approvalId as Id<"dealApprovals"> });
-      } else {
-        await reject({
-          approvalId: approvalId as Id<"dealApprovals">,
-          reason,
-        });
-      }
-    },
-    isPending: false,
-  };
+  const isPending = false;
+
+  function mutate({
+    approvalId,
+    action,
+    reason,
+  }: {
+    approvalId: string;
+    action: "approve" | "reject";
+    reason?: string;
+  }) {
+    const id = approvalId as Id<"dealApprovals">;
+    if (action === "approve") {
+      return approve({ approvalId: id });
+    }
+    return reject({ approvalId: id, reason });
+  }
+
+  return { mutate, isPending };
 }
 
-/** @deprecated No Convex mutation for configure yet. Stub — no-op. Flag: PR #103. */
+/** @deprecated No Convex mandate mutation wired yet — stub. See PR #103. */
 export function useConfigureMandate() {
   return {
     mutate: (

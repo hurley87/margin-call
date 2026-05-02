@@ -9,46 +9,48 @@ export interface ActivityFeedData {
   traderNames: Record<string, string>;
 }
 
-/** Reactive activity feed for the authenticated desk manager's traders. */
+/**
+ * Reactive activity feed for all traders owned by the desk manager.
+ * Backed by Convex subscription — live updates without polling or cache invalidation.
+ */
 export function useActivityFeed(): {
   data: ActivityFeedData | undefined;
   isLoading: boolean;
+  isError: boolean;
 } {
-  const result = useQuery(api.agentActivityLog.listForDesk, {});
+  const result = useQuery(api.agentActivityLog.listForDesk, { limit: 200 });
 
   if (result === undefined) {
-    return { data: undefined, isLoading: true };
+    return { data: undefined, isLoading: true, isError: false };
   }
 
-  if (!result || typeof result !== "object" || !("activity" in result)) {
-    return { data: { activity: [], traderNames: {} }, isLoading: false };
+  // listForDesk returns { activity, traderNames } | []
+  // When no desk manager is found, returns []
+  if (Array.isArray(result)) {
+    return {
+      data: { activity: [], traderNames: {} },
+      isLoading: false,
+      isError: false,
+    };
   }
 
-  const raw = result as {
-    activity: {
-      _id: string;
-      traderId: string;
-      activityType: string;
-      message: string;
-      dealId?: string;
-      metadata?: Record<string, unknown>;
-      createdAt: number;
-    }[];
-    traderNames: Record<string, string>;
-  };
-
-  const activity: AgentActivity[] = raw.activity.map((a) => ({
-    id: a._id,
-    trader_id: a.traderId,
-    activity_type: a.activityType,
-    message: a.message,
-    deal_id: a.dealId ?? null,
-    metadata: a.metadata ?? {},
-    created_at: new Date(a.createdAt).toISOString(),
+  // Map Convex camelCase → legacy snake_case AgentActivity interface
+  const activity: AgentActivity[] = result.activity.map((entry) => ({
+    id: entry._id,
+    trader_id: entry.traderId,
+    activity_type: entry.activityType,
+    message: entry.message,
+    deal_id: entry.dealId ?? null,
+    metadata: (entry.metadata as Record<string, unknown>) ?? {},
+    created_at: new Date(entry.createdAt).toISOString(),
   }));
 
   return {
-    data: { activity, traderNames: raw.traderNames },
+    data: {
+      activity,
+      traderNames: result.traderNames as Record<string, string>,
+    },
     isLoading: false,
+    isError: false,
   };
 }
