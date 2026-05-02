@@ -27,6 +27,9 @@ export default defineSchema({
     personality: v.optional(v.string()),
     escrowBalanceUsdc: v.optional(v.number()),
     lastCycleAt: v.optional(v.number()),
+    // Cycle lease fields for idempotent, non-overlapping agent cycles (issue #85)
+    cycleLeaseUntil: v.optional(v.number()),
+    cycleGeneration: v.optional(v.number()),
     // CDP wallet pipeline
     walletStatus: v.union(
       v.literal("pending"),
