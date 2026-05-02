@@ -5,6 +5,7 @@ import {
   query,
 } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 
 /** Public: list traders owned by the calling desk manager. */
@@ -148,5 +149,67 @@ export const applyWalletError = internalMutation({
       walletError: error,
       updatedAt: Date.now(),
     });
+  },
+});
+
+/**
+ * Internal: apply a PnL outcome to a trader's escrow balance.
+ * CAS on traderId: reads current balance, applies delta, clamps to zero.
+ * If wipedOut is true, transitions status → "wiped_out".
+ * Idempotent: same outcomeId returns without re-applying.
+ */
+export const applyOutcomeBalance = internalMutation({
+  args: {
+    traderId: v.id("traders"),
+    pnlUsdc: v.number(),
+    wipedOut: v.boolean(),
+    /** Outcome document id — idempotency key; persisted as lastOutcomeId. */
+    outcomeId: v.id("dealOutcomes"),
+  },
+  handler: async (ctx, { traderId, pnlUsdc, wipedOut, outcomeId }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return;
+
+    if (trader.lastOutcomeId === outcomeId) return;
+
+    const currentBalance = trader.escrowBalanceUsdc ?? 0;
+    const newBalance = Math.max(0, currentBalance + pnlUsdc);
+
+    const patch: Partial<
+      Pick<
+        Doc<"traders">,
+        "escrowBalanceUsdc" | "lastOutcomeId" | "updatedAt" | "status"
+      >
+    > = {
+      escrowBalanceUsdc: newBalance,
+      lastOutcomeId: outcomeId,
+      updatedAt: Date.now(),
+    };
+
+    if (wipedOut) {
+      patch.status = "wiped_out";
+    }
+
+    await ctx.db.patch(traderId, patch);
+  },
+});
+
+/**
+ * Internal: list traders on the same desk (same deskManagerId) excluding
+ * the given traderId. Used for desk dedup in deal selection.
+ */
+export const listSiblingTraderIds = internalQuery({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    excludeTraderId: v.id("traders"),
+  },
+  handler: async (ctx, { deskManagerId, excludeTraderId }) => {
+    const traders = await ctx.db
+      .query("traders")
+      .withIndex("byDeskManager", (q) => q.eq("deskManagerId", deskManagerId))
+      .collect();
+    return traders
+      .filter((t) => t._id !== excludeTraderId)
+      .map((t) => t._id as string);
   },
 });
