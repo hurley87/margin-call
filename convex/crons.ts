@@ -28,4 +28,17 @@ crons.interval(
   internal.agent.scheduler.scheduler
 );
 
+/**
+ * Market Wire narrative generation — every 5 minutes.
+ *
+ * Replaces the Vercel Cron entry that hit /api/narrative/generate (removed).
+ * Idempotent per epoch so concurrent runs are safe.
+ */
+crons.interval(
+  "generate-narrative",
+  { minutes: 5 },
+  internal.narrative.generate,
+  {}
+);
+
 export default crons;

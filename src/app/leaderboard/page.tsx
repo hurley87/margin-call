@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useLeaderboard } from "@/hooks/use-leaderboard";
+import {
+  useConvexLeaderboard,
+  type LeaderboardEntry,
+} from "@/hooks/use-convex-leaderboard";
 import { useGlobalActivity } from "@/hooks/use-global-activity";
-import { useLeaderboardRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
 import { FeedLine, getFeedGridClass } from "@/components/feed-line";
-import type { LeaderboardTrader } from "@/lib/supabase/leaderboard";
 
 type SortKey = "pnl" | "win_rate" | "total_value";
 type ActivityFilter = "ALL" | "WINS" | "LOSSES" | "WIPEOUTS" | "ENTRIES";
@@ -21,25 +22,25 @@ const ACTIVITY_FILTER_TYPES: Record<ActivityFilter, string[] | null> = {
 };
 
 function sortTraders(
-  traders: LeaderboardTrader[],
+  traders: LeaderboardEntry[],
   key: SortKey
-): LeaderboardTrader[] {
+): LeaderboardEntry[] {
   return [...traders].sort((a, b) => {
     switch (key) {
       case "pnl":
-        return b.total_pnl - a.total_pnl;
+        return b.totalPnlUsdc - a.totalPnlUsdc;
       case "win_rate":
-        return b.win_rate - a.win_rate;
+        return b.winRate - a.winRate;
       case "total_value":
-        return b.total_value - a.total_value;
+        return b.totalValueUsdc - a.totalValueUsdc;
     }
   });
 }
 
 export default function LeaderboardPage() {
-  useLeaderboardRealtime();
-
-  const { data: traders, isLoading: tradersLoading } = useLeaderboard();
+  // useConvexLeaderboard subscribes reactively — no TanStack invalidation needed
+  const traders = useConvexLeaderboard();
+  const tradersLoading = traders === undefined;
   const { data: feedData, isLoading: feedLoading } = useGlobalActivity();
 
   const [sortKey, setSortKey] = useState<SortKey>("pnl");
@@ -109,8 +110,8 @@ export default function LeaderboardPage() {
               <div className="max-h-[50vh] overflow-y-auto">
                 {sorted.map((t, i) => (
                   <Link
-                    key={t.id}
-                    href={`/traders/${t.id}`}
+                    key={t.traderId}
+                    href={`/traders/${t.traderId}`}
                     className="flex items-center gap-3 border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-sm transition-colors hover:bg-[var(--t-surface)]"
                   >
                     <span className="w-6 shrink-0 text-right text-[var(--t-muted)]">
@@ -126,25 +127,26 @@ export default function LeaderboardPage() {
                       }`}
                     />
                     <span className="min-w-0 flex-1 truncate text-[var(--t-text)]">
-                      {t.name}
+                      {t.traderName}
                     </span>
                     <span
                       className={`w-20 shrink-0 text-right font-bold ${
-                        t.total_pnl >= 0
+                        t.totalPnlUsdc >= 0
                           ? "text-[var(--t-green)]"
                           : "text-[var(--t-red)]"
                       }`}
                     >
-                      {t.total_pnl >= 0 ? "+" : ""}${t.total_pnl.toFixed(2)}
+                      {t.totalPnlUsdc >= 0 ? "+" : ""}$
+                      {t.totalPnlUsdc.toFixed(2)}
                     </span>
                     <span className="w-24 shrink-0 text-right text-[var(--t-muted)]">
                       W{t.wins} L{t.losses} X{t.wipeouts}
                     </span>
                     <span className="w-10 shrink-0 text-right text-[var(--t-muted)]">
-                      {t.win_rate.toFixed(0)}%
+                      {t.winRate.toFixed(0)}%
                     </span>
                     <span className="w-16 shrink-0 text-right text-[var(--t-text)]">
-                      ${t.total_value.toFixed(2)}
+                      ${t.totalValueUsdc.toFixed(2)}
                     </span>
                   </Link>
                 ))}
