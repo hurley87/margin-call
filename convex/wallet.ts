@@ -17,6 +17,17 @@ import { internal } from "./_generated/api";
  *          npx convex env set IDENTITY_REGISTRY_ADDRESS <value>
  */
 
+// If a `creating` job hasn't progressed in this long, treat it as crashed and allow a retry.
+const CREATING_LEASE_MS = 5 * 60 * 1000;
+
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value || value.trim() === "") {
+    throw new Error(`Missing required Convex env var: ${name}`);
+  }
+  return value;
+}
+
 /**
  * Creates a CDP smart account for a trader.
  * Safe to retry: checks walletStatus before acting.
@@ -30,24 +41,36 @@ export const createForTrader = internalAction({
     });
     if (!trader) return;
     if (trader.walletStatus === "ready") return; // no-op
+    // Re-entry guard: another run is in flight and still within the lease window.
+    if (
+      trader.walletStatus === "creating" &&
+      Date.now() - trader.updatedAt < CREATING_LEASE_MS
+    ) {
+      return;
+    }
 
     // CAS: mark creating so concurrent runs are idempotent
     await ctx.runMutation(internal.traders.markCreating, { traderId });
 
     try {
+      // Validate env vars with clear errors instead of opaque SDK failures.
+      const cdpApiKeyId = requireEnv("CDP_API_KEY_ID");
+      const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
+      const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
+      const identityRegistryAddress = requireEnv(
+        "IDENTITY_REGISTRY_ADDRESS"
+      ) as `0x${string}`;
+
       const { CdpClient } = await import("@coinbase/cdp-sdk");
       const { encodeFunctionData } = await import("viem");
       const { createPublicClient, http, decodeEventLog } = await import("viem");
       const { baseSepolia } = await import("viem/chains");
 
       const cdp = new CdpClient({
-        apiKeyId: process.env.CDP_API_KEY_ID,
-        apiKeySecret: process.env.CDP_API_KEY_SECRET,
-        walletSecret: process.env.CDP_WALLET_SECRET,
+        apiKeyId: cdpApiKeyId,
+        apiKeySecret: cdpApiKeySecret,
+        walletSecret: cdpWalletSecret,
       });
-
-      const identityRegistryAddress = (process.env.IDENTITY_REGISTRY_ADDRESS ??
-        "0x0000000000000000000000000000000000000000") as `0x${string}`;
 
       const identityRegistryAbi = [
         {

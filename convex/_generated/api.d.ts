@@ -27,6 +27,7 @@ import type * as deals from "../deals.js";
 import type * as deskManagers from "../deskManagers.js";
 import type * as marketNarratives from "../marketNarratives.js";
 import type * as me from "../me.js";
+import type * as siwaNonces from "../siwaNonces.js";
 import type * as systemPrompts from "../systemPrompts.js";
 import type * as traders from "../traders.js";
 import type * as wallet from "../wallet.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   deskManagers: typeof deskManagers;
   marketNarratives: typeof marketNarratives;
   me: typeof me;
+  siwaNonces: typeof siwaNonces;
   systemPrompts: typeof systemPrompts;
   traders: typeof traders;
   wallet: typeof wallet;
