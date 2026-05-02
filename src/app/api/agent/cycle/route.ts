@@ -10,10 +10,26 @@ import { agentCycleLimit, checkRateLimit } from "@/lib/rate-limit";
 /**
  * POST /api/agent/cycle
  *
- * Runs one iteration of the autonomous trade loop for a trader.
- * Continuation is driven by Vercel Cron → POST /api/agent/scheduler (not self-POST + after()).
+ * LEGACY — guarded by LEGACY_AGENT_LOOP=1 env flag (issue #85).
+ * The Convex-native cycle action (convex/agent/cycle.ts) is now the canonical path.
+ * This HTTP route is kept to avoid breaking existing tooling until the full removal
+ * tracked in issue #91.
+ *
+ * To re-enable: set LEGACY_AGENT_LOOP=1 in your environment.
+ * Default: disabled (returns 503).
  */
 export async function POST(request: NextRequest) {
+  if (process.env.LEGACY_AGENT_LOOP !== "1") {
+    return NextResponse.json(
+      {
+        error:
+          "Legacy agent loop is disabled. Set LEGACY_AGENT_LOOP=1 to re-enable. " +
+          "The Convex-native cycle action (convex/agent/cycle.ts) is now active.",
+      },
+      { status: 503 }
+    );
+  }
+
   try {
     // Verify SIWA (Sign In With Agent) authentication
     const siwaMessageB64 = request.headers.get("x-siwa-message");

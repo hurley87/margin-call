@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
-import { useNarrativeFeed } from "@/hooks/use-narrative";
-import { useNarrativeRealtime } from "@/hooks/use-realtime";
+import { useConvexNarrativeFeed } from "@/hooks/use-convex-narrative";
 import { Nav } from "@/components/nav";
 import { WireFeed } from "@/components/wire/wire-feed";
 import { WireStatsBar } from "@/components/wire/wire-stats-bar";
 import { DEAL_CREATION_FEE_PERCENTAGE } from "@/lib/constants";
+import type { FeedHeadline } from "@/hooks/use-narrative";
 
 const HOW_DEALS_SECTIONS = [
   {
@@ -32,8 +32,21 @@ const HOW_DEALS_SECTIONS = [
 ] as const;
 
 export default function WirePage() {
-  useNarrativeRealtime();
-  const { data: feed, isLoading } = useNarrativeFeed();
+  // useConvexNarrativeFeed subscribes reactively — no manual invalidation needed
+  const convexFeed = useConvexNarrativeFeed();
+  const isLoading = convexFeed === undefined;
+
+  // Adapt Convex camelCase fields to the FeedHeadline shape used by wire components
+  const feed: FeedHeadline[] | undefined = convexFeed?.map((item) => ({
+    headline: item.headline,
+    body: item.body,
+    category: item.category,
+    epoch: item.epoch,
+    created_at: new Date(item.createdAt).toISOString(),
+    mood: item.mood,
+    sec_heat: item.secHeat,
+  }));
+
   const [howDealsOpen, setHowDealsOpen] = useState(false);
 
   const latestMood = feed?.[0]?.mood;
