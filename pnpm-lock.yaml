@@ -31,9 +31,6 @@ importers:
       "@supabase/supabase-js":
         specifier: ^2.98.0
         version: 2.98.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-      "@tanstack/react-query":
-        specifier: ^5.90.21
-        version: 5.90.21(react@19.2.3)
       "@upstash/ratelimit":
         specifier: ^2.0.8
         version: 2.0.8(@upstash/redis@1.36.4)

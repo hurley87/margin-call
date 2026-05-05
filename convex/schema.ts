@@ -168,7 +168,8 @@ export default defineSchema({
     .index("byTrader", ["traderId"])
     .index("byTraderAndCreatedAt", ["traderId", "createdAt"])
     .index("byActivityType", ["activityType"])
-    .index("byDedupeKey", ["dedupeKey"]),
+    .index("byDedupeKey", ["dedupeKey"])
+    .index("byCreatedAt", ["createdAt"]),
 
   traderTransactions: defineTable({
     traderId: v.id("traders"),

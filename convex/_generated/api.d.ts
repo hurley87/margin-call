@@ -25,6 +25,7 @@ import type * as dealApprovals from "../dealApprovals.js";
 import type * as dealOutcomes from "../dealOutcomes.js";
 import type * as deals from "../deals.js";
 import type * as deskManagers from "../deskManagers.js";
+import type * as leaderboard from "../leaderboard.js";
 import type * as marketNarratives from "../marketNarratives.js";
 import type * as me from "../me.js";
 import type * as portfolio from "../portfolio.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   dealOutcomes: typeof dealOutcomes;
   deals: typeof deals;
   deskManagers: typeof deskManagers;
+  leaderboard: typeof leaderboard;
   marketNarratives: typeof marketNarratives;
   me: typeof me;
   portfolio: typeof portfolio;

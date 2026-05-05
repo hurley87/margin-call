@@ -83,6 +83,28 @@ export const listForDesk = query({
   },
 });
 
+/** Recent activity across all traders — public (leaderboard global feed). Newest-first. */
+export const listRecentGlobal = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit = 100 }) => {
+    const entries = await ctx.db
+      .query("agentActivityLog")
+      .withIndex("byCreatedAt")
+      .order("desc")
+      .take(limit);
+
+    const traderNames: Record<string, string> = {};
+    for (const e of entries) {
+      const tid = String(e.traderId);
+      if (traderNames[tid]) continue;
+      const trader = await ctx.db.get(e.traderId);
+      if (trader) traderNames[tid] = trader.name;
+    }
+
+    return { entries, traderNames };
+  },
+});
+
 // ── Internal queries ───────────────────────────────────────────────────────
 
 /** Internal: check if an activity entry with this dedupe key already exists. */

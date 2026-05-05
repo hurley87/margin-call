@@ -1,4 +1,8 @@
-import { useQuery } from "@tanstack/react-query";
+"use client";
+
+import { useQuery } from "convex/react";
+import type { Doc } from "../../convex/_generated/dataModel";
+import { api } from "../../convex/_generated/api";
 import type { NarrativeHeadline, WorldState } from "@/lib/llm/schemas";
 
 export type { NarrativeHeadline, WorldState };
@@ -13,29 +17,37 @@ export interface Narrative {
   created_at: string;
 }
 
+function mapNarrative(doc: Doc<"marketNarratives">): Narrative {
+  return {
+    id: doc._id,
+    epoch: doc.epoch,
+    headlines: (doc.headlines ?? []) as NarrativeHeadline[],
+    world_state: (doc.worldState ?? {}) as WorldState,
+    raw_narrative: doc.rawNarrative,
+    events_ingested: (doc.eventsIngested ?? []) as unknown[],
+    created_at: new Date(doc.createdAt).toISOString(),
+  };
+}
+
 export function useNarrative() {
-  return useQuery({
-    queryKey: ["narrative"],
-    queryFn: async () => {
-      const res = await fetch("/api/narrative/current");
-      if (!res.ok) throw new Error("Failed to load narrative");
-      const data = await res.json();
-      return data.narrative as Narrative | null;
-    },
-    refetchInterval: 60_000,
-  });
+  const doc = useQuery(api.marketNarratives.getLatest);
+
+  return {
+    data:
+      doc === undefined ? undefined : doc === null ? null : mapNarrative(doc),
+    isLoading: doc === undefined,
+    isError: false,
+  };
 }
 
 export function useNarrativeHistory(limit = 10) {
-  return useQuery({
-    queryKey: ["narrative-history", limit],
-    queryFn: async () => {
-      const res = await fetch(`/api/narrative/history?limit=${limit}`);
-      if (!res.ok) throw new Error("Failed to load narrative history");
-      const data = await res.json();
-      return (data.narratives ?? []) as Narrative[];
-    },
-  });
+  const docs = useQuery(api.marketNarratives.listRecentEpochs, { limit });
+
+  return {
+    data: docs === undefined ? undefined : docs.map(mapNarrative),
+    isLoading: docs === undefined,
+    isError: false,
+  };
 }
 
 export interface FeedHeadline {
@@ -49,14 +61,13 @@ export interface FeedHeadline {
 }
 
 export function useNarrativeFeed(epochs = 20) {
-  return useQuery({
-    queryKey: ["narrative-feed", epochs],
-    queryFn: async () => {
-      const res = await fetch(`/api/narrative/feed?epochs=${epochs}`);
-      if (!res.ok) throw new Error("Failed to load narrative feed");
-      const data = await res.json();
-      return (data.feed ?? []) as FeedHeadline[];
-    },
-    refetchInterval: 60_000,
+  const feed = useQuery(api.marketNarratives.feedHeadlines, {
+    maxEpochs: epochs,
   });
+
+  return {
+    data: feed === undefined ? undefined : (feed as FeedHeadline[]),
+    isLoading: feed === undefined,
+    isError: false,
+  };
 }
