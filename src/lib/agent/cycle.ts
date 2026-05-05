@@ -351,6 +351,31 @@ export async function runCycle(
     }
 
     const result = await enterRes.json();
+    if (result.agent_cycle === true) {
+      // Canonical agent path: entry is recorded in Convex; PnL is resolved by
+      // `internal.agent.cycle`. Legacy HTTP cycle cannot compute PnL from this response.
+      const paymentId = result.entry?.payment_id ?? "unknown";
+      await logActivity(
+        traderId,
+        "enter",
+        `Deal entry recorded (agent_cycle, paymentId=${paymentId}). Use Convex-native scheduler for outcome/PnL.`,
+        bestDeal.id,
+        { agent_cycle: true, payment_id: paymentId }
+      );
+      await logActivity(
+        traderId,
+        "cycle_end",
+        "Legacy HTTP cycle: enter-only response — disable LEGACY_AGENT_LOOP and use Convex cycle"
+      );
+      return {
+        traderId,
+        status: "entered",
+        dealId: bestDeal.id,
+        message:
+          "Enter recorded via Convex agent path. Outcome/PnL is applied by internal.agent.cycle.",
+      };
+    }
+
     const pnl = result.summary?.net_pnl ?? 0;
     const wipedOut = result.summary?.wiped_out ?? false;
 

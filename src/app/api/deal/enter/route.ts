@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { keccak256, toBytes, parseUnits } from "viem";
 import { verifyPrivyToken } from "@/lib/privy/server";
 import { verifySIWARequest } from "@/lib/siwa/verify";
-import { siwaAuthMatchesTrader } from "@/lib/siwa/binding";
+import { siwaAuthMatchesConvexTrader } from "@/lib/siwa/binding";
 import { createServerClient } from "@/lib/supabase/client";
-import { getTrader, getOwnedTrader } from "@/lib/supabase/traders";
+import { getOwnedTrader } from "@/lib/supabase/traders";
 import {
   getDeal,
   getExistingDealOutcome,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/supabase/queries";
 import { createConvexAdminClient } from "@/lib/convex/server-client";
 import { internal } from "../../../../../convex/_generated/api";
+import type { Id } from "../../../../../convex/_generated/dataModel";
 import { callModel } from "@/lib/llm/call-model";
 import {
   buildDealResolutionMessages,
@@ -132,6 +133,216 @@ async function postReputation(
   }
 }
 
+/**
+ * Convex agent cycle: on-chain deal **entry** + `dealEntries` write only.
+ * Outcome resolution lives in `internal.agent.cycle` (Convex LLM + mutations).
+ */
+async function handleAgentCycleDealEnter(
+  request: NextRequest,
+  params: { deal_id: string; trader_id: string }
+): Promise<NextResponse> {
+  const { deal_id, trader_id } = params;
+
+  const siwaMessageB64 = request.headers.get("x-siwa-message");
+  const siwaSignature = request.headers.get("x-siwa-signature");
+  if (!siwaMessageB64 || !siwaSignature) {
+    return NextResponse.json(
+      { error: "Missing SIWA auth headers" },
+      { status: 401 }
+    );
+  }
+  const siwaMessage = Buffer.from(siwaMessageB64, "base64").toString("utf-8");
+  const siwaResult = await verifySIWARequest(siwaMessage, siwaSignature);
+  if (!siwaResult.valid) {
+    return NextResponse.json({ error: "Invalid SIWA auth" }, { status: 401 });
+  }
+
+  const convex = createConvexAdminClient();
+  // ConvexHttpClient typings only cover public functions; admin auth allows internal.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const loadTraderFn = internal.traders.loadInternal as any;
+  const trader = (await convex.query(loadTraderFn, {
+    traderId: trader_id as Id<"traders">,
+  })) as {
+    tokenId?: number;
+    cdpWalletAddress?: string;
+    walletStatus?: string;
+  } | null;
+
+  if (!trader) {
+    return NextResponse.json({ error: "Trader not found" }, { status: 404 });
+  }
+
+  if (!siwaAuthMatchesConvexTrader(siwaResult, trader)) {
+    return NextResponse.json(
+      { error: "SIWA identity does not match trader" },
+      { status: 403 }
+    );
+  }
+
+  if (trader.walletStatus !== "ready") {
+    return NextResponse.json(
+      { error: "Trader wallet is not ready" },
+      { status: 400 }
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const loadDealFn = internal.deals.loadInternal as any;
+  const deal = (await convex.query(loadDealFn, {
+    dealId: deal_id as Id<"deals">,
+  })) as {
+    status: string;
+    prompt: string;
+    potUsdc: number;
+    entryCostUsdc: number;
+    onChainDealId?: number | null;
+  } | null;
+
+  if (!deal) {
+    return NextResponse.json({ error: "Deal not found" }, { status: 404 });
+  }
+
+  const rlKey = getClientIdentifier(request, trader.cdpWalletAddress ?? null);
+  const limited = await checkRateLimit(dealEnterLimit, rlKey);
+  if (limited) return limited;
+
+  if (deal.status !== "open") {
+    return NextResponse.json({ error: "Deal is not open" }, { status: 400 });
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const findEntryFn = internal.deals.findVerifiedEntryByTraderAndDeal as any;
+  const existingEntry = (await convex.query(findEntryFn, {
+    traderId: trader_id,
+    dealId: deal_id as Id<"deals">,
+  })) as { paymentId: string } | null;
+
+  if (existingEntry) {
+    return NextResponse.json({
+      agent_cycle: true,
+      entry: {
+        payment_id: existingEntry.paymentId,
+        already_entered: true,
+      },
+      summary: {
+        enter_tx_hash: null,
+        resolve_tx_hash: null,
+      },
+    });
+  }
+
+  const onChainDealId =
+    deal.onChainDealId !== null && deal.onChainDealId !== undefined
+      ? BigInt(deal.onChainDealId)
+      : null;
+
+  const tokenId =
+    trader.tokenId !== null && trader.tokenId !== undefined
+      ? BigInt(trader.tokenId)
+      : null;
+
+  if (onChainDealId !== null && tokenId === null) {
+    return NextResponse.json(
+      { error: "Trader tokenId is not set — cannot enter on-chain deal" },
+      { status: 400 }
+    );
+  }
+
+  if (onChainDealId !== null && tokenId !== null) {
+    const onChainDeal = await getOnChainDeal(onChainDealId);
+    if (!onChainDeal || onChainDeal.status !== DEAL_STATUS_OPEN) {
+      return NextResponse.json(
+        { error: "Deal is not open on-chain" },
+        { status: 400 }
+      );
+    }
+
+    const balanceUsdc = await getEscrowBalance(tokenId);
+    if (balanceUsdc < deal.entryCostUsdc) {
+      return NextResponse.json(
+        { error: "Insufficient escrow balance" },
+        { status: 400 }
+      );
+    }
+
+    if (trader.cdpWalletAddress) {
+      let currentOwner: string;
+      try {
+        currentOwner = await getNftOwner(tokenId);
+      } catch {
+        return NextResponse.json(
+          { error: "Failed to verify NFT ownership (RPC error)" },
+          { status: 502 }
+        );
+      }
+      if (
+        currentOwner.toLowerCase() !== trader.cdpWalletAddress.toLowerCase()
+      ) {
+        return NextResponse.json(
+          { error: "Trader NFT ownership changed" },
+          { status: 403 }
+        );
+      }
+    }
+  }
+
+  let enterTxHash: string | null = null;
+
+  if (onChainDealId !== null && tokenId !== null) {
+    const { smartAccount } = await getOrCreateTraderSmartAccount(
+      Number(tokenId)
+    );
+
+    const enterReceipt = await sendContractCall(smartAccount, {
+      address: ESCROW_ADDRESS,
+      abi: escrowAbi,
+      functionName: "enterDeal",
+      args: [onChainDealId, tokenId],
+    });
+    enterTxHash = enterReceipt.transactionHash;
+  }
+
+  const paymentId = enterTxHash ?? `noop:${trader_id}:${deal_id}`;
+  const chainDealId =
+    onChainDealId !== null ? Number(onChainDealId) : undefined;
+
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const recordFn = internal.deals.recordVerifiedEntry as any;
+    await convex.mutation(recordFn, {
+      paymentId,
+      dealId: deal_id as Id<"deals">,
+      traderId: trader_id,
+      entryCostUsdc: deal.entryCostUsdc,
+      enterTxHash: enterTxHash ?? undefined,
+      resolveTxHash: undefined,
+      onChainDealId: chainDealId,
+    });
+  } catch (convexErr) {
+    console.error(
+      "[deal/enter agent_cycle] Convex recordVerifiedEntry failed:",
+      convexErr
+    );
+    return NextResponse.json(
+      { error: "Failed to record verified entry in Convex" },
+      { status: 500 }
+    );
+  }
+
+  return NextResponse.json({
+    agent_cycle: true,
+    entry: {
+      payment_id: paymentId,
+      already_entered: false,
+    },
+    summary: {
+      enter_tx_hash: enterTxHash,
+      resolve_tx_hash: null,
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -148,9 +359,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (_agent_cycle && trader_id) {
+      return await handleAgentCycleDealEnter(request, {
+        deal_id,
+        trader_id,
+      });
+    }
+
     const supabase = createServerClient();
 
-    // ----- Auth: Privy user or internal agent cycle -----
+    // ----- Auth: Privy user (agent cycles use `handleAgentCycleDealEnter` above) -----
     let traderId: string;
     let traderName: string;
     let tokenId: bigint | null = null;
@@ -159,77 +377,40 @@ export async function POST(request: NextRequest) {
     /** Cached escrow balance from Supabase — used for LLM portfolio context. */
     let cachedBalanceUsdc: number | null = null;
 
-    if (_agent_cycle && trader_id) {
-      // Agent cycle call — verify SIWA (Sign In With Agent) auth
-      const siwaMessageB64 = request.headers.get("x-siwa-message");
-      const siwaSignature = request.headers.get("x-siwa-signature");
-      if (!siwaMessageB64 || !siwaSignature) {
-        return NextResponse.json(
-          { error: "Missing SIWA auth headers" },
-          { status: 401 }
-        );
-      }
-      const siwaMessage = Buffer.from(siwaMessageB64, "base64").toString(
-        "utf-8"
-      );
-      const siwaResult = await verifySIWARequest(siwaMessage, siwaSignature);
-      if (!siwaResult.valid) {
-        return NextResponse.json(
-          { error: "Invalid SIWA auth" },
-          { status: 401 }
-        );
-      }
+    const { user } = await verifyPrivyToken(request);
 
-      const trader = await getTrader(trader_id);
-      if (!siwaAuthMatchesTrader(siwaResult, trader)) {
-        return NextResponse.json(
-          { error: "SIWA identity does not match trader" },
-          { status: 403 }
-        );
-      }
+    const walletAddress = user.wallet?.address;
+    if (!walletAddress) {
+      return NextResponse.json(
+        { error: "No wallet linked to this account" },
+        { status: 400 }
+      );
+    }
+
+    if (trader_id) {
+      const trader = await getOwnedTrader(trader_id, walletAddress);
       traderId = trader.id;
       traderName = trader.name || "Anonymous Trader";
       tokenId = BigInt(trader.token_id);
       expectedOwnerAddress = trader.cdp_wallet_address ?? trader.owner_address;
       cachedBalanceUsdc = trader.escrow_balance_usdc;
     } else {
-      // Normal user request — verify Privy token
-      const { user } = await verifyPrivyToken(request);
+      // Legacy: use desk_manager as trader
+      const { data: dm, error: dmError } = await supabase
+        .from("desk_managers")
+        .select("id, display_name, wallet_address")
+        .eq("wallet_address", walletAddress)
+        .single();
 
-      const walletAddress = user.wallet?.address;
-      if (!walletAddress) {
+      if (dmError || !dm) {
         return NextResponse.json(
-          { error: "No wallet linked to this account" },
-          { status: 400 }
+          { error: "Desk manager not found. Register first." },
+          { status: 404 }
         );
       }
 
-      if (trader_id) {
-        const trader = await getOwnedTrader(trader_id, walletAddress);
-        traderId = trader.id;
-        traderName = trader.name || "Anonymous Trader";
-        tokenId = BigInt(trader.token_id);
-        expectedOwnerAddress =
-          trader.cdp_wallet_address ?? trader.owner_address;
-        cachedBalanceUsdc = trader.escrow_balance_usdc;
-      } else {
-        // Legacy: use desk_manager as trader
-        const { data: dm, error: dmError } = await supabase
-          .from("desk_managers")
-          .select("id, display_name, wallet_address")
-          .eq("wallet_address", walletAddress)
-          .single();
-
-        if (dmError || !dm) {
-          return NextResponse.json(
-            { error: "Desk manager not found. Register first." },
-            { status: 404 }
-          );
-        }
-
-        traderId = dm.id;
-        traderName = dm.display_name || "Anonymous Trader";
-      }
+      traderId = dm.id;
+      traderName = dm.display_name || "Anonymous Trader";
     }
 
     // Rate limit: 10 req/min per wallet
@@ -479,8 +660,7 @@ export async function POST(request: NextRequest) {
         paymentId,
         // deal_id is a Convex Id<"deals"> serialised as a plain string from
         // the request body — safe to cast here.
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        dealId: deal_id as any,
+        dealId: deal_id as Id<"deals">,
         traderId,
         entryCostUsdc: deal.entry_cost_usdc,
         enterTxHash: enterTxHash ?? undefined,

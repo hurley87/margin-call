@@ -170,6 +170,24 @@ export const findEntryByPaymentId = internalQuery({
 });
 
 /**
+ * Internal: most recent verified entry for (traderId, dealId).
+ * Used by agent-cycle `/api/deal/enter` for idempotency without Supabase.
+ */
+export const findVerifiedEntryByTraderAndDeal = internalQuery({
+  args: { traderId: v.string(), dealId: v.id("deals") },
+  handler: async (ctx, { traderId, dealId }) => {
+    const rows = await ctx.db
+      .query("dealEntries")
+      .withIndex("byTraderAndDeal", (q) =>
+        q.eq("traderId", traderId).eq("dealId", dealId)
+      )
+      .order("desc")
+      .take(1);
+    return rows[0] ?? null;
+  },
+});
+
+/**
  * Internal: record a verified x402 deal entry.
  *
  * This is the **single writer path** for marking a deal entry as paid/verified.

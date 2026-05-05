@@ -460,6 +460,54 @@ describe("Activity log deduplication", () => {
   });
 });
 
+describe("Verified deal entry lookup (agent cycle idempotency)", () => {
+  it("findVerifiedEntryByTraderAndDeal returns the entry row", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId);
+    const dealId = await seedDeal(t);
+
+    await t.mutation(internal.deals.recordVerifiedEntry, {
+      paymentId: "test-payment-xyz",
+      dealId: dealId as never,
+      traderId: traderId as string,
+      entryCostUsdc: 50,
+    });
+
+    const found = await t.query(
+      internal.deals.findVerifiedEntryByTraderAndDeal,
+      {
+        traderId: traderId as string,
+        dealId: dealId as never,
+      }
+    );
+
+    expect(found).not.toBeNull();
+    expect(found?.paymentId).toBe("test-payment-xyz");
+  });
+
+  it("replay-safe: duplicate recordVerifiedEntry paymentId returns existing id", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId);
+    const dealId = await seedDeal(t);
+
+    const id1 = await t.mutation(internal.deals.recordVerifiedEntry, {
+      paymentId: "same-key",
+      dealId: dealId as never,
+      traderId: traderId as string,
+      entryCostUsdc: 50,
+    });
+    const id2 = await t.mutation(internal.deals.recordVerifiedEntry, {
+      paymentId: "same-key",
+      dealId: dealId as never,
+      traderId: traderId as string,
+      entryCostUsdc: 99,
+    });
+    expect(id1).toBe(id2);
+  });
+});
+
 describe("Wallet creation idempotency (at-most-one per trader)", () => {
   it("markCreating only transitions from pending", async () => {
     const t = convexTest(schema, modules);
