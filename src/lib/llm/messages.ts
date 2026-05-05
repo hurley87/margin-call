@@ -1,5 +1,24 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { getActiveSystemPrompt } from "@/lib/supabase/queries";
+import { createConvexAdminClient } from "@/lib/convex/server-client";
+import { internal } from "../../../convex/_generated/api";
+
+type PromptName =
+  | "deal_outcome"
+  | "correction_narrative"
+  | "prompt_suggestions"
+  | "narrative_generation";
+
+async function getActiveSystemPrompt(name: PromptName): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prompt = await (createConvexAdminClient() as any).query(
+    internal.systemPrompts.getActive,
+    { name }
+  );
+  if (!prompt || typeof prompt !== "string") {
+    throw new Error(`Missing active system prompt: ${name}`);
+  }
+  return prompt;
+}
 
 interface DealResolutionParams {
   dealPrompt: string;

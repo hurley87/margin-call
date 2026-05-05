@@ -5,8 +5,20 @@ import { useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { Doc } from "../../convex/_generated/dataModel";
-import type { Asset } from "@/lib/supabase/queries";
 import { authFetch } from "@/lib/api";
+
+/** Trader inventory row (Convex `assets` table, UI shape). */
+export interface Asset {
+  id: string;
+  trader_id: string;
+  name: string;
+  value_usdc: number;
+  source_deal_id: string | null;
+  source_outcome_id: string | null;
+  acquired_at: string;
+}
+
+export type TraderAsset = Asset;
 
 export interface AgentActivity {
   id: string;
@@ -33,8 +45,6 @@ export interface DealOutcomeWithNarrative {
   created_at: string;
   on_chain_tx_hash?: string | null;
 }
-
-export type { Asset as TraderAsset } from "@/lib/supabase/queries";
 
 function mapConvexAsset(asset: Doc<"assets">, traderId: string): Asset {
   return {

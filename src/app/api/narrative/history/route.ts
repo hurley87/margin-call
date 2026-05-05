@@ -1,15 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { getNarrativeHistory } from "@/lib/supabase/queries";
+import { convexDeprecatedResponse } from "@/lib/http/convex-deprecated-response";
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const limit = Math.min(Number(searchParams.get("limit") ?? 10), 50);
-    const narratives = await getNarrativeHistory(limit);
-    return NextResponse.json({ narratives });
-  } catch (e) {
-    console.error("Narrative history error:", e);
-    const message = e instanceof Error ? e.message : "Internal server error";
-    return NextResponse.json({ error: message }, { status: 500 });
-  }
+const DEPRECATED_MESSAGE =
+  "Deprecated: this HTTP route has been replaced by Convex functions and subscriptions.";
+
+export function GET() {
+  return convexDeprecatedResponse(DEPRECATED_MESSAGE);
 }

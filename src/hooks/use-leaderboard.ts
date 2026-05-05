@@ -2,7 +2,21 @@
 
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
-import type { LeaderboardTrader } from "@/lib/supabase/leaderboard";
+
+/** Shape returned by Convex `leaderboard.listTraderStats` — matches leaderboard UI expectations. */
+export interface LeaderboardTrader {
+  id: string;
+  name: string;
+  status: string;
+  owner_address: string;
+  total_pnl: number;
+  wins: number;
+  losses: number;
+  wipeouts: number;
+  deal_count: number;
+  win_rate: number;
+  total_value: number;
+}
 
 /** Public leaderboard — Convex subscription. */
 export function useLeaderboard() {
