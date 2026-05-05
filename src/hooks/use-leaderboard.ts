@@ -1,14 +1,16 @@
-import { useQuery } from "@tanstack/react-query";
+"use client";
+
+import { useQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import type { LeaderboardTrader } from "@/lib/supabase/leaderboard";
 
+/** Public leaderboard — Convex subscription. */
 export function useLeaderboard() {
-  return useQuery({
-    queryKey: ["leaderboard"],
-    queryFn: async () => {
-      const res = await fetch("/api/leaderboard");
-      if (!res.ok) throw new Error("Failed to load leaderboard");
-      const data = await res.json();
-      return (data.traders ?? []) as LeaderboardTrader[];
-    },
-  });
+  const traders = useQuery(api.leaderboard.listTraderStats, { limit: 50 });
+
+  return {
+    data: traders as LeaderboardTrader[] | undefined,
+    isLoading: traders === undefined,
+    isError: false as const,
+  };
 }

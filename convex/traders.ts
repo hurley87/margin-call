@@ -33,6 +33,95 @@ export const getById = query({
   },
 });
 
+const MANDATE_NUMERIC_KEYS = [
+  "max_entry_cost_usdc",
+  "min_pot_usdc",
+  "max_pot_usdc",
+  "bankroll_pct",
+  "approval_threshold_usdc",
+] as const;
+
+/** Update mandate + personality for owned trader (Convex-native; replaces desk/configure for game UI). */
+export const updateMandate = mutation({
+  args: {
+    traderId: v.id("traders"),
+    mandate: v.any(),
+    personality: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, { traderId, mandate, personality }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const trader = await ctx.db.get(traderId);
+    if (!trader || trader.ownerSubject !== identity.subject) {
+      throw new Error("Forbidden");
+    }
+
+    if (!mandate || typeof mandate !== "object" || Array.isArray(mandate)) {
+      throw new Error("mandate must be an object");
+    }
+
+    const cleaned: Record<string, unknown> = {};
+
+    for (const key of MANDATE_NUMERIC_KEYS) {
+      if (!(key in mandate)) continue;
+      const val = (mandate as Record<string, unknown>)[key];
+      if (val === null || val === undefined) continue;
+      const num = Number(val);
+      if (Number.isNaN(num) || num < 0) {
+        throw new Error(`${key} must be a non-negative number`);
+      }
+      if (key === "bankroll_pct" && (num <= 0 || num > 100)) {
+        throw new Error("bankroll_pct must be between 1 and 100");
+      }
+      cleaned[key] = num;
+    }
+
+    if ("keywords" in mandate) {
+      const val = (mandate as Record<string, unknown>).keywords;
+      if (
+        !Array.isArray(val) ||
+        !val.every((entry) => typeof entry === "string")
+      ) {
+        throw new Error("keywords must be an array of strings");
+      }
+      cleaned.keywords = val;
+    }
+
+    if ("llm_deal_selection" in mandate) {
+      const val = (mandate as Record<string, unknown>).llm_deal_selection;
+      if (typeof val !== "boolean") {
+        throw new Error("llm_deal_selection must be a boolean");
+      }
+      cleaned.llm_deal_selection = val;
+    }
+
+    const existingMandate =
+      (trader.mandate as Record<string, unknown> | undefined) ?? {};
+
+    const patch: Partial<
+      Pick<Doc<"traders">, "mandate" | "personality" | "updatedAt">
+    > = {
+      mandate: { ...existingMandate, ...cleaned },
+      updatedAt: Date.now(),
+    };
+
+    if (personality !== undefined) {
+      if (personality !== null && typeof personality !== "string") {
+        throw new Error("personality must be a string or null");
+      }
+      if (typeof personality === "string" && personality.length > 2000) {
+        throw new Error("personality must be at most 2000 characters");
+      }
+      patch.personality =
+        personality === null ? undefined : personality.trim() || undefined;
+    }
+
+    await ctx.db.patch(traderId, patch);
+    return { ok: true as const };
+  },
+});
+
 /** Public: create a trader, schedule wallet creation. Idempotent on (ownerSubject, name). */
 export const create = mutation({
   args: {

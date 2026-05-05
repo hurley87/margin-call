@@ -1,5 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { authFetch } from "@/lib/api";
+"use client";
+
+import { useCallback, useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
 import type { DeskManager } from "./use-desk";
 
 interface UpdateSettingsInput {
@@ -8,21 +11,36 @@ interface UpdateSettingsInput {
 }
 
 export function useUpdateSettings() {
-  const queryClient = useQueryClient();
+  const upsert = useMutation(api.deskManagers.upsertMe);
+  const [isPending, setPending] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useMutation({
-    mutationFn: async (input: UpdateSettingsInput) => {
-      const res = await authFetch("/api/desk/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(input),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to update settings");
-      return data.deskManager as DeskManager;
+  const mutate = useCallback(
+    async (input: UpdateSettingsInput) => {
+      setPending(true);
+      setError(null);
+      try {
+        await upsert({
+          displayName: input.display_name,
+          settings: input.settings,
+        });
+        // DeskManager row is reactive via getMe; return a minimal DeskManager for callers
+        return {} as DeskManager;
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        setError(err);
+        throw err;
+      } finally {
+        setPending(false);
+      }
     },
-    onSuccess: (deskManager) => {
-      queryClient.setQueryData(["desk", "register"], deskManager);
-    },
-  });
+    [upsert]
+  );
+
+  return {
+    mutateAsync: mutate,
+    isPending,
+    isError: !!error,
+    error,
+  };
 }

@@ -1,6 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
 import { useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
+import type { Doc } from "../../convex/_generated/dataModel";
 import { authFetch } from "@/lib/api";
 
 export interface Deal {
@@ -39,22 +43,8 @@ export interface DealOutcome {
   on_chain_tx_hash?: string;
 }
 
-/**
- * Returns all deals (any status) visible to the authenticated user.
- * Backed by Convex subscription — live updates without polling.
- */
-export function useDeals(): {
-  data: Deal[] | undefined;
-  isLoading: boolean;
-  isError: boolean;
-} {
-  const result = useConvexQuery(api.deals.list);
-
-  if (result === undefined) {
-    return { data: undefined, isLoading: true, isError: false };
-  }
-
-  const data: Deal[] = result.map((deal) => ({
+function mapConvexDeal(deal: Doc<"deals">): Deal {
+  return {
     id: deal._id,
     creator_id: deal.creatorDeskManagerId,
     creator_type: deal.creatorType,
@@ -72,7 +62,44 @@ export function useDeals(): {
     on_chain_tx_hash: deal.onChainTxHash,
     creator_address: deal.creatorAddress,
     source_headline: deal.sourceHeadline,
-  }));
+  };
+}
+
+function mapConvexOutcome(o: Doc<"dealOutcomes">): DealOutcome {
+  return {
+    id: o._id,
+    deal_id: o.dealId,
+    trader_id: String(o.traderId),
+    trader_pnl_usdc: o.traderPnlUsdc ?? 0,
+    pot_change_usdc: o.potChangeUsdc ?? 0,
+    rake_usdc: o.rakeUsdc ?? 0,
+    narrative: (o.narrative as DealOutcome["narrative"]) ?? "",
+    trader_wiped_out: o.traderWipedOut ?? false,
+    wipeout_reason: o.wipeoutReason,
+    assets_gained:
+      (o.assetsGained as { name: string; value_usdc: number }[]) ?? [],
+    assets_lost: (o.assetsLost as string[]) ?? [],
+    created_at: new Date(o.createdAt).toISOString(),
+    on_chain_tx_hash: o.onChainTxHash,
+  };
+}
+
+/**
+ * Returns all deals (any status) visible to the authenticated user.
+ * Backed by Convex subscription — live updates without polling.
+ */
+export function useDeals(): {
+  data: Deal[] | undefined;
+  isLoading: boolean;
+  isError: boolean;
+} {
+  const result = useConvexQuery(api.deals.list);
+
+  if (result === undefined) {
+    return { data: undefined, isLoading: true, isError: false };
+  }
+
+  const data: Deal[] = result.map(mapConvexDeal);
 
   return { data, isLoading: false, isError: false };
 }
@@ -92,43 +119,52 @@ export function useMyDeals(): {
     return { data: undefined, isLoading: true, isError: false };
   }
 
-  // Map Convex camelCase → legacy snake_case Deal interface
-  const data: Deal[] = result.map((deal) => ({
-    id: deal._id,
-    creator_id: deal.creatorDeskManagerId,
-    creator_type: deal.creatorType,
-    on_chain_deal_id: deal.onChainDealId,
-    prompt: deal.prompt,
-    pot_usdc: deal.potUsdc,
-    entry_cost_usdc: deal.entryCostUsdc,
-    fee_usdc: deal.feeUsdc,
-    max_extraction_percentage: deal.maxExtractionPercentage ?? 0,
-    entry_count: deal.entryCount ?? 0,
-    wipeout_count: deal.wipeoutCount ?? 0,
-    status: deal.status,
-    created_at: new Date(deal.createdAt).toISOString(),
-    updated_at: new Date(deal.updatedAt).toISOString(),
-    on_chain_tx_hash: deal.onChainTxHash,
-    creator_address: deal.creatorAddress,
-    source_headline: deal.sourceHeadline,
-  }));
+  const data: Deal[] = result.map(mapConvexDeal);
 
   return { data, isLoading: false, isError: false };
 }
 
 export function useDeal(id: string) {
-  return useQuery({
-    queryKey: ["deal", id],
-    queryFn: async () => {
-      const res = await fetch(`/api/deal/${id}`);
-      if (!res.ok) throw new Error("Deal not found");
-      const data = await res.json();
-      return {
-        deal: data.deal as Deal,
-        outcomes: (data.outcomes ?? []) as DealOutcome[],
-      };
+  const convexId = id as Id<"deals">;
+
+  const rawDeal = useConvexQuery(
+    api.deals.getById,
+    id ? { dealId: convexId } : "skip"
+  );
+
+  const rawOutcomes = useConvexQuery(
+    api.dealOutcomes.listByDeal,
+    id ? { dealId: convexId } : "skip"
+  );
+
+  if (!id) {
+    return {
+      data: undefined as { deal: Deal; outcomes: DealOutcome[] } | undefined,
+      isLoading: false,
+      error: new Error("Deal not found"),
+    };
+  }
+
+  if (rawDeal === undefined || rawOutcomes === undefined) {
+    return { data: undefined, isLoading: true, error: null };
+  }
+
+  if (rawDeal === null) {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: new Error("Deal not found"),
+    };
+  }
+
+  return {
+    data: {
+      deal: mapConvexDeal(rawDeal),
+      outcomes: rawOutcomes.map(mapConvexOutcome),
     },
-  });
+    isLoading: false,
+    error: null,
+  };
 }
 
 /**
@@ -155,17 +191,40 @@ export function useHeadlineDeals(): {
 }
 
 export function useSuggestPrompts(theme: string) {
-  return useQuery({
-    queryKey: ["suggest-prompts", theme],
-    queryFn: async () => {
+  const [data, setData] = useState<string[] | undefined>(undefined);
+  const [isPending, setPending] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
+
+  const load = useCallback(async () => {
+    setPending(true);
+    setError(null);
+    try {
       const res = await authFetch("/api/prompt/suggest", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ theme }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Failed to suggest prompts");
-      return data.suggestions as string[];
-    },
-  });
+      const payload = await res.json();
+      if (!res.ok)
+        throw new Error(payload.error || "Failed to suggest prompts");
+      setData(payload.suggestions as string[]);
+    } catch (e) {
+      setData(undefined);
+      setError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setPending(false);
+    }
+  }, [theme]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return {
+    data,
+    isPending,
+    isError: !!error,
+    error,
+    refetch: load,
+  };
 }

@@ -1,7 +1,11 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+"use client";
+
+import { useCallback, useState } from "react";
 import { useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import type { Doc } from "../../convex/_generated/dataModel";
+import type { Asset } from "@/lib/supabase/queries";
 import { authFetch } from "@/lib/api";
 
 export interface AgentActivity {
@@ -27,22 +31,40 @@ export interface DealOutcomeWithNarrative {
   trader_wiped_out: boolean;
   wipeout_reason: string | null;
   created_at: string;
+  on_chain_tx_hash?: string | null;
 }
 
 export type { Asset as TraderAsset } from "@/lib/supabase/queries";
 
+function mapConvexAsset(asset: Doc<"assets">, traderId: string): Asset {
+  return {
+    id: asset._id,
+    trader_id: traderId,
+    name: asset.name,
+    value_usdc: asset.valueUsdc ?? 0,
+    source_deal_id: asset.sourceDealId ?? null,
+    source_outcome_id: asset.sourceOutcomeId ?? null,
+    acquired_at: new Date(asset.acquiredAt).toISOString(),
+  };
+}
+
 export function useTraderAssets(traderId: string) {
-  return useQuery({
-    queryKey: ["trader-assets", traderId],
-    queryFn: async () => {
-      const res = await authFetch(`/api/trader/${traderId}/assets`);
-      if (!res.ok) throw new Error("Failed to load assets");
-      const data = await res.json();
-      return (data.assets ?? []) as import("@/lib/supabase/queries").Asset[];
-    },
-    enabled: !!traderId,
-    // Realtime subscriptions handle live updates — no polling needed
-  });
+  const rows = useConvexQuery(
+    api.assets.listByTrader,
+    traderId ? { traderId: traderId as Id<"traders"> } : "skip"
+  );
+
+  if (rows === undefined) {
+    return {
+      data: undefined as Asset[] | undefined,
+      isLoading: true,
+      isError: false,
+    };
+  }
+
+  const data = rows.map((a) => mapConvexAsset(a, traderId));
+
+  return { data, isLoading: false, isError: false };
 }
 
 /**
@@ -64,10 +86,9 @@ export function useAgentActivity(traderId: string): {
     return { data: undefined, isLoading: true, isError: false, error: null };
   }
 
-  // Map Convex camelCase → legacy snake_case AgentActivity interface
   const data: AgentActivity[] = result.map((entry) => ({
     id: entry._id,
-    trader_id: entry.traderId,
+    trader_id: String(entry.traderId),
     activity_type: entry.activityType,
     message: entry.message,
     deal_id: entry.dealId ?? null,
@@ -96,11 +117,10 @@ export function useTraderOutcomes(traderId: string): {
     return { data: undefined, isLoading: true, isError: false };
   }
 
-  // Map Convex camelCase → legacy snake_case DealOutcomeWithNarrative interface
   const data: DealOutcomeWithNarrative[] = result.map((outcome) => ({
     id: outcome._id,
     deal_id: outcome.dealId,
-    trader_id: outcome.traderId,
+    trader_id: String(outcome.traderId),
     narrative:
       (outcome.narrative as DealOutcomeWithNarrative["narrative"]) ?? "",
     trader_pnl_usdc: outcome.traderPnlUsdc ?? 0,
@@ -119,29 +139,39 @@ export function useTraderOutcomes(traderId: string): {
 }
 
 function useTraderStatusMutation(action: "pause" | "resume" | "revive") {
-  const queryClient = useQueryClient();
+  const [isPending, setPending] = useState(false);
+  const [error, setError] = useState<Error | null>(null);
 
-  return useMutation({
-    mutationFn: async (traderId: string) => {
-      const res = await authFetch(`/api/trader/${traderId}/${action}`, {
-        method: "POST",
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error ?? `Failed to ${action}`);
-      }
-      return res.json();
+  const mutate = useCallback(
+    (traderId: string) => {
+      setPending(true);
+      setError(null);
+      void authFetch(`/api/trader/${traderId}/${action}`, { method: "POST" })
+        .then(async (res) => {
+          if (!res.ok) {
+            const data = (await res.json().catch(() => ({}))) as {
+              error?: string;
+            };
+            throw new Error(data.error ?? `Failed to ${action}`);
+          }
+          return res.json();
+        })
+        .catch((e: unknown) => {
+          setError(e instanceof Error ? e : new Error(String(e)));
+        })
+        .finally(() => {
+          setPending(false);
+        });
     },
-    onSuccess: (_data, traderId) => {
-      queryClient.invalidateQueries({ queryKey: ["trader", traderId] });
-      queryClient.invalidateQueries({
-        queryKey: ["agent-activity", traderId],
-      });
-      queryClient.invalidateQueries({
-        queryKey: ["trader-outcomes", traderId],
-      });
-    },
-  });
+    [action]
+  );
+
+  return {
+    mutate,
+    isPending,
+    isError: !!error,
+    error,
+  };
 }
 
 export function usePauseTrader() {

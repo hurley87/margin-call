@@ -1,14 +1,12 @@
 "use client";
 
-import { useRef, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
-import { useQueryClient } from "@tanstack/react-query";
+
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useDeal } from "@/hooks/use-deals";
-import { useDealRealtime } from "@/hooks/use-realtime";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
@@ -20,7 +18,6 @@ import { shortAssetLabel } from "@/lib/format-asset-label";
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
-  useDealRealtime(id);
   const { data, isLoading, error } = useDeal(id);
   const { user } = usePrivy();
   const walletAddress = user?.wallet?.address;
@@ -285,45 +282,31 @@ export default function DealDetailPage() {
 }
 
 function CloseDealButton({
-  dealId,
+  dealId: _dealId,
   onChainDealId,
 }: {
   dealId: string;
   onChainDealId: number;
 }) {
-  const queryClient = useQueryClient();
   const syncedRef = useRef(false);
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
   });
 
-  const syncMutation = useMutation({
-    mutationFn: async ({
-      onChainId,
-      hash,
-    }: {
-      onChainId: number;
-      hash: string;
-    }) => {
-      const res = await fetch("/api/deal/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ on_chain_deal_id: onChainId, txHash: hash }),
-      });
-      if (!res.ok) throw new Error("Sync failed");
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["deal", dealId] });
-    },
-  });
-
-  // After close confirms, sync deal status from chain (once)
   useEffect(() => {
     if (!isSuccess || !txHash || syncedRef.current) return;
     syncedRef.current = true;
-    syncMutation.mutate({ onChainId: onChainDealId, hash: txHash });
-  }, [isSuccess, txHash, onChainDealId, syncMutation]);
+    void fetch("/api/deal/sync", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ on_chain_deal_id: onChainDealId, txHash }),
+    }).then(async (res) => {
+      if (!res.ok) {
+        syncedRef.current = false;
+      }
+    });
+  }, [isSuccess, txHash, onChainDealId]);
 
   function handleClose() {
     writeContract({

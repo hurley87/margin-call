@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { useNarrativeFeed } from "@/hooks/use-narrative";
-import { useNarrativeRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
 import { WireFeed } from "@/components/wire/wire-feed";
 import { WireStatsBar } from "@/components/wire/wire-stats-bar";
@@ -32,7 +31,6 @@ const HOW_DEALS_SECTIONS = [
 ] as const;
 
 export default function WirePage() {
-  useNarrativeRealtime();
   const { data: feed, isLoading } = useNarrativeFeed();
   const [howDealsOpen, setHowDealsOpen] = useState(false);
 

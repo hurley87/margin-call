@@ -4,7 +4,6 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useReadContract } from "wagmi";
-import { useQueryClient } from "@tanstack/react-query";
 import { useTrader, useTraderHistory } from "@/hooks/use-traders";
 import type { TraderHistoryEvent } from "@/hooks/use-traders";
 import { useSepoliaUsdcBalance } from "@/hooks/use-escrow";
@@ -26,7 +25,6 @@ import {
   useConfigureMandate,
   usePendingApprovals,
 } from "@/hooks/use-approvals";
-import { useTraderRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
@@ -82,9 +80,7 @@ function CollapsibleSection({
 }
 
 export default function TraderDetailPage() {
-  const queryClient = useQueryClient();
   const { id } = useParams<{ id: string }>();
-  useTraderRealtime(id);
   const { data: trader, isLoading, error } = useTrader(id);
   const syncInFlightRef = useRef(false);
 
@@ -119,19 +115,15 @@ export default function TraderDetailPage() {
     syncInFlightRef.current = true;
 
     void authFetch(`/api/trader/${id}/balance`, { method: "POST" })
-      .then((res) => {
+      .then(async (res) => {
         if (!res.ok) throw new Error("Balance sync failed");
-        return Promise.all([
-          queryClient.invalidateQueries({ queryKey: ["trader", id] }),
-          queryClient.invalidateQueries({ queryKey: ["portfolio"] }),
-        ]);
       })
       .catch((err) => console.error("Balance sync error:", err))
       .finally(() => {
         syncInFlightRef.current = false;
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, balanceUsdc, cachedEscrowUsdc, queryClient]);
+  }, [id, balanceUsdc, cachedEscrowUsdc]);
 
   const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
   const isNewTrader = !!trader && trader.status === "paused" && unfunded;
@@ -333,7 +325,7 @@ function AgentControls({
         </button>
         {revive.isError && (
           <p className="mt-2 text-xs text-[var(--t-red)]">
-            {revive.error.message}
+            {revive.error?.message}
           </p>
         )}
       </div>
@@ -385,12 +377,12 @@ function AgentControls({
 
       {pause.isError && (
         <p className="ml-auto text-xs text-[var(--t-red)]">
-          {pause.error.message}
+          {pause.error?.message}
         </p>
       )}
       {resume.isError && (
         <p className="ml-auto text-xs text-[var(--t-red)]">
-          {resume.error.message}
+          {resume.error?.message}
         </p>
       )}
     </div>
@@ -995,7 +987,7 @@ function MandateConfig({
       </div>
       {configure.isError && (
         <p className="mt-2 text-xs text-[var(--t-red)]">
-          {configure.error.message}
+          {configure.error?.message}
         </p>
       )}
     </CollapsibleSection>

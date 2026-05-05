@@ -17,7 +17,7 @@ Standard commands are in `package.json` scripts and documented in `CLAUDE.md`:
 
 ### Dev server caveats
 
-- The dev server starts without any external service credentials. Without `NEXT_PUBLIC_PRIVY_APP_ID`, the PrivyProvider gracefully degrades (wraps children in only a `QueryClientProvider`), but `usePrivy()` on the home page will show the unauthenticated state (CONNECT_WALLET screen). Full functionality requires Privy, Supabase, OpenAI, and CDP credentials in `.env.local` (see `.env.example`).
+- Without `NEXT_PUBLIC_PRIVY_APP_ID`, `PrivyProvider` renders children without Privy/Wagmi/Convex wrappers; `usePrivy()` on the home page shows the unauthenticated state (CONNECT_WALLET screen).
 - Upstash Redis is optional; the rate limiter falls back to in-memory when env vars are missing.
 - Sentry source map uploads are disabled when `SENTRY_AUTH_TOKEN` is absent.
 - **Agent trade loop:** Production uses Vercel Cron (`/api/agent/scheduler` with `CRON_SECRET`). Locally, resuming a trader still kicks one cycle immediately; call `POST /api/agent/scheduler` with `Authorization: Bearer $CRON_SECRET` (or wait for the next resume) to run additional cycles. Apply Supabase migration `024_trader_personality.sql` for the `personality` column.
@@ -28,8 +28,7 @@ pnpm v10 blocks postinstall/build scripts by default. Running `pnpm install` wil
 
 ### Pre-existing lint errors and test failures
 
-- `pnpm lint` exits 1 due to pre-existing `react-hooks/refs` errors in `src/hooks/use-realtime.ts` and unused-variable warnings. These are in the existing codebase.
-- `pnpm test` has 5 pre-existing failures in `src/lib/privy/__tests__/chain-id.test.ts` (tests expect Base mainnet chain ID 8453, but the code uses Base Sepolia 84532). 24 other tests pass.
+- `pnpm lint` exits 1 due to pre-existing issues in some hooks/components and unused-variable warnings (see ESLint output).
 
 ### Git hooks
 
