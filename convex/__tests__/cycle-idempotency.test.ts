@@ -12,11 +12,11 @@
  * - Wallet creation is at-most-once per trader (pending → creating → ready CAS)
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../schema";
 import { internal } from "../_generated/api";
-import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
 
 const modules = import.meta.glob("../**/*.ts");
 

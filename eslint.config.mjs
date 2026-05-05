@@ -9,9 +9,12 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    "**/.next/**",
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Local agent worktrees can contain nested Next.js output; never lint them
+    ".claude/**",
     // Foundry vendored dependencies
     "contracts/**",
   ]),
