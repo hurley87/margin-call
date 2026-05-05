@@ -131,40 +131,44 @@ export interface TraderHistoryEvent {
 
 export function useTraderHistory(id: string) {
   const [data, setData] = useState<TraderHistoryEvent[] | undefined>(undefined);
-  const [isLoading, setLoading] = useState(true);
+  const [isLoading, setLoading] = useState(() => Boolean(id));
   const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
-    if (!id) {
-      setData(undefined);
-      setLoading(false);
-      return;
-    }
+    if (!id) return;
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
 
-    void authFetch(`/api/trader/${id}/history`)
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Failed to load history");
-        const body = (await res.json()) as { events?: TraderHistoryEvent[] };
-        if (!cancelled) setData(body.events ?? []);
-      })
-      .catch((e: unknown) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e : new Error(String(e)));
-          setData(undefined);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
+    queueMicrotask(() => {
+      if (cancelled) return;
+      setLoading(true);
+      setError(null);
+
+      void authFetch(`/api/trader/${id}/history`)
+        .then(async (res) => {
+          if (!res.ok) throw new Error("Failed to load history");
+          const body = (await res.json()) as { events?: TraderHistoryEvent[] };
+          if (!cancelled) setData(body.events ?? []);
+        })
+        .catch((e: unknown) => {
+          if (!cancelled) {
+            setError(e instanceof Error ? e : new Error(String(e)));
+            setData(undefined);
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    });
 
     return () => {
       cancelled = true;
     };
   }, [id]);
+
+  if (!id) {
+    return { data: undefined, isLoading: false, error: null };
+  }
 
   return { data, isLoading, error };
 }

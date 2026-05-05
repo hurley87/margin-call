@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PrivyProvider as BasePrivyProvider } from "@privy-io/react-auth";
 import { WagmiProvider, createConfig } from "@privy-io/wagmi";
 import { base, baseSepolia } from "viem/chains";
@@ -19,6 +21,7 @@ const wagmiConfig = createConfig({
 
 export function PrivyProvider({ children }: { children: React.ReactNode }) {
   const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  const [queryClient] = useState(() => new QueryClient());
 
   if (!appId) {
     return children;
@@ -26,12 +29,14 @@ export function PrivyProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <BasePrivyProvider appId={appId} config={privyConfig}>
-      <WagmiProvider config={wagmiConfig}>
-        <ConvexClientProvider>
-          <BaseNetworkGuard />
-          {children}
-        </ConvexClientProvider>
-      </WagmiProvider>
+      <QueryClientProvider client={queryClient}>
+        <WagmiProvider config={wagmiConfig}>
+          <ConvexClientProvider>
+            <BaseNetworkGuard />
+            {children}
+          </ConvexClientProvider>
+        </WagmiProvider>
+      </QueryClientProvider>
     </BasePrivyProvider>
   );
 }
