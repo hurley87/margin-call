@@ -7,7 +7,7 @@ import { useGlobalActivity } from "@/hooks/use-global-activity";
 import { useLeaderboardRealtime } from "@/hooks/use-realtime";
 import { Nav } from "@/components/nav";
 import { FeedLine, getFeedGridClass } from "@/components/feed-line";
-import type { LeaderboardTrader } from "@/lib/supabase/leaderboard";
+import type { LeaderboardTrader } from "@/hooks/use-leaderboard";
 
 type SortKey = "pnl" | "win_rate" | "total_value";
 type ActivityFilter = "ALL" | "WINS" | "LOSSES" | "WIPEOUTS" | "ENTRIES";

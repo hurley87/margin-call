@@ -1,8 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import { useQueryClient } from "@tanstack/react-query";
-import { createBrowserClient } from "@/lib/supabase/client";
+import { useEffect } from "react";
 
 interface RealtimeSubscription {
   table: string;
@@ -12,66 +10,18 @@ interface RealtimeSubscription {
   filter?: string;
 }
 
-function buildSubscriptionSignature(subscriptions: RealtimeSubscription[]) {
-  return JSON.stringify(
-    subscriptions.map((subscription) => ({
-      table: subscription.table,
-      filter: subscription.filter ?? null,
-      queryKeys: subscription.queryKeys,
-    }))
-  );
-}
-
 /**
- * Subscribe to Supabase Realtime changes and invalidate TanStack Query caches.
- * Replaces polling with push-based updates.
+ * Legacy shim retained while pages migrate fully to Convex subscriptions.
+ * No-op by design: Supabase realtime has been removed from runtime paths.
  */
 export function useRealtimeInvalidation(subscriptions: RealtimeSubscription[]) {
-  const queryClient = useQueryClient();
-  const subscriptionSignature = buildSubscriptionSignature(subscriptions);
-
-  // Stabilize the subscriptions array reference — only update when the
-  // serialized signature changes, so the effect doesn't re-run on every render.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const stableSubscriptions = useMemo(
-    () => subscriptions,
-    [subscriptionSignature]
-  );
-
   useEffect(() => {
-    if (stableSubscriptions.length === 0) return;
-
-    const supabase = createBrowserClient();
-    const channel = supabase.channel("realtime-invalidation");
-
-    for (const sub of stableSubscriptions) {
-      const config: {
-        event: "INSERT" | "UPDATE" | "DELETE" | "*";
-        schema: string;
-        table: string;
-        filter?: string;
-      } = {
-        event: "*",
-        schema: "public",
-        table: sub.table,
-      };
-      if (sub.filter) {
-        config.filter = sub.filter;
-      }
-
-      channel.on("postgres_changes" as never, config, () => {
-        for (const key of sub.queryKeys) {
-          queryClient.invalidateQueries({ queryKey: key });
-        }
-      });
+    if (subscriptions.length > 0 && process.env.NODE_ENV !== "production") {
+      console.warn(
+        "[use-realtime] Supabase realtime hooks are deprecated and now no-op."
+      );
     }
-
-    channel.subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient, stableSubscriptions]);
+  }, [subscriptions]);
 }
 
 /**

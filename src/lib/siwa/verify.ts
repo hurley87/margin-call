@@ -8,7 +8,6 @@ import {
   CONTRACTS_CHAIN_ID,
 } from "@/lib/contracts/escrow";
 import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
-import { createServerClient } from "@/lib/supabase/client";
 
 const nonceStore = createConvexNonceStore();
 
@@ -93,53 +92,21 @@ export async function verifySIWARequest(
       return { valid: false };
     }
 
-    // 5. Nonce consumption + DB trader lookup in parallel (independent I/O)
-    const supabase = createServerClient();
-    const [nonceOk, { data: trader }] = await Promise.all([
-      nonceStore.consume(fields.nonce),
-      supabase
-        .from("traders")
-        .select("cdp_owner_address, cdp_wallet_address")
-        .eq("token_id", fields.agentId)
-        .single(),
-    ]);
+    // 5. Nonce consumption
+    const nonceOk = await nonceStore.consume(fields.nonce);
 
     if (!nonceOk) {
       console.error("[SIWA verify] Invalid or already consumed nonce");
       return { valid: false };
     }
 
-    if (!trader) {
-      console.error(
-        "[SIWA verify] Trader not found for agentId:",
-        fields.agentId
-      );
-      return { valid: false };
-    }
-
-    // Check: recovered EOA must be the trader's CDP owner
-    if (
-      !trader.cdp_owner_address ||
-      getAddress(recoveredAddress) !== getAddress(trader.cdp_owner_address)
-    ) {
-      console.error("[SIWA verify] Signer is not the agent's authorized key");
-      return { valid: false };
-    }
-
-    // Check: SIWA address must be the trader's smart account (agent wallet)
-    if (
-      !trader.cdp_wallet_address ||
-      getAddress(fields.address) !== getAddress(trader.cdp_wallet_address)
-    ) {
-      console.error("[SIWA verify] SIWA address does not match agent wallet");
-      return { valid: false };
-    }
-
-    return {
-      valid: true,
-      agentId: fields.agentId,
-      address: fields.address,
-    };
+    // The legacy SIWA verify endpoint is deprecated in favor of Convex-native
+    // auth flows; keep this path closed during migration.
+    console.warn(
+      "[SIWA verify] deprecated legacy verification path invoked; rejecting."
+    );
+    void getAddress(recoveredAddress);
+    return { valid: false };
   } catch (err) {
     console.error("[SIWA verify] failed:", err);
     return { valid: false };

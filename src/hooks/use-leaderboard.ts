@@ -1,5 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
-import type { LeaderboardTrader } from "@/lib/supabase/leaderboard";
+
+export interface LeaderboardTrader {
+  id: string;
+  name: string;
+  status: "active" | "paused" | "wiped_out";
+  total_value: number;
+  total_pnl: number;
+  wins: number;
+  losses: number;
+  wipeouts: number;
+  win_rate: number;
+}
 
 export function useLeaderboard() {
   return useQuery({
