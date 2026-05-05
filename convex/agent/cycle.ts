@@ -12,24 +12,19 @@ import type { Mandate } from "./_types";
 // ── x402 deal-entry helper ───────────────────────────────────────────────────
 
 /**
- * Call the Next.js /api/deal/enter route with SIWA authentication.
+ * Call the Next.js /api/deal/enter route with SIWA authentication
+ * (`_agent_cycle: true`).
  *
  * Design:
- *  - The Convex action calls Next.js over HTTP; Next.js owns the x402
- *    verification and the Convex recordVerifiedEntry write. The cycle never
- *    directly writes paid/verified/settled state to Convex.
- *  - SIWA signing: the cycle holds CDP env vars and can instantiate the CDP
- *    SDK to get the trader's accounts, sign the SIWA message, and pass the
- *    auth headers to /api/deal/enter — identical to the legacy Next.js cycle.
- *  - Idempotency: /api/deal/enter calls recordVerifiedEntry which is a CAS on
- *    paymentId (enterTxHash ?? noop:<traderId>:<dealId>). Duplicate callbacks
- *    from a retry or a crashed cycle return the existing record without error.
+ *  - Entry transport only: Next.js performs on-chain `enterDeal` (if applicable)
+ *    and `recordVerifiedEntry`. It does **not** resolve outcomes for agent
+ *    cycles (#86) — Convex `resolveOutcome` + `dealOutcomes.apply` own that.
+ *  - Idempotency: replay-safe via Convex `dealEntries` + paymentId CAS.
  *
  * @param traderId  Convex trader id string
  * @param tokenId   ERC-8004 token id (used as agent identity in SIWA)
  * @param dealId    Convex deal id string
  * @param baseUrl   NEXT_PUBLIC_APP_URL (e.g. https://app.example.com)
- * @returns         The parsed JSON response from /api/deal/enter
  */
 async function callDealEnter(
   traderId: string,
@@ -37,14 +32,8 @@ async function callDealEnter(
   dealId: string,
   baseUrl: string
 ): Promise<{
-  outcome: {
-    trader_pnl_usdc: number;
-    rake_usdc: number;
-    narrative: string;
-    trader_wiped_out: boolean;
-    wipeout_reason: string | null;
-    payment_id: string;
-  };
+  entry: { payment_id: string; already_entered: boolean };
+  summary?: { enter_tx_hash: string | null; resolve_tx_hash: string | null };
 }> {
   // ── 1. Get CDP accounts (matches `getOrCreateTraderSmartAccount` pattern) ─
   const { CdpClient } = await import("@coinbase/cdp-sdk");
@@ -135,7 +124,24 @@ async function callDealEnter(
     throw err;
   }
 
-  return enterRes.json();
+  const json = (await enterRes.json()) as {
+    entry?: { payment_id: string; already_entered?: boolean };
+    agent_cycle?: boolean;
+    summary?: { enter_tx_hash: string | null; resolve_tx_hash: string | null };
+  };
+  const paymentId = json.entry?.payment_id;
+  if (!paymentId) {
+    throw new Error(
+      `[cycle] /api/deal/enter missing entry.payment_id in response`
+    );
+  }
+  return {
+    entry: {
+      payment_id: paymentId,
+      already_entered: json.entry?.already_entered ?? false,
+    },
+    summary: json.summary,
+  };
 }
 
 /**
@@ -171,8 +177,8 @@ async function callDealEnter(
  *   - Outcome resolution is keyed on (traderId, dealId), NOT generation, so a
  *     recovery cycle can finish stuck work without re-resolving.
  *
- * Scope (#86): deal selection + outcome resolution wired in.
- * Out of scope: x402 deal-entry HTTP call (#87).
+ * Scope (#86): deal selection + outcome resolution in Convex; HTTP entry is
+ * transport-only (no legacy LLM outcome in `/api/deal/enter` for agent).
  */
 export const cycle = internalAction({
   args: { traderId: v.id("traders") },
@@ -372,12 +378,9 @@ export const cycle = internalAction({
         correlationId,
       });
 
-      // ── 7. x402 deal entry via Next.js HTTP boundary ──────────────────────
-      // The cycle does NOT write paid/verified state directly to Convex.
-      // It calls /api/deal/enter over HTTP; Next.js verifies the x402 payment
-      // and then calls internal.deals.recordVerifiedEntry (single writer path).
-      // Idempotency: recordVerifiedEntry is a CAS on paymentId, so duplicate
-      // retries (e.g. after a cycle crash) are safe and return the existing id.
+      // ── 7. Deal entry via Next.js HTTP boundary (transport only, #86) ─────
+      // Next.js `handleAgentCycleDealEnter`: on-chain enterDeal + recordVerifiedEntry.
+      // Outcome / PnL / narrative are applied below via Convex only.
       const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
       const traderTokenId = trader.tokenId;
 
@@ -391,54 +394,57 @@ export const cycle = internalAction({
             bestDeal.id,
             appUrl
           );
-          entryPaymentId = entryResult.outcome.payment_id;
+          entryPaymentId = entryResult.entry.payment_id;
 
-          await ctx.runMutation(internal.agentActivityLog.append, {
-            traderId,
-            activityType: "enter",
-            message: `x402 deal entry complete (paymentId=${entryPaymentId}, pnl=$${entryResult.outcome.trader_pnl_usdc.toFixed(2)})`,
-            dealId: dealId as never,
-            metadata: { payment_id: entryPaymentId },
-            correlationId,
-          });
+          if (entryResult.entry.already_entered) {
+            await ctx.runMutation(internal.agentActivityLog.append, {
+              traderId,
+              activityType: "enter",
+              message: `Deal entry already recorded (paymentId=${entryPaymentId}); reconciling Convex outcome`,
+              dealId: dealId as never,
+              metadata: {
+                payment_id: entryPaymentId,
+                already_entered: true,
+              },
+              correlationId,
+            });
+          } else {
+            await ctx.runMutation(internal.agentActivityLog.append, {
+              traderId,
+              activityType: "enter",
+              message: `On-chain deal entry recorded (paymentId=${entryPaymentId}${entryResult.summary?.enter_tx_hash ? `, enterTx=${entryResult.summary.enter_tx_hash}` : ""}) — outcome resolves in Convex`,
+              dealId: dealId as never,
+              metadata: { payment_id: entryPaymentId },
+              correlationId,
+            });
+          }
         } catch (enterErr) {
           const httpStatus = (enterErr as Error & { httpStatus?: number })
             .httpStatus;
 
           if (httpStatus === 409) {
-            // Duplicate entry — deal already entered by this trader; skip cycle
+            // Legacy duplicate response: still run Convex outcome reconciliation
             await ctx.runMutation(internal.agentActivityLog.append, {
               traderId,
-              activityType: "skip",
-              message: "Deal already entered (duplicate); skipping cycle",
+              activityType: "enter",
+              message:
+                "HTTP 409 duplicate deal entry — reconciling Convex outcome",
               dealId: dealId as never,
               correlationId,
             });
+          } else {
+            // Non-409 error: log and re-throw so the lease is released
+            const msg =
+              enterErr instanceof Error ? enterErr.message : String(enterErr);
             await ctx.runMutation(internal.agentActivityLog.append, {
               traderId,
-              activityType: "cycle_end",
-              message: "Cycle ended — duplicate deal entry prevented",
+              activityType: "error",
+              message: `Deal entry HTTP failed: ${msg.slice(0, 500)}`,
+              dealId: dealId as never,
               correlationId,
             });
-            await ctx.runMutation(internal.agent.internal.markCycleComplete, {
-              traderId,
-              generation,
-              lastCycleAt: Date.now(),
-            });
-            return;
+            throw enterErr;
           }
-
-          // Non-409 error: log and re-throw so the lease is released
-          const msg =
-            enterErr instanceof Error ? enterErr.message : String(enterErr);
-          await ctx.runMutation(internal.agentActivityLog.append, {
-            traderId,
-            activityType: "error",
-            message: `x402 deal entry failed: ${msg.slice(0, 500)}`,
-            dealId: dealId as never,
-            correlationId,
-          });
-          throw enterErr;
         }
       } else {
         // tokenId not set — wallet not fully ready; skip the on-chain step

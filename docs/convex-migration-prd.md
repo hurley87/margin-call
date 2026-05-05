@@ -112,13 +112,15 @@ Convex stores the outcome of verification; **verification itself** remains in Ne
 
 - **`crons.ts`** runs every 30s and invokes an `internalAction` named `agent.scheduler`.
 - **`agent.scheduler`** queries traders whose `lastCycleAt` is stale and calls `ctx.scheduler.runAfter(0, internal.agent.cycle, { traderId })` per trader. No HMAC, no self-signed HTTP.
-- **`agent.cycle`** is an `internalAction` that mirrors the current `src/lib/agent/cycle.ts` flow: load trader + mandate → run deal selection → optionally request approval → enter deal (calls Next.js x402 route over HTTP from the action) → write outcome via mutation. **Every step that can retry MUST be idempotent** (see [Idempotency requirements](#idempotency-requirements)).
+- **`agent.cycle`** is an `internalAction` that mirrors the current `src/lib/agent/cycle.ts` flow: load trader + mandate → run deal selection → optionally request approval → **deal entry** (calls Next.js over HTTP from the action; see below) → **resolve outcome + apply PnL** exclusively via Convex mutations (`dealOutcomes`, `traders.applyOutcomeBalance`, activity log). **Every step that can retry MUST be idempotent** (see [Idempotency requirements](#idempotency-requirements)).
+- **Single outcome resolution (issue #86):** `POST /api/deal/enter` with `_agent_cycle: true` performs **on-chain `enterDeal` + `recordVerifiedEntry` only** (Convex-loaded trader/deal; no Supabase `deal_outcomes` check, no LLM in that route). GPT outcome + narrative run **only** in `internal.agent.cycle` via `convex/agent/outcomeResolver.ts`. HTTP `409` duplicate entry or idempotent replay must **not** skip Convex outcome reconciliation—see `convex/agent/cycle.ts`.
 - **Deal-selection module** stays as a pure function in `src/lib/agent/deal-selection.ts` (or moves under `convex/lib/`); takes trader state + deal candidates + LLM client and returns a pick. Untouched by the migration except for its data-source adapter.
 - **Outcome resolver** (GPT-5 mini call) stays pure; called from the cycle action.
 
 ### HTTP boundary (Next.js routes that survive)
 
 - `POST /api/deal/enter` — x402-protected; remains a Next.js route. **Verify payment first** at the HTTP boundary, then call a **dedicated Convex server-side function** to record the verified paid deal entry (idempotent on settlement id / request key). The client cannot mark deals paid or settled directly in Convex.
+- **Agent cycle (`_agent_cycle`):** entry-only path in the same route loads **Convex** trader + deal (admin client), performs **on-chain `enterDeal`** when applicable, and writes **`dealEntries`** via `internal.deals.recordVerifiedEntry`. It does **not** run the LLM outcome path or write Supabase outcomes; **`internal.agent.cycle`** owns outcome resolution after the HTTP call returns.
 - SIWA routes (`/api/siwa/*`) — remain Next.js, write nonces to Convex.
 - Webhook receivers (if any) — remain Next.js.
 - All other routes under `src/app/api/{trader,desk,deal,activity,leaderboard,narrative,prompt,agent}` are deleted; their logic moves to Convex queries/mutations/actions.
