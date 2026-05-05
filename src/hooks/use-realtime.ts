@@ -158,34 +158,6 @@ export function useTraderRealtime(traderId: string) {
 }
 
 /**
- * Subscribe to realtime updates for the dashboard (portfolio-level).
- */
-export function useDashboardRealtime() {
-  useRealtimeInvalidation([
-    {
-      table: "deal_outcomes",
-      queryKeys: [["portfolio"]],
-    },
-    {
-      table: "traders",
-      queryKeys: [["traders"], ["portfolio"]],
-    },
-    {
-      table: "deals",
-      queryKeys: [["deals"], ["my-deals"], ["portfolio"]],
-    },
-    {
-      table: "deal_approvals",
-      queryKeys: [["pending-approvals"]],
-    },
-    {
-      table: "agent_activity_log",
-      queryKeys: [["activity-feed"]],
-    },
-  ]);
-}
-
-/**
  * Subscribe to realtime updates for the Market Wire narrative.
  */
 export function useNarrativeRealtime() {

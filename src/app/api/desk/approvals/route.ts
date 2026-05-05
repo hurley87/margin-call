@@ -1,23 +1,8 @@
-import { NextRequest, NextResponse } from "next/server";
-import { verifyPrivyToken } from "@/lib/privy/server";
-import { listPendingApprovalsByOwner } from "@/lib/supabase/approvals";
+import { convexDeprecatedResponse } from "@/lib/http/convex-deprecated-response";
 
-export async function GET(request: NextRequest) {
-  try {
-    const { user } = await verifyPrivyToken(request);
-    const walletAddress = user.wallet?.address;
-    if (!walletAddress) {
-      return NextResponse.json(
-        { error: "No wallet linked to this account" },
-        { status: 400 }
-      );
-    }
-
-    const approvals = await listPendingApprovalsByOwner(walletAddress);
-
-    return NextResponse.json({ approvals });
-  } catch (e) {
-    const message = e instanceof Error ? e.message : "Unauthorized";
-    return NextResponse.json({ error: message }, { status: 401 });
-  }
+/** @deprecated Use Convex `api.dealApprovals.listPending` (reactive subscription). */
+export function GET() {
+  return convexDeprecatedResponse(
+    "Deprecated: use Convex api.dealApprovals.listPending from the client."
+  );
 }

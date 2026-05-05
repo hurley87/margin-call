@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
-import { usePrivy } from "@privy-io/react-auth";
-import { authFetch } from "@/lib/api";
+"use client";
+
+import { useQuery as useConvexQuery } from "convex/react";
+import { api } from "../../convex/_generated/api";
 
 export interface TraderSummary {
   id: string;
@@ -30,16 +31,37 @@ export interface Portfolio {
   stats: PortfolioStats;
 }
 
-export function usePortfolio() {
-  const { authenticated } = usePrivy();
+export function usePortfolio(): {
+  data: Portfolio | undefined;
+  isLoading: boolean;
+} {
+  const result = useConvexQuery(api.portfolio.forDesk);
 
-  return useQuery({
-    queryKey: ["portfolio"],
-    queryFn: async () => {
-      const res = await authFetch("/api/desk/portfolio");
-      if (!res.ok) throw new Error("Failed to load portfolio");
-      return (await res.json()) as Portfolio;
+  if (result === undefined) {
+    return { data: undefined, isLoading: true };
+  }
+
+  const portfolio: Portfolio = {
+    total_value_usdc: result.totalValueUsdc,
+    traders: result.traders.map((t) => ({
+      id: String(t.id),
+      name: t.name,
+      status: t.status,
+      escrow_usdc: t.escrowUsdc,
+      asset_value_usdc: t.assetValueUsdc,
+      total_value_usdc: t.totalValueUsdc,
+    })),
+    pnl_history: result.pnlHistory.map((p) => ({
+      timestamp: new Date(p.createdAt).toISOString(),
+      cumulative_pnl: p.cumulativePnl,
+    })),
+    stats: {
+      total_wins: result.stats.totalWins,
+      total_losses: result.stats.totalLosses,
+      total_wipeouts: result.stats.totalWipeouts,
+      total_pnl: result.stats.totalPnl,
     },
-    enabled: authenticated,
-  });
+  };
+
+  return { data: portfolio, isLoading: false };
 }

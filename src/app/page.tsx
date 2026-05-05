@@ -6,12 +6,10 @@ import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { useDeskManager } from "@/hooks/use-desk";
 import { usePortfolio } from "@/hooks/use-portfolio";
-import { useTraders } from "@/hooks/use-traders";
 
 import { usePendingApprovals } from "@/hooks/use-approvals";
 import { useMyDeals } from "@/hooks/use-deals";
 import type { Deal } from "@/hooks/use-deals";
-import { useDashboardRealtime } from "@/hooks/use-realtime";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import { Nav } from "@/components/nav";
@@ -99,13 +97,24 @@ export default function Home() {
   );
 }
 
+function traderStatusDotClass(status: string) {
+  if (status === "active") return "bg-[var(--t-green)]";
+  if (status === "paused") return "bg-[var(--t-amber)]";
+  return "bg-[var(--t-red)]";
+}
+
 /* ── Dashboard ── */
 
 function Dashboard({ displayName }: { displayName: string }) {
-  useDashboardRealtime();
-
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
-  const { data: traders } = useTraders();
+  const traders = useMemo(() => {
+    if (!portfolio) return undefined;
+    return portfolio.traders.map((t) => ({
+      id: t.id,
+      name: t.name,
+      status: t.status,
+    }));
+  }, [portfolio]);
   const { data: approvals } = usePendingApprovals();
   const { data: deals } = useMyDeals();
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
@@ -228,13 +237,7 @@ function Dashboard({ displayName }: { displayName: string }) {
                 }`}
               >
                 <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${
-                    t.status === "active"
-                      ? "bg-[var(--t-green)]"
-                      : t.status === "paused"
-                        ? "bg-[var(--t-amber)]"
-                        : "bg-[var(--t-red)]"
-                  }`}
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${traderStatusDotClass(t.status)}`}
                 />
                 {t.name}
               </button>
@@ -368,13 +371,7 @@ function TraderRoster({
             >
               <div className="flex items-center gap-2">
                 <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${
-                    t.status === "active"
-                      ? "bg-[var(--t-green)]"
-                      : t.status === "paused"
-                        ? "bg-[var(--t-amber)]"
-                        : "bg-[var(--t-red)]"
-                  }`}
+                  className={`inline-block h-1.5 w-1.5 rounded-full ${traderStatusDotClass(t.status)}`}
                 />
                 <span className="text-[var(--t-text)]">{t.name}</span>
               </div>
