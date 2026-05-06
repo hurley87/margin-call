@@ -10,7 +10,7 @@ import {
   MIN_POT_AMOUNT,
   MIN_ENTRY_COST,
 } from "@/lib/constants";
-import type { FeedHeadline } from "@/hooks/use-narrative";
+import type { FeedHeadline } from "./wire-feed";
 
 const STEP_LABELS: Record<string, string> = {
   approving: "APPROVING USDC SPEND...",

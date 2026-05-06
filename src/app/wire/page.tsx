@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { useQuery } from "convex/react";
 import { Dialog } from "@base-ui/react/dialog";
-import { useNarrativeFeed } from "@/hooks/use-narrative";
+import { api } from "../../../convex/_generated/api";
 import { Nav } from "@/components/nav";
 import { WireFeed } from "@/components/wire/wire-feed";
 import { WireStatsBar } from "@/components/wire/wire-stats-bar";
@@ -31,7 +32,8 @@ const HOW_DEALS_SECTIONS = [
 ] as const;
 
 export default function WirePage() {
-  const { data: feed, isLoading } = useNarrativeFeed();
+  const feed = useQuery(api.marketNarratives.feedHeadlines, { maxEpochs: 20 });
+  const isLoading = feed === undefined;
   const [howDealsOpen, setHowDealsOpen] = useState(false);
 
   const latestMood = feed?.[0]?.mood;

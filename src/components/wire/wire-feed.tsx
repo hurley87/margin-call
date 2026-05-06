@@ -4,7 +4,16 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useHeadlineDeals } from "@/hooks/use-deals";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import { WirePost } from "./wire-post";
-import type { FeedHeadline } from "@/hooks/use-narrative";
+
+export interface FeedHeadline {
+  headline: string;
+  body: string;
+  category: string;
+  epoch: number;
+  created_at: string;
+  mood: string;
+  sec_heat: number;
+}
 
 export function WireFeed({ feed }: { feed: FeedHeadline[] }) {
   const { data: headlineDealsMap } = useHeadlineDeals();

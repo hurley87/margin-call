@@ -5,7 +5,7 @@ import Link from "next/link";
 import { WireSourceLine } from "./wire-sources";
 import { CreateDealDialog } from "./create-deal-dialog";
 import type { Deal } from "@/hooks/use-deals";
-import type { FeedHeadline } from "@/hooks/use-narrative";
+import type { FeedHeadline } from "./wire-feed";
 
 function DealBadge({ deal }: { deal: Deal }) {
   return (
