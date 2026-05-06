@@ -6,6 +6,8 @@ import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useMutation } from "convex/react";
+import { api } from "../../../../convex/_generated/api";
 import { useDeal } from "@/hooks/use-deals";
 import {
   ESCROW_ADDRESS,
@@ -293,20 +295,18 @@ function CloseDealButton({
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
   });
+  const setStatusByOnChainId = useMutation(api.deals.setStatusByOnChainId);
 
   useEffect(() => {
     if (!isSuccess || !txHash || syncedRef.current) return;
     syncedRef.current = true;
-    void fetch("/api/deal/sync", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ on_chain_deal_id: onChainDealId, txHash }),
-    }).then(async (res) => {
-      if (!res.ok) {
+    void setStatusByOnChainId({ onChainDealId, status: "closed" }).catch(
+      (err) => {
+        console.error("setStatusByOnChainId failed:", err);
         syncedRef.current = false;
       }
-    });
-  }, [isSuccess, txHash, onChainDealId]);
+    );
+  }, [isSuccess, txHash, onChainDealId, setStatusByOnChainId]);
 
   function handleClose() {
     writeContract({

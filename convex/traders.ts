@@ -122,6 +122,30 @@ export const updateMandate = mutation({
   },
 });
 
+/** Public: set status (pause/resume/revive) for an owned trader. */
+export const setStatus = mutation({
+  args: {
+    traderId: v.id("traders"),
+    status: v.union(
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("wiped_out")
+    ),
+  },
+  handler: async (ctx, { traderId, status }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const trader = await ctx.db.get(traderId);
+    if (!trader || trader.ownerSubject !== identity.subject) {
+      throw new Error("Forbidden");
+    }
+
+    await ctx.db.patch(traderId, { status, updatedAt: Date.now() });
+    return { ok: true as const };
+  },
+});
+
 /** Public: create a trader, schedule wallet creation. Idempotent on (ownerSubject, name). */
 export const create = mutation({
   args: {

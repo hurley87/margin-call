@@ -1,4 +1,9 @@
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { v } from "convex/values";
 
 // ── Public queries (auth-checked) ──────────────────────────────────────────
@@ -55,6 +60,90 @@ export const listMine = query({
       .withIndex("byCreator", (q) => q.eq("creatorDeskManagerId", dm._id))
       .order("desc")
       .collect();
+  },
+});
+
+// ── Public mutations (auth-checked) ────────────────────────────────────────
+
+/**
+ * Public: record a user-created on-chain deal in Convex.
+ * Idempotent on `onChainDealId` — repeat calls return the existing deal id.
+ */
+export const recordOnChainCreation = mutation({
+  args: {
+    onChainDealId: v.number(),
+    onChainTxHash: v.string(),
+    prompt: v.string(),
+    potUsdc: v.number(),
+    entryCostUsdc: v.number(),
+    sourceHeadline: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const dm = await ctx.db
+      .query("deskManagers")
+      .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
+      .unique();
+    if (!dm) throw new Error("Desk manager not found");
+
+    const existing = await ctx.db
+      .query("deals")
+      .withIndex("byOnChainDealId", (q) =>
+        q.eq("onChainDealId", args.onChainDealId)
+      )
+      .unique();
+    if (existing) return existing._id;
+
+    const now = Date.now();
+    return await ctx.db.insert("deals", {
+      creatorDeskManagerId: dm._id,
+      creatorType: "desk_manager",
+      prompt: args.prompt,
+      potUsdc: args.potUsdc,
+      entryCostUsdc: args.entryCostUsdc,
+      status: "open",
+      onChainDealId: args.onChainDealId,
+      onChainTxHash: args.onChainTxHash,
+      sourceHeadline: args.sourceHeadline,
+      entryCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});
+
+/** Public: set status of a user-created deal by its on-chain id. */
+export const setStatusByOnChainId = mutation({
+  args: {
+    onChainDealId: v.number(),
+    status: v.union(
+      v.literal("open"),
+      v.literal("closed"),
+      v.literal("depleted")
+    ),
+  },
+  handler: async (ctx, { onChainDealId, status }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const deal = await ctx.db
+      .query("deals")
+      .withIndex("byOnChainDealId", (q) => q.eq("onChainDealId", onChainDealId))
+      .unique();
+    if (!deal) throw new Error("Deal not found");
+
+    const dm = await ctx.db
+      .query("deskManagers")
+      .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
+      .unique();
+    if (!dm || deal.creatorDeskManagerId !== dm._id) {
+      throw new Error("Forbidden");
+    }
+
+    await ctx.db.patch(deal._id, { status, updatedAt: Date.now() });
+    return { ok: true as const };
   },
 });
 

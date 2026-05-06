@@ -1,11 +1,10 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { useQuery as useConvexQuery } from "convex/react";
+import { useMutation, useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { Doc } from "../../convex/_generated/dataModel";
-import { authFetch } from "@/lib/api";
 
 /** Trader inventory row (Convex `assets` table, UI shape). */
 export interface Asset {
@@ -148,7 +147,8 @@ export function useTraderOutcomes(traderId: string): {
   return { data, isLoading: false, isError: false };
 }
 
-function useTraderStatusMutation(action: "pause" | "resume" | "revive") {
+function useTraderStatusMutation(status: "active" | "paused") {
+  const setStatus = useMutation(api.traders.setStatus);
   const [isPending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
@@ -156,16 +156,7 @@ function useTraderStatusMutation(action: "pause" | "resume" | "revive") {
     (traderId: string) => {
       setPending(true);
       setError(null);
-      void authFetch(`/api/trader/${traderId}/${action}`, { method: "POST" })
-        .then(async (res) => {
-          if (!res.ok) {
-            const data = (await res.json().catch(() => ({}))) as {
-              error?: string;
-            };
-            throw new Error(data.error ?? `Failed to ${action}`);
-          }
-          return res.json();
-        })
+      void setStatus({ traderId: traderId as Id<"traders">, status })
         .catch((e: unknown) => {
           setError(e instanceof Error ? e : new Error(String(e)));
         })
@@ -173,25 +164,20 @@ function useTraderStatusMutation(action: "pause" | "resume" | "revive") {
           setPending(false);
         });
     },
-    [action]
+    [setStatus, status]
   );
 
-  return {
-    mutate,
-    isPending,
-    isError: !!error,
-    error,
-  };
+  return { mutate, isPending, isError: !!error, error };
 }
 
 export function usePauseTrader() {
-  return useTraderStatusMutation("pause");
+  return useTraderStatusMutation("paused");
 }
 
 export function useResumeTrader() {
-  return useTraderStatusMutation("resume");
+  return useTraderStatusMutation("active");
 }
 
 export function useReviveTrader() {
-  return useTraderStatusMutation("revive");
+  return useTraderStatusMutation("active");
 }

@@ -3,13 +3,15 @@
 import { useState, useCallback } from "react";
 import { useWriteContract } from "wagmi";
 import { erc20Abi, parseUnits, decodeEventLog } from "viem";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import type { Id } from "../../convex/_generated/dataModel";
 import {
   ESCROW_ADDRESS,
   USDC_SEPOLIA_ADDRESS,
   CONTRACTS_CHAIN_ID,
   escrowAbi,
 } from "@/lib/contracts/escrow";
-import { authFetch } from "@/lib/api";
 import { makePublicClient } from "@/lib/contracts/client";
 
 type CreateDealStep = "idle" | "approving" | "creating" | "syncing" | "done";
@@ -19,7 +21,7 @@ interface CreateDealState {
   approveHash?: `0x${string}`;
   createHash?: `0x${string}`;
   dealId?: bigint;
-  supabaseId?: string;
+  convexDealId?: Id<"deals">;
   error?: string;
 }
 
@@ -29,6 +31,8 @@ export function useCreateDeal() {
   const { writeContractAsync: writeApprove } = useWriteContract();
 
   const { writeContractAsync: writeCreateDeal } = useWriteContract();
+
+  const recordOnChainCreation = useMutation(api.deals.recordOnChainCreation);
 
   const createDeal = useCallback(
     async (
@@ -94,28 +98,34 @@ export function useCreateDeal() {
           }
         }
 
-        // Step 3: Sync to Supabase
+        // Step 3: Record on-chain deal in Convex
         setState((s) => ({ ...s, step: "syncing", dealId }));
 
-        let supabaseId: string | undefined;
-        try {
-          const syncRes = await authFetch("/api/deal/sync", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              txHash: createHash,
-              source_headline: sourceHeadline,
-            }),
-          });
-          const syncData = await syncRes.json();
-          supabaseId = syncData.supabaseId ?? undefined;
-        } catch {
-          // Sync failure is non-critical
+        let convexDealId: Id<"deals"> | undefined;
+        if (dealId !== undefined) {
+          try {
+            convexDealId = await recordOnChainCreation({
+              onChainDealId: Number(dealId),
+              onChainTxHash: createHash,
+              prompt,
+              potUsdc: potAmountUsdc,
+              entryCostUsdc,
+              sourceHeadline,
+            });
+          } catch (syncErr) {
+            console.error("recordOnChainCreation failed:", syncErr);
+          }
         }
 
-        setState({ step: "done", approveHash, createHash, dealId, supabaseId });
+        setState({
+          step: "done",
+          approveHash,
+          createHash,
+          dealId,
+          convexDealId,
+        });
 
-        return { dealId, createHash, supabaseId };
+        return { dealId, createHash, convexDealId };
       } catch (err) {
         const message =
           err instanceof Error ? err.message : "Transaction failed";
@@ -123,7 +133,7 @@ export function useCreateDeal() {
         throw err;
       }
     },
-    [writeApprove, writeCreateDeal]
+    [writeApprove, writeCreateDeal, recordOnChainCreation]
   );
 
   const reset = useCallback(() => {
@@ -137,7 +147,7 @@ export function useCreateDeal() {
     approveHash: state.approveHash,
     createHash: state.createHash,
     dealId: state.dealId,
-    supabaseId: state.supabaseId,
+    convexDealId: state.convexDealId,
     error: state.error,
     isLoading: state.step !== "idle" && state.step !== "done",
   };

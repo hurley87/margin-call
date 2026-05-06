@@ -18,8 +18,6 @@ import {
   checkRateLimit,
   getClientIdentifier,
 } from "@/lib/rate-limit";
-import { convexDeprecatedResponse } from "@/lib/http/convex-deprecated-response";
-
 const LEGACY_PRIVY_ENTRY_MESSAGE =
   "Deprecated: Privy + Supabase deal enter has been removed; use Convex-backed flows. Agent cycles still use this route with SIWA (`_agent_cycle: true`).";
 
@@ -256,7 +254,10 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    return convexDeprecatedResponse(LEGACY_PRIVY_ENTRY_MESSAGE);
+    return NextResponse.json(
+      { error: LEGACY_PRIVY_ENTRY_MESSAGE },
+      { status: 410 }
+    );
   } catch (e) {
     console.error("Deal entry error:", e);
     const message = e instanceof Error ? e.message : "Internal server error";

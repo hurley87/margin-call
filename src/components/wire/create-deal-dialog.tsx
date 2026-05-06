@@ -75,7 +75,7 @@ export function CreateDealDialog({
       );
       onOpenChange(false);
       router.push(
-        result?.supabaseId ? `/deals/${result.supabaseId}` : "/deals"
+        result?.convexDealId ? `/deals/${result.convexDealId}` : "/deals"
       );
     } catch {
       setState("configure");

@@ -30,7 +30,6 @@ import { FEED_DISPLAY } from "@/components/feed-line";
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
-import { authFetch } from "@/lib/api";
 import { shortAssetLabel } from "@/lib/format-asset-label";
 
 const ZERO = BigInt(0);
@@ -83,7 +82,6 @@ function CollapsibleSection({
 export default function TraderDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data: trader, isLoading, error } = useTrader(id);
-  const syncInFlightRef = useRef(false);
 
   const { data: escrowBalance, refetch: refetchBalance } = useReadContract({
     address: ESCROW_ADDRESS,
@@ -102,29 +100,6 @@ export default function TraderDetailPage() {
   const hasAutoOpened = useRef(false);
   const balanceUsdc =
     escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
-  const cachedEscrowUsdc =
-    typeof trader?.escrow_balance_usdc === "number"
-      ? trader.escrow_balance_usdc
-      : null;
-
-  useEffect(() => {
-    if (!trader) return;
-    if (balanceUsdc === null || cachedEscrowUsdc === null) return;
-    if (Math.abs(balanceUsdc - cachedEscrowUsdc) < 0.000001) return;
-    if (syncInFlightRef.current) return;
-
-    syncInFlightRef.current = true;
-
-    void authFetch(`/api/trader/${id}/balance`, { method: "POST" })
-      .then(async (res) => {
-        if (!res.ok) throw new Error("Balance sync failed");
-      })
-      .catch((err) => console.error("Balance sync error:", err))
-      .finally(() => {
-        syncInFlightRef.current = false;
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, balanceUsdc, cachedEscrowUsdc]);
 
   const unfunded = escrowBalance === undefined || escrowBalance === ZERO;
   const isNewTrader = !!trader && trader.status === "paused" && unfunded;
@@ -230,16 +205,12 @@ export default function TraderDetailPage() {
           open
           onOpenChange={setWalletOpen}
           traderId={trader.token_id}
-          supabaseId={id}
           walletUsdc={walletUsdc}
           escrowUsdc={balanceUsdc}
           tbaAddress={trader.tba_address}
           ownerAddress={trader.owner_address}
           isNewTrader={isNewTrader}
-          onSuccess={() => {
-            refetchBalance();
-            authFetch(`/api/trader/${id}/balance`, { method: "POST" });
-          }}
+          onSuccess={refetchBalance}
         />
       )}
     </div>
