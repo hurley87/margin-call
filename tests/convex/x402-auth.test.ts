@@ -12,11 +12,11 @@
 
 import { describe, it, expect } from "vitest";
 import { convexTest } from "convex-test";
-import schema from "../schema";
-import { internal, api } from "../_generated/api";
+import schema from "../../convex/schema";
+import { internal, api } from "../../convex/_generated/api";
 import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
 
-const modules = import.meta.glob("../**/*.ts");
+const modules = import.meta.glob("../../convex/**/*.ts");
 
 // ── x402 verified path ────────────────────────────────────────────────────────
 

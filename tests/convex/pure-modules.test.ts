@@ -11,9 +11,12 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { evaluateDeals } from "../agent/_evaluator";
-import { DealEvaluationSchema, DealOutcomeSchema } from "../agent/_schemas";
-import type { Deal, Mandate } from "../agent/_types";
+import { evaluateDeals } from "../../convex/agent/_evaluator";
+import {
+  DealEvaluationSchema,
+  DealOutcomeSchema,
+} from "../../convex/agent/_schemas";
+import type { Deal, Mandate } from "../../convex/agent/_types";
 
 // ── evaluateDeals: mandate filter ─────────────────────────────────────────────
 

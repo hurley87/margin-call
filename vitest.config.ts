@@ -12,7 +12,7 @@ export default defineConfig({
     include: [
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
-      "convex/__tests__/**/*.test.ts",
+      "tests/convex/**/*.test.ts",
     ],
     exclude: ["**/node_modules/**", "contracts/lib/**"],
   },

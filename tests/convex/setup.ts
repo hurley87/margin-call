@@ -10,11 +10,11 @@
  * or `internal.traders.markCreating` when testing the wallet state machine.
  */
 import { convexTest } from "convex-test";
-import schema from "../schema";
+import schema from "../../convex/schema";
 
-// Module glob — must be called from within the convex directory tree.
-// We use a relative glob evaluated at runtime by Vite/Vitest.
-const modules = import.meta.glob("../**/*.ts");
+// Module glob — must cover the Convex backend tree under convex/ (not tests/).
+// Evaluated at runtime by Vite/Vitest from tests/convex.
+const modules = import.meta.glob("../../convex/**/*.ts");
 
 export function makeT() {
   return convexTest(schema, modules);
@@ -24,7 +24,7 @@ export function makeT() {
 
 import type { TestConvex } from "convex-test";
 import type { DataModelFromSchemaDefinition } from "convex/server";
-import type schema_ from "../schema";
+import type schema_ from "../../convex/schema";
 
 type T = TestConvex<typeof schema_>;
 

@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:convex": "vitest run convex/__tests__",
+    "test:convex": "vitest run tests/convex",
     "prepare": "husky"
   },
   "dependencies": {
