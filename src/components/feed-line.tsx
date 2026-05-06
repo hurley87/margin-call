@@ -25,6 +25,7 @@ export const FEED_DISPLAY: Record<string, { label: string; color: string }> = {
   approved: { label: "OK", color: "text-[var(--t-green)]" },
   rejected: { label: "DENIED", color: "text-[var(--t-red)]" },
   error: { label: "ERR", color: "text-[var(--t-red)]" },
+  cycle_error: { label: "ERR", color: "text-[var(--t-red)]" },
   cycle_end: { label: "DONE", color: "text-[var(--t-muted)]" },
 };
 

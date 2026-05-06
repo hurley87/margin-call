@@ -1,11 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
-import { authFetch } from "@/lib/api";
 
 export interface Trader {
   id: string;
@@ -119,56 +117,20 @@ export function useTrader(id: string) {
   };
 }
 
-export interface TraderHistoryEvent {
-  type: "deposit" | "withdrawal" | "enter" | "resolve";
-  block: number;
-  txHash: string;
-  amount?: number;
-  dealId?: number;
-  pnl?: number;
-  rake?: number;
-}
+export type TraderHistoryEvent = Doc<"agentActivityLog">;
 
 export function useTraderHistory(id: string) {
-  const [data, setData] = useState<TraderHistoryEvent[] | undefined>(undefined);
-  const [isLoading, setLoading] = useState(() => Boolean(id));
-  const [error, setError] = useState<Error | null>(null);
+  const traderId = id as Id<"traders">;
+  const results = useQuery(
+    api.agentActivityLog.listByTrader,
+    id ? { traderId, limit: 100 } : "skip"
+  );
 
-  useEffect(() => {
-    if (!id) return;
+  if (!id) return { data: undefined, isLoading: false, error: null };
 
-    let cancelled = false;
-
-    queueMicrotask(() => {
-      if (cancelled) return;
-      setLoading(true);
-      setError(null);
-
-      void authFetch(`/api/trader/${id}/history`)
-        .then(async (res) => {
-          if (!res.ok) throw new Error("Failed to load history");
-          const body = (await res.json()) as { events?: TraderHistoryEvent[] };
-          if (!cancelled) setData(body.events ?? []);
-        })
-        .catch((e: unknown) => {
-          if (!cancelled) {
-            setError(e instanceof Error ? e : new Error(String(e)));
-            setData(undefined);
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
-
-  if (!id) {
-    return { data: undefined, isLoading: false, error: null };
-  }
-
-  return { data, isLoading, error };
+  return {
+    data: results,
+    isLoading: results === undefined,
+    error: null,
+  };
 }

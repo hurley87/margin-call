@@ -26,6 +26,7 @@ import {
   usePendingApprovals,
 } from "@/hooks/use-approvals";
 import { Nav } from "@/components/nav";
+import { FEED_DISPLAY } from "@/components/feed-line";
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
@@ -545,80 +546,60 @@ function OutcomeCard({
   );
 }
 
-/* ── On-Chain Activity History ── */
+/* ── Activity History ── */
 
 function formatEvent(event: TraderHistoryEvent) {
-  switch (event.type) {
-    case "deposit":
-      return {
-        label: "Deposit",
-        detail: `+${event.amount} USDC`,
-        color: "text-[var(--t-green)]",
-      };
-    case "withdrawal":
-      return {
-        label: "Withdrawal",
-        detail: `-${event.amount} USDC`,
-        color: "text-[var(--t-red)]",
-      };
-    case "enter":
-      return {
-        label: "Entered Deal",
-        detail: `Deal #${event.dealId}`,
-        color: "text-[var(--t-text)]",
-      };
-    case "resolve": {
-      const pnl = event.pnl ?? 0;
-      const net = pnl > 0 ? pnl - (event.rake ?? 0) : pnl;
-      const sign = net >= 0 ? "+" : "";
-      return {
-        label: pnl > 0 ? "Win" : pnl < 0 ? "Loss" : "Break-even",
-        detail: `${sign}${net.toFixed(6)} USDC (Deal #${event.dealId})`,
-        color:
-          pnl > 0
-            ? "text-[var(--t-green)]"
-            : pnl < 0
-              ? "text-[var(--t-red)]"
-              : "text-[var(--t-text)]",
-      };
-    }
+  const display = FEED_DISPLAY[event.activityType];
+  const label =
+    display?.label ?? event.activityType.replace(/_/g, " ").toUpperCase();
+  const color = display?.color ?? "text-[var(--t-muted)]";
+
+  if (event.activityType === "win" || event.activityType === "loss") {
+    const meta = event.metadata as Record<string, unknown> | undefined;
+    const pnl = typeof meta?.pnl === "number" ? meta.pnl : null;
+    const detail =
+      pnl !== null
+        ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} USDC`
+        : event.message;
+    return { label, detail, color };
   }
+
+  return { label, detail: event.message, color };
 }
 
 function ActivityHistory({ id }: { id: string }) {
   const { data: events, isLoading } = useTraderHistory(id);
 
   return (
-    <CollapsibleSection title="On-Chain History">
+    <CollapsibleSection title="Activity Log">
       {isLoading ? (
         <p className="text-sm text-[var(--t-muted)]">Loading...</p>
       ) : !events || events.length === 0 ? (
-        <p className="text-sm text-[var(--t-muted)]">
-          No on-chain activity yet.
-        </p>
+        <p className="text-sm text-[var(--t-muted)]">No activity yet.</p>
       ) : (
         <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
-          {events.map((event, i) => {
+          {events.map((event) => {
             const { label, detail, color } = formatEvent(event);
             return (
               <div
-                key={`${event.txHash}-${i}`}
+                key={event._id}
                 className="flex items-center justify-between bg-[var(--t-bg)] px-3 py-2"
               >
                 <div className="flex items-center gap-3">
-                  <span className="w-24 text-xs font-medium text-[var(--t-muted)]">
+                  <span className="w-24 shrink-0 text-xs font-medium capitalize text-[var(--t-muted)]">
                     {label}
                   </span>
-                  <span className={`text-sm ${color}`}>{detail}</span>
+                  <span className={`text-sm ${color} line-clamp-1`}>
+                    {detail}
+                  </span>
                 </div>
-                <a
-                  href={`https://sepolia.basescan.org/tx/${event.txHash}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs text-[var(--t-muted)] hover:text-[var(--t-accent)]"
-                >
-                  tx
-                </a>
+                <span className="shrink-0 text-xs text-[var(--t-muted)]">
+                  {new Date(event.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                  })}
+                </span>
               </div>
             );
           })}
