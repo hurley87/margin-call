@@ -56,7 +56,11 @@ export function useTraders() {
     authenticated && ready ? {} : "skip"
   );
 
-  if (!authenticated || !ready) {
+  if (!ready) {
+    return { data: undefined, isLoading: true, isError: false };
+  }
+
+  if (!authenticated) {
     return { data: undefined, isLoading: false, isError: false };
   }
 
@@ -80,7 +84,7 @@ export function useTrader(id: string) {
   );
   const dm = useQuery(
     api.deskManagers.getMe,
-    authenticated && ready ? {} : "skip"
+    id && authenticated && ready ? {} : "skip"
   );
 
   if (!id) {
@@ -91,13 +95,15 @@ export function useTrader(id: string) {
     };
   }
 
-  if (!authenticated || !ready) {
+  if (!ready) {
+    return { data: undefined, isLoading: true, error: null };
+  }
+
+  if (!authenticated) {
     return { data: undefined, isLoading: false, error: null };
   }
 
-  const waitingDesk = dm === undefined;
-
-  if (traderDoc === undefined || waitingDesk) {
+  if (traderDoc === undefined || dm === undefined) {
     return { data: undefined, isLoading: true, error: null };
   }
 
@@ -120,10 +126,9 @@ export function useTrader(id: string) {
 export type TraderHistoryEvent = Doc<"agentActivityLog">;
 
 export function useTraderHistory(id: string) {
-  const traderId = id as Id<"traders">;
   const results = useQuery(
     api.agentActivityLog.listByTrader,
-    id ? { traderId, limit: 100 } : "skip"
+    id ? { traderId: id as Id<"traders">, limit: 100 } : "skip"
   );
 
   if (!id) return { data: undefined, isLoading: false, error: null };
