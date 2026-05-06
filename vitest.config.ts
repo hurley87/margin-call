@@ -7,7 +7,7 @@ export default defineConfig({
     // Skip scheduling wallet:createForTrader during Vitest — convex-test executes
     // that internal action with incomplete transaction context (runQuery throws).
     env: {
-      MARGIN_CALL_CONVEX_TEST_SKIP_WALLET_SCHEDULE: "1",
+      MC_SKIP_WALLET_SCHEDULE: "1",
     },
     include: [
       "src/**/*.test.ts",

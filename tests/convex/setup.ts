@@ -5,7 +5,7 @@
  * a glob of all Convex module files so it can execute functions end-to-end.
  *
  * Wallet bootstrap: `api.traders.create` does not schedule `wallet:createForTrader`
- * when Vitest sets `MARGIN_CALL_CONVEX_TEST_SKIP_WALLET_SCHEDULE=1` (see root
+ * when Vitest sets `MC_SKIP_WALLET_SCHEDULE=1` (see root
  * vitest.config.ts). Use `seedActiveTrader` / direct inserts for ready traders,
  * or `internal.traders.markCreating` when testing the wallet state machine.
  */
