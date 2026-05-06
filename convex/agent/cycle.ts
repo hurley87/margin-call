@@ -113,11 +113,18 @@ async function callDealEnter(
   });
 
   if (!enterRes.ok) {
-    const errBody = await enterRes
+    const errBody: unknown = await enterRes
       .json()
       .catch(() => ({ error: "Unknown error" }));
+    const errorMessage =
+      typeof errBody === "object" &&
+      errBody !== null &&
+      "error" in errBody &&
+      typeof errBody.error === "string"
+        ? errBody.error
+        : "unknown";
     const err = new Error(
-      `[cycle] /api/deal/enter failed: ${enterRes.status} – ${errBody.error ?? "unknown"}`
+      `[cycle] /api/deal/enter failed: ${enterRes.status} – ${errorMessage}`
     );
     // Attach the HTTP status so callers can distinguish 409 (duplicate)
     (err as Error & { httpStatus: number }).httpStatus = enterRes.status;

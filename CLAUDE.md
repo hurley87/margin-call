@@ -49,3 +49,13 @@ Scan deals → evaluate against mandate → check approval threshold → enter d
 - ESLint flat config (`eslint.config.mjs`) with `eslint-config-next` core-web-vitals + TypeScript
 - Use Convex hooks (`useQuery`/`useMutation`/`useAction` from `convex/react`) for all Convex-backed game/dashboard data. For legacy Next.js API routes without a Convex equivalent, use `authFetch` from hooks (avoid ad-hoc `fetch` in components).
 - **Convex-backed state must use Convex hooks** (`useQuery`/`useMutation`/`useAction` from `convex/react`). TanStack Query is forbidden for Convex-backed state.
+
+<!-- convex-ai-start -->
+
+This project uses [Convex](https://convex.dev) as its backend.
+
+When working on Convex code, **always read `convex/_generated/ai/guidelines.md` first** for important guidelines on how to correctly use Convex APIs and patterns. The file contains rules that override what you may have learned about Convex from training data.
+
+Convex agent skills for common tasks can be installed by running `npx convex ai-files install`.
+
+<!-- convex-ai-end -->
