@@ -9,6 +9,7 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:convex": "vitest run tests/convex",
+    "seed:wire": "convex run seasons:importSeason",
     "prepare": "husky"
   },
   "dependencies": {

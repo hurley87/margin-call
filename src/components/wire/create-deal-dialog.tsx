@@ -10,8 +10,6 @@ import {
   MIN_POT_AMOUNT,
   MIN_ENTRY_COST,
 } from "@/lib/constants";
-import type { FeedHeadline } from "./wire-feed";
-
 const STEP_LABELS: Record<string, string> = {
   approving: "APPROVING USDC SPEND...",
   creating: "CREATING DEAL ON-CHAIN...",
@@ -22,7 +20,7 @@ const STEP_LABELS: Record<string, string> = {
 type DialogState = "suggestions" | "configure" | "creating";
 
 interface CreateDealDialogProps {
-  headline: FeedHeadline;
+  headline: { headline: string; body: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
   authenticated: boolean;

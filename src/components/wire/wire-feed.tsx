@@ -3,30 +3,22 @@
 import { usePrivy } from "@privy-io/react-auth";
 import { useHeadlineDeals } from "@/hooks/use-deals";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
-import { WirePost } from "./wire-post";
+import { WireDropBlock, type WireDrop } from "./wire-drop";
 
-export interface FeedHeadline {
-  headline: string;
-  body: string;
-  category: string;
-  epoch: number;
-  created_at: string;
-  mood: string;
-  sec_heat: number;
-}
+export type { WireDrop };
 
-export function WireFeed({ feed }: { feed: FeedHeadline[] }) {
+export function WireFeed({ drops }: { drops: WireDrop[] }) {
   const { data: headlineDealsMap } = useHeadlineDeals();
   const { authenticated } = usePrivy();
   const { balance } = useUsdcBalance();
 
   return (
     <div className="divide-y divide-[var(--t-border)]">
-      {feed.map((item, i) => (
-        <WirePost
-          key={`${item.epoch}-${i}`}
-          item={item}
-          headlineDeals={headlineDealsMap?.[item.headline]}
+      {drops.map((drop) => (
+        <WireDropBlock
+          key={drop.epoch}
+          drop={drop}
+          headlineDealsMap={headlineDealsMap}
           authenticated={authenticated}
           balance={balance}
         />

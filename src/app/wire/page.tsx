@@ -32,12 +32,12 @@ const HOW_DEALS_SECTIONS = [
 ] as const;
 
 export default function WirePage() {
-  const feed = useQuery(api.marketNarratives.feedHeadlines, { maxEpochs: 20 });
-  const isLoading = feed === undefined;
+  const drops = useQuery(api.marketNarratives.feedDrops, { limit: 20 });
+  const isLoading = drops === undefined;
   const [howDealsOpen, setHowDealsOpen] = useState(false);
 
-  const latestMood = feed?.[0]?.mood;
-  const latestSecHeat = feed?.[0]?.sec_heat;
+  const latestMood = drops?.[0]?.mood;
+  const latestSecHeat = drops?.[0]?.secHeat;
 
   return (
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
@@ -140,7 +140,7 @@ export default function WirePage() {
                   <span className="cursor-blink">{"\u2588"}</span>
                 </p>
               </div>
-            ) : !feed || feed.length === 0 ? (
+            ) : !drops || drops.length === 0 ? (
               <div className="border border-[var(--t-border)] bg-[var(--t-bg)] p-8 text-center">
                 <p className="text-sm text-[var(--t-muted)]">
                   NO WIRE DATA — WAITING FOR FIRST EPOCH
@@ -150,7 +150,7 @@ export default function WirePage() {
                 </p>
               </div>
             ) : (
-              <WireFeed feed={feed} />
+              <WireFeed drops={drops} />
             )}
           </div>
         </div>

@@ -203,14 +203,78 @@ export default defineSchema({
     .index("byTrader", ["traderId"])
     .index("byDeal", ["sourceDealId"]),
 
+  narrativeSeasons: defineTable({
+    seasonKey: v.string(),
+    title: v.string(),
+    weekStartAt: v.number(),
+    weekEndAt: v.number(),
+    tone: v.string(),
+    weeklyShape: v.any(),
+    styleRules: v.any(),
+    forbiddenLanguage: v.array(v.string()),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("byIsActive", ["isActive"])
+    .index("bySeasonKey", ["seasonKey"]),
+
+  narrativeEntities: defineTable({
+    seasonId: v.id("narrativeSeasons"),
+    slug: v.string(),
+    kind: v.union(
+      v.literal("firm"),
+      v.literal("trader"),
+      v.literal("regulator"),
+      v.literal("politician")
+    ),
+    displayName: v.string(),
+    aliases: v.array(v.string()),
+    bio: v.string(),
+    traits: v.array(v.string()),
+    createdAt: v.number(),
+  })
+    .index("bySeason", ["seasonId"])
+    .index("bySeasonAndSlug", ["seasonId", "slug"]),
+
+  narrativeArcs: defineTable({
+    seasonId: v.id("narrativeSeasons"),
+    slug: v.string(),
+    title: v.string(),
+    summary: v.string(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("resolved"),
+      v.literal("abandoned")
+    ),
+    tensionScore: v.number(),
+    entityRefs: v.array(v.id("narrativeEntities")),
+    lastTouchedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("bySeason", ["seasonId"])
+    .index("bySeasonAndStatus", ["seasonId", "status"])
+    .index("bySeasonAndSlug", ["seasonId", "slug"]),
+
   marketNarratives: defineTable({
     epoch: v.number(),
     headlines: v.any(),
     worldState: v.any(),
     rawNarrative: v.string(),
     eventsIngested: v.optional(v.any()),
+    // Narrative engine extensions (all optional for back-compat with existing rows)
+    seasonId: v.optional(v.id("narrativeSeasons")),
+    arcRefs: v.optional(v.array(v.id("narrativeArcs"))),
+    epochSlot: v.optional(v.number()),
+    dropTitle: v.optional(v.string()),
+    topArcTitle: v.optional(v.string()),
+    topArcTension: v.optional(v.number()),
     createdAt: v.number(),
-  }).index("byEpoch", ["epoch"]),
+  })
+    .index("byEpoch", ["epoch"])
+    .index("byCreatedAt", ["createdAt"])
+    .index("byEpochSlot", ["epochSlot"]),
 
   systemPrompts: defineTable({
     name: v.string(),
