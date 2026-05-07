@@ -4,8 +4,7 @@ import { siwaAuthMatchesConvexTrader } from "@/lib/siwa/binding";
 import { createConvexAdminClient } from "@/lib/convex/server-client";
 import { internal } from "../../../../../convex/_generated/api";
 import type { Id } from "../../../../../convex/_generated/dataModel";
-import { getOrCreateTraderSmartAccount } from "@/lib/cdp/trader-wallet";
-import { sendContractCall } from "@/lib/cdp/send-contract-call";
+import { sendOperatorContractCall } from "@/lib/contracts/operator";
 import { getEscrowBalance } from "@/lib/contracts/balance";
 import {
   getOnChainDeal,
@@ -182,11 +181,7 @@ async function handleAgentCycleDealEnter(
   let enterTxHash: string | null = null;
 
   if (onChainDealId !== null && tokenId !== null) {
-    const { smartAccount } = await getOrCreateTraderSmartAccount(
-      Number(tokenId)
-    );
-
-    const enterReceipt = await sendContractCall(smartAccount, {
+    const enterReceipt = await sendOperatorContractCall({
       address: ESCROW_ADDRESS,
       abi: escrowAbi,
       functionName: "enterDeal",

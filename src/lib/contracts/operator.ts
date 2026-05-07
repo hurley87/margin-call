@@ -1,9 +1,16 @@
 import "server-only";
 
-import { createWalletClient, http, nonceManager } from "viem";
+import { createWalletClient, http, nonceManager, type Abi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { CONTRACTS_CHAIN } from "./escrow";
-import { baseSepoliaRpcUrl } from "./client";
+import { baseSepoliaRpcUrl, makePublicClient } from "./client";
+
+interface OperatorContractCallParams {
+  address: `0x${string}`;
+  abi: Abi;
+  functionName: string;
+  args: readonly unknown[];
+}
 
 function buildOperatorClient() {
   const key = process.env.OPERATOR_PRIVATE_KEY;
@@ -34,4 +41,27 @@ export function makeOperatorWalletClient() {
     cached = buildOperatorClient();
   }
   return cached;
+}
+
+/**
+ * Send an operator-authorized contract call and wait for confirmation.
+ */
+export async function sendOperatorContractCall({
+  address,
+  abi,
+  functionName,
+  args,
+}: OperatorContractCallParams): Promise<{ transactionHash: `0x${string}` }> {
+  const walletClient = makeOperatorWalletClient();
+  const publicClient = makePublicClient();
+
+  const hash = await walletClient.writeContract({
+    address,
+    abi,
+    functionName,
+    args,
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  return { transactionHash: receipt.transactionHash };
 }
