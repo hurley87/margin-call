@@ -46,16 +46,9 @@ interface WireDispatchProps {
     dealSeed?: WireDealSeed;
   };
   headlineDeals?: Deal[];
-  authenticated: boolean;
-  balance: number | undefined;
 }
 
-export function WireDispatch({
-  dispatch,
-  headlineDeals,
-  authenticated,
-  balance,
-}: WireDispatchProps) {
+export function WireDispatch({ dispatch, headlineDeals }: WireDispatchProps) {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const dealCount = headlineDeals?.length ?? 0;
@@ -88,9 +81,13 @@ export function WireDispatch({
       <div className="mt-2 flex items-center justify-between">
         <button
           onClick={() => setDialogOpen(true)}
-          className="flex items-center gap-1.5 border border-[var(--t-accent)] px-3 py-1 text-[11px] font-bold text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+          className={
+            seed
+              ? "flex items-center gap-1.5 border border-[var(--t-accent)] px-3 py-1 text-[11px] font-bold text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+              : "text-[10px] text-[var(--t-muted)] transition-colors hover:text-[var(--t-accent)]"
+          }
         >
-          {seed ? "$ CREATE DEAL FROM THIS" : "$ CREATE DEAL"}
+          {seed ? "$ CREATE DEAL FROM THIS" : "USE AS PREMISE →"}
         </button>
 
         {seed && (
@@ -120,8 +117,6 @@ export function WireDispatch({
           headline={{ headline: dispatch.headline, body: dispatch.body }}
           open={dialogOpen}
           onOpenChange={setDialogOpen}
-          authenticated={authenticated}
-          balance={balance}
           dealSeed={
             seed
               ? {
@@ -141,16 +136,9 @@ export function WireDispatch({
 interface WireDropBlockProps {
   drop: WireDrop;
   headlineDealsMap?: Record<string, Deal[]>;
-  authenticated: boolean;
-  balance: number | undefined;
 }
 
-export function WireDropBlock({
-  drop,
-  headlineDealsMap,
-  authenticated,
-  balance,
-}: WireDropBlockProps) {
+export function WireDropBlock({ drop, headlineDealsMap }: WireDropBlockProps) {
   const timeStr = useMemo(
     () =>
       new Date(drop.createdAt).toLocaleTimeString("en-US", {
@@ -207,8 +195,6 @@ export function WireDropBlock({
           <WireDispatch
             dispatch={{ ...dispatch, createdAt: drop.createdAt }}
             headlineDeals={headlineDealsMap?.[dispatch.headline]}
-            authenticated={authenticated}
-            balance={balance}
           />
         </div>
       ))}

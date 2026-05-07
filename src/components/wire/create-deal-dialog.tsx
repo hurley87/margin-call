@@ -2,15 +2,18 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { usePrivy } from "@privy-io/react-auth";
 import { Dialog } from "@base-ui/react/dialog";
 import { useSuggestPrompts } from "@/hooks/use-deals";
 import { useCreateDeal } from "@/hooks/use-create-deal";
+import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import {
   DEAL_CREATION_FEE_PERCENTAGE,
   MIN_POT_AMOUNT,
   MIN_ENTRY_COST,
 } from "@/lib/constants";
 import type { Id } from "../../../convex/_generated/dataModel";
+
 const STEP_LABELS: Record<string, string> = {
   approving: "APPROVING USDC SPEND...",
   creating: "CREATING DEAL ON-CHAIN...",
@@ -31,8 +34,6 @@ interface CreateDealDialogProps {
   headline: { headline: string; body: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  authenticated: boolean;
-  balance: number | undefined;
   /** When provided, the dialog opens straight into "configure" with prefilled values. */
   dealSeed?: DealSeedPrefill;
 }
@@ -41,14 +42,21 @@ export function CreateDealDialog({
   headline,
   open,
   onOpenChange,
-  authenticated,
-  balance,
   dealSeed,
 }: CreateDealDialogProps) {
+  const { authenticated } = usePrivy();
+  const { balance } = useUsdcBalance();
+
+  // Open directly in configure when there's a seed or a source headline to prefill
+  const openInConfigure = !!(dealSeed || headline.headline);
+  const initialPrompt =
+    dealSeed?.prompt ??
+    [headline.headline, headline.body].filter(Boolean).join("\n\n");
+
   const [state, setState] = useState<DialogState>(
-    dealSeed ? "configure" : "suggestions"
+    openInConfigure ? "configure" : "suggestions"
   );
-  const [selectedPrompt, setSelectedPrompt] = useState(dealSeed?.prompt ?? "");
+  const [selectedPrompt, setSelectedPrompt] = useState(initialPrompt);
   const [potAmount, setPotAmount] = useState(
     dealSeed ? dealSeed.suggestedPotUsdc.toString() : MIN_POT_AMOUNT.toString()
   );
@@ -101,8 +109,7 @@ export function CreateDealDialog({
   };
 
   const handleBack = () => {
-    if (dealSeed) {
-      // Seed-driven flow has no suggestion step; close the dialog instead.
+    if (openInConfigure) {
       onOpenChange(false);
       return;
     }
@@ -128,16 +135,18 @@ export function CreateDealDialog({
           </div>
 
           {/* Source headline context */}
-          <div className="border-b border-[var(--t-border)] px-4 py-2">
-            <p className="text-xs font-bold text-[var(--t-text)]">
-              {headline.headline}
-            </p>
-            {headline.body && (
-              <p className="mt-1 text-[11px] leading-relaxed text-[var(--t-muted)]">
-                {headline.body}
+          {headline.headline && (
+            <div className="border-b border-[var(--t-border)] px-4 py-2">
+              <p className="text-xs font-bold text-[var(--t-text)]">
+                {headline.headline}
               </p>
-            )}
-          </div>
+              {headline.body && (
+                <p className="mt-1 text-[11px] leading-relaxed text-[var(--t-muted)]">
+                  {headline.body}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Suggestions state */}
           {state === "suggestions" && (
@@ -146,7 +155,7 @@ export function CreateDealDialog({
                 <div className="px-4 py-6 text-center">
                   <p className="text-xs text-[var(--t-muted)]">
                     GENERATING DEAL IDEAS...
-                    <span className="cursor-blink">{"\u2588"}</span>
+                    <span className="cursor-blink">{"█"}</span>
                   </p>
                 </div>
               ) : suggestQuery.data ? (
@@ -276,7 +285,7 @@ export function CreateDealDialog({
                       {STEP_LABELS[step] ?? "PROCESSING..."}
                     </span>
                     <span className="cursor-blink text-[var(--t-green)]">
-                      {"\u2588"}
+                      {"█"}
                     </span>
                   </div>
                   <div className="mt-1 h-0.5 overflow-hidden bg-[var(--t-border)]">
