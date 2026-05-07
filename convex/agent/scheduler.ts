@@ -31,7 +31,7 @@ export const scheduler = internalAction({
 
     console.log(
       `[scheduler] enqueued ${staleTraders.length} cycle(s):`,
-      staleTraders.map((t) => t._id)
+      staleTraders.map((t: { _id: string }) => t._id)
     );
   },
 });

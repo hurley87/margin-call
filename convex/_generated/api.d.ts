@@ -41,6 +41,9 @@ import type * as wire_epochAssembler from "../wire/epochAssembler.js";
 import type * as wire_epochValidator from "../wire/epochValidator.js";
 import type * as wire_generator from "../wire/generator.js";
 import type * as wire_internal from "../wire/internal.js";
+import type * as wire_operatorActions from "../wire/operatorActions.js";
+import type * as wire_operatorMutations from "../wire/operatorMutations.js";
+import type * as wire_operatorQueries from "../wire/operatorQueries.js";
 import type * as wire_persist from "../wire/persist.js";
 import type * as wire_tradingHours from "../wire/tradingHours.js";
 
@@ -84,6 +87,9 @@ declare const fullApi: ApiFromModules<{
   "wire/epochValidator": typeof wire_epochValidator;
   "wire/generator": typeof wire_generator;
   "wire/internal": typeof wire_internal;
+  "wire/operatorActions": typeof wire_operatorActions;
+  "wire/operatorMutations": typeof wire_operatorMutations;
+  "wire/operatorQueries": typeof wire_operatorQueries;
   "wire/persist": typeof wire_persist;
   "wire/tradingHours": typeof wire_tradingHours;
 }>;
