@@ -1,5 +1,5 @@
 /// <reference types="vite/client" />
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { api, internal } from "../../convex/_generated/api";
@@ -185,21 +185,30 @@ describe("wire/generator: writes a marketNarratives row on success", () => {
 
 describe("wire/generator: no-op outside trading hours (via generateNextEpoch)", () => {
   it("generateNextEpoch skips without writing when called on a weekend", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
+    // Pin clock to Saturday 2026-05-09 14:00 UTC — guaranteed outside ET trading hours
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-09T14:00:00.000Z"));
 
-    // We can't control Date.now() in convex-test actions, but we can verify
-    // the idempotency path: if the test is run on a weekend / off-hours, the
-    // action returns skipped. On weekdays during market hours it may proceed.
-    // This test verifies that the action handler exists and returns a valid shape.
-    const result = await t.action(
-      internal.wire.generator.generateNextEpoch,
-      {}
-    );
+    try {
+      const t = convexTest(schema, modules);
+      await seedSeasonAndDrops(t);
 
-    // Result must be either a skipped object or an inserted object — never undefined
-    expect(result).toBeDefined();
-    expect(typeof result).toBe("object");
+      const result = await t.action(
+        internal.wire.generator.generateNextEpoch,
+        {}
+      );
+
+      expect(result).toMatchObject({ skipped: "outside-market-hours" });
+
+      // No rows written
+      const rows = await t.run(async (ctx) =>
+        ctx.db.query("marketNarratives").collect()
+      );
+      const generatedRows = rows.filter((r) => r.epochSlot !== 0);
+      expect(generatedRows.length).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
