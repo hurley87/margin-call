@@ -39,7 +39,8 @@ export function useCreateDeal() {
       prompt: string,
       potAmountUsdc: number,
       entryCostUsdc: number,
-      sourceHeadline?: string
+      sourceHeadline?: string,
+      wireDealSeedId?: Id<"wireDealSeeds">
     ) => {
       setState({ step: "approving" });
 
@@ -111,6 +112,7 @@ export function useCreateDeal() {
               potUsdc: potAmountUsdc,
               entryCostUsdc,
               sourceHeadline,
+              wireDealSeedId,
             });
           } catch (syncErr) {
             console.error("recordOnChainCreation failed:", syncErr);

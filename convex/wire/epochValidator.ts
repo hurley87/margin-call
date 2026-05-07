@@ -8,6 +8,11 @@ export function validateEpoch(
     arcSlugs: Set<string>;
     entitySlugs: Set<string>;
     forbiddenLanguage: string[];
+    /**
+     * When true, the cadence rule requires this epoch to include a dealSeed.
+     * Set by the generator when the previous market-hour drop did not include one.
+     */
+    requireDealSeed?: boolean;
   }
 ): { ok: true; data: ValidatedEpoch } | { ok: false; error: string } {
   const result = NarrativeEpochSchema.safeParse(raw);
@@ -20,6 +25,18 @@ export function validateEpoch(
   // Require at least one "main" dispatch
   if (!data.dispatches.some((d) => d.role === "main")) {
     return { ok: false, error: "At least one dispatch must have role 'main'" };
+  }
+
+  // Dispatch keys must be unique within the drop so a dealSeed can point at exactly one source.
+  const seenKeys = new Set<string>();
+  for (const d of data.dispatches) {
+    if (seenKeys.has(d.dispatchKey)) {
+      return {
+        ok: false,
+        error: `Duplicate dispatchKey: "${d.dispatchKey}"`,
+      };
+    }
+    seenKeys.add(d.dispatchKey);
   }
 
   // arcSlug references in dispatches must be on-roster
@@ -52,10 +69,44 @@ export function validateEpoch(
     }
   }
 
+  // ── Deal seed cadence + integrity ─────────────────────────────────────────
+  if (ctx.requireDealSeed && data.dealSeed === null) {
+    return {
+      ok: false,
+      error: "deal seed required this epoch (cadence)",
+    };
+  }
+
+  if (data.dealSeed) {
+    if (!ctx.arcSlugs.has(data.dealSeed.arcSlug)) {
+      return {
+        ok: false,
+        error: `Unknown arcSlug in dealSeed: "${data.dealSeed.arcSlug}"`,
+      };
+    }
+
+    const matchingDispatches = data.dispatches.filter(
+      (d) => d.dispatchKey === data.dealSeed!.dispatchKey
+    );
+    if (matchingDispatches.length !== 1) {
+      return {
+        ok: false,
+        error: `dealSeed.dispatchKey "${data.dealSeed.dispatchKey}" must match exactly one dispatch`,
+      };
+    }
+    if (matchingDispatches[0].role !== "deal_seed") {
+      return {
+        ok: false,
+        error: `dispatch referenced by dealSeed must have role "deal_seed"`,
+      };
+    }
+  }
+
   // Forbidden language check (case-insensitive substring)
   const fullText = [
     data.dropTitle,
     ...data.dispatches.map((d) => `${d.headline} ${d.body}`),
+    data.dealSeed?.prompt ?? "",
   ]
     .join(" ")
     .toLowerCase();

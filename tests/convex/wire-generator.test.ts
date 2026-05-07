@@ -30,6 +30,7 @@ function makeLlmStub(overrides: Record<string, unknown> = {}) {
     },
     dispatches: [
       {
+        dispatchKey: "main-panatl-halt",
         headline: "PanAtlantic bonds halted at the exchange",
         body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
         category: "market",
@@ -38,6 +39,7 @@ function makeLlmStub(overrides: Record<string, unknown> = {}) {
         referenceEpoch: null,
       },
       {
+        dispatchKey: "supp-vale-sec",
         headline: "Marty Vale spotted outside SEC building",
         body: "No comment from his office. His assistant hung up.",
         category: "floor_talk",
@@ -46,10 +48,45 @@ function makeLlmStub(overrides: Record<string, unknown> = {}) {
         referenceEpoch: null,
       },
     ],
+    dealSeed: null,
     arcUpdates: [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 2 }],
     entityMentions: ["marty-vale"],
     ...overrides,
   };
+}
+
+function makeLlmStubWithSeed(overrides: Record<string, unknown> = {}) {
+  return makeLlmStub({
+    dispatches: [
+      {
+        dispatchKey: "main-panatl-halt",
+        headline: "PanAtlantic bonds halted at the exchange",
+        body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
+        category: "market",
+        role: "main",
+        arcSlug: "pan-atlantic-blowup",
+        referenceEpoch: null,
+      },
+      {
+        dispatchKey: "seed-rourke-short",
+        headline: "Rourke seen building short against PanAtl. bond block",
+        body: "Three orders crossed before lunch. Counterparty unconfirmed.",
+        category: "rumor",
+        role: "deal_seed",
+        arcSlug: "pan-atlantic-blowup",
+        referenceEpoch: null,
+      },
+    ],
+    dealSeed: {
+      dispatchKey: "seed-rourke-short",
+      arcSlug: "pan-atlantic-blowup",
+      prompt:
+        "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
+      suggestedPotUsdc: 250,
+      suggestedEntryCostUsdc: 10,
+    },
+    ...overrides,
+  });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -59,7 +96,9 @@ describe("wire/generator: idempotency on duplicate epochSlot", () => {
     const t = convexTest(schema, modules);
     await seedSeasonAndDrops(t);
 
-    const stub = makeLlmStub();
+    // Initial seed drop has no Deal Seed, so cadence requires the first
+    // generator drop to include one.
+    const stub = makeLlmStubWithSeed();
 
     // First run — force a specific slot
     const result1 = await t.action(internal.wire.generator.devForceEpoch, {
@@ -92,7 +131,7 @@ describe("wire/generator: writes a marketNarratives row on success", () => {
     const t = convexTest(schema, modules);
     await seedSeasonAndDrops(t);
 
-    const stub = makeLlmStub();
+    const stub = makeLlmStubWithSeed();
 
     const result = await t.action(internal.wire.generator.devForceEpoch, {
       ignoreSlot: true, // unique slot per run
@@ -127,7 +166,7 @@ describe("wire/generator: writes a marketNarratives row on success", () => {
     expect(arc).toBeDefined();
     const initialTension = arc!.tensionScore;
 
-    const stub = makeLlmStub({
+    const stub = makeLlmStubWithSeed({
       arcUpdates: [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 2 }],
     });
 
@@ -195,6 +234,7 @@ describe("wire/generator: validation rejection", () => {
     const badStub = makeLlmStub({
       dispatches: [
         {
+          dispatchKey: "main-mystery",
           headline: "Mystery arc dispatch here",
           body: "This arc does not exist in the season.",
           category: "market",
@@ -203,6 +243,7 @@ describe("wire/generator: validation rejection", () => {
           referenceEpoch: null,
         },
         {
+          dispatchKey: "supp-pad",
           headline: "Second dispatch for count",
           body: "Padding dispatch body here.",
           category: "market",
@@ -248,7 +289,9 @@ describe("wire/generator: activity ingestion — wipeout captured in eventsInges
       });
     });
 
-    const stub = makeLlmStub();
+    // Cadence requires a seeded stub for the first generator drop after import.
+    const stub = makeLlmStubWithSeed();
+
     const result = await t.action(internal.wire.generator.devForceEpoch, {
       ignoreSlot: true,
       _testLlmStub: stub,
@@ -271,5 +314,108 @@ describe("wire/generator: activity ingestion — wipeout captured in eventsInges
     );
     expect(wipeout).toBeDefined();
     expect(wipeout!.dramatic).toBe(true);
+  });
+});
+
+describe("wire/generator: deal seeds — persistence + cadence", () => {
+  it("persists a wireDealSeeds row when the LLM stub includes a dealSeed", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const stub = makeLlmStubWithSeed();
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: stub,
+    });
+    expect((result as { inserted?: boolean }).inserted).toBe(true);
+
+    const seeds = await t.run(async (ctx) =>
+      ctx.db.query("wireDealSeeds").collect()
+    );
+    expect(seeds.length).toBe(1);
+    const seed = seeds[0];
+    expect(seed.dispatchKey).toBe("seed-rourke-short");
+    expect(seed.dispatchHeadline).toContain("Rourke");
+    expect(seed.suggestedPotUsdc).toBe(250);
+    expect(seed.suggestedEntryCostUsdc).toBe(10);
+    expect(seed.dispatchIndex).toBe(1);
+    expect(seed.epochId).toEqual((result as { dropId: unknown }).dropId);
+  });
+
+  it("rejects a second consecutive drop with no dealSeed (cadence)", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    // Drop 1: with seed (seed-imported initial drop has no seed, so cadence requires one).
+    const r1 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed(),
+    });
+    expect((r1 as { inserted?: boolean }).inserted).toBe(true);
+
+    // Drop 2: no seed — cadence satisfied because previous drop had a seed.
+    const r2 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub(),
+    });
+    expect((r2 as { inserted?: boolean }).inserted).toBe(true);
+
+    // Drop 3: also no seed — second consecutive no-seed drop, must be rejected.
+    const r3 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub(),
+    });
+    expect((r3 as { skipped?: string }).skipped).toBe("validation-failed");
+
+    // Only two generator-produced drops persisted; only the first carries a seed.
+    const rows = await t.run(async (ctx) =>
+      ctx.db.query("marketNarratives").collect()
+    );
+    const generated = rows.filter((r) => r.epochSlot !== 0);
+    expect(generated.length).toBe(2);
+    const seeds = await t.run(async (ctx) =>
+      ctx.db.query("wireDealSeeds").collect()
+    );
+    expect(seeds.length).toBe(1);
+  });
+
+  it("accepts a no-seed drop immediately after a seeded drop (cadence satisfied)", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const r1 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed(),
+    });
+    expect((r1 as { inserted?: boolean }).inserted).toBe(true);
+
+    const r2 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub(),
+    });
+    expect((r2 as { inserted?: boolean }).inserted).toBe(true);
+  });
+
+  it("rejects a dealSeed pointing at an off-roster arcSlug", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const badStub = makeLlmStubWithSeed({
+      dealSeed: {
+        dispatchKey: "seed-rourke-short",
+        arcSlug: "arc-ghost",
+        prompt: "Off-roster arc seed prompt for testing the rejection path.",
+        suggestedPotUsdc: 100,
+        suggestedEntryCostUsdc: 5,
+      },
+    });
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: badStub,
+    });
+
+    expect((result as { skipped?: string }).skipped).toBe("validation-failed");
   });
 });

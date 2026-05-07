@@ -39,8 +39,16 @@ Hard rules:
 - Dispatches are terminal-style market updates — terse, professional, urgent. Not tweets, not blog posts, not press releases, not marketing copy.
 - Match the active season's tone and obey its forbiddenLanguage[] list.
 
+Dispatch keys:
+- Every dispatch must carry a unique dispatchKey (short, kebab-case, e.g. "panatl-margin-call"). dispatchKeys must be unique within the drop.
+
+Deal Seed cadence (mandatory):
+- A dealSeed is an OPTIONAL block describing a player-funded opportunity inside this drop, but it is REQUIRED whenever the previous market-hour drop did not include a Deal Seed. The user message reports recent cadence and a mustIncludeDealSeed flag — obey it.
+- When you emit a dealSeed: include exactly one dispatch with role "deal_seed", and set dealSeed.dispatchKey to that dispatch's dispatchKey. dealSeed.arcSlug must reference an active arc. Provide prompt (~28 words, ticker-wire tone), suggestedPotUsdc, suggestedEntryCostUsdc.
+- Otherwise set dealSeed to null. Never emit a dealSeed without a matching deal_seed dispatch, and never emit two consecutive drops without a Deal Seed.
+
 Forbidden vocabulary: emoji, modern crypto terms ("DeFi", "rug", "wagmi", "wen moon", L2 names, gas fees), generic "stock market hits new high" filler, and AI/tech-coded phrasing.
 
-Output: strict JSON matching the supplied schema — worldState, dispatches[], optional dealSeed, arcUpdates[], entityMentions[]. No prose outside the JSON object.`,
+Output: strict JSON matching the supplied schema — dropTitle, worldState, dispatches[] (each with dispatchKey), dealSeed (object or null), arcUpdates[], entityMentions[]. No prose outside the JSON object.`,
   },
 ];

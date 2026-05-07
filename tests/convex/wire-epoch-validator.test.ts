@@ -17,6 +17,7 @@ function makeValidPayload() {
     },
     dispatches: [
       {
+        dispatchKey: "main-panatl",
         headline: "PanAtlantic down 12%",
         body: "The bond desk is silent. Nobody is picking up calls from Jersey.",
         category: "market",
@@ -25,6 +26,7 @@ function makeValidPayload() {
         referenceEpoch: null,
       },
       {
+        dispatchKey: "supp-vale",
         headline: "Marty Vale exits the building",
         body: "Vale's coat is on. His assistant is shredding paper.",
         category: "floor_talk",
@@ -33,9 +35,24 @@ function makeValidPayload() {
         referenceEpoch: null,
       },
     ],
+    dealSeed: null,
     arcUpdates: [{ arcSlug: "arc-a", tensionDelta: 2 }],
     entityMentions: ["marty-vale"],
   };
+}
+
+function makeValidPayloadWithSeed() {
+  const payload = makeValidPayload();
+  payload.dispatches[1].role = "deal_seed" as never;
+  (payload as Record<string, unknown>).dealSeed = {
+    dispatchKey: "supp-vale",
+    arcSlug: "arc-b",
+    prompt:
+      "Vale tip says PanAtlantic books are missing $40M from Jersey desk.",
+    suggestedPotUsdc: 100,
+    suggestedEntryCostUsdc: 5,
+  };
+  return payload;
 }
 
 describe("validateEpoch: accepts valid payloads", () => {
@@ -51,6 +68,7 @@ describe("validateEpoch: accepts valid payloads", () => {
   it("accepts a valid 3-dispatch payload", () => {
     const payload = makeValidPayload();
     payload.dispatches.push({
+      dispatchKey: "supp-sec",
       headline: "SEC files subpoena",
       body: "Document request covers three years of trading records.",
       category: "regulatory",
@@ -77,10 +95,8 @@ describe("validateEpoch: accepts valid payloads", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("accepts a payload with a deal_seed dispatch role", () => {
-    const payload = makeValidPayload();
-    payload.dispatches[1].role = "deal_seed" as never;
-    const result = validateEpoch(payload, {
+  it("accepts a payload with a deal_seed dispatch role and matching dealSeed", () => {
+    const result = validateEpoch(makeValidPayloadWithSeed(), {
       arcSlugs,
       entitySlugs,
       forbiddenLanguage,
@@ -105,11 +121,12 @@ describe("validateEpoch: rejects invalid dispatch counts", () => {
     const payload = makeValidPayload();
     for (let i = 2; i < 4; i++) {
       payload.dispatches.push({
+        dispatchKey: `extra-${i}`,
         headline: `Extra dispatch ${i}`,
         body: "Extra body text here.",
         category: "market",
         role: "supporting" as const,
-        arcSlug: null,
+        arcSlug: null as unknown as string,
         referenceEpoch: null,
       });
     }
@@ -281,5 +298,85 @@ describe("validateEpoch: rejects forbidden language", () => {
       forbiddenLanguage: ["rug"],
     });
     expect(result.ok).toBe(true);
+  });
+});
+
+describe("validateEpoch: deal seed cadence + integrity", () => {
+  it("rejects when requireDealSeed is true and dealSeed is null", () => {
+    const result = validateEpoch(makeValidPayload(), {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+      requireDealSeed: true,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(/cadence/i);
+  });
+
+  it("accepts when requireDealSeed is true and a valid dealSeed is supplied", () => {
+    const result = validateEpoch(makeValidPayloadWithSeed(), {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+      requireDealSeed: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects dealSeed.arcSlug not in roster", () => {
+    const payload = makeValidPayloadWithSeed();
+    (payload.dealSeed as Record<string, unknown>).arcSlug = "arc-ghost";
+    const result = validateEpoch(payload, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toContain(
+      "arc-ghost"
+    );
+  });
+
+  it("rejects dealSeed.dispatchKey not matching any dispatch", () => {
+    const payload = makeValidPayloadWithSeed();
+    (payload.dealSeed as Record<string, unknown>).dispatchKey = "no-match";
+    const result = validateEpoch(payload, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /must match exactly one dispatch/
+    );
+  });
+
+  it("rejects dealSeed pointing at a non-deal_seed dispatch", () => {
+    const payload = makeValidPayloadWithSeed();
+    // Point the seed at the main dispatch (which has role "main")
+    (payload.dealSeed as Record<string, unknown>).dispatchKey = "main-panatl";
+    const result = validateEpoch(payload, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /role "deal_seed"/
+    );
+  });
+
+  it("rejects duplicate dispatchKeys", () => {
+    const payload = makeValidPayload();
+    payload.dispatches[1].dispatchKey = payload.dispatches[0].dispatchKey;
+    const result = validateEpoch(payload, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /duplicate dispatchkey/i
+    );
   });
 });

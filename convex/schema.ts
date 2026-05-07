@@ -259,6 +259,32 @@ export default defineSchema({
     .index("bySeasonAndStatus", ["seasonId", "status"])
     .index("bySeasonAndSlug", ["seasonId", "slug"]),
 
+  wireDealSeeds: defineTable({
+    epochId: v.id("marketNarratives"),
+    seasonId: v.id("narrativeSeasons"),
+    arcId: v.id("narrativeArcs"),
+    dispatchIndex: v.number(),
+    dispatchKey: v.string(),
+    dispatchHeadline: v.string(),
+    prompt: v.string(),
+    suggestedPotUsdc: v.number(),
+    suggestedEntryCostUsdc: v.number(),
+    createdAt: v.number(),
+  })
+    .index("byEpoch", ["epochId"])
+    .index("byEpochAndDispatchKey", ["epochId", "dispatchKey"])
+    .index("byArc", ["arcId"]),
+
+  wireDealSeedLinks: defineTable({
+    seedId: v.id("wireDealSeeds"),
+    dealId: v.id("deals"),
+    deskManagerId: v.optional(v.id("deskManagers")),
+    createdAt: v.number(),
+  })
+    .index("bySeed", ["seedId"])
+    .index("byDeal", ["dealId"])
+    .index("byDeskManager", ["deskManagerId"]),
+
   marketNarratives: defineTable({
     epoch: v.number(),
     headlines: v.any(),

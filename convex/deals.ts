@@ -77,6 +77,12 @@ export const recordOnChainCreation = mutation({
     potUsdc: v.number(),
     entryCostUsdc: v.number(),
     sourceHeadline: v.optional(v.string()),
+    /**
+     * Optional Wire Deal Seed this deal was created from. When provided, a
+     * wireDealSeedLinks row is inserted in the same mutation. Multiple deals
+     * may link to the same seed — seeds are never marked taken.
+     */
+    wireDealSeedId: v.optional(v.id("wireDealSeeds")),
   },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
@@ -97,7 +103,7 @@ export const recordOnChainCreation = mutation({
     if (existing) return existing._id;
 
     const now = Date.now();
-    return await ctx.db.insert("deals", {
+    const dealId = await ctx.db.insert("deals", {
       creatorDeskManagerId: dm._id,
       creatorType: "desk_manager",
       prompt: args.prompt,
@@ -111,6 +117,17 @@ export const recordOnChainCreation = mutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    if (args.wireDealSeedId) {
+      await ctx.db.insert("wireDealSeedLinks", {
+        seedId: args.wireDealSeedId,
+        dealId,
+        deskManagerId: dm._id,
+        createdAt: now,
+      });
+    }
+
+    return dealId;
   },
 });
 

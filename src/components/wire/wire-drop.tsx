@@ -5,6 +5,17 @@ import { WireSourceLine } from "./wire-sources";
 import { CreateDealDialog } from "./create-deal-dialog";
 import { DealBadge } from "./deal-badge";
 import type { Deal } from "@/hooks/use-deals";
+import type { Id } from "../../../convex/_generated/dataModel";
+
+export interface WireDealSeed {
+  seedId: Id<"wireDealSeeds">;
+  arcId: Id<"narrativeArcs">;
+  prompt: string;
+  suggestedPotUsdc: number;
+  suggestedEntryCostUsdc: number;
+  linkedDealCount: number;
+  linkedPotTotalUsdc: number;
+}
 
 export interface WireDrop {
   epoch: number;
@@ -20,6 +31,8 @@ export interface WireDrop {
     body: string;
     category: string;
     role: string;
+    dispatchKey?: string;
+    dealSeed?: WireDealSeed;
   }>;
 }
 
@@ -30,6 +43,7 @@ interface WireDispatchProps {
     category: string;
     role: string;
     createdAt: string;
+    dealSeed?: WireDealSeed;
   };
   headlineDeals?: Deal[];
   authenticated: boolean;
@@ -46,6 +60,7 @@ export function WireDispatch({
 
   const dealCount = headlineDeals?.length ?? 0;
   const totalPot = headlineDeals?.reduce((sum, d) => sum + d.pot_usdc, 0) ?? 0;
+  const seed = dispatch.dealSeed;
 
   return (
     <div className="px-3 py-3">
@@ -75,16 +90,30 @@ export function WireDispatch({
           onClick={() => setDialogOpen(true)}
           className="flex items-center gap-1.5 border border-[var(--t-accent)] px-3 py-1 text-[11px] font-bold text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
         >
-          $ CREATE DEAL
+          {seed ? "$ CREATE DEAL FROM THIS" : "$ CREATE DEAL"}
         </button>
 
-        {dealCount > 0 && (
+        {seed && (
+          <span className="text-[10px] text-[var(--t-muted)]">
+            POT ${seed.suggestedPotUsdc.toFixed(2)} · ENTRY $
+            {seed.suggestedEntryCostUsdc.toFixed(2)}
+          </span>
+        )}
+        {!seed && dealCount > 0 && (
           <span className="text-[10px] text-[var(--t-muted)]">
             {dealCount} {dealCount === 1 ? "deal" : "deals"} · $
             {totalPot.toFixed(2)} pot
           </span>
         )}
       </div>
+
+      {seed && seed.linkedDealCount > 0 && (
+        <div className="mt-1 text-[10px] text-[var(--t-muted)]">
+          LINKED {seed.linkedDealCount}{" "}
+          {seed.linkedDealCount === 1 ? "DEAL" : "DEALS"} · $
+          {seed.linkedPotTotalUsdc.toFixed(2)} POT
+        </div>
+      )}
 
       {dialogOpen && (
         <CreateDealDialog
@@ -93,6 +122,16 @@ export function WireDispatch({
           onOpenChange={setDialogOpen}
           authenticated={authenticated}
           balance={balance}
+          dealSeed={
+            seed
+              ? {
+                  seedId: seed.seedId,
+                  prompt: seed.prompt,
+                  suggestedPotUsdc: seed.suggestedPotUsdc,
+                  suggestedEntryCostUsdc: seed.suggestedEntryCostUsdc,
+                }
+              : undefined
+          }
         />
       )}
     </div>

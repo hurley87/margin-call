@@ -7,7 +7,8 @@ import { v } from "convex/values";
  * Re-checks byEpochSlot inside the transaction; if a row already exists for
  * this slot, returns { inserted: false } without touching any data.
  * Otherwise writes the marketNarratives row, applies arc tension updates,
- * and returns { inserted: true, dropId, epoch }.
+ * inserts a wireDealSeeds row when a Deal Seed was emitted, and returns
+ * { inserted: true, dropId, epoch }.
  */
 export const persistGeneratedEpoch = internalMutation({
   args: {
@@ -24,6 +25,21 @@ export const persistGeneratedEpoch = internalMutation({
     ),
     eventsIngested: v.optional(v.any()),
     rawNarrative: v.string(),
+    /**
+     * Optional Deal Seed payload. Generator pre-resolves arcSlug → arcId and the
+     * source dispatch index; this mutation just inserts the row.
+     */
+    dealSeed: v.optional(
+      v.object({
+        arcId: v.id("narrativeArcs"),
+        dispatchIndex: v.number(),
+        dispatchKey: v.string(),
+        dispatchHeadline: v.string(),
+        prompt: v.string(),
+        suggestedPotUsdc: v.number(),
+        suggestedEntryCostUsdc: v.number(),
+      })
+    ),
   },
   handler: async (
     ctx,
@@ -39,6 +55,7 @@ export const persistGeneratedEpoch = internalMutation({
       arcUpdates,
       eventsIngested,
       rawNarrative,
+      dealSeed,
     }
   ) => {
     // Idempotency: bail if this slot was already written
@@ -87,6 +104,21 @@ export const persistGeneratedEpoch = internalMutation({
         tensionScore: newTension,
         lastTouchedAt: now,
         updatedAt: now,
+      });
+    }
+
+    if (dealSeed) {
+      await ctx.db.insert("wireDealSeeds", {
+        epochId: dropId,
+        seasonId,
+        arcId: dealSeed.arcId,
+        dispatchIndex: dealSeed.dispatchIndex,
+        dispatchKey: dealSeed.dispatchKey,
+        dispatchHeadline: dealSeed.dispatchHeadline,
+        prompt: dealSeed.prompt,
+        suggestedPotUsdc: dealSeed.suggestedPotUsdc,
+        suggestedEntryCostUsdc: dealSeed.suggestedEntryCostUsdc,
+        createdAt: now,
       });
     }
 

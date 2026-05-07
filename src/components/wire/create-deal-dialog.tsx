@@ -10,6 +10,7 @@ import {
   MIN_POT_AMOUNT,
   MIN_ENTRY_COST,
 } from "@/lib/constants";
+import type { Id } from "../../../convex/_generated/dataModel";
 const STEP_LABELS: Record<string, string> = {
   approving: "APPROVING USDC SPEND...",
   creating: "CREATING DEAL ON-CHAIN...",
@@ -19,12 +20,21 @@ const STEP_LABELS: Record<string, string> = {
 
 type DialogState = "suggestions" | "configure" | "creating";
 
+interface DealSeedPrefill {
+  seedId: Id<"wireDealSeeds">;
+  prompt: string;
+  suggestedPotUsdc: number;
+  suggestedEntryCostUsdc: number;
+}
+
 interface CreateDealDialogProps {
   headline: { headline: string; body: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
   authenticated: boolean;
   balance: number | undefined;
+  /** When provided, the dialog opens straight into "configure" with prefilled values. */
+  dealSeed?: DealSeedPrefill;
 }
 
 export function CreateDealDialog({
@@ -33,11 +43,20 @@ export function CreateDealDialog({
   onOpenChange,
   authenticated,
   balance,
+  dealSeed,
 }: CreateDealDialogProps) {
-  const [state, setState] = useState<DialogState>("suggestions");
-  const [selectedPrompt, setSelectedPrompt] = useState("");
-  const [potAmount, setPotAmount] = useState(MIN_POT_AMOUNT.toString());
-  const [entryCost, setEntryCost] = useState(MIN_ENTRY_COST.toString());
+  const [state, setState] = useState<DialogState>(
+    dealSeed ? "configure" : "suggestions"
+  );
+  const [selectedPrompt, setSelectedPrompt] = useState(dealSeed?.prompt ?? "");
+  const [potAmount, setPotAmount] = useState(
+    dealSeed ? dealSeed.suggestedPotUsdc.toString() : MIN_POT_AMOUNT.toString()
+  );
+  const [entryCost, setEntryCost] = useState(
+    dealSeed
+      ? dealSeed.suggestedEntryCostUsdc.toString()
+      : MIN_ENTRY_COST.toString()
+  );
 
   const router = useRouter();
   const suggestQuery = useSuggestPrompts(headline.headline);
@@ -69,7 +88,8 @@ export function CreateDealDialog({
         selectedPrompt.trim(),
         potNum,
         entryNum,
-        headline.headline
+        headline.headline,
+        dealSeed?.seedId
       );
       onOpenChange(false);
       router.push(
@@ -81,6 +101,11 @@ export function CreateDealDialog({
   };
 
   const handleBack = () => {
+    if (dealSeed) {
+      // Seed-driven flow has no suggestion step; close the dialog instead.
+      onOpenChange(false);
+      return;
+    }
     setState("suggestions");
     resetCreateDeal();
     setPotAmount(MIN_POT_AMOUNT.toString());

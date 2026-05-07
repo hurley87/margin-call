@@ -15,8 +15,10 @@ You produce hourly Wire Drop dispatches that serialize an ongoing financial thri
 
 OUTPUT FORMAT: Return valid JSON matching the narrative_epoch schema.
 - dispatches: exactly 2-3 items; at least one must have role "main"
+- every dispatch carries a unique kebab-case dispatchKey (e.g. "panatl-margin-call")
 - dispatch headlines: max 100 characters; present tense; terse
 - dispatch bodies: max 180 characters; 1-3 sentences
+- dealSeed: object or null. If the previous market-hour drop had no Deal Seed, dealSeed MUST be present and one dispatch must have role "deal_seed" whose dispatchKey matches dealSeed.dispatchKey. dealSeed.arcSlug must reference an active arc; supply prompt, suggestedPotUsdc, suggestedEntryCostUsdc.
 - arcUpdates: optional, max 3 arcs; tensionDelta between -3 and +3
 - entityMentions: list all entity slugs you referenced in dispatches
 
@@ -45,13 +47,15 @@ async function runGenerator(
   const { slot, sinceMs } = opts;
 
   // Load all context in parallel
-  const [seasonData, recentDrops, recentGameEvents] = await Promise.all([
-    ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
-    ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
-    ctx.runQuery(internal.wire.internal.listRecentGameEvents, {
-      since: sinceMs,
-    }),
-  ]);
+  const [seasonData, recentDrops, recentGameEvents, recentSeedCadence] =
+    await Promise.all([
+      ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
+      ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
+      ctx.runQuery(internal.wire.internal.listRecentGameEvents, {
+        since: sinceMs,
+      }),
+      ctx.runQuery(internal.wire.internal.listRecentSeedCadence, { limit: 6 }),
+    ]);
 
   if (!seasonData) {
     console.warn("[wire/generator] no active season found — skipping");
@@ -63,15 +67,13 @@ async function runGenerator(
   // Sort arcs by tension desc for the assembler
   const sortedArcs = [...arcs].sort((a, b) => b.tensionScore - a.tensionScore);
 
-  // Detect last-drop-was-deal-seed flag
-  const lastDrop = recentDrops[0];
-  const lastDropWasDealSeed =
-    Array.isArray(lastDrop?.headlines) &&
-    (lastDrop.headlines as Array<{ role?: string }>).some(
-      (d) => d.role === "deal_seed"
-    );
+  // Cadence rule: if the previous drop did not include a Deal Seed, this drop must.
+  // Cold start (no recent drops) → no requirement.
+  const lastCadence = recentSeedCadence[0];
+  const mustIncludeDealSeed = lastCadence ? !lastCadence.hadSeed : false;
 
   // Current world state from latest drop
+  const lastDrop = recentDrops[0];
   const worldState = lastDrop?.worldState as
     | { mood?: string; sec_heat?: number }
     | null
@@ -110,7 +112,8 @@ async function runGenerator(
     })),
     recentGameEvents,
     worldState: worldState ?? null,
-    lastDropWasDealSeed,
+    recentSeedCadence,
+    mustIncludeDealSeed,
   });
 
   // ── LLM call (or test stub) ──────────────────────────────────────────────────
@@ -164,6 +167,7 @@ async function runGenerator(
     arcSlugs,
     entitySlugs,
     forbiddenLanguage: season.forbiddenLanguage,
+    requireDealSeed: mustIncludeDealSeed,
   });
 
   if (!validation.ok) {
@@ -225,6 +229,37 @@ async function runGenerator(
 
   const rawNarrative = validated.dispatches.map((d) => d.headline).join(" | ");
 
+  // Resolve dealSeed.arcSlug → arcId, locate the source dispatch.
+  // Validator guarantees the slug exists and dispatch resolves to exactly one entry.
+  let dealSeedPayload:
+    | {
+        arcId: Id<"narrativeArcs">;
+        dispatchIndex: number;
+        dispatchKey: string;
+        dispatchHeadline: string;
+        prompt: string;
+        suggestedPotUsdc: number;
+        suggestedEntryCostUsdc: number;
+      }
+    | undefined;
+  if (validated.dealSeed) {
+    const seedArcId = arcSlugToId.get(validated.dealSeed.arcSlug);
+    const dispatchIndex = validated.dispatches.findIndex(
+      (d) => d.dispatchKey === validated.dealSeed!.dispatchKey
+    );
+    if (seedArcId && dispatchIndex >= 0) {
+      dealSeedPayload = {
+        arcId: seedArcId,
+        dispatchIndex,
+        dispatchKey: validated.dealSeed.dispatchKey,
+        dispatchHeadline: validated.dispatches[dispatchIndex].headline,
+        prompt: validated.dealSeed.prompt,
+        suggestedPotUsdc: validated.dealSeed.suggestedPotUsdc,
+        suggestedEntryCostUsdc: validated.dealSeed.suggestedEntryCostUsdc,
+      };
+    }
+  }
+
   const result = await ctx.runMutation(
     internal.wire.persist.persistGeneratedEpoch,
     {
@@ -240,6 +275,7 @@ async function runGenerator(
       eventsIngested:
         recentGameEvents.length > 0 ? recentGameEvents : undefined,
       rawNarrative,
+      dealSeed: dealSeedPayload,
     }
   );
 
