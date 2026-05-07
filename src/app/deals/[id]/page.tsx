@@ -9,6 +9,7 @@ import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { useDeal } from "@/hooks/use-deals";
+import { useDeskManager } from "@/hooks/use-desk";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
@@ -22,7 +23,15 @@ export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { data, isLoading, error } = useDeal(id);
   const { user } = usePrivy();
-  const walletAddress = user?.wallet?.address;
+  const { data: deskManager } = useDeskManager();
+  const linkedWalletAddress = user?.linkedAccounts?.find(
+    (account) => account.type === "wallet" && "address" in account
+  ) as { address?: unknown } | undefined;
+  const walletAddress =
+    user?.wallet?.address ??
+    (typeof linkedWalletAddress?.address === "string"
+      ? linkedWalletAddress.address
+      : undefined);
 
   if (isLoading) {
     return (
@@ -59,6 +68,12 @@ export default function DealDetailPage() {
     .filter((outcome) => outcome.pot_change_inferred)
     .reduce((sum, outcome) => sum + outcome.pot_change_usdc, 0);
   const displayPotUsdc = deal.pot_usdc + legacyPotDelta;
+  const isDealOwner =
+    deal.creator_id !== undefined &&
+    deskManager?.id === deal.creator_id &&
+    walletAddress !== undefined &&
+    deal.creator_address !== undefined &&
+    deal.creator_address.toLowerCase() === walletAddress.toLowerCase();
 
   return (
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
@@ -161,9 +176,8 @@ export default function DealDetailPage() {
               </div>
 
               {deal.on_chain_deal_id !== undefined &&
+                isDealOwner &&
                 walletAddress &&
-                deal.creator_address?.toLowerCase() ===
-                  walletAddress.toLowerCase() &&
                 (deal.status === "open" ? (
                   <CloseDealButton
                     dealId={deal.id}

@@ -105,6 +105,7 @@ export const recordOnChainCreation = mutation({
     const now = Date.now();
     const dealId = await ctx.db.insert("deals", {
       creatorDeskManagerId: dm._id,
+      creatorAddress: dm.walletAddress,
       creatorType: "desk_manager",
       prompt: args.prompt,
       potUsdc: args.potUsdc,
