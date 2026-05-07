@@ -8,7 +8,13 @@ const forbiddenLanguage = ["DeFi", "wagmi", "stakeholders"];
 function makeValidPayload() {
   return {
     dropTitle: "MARGIN CALLED",
-    worldState: { mood: "tense", sec_heat: 7 },
+    worldState: {
+      mood: "tense",
+      sec_heat: 7,
+      sectors: null,
+      active_storylines: null,
+      notable_traders: null,
+    },
     dispatches: [
       {
         headline: "PanAtlantic down 12%",
@@ -16,6 +22,7 @@ function makeValidPayload() {
         category: "market",
         role: "main" as const,
         arcSlug: "arc-a",
+        referenceEpoch: null,
       },
       {
         headline: "Marty Vale exits the building",
@@ -23,6 +30,7 @@ function makeValidPayload() {
         category: "floor_talk",
         role: "supporting" as const,
         arcSlug: "arc-b",
+        referenceEpoch: null,
       },
     ],
     arcUpdates: [{ arcSlug: "arc-a", tensionDelta: 2 }],
@@ -48,6 +56,7 @@ describe("validateEpoch: accepts valid payloads", () => {
       category: "regulatory",
       role: "supporting" as const,
       arcSlug: "arc-b",
+      referenceEpoch: null,
     });
     const result = validateEpoch(payload, {
       arcSlugs,
@@ -57,9 +66,9 @@ describe("validateEpoch: accepts valid payloads", () => {
     expect(result.ok).toBe(true);
   });
 
-  it("accepts a payload with no arcUpdates", () => {
+  it("accepts a payload with null arcUpdates", () => {
     const payload = makeValidPayload();
-    delete (payload as { arcUpdates?: unknown }).arcUpdates;
+    (payload as Record<string, unknown>).arcUpdates = null;
     const result = validateEpoch(payload, {
       arcSlugs,
       entitySlugs,
@@ -100,6 +109,8 @@ describe("validateEpoch: rejects invalid dispatch counts", () => {
         body: "Extra body text here.",
         category: "market",
         role: "supporting" as const,
+        arcSlug: null,
+        referenceEpoch: null,
       });
     }
     const result = validateEpoch(payload, {

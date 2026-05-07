@@ -5,16 +5,16 @@ const DispatchSchema = z.object({
   body: z.string().max(180),
   category: z.string(),
   role: z.enum(["main", "supporting", "deal_seed"]),
-  arcSlug: z.string().optional(),
-  referenceEpoch: z.number().optional(),
+  arcSlug: z.string().nullable(),
+  referenceEpoch: z.number().nullable(),
 });
 
 const WorldStateSchema = z.object({
   mood: z.string(),
   sec_heat: z.number().min(0).max(10),
-  sectors: z.array(z.string()).optional(),
-  active_storylines: z.array(z.string()).optional(),
-  notable_traders: z.array(z.string()).optional(),
+  sectors: z.array(z.string()).nullable(),
+  active_storylines: z.array(z.string()).nullable(),
+  notable_traders: z.array(z.string()).nullable(),
 });
 
 const ArcUpdateSchema = z.object({
@@ -26,8 +26,8 @@ export const NarrativeEpochSchema = z.object({
   dropTitle: z.string(),
   worldState: WorldStateSchema,
   dispatches: z.array(DispatchSchema).min(2).max(3),
-  arcUpdates: z.array(ArcUpdateSchema).max(3).optional(),
-  entityMentions: z.array(z.string()).optional(),
+  arcUpdates: z.array(ArcUpdateSchema).max(3).nullable(),
+  entityMentions: z.array(z.string()).nullable(),
 });
 
 export type NarrativeEpoch = z.infer<typeof NarrativeEpochSchema>;

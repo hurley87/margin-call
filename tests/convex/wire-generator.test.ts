@@ -20,7 +20,13 @@ async function seedSeasonAndDrops(t: ReturnType<typeof convexTest>) {
 function makeLlmStub(overrides: Record<string, unknown> = {}) {
   return {
     dropTitle: "PANIC ON THE FLOOR",
-    worldState: { mood: "chaotic", sec_heat: 8 },
+    worldState: {
+      mood: "chaotic",
+      sec_heat: 8,
+      sectors: null,
+      active_storylines: null,
+      notable_traders: null,
+    },
     dispatches: [
       {
         headline: "PanAtlantic bonds halted at the exchange",
@@ -28,6 +34,7 @@ function makeLlmStub(overrides: Record<string, unknown> = {}) {
         category: "market",
         role: "main",
         arcSlug: "pan-atlantic-blowup",
+        referenceEpoch: null,
       },
       {
         headline: "Marty Vale spotted outside SEC building",
@@ -35,6 +42,7 @@ function makeLlmStub(overrides: Record<string, unknown> = {}) {
         category: "floor_talk",
         role: "supporting",
         arcSlug: "mercer-investigation",
+        referenceEpoch: null,
       },
     ],
     arcUpdates: [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 2 }],
@@ -191,6 +199,7 @@ describe("wire/generator: validation rejection", () => {
           category: "market",
           role: "main",
           arcSlug: "nonexistent-arc-xyz",
+          referenceEpoch: null,
         },
         {
           headline: "Second dispatch for count",
@@ -198,6 +207,7 @@ describe("wire/generator: validation rejection", () => {
           category: "market",
           role: "supporting",
           arcSlug: "pan-atlantic-blowup",
+          referenceEpoch: null,
         },
       ],
     });
