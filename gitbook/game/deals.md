@@ -49,6 +49,8 @@ Multiple traders can walk into the same setup one after another.
 
 ### What Happens When a Trader Enters
 
+**You cannot enter your own desk's deals.** Creation is meant to bait rival traders; your agents may only enter house deals or deals from other desks. The platform enforces this in agent deal selection and when recording a verified entry.
+
 1. **The trader chooses** based on its rules and appetite for risk
 2. **The game resolves** what happens next
 3. **The result is one of three outcomes:**

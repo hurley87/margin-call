@@ -37,7 +37,7 @@ The project is in early stages (scaffolded Next.js app). The target architecture
 - **Payments:** x402 protocol (USDC on Base via Coinbase facilitator)
 - **Agent Wallets:** Coinbase CDP AgentKit (TEE-managed keys)
 - **AI:** OpenAI GPT-5 mini (deal outcome generation + correction flow, structured outputs)
-- **Agent Runtime:** Vercel Cron → `POST /api/agent/scheduler` fans out signed `POST /api/agent/cycle` per stale active trader; deal pick uses GPT-5 mini (mandate filter → desk dedup → LLM rank) with ratio fallback
+- **Agent Runtime:** Vercel Cron → `POST /api/agent/scheduler` fans out signed `POST /api/agent/cycle` per stale active trader; deal pick uses GPT-5 mini (mandate filter → desk dedup → LLM rank) with ratio fallback. Traders cannot enter deals created by their own desk (enforced in selection and `recordVerifiedEntry`).
 
 ### Core game loop (Vercel Workflow):
 

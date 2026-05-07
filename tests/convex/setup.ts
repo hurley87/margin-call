@@ -87,6 +87,8 @@ export async function seedDeal(
     potUsdc?: number;
     entryCostUsdc?: number;
     status?: "open" | "closed" | "depleted";
+    /** When set, deal is treated as created by that desk (not house). */
+    creatorDeskManagerId?: string;
   } = {}
 ) {
   return t.run(async (ctx) => {
@@ -97,6 +99,9 @@ export async function seedDeal(
       entryCostUsdc: opts.entryCostUsdc ?? 50,
       status: opts.status ?? "open",
       creatorType: "desk_manager",
+      ...(opts.creatorDeskManagerId !== undefined
+        ? { creatorDeskManagerId: opts.creatorDeskManagerId as never }
+        : {}),
       createdAt: now,
       updatedAt: now,
     });

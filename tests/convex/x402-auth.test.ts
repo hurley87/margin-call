@@ -145,6 +145,58 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
   });
 });
 
+describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
+  it("rejects entry when deal was created by the trader's desk", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId);
+    const dealId = await seedDeal(t, { creatorDeskManagerId: dmId });
+
+    await expect(
+      t.mutation(internal.deals.recordVerifiedEntry, {
+        paymentId: "pay-own-desk",
+        dealId: dealId as never,
+        traderId: traderId as string,
+        entryCostUsdc: 50,
+      })
+    ).rejects.toThrow("Trader cannot enter deals created by its own desk.");
+  });
+
+  it("allows entry when deal was created by another desk", async () => {
+    const t = convexTest(schema, modules);
+    const dmA = await seedDeskManager(t, { subject: "sub-a" });
+    const dmB = await seedDeskManager(t, {
+      subject: "sub-b",
+      walletAddress: "0xb",
+    });
+    const traderId = await seedActiveTrader(t, dmA);
+    const dealId = await seedDeal(t, { creatorDeskManagerId: dmB });
+
+    const entryId = await t.mutation(internal.deals.recordVerifiedEntry, {
+      paymentId: "pay-rival-desk",
+      dealId: dealId as never,
+      traderId: traderId as string,
+      entryCostUsdc: 50,
+    });
+    expect(entryId).toBeTruthy();
+  });
+
+  it("allows entry for house deal (no creatorDeskManagerId)", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId);
+    const dealId = await seedDeal(t);
+
+    const entryId = await t.mutation(internal.deals.recordVerifiedEntry, {
+      paymentId: "pay-house",
+      dealId: dealId as never,
+      traderId: traderId as string,
+      entryCostUsdc: 50,
+    });
+    expect(entryId).toBeTruthy();
+  });
+});
+
 // ── x402 boundary: no public mutation surface for verified flags ───────────────
 
 describe("x402 boundary: public mutation surface regression", () => {

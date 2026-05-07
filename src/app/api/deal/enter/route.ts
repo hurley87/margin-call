@@ -17,6 +17,8 @@ import {
   checkRateLimit,
   getClientIdentifier,
 } from "@/lib/rate-limit";
+import { isTraderEligibleToEnterDealByDesk } from "@/lib/deal-entry-eligibility";
+
 const LEGACY_PRIVY_ENTRY_MESSAGE =
   "Deprecated: Privy + Supabase deal enter has been removed; use Convex-backed flows. Agent cycles still use this route with SIWA (`_agent_cycle: true`).";
 
@@ -54,6 +56,7 @@ async function handleAgentCycleDealEnter(
   const trader = (await convex.query(loadTraderFn, {
     traderId: trader_id as Id<"traders">,
   })) as {
+    deskManagerId: Id<"deskManagers">;
     tokenId?: number;
     cdpWalletAddress?: string;
     cdpOwnerAddress?: string;
@@ -88,6 +91,7 @@ async function handleAgentCycleDealEnter(
     potUsdc: number;
     entryCostUsdc: number;
     onChainDealId?: number | null;
+    creatorDeskManagerId?: Id<"deskManagers">;
   } | null;
 
   if (!deal) {
@@ -121,6 +125,20 @@ async function handleAgentCycleDealEnter(
         resolve_tx_hash: null,
       },
     });
+  }
+
+  if (
+    !isTraderEligibleToEnterDealByDesk(
+      { creatorDeskManagerId: deal.creatorDeskManagerId ?? null },
+      { deskManagerId: String(trader.deskManagerId) }
+    )
+  ) {
+    return NextResponse.json(
+      {
+        error: "Trader cannot enter deals created by its own desk.",
+      },
+      { status: 403 }
+    );
   }
 
   const onChainDealId =

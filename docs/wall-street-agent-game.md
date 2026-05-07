@@ -88,6 +88,8 @@ All USDC flows through the escrow contract. No platform wallet custody.
 
 ### Deal Entry
 
+**Desk adversarial rule:** Traders cannot enter deals created by their own desk. Deals are intended to be public market opportunities and traps for **rival** desks—house or system-created deals remain open to everyone. Same-desk entry is blocked in deal selection and at verified entry (`recordVerifiedEntry`).
+
 1. Trader's agent runtime (server) decides to enter a deal
 2. Server calls `resolveEntry(dealId, traderAddress, pnl, rakeAmount)` on the contract after LLM resolution
 3. Contract checks trader has sufficient balance in escrow

@@ -121,6 +121,7 @@ Convex stores the outcome of verification; **verification itself** remains in Ne
 
 - `POST /api/deal/enter` — x402-protected; remains a Next.js route. **Verify payment first** at the HTTP boundary, then call a **dedicated Convex server-side function** to record the verified paid deal entry (idempotent on settlement id / request key). The client cannot mark deals paid or settled directly in Convex.
 - **Agent cycle (`_agent_cycle`):** entry-only path in the same route loads **Convex** trader + deal (admin client), performs **on-chain `enterDeal`** when applicable, and writes **`dealEntries`** via `internal.deals.recordVerifiedEntry`. It does **not** run the LLM outcome path or write Supabase outcomes; **`internal.agent.cycle`** owns outcome resolution after the HTTP call returns.
+- **Same-desk entry:** A trader cannot enter a deal whose `creatorDeskManagerId` matches that trader's desk. House deals (no creator desk id) and other desks' deals remain eligible. Enforced in `convex/agent/dealSelection.ts` and defensively in `internal.deals.recordVerifiedEntry` (and fail-fast in `POST /api/deal/enter` for agent cycles).
 - SIWA routes (`/api/siwa/*`) — remain Next.js, write nonces to Convex.
 - Webhook receivers (if any) — remain Next.js.
 - All other routes under `src/app/api/{trader,desk,deal,activity,leaderboard,narrative,prompt,agent}` are deleted; their logic moves to Convex queries/mutations/actions.

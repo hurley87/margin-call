@@ -88,6 +88,7 @@ export default defineSchema({
    * Populated exclusively via the internal mutation `deals.recordVerifiedEntry`.
    * No public mutation may set paid/verified/settled flags.
    * `paymentId` is the idempotency key (x402 settlement / request id).
+   * Business rule: same-desk deals are rejected in `recordVerifiedEntry` (trader cannot enter its own desk's deals).
    */
   dealEntries: defineTable({
     // Idempotency key — x402 settlement id / payment id / request id.

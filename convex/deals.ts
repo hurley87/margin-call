@@ -4,7 +4,9 @@ import {
   mutation,
   query,
 } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { isOwnDeskCreatedDeal } from "./lib/dealEntryEligibility";
 
 // ── Public queries (auth-checked) ──────────────────────────────────────────
 
@@ -333,19 +335,33 @@ export const recordVerifiedEntry = internalMutation({
       .unique();
     if (existing) return existing._id;
 
+    const dealDoc = await ctx.db.get(args.dealId);
+    if (!dealDoc) {
+      throw new Error("Deal not found");
+    }
+    const traderDoc = await ctx.db.get(args.traderId as Id<"traders">);
+    if (!traderDoc) {
+      throw new Error("Trader not found");
+    }
+    if (
+      isOwnDeskCreatedDeal(
+        { creatorDeskManagerId: dealDoc.creatorDeskManagerId },
+        String(traderDoc.deskManagerId)
+      )
+    ) {
+      throw new Error("Trader cannot enter deals created by its own desk.");
+    }
+
     const id = await ctx.db.insert("dealEntries", {
       ...args,
       createdAt: Date.now(),
     });
 
     // Also increment entryCount on the parent deal (best-effort)
-    const deal = await ctx.db.get(args.dealId);
-    if (deal) {
-      await ctx.db.patch(args.dealId, {
-        entryCount: (deal.entryCount ?? 0) + 1,
-        updatedAt: Date.now(),
-      });
-    }
+    await ctx.db.patch(args.dealId, {
+      entryCount: (dealDoc.entryCount ?? 0) + 1,
+      updatedAt: Date.now(),
+    });
 
     return id;
   },

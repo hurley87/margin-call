@@ -10,6 +10,7 @@
  * Pipeline:
  *   1. Load open deals from Convex
  *   2. Exclude deals already resolved by this trader
+ *   2b. Exclude own-desk deals (no self-dealing)
  *   3. Mandate filter (pure: evaluateDeals)
  *   4. Desk dedup (sibling traders on same desk, via Convex)
  *   5. LLM rank (GPT-4o-mini) → ratio fallback on error / disabled
@@ -23,6 +24,7 @@ import { DESK_DEAL_DEDUP_HOURS } from "./_constants";
 import type { Mandate, Deal } from "./_types";
 import { evaluateDeals } from "./_evaluator";
 import { DealEvaluationSchema, type DealEvaluation } from "./_schemas";
+import { isOwnDeskCreatedDeal } from "../lib/dealEntryEligibility";
 
 export type { Mandate, Deal };
 export { evaluateDeals };
@@ -153,9 +155,33 @@ export async function selectDeal(
     };
   }
 
+  // ── 2b. Exclude own desk's deals (adversarial / no self-dealing) ───────────
+  const notOwnDeskDeals = deals.filter(
+    (d) =>
+      !isOwnDeskCreatedDeal(
+        { creatorDeskManagerId: d.creator_id },
+        deskManagerId
+      )
+  );
+  const skippedOwnDeskCount = deals.length - notOwnDeskDeals.length;
+  if (skippedOwnDeskCount > 0) {
+    console.info(
+      `[dealSelection] Skipped ${skippedOwnDeskCount} deal(s): own-desk deals are not eligible.`
+    );
+  }
+
+  if (notOwnDeskDeals.length === 0) {
+    return {
+      deal: null,
+      reasoning:
+        "No open deals eligible for this trader (own-desk deals are not eligible).",
+      method: "skip",
+    };
+  }
+
   // ── 3. Mandate filter (pure) ────────────────────────────────────────────────
   const { eligible, skipped: mandateSkipped } = evaluateDeals(
-    deals,
+    notOwnDeskDeals,
     mandate,
     escrowBalanceUsdc
   );
