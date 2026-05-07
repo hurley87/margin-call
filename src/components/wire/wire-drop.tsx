@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { heatColor } from "@/lib/utils";
 import { WireSourceLine } from "./wire-sources";
 import { CreateDealDialog } from "./create-deal-dialog";
 import { DealBadge } from "./deal-badge";
@@ -150,12 +151,7 @@ export function WireDropBlock({ drop, headlineDealsMap }: WireDropBlockProps) {
     [drop.createdAt]
   );
 
-  const tensionColor =
-    (drop.topArcTension ?? 0) >= 7
-      ? "text-[var(--t-red)]"
-      : (drop.topArcTension ?? 0) >= 4
-        ? "text-[var(--t-amber)]"
-        : "text-[var(--t-green)]";
+  const tensionColor = heatColor(drop.topArcTension ?? 0);
 
   return (
     <div className="my-3 border border-[var(--t-border)]">

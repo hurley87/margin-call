@@ -36,6 +36,7 @@ import type * as siwaNonces from "../siwaNonces.js";
 import type * as systemPrompts from "../systemPrompts.js";
 import type * as traders from "../traders.js";
 import type * as wallet from "../wallet.js";
+import type * as wire__operatorUtils from "../wire/_operatorUtils.js";
 import type * as wire__schemas from "../wire/_schemas.js";
 import type * as wire_epochAssembler from "../wire/epochAssembler.js";
 import type * as wire_epochValidator from "../wire/epochValidator.js";
@@ -82,6 +83,7 @@ declare const fullApi: ApiFromModules<{
   systemPrompts: typeof systemPrompts;
   traders: typeof traders;
   wallet: typeof wallet;
+  "wire/_operatorUtils": typeof wire__operatorUtils;
   "wire/_schemas": typeof wire__schemas;
   "wire/epochAssembler": typeof wire_epochAssembler;
   "wire/epochValidator": typeof wire_epochValidator;

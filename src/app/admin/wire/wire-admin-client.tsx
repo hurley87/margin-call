@@ -4,12 +4,7 @@ import { useState } from "react";
 import { useQuery, useAction } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { Nav } from "@/components/nav";
-
-function tensionColor(score: number): string {
-  if (score >= 8) return "text-[var(--t-red)]";
-  if (score >= 5) return "text-[var(--t-amber)]";
-  return "text-[var(--t-green)]";
-}
+import { heatColor } from "@/lib/utils";
 
 function relativeTime(ms: number): string {
   const diff = Date.now() - ms;
@@ -224,7 +219,7 @@ export default function WireAdminClient() {
                         </div>
                         <div className="shrink-0 text-right">
                           <div
-                            className={`text-sm font-bold tabular-nums ${tensionColor(arc.tensionScore)}`}
+                            className={`text-sm font-bold tabular-nums ${heatColor(arc.tensionScore)}`}
                           >
                             {arc.tensionScore}/10
                           </div>

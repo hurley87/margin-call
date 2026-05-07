@@ -1,16 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQuery } from "convex/react";
 import { Dialog } from "@base-ui/react/dialog";
 import { api } from "../../../convex/_generated/api";
 import { Nav } from "@/components/nav";
 import { WireFeed } from "@/components/wire/wire-feed";
 import { WireStatsBar } from "@/components/wire/wire-stats-bar";
-import { CreateDealDialog } from "@/components/wire/create-deal-dialog";
+import { heatColor } from "@/lib/utils";
 import { DEAL_CREATION_FEE_PERCENTAGE } from "@/lib/constants";
 
-const HOW_DEALS_SECTIONS = [
+interface HowDealsSection {
+  label: string;
+  body: ReactNode;
+}
+
+const HOW_DEALS_SECTIONS: HowDealsSection[] = [
   {
     label: "WHAT'S A DEAL?",
     body: "You write a scenario and fund a USDC pot. AI traders on the street evaluate it and decide whether to enter.",
@@ -30,25 +35,22 @@ const HOW_DEALS_SECTIONS = [
     label: "GOOD DEALS",
     body: "Scenarios that sound lucrative but are traps. High entry costs attract confident traders but filter out cautious ones. Bigger pots attract more entries. The AI resolves outcomes, so a well-crafted scenario influences the narrative.",
   },
-] as const;
+];
 
 export default function WirePage() {
   const drops = useQuery(api.marketNarratives.feedDrops, { limit: 20 });
   const isLoading = drops === undefined;
   const [howDealsOpen, setHowDealsOpen] = useState(false);
-  const [globalDealOpen, setGlobalDealOpen] = useState(false);
 
   const latestMood = drops?.[0]?.mood;
-  const latestSecHeat = drops?.[0]?.secHeat;
+  const secHeat = drops?.[0]?.secHeat ?? 0;
 
   return (
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
 
-      {/* Single bordered column for all content */}
       <div className="mx-auto w-full max-w-4xl px-4">
         <div className="border-x border-[var(--t-border)]">
-          {/* Sticky header: sub-header + stats/deals bar (below nav ~37px) */}
           <div className="sticky top-[37px] z-20 bg-[var(--t-bg)]">
             <div className="flex items-center justify-between border-b border-[var(--t-border)] px-4 py-1.5 text-sm">
               <div className="flex items-center gap-2">
@@ -62,12 +64,7 @@ export default function WirePage() {
                   HOW DEALS WORK
                 </button>
               </div>
-              <button
-                onClick={() => setGlobalDealOpen(true)}
-                className="cursor-pointer border border-[var(--t-accent)] bg-[var(--t-accent)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-bg)] transition-colors hover:bg-transparent hover:text-[var(--t-accent)]"
-              >
-                + CREATE DEAL
-              </button>
+
               {latestMood != null && (
                 <div className="flex items-center gap-3 text-xs">
                   <span className="text-[var(--t-muted)]">
@@ -77,18 +74,7 @@ export default function WirePage() {
                     </span>
                   </span>
                   <span className="text-[var(--t-muted)]">
-                    SEC{" "}
-                    <span
-                      className={
-                        (latestSecHeat ?? 0) >= 7
-                          ? "text-[var(--t-red)]"
-                          : (latestSecHeat ?? 0) >= 4
-                            ? "text-[var(--t-amber)]"
-                            : "text-[var(--t-green)]"
-                      }
-                    >
-                      {latestSecHeat}/10
-                    </span>
+                    SEC <span className={heatColor(secHeat)}>{secHeat}/10</span>
                   </span>
                 </div>
               )}
@@ -97,7 +83,6 @@ export default function WirePage() {
             <WireStatsBar />
           </div>
 
-          {/* How Deals Work dialog — outside sticky header, Portal renders to body */}
           <Dialog.Root open={howDealsOpen} onOpenChange={setHowDealsOpen}>
             <Dialog.Portal>
               <Dialog.Backdrop className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm" />
@@ -139,14 +124,6 @@ export default function WirePage() {
               </Dialog.Popup>
             </Dialog.Portal>
           </Dialog.Root>
-
-          {globalDealOpen && (
-            <CreateDealDialog
-              headline={{ headline: "", body: "" }}
-              open={globalDealOpen}
-              onOpenChange={setGlobalDealOpen}
-            />
-          )}
 
           <div className="px-4 pb-4">
             {isLoading ? (
