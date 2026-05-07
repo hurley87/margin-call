@@ -6,8 +6,111 @@ import { internal } from "../_generated/api";
 import { CYCLE_LEASE_TTL_MS } from "./internal";
 import { APPROVAL_EXPIRY_MS } from "./_constants";
 import { selectDeal } from "./dealSelection";
-import { resolveOutcome } from "./outcomeResolver";
+import { resolveOutcome, type ResolvedOutcome } from "./outcomeResolver";
 import type { Mandate } from "./_types";
+
+const ESCROW_ADDRESS = "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
+const USDC_DECIMALS = 1_000_000;
+
+function usdcToRaw(amountUsdc: number): bigint {
+  return BigInt(Math.max(0, Math.round(amountUsdc * USDC_DECIMALS)));
+}
+
+async function resolveOnChainEntry({
+  onChainDealId,
+  tokenId,
+  entryCostUsdc,
+  traderPnlUsdc,
+  rakeUsdc,
+}: {
+  onChainDealId: number;
+  tokenId: number;
+  entryCostUsdc: number;
+  traderPnlUsdc: number;
+  rakeUsdc: number;
+}): Promise<`0x${string}` | null> {
+  const operatorKey = process.env.OPERATOR_PRIVATE_KEY;
+  if (!operatorKey) {
+    throw new Error("OPERATOR_PRIVATE_KEY env var is not set");
+  }
+
+  const { createPublicClient, createWalletClient, http } = await import("viem");
+  const { privateKeyToAccount } = await import("viem/accounts");
+  const { baseSepolia } = await import("viem/chains");
+
+  const abi = [
+    {
+      type: "function",
+      name: "getDeal",
+      inputs: [{ name: "dealId", type: "uint256" }],
+      outputs: [
+        {
+          name: "",
+          type: "tuple",
+          components: [
+            { name: "creator", type: "address" },
+            { name: "prompt", type: "string" },
+            { name: "potAmount", type: "uint256" },
+            { name: "entryCost", type: "uint256" },
+            { name: "fee", type: "uint256" },
+            { name: "status", type: "uint8" },
+            { name: "pendingEntries", type: "uint256" },
+          ],
+        },
+      ],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
+      name: "resolveEntry",
+      inputs: [
+        { name: "dealId", type: "uint256" },
+        { name: "traderId", type: "uint256" },
+        { name: "pnl", type: "int256" },
+        { name: "rake", type: "uint256" },
+      ],
+      outputs: [],
+      stateMutability: "nonpayable",
+    },
+  ] as const;
+
+  const transport = http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL);
+  const account = privateKeyToAccount(operatorKey as `0x${string}`);
+  const walletClient = createWalletClient({
+    account,
+    chain: baseSepolia,
+    transport,
+  });
+  const publicClient = createPublicClient({ chain: baseSepolia, transport });
+
+  const onChainDeal = await publicClient.readContract({
+    address: ESCROW_ADDRESS,
+    abi,
+    functionName: "getDeal",
+    args: [BigInt(onChainDealId)],
+  });
+  if (onChainDeal.pendingEntries === BigInt(0)) return null;
+
+  // The escrow contract deducts the entry cost when the trader enters. Its
+  // `pnl` argument is the gross payout from the deal pot, not net portfolio PnL.
+  const grossPayoutUsdc = Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc);
+  const hash = await walletClient.writeContract({
+    address: ESCROW_ADDRESS,
+    abi,
+    functionName: "resolveEntry",
+    args: [
+      BigInt(onChainDealId),
+      BigInt(tokenId),
+      usdcToRaw(grossPayoutUsdc),
+      usdcToRaw(rakeUsdc),
+    ],
+    chain: baseSepolia,
+    account,
+  });
+
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  return receipt.transactionHash;
+}
 
 // ── x402 deal-entry helper ───────────────────────────────────────────────────
 
@@ -253,8 +356,6 @@ export const cycle = internalAction({
         try {
           const { createPublicClient, http } = await import("viem");
           const { baseSepolia } = await import("viem/chains");
-          const ESCROW_ADDRESS =
-            "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
           const publicClient = createPublicClient({
             chain: baseSepolia,
             transport: http(),
@@ -273,7 +374,7 @@ export const cycle = internalAction({
             functionName: "getBalance",
             args: [BigInt(trader.tokenId)],
           });
-          escrowBalanceUsdc = Number(raw) / 1_000_000;
+          escrowBalanceUsdc = Number(raw) / USDC_DECIMALS;
           await ctx.runMutation(internal.traders.syncEscrowBalance, {
             traderId,
             balanceUsdc: escrowBalanceUsdc,
@@ -507,15 +608,18 @@ export const cycle = internalAction({
         { traderId: traderId as string, dealId: dealId as never }
       );
 
-      let outcomeId: string;
+      let outcomeId: string | null = null;
       let traderPnlUsdc: number;
+      let rakeUsdc: number;
       let traderWipedOut: boolean;
       let narrative: string;
+      let pendingOutcome: ResolvedOutcome | null = null;
 
       if (existingOutcome) {
         // Outcome already recorded (e.g. from a previous crashed cycle) — reuse it
         outcomeId = existingOutcome._id as string;
         traderPnlUsdc = existingOutcome.traderPnlUsdc ?? 0;
+        rakeUsdc = existingOutcome.rakeUsdc ?? 0;
         traderWipedOut = existingOutcome.traderWipedOut ?? false;
         narrative =
           typeof existingOutcome.narrative === "string"
@@ -535,28 +639,66 @@ export const cycle = internalAction({
         });
 
         traderPnlUsdc = resolved.traderPnlUsdc;
+        rakeUsdc = resolved.rakeUsdc;
         traderWipedOut = resolved.traderWipedOut;
         narrative =
           typeof resolved.narrative === "string"
             ? resolved.narrative
             : "Deal resolved.";
 
-        // Persist outcome (idempotent CAS: returns existing id if already written)
+        pendingOutcome = resolved;
+      }
+
+      // ── 9. Resolve on-chain pending entry before closing out local state ───
+      let resolveTxHash: `0x${string}` | null | undefined;
+      if (
+        bestDeal.on_chain_deal_id !== undefined &&
+        bestDeal.on_chain_deal_id !== null &&
+        traderTokenId !== undefined
+      ) {
+        resolveTxHash = await resolveOnChainEntry({
+          onChainDealId: bestDeal.on_chain_deal_id,
+          tokenId: traderTokenId,
+          entryCostUsdc: bestDeal.entry_cost_usdc,
+          traderPnlUsdc,
+          rakeUsdc,
+        });
+      }
+
+      if (pendingOutcome) {
+        // Persist after on-chain settlement succeeds. If the contract rejects
+        // the resolution, leave no local outcome behind so a later cycle can retry.
         outcomeId = (await ctx.runMutation(internal.dealOutcomes.apply, {
           dealId: dealId as never,
           traderId: traderId as string,
-          narrative: resolved.narrative,
-          traderPnlUsdc: resolved.traderPnlUsdc,
-          potChangeUsdc: resolved.potChangeUsdc,
-          rakeUsdc: resolved.rakeUsdc,
-          traderWipedOut: resolved.traderWipedOut,
-          wipeoutReason: resolved.wipeoutReason ?? undefined,
-          assetsGained: resolved.assetsGained,
-          assetsLost: resolved.assetsLost,
+          narrative: pendingOutcome.narrative,
+          traderPnlUsdc: pendingOutcome.traderPnlUsdc,
+          potChangeUsdc: pendingOutcome.potChangeUsdc,
+          rakeUsdc: pendingOutcome.rakeUsdc,
+          traderWipedOut: pendingOutcome.traderWipedOut,
+          wipeoutReason: pendingOutcome.wipeoutReason ?? undefined,
+          assetsGained: pendingOutcome.assetsGained,
+          assetsLost: pendingOutcome.assetsLost,
         })) as string;
       }
 
-      // ── 9. Apply PnL to trader balance (single-writer, idempotent) ─────────
+      if (resolveTxHash !== undefined && outcomeId !== null) {
+        await ctx.runMutation(internal.agentActivityLog.append, {
+          traderId,
+          activityType: "resolve",
+          message: resolveTxHash
+            ? `On-chain entry resolved (tx=${resolveTxHash})`
+            : "On-chain entry was already resolved",
+          dealId: dealId as never,
+          metadata: {
+            outcome_id: outcomeId,
+            resolve_tx_hash: resolveTxHash,
+          },
+          correlationId,
+        });
+      }
+
+      // ── 10. Apply PnL to trader balance (single-writer, idempotent) ────────
       const balanceResult = await ctx.runMutation(
         internal.traders.applyOutcomeBalance,
         {
@@ -569,7 +711,7 @@ export const cycle = internalAction({
         traderWipedOut = balanceResult.wipedOut;
       }
 
-      // ── 10. Log outcome ────────────────────────────────────────────────────
+      // ── 11. Log outcome ────────────────────────────────────────────────────
       const activityType = traderWipedOut
         ? "wipeout"
         : traderPnlUsdc >= 0
@@ -589,7 +731,7 @@ export const cycle = internalAction({
         correlationId,
       });
 
-      // ── 11. Mark complete (updates lastCycleAt, releases lease) ──────────
+      // ── 12. Mark complete (updates lastCycleAt, releases lease) ──────────
       const cycleEndMessage = traderWipedOut
         ? "Trader wiped out — cycle ended"
         : "Cycle complete";

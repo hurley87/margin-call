@@ -5,7 +5,11 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 
-import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import {
+  useReadContract,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from "wagmi";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
 import { useDeal } from "@/hooks/use-deals";
@@ -320,10 +324,28 @@ function CloseDealButton({
 }) {
   const syncedRef = useRef(false);
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
+  const {
+    data: onChainDeal,
+    isLoading: isLoadingOnChainDeal,
+    error: onChainDealError,
+  } = useReadContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getDeal",
+    args: [BigInt(onChainDealId)],
+    chainId: CONTRACTS_CHAIN_ID,
+  });
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
   });
   const setStatusByOnChainId = useMutation(api.deals.setStatusByOnChainId);
+  const pendingEntries = onChainDeal?.pendingEntries;
+  const isPendingEntriesUnknown =
+    isLoadingOnChainDeal ||
+    onChainDealError !== null ||
+    pendingEntries === undefined;
+  const hasPendingEntries =
+    pendingEntries !== undefined && pendingEntries > BigInt(0);
 
   useEffect(() => {
     if (!isSuccess || !txHash || syncedRef.current) return;
@@ -370,11 +392,19 @@ function CloseDealButton({
     <div className="border-t border-[var(--t-border)] px-3 py-2">
       <div className="flex items-center justify-between">
         <p className="text-[10px] text-[var(--t-muted)]">
-          Withdraw remaining pot (requires 0 pending entries)
+          Withdraw remaining pot
+          {pendingEntries !== undefined
+            ? ` (${pendingEntries.toString()} pending ${pendingEntries === BigInt(1) ? "entry" : "entries"})`
+            : " (checking pending entries...)"}
         </p>
         <button
           onClick={handleClose}
-          disabled={isPending || isConfirming}
+          disabled={
+            isPending ||
+            isConfirming ||
+            isPendingEntriesUnknown ||
+            hasPendingEntries
+          }
           className="border border-[var(--t-border)] px-3 py-1 text-[10px] text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
         >
           {isPending
