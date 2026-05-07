@@ -17,6 +17,10 @@ export const MAX_EXTRACTION_PERCENTAGE = 25; // 25% of pot per win
 export const MIN_POT_AMOUNT = 5; // 5 USDC
 export const MIN_ENTRY_COST = 1; // 1 USDC
 
+// Deal seed suggested value caps (LLM-generated; kept small for low-stakes entry)
+export const MAX_SUGGESTED_POT_USDC = 10;
+export const MAX_SUGGESTED_ENTRY_USDC = 5;
+
 // Agent runtime
 export const AGENT_LOOP_INTERVAL_MS = 30_000; // 30 seconds (target spacing between cycles)
 

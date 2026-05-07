@@ -14,3 +14,7 @@ export const MAX_EXTRACTION_PERCENTAGE = 25;
 
 /** Approval expiry: 24 hours from request time. */
 export const APPROVAL_EXPIRY_MS = 24 * 60 * 60 * 1000;
+
+/** Deal seed suggested value caps — LLM output is clamped to these in the Zod schema. */
+export const MAX_SUGGESTED_POT_USDC = 10;
+export const MAX_SUGGESTED_ENTRY_USDC = 5;

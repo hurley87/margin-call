@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  MAX_SUGGESTED_POT_USDC,
+  MAX_SUGGESTED_ENTRY_USDC,
+} from "../agent/_constants";
 
 const DispatchSchema = z.object({
   /** Stable per-drop identifier the LLM emits so a deal seed can point at its source dispatch. */
@@ -31,8 +35,8 @@ const DealSeedSchema = z.object({
   arcSlug: z.string(),
   /** Prefillable into the Create Deal dialog. */
   prompt: z.string().min(8).max(280),
-  suggestedPotUsdc: z.number().positive(),
-  suggestedEntryCostUsdc: z.number().positive(),
+  suggestedPotUsdc: z.number().positive().max(MAX_SUGGESTED_POT_USDC),
+  suggestedEntryCostUsdc: z.number().positive().max(MAX_SUGGESTED_ENTRY_USDC),
 });
 
 export const NarrativeEpochSchema = z.object({

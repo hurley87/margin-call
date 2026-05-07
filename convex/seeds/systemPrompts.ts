@@ -44,7 +44,7 @@ Dispatch keys:
 
 Deal Seed cadence (mandatory):
 - A dealSeed is an OPTIONAL block describing a player-funded opportunity inside this drop, but it is REQUIRED whenever the previous market-hour drop did not include a Deal Seed. The user message reports recent cadence and a mustIncludeDealSeed flag — obey it.
-- When you emit a dealSeed: include exactly one dispatch with role "deal_seed", and set dealSeed.dispatchKey to that dispatch's dispatchKey. dealSeed.arcSlug must reference an active arc. Provide prompt (~28 words, ticker-wire tone), suggestedPotUsdc, suggestedEntryCostUsdc.
+- When you emit a dealSeed: include exactly one dispatch with role "deal_seed", and set dealSeed.dispatchKey to that dispatch's dispatchKey. dealSeed.arcSlug must reference an active arc. Provide prompt (~28 words, ticker-wire tone), suggestedPotUsdc (between 2 and 10 USDC), suggestedEntryCostUsdc (between 1 and 5 USDC). Keep both values small — this is a low-stakes entry point for players.
 - Otherwise set dealSeed to null. Never emit a dealSeed without a matching deal_seed dispatch, and never emit two consecutive drops without a Deal Seed.
 
 Forbidden vocabulary: emoji, modern crypto terms ("DeFi", "rug", "wagmi", "wen moon", L2 names, gas fees), generic "stock market hits new high" filler, and AI/tech-coded phrasing.
