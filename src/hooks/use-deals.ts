@@ -31,6 +31,7 @@ export interface DealOutcome {
   id: string;
   deal_id: string;
   trader_id: string;
+  trader_name?: string;
   trader_pnl_usdc: number;
   pot_change_usdc: number;
   pot_change_inferred: boolean;
@@ -66,7 +67,9 @@ function mapConvexDeal(deal: Doc<"deals">): Deal {
   };
 }
 
-function mapConvexOutcome(o: Doc<"dealOutcomes">): DealOutcome {
+type DealOutcomeDoc = Doc<"dealOutcomes"> & { traderName?: string };
+
+function mapConvexOutcome(o: DealOutcomeDoc): DealOutcome {
   const traderPnlUsdc = o.traderPnlUsdc ?? 0;
   const rakeUsdc = o.rakeUsdc ?? 0;
   const potChangeInferred = o.potChangeUsdc === undefined;
@@ -78,6 +81,7 @@ function mapConvexOutcome(o: Doc<"dealOutcomes">): DealOutcome {
     id: o._id,
     deal_id: o.dealId,
     trader_id: String(o.traderId),
+    trader_name: o.traderName,
     trader_pnl_usdc: traderPnlUsdc,
     pot_change_usdc: potChangeUsdc,
     pot_change_inferred: potChangeInferred,

@@ -13,7 +13,7 @@ import {
 } from "wagmi";
 import { useMutation } from "convex/react";
 import { api } from "../../../../convex/_generated/api";
-import { useDeal } from "@/hooks/use-deals";
+import { useDeal, type DealOutcome } from "@/hooks/use-deals";
 import { useDeskManager } from "@/hooks/use-desk";
 import {
   ESCROW_ADDRESS,
@@ -23,6 +23,21 @@ import {
 import { Nav } from "@/components/nav";
 import { NarrativeRenderer } from "@/components/narrative-renderer";
 import { shortAssetLabel } from "@/lib/format-asset-label";
+
+function formatOutcomeResult(outcome: DealOutcome) {
+  const traderName = outcome.trader_name ?? "Trader";
+  const formattedAmount = `$${Math.abs(outcome.trader_pnl_usdc).toFixed(2)}`;
+
+  if (outcome.trader_wiped_out || outcome.trader_pnl_usdc < 0) {
+    return `${traderName} lost ${formattedAmount}`;
+  }
+
+  if (outcome.trader_pnl_usdc > 0) {
+    return `${traderName} made ${formattedAmount}`;
+  }
+
+  return `${traderName} broke even`;
+}
 
 export default function DealDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -202,10 +217,7 @@ export default function DealDetailPage() {
                 isDealOwner &&
                 walletAddress &&
                 (deal.status === "open" ? (
-                  <CloseDealButton
-                    dealId={deal.id}
-                    onChainDealId={deal.on_chain_deal_id}
-                  />
+                  <CloseDealButton onChainDealId={deal.on_chain_deal_id} />
                 ) : deal.status === "closed" ? (
                   <div className="border border-green-500/30 bg-green-500/10 px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-green-400">
                     DEAL CLOSED — pot withdrawn
@@ -247,8 +259,7 @@ export default function DealDetailPage() {
                                 : "text-[var(--t-red)]"
                             }`}
                           >
-                            {outcome.trader_pnl_usdc >= 0 ? "+" : ""}$
-                            {Math.abs(outcome.trader_pnl_usdc).toFixed(2)}
+                            {formatOutcomeResult(outcome)}
                           </span>
                         </div>
                         <div className="flex items-center gap-2">
@@ -334,13 +345,7 @@ export default function DealDetailPage() {
   );
 }
 
-function CloseDealButton({
-  dealId: _dealId,
-  onChainDealId,
-}: {
-  dealId: string;
-  onChainDealId: number;
-}) {
+function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
   const syncedRef = useRef(false);
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
   const {

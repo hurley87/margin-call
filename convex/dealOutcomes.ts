@@ -9,11 +9,29 @@ export const listByDeal = query({
   handler: async (ctx, { dealId }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
-    return ctx.db
+    const outcomes = await ctx.db
       .query("dealOutcomes")
       .withIndex("byDeal", (q) => q.eq("dealId", dealId))
       .order("desc")
       .collect();
+
+    const outcomesWithTraderNames = outcomes.map(async (outcome) => {
+      const traderId = ctx.db.normalizeId("traders", outcome.traderId);
+      if (!traderId) {
+        return {
+          ...outcome,
+          traderName: outcome.traderId,
+        };
+      }
+
+      const trader = await ctx.db.get(traderId);
+      return {
+        ...outcome,
+        traderName: trader?.name ?? outcome.traderId,
+      };
+    });
+
+    return await Promise.all(outcomesWithTraderNames);
   },
 });
 
@@ -141,9 +159,8 @@ export const apply = internalMutation({
         : Math.abs(traderPnlUsdc));
     const now = Date.now();
 
-    const { potChangeUsdc: _potChangeUsdc, ...outcomeArgs } = args;
     const outcomeId = await ctx.db.insert("dealOutcomes", {
-      ...outcomeArgs,
+      ...args,
       potChangeUsdc,
       createdAt: now,
     });
