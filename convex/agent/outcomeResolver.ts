@@ -29,6 +29,7 @@ export interface OutcomeResolverInput {
   traderId: string;
   traderName: string;
   escrowBalanceUsdc: number;
+  entryCostUsdc: number;
 }
 
 export interface ResolvedOutcome {
@@ -54,7 +55,8 @@ export async function resolveOutcome(
   ctx: RunActionCtx,
   input: OutcomeResolverInput
 ): Promise<ResolvedOutcome> {
-  const { deal, traderId, traderName, escrowBalanceUsdc } = input;
+  const { deal, traderId, traderName, escrowBalanceUsdc, entryCostUsdc } =
+    input;
 
   // ── Load context (assets + market narrative + system prompt) ───────────────
   const [assets, marketNarrative, systemPromptContent] = await Promise.all([
@@ -96,6 +98,7 @@ DEAL: ${deal.prompt}
 TRADER: ${traderName}
 INVENTORY: ${inventoryDescription}
 PORTFOLIO BALANCE: $${escrowBalanceUsdc} USDC
+MAX LOSS: $${entryCostUsdc.toFixed(2)} USDC (normal deals cannot lose more than the entry cost)
 MAX WIN VALUE: $${maxValuePerWin.toFixed(2)} USDC (cannot exceed this)
 RANDOM SEED: ${randomSeed.toFixed(2)} (use this to introduce randomness — lower values favor losses, higher values favor gains)
 
@@ -108,8 +111,9 @@ The market conditions should subtly influence outcomes. High SEC heat + insider 
 Euphoric mood + bull play = can skew positive. Use these as soft signals, not hard rules.
 
 Rules:
-- balance_change_usdc must be between -${escrowBalanceUsdc} and +${maxValuePerWin.toFixed(2)}
-- If the trader loses everything, set trader_wiped_out to true and provide a wipeout_reason
+- balance_change_usdc must be between -${entryCostUsdc.toFixed(2)} and +${maxValuePerWin.toFixed(2)}
+- For normal deals, max downside is the entry cost, not the full portfolio balance
+- trader_wiped_out is advisory only; final wipeout is derived mechanically after validated PnL is applied
 - The narrative should be 2-3 short sentences only — vivid 1980s Wall Street tone, no rambling
 - Each assets_gained[].name must be exactly 2-3 words (no parentheses, no subtitles); thematic items (tips, contacts, documents)
 - assets_lost entries must copy inventory names exactly as listed in INVENTORY (required for matching)`,
@@ -138,10 +142,10 @@ Rules:
   const raw = msg.parsed as DealOutcomePayload;
 
   // ── Validate + clamp PnL ────────────────────────────────────────────────────
-  // balance_change_usdc from LLM: clamp to [-balance, +maxValuePerWin]
+  // balance_change_usdc from LLM: clamp to [-entry cost, +maxValuePerWin]
   let balanceChange = raw.balance_change_usdc;
   balanceChange = Math.min(balanceChange, maxValuePerWin);
-  balanceChange = Math.max(balanceChange, -escrowBalanceUsdc);
+  balanceChange = Math.max(balanceChange, -entryCostUsdc);
 
   // Apply rake on positive gains
   let traderPnlUsdc: number;
@@ -152,17 +156,16 @@ Rules:
     traderPnlUsdc = balanceChange;
   }
 
-  // If trader_wiped_out, force pnl to wipe out remaining balance
-  const traderWipedOut = raw.trader_wiped_out;
-  if (traderWipedOut) {
-    traderPnlUsdc = -escrowBalanceUsdc;
-  }
+  const endingBalance = escrowBalanceUsdc + traderPnlUsdc;
+  const traderWipedOut = endingBalance <= 0;
 
   return {
     payload: raw,
     traderPnlUsdc,
     traderWipedOut,
-    wipeoutReason: raw.wipeout_reason ?? null,
+    wipeoutReason: traderWipedOut
+      ? (raw.wipeout_reason ?? "margin_call")
+      : null,
     narrative: raw.narrative,
     assetsGained: raw.assets_gained,
     assetsLost: raw.assets_lost,

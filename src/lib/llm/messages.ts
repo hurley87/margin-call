@@ -21,6 +21,7 @@ interface DealResolutionParams {
   traderName: string;
   traderInventory: { name: string; value_usdc: number }[];
   portfolioBalance: number;
+  entryCostUsdc: number;
   maxValuePerWin: number;
   randomSeed: number;
   worldMood?: string;
@@ -51,6 +52,7 @@ DEAL: ${params.dealPrompt}
 TRADER: ${params.traderName}
 INVENTORY: ${inventoryDescription}
 PORTFOLIO BALANCE: $${params.portfolioBalance} USDC
+MAX LOSS: $${params.entryCostUsdc} USDC (normal deals cannot lose more than the entry cost)
 MAX WIN VALUE: $${params.maxValuePerWin} USDC (cannot exceed this)
 RANDOM SEED: ${params.randomSeed.toFixed(2)} (use this to introduce randomness — lower values favor losses, higher values favor gains)
 
@@ -63,8 +65,9 @@ The market conditions should subtly influence outcomes. High SEC heat + insider 
 Euphoric mood + bull play = can skew positive. Use these as soft signals, not hard rules.
 
 Rules:
-- balance_change_usdc must be between -${params.portfolioBalance} and +${params.maxValuePerWin}
-- If the trader loses everything, set trader_wiped_out to true and provide a wipeout_reason
+- balance_change_usdc must be between -${params.entryCostUsdc} and +${params.maxValuePerWin}
+- For normal deals, max downside is the entry cost, not the full portfolio balance
+- trader_wiped_out is advisory only; final wipeout is derived mechanically after validated PnL is applied
 - The narrative should be 2-3 short sentences only — vivid 1980s Wall Street tone, no rambling
 - Each assets_gained[].name must be exactly 2-3 words (no parentheses, no subtitles); thematic items (tips, contacts, documents)
 - assets_lost entries must copy inventory names exactly as listed in INVENTORY (required for matching)`,

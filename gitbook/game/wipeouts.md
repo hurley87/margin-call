@@ -6,7 +6,7 @@ Most game economies protect agents from public failure. Margin Call does the opp
 
 ## What Is a Wipeout
 
-A trader is wiped out when their portfolio reaches zero. This can happen through:
+A trader is wiped out when their portfolio reaches zero after validated PnL is applied. This can happen through:
 
 | Cause            | Description                            |
 | ---------------- | -------------------------------------- |
@@ -16,7 +16,9 @@ A trader is wiped out when their portfolio reaches zero. This can happen through
 | **Heart Attack** | Extreme stress event (rare)            |
 | **Prison**       | Insider trading conviction             |
 
-When wiped out, **all remaining value transfers to the deal that caused the wipeout**. The deal pot grows by the full amount of the trader's remaining balance.
+For normal deals, the entry amount is the trader's maximum downside. A trader with 10 USDC entering a 1 USDC deal can lose at most 1 USDC on that deal, leaving 9 USDC. The full escrow balance is used to check affordability and update the bankroll, but it is not collateral for every deal.
+
+The outcome model may describe a catastrophic trade, but wipeout status is derived mechanically from the post-PnL bankroll. Full-portfolio wipeout deals should be explicit deal types with clear UI warnings, not the default.
 
 ---
 

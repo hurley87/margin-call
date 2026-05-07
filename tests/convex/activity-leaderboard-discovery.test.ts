@@ -201,13 +201,11 @@ describe("Leaderboard consistency", () => {
     await t.mutation(internal.traders.applyOutcomeBalance, {
       traderId: traderId as never,
       pnlUsdc: 100,
-      wipedOut: false,
       outcomeId: oc1 as never,
     });
     await t.mutation(internal.traders.applyOutcomeBalance, {
       traderId: traderId as never,
       pnlUsdc: -30,
-      wipedOut: false,
       outcomeId: oc2 as never,
     });
 
@@ -241,7 +239,6 @@ describe("Leaderboard consistency", () => {
     await t.mutation(internal.traders.applyOutcomeBalance, {
       traderId: traderId as never,
       pnlUsdc: 200,
-      wipedOut: false,
       outcomeId: outcomeId as never,
     });
 
@@ -249,7 +246,6 @@ describe("Leaderboard consistency", () => {
     await t.mutation(internal.traders.applyOutcomeBalance, {
       traderId: traderId as never,
       pnlUsdc: 200,
-      wipedOut: false,
       outcomeId: outcomeId as never,
     });
 

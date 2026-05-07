@@ -531,6 +531,7 @@ export const cycle = internalAction({
           traderId: traderId as string,
           traderName: trader.name,
           escrowBalanceUsdc,
+          entryCostUsdc: bestDeal.entry_cost_usdc,
         });
 
         traderPnlUsdc = resolved.traderPnlUsdc;
@@ -554,12 +555,17 @@ export const cycle = internalAction({
       }
 
       // ── 9. Apply PnL to trader balance (single-writer, idempotent) ─────────
-      await ctx.runMutation(internal.traders.applyOutcomeBalance, {
-        traderId,
-        pnlUsdc: traderPnlUsdc,
-        wipedOut: traderWipedOut,
-        outcomeId: outcomeId as never,
-      });
+      const balanceResult = await ctx.runMutation(
+        internal.traders.applyOutcomeBalance,
+        {
+          traderId,
+          pnlUsdc: traderPnlUsdc,
+          outcomeId: outcomeId as never,
+        }
+      );
+      if (balanceResult) {
+        traderWipedOut = balanceResult.wipedOut;
+      }
 
       // ── 10. Log outcome ────────────────────────────────────────────────────
       const activityType = traderWipedOut

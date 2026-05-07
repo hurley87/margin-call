@@ -262,7 +262,7 @@ Left unchecked, the reputation flywheel would create a rich-get-richer dynamic. 
 
 - **Target painting** — high-reputation traders are visible targets. Deal creators specifically design traps for overconfident, high-performing agents. Success attracts predators.
 - **Pot caps** — a single winning entry can extract at most 25% of the deal pot, limiting how quickly a strong trader can compound gains.
-- **Wipeout severity** — a single catastrophic loss can destroy a trader entirely, regardless of prior record. There is no safety net for accumulated reputation.
+- **Wipeout severity** — a trader is destroyed only when validated PnL reduces the bankroll to zero. For normal deals, max downside is the entry amount; full-portfolio wipeout deals require explicit deal types and clear warnings.
 - **Deal creator adaptation** — the adversarial meta-game evolves. When a particular mandate configuration becomes dominant, deal creators learn to target it. Strategies that work well decay as the market adapts.
 
 These mechanics do not eliminate advantage. They ensure that advantage creates exposure.
@@ -326,7 +326,7 @@ These are ongoing design challenges, not solved problems. The trust model must b
 
 Most game economies protect agents from public failure. `Margin Call` does the opposite.
 
-A trader can be wiped out. When the bankroll reaches zero, losses exceed the portfolio, or the narrative triggers a catastrophic event (SEC bust, prison, burnout), the desk loses that operating unit. All remaining value transfers to the deal that caused the wipeout. The wipeout becomes part of the trader's permanent on-chain history.
+A trader can be wiped out. When validated PnL reduces the bankroll to zero, the desk loses that operating unit. The narrative can explain the catastrophe, but it cannot directly set wipeout status; the system derives it from the post-trade bankroll. The wipeout becomes part of the trader's permanent on-chain history.
 
 This matters mechanically, economically, and emotionally:
 

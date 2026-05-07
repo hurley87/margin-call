@@ -328,7 +328,6 @@ describe("applyOutcomeBalance idempotency", () => {
     await t.mutation(internal.traders.applyOutcomeBalance, {
       traderId: traderId as never,
       pnlUsdc: 200,
-      wipedOut: false,
       outcomeId: outcomeId as never,
     });
 
@@ -341,7 +340,6 @@ describe("applyOutcomeBalance idempotency", () => {
     await t.mutation(internal.traders.applyOutcomeBalance, {
       traderId: traderId as never,
       pnlUsdc: 200,
-      wipedOut: false,
       outcomeId: outcomeId as never,
     });
 
@@ -367,13 +365,36 @@ describe("applyOutcomeBalance idempotency", () => {
     await t.mutation(internal.traders.applyOutcomeBalance, {
       traderId: traderId as never,
       pnlUsdc: -100,
-      wipedOut: true,
       outcomeId: outcomeId as never,
     });
 
     const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
     expect(trader?.status).toBe("wiped_out");
     expect(trader?.escrowBalanceUsdc).toBe(0); // clamped to zero
+  });
+
+  it("does not wipe out when a normal deal loss leaves balance positive", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId, { escrowBalance: 10 });
+    const dealId = await seedDeal(t, { entryCostUsdc: 1 });
+
+    const outcomeId = await t.mutation(internal.dealOutcomes.apply, {
+      dealId: dealId as never,
+      traderId: traderId as string,
+      traderPnlUsdc: -1,
+      traderWipedOut: true,
+    });
+
+    await t.mutation(internal.traders.applyOutcomeBalance, {
+      traderId: traderId as never,
+      pnlUsdc: -1,
+      outcomeId: outcomeId as never,
+    });
+
+    const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.status).toBe("active");
+    expect(trader?.escrowBalanceUsdc).toBe(9);
   });
 });
 

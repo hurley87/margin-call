@@ -503,13 +503,15 @@ AI suggests:
 
 A trader is wiped out when their portfolio reaches 0:
 
-1. **Margin Call** — losses exceed portfolio
+1. **Margin Call** — validated losses reduce the bankroll to zero
 2. **SEC Bust** — caught by regulators
 3. **Burnout** — too many bad deals
 4. **Heart Attack** — extreme stress (rare)
 5. **Prison** — insider trading conviction
 
-When wiped out, all remaining value transfers to the deal that killed them (handled by the escrow contract). The desk manager must mint a new trader to continue. The wiped-out trader NFT remains — a permanent record of failure.
+For normal deals, the entry amount is the trader's maximum downside. The full escrow balance is used for affordability and bankroll accounting, but it is not collateral for every deal. Wipeout is derived mechanically after the validated PnL is applied; the LLM cannot directly wipe out a trader by setting a flag. Full-portfolio wipeout deals must be explicit deal types with clear UI warnings.
+
+The desk manager must mint a new trader to continue. The wiped-out trader NFT remains — a permanent record of failure.
 
 ---
 

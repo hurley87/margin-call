@@ -274,26 +274,31 @@ export const applyWalletError = internalMutation({
 /**
  * Internal: apply a PnL outcome to a trader's escrow balance.
  * CAS on traderId: reads current balance, applies delta, clamps to zero.
- * If wipedOut is true, transitions status → "wiped_out".
+ * If the resulting balance reaches zero, transitions status → "wiped_out".
  * Idempotent: same outcomeId returns without re-applying.
  */
 export const applyOutcomeBalance = internalMutation({
   args: {
     traderId: v.id("traders"),
     pnlUsdc: v.number(),
-    wipedOut: v.boolean(),
     /** Outcome document id — idempotency key; persisted as lastOutcomeId. */
     outcomeId: v.id("dealOutcomes"),
   },
-  handler: async (ctx, { traderId, pnlUsdc, wipedOut, outcomeId }) => {
+  handler: async (ctx, { traderId, pnlUsdc, outcomeId }) => {
     const trader = await ctx.db.get(traderId);
-    if (!trader) return;
+    if (!trader) return null;
 
     // Idempotency: if this outcome was already applied, no-op
-    if (trader.lastOutcomeId === outcomeId) return;
+    if (trader.lastOutcomeId === outcomeId) {
+      return {
+        escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,
+        wipedOut: trader.status === "wiped_out",
+      };
+    }
 
     const currentBalance = trader.escrowBalanceUsdc ?? 0;
     const newBalance = Math.max(0, currentBalance + pnlUsdc);
+    const wipedOut = newBalance <= 0;
 
     const patch: Partial<
       Pick<
@@ -311,6 +316,8 @@ export const applyOutcomeBalance = internalMutation({
     }
 
     await ctx.db.patch(traderId, patch);
+
+    return { escrowBalanceUsdc: newBalance, wipedOut };
   },
 });
 
