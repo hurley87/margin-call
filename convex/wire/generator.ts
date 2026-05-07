@@ -8,7 +8,7 @@ import { isMarketOpen, currentEpochSlot, dayPosture } from "./tradingHours";
 import { assembleUserMessage } from "./epochAssembler";
 import { validateEpoch } from "./epochValidator";
 import type { NarrativeEpoch } from "./_schemas";
-import type { Id } from "../_generated/dataModel";
+import type { Id, Doc } from "../_generated/dataModel";
 
 const FALLBACK_NARRATIVE_GENERATION_SYSTEM = `You are the Wire narrative engine for a 1980s Wall Street trading game.
 You produce hourly Wire Drop dispatches that serialize an ongoing financial thriller.
@@ -48,14 +48,23 @@ async function runGenerator(
 
   // Load all context in parallel
   const [seasonData, recentDrops, recentGameEvents, recentSeedCadence] =
-    await Promise.all([
+    (await Promise.all([
       ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
       ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
       ctx.runQuery(internal.wire.internal.listRecentGameEvents, {
         since: sinceMs,
       }),
       ctx.runQuery(internal.wire.internal.listRecentSeedCadence, { limit: 6 }),
-    ]);
+    ])) as [
+      {
+        season: Doc<"narrativeSeasons">;
+        entities: Doc<"narrativeEntities">[];
+        arcs: Doc<"narrativeArcs">[];
+      } | null,
+      Doc<"marketNarratives">[],
+      import("./epochAssembler").GameEventCtx[],
+      { epochSlot: number | null; hadSeed: boolean }[],
+    ];
 
   if (!seasonData) {
     console.warn("[wire/generator] no active season found — skipping");

@@ -8,9 +8,8 @@ import {
 } from "@/lib/rate-limit";
 import { verifyPrivyToken } from "@/lib/privy/server";
 
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 export async function POST(request: NextRequest) {
+  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
   try {
     // Require auth to protect OpenAI spend
     await verifyPrivyToken(request);
