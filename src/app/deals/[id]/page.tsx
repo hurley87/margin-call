@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
+import { formatUnits } from "viem";
 
 import {
   useReadContract,
@@ -28,6 +29,18 @@ export default function DealDetailPage() {
   const { data, isLoading, error } = useDeal(id);
   const { user } = usePrivy();
   const { data: deskManager } = useDeskManager();
+  const convexDeal = data?.deal;
+  const onChainDealId = convexDeal?.on_chain_deal_id;
+  const { data: onChainDeal } = useReadContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getDeal",
+    args: onChainDealId !== undefined ? [BigInt(onChainDealId)] : undefined,
+    chainId: CONTRACTS_CHAIN_ID,
+    query: {
+      enabled: onChainDealId !== undefined,
+    },
+  });
   const linkedWalletAddress = user?.linkedAccounts?.find(
     (account) => account.type === "wallet" && "address" in account
   ) as { address?: unknown } | undefined;
@@ -71,7 +84,13 @@ export default function DealDetailPage() {
   const legacyPotDelta = outcomes
     .filter((outcome) => outcome.pot_change_inferred)
     .reduce((sum, outcome) => sum + outcome.pot_change_usdc, 0);
-  const displayPotUsdc = deal.pot_usdc + legacyPotDelta;
+  const displayPotUsdc =
+    onChainDeal !== undefined
+      ? Number(formatUnits(onChainDeal.potAmount, 6))
+      : deal.pot_usdc + legacyPotDelta;
+  const displayPotLabel = displayPotUsdc.toLocaleString(undefined, {
+    maximumFractionDigits: 2,
+  });
   const isDealOwner =
     deal.creator_id !== undefined &&
     deskManager?.id === deal.creator_id &&
@@ -130,7 +149,7 @@ export default function DealDetailPage() {
               <div className="flex items-center gap-0 border-t border-[var(--t-border)] text-xs">
                 <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
                   <p className="text-[10px] text-[var(--t-muted)]">POT</p>
-                  <p className="text-[var(--t-green)]">${displayPotUsdc}</p>
+                  <p className="text-[var(--t-green)]">${displayPotLabel}</p>
                 </div>
                 <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
                   <p className="text-[10px] text-[var(--t-muted)]">ENTRY</p>
