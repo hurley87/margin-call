@@ -110,7 +110,9 @@ export default defineSchema({
     .index("byPaymentId", ["paymentId"])
     .index("byDeal", ["dealId"])
     .index("byTrader", ["traderId"])
-    .index("byTraderAndDeal", ["traderId", "dealId"]),
+    .index("byTraderAndDeal", ["traderId", "dealId"])
+    .index("byCreatedAt", ["createdAt"])
+    .index("byDealAndCreatedAt", ["dealId", "createdAt"]),
 
   dealOutcomes: defineTable({
     dealId: v.id("deals"),

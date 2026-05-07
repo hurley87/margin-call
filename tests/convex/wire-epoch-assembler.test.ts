@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   assembleUserMessage,
   type AssemblerInput,
+  type GameEventCtx,
 } from "../../convex/wire/epochAssembler";
 
 function makeInput(overrides: Partial<AssemblerInput> = {}): AssemblerInput {
@@ -40,6 +41,15 @@ function makeInput(overrides: Partial<AssemblerInput> = {}): AssemblerInput {
     recentGameEvents: [],
     worldState: { mood: "tense", sec_heat: 7 },
     lastDropWasDealSeed: false,
+    ...overrides,
+  };
+}
+
+function makeEvent(overrides: Partial<GameEventCtx> = {}): GameEventCtx {
+  return {
+    type: "wipeout",
+    dramatic: true,
+    summary: "Trader wiped out",
     ...overrides,
   };
 }
@@ -129,21 +139,156 @@ describe("assembleUserMessage: entity roster", () => {
   });
 });
 
-describe("assembleUserMessage: recent game events", () => {
-  it("includes game event summaries", () => {
+describe("assembleUserMessage: recent game events — dramatic vs routine", () => {
+  it("places dramatic events under the DRAMATIC heading", () => {
     const input = makeInput({
       recentGameEvents: [
-        { type: "wipeout", summary: "Trader T1 wiped out (sec_bust)" },
+        makeEvent({
+          type: "wipeout",
+          dramatic: true,
+          summary: "Trader T1 wiped out (sec_bust)",
+        }),
       ],
     });
     const msg = assembleUserMessage(input);
-    expect(msg).toContain("wipeout");
+    expect(msg).toContain("DRAMATIC");
     expect(msg).toContain("Trader T1 wiped out");
   });
 
-  it("handles empty events gracefully", () => {
+  it("places routine events under the ROUTINE heading", () => {
+    const input = makeInput({
+      recentGameEvents: [
+        makeEvent({
+          type: "deal_created",
+          dramatic: false,
+          summary: "Deal opened: short the market ($300 pot)",
+        }),
+      ],
+    });
+    const msg = assembleUserMessage(input);
+    expect(msg).toContain("ROUTINE");
+    expect(msg).toContain("short the market");
+  });
+
+  it("dramatic events do NOT appear under the ROUTINE heading", () => {
+    const input = makeInput({
+      recentGameEvents: [
+        makeEvent({
+          type: "wipeout",
+          dramatic: true,
+          summary: "UNIQUE_DRAMATIC_EVENT",
+        }),
+      ],
+    });
+    const msg = assembleUserMessage(input);
+    const routineIdx = msg.indexOf("RECENT MARKET EVENTS — ROUTINE");
+    const summaryIdx = msg.indexOf("UNIQUE_DRAMATIC_EVENT");
+    // The summary appears before the ROUTINE section
+    expect(summaryIdx).toBeLessThan(routineIdx);
+  });
+
+  it("routine events do NOT appear under the DRAMATIC heading", () => {
+    const input = makeInput({
+      recentGameEvents: [
+        makeEvent({
+          type: "deal_entry",
+          dramatic: false,
+          summary: "UNIQUE_ROUTINE_EVENT",
+        }),
+      ],
+    });
+    const msg = assembleUserMessage(input);
+    const dramaticIdx = msg.indexOf("RECENT MARKET EVENTS — DRAMATIC");
+    const routineIdx = msg.indexOf("RECENT MARKET EVENTS — ROUTINE");
+    const summaryIdx = msg.indexOf("UNIQUE_ROUTINE_EVENT");
+    // Routine summary appears after the DRAMATIC heading
+    expect(summaryIdx).toBeGreaterThan(dramaticIdx);
+    expect(summaryIdx).toBeGreaterThan(routineIdx);
+  });
+
+  it("annotates dramatic events with traderName and deskName", () => {
+    const input = makeInput({
+      recentGameEvents: [
+        makeEvent({
+          type: "wipeout",
+          dramatic: true,
+          summary: "Trader wiped out — escrow exhausted",
+          traderName: "Marty Vale",
+          deskName: "PanAtlantic",
+        }),
+      ],
+    });
+    const msg = assembleUserMessage(input);
+    expect(msg).toContain("[Marty Vale @ PanAtlantic]");
+  });
+
+  it("omits actor annotation when traderName is absent", () => {
+    const input = makeInput({
+      recentGameEvents: [
+        makeEvent({
+          type: "crowded_trade",
+          dramatic: true,
+          summary: "3 entries on a deal",
+        }),
+      ],
+    });
+    const msg = assembleUserMessage(input);
+    // Should not contain an actor bracket annotation
+    expect(msg).not.toMatch(/\[\w.*@.*\w\]/);
+  });
+
+  it("shows (none) for DRAMATIC when all events are routine", () => {
+    const input = makeInput({
+      recentGameEvents: [
+        makeEvent({
+          type: "deal_created",
+          dramatic: false,
+          summary: "Routine deal opened",
+        }),
+      ],
+    });
+    const msg = assembleUserMessage(input);
+    const lines = msg.split("\n");
+    const dramaticIdx = lines.findIndex((l) =>
+      l.includes("RECENT MARKET EVENTS — DRAMATIC")
+    );
+    expect(dramaticIdx).toBeGreaterThan(-1);
+    // The line after the DRAMATIC heading should be "(none)"
+    expect(lines[dramaticIdx + 1]).toContain("(none)");
+  });
+
+  it("shows (none) for ROUTINE when all events are dramatic", () => {
+    const input = makeInput({
+      recentGameEvents: [
+        makeEvent({
+          type: "wipeout",
+          dramatic: true,
+          summary: "Trader wiped out",
+        }),
+      ],
+    });
+    const msg = assembleUserMessage(input);
+    const lines = msg.split("\n");
+    const routineIdx = lines.findIndex((l) =>
+      l.includes("RECENT MARKET EVENTS — ROUTINE")
+    );
+    expect(routineIdx).toBeGreaterThan(-1);
+    expect(lines[routineIdx + 1]).toContain("(none)");
+  });
+
+  it("shows (none) in both sections when there are no events", () => {
     const msg = assembleUserMessage(makeInput({ recentGameEvents: [] }));
-    expect(msg).toContain("no notable events");
+    const lines = msg.split("\n");
+    const dramaticIdx = lines.findIndex((l) =>
+      l.includes("RECENT MARKET EVENTS — DRAMATIC")
+    );
+    const routineIdx = lines.findIndex((l) =>
+      l.includes("RECENT MARKET EVENTS — ROUTINE")
+    );
+    expect(dramaticIdx).toBeGreaterThan(-1);
+    expect(routineIdx).toBeGreaterThan(-1);
+    expect(lines[dramaticIdx + 1]).toContain("(none)");
+    expect(lines[routineIdx + 1]).toContain("(none)");
   });
 });
 

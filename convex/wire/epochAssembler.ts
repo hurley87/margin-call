@@ -30,7 +30,10 @@ export interface RecentDropCtx {
 
 export interface GameEventCtx {
   type: string;
+  dramatic: boolean;
   summary: string;
+  traderName?: string;
+  deskName?: string;
 }
 
 export interface AssemblerInput {
@@ -130,11 +133,29 @@ export function assembleUserMessage(input: AssemblerInput): string {
     });
   }
 
-  lines.push(`\nRECENT MARKET EVENTS (since last drop):`);
-  if (recentGameEvents.length === 0) {
-    lines.push("  (no notable events)");
+  const dramaticEvents = recentGameEvents.filter((e) => e.dramatic);
+  const routineEvents = recentGameEvents.filter((e) => !e.dramatic);
+
+  lines.push(
+    `\nRECENT MARKET EVENTS — DRAMATIC (name traders/desks directly when relevant):`
+  );
+  if (dramaticEvents.length === 0) {
+    lines.push("  (none)");
   } else {
-    recentGameEvents.slice(0, 10).forEach((e) => {
+    dramaticEvents.forEach((e) => {
+      const actor = [e.traderName, e.deskName].filter(Boolean).join(" @ ");
+      const actorTag = actor ? ` [${actor}]` : "";
+      lines.push(`  [${e.type}]${actorTag} ${e.summary}`);
+    });
+  }
+
+  lines.push(
+    `\nRECENT MARKET EVENTS — ROUTINE (influence mood, SEC heat, arc tension in aggregate; do not name every player):`
+  );
+  if (routineEvents.length === 0) {
+    lines.push("  (none)");
+  } else {
+    routineEvents.forEach((e) => {
       lines.push(`  [${e.type}] ${e.summary}`);
     });
   }

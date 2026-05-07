@@ -35,21 +35,21 @@ NARRATIVE CONTINUITY: Reference previous drops. Advance active arcs. Apply tensi
 
 async function runGenerator(
   ctx: ActionCtx,
-  opts: { slot: number; testLlmStub?: NarrativeEpoch }
+  opts: { slot: number; sinceMs: number; testLlmStub?: NarrativeEpoch }
 ): Promise<
   | { skipped: "outside-market-hours" | "duplicate-slot" }
   | { skipped: "validation-failed"; error: string }
   | { inserted: boolean; dropId: string; epoch?: number }
 > {
   const now = Date.now();
-  const { slot } = opts;
+  const { slot, sinceMs } = opts;
 
   // Load all context in parallel
   const [seasonData, recentDrops, recentGameEvents] = await Promise.all([
     ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
     ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
     ctx.runQuery(internal.wire.internal.listRecentGameEvents, {
-      since: now - 2 * 60 * 60 * 1000, // last 2 hours
+      since: sinceMs,
     }),
   ]);
 
@@ -108,10 +108,7 @@ async function runGenerator(
         role?: string;
       }> | null,
     })),
-    recentGameEvents: recentGameEvents as Array<{
-      type: string;
-      summary: string;
-    }>,
+    recentGameEvents,
     worldState: worldState ?? null,
     lastDropWasDealSeed,
   });
@@ -265,6 +262,9 @@ export const generateNextEpoch = internalAction({
     }
 
     const slot = currentEpochSlot(now);
+    // Events since the start of the previous epoch slot (avoids re-ingesting
+    // events already included in the last drop)
+    const sinceMs = (slot - 1) * 3_600_000;
 
     // Fast pre-check to avoid paying LLM cost on known duplicates
     const existing = await ctx.runQuery(internal.wire.internal.findBySlot, {
@@ -275,7 +275,7 @@ export const generateNextEpoch = internalAction({
       return { skipped: "duplicate-slot" as const };
     }
 
-    return runGenerator(ctx, { slot });
+    return runGenerator(ctx, { slot, sinceMs });
   },
 });
 
@@ -293,6 +293,8 @@ export const devForceEpoch = internalAction({
   handler: async (ctx, { ignoreSlot = false, _testLlmStub }) => {
     const now = Date.now();
     const slot = ignoreSlot ? now : currentEpochSlot(now);
+    // When ignoreSlot=true, slot=Date.now() (ms). (slot-1)*3_600_000 overflows.
+    const sinceMs = ignoreSlot ? now - 3_600_000 : (slot - 1) * 3_600_000;
 
     if (!ignoreSlot) {
       const existing = await ctx.runQuery(internal.wire.internal.findBySlot, {
@@ -308,6 +310,7 @@ export const devForceEpoch = internalAction({
 
     return runGenerator(ctx, {
       slot,
+      sinceMs,
       testLlmStub: _testLlmStub as NarrativeEpoch | undefined,
     });
   },

@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { api, internal } from "../../convex/_generated/api";
+import type { GameEventCtx } from "../../convex/wire/epochAssembler";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
@@ -218,5 +219,57 @@ describe("wire/generator: validation rejection", () => {
     });
 
     expect((result as { skipped?: string }).skipped).toBe("validation-failed");
+  });
+});
+
+describe("wire/generator: activity ingestion — wipeout captured in eventsIngested", () => {
+  it("includes a dramatic wipeout event in eventsIngested when a dealOutcome exists", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    // Seed a deal and a wipeout outcome created just now
+    await t.run(async (ctx) => {
+      const now = Date.now();
+      const dealId = await ctx.db.insert("deals", {
+        prompt: "Short the whole market",
+        potUsdc: 500,
+        entryCostUsdc: 50,
+        status: "open",
+        creatorType: "desk_manager",
+        createdAt: now,
+        updatedAt: now,
+      });
+      await ctx.db.insert("dealOutcomes", {
+        dealId,
+        traderId: "trader-stub-123",
+        traderWipedOut: true,
+        wipeoutReason: "margin call",
+        createdAt: now,
+      });
+    });
+
+    const stub = makeLlmStub();
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: stub,
+    });
+
+    expect((result as { inserted?: boolean }).inserted).toBe(true);
+
+    const rows = await t.run(async (ctx) =>
+      ctx.db.query("marketNarratives").collect()
+    );
+    const row = rows.find((r) => r.epochSlot !== 0);
+    expect(row).toBeDefined();
+
+    const events = row!.eventsIngested as GameEventCtx[] | null | undefined;
+    expect(events).toBeDefined();
+    expect(Array.isArray(events)).toBe(true);
+
+    const wipeout = (events as GameEventCtx[]).find(
+      (e) => e.type === "wipeout"
+    );
+    expect(wipeout).toBeDefined();
+    expect(wipeout!.dramatic).toBe(true);
   });
 });
