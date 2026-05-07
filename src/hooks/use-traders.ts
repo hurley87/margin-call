@@ -18,6 +18,11 @@ export interface Trader {
   mandate: Record<string, unknown>;
   personality: string | null;
   escrow_balance_usdc: number;
+  wallet_status: Doc<"traders">["walletStatus"];
+  wallet_error: string | null;
+  /** Epoch ms for agent cycle countdown UI */
+  last_cycle_at_ms: number | null;
+  cycle_lease_until_ms: number | null;
   last_cycle_at: string | null;
   created_at: string;
   updated_at: string;
@@ -37,6 +42,10 @@ function mapTrader(doc: Doc<"traders">, ownerAddress: string): Trader {
     mandate: (doc.mandate as Record<string, unknown>) ?? {},
     personality: doc.personality ?? null,
     escrow_balance_usdc: doc.escrowBalanceUsdc ?? 0,
+    wallet_status: doc.walletStatus,
+    wallet_error: doc.walletError ?? null,
+    last_cycle_at_ms: doc.lastCycleAt ?? null,
+    cycle_lease_until_ms: doc.cycleLeaseUntil ?? null,
     last_cycle_at: doc.lastCycleAt
       ? new Date(doc.lastCycleAt).toISOString()
       : null,

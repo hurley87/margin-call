@@ -4,8 +4,12 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useReadContract } from "wagmi";
-import { useTrader, useTraderHistory } from "@/hooks/use-traders";
-import type { TraderHistoryEvent } from "@/hooks/use-traders";
+import {
+  useTrader,
+  useTraderHistory,
+  type TraderHistoryEvent,
+  type Trader,
+} from "@/hooks/use-traders";
 import { useSepoliaUsdcBalance } from "@/hooks/use-escrow";
 import {
   useTraderOutcomes,
@@ -31,6 +35,11 @@ import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
 import { shortAssetLabel } from "@/lib/format-asset-label";
+import { useSecondTick } from "@/hooks/use-second-tick";
+import {
+  getTraderCycleUi,
+  traderCycleDocFromDetailTrader,
+} from "@/lib/trader-cycle";
 
 const ZERO = BigInt(0);
 const TRADER_SECTION_CLASS =
@@ -144,7 +153,7 @@ export default function TraderDetailPage() {
       {/* Trader Header Strip */}
       <div className="sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
             <Link
               href="/"
               className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
@@ -155,6 +164,9 @@ export default function TraderDetailPage() {
               {trader.name}
             </h1>
             <StatusBadge status={trader.status} />
+            <span className="max-w-[min(100%,14rem)] min-w-0 sm:max-w-[20rem]">
+              <TraderCycleLine trader={trader} />
+            </span>
           </div>
           <div className="flex shrink-0 items-center gap-4 text-xs">
             <button
@@ -215,6 +227,19 @@ export default function TraderDetailPage() {
         />
       )}
     </div>
+  );
+}
+
+function TraderCycleLine({ trader }: { trader: Trader }) {
+  const nowMs = useSecondTick();
+  const ui = getTraderCycleUi(traderCycleDocFromDetailTrader(trader), nowMs);
+  return (
+    <span
+      title={ui.text}
+      className={`truncate text-[10px] font-bold uppercase tracking-wide ${ui.className}`}
+    >
+      {ui.text}
+    </span>
   );
 }
 

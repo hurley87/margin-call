@@ -7,6 +7,10 @@ type DeskPortfolio = {
     id: Id<"traders">;
     name: string;
     status: Doc<"traders">["status"];
+    walletStatus: Doc<"traders">["walletStatus"];
+    lastCycleAt?: number;
+    cycleLeaseUntil?: number;
+    walletError?: string;
     escrowUsdc: number;
     assetValueUsdc: number;
     totalValueUsdc: number;
@@ -113,6 +117,10 @@ export const forDesk = query({
           id: tr._id,
           name: tr.name,
           status: tr.status,
+          walletStatus: tr.walletStatus,
+          lastCycleAt: tr.lastCycleAt,
+          cycleLeaseUntil: tr.cycleLeaseUntil,
+          walletError: tr.walletError,
           escrowUsdc: escrow,
           assetValueUsdc: assetSum,
           totalValueUsdc: total,

@@ -22,6 +22,11 @@ import {
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { DealApprovalDialog } from "@/components/deal-approval-dialog";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
+import { useSecondTick } from "@/hooks/use-second-tick";
+import {
+  getTraderCycleUi,
+  traderCycleDocFromDeskSummary,
+} from "@/lib/trader-cycle";
 
 export default function Home() {
   const { ready, authenticated, login, logout } = usePrivy();
@@ -311,7 +316,11 @@ function TraderRoster({
   portfolio: ReturnType<typeof usePortfolio>["data"];
   portfolioLoading: boolean;
 }) {
+  const nowMs = useSecondTick();
   const traders = portfolio?.traders ?? [];
+
+  const rosterGridClass =
+    "grid grid-cols-[minmax(0,1fr)_minmax(4rem,7.5rem)_3.25rem_3.25rem_3.25rem] items-center gap-x-2 sm:grid-cols-[minmax(0,1fr)_minmax(6.25rem,10rem)_4.5rem_4.5rem_4.5rem] sm:gap-x-4";
 
   return (
     <div className="mb-6">
@@ -329,19 +338,14 @@ function TraderRoster({
 
       <div className="border border-[var(--t-border)]">
         {/* Table Header */}
-        <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]">
+        <div
+          className={`${rosterGridClass} border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-xs uppercase tracking-wider text-[var(--t-muted)]`}
+        >
           <span>Name</span>
-          <div className="flex items-center gap-3 sm:gap-4">
-            <span className="w-[4.5rem] shrink-0 text-right sm:w-20">
-              Escrow
-            </span>
-            <span className="w-[4.5rem] shrink-0 text-right sm:w-20">
-              Assets
-            </span>
-            <span className="w-[4.5rem] shrink-0 text-right sm:w-20">
-              Total
-            </span>
-          </div>
+          <span className="text-right">Next run</span>
+          <span className="text-right">Escrow</span>
+          <span className="text-right">Assets</span>
+          <span className="text-right">Total</span>
         </div>
 
         {/* Trader Rows */}
@@ -363,31 +367,43 @@ function TraderRoster({
             </Link>
           </div>
         ) : (
-          traders.map((t) => (
-            <Link
-              key={t.id}
-              href={`/traders/${t.id}`}
-              className="flex items-center justify-between border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-sm transition-colors hover:bg-[var(--t-surface)]"
-            >
-              <div className="flex items-center gap-2">
+          traders.map((t) => {
+            const cycleUi = getTraderCycleUi(
+              traderCycleDocFromDeskSummary(t),
+              nowMs
+            );
+            return (
+              <Link
+                key={t.id}
+                href={`/traders/${t.id}`}
+                className={`${rosterGridClass} border-b border-[var(--t-border)] last:border-b-0 bg-[var(--t-bg)] px-3 py-2.5 text-sm transition-colors hover:bg-[var(--t-surface)]`}
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span
+                    className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${traderStatusDotClass(t.status)}`}
+                  />
+                  <span className="min-w-0 truncate text-[var(--t-text)]">
+                    {t.name}
+                  </span>
+                </div>
                 <span
-                  className={`inline-block h-1.5 w-1.5 rounded-full ${traderStatusDotClass(t.status)}`}
-                />
-                <span className="text-[var(--t-text)]">{t.name}</span>
-              </div>
-              <div className="flex items-center gap-3 sm:gap-4">
-                <span className="w-[4.5rem] shrink-0 text-right text-[var(--t-muted)] sm:w-20">
+                  title={cycleUi.text}
+                  className={`truncate text-right text-[10px] font-bold uppercase leading-tight ${cycleUi.className}`}
+                >
+                  {cycleUi.text}
+                </span>
+                <span className="text-right text-[var(--t-muted)]">
                   ${t.escrow_usdc.toFixed(2)}
                 </span>
-                <span className="w-[4.5rem] shrink-0 text-right text-[var(--t-muted)] sm:w-20">
+                <span className="text-right text-[var(--t-muted)]">
                   ${t.asset_value_usdc.toFixed(2)}
                 </span>
-                <span className="w-[4.5rem] shrink-0 text-right text-[var(--t-text)] sm:w-20">
+                <span className="text-right text-[var(--t-text)]">
                   ${t.total_value_usdc.toFixed(2)}
                 </span>
-              </div>
-            </Link>
-          ))
+              </Link>
+            );
+          })
         )}
       </div>
     </div>

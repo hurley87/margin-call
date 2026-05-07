@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useConvexTraders } from "@/hooks/use-convex-traders";
+import { useSecondTick } from "@/hooks/use-second-tick";
+import { getTraderCycleUi } from "@/lib/trader-cycle";
 import { Nav } from "@/components/nav";
 
 const WALLET_STATUS_LABEL: Record<string, string> = {
@@ -18,8 +20,15 @@ const WALLET_STATUS_COLOR: Record<string, string> = {
   error: "text-[var(--t-red)]",
 };
 
+function tradersRowStatusClass(status: string): string {
+  if (status === "active") return "text-[var(--t-green)]";
+  if (status === "paused") return "text-[var(--t-amber)]";
+  return "text-[var(--t-red)]";
+}
+
 export default function TradersPage() {
   const traders = useConvexTraders();
+  const nowMs = useSecondTick();
   const isLoading = traders === undefined;
 
   return (
@@ -45,57 +54,61 @@ export default function TradersPage() {
           </p>
         ) : (
           <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
-            {traders.map((trader) => (
-              <Link
-                key={trader._id}
-                href={`/traders/${trader._id}`}
-                className="bg-[var(--t-bg)] p-5 transition-colors hover:bg-[var(--t-surface)]"
-              >
-                <div className="mb-3 flex items-center justify-between">
-                  <p className="text-lg font-medium text-[var(--t-text)]">
-                    {trader.name}
-                  </p>
-                  <div className="flex items-center gap-2">
-                    {trader.walletStatus !== "ready" && (
+            {traders.map((trader) => {
+              const cycleUi = getTraderCycleUi(trader, nowMs);
+              return (
+                <Link
+                  key={trader._id}
+                  href={`/traders/${trader._id}`}
+                  className="bg-[var(--t-bg)] p-5 transition-colors hover:bg-[var(--t-surface)]"
+                >
+                  <div className="mb-3 flex items-center justify-between">
+                    <p className="text-lg font-medium text-[var(--t-text)]">
+                      {trader.name}
+                    </p>
+                    <div className="flex flex-col items-end gap-1">
+                      <div className="flex items-center gap-2">
+                        {trader.walletStatus !== "ready" && (
+                          <span
+                            className={`text-[10px] font-bold uppercase ${WALLET_STATUS_COLOR[trader.walletStatus]}`}
+                          >
+                            {WALLET_STATUS_LABEL[trader.walletStatus]}
+                          </span>
+                        )}
+                        <span
+                          className={`text-[10px] font-bold uppercase ${tradersRowStatusClass(trader.status)}`}
+                        >
+                          [
+                          {trader.status === "wiped_out"
+                            ? "WIPED"
+                            : trader.status.toUpperCase()}
+                          ]
+                        </span>
+                      </div>
                       <span
-                        className={`text-[10px] font-bold uppercase ${WALLET_STATUS_COLOR[trader.walletStatus]}`}
+                        className={`text-[10px] font-bold uppercase tracking-wide ${cycleUi.className}`}
                       >
-                        {WALLET_STATUS_LABEL[trader.walletStatus]}
+                        {cycleUi.text}
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1 text-sm text-[var(--t-muted)]">
+                    {trader.tokenId && <span>Token ID: #{trader.tokenId}</span>}
+                    {trader.cdpWalletAddress && (
+                      <span className="font-mono text-xs">
+                        Wallet: {trader.cdpWalletAddress.slice(0, 6)}...
+                        {trader.cdpWalletAddress.slice(-4)}
                       </span>
                     )}
-                    <span
-                      className={`text-[10px] font-bold uppercase ${
-                        trader.status === "active"
-                          ? "text-[var(--t-green)]"
-                          : trader.status === "paused"
-                            ? "text-[var(--t-amber)]"
-                            : "text-[var(--t-red)]"
-                      }`}
-                    >
-                      [
-                      {trader.status === "wiped_out"
-                        ? "WIPED"
-                        : trader.status.toUpperCase()}
-                      ]
-                    </span>
+                    {trader.walletError && (
+                      <span className="text-xs text-[var(--t-red)]">
+                        {trader.walletError}
+                      </span>
+                    )}
                   </div>
-                </div>
-                <div className="flex flex-col gap-1 text-sm text-[var(--t-muted)]">
-                  {trader.tokenId && <span>Token ID: #{trader.tokenId}</span>}
-                  {trader.cdpWalletAddress && (
-                    <span className="font-mono text-xs">
-                      Wallet: {trader.cdpWalletAddress.slice(0, 6)}...
-                      {trader.cdpWalletAddress.slice(-4)}
-                    </span>
-                  )}
-                  {trader.walletError && (
-                    <span className="text-xs text-[var(--t-red)]">
-                      {trader.walletError}
-                    </span>
-                  )}
-                </div>
-              </Link>
-            ))}
+                </Link>
+              );
+            })}
           </div>
         )}
       </div>

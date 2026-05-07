@@ -7,6 +7,10 @@ export interface TraderSummary {
   id: string;
   name: string;
   status: string;
+  wallet_status: "pending" | "creating" | "ready" | "error";
+  last_cycle_at?: number;
+  cycle_lease_until?: number;
+  wallet_error?: string;
   escrow_usdc: number;
   asset_value_usdc: number;
   total_value_usdc: number;
@@ -47,6 +51,10 @@ export function usePortfolio(): {
       id: String(t.id),
       name: t.name,
       status: t.status,
+      wallet_status: t.walletStatus,
+      last_cycle_at: t.lastCycleAt,
+      cycle_lease_until: t.cycleLeaseUntil,
+      wallet_error: t.walletError,
       escrow_usdc: t.escrowUsdc,
       asset_value_usdc: t.assetValueUsdc,
       total_value_usdc: t.totalValueUsdc,
