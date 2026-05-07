@@ -246,11 +246,51 @@ export const cycle = internalAction({
 
       // ── 4. Deal selection ──────────────────────────────────────────────────
       const mandate = (trader.mandate ?? {}) as Mandate;
+
+      // Read live on-chain balance so stale Convex cache never blocks trading.
+      let escrowBalanceUsdc = trader.escrowBalanceUsdc ?? 0;
+      if (trader.tokenId !== undefined && trader.tokenId !== null) {
+        try {
+          const { createPublicClient, http } = await import("viem");
+          const { baseSepolia } = await import("viem/chains");
+          const ESCROW_ADDRESS =
+            "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
+          const publicClient = createPublicClient({
+            chain: baseSepolia,
+            transport: http(),
+          });
+          const raw = await publicClient.readContract({
+            address: ESCROW_ADDRESS,
+            abi: [
+              {
+                type: "function",
+                name: "getBalance",
+                inputs: [{ name: "traderId", type: "uint256" }],
+                outputs: [{ name: "", type: "uint256" }],
+                stateMutability: "view",
+              },
+            ] as const,
+            functionName: "getBalance",
+            args: [BigInt(trader.tokenId)],
+          });
+          escrowBalanceUsdc = Number(raw) / 1_000_000;
+          await ctx.runMutation(internal.traders.syncEscrowBalance, {
+            traderId,
+            balanceUsdc: escrowBalanceUsdc,
+          });
+        } catch (err) {
+          console.warn(
+            "[cycle] on-chain balance read failed, using cached value",
+            err
+          );
+        }
+      }
+
       const selection = await selectDeal(ctx, {
         traderId: traderId as string,
         traderName: trader.name,
         deskManagerId: trader.deskManagerId as string,
-        escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,
+        escrowBalanceUsdc,
         personality: trader.personality,
         mandate,
       });
@@ -490,7 +530,7 @@ export const cycle = internalAction({
           deal: bestDeal,
           traderId: traderId as string,
           traderName: trader.name,
-          escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,
+          escrowBalanceUsdc,
         });
 
         traderPnlUsdc = resolved.traderPnlUsdc;

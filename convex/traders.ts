@@ -314,6 +314,19 @@ export const applyOutcomeBalance = internalMutation({
   },
 });
 
+/** Internal: overwrite escrowBalanceUsdc from a fresh on-chain read. */
+export const syncEscrowBalance = internalMutation({
+  args: { traderId: v.id("traders"), balanceUsdc: v.number() },
+  handler: async (ctx, { traderId, balanceUsdc }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return;
+    await ctx.db.patch(traderId, {
+      escrowBalanceUsdc: balanceUsdc,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 /**
  * Internal: list traders on the same desk (same deskManagerId) excluding
  * the given traderId. Used for desk dedup in deal selection.
