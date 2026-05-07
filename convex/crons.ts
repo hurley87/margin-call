@@ -28,4 +28,16 @@ crons.interval(
   internal.agent.scheduler.scheduler
 );
 
+/**
+ * Wire Drop generator — fires every hour at :05 ET.
+ * The trading-hours guard inside the action (Mon–Fri 09:30–16:00 ET) gates
+ * whether a drop is actually written; the cron just provides the trigger.
+ */
+crons.hourly(
+  "wire-epoch-generator",
+  { minuteUTC: 5 },
+  internal.wire.generator.generateNextEpoch,
+  {}
+);
+
 export default crons;

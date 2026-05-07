@@ -1,6 +1,6 @@
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
-import { createConvexAdminClient } from "@/lib/convex/server-client";
-import { internal } from "../../../convex/_generated/api";
+import { fetchQuery } from "convex/nextjs";
+import { api } from "../../../convex/_generated/api";
 
 type PromptName =
   | "deal_outcome"
@@ -9,11 +9,7 @@ type PromptName =
   | "narrative_generation";
 
 async function getActiveSystemPrompt(name: PromptName): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const prompt = await (createConvexAdminClient() as any).query(
-    internal.systemPrompts.getActive,
-    { name }
-  );
+  const prompt = await fetchQuery(api.systemPrompts.getActiveByName, { name });
   if (!prompt || typeof prompt !== "string") {
     throw new Error(`Missing active system prompt: ${name}`);
   }
