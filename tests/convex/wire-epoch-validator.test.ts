@@ -271,4 +271,15 @@ describe("validateEpoch: rejects forbidden language", () => {
     });
     expect(result.ok).toBe(false);
   });
+
+  it("does not flag a forbidden word embedded inside another word", () => {
+    const payload = makeValidPayload();
+    payload.dispatches[0].body = "The trader shrugged and lit a cigarette.";
+    const result = validateEpoch(payload, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage: ["rug"],
+    });
+    expect(result.ok).toBe(true);
+  });
 });

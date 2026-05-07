@@ -61,7 +61,11 @@ export function validateEpoch(
     .toLowerCase();
 
   for (const word of ctx.forbiddenLanguage) {
-    if (fullText.includes(word.toLowerCase())) {
+    const pattern = new RegExp(
+      `\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+      "i"
+    );
+    if (pattern.test(fullText)) {
       return { ok: false, error: `Forbidden language: "${word}"` };
     }
   }
