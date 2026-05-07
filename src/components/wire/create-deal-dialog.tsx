@@ -67,7 +67,7 @@ export function CreateDealDialog({
   );
 
   const router = useRouter();
-  const suggestQuery = useSuggestPrompts(headline.headline);
+  const suggestQuery = useSuggestPrompts(headline.headline, !openInConfigure);
   const {
     createDeal,
     reset: resetCreateDeal,

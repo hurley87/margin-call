@@ -190,41 +190,49 @@ export function useHeadlineDeals(): {
   return { data: map, isLoading: false, isError: false };
 }
 
-export function useSuggestPrompts(theme: string) {
+export function useSuggestPrompts(theme: string, enabled = true) {
   const [data, setData] = useState<string[] | undefined>(undefined);
   const [isPending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
-  const load = useCallback(async () => {
-    setPending(true);
-    setError(null);
-    try {
-      const res = await authFetch("/api/prompt/suggest", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ theme }),
-      });
-      const payload = await res.json();
-      if (!res.ok)
-        throw new Error(payload.error || "Failed to suggest prompts");
-      setData(payload.suggestions as string[]);
-    } catch (e) {
-      setData(undefined);
-      setError(e instanceof Error ? e : new Error(String(e)));
-    } finally {
-      setPending(false);
-    }
-  }, [theme]);
+  const load = useCallback(
+    async (signal?: AbortSignal) => {
+      setPending(true);
+      setError(null);
+      try {
+        const res = await authFetch("/api/prompt/suggest", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ theme }),
+          signal,
+        });
+        const payload = await res.json();
+        if (!res.ok)
+          throw new Error(payload.error || "Failed to suggest prompts");
+        setData(payload.suggestions as string[]);
+      } catch (e) {
+        if (e instanceof Error && e.name === "AbortError") return;
+        setData(undefined);
+        setError(e instanceof Error ? e : new Error(String(e)));
+      } finally {
+        setPending(false);
+      }
+    },
+    [theme]
+  );
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    if (!enabled) return;
+    const controller = new AbortController();
+    void load(controller.signal);
+    return () => controller.abort();
+  }, [load, enabled]);
 
   return {
     data,
     isPending,
     isError: !!error,
     error,
-    refetch: load,
+    refetch: () => load(),
   };
 }
