@@ -45,7 +45,13 @@ export async function createNonce(agentId: number, address: string) {
 export async function verifySIWARequest(
   message: string,
   signature: string
-): Promise<{ valid: boolean; agentId?: number; address?: string }> {
+): Promise<{
+  valid: boolean;
+  error?: string;
+  agentId?: number;
+  address?: string;
+  signerAddress?: string;
+}> {
   try {
     const fields = parseSIWAMessage(message);
 
@@ -53,7 +59,7 @@ export async function verifySIWARequest(
     const issuedAtMs = Date.parse(fields.issuedAt);
     if (Number.isNaN(issuedAtMs) || Date.now() - issuedAtMs > MAX_SIWA_AGE_MS) {
       console.error("[SIWA verify] Message too old or invalid issuedAt");
-      return { valid: false };
+      return { valid: false, error: "Message too old or invalid issuedAt" };
     }
 
     // 2. Expiration / notBefore checks
@@ -62,11 +68,11 @@ export async function verifySIWARequest(
       Date.now() > Date.parse(fields.expirationTime)
     ) {
       console.error("[SIWA verify] Message expired");
-      return { valid: false };
+      return { valid: false, error: "Message expired" };
     }
     if (fields.notBefore && Date.now() < Date.parse(fields.notBefore)) {
       console.error("[SIWA verify] Message not yet valid");
-      return { valid: false };
+      return { valid: false, error: "Message not yet valid" };
     }
 
     // 3. Domain binding
@@ -77,10 +83,23 @@ export async function verifySIWARequest(
         "!==",
         domain
       );
-      return { valid: false };
+      return { valid: false, error: "Domain mismatch" };
     }
 
-    // 4. Recover the actual EOA signer from the EIP-191 signature
+    // 4. Registry / chain binding
+    const registryParts = fields.agentRegistry.split(":");
+    if (
+      registryParts.length !== 3 ||
+      registryParts[0] !== "eip155" ||
+      Number(fields.chainId) !== CONTRACTS_CHAIN_ID ||
+      Number(registryParts[1]) !== CONTRACTS_CHAIN_ID ||
+      getAddress(registryParts[2]) !== getAddress(IDENTITY_REGISTRY_ADDRESS)
+    ) {
+      console.error("[SIWA verify] Agent registry or chain mismatch");
+      return { valid: false, error: "Agent registry or chain mismatch" };
+    }
+
+    // 5. Recover the actual EOA signer from the EIP-191 signature.
     let recoveredAddress: string;
     try {
       recoveredAddress = await recoverMessageAddress({
@@ -89,26 +108,25 @@ export async function verifySIWARequest(
       });
     } catch (err) {
       console.error("[SIWA verify] Failed to recover signer:", err);
-      return { valid: false };
+      return { valid: false, error: "Failed to recover signer" };
     }
 
-    // 5. Nonce consumption
+    // 6. Nonce consumption
     const nonceOk = await nonceStore.consume(fields.nonce);
 
     if (!nonceOk) {
       console.error("[SIWA verify] Invalid or already consumed nonce");
-      return { valid: false };
+      return { valid: false, error: "Invalid or already consumed nonce" };
     }
 
-    // The legacy SIWA verify endpoint is deprecated in favor of Convex-native
-    // auth flows; keep this path closed during migration.
-    console.warn(
-      "[SIWA verify] deprecated legacy verification path invoked; rejecting."
-    );
-    void getAddress(recoveredAddress);
-    return { valid: false };
+    return {
+      valid: true,
+      agentId: fields.agentId,
+      address: getAddress(fields.address),
+      signerAddress: getAddress(recoveredAddress),
+    };
   } catch (err) {
     console.error("[SIWA verify] failed:", err);
-    return { valid: false };
+    return { valid: false, error: "Malformed SIWA message" };
   }
 }

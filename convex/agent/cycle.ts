@@ -76,7 +76,7 @@ async function callDealEnter(
   );
   const identityRegistryAddress =
     process.env.IDENTITY_REGISTRY_ADDRESS ??
-    "0x0000000000000000000000000000000000000000";
+    "0x8004A818BFB912233c491871b3d84c89A494BD9e";
 
   const signer = {
     getAddress: async () => smartAccount.address as `0x${string}`,

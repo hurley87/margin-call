@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { siwaAuthMatchesTrader } from "@/lib/siwa/binding";
+import { siwaAuthMatchesConvexTrader } from "@/lib/siwa/binding";
 import { getPrivyWalletAddress } from "@/lib/privy/server";
 
 describe("siwaAuthMatchesTrader", () => {
@@ -43,6 +44,42 @@ describe("siwaAuthMatchesTrader", () => {
         {
           token_id: 42,
           cdp_wallet_address: "0x2222222222222222222222222222222222222222",
+        }
+      )
+    ).toBe(false);
+  });
+});
+
+describe("siwaAuthMatchesConvexTrader", () => {
+  it("requires the SIWA smart account and recovered CDP owner to match the trader", () => {
+    expect(
+      siwaAuthMatchesConvexTrader(
+        {
+          agentId: 42,
+          address: "0x1111111111111111111111111111111111111111",
+          signerAddress: "0x2222222222222222222222222222222222222222",
+        },
+        {
+          tokenId: 42,
+          cdpWalletAddress: "0x1111111111111111111111111111111111111111",
+          cdpOwnerAddress: "0x2222222222222222222222222222222222222222",
+        }
+      )
+    ).toBe(true);
+  });
+
+  it("rejects a matching smart account signed by the wrong CDP owner", () => {
+    expect(
+      siwaAuthMatchesConvexTrader(
+        {
+          agentId: 42,
+          address: "0x1111111111111111111111111111111111111111",
+          signerAddress: "0x3333333333333333333333333333333333333333",
+        },
+        {
+          tokenId: 42,
+          cdpWalletAddress: "0x1111111111111111111111111111111111111111",
+          cdpOwnerAddress: "0x2222222222222222222222222222222222222222",
         }
       )
     ).toBe(false);

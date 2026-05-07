@@ -42,7 +42,10 @@ async function handleAgentCycleDealEnter(
   const siwaMessage = Buffer.from(siwaMessageB64, "base64").toString("utf-8");
   const siwaResult = await verifySIWARequest(siwaMessage, siwaSignature);
   if (!siwaResult.valid) {
-    return NextResponse.json({ error: "Invalid SIWA auth" }, { status: 401 });
+    return NextResponse.json(
+      { error: `Invalid SIWA auth: ${siwaResult.error ?? "unknown"}` },
+      { status: 401 }
+    );
   }
 
   const convex = createConvexAdminClient();
@@ -54,6 +57,7 @@ async function handleAgentCycleDealEnter(
   })) as {
     tokenId?: number;
     cdpWalletAddress?: string;
+    cdpOwnerAddress?: string;
     walletStatus?: string;
   } | null;
 

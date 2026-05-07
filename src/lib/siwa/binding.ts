@@ -21,8 +21,12 @@ export function siwaAuthMatchesTrader(
  * (`tokenId` / `cdpWalletAddress` naming).
  */
 export function siwaAuthMatchesConvexTrader(
-  siwa: { agentId?: number; address?: string },
-  trader: { tokenId?: number; cdpWalletAddress?: string }
+  siwa: { agentId?: number; address?: string; signerAddress?: string },
+  trader: {
+    tokenId?: number;
+    cdpWalletAddress?: string;
+    cdpOwnerAddress?: string;
+  }
 ): boolean {
   if (
     siwa.agentId === undefined ||
@@ -34,5 +38,11 @@ export function siwaAuthMatchesConvexTrader(
   if (!siwa.address || !trader.cdpWalletAddress) {
     return false;
   }
-  return getAddress(siwa.address) === getAddress(trader.cdpWalletAddress);
+  if (getAddress(siwa.address) !== getAddress(trader.cdpWalletAddress)) {
+    return false;
+  }
+  if (!siwa.signerAddress || !trader.cdpOwnerAddress) {
+    return false;
+  }
+  return getAddress(siwa.signerAddress) === getAddress(trader.cdpOwnerAddress);
 }
