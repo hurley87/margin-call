@@ -16,10 +16,13 @@ crons.hourly(
 );
 
 /**
- * Agent scheduler cron — fires every 1 minute (Convex minimum; PRD target is
+ * Agent scheduler heartbeat — fires every 1 minute (Convex minimum; PRD target is
  * 30 s but the platform constraint is 1 m on most plans).
  *
- * Calls internal.agent.scheduler which queries stale active traders and fans
+ * This is only a heartbeat: each trader becomes eligible on their own interval
+ * (see resolveCycleIntervalMsForTrader / listStaleTradersForCycle), not once per cron tick.
+ *
+ * Calls internal.agent.scheduler which queries eligible active traders and fans
  * out one cycle action per trader via ctx.scheduler.runAfter(0, ...).
  */
 crons.interval(

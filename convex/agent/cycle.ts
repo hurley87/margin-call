@@ -272,10 +272,10 @@ async function callDealEnter(
  *    lastCycleAt and clears the lease — but only if generation still equals N.
  *    This prevents a stale cycle from clobbering a recovery cycle's state.
  * 5. On crash / timeout the lease expires automatically after CYCLE_LEASE_TTL_MS
- *    (90 s). The next scheduler tick sees no active lease and enqueues a fresh
- *    cycle with an incremented generation.
+ *    (90 s). The next cron heartbeat sees no active lease and may enqueue a fresh
+ *    cycle once the trader also satisfies their eligibility interval for lastCycleAt.
  *
- * Overlapping ticks: if the cron fires while a cycle is in flight,
+ * Overlapping heartbeats: if the cron fires while a cycle is in flight,
  * listStaleTradersForCycle filters out traders with cycleLeaseUntil > now,
  * so the scheduler never even enqueues a second cycle. Belt-and-suspenders:
  * even if it did enqueue one (e.g. clock skew) the CAS would reject it.

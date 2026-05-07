@@ -16,6 +16,7 @@ import { describe, it, expect } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { internal } from "../../convex/_generated/api";
+import { DEFAULT_CYCLE_INTERVAL_MS } from "../../convex/agent/internal";
 import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
@@ -33,10 +34,10 @@ describe("Cycle lease: stale trader eligibility", () => {
     expect(stale.length).toBe(1);
   });
 
-  it("returns stale trader (old lastCycleAt) as eligible", async () => {
+  it("returns stale trader (lastCycleAt past default interval) as eligible", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);
-    const oldCycleAt = Date.now() - 5 * 60 * 1000; // 5 min ago (stale)
+    const oldCycleAt = Date.now() - DEFAULT_CYCLE_INTERVAL_MS;
     await seedActiveTrader(t, dmId, { lastCycleAt: oldCycleAt });
 
     const stale = await t.query(
@@ -46,10 +47,10 @@ describe("Cycle lease: stale trader eligibility", () => {
     expect(stale.length).toBe(1);
   });
 
-  it("does NOT return trader with fresh lastCycleAt", async () => {
+  it("does NOT return trader with lastCycleAt within default cycle interval", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);
-    const freshCycleAt = Date.now() - 10_000; // 10s ago (fresh)
+    const freshCycleAt = Date.now() - 10_000; // well inside 5-minute spacing
     await seedActiveTrader(t, dmId, { lastCycleAt: freshCycleAt });
 
     const stale = await t.query(
@@ -57,6 +58,32 @@ describe("Cycle lease: stale trader eligibility", () => {
       {}
     );
     expect(stale.length).toBe(0);
+  });
+
+  it("does NOT return trader whose lastCycleAt is 4 minutes ago (boundary: still fresh)", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const fourMinutesAgo = Date.now() - 4 * 60 * 1000;
+    await seedActiveTrader(t, dmId, { lastCycleAt: fourMinutesAgo });
+
+    const stale = await t.query(
+      internal.agent.internal.listStaleTradersForCycle,
+      {}
+    );
+    expect(stale.length).toBe(0);
+  });
+
+  it("returns trader whose lastCycleAt is older than default interval by a margin", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const wellPastInterval = Date.now() - DEFAULT_CYCLE_INTERVAL_MS - 1_000;
+    await seedActiveTrader(t, dmId, { lastCycleAt: wellPastInterval });
+
+    const stale = await t.query(
+      internal.agent.internal.listStaleTradersForCycle,
+      {}
+    );
+    expect(stale.length).toBe(1);
   });
 
   it("does NOT return trader with active cycle lease", async () => {

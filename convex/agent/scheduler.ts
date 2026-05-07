@@ -6,11 +6,13 @@ import { internal } from "../_generated/api";
 /**
  * Convex internal scheduler action — replaces the legacy Vercel Cron HTTP path.
  *
- * Triggered every 1 minute via convex/crons.ts (Convex minimum; PRD target is
- * 30s but the platform constraint is 1m on most plans).
+ * Triggered every 1 minute via convex/crons.ts as a heartbeat (Convex minimum).
+ * Trader eligibility uses per-trader cycle intervals (see listStaleTradersForCycle),
+ * not the cron period — traders may skip many heartbeats until they are stale enough.
  *
- * For each eligible trader (active, wallet ready, no live lease, lastCycleAt
- * stale) it enqueues an immediate cycle action via ctx.scheduler.runAfter.
+ * For each eligible trader (active, wallet ready, no live lease,
+ * lastCycleAt outside their minimum spacing) it enqueues an immediate cycle action
+ * via ctx.scheduler.runAfter.
  * No HMAC, no HTTP self-call, no user auth context (internal-only action).
  */
 export const scheduler = internalAction({

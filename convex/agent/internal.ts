@@ -1,11 +1,33 @@
+import { Doc } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 
 /** Cycle lease TTL: 90 seconds. Longer than the cycle itself to avoid false-recovery. */
 export const CYCLE_LEASE_TTL_MS = 90_000;
 
-/** How stale lastCycleAt must be before the scheduler kicks a new cycle. */
-export const CYCLE_STALE_MS = 60_000; // 1 minute (Convex cron minimum)
+/**
+ * Minimum time between successful cycle completions for traders without acceleration.
+ * The Convex cron runs every minute as a heartbeat; eligibility is gated by this
+ * per-trader interval (not by the cron period).
+ */
+export const DEFAULT_CYCLE_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * Future: interval when speed-token acceleration applies (stored flags only; no chain reads).
+ * Matches default today — reserved so the resolver can branch without API churn later.
+ */
+export const SPEED_TOKEN_CYCLE_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * Per-trader minimum spacing between cycles. Extend with stored fields such as
+ * `speedTokenEligible` / `hasSpeedToken` later; never read on-chain balances here.
+ */
+export function resolveCycleIntervalMsForTrader(
+  _trader: Doc<"traders">
+): number {
+  // Future: if (_trader.speedTokenEligible ?? false) return SPEED_TOKEN_CYCLE_INTERVAL_MS;
+  return DEFAULT_CYCLE_INTERVAL_MS;
+}
 
 // ── Queries ───────────────────────────────────────────────────────────────────
 
@@ -24,16 +46,16 @@ export const loadTraderForCycle = internalQuery({
  * List traders eligible for a new cycle:
  *   - status === "active"
  *   - walletStatus === "ready"
- *   - lastCycleAt is either unset or older than CYCLE_STALE_MS
+ *   - lastCycleAt is either unset or older than resolveCycleIntervalMsForTrader(trader)
  *   - cycleLeaseUntil is either unset or in the past (no active lease)
  *
+ * The 1-minute cron is only a heartbeat; each trader uses their own eligibility interval.
  * Called by the scheduler action — no auth context required.
  */
 export const listStaleTradersForCycle = internalQuery({
   args: {},
   handler: async (ctx) => {
     const now = Date.now();
-    const staleThreshold = now - CYCLE_STALE_MS;
 
     // Fetch active traders; Convex does not support multi-field inequality
     // indexes so we filter in memory after the index scan.
@@ -47,7 +69,9 @@ export const listStaleTradersForCycle = internalQuery({
       // Skip if a cycle lease is still valid (another cycle is in flight)
       if (t.cycleLeaseUntil !== undefined && t.cycleLeaseUntil > now)
         return false;
-      // Skip if recently cycled
+      const intervalMs = resolveCycleIntervalMsForTrader(t);
+      const staleThreshold = now - intervalMs;
+      // Skip if within this trader's minimum cycle spacing
       if (t.lastCycleAt !== undefined && t.lastCycleAt > staleThreshold)
         return false;
       return true;
@@ -75,8 +99,8 @@ export const listStaleTradersForCycle = internalQuery({
  *   - Any other concurrent caller that observed the same generation will fail
  *     the CAS check and receive { acquired: false }.
  *
- * Recovery: if a cycle crashes without releasing its lease, the next scheduler
- * tick skips the trader (leaseUntil > now). After CYCLE_LEASE_TTL_MS the lease
+ * Recovery: if a cycle crashes without releasing its lease, the next cron
+ * heartbeat skips the trader (leaseUntil > now). After CYCLE_LEASE_TTL_MS the lease
  * expires, listStaleTradersForCycle returns the trader again, and a new cycle
  * acquires with a fresh generation — preventing double-execution.
  */
