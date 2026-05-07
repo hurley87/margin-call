@@ -208,7 +208,7 @@ export default function TraderDetailPage() {
           traderId={trader.token_id}
           walletUsdc={walletUsdc}
           escrowUsdc={balanceUsdc}
-          tbaAddress={trader.tba_address}
+          walletAddress={trader.cdp_wallet_address}
           ownerAddress={trader.owner_address}
           isNewTrader={isNewTrader}
           onSuccess={refetchBalance}

@@ -22,7 +22,7 @@ interface WalletDialogProps {
   traderId: number;
   walletUsdc: number | undefined;
   escrowUsdc: number | null;
-  tbaAddress: string | null;
+  walletAddress: string | null;
   ownerAddress: string;
   isNewTrader: boolean;
   onSuccess: () => void;
@@ -35,7 +35,7 @@ export function WalletDialog({
   traderId,
   walletUsdc,
   escrowUsdc,
-  tbaAddress,
+  walletAddress,
   ownerAddress,
   isNewTrader,
   onSuccess,
@@ -320,7 +320,7 @@ export function WalletDialog({
               <div>
                 <span className="text-[var(--t-muted)]">Trader Wallet </span>
                 <span className="font-mono text-[var(--t-text)]">
-                  {tbaAddress ?? "Not derived"}
+                  {walletAddress ?? "Not derived"}
                 </span>
               </div>
               <div>
