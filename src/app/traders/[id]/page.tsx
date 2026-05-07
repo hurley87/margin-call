@@ -204,6 +204,7 @@ export default function TraderDetailPage() {
         <WalletDialog
           open
           onOpenChange={setWalletOpen}
+          convexTraderId={trader.id}
           traderId={trader.token_id}
           walletUsdc={walletUsdc}
           escrowUsdc={balanceUsdc}

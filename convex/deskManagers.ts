@@ -1,5 +1,11 @@
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+
+/** Internal: fetch desk manager by document ID (for server-side lookups). */
+export const getByIdInternal = internalQuery({
+  args: { id: v.id("deskManagers") },
+  handler: async (ctx, { id }) => ctx.db.get(id),
+});
 
 /** Returns the deskManager row for the authenticated Privy subject, or null. */
 export const getMe = query({

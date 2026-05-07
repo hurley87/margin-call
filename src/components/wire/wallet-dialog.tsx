@@ -16,6 +16,9 @@ function usdcToInputString(usdc: number): string {
 interface WalletDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Convex document ID — used for the ensure-depositor pre-flight. */
+  convexTraderId: string;
+  /** ERC-8004 token ID — used as the escrow traderId on-chain. */
   traderId: number;
   walletUsdc: number | undefined;
   escrowUsdc: number | null;
@@ -28,6 +31,7 @@ interface WalletDialogProps {
 export function WalletDialog({
   open,
   onOpenChange,
+  convexTraderId,
   traderId,
   walletUsdc,
   escrowUsdc,
@@ -38,6 +42,7 @@ export function WalletDialog({
 }: WalletDialogProps) {
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");
+  const [ensureError, setEnsureError] = useState<string | undefined>();
 
   const {
     deposit,
@@ -63,6 +68,25 @@ export function WalletDialog({
     e.preventDefault();
     const parsed = parseUnits(amount, 6);
     if (parsed === ZERO) return;
+    setEnsureError(undefined);
+
+    // Skip pre-flight if escrow already has funds — depositor is confirmed set.
+    if (!escrowUsdc) {
+      try {
+        const res = await fetch(
+          `/api/trader/${convexTraderId}/ensure-depositor`,
+          { method: "POST" }
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setEnsureError((body as { error?: string }).error ?? "Setup failed");
+          return;
+        }
+      } catch {
+        setEnsureError("Network error during depositor setup");
+        return;
+      }
+    }
 
     try {
       await deposit(BigInt(traderId), parsed);
@@ -102,6 +126,7 @@ export function WalletDialog({
   }
 
   const showWelcome = isNewTrader && (escrowUsdc === null || escrowUsdc === 0);
+  const depositDisplayError = ensureError ?? depositError;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -160,66 +185,73 @@ export function WalletDialog({
           </div>
 
           {/* Deposit form */}
-          {mode === "deposit" && (
-            <form
-              onSubmit={handleDeposit}
-              className="flex flex-col gap-3 px-4 py-4"
-            >
-              <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  step="0.000001"
-                  min="0"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  placeholder="0.00 USDC"
-                  disabled={isDepositBusy}
-                  className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
-                />
-                {walletUsdc !== undefined && walletUsdc > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setAmount(usdcToInputString(walletUsdc))}
-                    className="shrink-0 text-xs text-[var(--t-accent)] hover:underline"
-                  >
-                    Max
-                  </button>
-                )}
-              </div>
-              <button
-                type="submit"
-                disabled={isDepositBusy || !amount}
-                className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
+          {mode === "deposit" &&
+            (traderId === 0 ? (
+              <p className="px-4 py-4 text-xs text-[var(--t-amber)]">
+                Wallet setup in progress — deposit will be available shortly.
+              </p>
+            ) : (
+              <form
+                onSubmit={handleDeposit}
+                className="flex flex-col gap-3 px-4 py-4"
               >
-                {depositStep === "approving"
-                  ? "Approving USDC..."
-                  : depositStep === "depositing"
-                    ? "Depositing..."
-                    : isNewTrader && showWelcome
-                      ? "FUND ESCROW"
-                      : "Deposit"}
-              </button>
-              {depositStep === "done" && (
-                <p className="text-xs text-[var(--t-green)]">
-                  Deposit confirmed.
-                </p>
-              )}
-              {depositError && (
                 <div className="flex items-center gap-2">
-                  <p className="text-xs text-[var(--t-red)]">
-                    {depositError.slice(0, 120)}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={resetDeposit}
-                    className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
-                  >
-                    Retry
-                  </button>
+                  <input
+                    type="number"
+                    step="0.000001"
+                    min="0"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    placeholder="0.00 USDC"
+                    disabled={isDepositBusy}
+                    className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
+                  />
+                  {walletUsdc !== undefined && walletUsdc > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setAmount(usdcToInputString(walletUsdc))}
+                      className="shrink-0 text-xs text-[var(--t-accent)] hover:underline"
+                    >
+                      Max
+                    </button>
+                  )}
                 </div>
-              )}
-            </form>
-          )}
+                <button
+                  type="submit"
+                  disabled={isDepositBusy || !amount}
+                  className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
+                >
+                  {depositStep === "approving"
+                    ? "Approving USDC..."
+                    : depositStep === "depositing"
+                      ? "Depositing..."
+                      : isNewTrader && showWelcome
+                        ? "FUND ESCROW"
+                        : "Deposit"}
+                </button>
+                {depositStep === "done" && (
+                  <p className="text-xs text-[var(--t-green)]">
+                    Deposit confirmed.
+                  </p>
+                )}
+                {depositDisplayError && (
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs text-[var(--t-red)]">
+                      {depositDisplayError.slice(0, 120)}
+                    </p>
+                    {depositError && !ensureError && (
+                      <button
+                        type="button"
+                        onClick={resetDeposit}
+                        className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
+                      >
+                        Retry
+                      </button>
+                    )}
+                  </div>
+                )}
+              </form>
+            ))}
 
           {/* Withdraw form */}
           {mode === "withdraw" && (
