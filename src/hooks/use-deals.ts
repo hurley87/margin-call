@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useQuery as useConvexQuery } from "convex/react";
+import { useConvexAuth, useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { Doc } from "../../convex/_generated/dataModel";
@@ -125,16 +125,18 @@ export function useMyDeals(): {
 }
 
 export function useDeal(id: string) {
+  const { isLoading: isAuthLoading, isAuthenticated } = useConvexAuth();
   const convexId = id as Id<"deals">;
+  const shouldQuery = Boolean(id) && !isAuthLoading && isAuthenticated;
 
   const rawDeal = useConvexQuery(
     api.deals.getById,
-    id ? { dealId: convexId } : "skip"
+    shouldQuery ? { dealId: convexId } : "skip"
   );
 
   const rawOutcomes = useConvexQuery(
     api.dealOutcomes.listByDeal,
-    id ? { dealId: convexId } : "skip"
+    shouldQuery ? { dealId: convexId } : "skip"
   );
 
   if (!id) {
@@ -142,6 +144,18 @@ export function useDeal(id: string) {
       data: undefined as { deal: Deal; outcomes: DealOutcome[] } | undefined,
       isLoading: false,
       error: new Error("Deal not found"),
+    };
+  }
+
+  if (isAuthLoading) {
+    return { data: undefined, isLoading: true, error: null };
+  }
+
+  if (!isAuthenticated) {
+    return {
+      data: undefined,
+      isLoading: false,
+      error: new Error("Authentication required"),
     };
   }
 
