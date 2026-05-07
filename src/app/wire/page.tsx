@@ -7,6 +7,7 @@ import { api } from "../../../convex/_generated/api";
 import { Nav } from "@/components/nav";
 import { WireFeed } from "@/components/wire/wire-feed";
 import { WireStatsBar } from "@/components/wire/wire-stats-bar";
+import { CreateDealDialog } from "@/components/wire/create-deal-dialog";
 import { DEAL_CREATION_FEE_PERCENTAGE } from "@/lib/constants";
 
 const HOW_DEALS_SECTIONS = [
@@ -35,6 +36,7 @@ export default function WirePage() {
   const drops = useQuery(api.marketNarratives.feedDrops, { limit: 20 });
   const isLoading = drops === undefined;
   const [howDealsOpen, setHowDealsOpen] = useState(false);
+  const [globalDealOpen, setGlobalDealOpen] = useState(false);
 
   const latestMood = drops?.[0]?.mood;
   const latestSecHeat = drops?.[0]?.secHeat;
@@ -60,6 +62,12 @@ export default function WirePage() {
                   HOW DEALS WORK
                 </button>
               </div>
+              <button
+                onClick={() => setGlobalDealOpen(true)}
+                className="cursor-pointer border border-[var(--t-accent)] bg-[var(--t-accent)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-bg)] transition-colors hover:bg-transparent hover:text-[var(--t-accent)]"
+              >
+                + CREATE DEAL
+              </button>
               {latestMood != null && (
                 <div className="flex items-center gap-3 text-xs">
                   <span className="text-[var(--t-muted)]">
@@ -131,6 +139,14 @@ export default function WirePage() {
               </Dialog.Popup>
             </Dialog.Portal>
           </Dialog.Root>
+
+          {globalDealOpen && (
+            <CreateDealDialog
+              headline={{ headline: "", body: "" }}
+              open={globalDealOpen}
+              onOpenChange={setGlobalDealOpen}
+            />
+          )}
 
           <div className="px-4 pb-4">
             {isLoading ? (
