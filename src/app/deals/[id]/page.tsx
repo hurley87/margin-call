@@ -72,8 +72,8 @@ export default function DealDetailPage() {
     deal.creator_id !== undefined &&
     deskManager?.id === deal.creator_id &&
     walletAddress !== undefined &&
-    deal.creator_address !== undefined &&
-    deal.creator_address.toLowerCase() === walletAddress.toLowerCase();
+    (deal.creator_address === undefined ||
+      deal.creator_address.toLowerCase() === walletAddress.toLowerCase());
 
   return (
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
