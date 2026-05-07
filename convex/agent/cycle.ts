@@ -547,6 +547,8 @@ export const cycle = internalAction({
           traderId: traderId as string,
           narrative: resolved.narrative,
           traderPnlUsdc: resolved.traderPnlUsdc,
+          potChangeUsdc: resolved.potChangeUsdc,
+          rakeUsdc: resolved.rakeUsdc,
           traderWipedOut: resolved.traderWipedOut,
           wipeoutReason: resolved.wipeoutReason ?? undefined,
           assetsGained: resolved.assetsGained,

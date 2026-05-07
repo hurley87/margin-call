@@ -308,6 +308,53 @@ describe("Deal outcome idempotency", () => {
 
     expect(id1).not.toBe(id2);
   });
+
+  it("loss outcome increases deal pot and wipeout count once", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId);
+    const dealId = await seedDeal(t, { potUsdc: 5, entryCostUsdc: 1 });
+
+    const id1 = await t.mutation(internal.dealOutcomes.apply, {
+      dealId: dealId as never,
+      traderId: traderId as string,
+      traderPnlUsdc: -10,
+      traderWipedOut: true,
+    });
+    const id2 = await t.mutation(internal.dealOutcomes.apply, {
+      dealId: dealId as never,
+      traderId: traderId as string,
+      traderPnlUsdc: -10,
+      traderWipedOut: true,
+    });
+
+    expect(id2).toBe(id1);
+
+    const deal = await t.run(async (ctx) => ctx.db.get(dealId as never));
+    expect(deal?.potUsdc).toBe(15);
+    expect(deal?.wipeoutCount).toBe(1);
+
+    const outcome = await t.run(async (ctx) => ctx.db.get(id1 as never));
+    expect(outcome?.potChangeUsdc).toBe(10);
+  });
+
+  it("win outcome decreases deal pot by gross winnings including rake", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId);
+    const dealId = await seedDeal(t, { potUsdc: 100 });
+
+    await t.mutation(internal.dealOutcomes.apply, {
+      dealId: dealId as never,
+      traderId: traderId as string,
+      traderPnlUsdc: 9,
+      rakeUsdc: 1,
+    });
+
+    const deal = await t.run(async (ctx) => ctx.db.get(dealId as never));
+    expect(deal?.potUsdc).toBe(90);
+    expect(deal?.wipeoutCount ?? 0).toBe(0);
+  });
 });
 
 describe("applyOutcomeBalance idempotency", () => {

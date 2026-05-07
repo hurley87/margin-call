@@ -132,9 +132,35 @@ export const apply = internalMutation({
       .unique();
     if (existing) return existing._id;
 
-    return ctx.db.insert("dealOutcomes", {
-      ...args,
-      createdAt: Date.now(),
+    const traderPnlUsdc = args.traderPnlUsdc ?? 0;
+    const rakeUsdc = args.rakeUsdc ?? 0;
+    const potChangeUsdc =
+      args.potChangeUsdc ??
+      (traderPnlUsdc > 0
+        ? -(traderPnlUsdc + rakeUsdc)
+        : Math.abs(traderPnlUsdc));
+    const now = Date.now();
+
+    const { potChangeUsdc: _potChangeUsdc, ...outcomeArgs } = args;
+    const outcomeId = await ctx.db.insert("dealOutcomes", {
+      ...outcomeArgs,
+      potChangeUsdc,
+      createdAt: now,
     });
+
+    const deal = await ctx.db.get(args.dealId);
+    if (deal) {
+      const nextPotUsdc = Math.max(0, deal.potUsdc + potChangeUsdc);
+      await ctx.db.patch(args.dealId, {
+        potUsdc: nextPotUsdc,
+        wipeoutCount: args.traderWipedOut
+          ? (deal.wipeoutCount ?? 0) + 1
+          : (deal.wipeoutCount ?? 0),
+        status: nextPotUsdc <= 0 ? "depleted" : deal.status,
+        updatedAt: now,
+      });
+    }
+
+    return outcomeId;
   },
 });

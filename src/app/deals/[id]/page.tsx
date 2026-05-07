@@ -51,6 +51,14 @@ export default function DealDetailPage() {
   }
 
   const { deal, outcomes } = data;
+  const wipeoutCount = Math.max(
+    deal.wipeout_count,
+    outcomes.filter((outcome) => outcome.trader_wiped_out).length
+  );
+  const legacyPotDelta = outcomes
+    .filter((outcome) => outcome.pot_change_inferred)
+    .reduce((sum, outcome) => sum + outcome.pot_change_usdc, 0);
+  const displayPotUsdc = deal.pot_usdc + legacyPotDelta;
 
   return (
     <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
@@ -103,7 +111,7 @@ export default function DealDetailPage() {
               <div className="flex items-center gap-0 border-t border-[var(--t-border)] text-xs">
                 <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
                   <p className="text-[10px] text-[var(--t-muted)]">POT</p>
-                  <p className="text-[var(--t-green)]">${deal.pot_usdc}</p>
+                  <p className="text-[var(--t-green)]">${displayPotUsdc}</p>
                 </div>
                 <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
                   <p className="text-[10px] text-[var(--t-muted)]">ENTRY</p>
@@ -125,12 +133,12 @@ export default function DealDetailPage() {
                   <p className="text-[10px] text-[var(--t-muted)]">WIPEOUTS</p>
                   <p
                     className={
-                      deal.wipeout_count > 0
+                      wipeoutCount > 0
                         ? "text-[var(--t-red)]"
                         : "text-[var(--t-text)]"
                     }
                   >
-                    {deal.wipeout_count}
+                    {wipeoutCount}
                   </p>
                 </div>
               </div>
@@ -269,6 +277,12 @@ export default function DealDetailPage() {
                           >
                             Settlement TX
                           </a>
+                        )}
+                        {outcome.pot_change_usdc !== 0 && (
+                          <span>
+                            Pot {outcome.pot_change_usdc > 0 ? "+" : "-"}$
+                            {Math.abs(outcome.pot_change_usdc).toFixed(2)}
+                          </span>
                         )}
                       </div>
                     </div>

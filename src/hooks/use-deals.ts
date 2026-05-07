@@ -33,6 +33,7 @@ export interface DealOutcome {
   trader_id: string;
   trader_pnl_usdc: number;
   pot_change_usdc: number;
+  pot_change_inferred: boolean;
   rake_usdc: number;
   narrative: string | { event: string; description: string }[];
   trader_wiped_out: boolean;
@@ -66,13 +67,21 @@ function mapConvexDeal(deal: Doc<"deals">): Deal {
 }
 
 function mapConvexOutcome(o: Doc<"dealOutcomes">): DealOutcome {
+  const traderPnlUsdc = o.traderPnlUsdc ?? 0;
+  const rakeUsdc = o.rakeUsdc ?? 0;
+  const potChangeInferred = o.potChangeUsdc === undefined;
+  const potChangeUsdc =
+    o.potChangeUsdc ??
+    (traderPnlUsdc > 0 ? -(traderPnlUsdc + rakeUsdc) : Math.abs(traderPnlUsdc));
+
   return {
     id: o._id,
     deal_id: o.dealId,
     trader_id: String(o.traderId),
-    trader_pnl_usdc: o.traderPnlUsdc ?? 0,
-    pot_change_usdc: o.potChangeUsdc ?? 0,
-    rake_usdc: o.rakeUsdc ?? 0,
+    trader_pnl_usdc: traderPnlUsdc,
+    pot_change_usdc: potChangeUsdc,
+    pot_change_inferred: potChangeInferred,
+    rake_usdc: rakeUsdc,
     narrative: (o.narrative as DealOutcome["narrative"]) ?? "",
     trader_wiped_out: o.traderWipedOut ?? false,
     wipeout_reason: o.wipeoutReason,

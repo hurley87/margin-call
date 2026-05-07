@@ -37,6 +37,10 @@ export interface ResolvedOutcome {
   payload: DealOutcomePayload;
   /** Validated PnL (clamped to balance and max extraction) */
   traderPnlUsdc: number;
+  /** Platform rake on gross positive winnings. */
+  rakeUsdc: number;
+  /** Delta applied to the deal pot. Positive means the pot grew. */
+  potChangeUsdc: number;
   /** True if the trader is wiped out */
   traderWipedOut: boolean;
   wipeoutReason: string | null;
@@ -149,12 +153,15 @@ Rules:
 
   // Apply rake on positive gains
   let traderPnlUsdc: number;
+  let rakeUsdc = 0;
   if (balanceChange > 0) {
-    const rake = balanceChange * (RAKE_PERCENTAGE / 100);
-    traderPnlUsdc = balanceChange - rake;
+    rakeUsdc = balanceChange * (RAKE_PERCENTAGE / 100);
+    traderPnlUsdc = balanceChange - rakeUsdc;
   } else {
     traderPnlUsdc = balanceChange;
   }
+  const potChangeUsdc =
+    balanceChange > 0 ? -balanceChange : Math.abs(balanceChange);
 
   const endingBalance = escrowBalanceUsdc + traderPnlUsdc;
   const traderWipedOut = endingBalance <= 0;
@@ -162,6 +169,8 @@ Rules:
   return {
     payload: raw,
     traderPnlUsdc,
+    rakeUsdc,
+    potChangeUsdc,
     traderWipedOut,
     wipeoutReason: traderWipedOut
       ? (raw.wipeout_reason ?? "margin_call")
