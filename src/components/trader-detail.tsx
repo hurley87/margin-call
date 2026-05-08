@@ -29,7 +29,6 @@ import {
   useConfigureMandate,
   usePendingApprovals,
 } from "@/hooks/use-approvals";
-import { Nav } from "@/components/nav";
 import { FEED_DISPLAY } from "@/components/feed-line";
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
@@ -169,10 +168,10 @@ export function TraderDetailContent({
           </button>
         ) : (
           <Link
-            href="/traders"
+            href="/"
             className="text-sm text-[var(--t-muted)] hover:text-[var(--t-text)]"
           >
-            Back to traders
+            Back to desk
           </Link>
         )}
       </div>
@@ -186,14 +185,7 @@ export function TraderDetailContent({
         !compact && "min-h-screen"
       )}
     >
-      {!compact && <Nav containerClassName="max-w-[1600px]" />}
-
-      <div
-        className={cn(
-          "sticky z-20 border-b border-[var(--t-border)] bg-[var(--t-surface)]",
-          compact ? "top-0" : "top-[37px]"
-        )}
-      >
+      <div className="sticky top-0 z-20 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
         <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-3">
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
             {onClose ? (
@@ -539,6 +531,12 @@ function DealOutcomes({ traderId }: { traderId: string }) {
   );
 }
 
+function outcomeDealBadgeLabel(isWipeout: boolean, isWin: boolean) {
+  if (isWipeout) return "WIPEOUT";
+  if (isWin) return "WIN";
+  return "LOSS";
+}
+
 function OutcomeCard({
   outcome,
   isExpanded,
@@ -552,22 +550,24 @@ function OutcomeCard({
   const isWin = pnl > 0;
   const isWipeout = outcome.trader_wiped_out;
   const pnlColor = isWin ? "text-[var(--t-green)]" : "text-[var(--t-red)]";
-  let borderLeftClass = "";
-  if (isWipeout) {
-    borderLeftClass = "border-l-2 border-l-[var(--t-red)]";
-  } else if (isWin) {
-    borderLeftClass = "border-l-2 border-l-[var(--t-green)]";
-  }
-  const pnlLabel = isWipeout ? "WIPEOUT" : isWin ? "WIN" : "LOSS";
+  const headlineLabel = outcomeDealBadgeLabel(isWipeout, isWin);
 
   return (
-    <div className={cn("bg-[var(--t-bg)]", borderLeftClass)}>
+    <div
+      className={cn(
+        "bg-[var(--t-bg)]",
+        isWipeout && "border-l-2 border-l-[var(--t-red)]",
+        !isWipeout && isWin && "border-l-2 border-l-[var(--t-green)]"
+      )}
+    >
       <button
         onClick={onToggle}
         className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-[var(--t-surface)]"
       >
         <div className="flex items-center gap-3">
-          <span className={`text-sm font-medium ${pnlColor}`}>{pnlLabel}</span>
+          <span className={`text-sm font-medium ${pnlColor}`}>
+            {headlineLabel}
+          </span>
           <span className={`text-sm ${pnlColor}`}>
             {pnl >= 0 ? "+" : ""}
             {pnl.toFixed(2)} USDC
