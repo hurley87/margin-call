@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 
-import { HelpCircle, LogOut, Menu, Radio, Trophy } from "lucide-react";
+import { HelpCircle, LogOut } from "lucide-react";
 import { useQuery } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../../convex/_generated/api";
@@ -370,20 +370,11 @@ function TopStatusBar({
         </div>
 
         <div className="terminal-panel flex items-center justify-end gap-2 px-3 py-2">
-          <IconLink href="/leaderboard" label="Leaderboard">
-            <Trophy className="h-4 w-4" />
-          </IconLink>
-          <IconLink href="/wire" label="Newswire">
-            <Radio className="h-4 w-4" />
-          </IconLink>
           <IconLink
             href="https://margin-call.gitbook.io/product-docs"
             label="Docs"
           >
             <HelpCircle className="h-4 w-4" />
-          </IconLink>
-          <IconLink href="/traders" label="Traders">
-            <Menu className="h-4 w-4" />
           </IconLink>
           <button
             type="button"

@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
-import { MusicPlayer } from "@/components/music-player";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -49,7 +48,6 @@ export function Nav({ containerClassName }: NavProps) {
           })}
         </div>
         <div className="flex items-center gap-3">
-          <MusicPlayer />
           <a
             href="https://margin-call.gitbook.io/product-docs"
             target="_blank"
