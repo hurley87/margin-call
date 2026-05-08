@@ -29,6 +29,13 @@ const STATE_META: Record<DialogState, string> = {
   creating: "SENDING",
 };
 
+function createDealProgressWidth(step: string): "33%" | "66%" | "90%" | "100%" {
+  if (step === "approving") return "33%";
+  if (step === "creating") return "66%";
+  if (step === "syncing") return "90%";
+  return "100%";
+}
+
 interface DealSeedPrefill {
   seedId: Id<"wireDealSeeds">;
   prompt: string;
@@ -59,12 +66,10 @@ export function CreateDealDialog({
   // Deal seeds retain their exact prompt by default; normal headlines can request generated choices first.
   const openInConfigure =
     !startWithSuggestions && !!(dealSeed || headline.headline);
-  const initialPrompt =
-    dealSeed?.prompt ??
-    [headline.headline, headline.body].filter(Boolean).join("\n\n");
-  const suggestionTheme = [headline.headline, headline.body]
+  const headlineBody = [headline.headline, headline.body]
     .filter(Boolean)
     .join("\n\n");
+  const initialPrompt = dealSeed?.prompt ?? headlineBody;
 
   const [state, setState] = useState<DialogState>(
     openInConfigure ? "configure" : "suggestions"
@@ -80,7 +85,7 @@ export function CreateDealDialog({
   );
 
   const router = useRouter();
-  const suggestQuery = useSuggestPrompts(suggestionTheme, !openInConfigure);
+  const suggestQuery = useSuggestPrompts(headlineBody, !openInConfigure);
   const {
     createDeal,
     reset: resetCreateDeal,
@@ -136,7 +141,7 @@ export function CreateDealDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[86vh] w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-bronze)] bg-[linear-gradient(rgba(101,160,94,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(101,160,94,0.03)_1px,transparent_1px),radial-gradient(circle_at_top,rgba(214,166,96,0.08),transparent_34%),rgba(4,8,7,0.94)] bg-[length:100%_18px,18px_100%,auto,auto] font-mono shadow-2xl shadow-black/45">
+        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[86vh] w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-bronze)] bg-[linear-gradient(rgba(101,160,94,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(101,160,94,0.03)_1px,transparent_1px),radial-gradient(circle_at_top,rgba(214,166,96,0.08),transparent_34%),#040807] bg-[length:100%_18px,18px_100%,auto,auto] font-mono shadow-2xl shadow-black/45">
           <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[var(--t-divider)] bg-[#0b100d] px-3 py-2">
             <div className="min-w-0">
               <Dialog.Title className="truncate font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
@@ -319,14 +324,7 @@ export function CreateDealDialog({
                       <div
                         className="h-full bg-[var(--t-green)] transition-all duration-500"
                         style={{
-                          width:
-                            step === "approving"
-                              ? "33%"
-                              : step === "creating"
-                                ? "66%"
-                                : step === "syncing"
-                                  ? "90%"
-                                  : "100%",
+                          width: createDealProgressWidth(step),
                         }}
                       />
                     </div>
