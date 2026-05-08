@@ -17,6 +17,11 @@ interface NavProps {
   containerClassName?: string;
 }
 
+function isNavItemActive(pathname: string, href: string): boolean {
+  if (href === "/") return pathname === "/";
+  return pathname.startsWith(href);
+}
+
 function ExternalNavLink({
   href,
   "aria-label": ariaLabel,
@@ -31,7 +36,7 @@ function ExternalNavLink({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+      aria-label={ariaLabel}
       className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
     >
       {children}
@@ -52,25 +57,20 @@ export function Nav({ containerClassName }: NavProps) {
         )}
       >
         <div className="flex items-center gap-3 overflow-x-auto">
-          {NAV_ITEMS.map(({ href, label }) => {
-            const isActive =
-              href === "/" ? pathname === "/" : pathname.startsWith(href);
-
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "shrink-0 transition-colors",
-                  isActive
-                    ? "text-[var(--t-accent)]"
-                    : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
-                )}
-              >
-                {label}
-              </Link>
-            );
-          })}
+          {NAV_ITEMS.map(({ href, label }) => (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "shrink-0 transition-colors",
+                isNavItemActive(pathname, href)
+                  ? "text-[var(--t-accent)]"
+                  : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
+              )}
+            >
+              {label}
+            </Link>
+          ))}
         </div>
         <div className="flex items-center gap-3">
           <ExternalNavLink
