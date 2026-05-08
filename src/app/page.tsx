@@ -18,6 +18,7 @@ import {
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { TraderCreationDialog } from "@/components/trader-creation-flow";
+import { TraderDetailDialog } from "@/components/trader-detail";
 import { CreateDealDialog } from "@/components/wire/create-deal-dialog";
 import type { AgentActivity } from "@/hooks/use-agent";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
@@ -195,6 +196,7 @@ function Dashboard({ displayName }: { displayName: string }) {
   } | null>(null);
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
 
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
   const traderNames = feedData?.traderNames ?? {};
@@ -246,8 +248,7 @@ function Dashboard({ displayName }: { displayName: string }) {
             nowMs={nowMs}
             portfolio={portfolio}
             portfolioLoading={portfolioLoading}
-            traderFilter={traderFilter}
-            onTraderFilter={setTraderFilter}
+            onOpenTrader={setSelectedTraderId}
             onHireTrader={() => setHireDialogOpen(true)}
             deals={myDeals}
             dealsLoading={myDealsLoading}
@@ -257,6 +258,8 @@ function Dashboard({ displayName }: { displayName: string }) {
             activity={filteredActivity}
             feedLoading={feedLoading}
             traderFilter={traderFilter}
+            traderFilterOptions={portfolio?.traders ?? []}
+            onTraderFilter={setTraderFilter}
             traderNames={traderNames}
             approvalsCount={pendingApprovals.length}
             approvals={pendingApprovals}
@@ -278,9 +281,7 @@ function Dashboard({ displayName }: { displayName: string }) {
 
       <DealApprovalDialog
         open={approvalCtx !== null}
-        onOpenChange={(open) => {
-          if (!open) setApprovalCtx(null);
-        }}
+        onOpenChange={(open) => !open && setApprovalCtx(null)}
         traderId={approvalCtx?.traderId ?? null}
         dealId={approvalCtx?.dealId ?? null}
       />
@@ -291,9 +292,12 @@ function Dashboard({ displayName }: { displayName: string }) {
       <DealDetailDialog
         dealId={selectedDealId}
         open={selectedDealId !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedDealId(null);
-        }}
+        onOpenChange={(open) => !open && setSelectedDealId(null)}
+      />
+      <TraderDetailDialog
+        traderId={selectedTraderId}
+        open={selectedTraderId !== null}
+        onOpenChange={(open) => !open && setSelectedTraderId(null)}
       />
     </div>
   );
@@ -528,9 +532,7 @@ function NewswirePanel({
         <CreateDealDialog
           headline={{ headline: dealDialog.headline, body: dealDialog.body }}
           open
-          onOpenChange={(open) => {
-            if (!open) setDealDialog(null);
-          }}
+          onOpenChange={(open) => !open && setDealDialog(null)}
           dealSeed={
             dealDialog.dealSeed
               ? {
@@ -709,8 +711,7 @@ function TradingDeskPanel({
   nowMs,
   portfolio,
   portfolioLoading,
-  traderFilter,
-  onTraderFilter,
+  onOpenTrader,
   onHireTrader,
   deals,
   dealsLoading,
@@ -719,8 +720,7 @@ function TradingDeskPanel({
   nowMs: number;
   portfolio: Portfolio | undefined;
   portfolioLoading: boolean;
-  traderFilter: string | null;
-  onTraderFilter: (id: string | null) => void;
+  onOpenTrader: (id: string) => void;
   onHireTrader: () => void;
   deals: Deal[] | undefined;
   dealsLoading: boolean;
@@ -810,8 +810,7 @@ function TradingDeskPanel({
       ) : (
         <DeskTradersView
           traders={traders}
-          traderFilter={traderFilter}
-          onTraderFilter={onTraderFilter}
+          onOpenTrader={onOpenTrader}
           nowMs={nowMs}
         />
       )}
@@ -821,13 +820,11 @@ function TradingDeskPanel({
 
 function DeskTradersView({
   traders,
-  traderFilter,
-  onTraderFilter,
+  onOpenTrader,
   nowMs,
 }: {
   traders: TraderSummary[];
-  traderFilter: string | null;
-  onTraderFilter: (id: string | null) => void;
+  onOpenTrader: (id: string) => void;
   nowMs: number;
 }) {
   return (
@@ -837,19 +834,14 @@ function DeskTradersView({
           traderCycleDocFromDeskSummary(trader),
           nowMs
         );
-        const selected = traderFilter === trader.id;
         const role = DESK_ROLES[index % DESK_ROLES.length];
 
         return (
           <button
             key={trader.id}
             type="button"
-            onClick={() => onTraderFilter(selected ? null : trader.id)}
-            className={`group min-w-0 border bg-[#070b09] text-left transition-colors hover:border-[var(--t-accent)] ${
-              selected
-                ? "border-[var(--t-accent)] shadow-[0_0_18px_rgba(218,173,94,0.16)]"
-                : "border-[var(--t-divider)]"
-            }`}
+            onClick={() => onOpenTrader(trader.id)}
+            className="group min-w-0 border border-[var(--t-divider)] bg-[#070b09] text-left transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none"
           >
             <div className="relative aspect-[5/4] overflow-hidden border-b border-[var(--t-divider)] bg-[linear-gradient(135deg,rgba(104,166,82,0.16),rgba(218,173,94,0.08)_45%,rgba(0,0,0,0.42))]">
               <div className="absolute inset-0 crt-line-grid opacity-45" />
@@ -994,6 +986,8 @@ function TraderFeedPanel({
   activity,
   feedLoading,
   traderFilter,
+  traderFilterOptions,
+  onTraderFilter,
   traderNames,
   approvalsCount,
   approvals,
@@ -1004,6 +998,8 @@ function TraderFeedPanel({
   activity: AgentActivity[];
   feedLoading: boolean;
   traderFilter: string | null;
+  traderFilterOptions: TraderSummary[];
+  onTraderFilter: (id: string | null) => void;
   traderNames: Record<string, string>;
   approvalsCount: number;
   approvals: PendingApproval[];
@@ -1022,11 +1018,28 @@ function TraderFeedPanel({
         title="Trader Feed"
         meta={feedMeta}
         action={
-          approvalsCount > 0 ? (
-            <span className="text-[10px] uppercase tracking-wider text-[var(--t-amber)]">
-              {approvalsCount} approval{approvalsCount === 1 ? "" : "s"}
-            </span>
-          ) : null
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex max-w-[20rem] items-center gap-1 overflow-x-auto">
+              <TraderFeedFilterButton
+                label="All"
+                selected={traderFilter === null}
+                onClick={() => onTraderFilter(null)}
+              />
+              {traderFilterOptions.map((trader) => (
+                <TraderFeedFilterButton
+                  key={trader.id}
+                  label={trader.name}
+                  selected={traderFilter === trader.id}
+                  onClick={() => onTraderFilter(trader.id)}
+                />
+              ))}
+            </div>
+            {approvalsCount > 0 ? (
+              <span className="shrink-0 text-[10px] uppercase tracking-wider text-[var(--t-amber)]">
+                {approvalsCount} approval{approvalsCount === 1 ? "" : "s"}
+              </span>
+            ) : null}
+          </div>
         }
       />
 
@@ -1072,6 +1085,31 @@ function TraderFeedPanel({
         </div>
       )}
     </section>
+  );
+}
+
+function TraderFeedFilterButton({
+  label,
+  selected,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "shrink-0 border px-2 py-1 text-[10px] uppercase tracking-wider transition-colors",
+        selected
+          ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
+          : "border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+      )}
+    >
+      {label}
+    </button>
   );
 }
 
