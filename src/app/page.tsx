@@ -16,6 +16,7 @@ import {
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
+import { TraderCreationDialog } from "@/components/trader-creation-flow";
 import { CreateDealDialog } from "@/components/wire/create-deal-dialog";
 import type { AgentActivity } from "@/hooks/use-agent";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
@@ -189,6 +190,7 @@ function Dashboard({ displayName }: { displayName: string }) {
     traderId: string;
     dealId: string | null;
   } | null>(null);
+  const [hireDialogOpen, setHireDialogOpen] = useState(false);
 
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
   const traderNames = feedData?.traderNames ?? {};
@@ -242,6 +244,7 @@ function Dashboard({ displayName }: { displayName: string }) {
             portfolioLoading={portfolioLoading}
             traderFilter={traderFilter}
             onTraderFilter={setTraderFilter}
+            onHireTrader={() => setHireDialogOpen(true)}
           />
           <TraderFeedPanel
             activity={filteredActivity}
@@ -273,6 +276,10 @@ function Dashboard({ displayName }: { displayName: string }) {
         }}
         traderId={approvalCtx?.traderId ?? null}
         dealId={approvalCtx?.dealId ?? null}
+      />
+      <TraderCreationDialog
+        open={hireDialogOpen}
+        onOpenChange={setHireDialogOpen}
       />
     </div>
   );
@@ -830,12 +837,14 @@ function TradingDeskPanel({
   portfolioLoading,
   traderFilter,
   onTraderFilter,
+  onHireTrader,
 }: {
   nowMs: number;
   portfolio: Portfolio | undefined;
   portfolioLoading: boolean;
   traderFilter: string | null;
   onTraderFilter: (id: string | null) => void;
+  onHireTrader: () => void;
 }) {
   const traders = portfolio?.traders ?? [];
 
@@ -845,12 +854,13 @@ function TradingDeskPanel({
         title="Your Trading Desk"
         meta={`${traders.length} TRADER${traders.length === 1 ? "" : "S"}`}
         action={
-          <Link
-            href="/traders/new"
+          <button
+            type="button"
+            onClick={onHireTrader}
             className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)]"
           >
-            Hire
-          </Link>
+            Hire Trader
+          </button>
         }
       />
 
@@ -864,12 +874,13 @@ function TradingDeskPanel({
           <p className="text-sm uppercase tracking-wider text-[var(--t-muted)]">
             No traders on your desk
           </p>
-          <Link
-            href="/traders/new"
+          <button
+            type="button"
+            onClick={onHireTrader}
             className="mt-4 inline-block border border-[var(--t-accent)] px-5 py-2 text-xs uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
           >
-            Open hiring file
-          </Link>
+            Hire Trader
+          </button>
         </div>
       )}
       {!portfolioLoading && traders.length > 0 && (
