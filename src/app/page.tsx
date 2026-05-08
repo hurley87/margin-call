@@ -16,6 +16,7 @@ import {
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
+import { CreateDealDialog } from "@/components/wire/create-deal-dialog";
 import type { AgentActivity } from "@/hooks/use-agent";
 import { useActivityFeed } from "@/hooks/use-activity-feed";
 import {
@@ -38,6 +39,8 @@ import {
   getTraderCycleUi,
   traderCycleDocFromDeskSummary,
 } from "@/lib/trader-cycle";
+import { cn } from "@/lib/utils";
+import type { Id } from "../../convex/_generated/dataModel";
 
 const NY_TIME: Intl.DateTimeFormatOptions = {
   timeZone: "America/New_York",
@@ -448,10 +451,24 @@ function NewswirePanel({
           headline: string;
           body: string;
           category: string;
+          role?: string;
+          dealSeed?: {
+            seedId: Id<"wireDealSeeds">;
+            prompt: string;
+            suggestedPotUsdc: number;
+            suggestedEntryCostUsdc: number;
+            linkedDealCount: number;
+            linkedPotTotalUsdc: number;
+          };
         }>;
       }>
     | undefined;
 }) {
+  const [mode, setMode] = useState<"wire" | "deals">("wire");
+  const [dealDialog, setDealDialog] = useState<NewswireCreateDialog | null>(
+    null
+  );
+
   const items = useMemo(() => {
     if (!drops) return undefined;
     return drops
@@ -470,33 +487,140 @@ function NewswirePanel({
               ? `${dispatch.body.slice(0, 112)}...`
               : dispatch.body,
           category: dispatch.category,
+          body: dispatch.body,
+          dealSeed: dispatch.dealSeed,
         }));
       })
       .slice(0, 28);
   }, [drops]);
 
+  const dealItems = useMemo<NewswireDealItem[] | undefined>(() => {
+    if (!items) return undefined;
+    return items.flatMap((item) => {
+      if (!item.dealSeed) return [];
+      return [
+        {
+          time: item.time,
+          headline: item.headline,
+          body: item.body,
+          category: item.category,
+          dealSeed: item.dealSeed,
+        },
+      ];
+    });
+  }, [items]);
+
+  const visibleCount = mode === "deals" ? dealItems?.length : items?.length;
+
   return (
     <aside className="terminal-panel flex min-h-0 flex-col overflow-hidden">
-      <PanelHeader title="Newswire" meta={items ? `${items.length}` : "WAIT"} />
+      <PanelHeader
+        title="Newswire"
+        meta={visibleCount !== undefined ? `${visibleCount}` : "WAIT"}
+        action={
+          <div className="flex border border-[var(--t-divider)] text-[10px] uppercase tracking-wider">
+            <button
+              type="button"
+              onClick={() => setMode("wire")}
+              className={cn(
+                "px-2 py-1",
+                mode === "wire"
+                  ? "bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
+                  : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
+              )}
+            >
+              Wire
+            </button>
+            <button
+              type="button"
+              onClick={() => setMode("deals")}
+              className={cn(
+                "border-l border-[var(--t-divider)] px-2 py-1",
+                mode === "deals"
+                  ? "bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
+                  : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
+              )}
+            >
+              Deals
+            </button>
+          </div>
+        }
+      />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        <NewswireList items={items} />
+        {mode === "deals" ? (
+          <NewswireDealList items={dealItems} onCreate={setDealDialog} />
+        ) : (
+          <NewswireList items={items} onCreate={setDealDialog} />
+        )}
       </div>
+
+      {dealDialog && (
+        <CreateDealDialog
+          headline={{ headline: dealDialog.headline, body: dealDialog.body }}
+          open
+          onOpenChange={(open) => {
+            if (!open) setDealDialog(null);
+          }}
+          dealSeed={
+            dealDialog.dealSeed
+              ? {
+                  seedId: dealDialog.dealSeed.seedId,
+                  prompt: dealDialog.dealSeed.prompt,
+                  suggestedPotUsdc: dealDialog.dealSeed.suggestedPotUsdc,
+                  suggestedEntryCostUsdc:
+                    dealDialog.dealSeed.suggestedEntryCostUsdc,
+                }
+              : undefined
+          }
+          startWithSuggestions={dealDialog.startWithSuggestions}
+        />
+      )}
     </aside>
   );
 }
 
+type NewswireDealSeed = {
+  seedId: Id<"wireDealSeeds">;
+  prompt: string;
+  suggestedPotUsdc: number;
+  suggestedEntryCostUsdc: number;
+  linkedDealCount: number;
+  linkedPotTotalUsdc: number;
+};
+
+type NewswireCreateDialog = {
+  headline: string;
+  body: string;
+  dealSeed?: NewswireDealSeed;
+  startWithSuggestions?: boolean;
+};
+
+type NewswireDealItem = {
+  time: string;
+  headline: string;
+  body: string;
+  category: string;
+  dealSeed: NewswireDealSeed;
+};
+
+type NewswirePostItem = {
+  time: string;
+  headline: string;
+  body: string;
+  impact: string;
+  category?: string;
+  dealSeed?: NewswireDealSeed;
+};
+
 function NewswireList({
   items,
+  onCreate,
 }: {
-  items:
-    | Array<{
-        time: string;
-        headline: string;
-        impact: string;
-        category: string;
-      }>
-    | undefined;
+  items: NewswirePostItem[] | undefined;
+  onCreate: (item: NewswireCreateDialog) => void;
 }) {
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+
   if (items === undefined) {
     return <LoadingLine label="TUNING PRIVATE WIRE" />;
   }
@@ -504,7 +628,27 @@ function NewswireList({
     return (
       <div className="space-y-4">
         {FALLBACK_WIRE_ITEMS.map((item) => (
-          <NewswireItem key={item.time + item.headline} {...item} />
+          <NewswireItem
+            key={item.time + item.headline}
+            time={item.time}
+            headline={item.headline}
+            body={item.impact}
+            expanded={expanded[item.time + item.headline] ?? false}
+            onToggle={() =>
+              setExpanded((current) => ({
+                ...current,
+                [item.time + item.headline]:
+                  !current[item.time + item.headline],
+              }))
+            }
+            onCreate={() =>
+              onCreate({
+                headline: item.headline,
+                body: item.impact,
+                startWithSuggestions: true,
+              })
+            }
+          />
         ))}
       </div>
     );
@@ -516,7 +660,54 @@ function NewswireList({
           key={`${item.time}-${item.headline}`}
           time={item.time}
           headline={item.headline}
-          impact={`${item.category.toUpperCase()} // ${item.impact}`}
+          body={item.body}
+          category={item.category}
+          expanded={expanded[`${item.time}-${item.headline}`] ?? false}
+          onToggle={() =>
+            setExpanded((current) => ({
+              ...current,
+              [`${item.time}-${item.headline}`]:
+                !current[`${item.time}-${item.headline}`],
+            }))
+          }
+          onCreate={() =>
+            onCreate({
+              headline: item.headline,
+              body: item.body,
+              dealSeed: item.dealSeed,
+              startWithSuggestions: true,
+            })
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
+function NewswireDealList({
+  items,
+  onCreate,
+}: {
+  items: NewswireDealItem[] | undefined;
+  onCreate: (item: NewswireDealItem) => void;
+}) {
+  if (items === undefined) {
+    return <LoadingLine label="SCANNING DEAL TAPE" />;
+  }
+  if (items.length === 0) {
+    return (
+      <div className="px-2 py-8 text-center text-xs uppercase tracking-wider text-[var(--t-muted)]">
+        No deal seeds on the wire.
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-2.5">
+      {items.map((item) => (
+        <NewswireDealRow
+          key={`${item.time}-${item.headline}`}
+          item={item}
+          onCreate={onCreate}
         />
       ))}
     </div>
@@ -526,18 +717,108 @@ function NewswireList({
 function NewswireItem({
   time,
   headline,
-  impact,
+  body,
+  category,
+  expanded,
+  onToggle,
+  onCreate,
 }: {
   time: string;
   headline: string;
-  impact: string;
+  body: string;
+  category?: string;
+  expanded: boolean;
+  onToggle: () => void;
+  onCreate: () => void;
+}) {
+  const canExpand = body.length > 112;
+  const displayBody =
+    !expanded && canExpand ? `${body.slice(0, 112)}...` : body;
+
+  return (
+    <article
+      onClick={canExpand ? onToggle : undefined}
+      className="cursor-pointer border-b border-[var(--t-divider)]/45 pb-3 text-xs leading-relaxed last:border-b-0 last:pb-0"
+    >
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+        {category && <span>{category.replaceAll("_", " ")}</span>}
+        {category && <span className="text-[var(--t-divider)]">/</span>}
+        <time className="tabular-nums text-[var(--t-green)]/80">{time}</time>
+      </div>
+      <h3 className="text-[var(--t-amber)]">{headline}</h3>
+      <p className="mt-1 text-[var(--t-green)]">{displayBody}</p>
+      <div className="mt-2 flex items-center gap-3">
+        {canExpand && (
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              onToggle();
+            }}
+            className="text-[10px] uppercase tracking-wider text-[var(--t-muted)] hover:text-[var(--t-text)]"
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        )}
+        <button
+          onClick={(event) => {
+            event.stopPropagation();
+            onCreate();
+          }}
+          className="text-[10px] uppercase tracking-wider text-[var(--t-accent)]/75 hover:text-[var(--t-accent)]"
+        >
+          Create Deal
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function NewswireDealRow({
+  item,
+  onCreate,
+}: {
+  item: NewswireDealItem;
+  onCreate: (item: NewswireDealItem) => void;
 }) {
   return (
-    <article className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-3 text-xs leading-relaxed">
-      <time className="tabular-nums text-[var(--t-green)]/80">{time}</time>
-      <div>
-        <h3 className="text-[var(--t-amber)]">{headline}</h3>
-        <p className="mt-1 text-[var(--t-green)]">{impact}</p>
+    <article className="border border-[var(--t-divider)]/70 bg-black/10 p-2.5 text-xs leading-relaxed">
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+        <time className="tabular-nums text-[var(--t-green)]/80">
+          {item.time}
+        </time>
+        <span className="text-[var(--t-divider)]">/</span>
+        <span>{item.category.replaceAll("_", " ")}</span>
+      </div>
+      <h3 className="text-[var(--t-amber)]">{item.headline}</h3>
+      <p className="mt-1 line-clamp-3 text-[var(--t-green)]">
+        {item.dealSeed.prompt}
+      </p>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+          Pot{" "}
+          <span className="text-[var(--t-text)]">
+            ${item.dealSeed.suggestedPotUsdc.toFixed(2)}
+          </span>{" "}
+          / Entry{" "}
+          <span className="text-[var(--t-text)]">
+            ${item.dealSeed.suggestedEntryCostUsdc.toFixed(2)}
+          </span>
+          {item.dealSeed.linkedDealCount > 0 && (
+            <>
+              {" "}
+              /{" "}
+              <span className="text-[var(--t-accent)]">
+                {item.dealSeed.linkedDealCount} live
+              </span>
+            </>
+          )}
+        </div>
+        <button
+          onClick={() => onCreate(item)}
+          className="border border-[var(--t-accent)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-text)]"
+        >
+          Create
+        </button>
       </div>
     </article>
   );
@@ -825,11 +1106,10 @@ function MarketPlayersPanel({
                 {formatCompactMoney(firm.equity)}
               </span>
               <span
-                className={`text-right tabular-nums ${
-                  firm.pnl >= 0
-                    ? "text-[var(--t-green)]"
-                    : "text-[var(--t-red)]"
-                }`}
+                className={cn(
+                  "text-right tabular-nums",
+                  pnlSignClass(firm.pnl)
+                )}
               >
                 {firm.pnl >= 0 ? "+" : ""}
                 {formatCompactMoney(firm.pnl)}
@@ -887,11 +1167,7 @@ function BottomTape({
         </span>
         <span>
           Desk P&L:{" "}
-          <span
-            className={
-              pnl >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]"
-            }
-          >
+          <span className={pnlSignClass(pnl)}>
             {pnl >= 0 ? "+" : ""}
             {formatMoney(pnl)}
           </span>
@@ -1017,6 +1293,10 @@ function riskLabel(trader: TraderSummary) {
   if (assetRatio > 0.66) return "AGGRESSIVE";
   if (assetRatio > 0.33) return "BALANCED";
   return "CAUTIOUS";
+}
+
+function pnlSignClass(value: number) {
+  return value >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]";
 }
 
 function formatMoney(value: number) {
