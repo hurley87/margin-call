@@ -24,6 +24,7 @@ export const privyConfig: PrivyClientConfig = {
     theme: "dark",
     accentColor: "#22c55e",
     logo: undefined,
+    walletList: ["metamask", "coinbase_wallet", "base_account", "rainbow"],
   },
   embeddedWallets: {
     ethereum: {
