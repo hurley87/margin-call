@@ -1,10 +1,11 @@
 import Link from "next/link";
 import type { Deal } from "@/hooks/use-deals";
+import { cn } from "@/lib/utils";
 
 export function DealBadge({ deal }: { deal: Deal }) {
   return (
     <Link
-      href={`/deals/${deal.id}`}
+      href={`/?deal=${encodeURIComponent(deal.id)}`}
       className="flex items-center gap-2 border border-[var(--t-border)] px-2 py-1 text-[10px] transition-colors hover:bg-[var(--t-surface)]"
     >
       <span className="text-[var(--t-accent)]">
@@ -14,11 +15,12 @@ export function DealBadge({ deal }: { deal: Deal }) {
           : ""}
       </span>
       <span
-        className={`font-bold ${
+        className={cn(
+          "font-bold",
           deal.status === "open"
             ? "text-[var(--t-green)]"
             : "text-[var(--t-muted)]"
-        }`}
+        )}
       >
         [{deal.status.toUpperCase()}]
       </span>

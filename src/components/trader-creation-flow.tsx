@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
 
@@ -10,7 +9,6 @@ import {
   useConvexTraders,
 } from "@/hooks/use-convex-traders";
 import type { Mandate } from "@/lib/agent/evaluator";
-import { Nav } from "@/components/nav";
 
 type Option<T> = { label: string; sub: string; value: T };
 
@@ -58,25 +56,6 @@ const STEP_TITLES = [
   "WHEN SHOULD YOUR TRADER CHECK WITH YOU?",
 ] as const;
 
-type TraderCreationFlowProps = {
-  mode: "page" | "dialog";
-  onCreated?: (traderId: string) => void;
-};
-
-export function TraderCreationPage() {
-  const router = useRouter();
-
-  return (
-    <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
-      <Nav />
-      <TraderCreationFlow
-        mode="page"
-        onCreated={(traderId) => router.push(`/traders/${traderId}`)}
-      />
-    </div>
-  );
-}
-
 export function TraderCreationDialog({
   open,
   onOpenChange,
@@ -108,11 +87,10 @@ export function TraderCreationDialog({
           <div className="max-h-[calc(86vh-2.5rem)] overflow-y-auto">
             <TraderCreationFlow
               key={flowKey}
-              mode="dialog"
               onCreated={(traderId) => {
                 onOpenChange(false);
                 setFlowKey((key) => key + 1);
-                router.push(`/traders/${traderId}`);
+                router.push(`/?trader=${encodeURIComponent(traderId)}`);
               }}
             />
           </div>
@@ -122,7 +100,11 @@ export function TraderCreationDialog({
   );
 }
 
-function TraderCreationFlow({ mode, onCreated }: TraderCreationFlowProps) {
+function TraderCreationFlow({
+  onCreated,
+}: {
+  onCreated?: (traderId: string) => void;
+}) {
   const traders = useConvexTraders();
   const createTrader = useConvexCreateTrader();
 
@@ -179,42 +161,17 @@ function TraderCreationFlow({ mode, onCreated }: TraderCreationFlowProps) {
     }
   }
 
-  const isPage = mode === "page";
-
   return (
     <>
-      <div
-        className={
-          isPage
-            ? "sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)]"
-            : "border-b border-[var(--t-divider)] bg-[#0b100d]/70"
-        }
-      >
-        <div
-          className={`mx-auto flex items-center justify-between px-3 py-1.5 text-xs ${
-            isPage ? "max-w-4xl" : "max-w-2xl"
-          }`}
-        >
-          {isPage ? (
-            <Link
-              href="/traders"
-              className="text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
-            >
-              &larr; BACK
-            </Link>
-          ) : (
-            <span className="text-[var(--t-muted)]">DESK HIRING</span>
-          )}
-          <span className="text-[var(--t-text)]">
-            {isPage ? "HIRE TRADER" : "NEW TRADER"}
-          </span>
+      <div className="border-b border-[var(--t-divider)] bg-[#0b100d]/70">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-3 py-1.5 text-xs">
+          <span className="text-[var(--t-muted)]">DESK HIRING</span>
+          <span className="text-[var(--t-text)]">NEW TRADER</span>
           <span className="text-[var(--t-muted)]">STEP {step + 1} / 5</span>
         </div>
       </div>
 
-      <div
-        className={`mx-auto px-3 pt-4 ${isPage ? "max-w-4xl" : "max-w-2xl"}`}
-      >
+      <div className="mx-auto max-w-2xl px-3 pt-4">
         <div className="flex gap-1">
           {Array.from({ length: 5 }, (_, i) => (
             <div
@@ -227,11 +184,7 @@ function TraderCreationFlow({ mode, onCreated }: TraderCreationFlowProps) {
         </div>
       </div>
 
-      <div
-        className={`mx-auto w-full px-3 ${
-          isPage ? "max-w-4xl py-8" : "max-w-2xl py-4"
-        }`}
-      >
+      <div className="mx-auto w-full max-w-2xl px-3 py-4">
         <div className="border border-[var(--t-divider)] bg-[#070b09] p-4 sm:p-5">
           <h2 className="mb-5 text-sm font-bold uppercase tracking-[0.08em] text-[var(--t-accent)]">
             {STEP_TITLES[step]}

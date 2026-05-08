@@ -7,11 +7,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { Github, Twitter } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const NAV_ITEMS = [
-  { href: "/", label: "DESK" },
-  { href: "/wire", label: "NEWSWIRE" },
-  { href: "/leaderboard", label: "LEADERBOARD" },
-];
+const NAV_ITEMS = [{ href: "/", label: "DESK" }];
 
 interface NavProps {
   containerClassName?: string;

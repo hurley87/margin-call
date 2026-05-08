@@ -1,7 +1,16 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import {
+  Suspense,
+  useEffect,
+  useMemo,
+  useState,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { Github, HelpCircle, LogOut, Twitter } from "lucide-react";
 import { useQuery } from "convex/react";
@@ -103,6 +112,29 @@ const FALLBACK_WIRE_ITEMS = [
     impact: "-2% energy names / macro desks alert",
   },
 ] as const;
+
+function DeskDeepLinkHydration({
+  setSelectedDealId,
+  setSelectedTraderId,
+}: {
+  setSelectedDealId: Dispatch<SetStateAction<string | null>>;
+  setSelectedTraderId: Dispatch<SetStateAction<string | null>>;
+}) {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  useEffect(() => {
+    const deal = searchParams.get("deal")?.trim();
+    const trader = searchParams.get("trader")?.trim();
+    if (!deal && !trader) return;
+
+    if (deal) setSelectedDealId(deal);
+    if (trader) setSelectedTraderId(trader);
+    router.replace("/", { scroll: false });
+  }, [searchParams, router, setSelectedDealId, setSelectedTraderId]);
+
+  return null;
+}
 
 export default function Home() {
   const { ready, authenticated, login, logout } = usePrivy();
@@ -228,6 +260,12 @@ function Dashboard({ displayName }: { displayName: string }) {
 
   return (
     <div className="crt-scanlines flex h-svh flex-col overflow-hidden bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
+      <Suspense fallback={null}>
+        <DeskDeepLinkHydration
+          setSelectedDealId={setSelectedDealId}
+          setSelectedTraderId={setSelectedTraderId}
+        />
+      </Suspense>
       <TopStatusBar
         displayName={displayName}
         nowMs={nowMs}
@@ -784,37 +822,80 @@ function TradingDeskPanel({
         }
       />
 
-      {showingDeals ? (
-        <DeskDealsView
-          deals={deskDeals}
-          isLoading={dealsLoading}
-          onOpenDeal={onOpenDeal}
-        />
-      ) : portfolioLoading ? (
-        <div className="px-4 py-8">
-          <LoadingLine label="LOADING DESK ROSTER" />
-        </div>
-      ) : traders.length === 0 ? (
-        <div className="px-4 py-10 text-center">
-          <p className="text-sm uppercase tracking-wider text-[var(--t-muted)]">
-            No traders on your desk
-          </p>
-          <button
-            type="button"
-            onClick={onHireTrader}
-            className="mt-4 inline-block border border-[var(--t-accent)] px-5 py-2 text-xs uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
-          >
-            Hire Trader
-          </button>
-        </div>
-      ) : (
-        <DeskTradersView
-          traders={traders}
-          onOpenTrader={onOpenTrader}
-          nowMs={nowMs}
-        />
-      )}
+      <TradingDeskMain
+        showingDeals={showingDeals}
+        traders={traders}
+        portfolioLoading={portfolioLoading}
+        deskDeals={deskDeals}
+        dealsLoading={dealsLoading}
+        nowMs={nowMs}
+        onOpenTrader={onOpenTrader}
+        onOpenDeal={onOpenDeal}
+        onHireTrader={onHireTrader}
+      />
     </section>
+  );
+}
+
+function TradingDeskMain({
+  showingDeals,
+  traders,
+  portfolioLoading,
+  deskDeals,
+  dealsLoading,
+  nowMs,
+  onOpenTrader,
+  onOpenDeal,
+  onHireTrader,
+}: {
+  showingDeals: boolean;
+  traders: TraderSummary[];
+  portfolioLoading: boolean;
+  deskDeals: Deal[];
+  dealsLoading: boolean;
+  nowMs: number;
+  onOpenTrader: (id: string) => void;
+  onOpenDeal: (dealId: string) => void;
+  onHireTrader: () => void;
+}) {
+  if (showingDeals) {
+    return (
+      <DeskDealsView
+        deals={deskDeals}
+        isLoading={dealsLoading}
+        onOpenDeal={onOpenDeal}
+      />
+    );
+  }
+  if (portfolioLoading) {
+    return (
+      <div className="px-4 py-8">
+        <LoadingLine label="LOADING DESK ROSTER" />
+      </div>
+    );
+  }
+  if (traders.length === 0) {
+    return (
+      <div className="px-4 py-10 text-center">
+        <p className="text-sm uppercase tracking-wider text-[var(--t-muted)]">
+          No traders on your desk
+        </p>
+        <button
+          type="button"
+          onClick={onHireTrader}
+          className="mt-4 inline-block border border-[var(--t-accent)] px-5 py-2 text-xs uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
+        >
+          Hire Trader
+        </button>
+      </div>
+    );
+  }
+  return (
+    <DeskTradersView
+      traders={traders}
+      onOpenTrader={onOpenTrader}
+      nowMs={nowMs}
+    />
   );
 }
 

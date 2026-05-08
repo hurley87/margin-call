@@ -78,10 +78,10 @@ function DealErrorState({
         </button>
       ) : (
         <Link
-          href="/wire"
+          href="/"
           className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
         >
-          {"<"} BACK TO NEWSWIRE
+          {"<"} BACK TO DESK
         </Link>
       )}
     </div>
@@ -176,10 +176,10 @@ export function DealDetailContent({
               </button>
             ) : (
               <Link
-                href="/wire"
+                href="/"
                 className="text-xs uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
               >
-                {"<"} NEWSWIRE
+                {"<"} DESK
               </Link>
             )}
             <span className="text-[10px] text-[var(--t-border)]">/</span>
@@ -263,14 +263,12 @@ export function DealDetailContent({
 
           {deal.on_chain_deal_id !== undefined &&
             isDealOwner &&
-            walletAddress &&
-            (deal.status === "open" ? (
-              <CloseDealButton onChainDealId={deal.on_chain_deal_id} />
-            ) : deal.status === "closed" ? (
-              <div className="border border-green-500/30 bg-green-500/10 px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-green-400">
-                DEAL CLOSED — pot withdrawn
-              </div>
-            ) : null)}
+            walletAddress && (
+              <DealOwnerStatusFooter
+                status={deal.status}
+                onChainDealId={deal.on_chain_deal_id}
+              />
+            )}
         </div>
 
         <div className="mt-4 border border-[var(--t-border)]">
@@ -420,6 +418,32 @@ export function DealDetailDialog({
   );
 }
 
+function DealOwnerStatusFooter({
+  status,
+  onChainDealId,
+}: {
+  status: string;
+  onChainDealId: number;
+}) {
+  if (status === "open") {
+    return <CloseDealButton onChainDealId={onChainDealId} />;
+  }
+  if (status === "closed") {
+    return (
+      <div className="border border-green-500/30 bg-green-500/10 px-3 py-2 text-center text-xs font-medium uppercase tracking-wider text-green-400">
+        DEAL CLOSED — pot withdrawn
+      </div>
+    );
+  }
+  return null;
+}
+
+function closeDealButtonLabel(isPending: boolean, isConfirming: boolean) {
+  if (isPending) return "CONFIRM IN WALLET...";
+  if (isConfirming) return "CLOSING...";
+  return "CLOSE DEAL";
+}
+
 function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
   const syncedRef = useRef(false);
   const { writeContract, data: txHash, isPending, error } = useWriteContract();
@@ -506,11 +530,7 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
           }
           className="border border-[var(--t-border)] px-3 py-1 text-[10px] text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
         >
-          {isPending
-            ? "CONFIRM IN WALLET..."
-            : isConfirming
-              ? "CLOSING..."
-              : "CLOSE DEAL"}
+          {closeDealButtonLabel(isPending, isConfirming)}
         </button>
       </div>
       {error && (

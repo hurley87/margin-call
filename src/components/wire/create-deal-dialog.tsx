@@ -36,6 +36,69 @@ function createDealProgressWidth(step: string): "33%" | "66%" | "90%" | "100%" {
   return "100%";
 }
 
+type SuggestPromptsQuery = ReturnType<typeof useSuggestPrompts>;
+
+function DealSuggestionsPane({
+  suggestQuery,
+  onPickSuggestion,
+}: {
+  suggestQuery: SuggestPromptsQuery;
+  onPickSuggestion: (prompt: string) => void;
+}) {
+  if (suggestQuery.isPending || (!suggestQuery.data && !suggestQuery.isError)) {
+    return (
+      <div className="px-4 py-8 text-center">
+        <p className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
+          GENERATING DEAL IDEAS...
+          <span className="cursor-blink">{"█"}</span>
+        </p>
+      </div>
+    );
+  }
+  if (suggestQuery.data) {
+    return (
+      <>
+        <div className="border-b border-[var(--t-divider)] bg-[#0b100d] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+          Choose deal text
+        </div>
+        <div className="divide-y divide-[var(--t-divider)]/70">
+          {suggestQuery.data.map((s, i) => (
+            <button
+              key={i}
+              onClick={() => onPickSuggestion(s)}
+              className="group grid w-full grid-cols-[3.25rem_minmax(0,1fr)_4.25rem] items-start gap-3 px-3 py-3 text-left text-xs leading-relaxed transition-colors hover:bg-[var(--t-accent-soft)]"
+            >
+              <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+                {String(i + 1).padStart(2, "0")}
+              </span>
+              <span className="text-[var(--t-text)] group-hover:text-[var(--t-accent)]">
+                {s}
+              </span>
+              <span className="pt-0.5 text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)] group-hover:text-[var(--t-accent)]">
+                Select
+              </span>
+            </button>
+          ))}
+        </div>
+      </>
+    );
+  }
+  return (
+    <div className="px-4 py-8 text-center">
+      <p className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
+        Suggestions failed.
+      </p>
+      <button
+        type="button"
+        onClick={() => suggestQuery.refetch()}
+        className="mt-3 border border-[var(--t-divider)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+      >
+        Retry
+      </button>
+    </div>
+  );
+}
+
 interface DealSeedPrefill {
   seedId: Id<"wireDealSeeds">;
   prompt: string;
@@ -119,7 +182,9 @@ export function CreateDealDialog({
       );
       onOpenChange(false);
       router.push(
-        result?.convexDealId ? `/deals/${result.convexDealId}` : "/deals"
+        result?.convexDealId
+          ? `/?deal=${encodeURIComponent(result.convexDealId)}`
+          : "/"
       );
     } catch {
       setState("configure");
@@ -179,54 +244,10 @@ export function CreateDealDialog({
             )}
 
             {state === "suggestions" && (
-              <>
-                {suggestQuery.isPending ||
-                (!suggestQuery.data && !suggestQuery.isError) ? (
-                  <div className="px-4 py-8 text-center">
-                    <p className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
-                      GENERATING DEAL IDEAS...
-                      <span className="cursor-blink">{"█"}</span>
-                    </p>
-                  </div>
-                ) : suggestQuery.data ? (
-                  <>
-                    <div className="border-b border-[var(--t-divider)] bg-[#0b100d] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                      Choose deal text
-                    </div>
-                    <div className="divide-y divide-[var(--t-divider)]/70">
-                      {suggestQuery.data.map((s, i) => (
-                        <button
-                          key={i}
-                          onClick={() => handlePickSuggestion(s)}
-                          className="group grid w-full grid-cols-[3.25rem_minmax(0,1fr)_4.25rem] items-start gap-3 px-3 py-3 text-left text-xs leading-relaxed transition-colors hover:bg-[var(--t-accent-soft)]"
-                        >
-                          <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                            {String(i + 1).padStart(2, "0")}
-                          </span>
-                          <span className="text-[var(--t-text)] group-hover:text-[var(--t-accent)]">
-                            {s}
-                          </span>
-                          <span className="pt-0.5 text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)] group-hover:text-[var(--t-accent)]">
-                            Select
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <div className="px-4 py-8 text-center">
-                    <p className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
-                      Suggestions failed.
-                    </p>
-                    <button
-                      onClick={() => suggestQuery.refetch()}
-                      className="mt-3 border border-[var(--t-divider)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
-                    >
-                      Retry
-                    </button>
-                  </div>
-                )}
-              </>
+              <DealSuggestionsPane
+                suggestQuery={suggestQuery}
+                onPickSuggestion={handlePickSuggestion}
+              />
             )}
 
             {(state === "configure" || state === "creating") && (
