@@ -25,6 +25,7 @@ import {
   type PendingApproval,
 } from "@/hooks/use-approvals";
 import { useDeskManager } from "@/hooks/use-desk";
+import { useMyDeals, type Deal } from "@/hooks/use-deals";
 import {
   useLeaderboard,
   type LeaderboardTrader,
@@ -179,6 +180,7 @@ function Dashboard({ displayName }: { displayName: string }) {
   const { logout, user } = usePrivy();
   const nowMs = useSecondTick();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
+  const { data: myDeals, isLoading: myDealsLoading } = useMyDeals();
   const { data: approvals } = usePendingApprovals();
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
   const { data: leaderboard, isLoading: leaderboardLoading } = useLeaderboard();
@@ -245,6 +247,8 @@ function Dashboard({ displayName }: { displayName: string }) {
             traderFilter={traderFilter}
             onTraderFilter={setTraderFilter}
             onHireTrader={() => setHireDialogOpen(true)}
+            deals={myDeals}
+            dealsLoading={myDealsLoading}
           />
           <TraderFeedPanel
             activity={filteredActivity}
@@ -471,7 +475,6 @@ function NewswirePanel({
       }>
     | undefined;
 }) {
-  const [mode, setMode] = useState<"wire" | "deals">("wire");
   const [dealDialog, setDealDialog] = useState<NewswireCreateDialog | null>(
     null
   );
@@ -501,64 +504,14 @@ function NewswirePanel({
       .slice(0, 28);
   }, [drops]);
 
-  const dealItems = useMemo<NewswireDealItem[] | undefined>(() => {
-    if (!items) return undefined;
-    return items.flatMap((item) => {
-      if (!item.dealSeed) return [];
-      return [
-        {
-          time: item.time,
-          headline: item.headline,
-          body: item.body,
-          category: item.category,
-          dealSeed: item.dealSeed,
-        },
-      ];
-    });
-  }, [items]);
-
-  const visibleCount = mode === "deals" ? dealItems?.length : items?.length;
-
   return (
     <aside className="terminal-panel flex min-h-0 flex-col overflow-hidden">
       <PanelHeader
         title="Newswire"
-        meta={visibleCount !== undefined ? `${visibleCount}` : "WAIT"}
-        action={
-          <div className="flex border border-[var(--t-divider)] text-[10px] uppercase tracking-wider">
-            <button
-              type="button"
-              onClick={() => setMode("wire")}
-              className={cn(
-                "px-2 py-1",
-                mode === "wire"
-                  ? "bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
-                  : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
-              )}
-            >
-              Wire
-            </button>
-            <button
-              type="button"
-              onClick={() => setMode("deals")}
-              className={cn(
-                "border-l border-[var(--t-divider)] px-2 py-1",
-                mode === "deals"
-                  ? "bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
-                  : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
-              )}
-            >
-              Deals
-            </button>
-          </div>
-        }
+        meta={items !== undefined ? `${items.length}` : "WAIT"}
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {mode === "deals" ? (
-          <NewswireDealList items={dealItems} onCreate={setDealDialog} />
-        ) : (
-          <NewswireList items={items} onCreate={setDealDialog} />
-        )}
+        <NewswireList items={items} onCreate={setDealDialog} />
       </div>
 
       {dealDialog && (
@@ -600,14 +553,6 @@ type NewswireCreateDialog = {
   body: string;
   dealSeed?: NewswireDealSeed;
   startWithSuggestions?: boolean;
-};
-
-type NewswireDealItem = {
-  time: string;
-  headline: string;
-  body: string;
-  category: string;
-  dealSeed: NewswireDealSeed;
 };
 
 type NewswirePostItem = {
@@ -691,36 +636,6 @@ function NewswireList({
   );
 }
 
-function NewswireDealList({
-  items,
-  onCreate,
-}: {
-  items: NewswireDealItem[] | undefined;
-  onCreate: (item: NewswireDealItem) => void;
-}) {
-  if (items === undefined) {
-    return <LoadingLine label="SCANNING DEAL TAPE" />;
-  }
-  if (items.length === 0) {
-    return (
-      <div className="px-2 py-8 text-center text-xs uppercase tracking-wider text-[var(--t-muted)]">
-        No deal seeds on the wire.
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-2.5">
-      {items.map((item) => (
-        <NewswireDealRow
-          key={`${item.time}-${item.headline}`}
-          item={item}
-          onCreate={onCreate}
-        />
-      ))}
-    </div>
-  );
-}
-
 function NewswireItem({
   time,
   headline,
@@ -780,57 +695,6 @@ function NewswireItem({
   );
 }
 
-function NewswireDealRow({
-  item,
-  onCreate,
-}: {
-  item: NewswireDealItem;
-  onCreate: (item: NewswireDealItem) => void;
-}) {
-  return (
-    <article className="border border-[var(--t-divider)]/70 bg-black/10 p-2.5 text-xs leading-relaxed">
-      <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-        <time className="tabular-nums text-[var(--t-green)]/80">
-          {item.time}
-        </time>
-        <span className="text-[var(--t-divider)]">/</span>
-        <span>{item.category.replaceAll("_", " ")}</span>
-      </div>
-      <h3 className="text-[var(--t-amber)]">{item.headline}</h3>
-      <p className="mt-1 line-clamp-3 text-[var(--t-green)]">
-        {item.dealSeed.prompt}
-      </p>
-      <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
-        <div className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-          Pot{" "}
-          <span className="text-[var(--t-text)]">
-            ${item.dealSeed.suggestedPotUsdc.toFixed(2)}
-          </span>{" "}
-          / Entry{" "}
-          <span className="text-[var(--t-text)]">
-            ${item.dealSeed.suggestedEntryCostUsdc.toFixed(2)}
-          </span>
-          {item.dealSeed.linkedDealCount > 0 && (
-            <>
-              {" "}
-              /{" "}
-              <span className="text-[var(--t-accent)]">
-                {item.dealSeed.linkedDealCount} live
-              </span>
-            </>
-          )}
-        </div>
-        <button
-          onClick={() => onCreate(item)}
-          className="border border-[var(--t-accent)] px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-text)]"
-        >
-          Create
-        </button>
-      </div>
-    </article>
-  );
-}
-
 function TradingDeskPanel({
   nowMs,
   portfolio,
@@ -838,6 +702,8 @@ function TradingDeskPanel({
   traderFilter,
   onTraderFilter,
   onHireTrader,
+  deals,
+  dealsLoading,
 }: {
   nowMs: number;
   portfolio: Portfolio | undefined;
@@ -845,31 +711,74 @@ function TradingDeskPanel({
   traderFilter: string | null;
   onTraderFilter: (id: string | null) => void;
   onHireTrader: () => void;
+  deals: Deal[] | undefined;
+  dealsLoading: boolean;
 }) {
   const traders = portfolio?.traders ?? [];
+  const deskDeals = deals ?? [];
+  const [deskView, setDeskView] = useState<"traders" | "deals">("traders");
+  const showingDeals = deskView === "deals";
+
+  let deskPanelMeta: string;
+  if (showingDeals) {
+    deskPanelMeta = dealsLoading
+      ? "WAIT"
+      : `${deskDeals.length} DEAL${deskDeals.length === 1 ? "" : "S"}`;
+  } else {
+    deskPanelMeta = `${traders.length} TRADER${traders.length === 1 ? "" : "S"}`;
+  }
 
   return (
     <section className="terminal-panel flex min-h-0 flex-col overflow-hidden">
       <PanelHeader
         title="Your Trading Desk"
-        meta={`${traders.length} TRADER${traders.length === 1 ? "" : "S"}`}
+        meta={deskPanelMeta}
         action={
-          <button
-            type="button"
-            onClick={onHireTrader}
-            className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)]"
-          >
-            Hire Trader
-          </button>
+          <div className="flex items-center gap-2">
+            <div className="flex border border-[var(--t-divider)] text-[10px] uppercase tracking-wider">
+              <button
+                type="button"
+                onClick={() => setDeskView("traders")}
+                className={cn(
+                  "px-2 py-1",
+                  deskView === "traders"
+                    ? "bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
+                    : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
+                )}
+              >
+                Traders
+              </button>
+              <button
+                type="button"
+                onClick={() => setDeskView("deals")}
+                className={cn(
+                  "border-l border-[var(--t-divider)] px-2 py-1",
+                  deskView === "deals"
+                    ? "bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
+                    : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
+                )}
+              >
+                Deals
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={onHireTrader}
+              className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)]"
+            >
+              Hire Trader
+            </button>
+          </div>
         }
       />
 
-      {portfolioLoading && (
+      {showingDeals ? (
+        <DeskDealsView deals={deskDeals} isLoading={dealsLoading} />
+      ) : portfolioLoading ? (
         <div className="px-4 py-8">
           <LoadingLine label="LOADING DESK ROSTER" />
         </div>
-      )}
-      {!portfolioLoading && traders.length === 0 && (
+      ) : traders.length === 0 ? (
         <div className="px-4 py-10 text-center">
           <p className="text-sm uppercase tracking-wider text-[var(--t-muted)]">
             No traders on your desk
@@ -882,62 +791,162 @@ function TradingDeskPanel({
             Hire Trader
           </button>
         </div>
-      )}
-      {!portfolioLoading && traders.length > 0 && (
-        <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,12rem))] content-start justify-start gap-2 overflow-y-auto p-3">
-          {traders.map((trader, index) => {
-            const cycleUi = getTraderCycleUi(
-              traderCycleDocFromDeskSummary(trader),
-              nowMs
-            );
-            const selected = traderFilter === trader.id;
-            const role = DESK_ROLES[index % DESK_ROLES.length];
-
-            return (
-              <button
-                key={trader.id}
-                type="button"
-                onClick={() => onTraderFilter(selected ? null : trader.id)}
-                className={`group min-w-0 border bg-[#070b09] text-left transition-colors hover:border-[var(--t-accent)] ${
-                  selected
-                    ? "border-[var(--t-accent)] shadow-[0_0_18px_rgba(218,173,94,0.16)]"
-                    : "border-[var(--t-divider)]"
-                }`}
-              >
-                <div className="relative aspect-[5/4] overflow-hidden border-b border-[var(--t-divider)] bg-[linear-gradient(135deg,rgba(104,166,82,0.16),rgba(218,173,94,0.08)_45%,rgba(0,0,0,0.42))]">
-                  <div className="absolute inset-0 crt-line-grid opacity-45" />
-                  <div className="absolute right-2 top-2 h-2 w-2 bg-[var(--t-green)] shadow-[0_0_10px_var(--t-green)]" />
-                  <div className="absolute inset-x-0 bottom-4 text-center font-[family-name:var(--font-plex-sans)] text-4xl font-black text-[var(--t-accent)]/80">
-                    {initials(trader.name)}
-                  </div>
-                </div>
-                <div className="space-y-2 px-3 py-3">
-                  <div>
-                    <p className="truncate text-sm font-bold uppercase tracking-wider text-[var(--t-amber)]">
-                      {trader.name}
-                    </p>
-                    <p className="truncate text-[11px] uppercase text-[var(--t-muted)]">
-                      {role.role}
-                    </p>
-                  </div>
-                  <TraderDatum label="Focus" value={role.focus} tone="green" />
-                  <TraderDatum
-                    label="Mood"
-                    value={cycleUi.text}
-                    className={cycleUi.className}
-                  />
-                  <TraderDatum
-                    label="Risk"
-                    value={riskLabel(trader)}
-                    tone={trader.total_value_usdc > 0 ? "amber" : "red"}
-                  />
-                </div>
-              </button>
-            );
-          })}
-        </div>
+      ) : (
+        <DeskTradersView
+          traders={traders}
+          traderFilter={traderFilter}
+          onTraderFilter={onTraderFilter}
+          nowMs={nowMs}
+        />
       )}
     </section>
+  );
+}
+
+function DeskTradersView({
+  traders,
+  traderFilter,
+  onTraderFilter,
+  nowMs,
+}: {
+  traders: TraderSummary[];
+  traderFilter: string | null;
+  onTraderFilter: (id: string | null) => void;
+  nowMs: number;
+}) {
+  return (
+    <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,12rem))] content-start justify-start gap-2 overflow-y-auto p-3">
+      {traders.map((trader, index) => {
+        const cycleUi = getTraderCycleUi(
+          traderCycleDocFromDeskSummary(trader),
+          nowMs
+        );
+        const selected = traderFilter === trader.id;
+        const role = DESK_ROLES[index % DESK_ROLES.length];
+
+        return (
+          <button
+            key={trader.id}
+            type="button"
+            onClick={() => onTraderFilter(selected ? null : trader.id)}
+            className={`group min-w-0 border bg-[#070b09] text-left transition-colors hover:border-[var(--t-accent)] ${
+              selected
+                ? "border-[var(--t-accent)] shadow-[0_0_18px_rgba(218,173,94,0.16)]"
+                : "border-[var(--t-divider)]"
+            }`}
+          >
+            <div className="relative aspect-[5/4] overflow-hidden border-b border-[var(--t-divider)] bg-[linear-gradient(135deg,rgba(104,166,82,0.16),rgba(218,173,94,0.08)_45%,rgba(0,0,0,0.42))]">
+              <div className="absolute inset-0 crt-line-grid opacity-45" />
+              <div className="absolute right-2 top-2 h-2 w-2 bg-[var(--t-green)] shadow-[0_0_10px_var(--t-green)]" />
+              <div className="absolute inset-x-0 bottom-4 text-center font-[family-name:var(--font-plex-sans)] text-4xl font-black text-[var(--t-accent)]/80">
+                {initials(trader.name)}
+              </div>
+            </div>
+            <div className="space-y-2 px-3 py-3">
+              <div>
+                <p className="truncate text-sm font-bold uppercase tracking-wider text-[var(--t-amber)]">
+                  {trader.name}
+                </p>
+                <p className="truncate text-[11px] uppercase text-[var(--t-muted)]">
+                  {role.role}
+                </p>
+              </div>
+              <TraderDatum label="Focus" value={role.focus} tone="green" />
+              <TraderDatum
+                label="Mood"
+                value={cycleUi.text}
+                className={cycleUi.className}
+              />
+              <TraderDatum
+                label="Risk"
+                value={riskLabel(trader)}
+                tone={trader.total_value_usdc > 0 ? "amber" : "red"}
+              />
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function DeskDealsView({
+  deals,
+  isLoading,
+}: {
+  deals: Deal[];
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="px-4 py-8">
+        <LoadingLine label="LOADING DESK DEALS" />
+      </div>
+    );
+  }
+
+  if (deals.length === 0) {
+    return (
+      <div className="px-4 py-10 text-center text-sm uppercase tracking-wider text-[var(--t-muted)]">
+        No deals created by your desk
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto p-3">
+      <div className="grid gap-2">
+        {deals.map((deal) => (
+          <Link
+            key={deal.id}
+            href={`/deals/${deal.id}`}
+            className="group grid grid-cols-[minmax(0,1fr)_6.25rem] gap-3 border border-[var(--t-divider)] bg-[#070b09] px-3 py-2 text-left text-xs transition-colors hover:border-[var(--t-accent)]"
+          >
+            <div className="min-w-0">
+              <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+                <span
+                  className={
+                    deal.status === "open"
+                      ? "text-[var(--t-green)]"
+                      : "text-[var(--t-amber)]"
+                  }
+                >
+                  {deal.status}
+                </span>
+                <span className="text-[var(--t-divider)]">/</span>
+                <span>{new Date(deal.created_at).toLocaleDateString()}</span>
+              </div>
+              <p className="line-clamp-2 text-[var(--t-amber)] group-hover:text-[var(--t-accent)]">
+                {deal.source_headline || deal.prompt}
+              </p>
+              {deal.source_headline && (
+                <p className="mt-1 line-clamp-1 text-[var(--t-green)]">
+                  {deal.prompt}
+                </p>
+              )}
+            </div>
+            <div className="space-y-1 text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              <p>
+                Pot{" "}
+                <span className="text-[var(--t-text)]">
+                  ${deal.pot_usdc.toFixed(2)}
+                </span>
+              </p>
+              <p>
+                Entry{" "}
+                <span className="text-[var(--t-text)]">
+                  ${deal.entry_cost_usdc.toFixed(2)}
+                </span>
+              </p>
+              <p>
+                Hits{" "}
+                <span className="text-[var(--t-text)]">{deal.entry_count}</span>
+              </p>
+            </div>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
 

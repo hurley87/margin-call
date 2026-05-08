@@ -90,25 +90,32 @@ export function TraderCreationDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[92vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-y-auto border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-xl">
-          <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-2">
-            <span className="text-[10px] uppercase tracking-wider text-[var(--t-amber)]">
-              Hire Trader
-            </span>
-            <Dialog.Close className="text-[10px] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]">
+        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75" />
+        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[86vh] w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-bronze)] bg-[linear-gradient(rgba(101,160,94,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(101,160,94,0.03)_1px,transparent_1px),radial-gradient(circle_at_top,rgba(214,166,96,0.08),transparent_34%),#040807] bg-[length:100%_18px,18px_100%,auto,auto] font-mono shadow-2xl shadow-black/45">
+          <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[var(--t-divider)] bg-[#0b100d] px-3 py-2">
+            <div className="min-w-0">
+              <Dialog.Title className="truncate font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
+                Hire Trader
+              </Dialog.Title>
+              <p className="mt-0.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+                Desk hiring
+              </p>
+            </div>
+            <Dialog.Close className="border border-[var(--t-divider)] px-2 py-1 text-[10px] text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]">
               [X]
             </Dialog.Close>
           </div>
-          <TraderCreationFlow
-            key={flowKey}
-            mode="dialog"
-            onCreated={(traderId) => {
-              onOpenChange(false);
-              setFlowKey((key) => key + 1);
-              router.push(`/traders/${traderId}`);
-            }}
-          />
+          <div className="max-h-[calc(86vh-2.5rem)] overflow-y-auto">
+            <TraderCreationFlow
+              key={flowKey}
+              mode="dialog"
+              onCreated={(traderId) => {
+                onOpenChange(false);
+                setFlowKey((key) => key + 1);
+                router.push(`/traders/${traderId}`);
+              }}
+            />
+          </div>
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
@@ -172,17 +179,23 @@ function TraderCreationFlow({ mode, onCreated }: TraderCreationFlowProps) {
     }
   }
 
+  const isPage = mode === "page";
+
   return (
     <>
       <div
         className={
-          mode === "page"
+          isPage
             ? "sticky top-[37px] z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)]"
-            : "border-b border-[var(--t-border)] bg-[var(--t-bg)]"
+            : "border-b border-[var(--t-divider)] bg-[#0b100d]/70"
         }
       >
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-4 py-1.5 text-xs">
-          {mode === "page" ? (
+        <div
+          className={`mx-auto flex items-center justify-between px-3 py-1.5 text-xs ${
+            isPage ? "max-w-4xl" : "max-w-2xl"
+          }`}
+        >
+          {isPage ? (
             <Link
               href="/traders"
               className="text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
@@ -193,13 +206,15 @@ function TraderCreationFlow({ mode, onCreated }: TraderCreationFlowProps) {
             <span className="text-[var(--t-muted)]">DESK HIRING</span>
           )}
           <span className="text-[var(--t-text)]">
-            {mode === "page" ? "HIRE TRADER" : "NEW TRADER"}
+            {isPage ? "HIRE TRADER" : "NEW TRADER"}
           </span>
           <span className="text-[var(--t-muted)]">STEP {step + 1} / 5</span>
         </div>
       </div>
 
-      <div className="mx-auto max-w-4xl px-4 pt-4">
+      <div
+        className={`mx-auto px-3 pt-4 ${isPage ? "max-w-4xl" : "max-w-2xl"}`}
+      >
         <div className="flex gap-1">
           {Array.from({ length: 5 }, (_, i) => (
             <div
@@ -212,9 +227,13 @@ function TraderCreationFlow({ mode, onCreated }: TraderCreationFlowProps) {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-4xl px-4 py-8">
-        <div className="border border-[var(--t-border)] bg-[var(--t-surface)] p-6">
-          <h2 className="mb-6 text-sm font-bold text-[var(--t-accent)]">
+      <div
+        className={`mx-auto w-full px-3 ${
+          isPage ? "max-w-4xl py-8" : "max-w-2xl py-4"
+        }`}
+      >
+        <div className="border border-[var(--t-divider)] bg-[#070b09] p-4 sm:p-5">
+          <h2 className="mb-5 text-sm font-bold uppercase tracking-[0.08em] text-[var(--t-accent)]">
             {STEP_TITLES[step]}
           </h2>
 
