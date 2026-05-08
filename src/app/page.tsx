@@ -3,7 +3,7 @@
 import { useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 
-import { HelpCircle, LogOut } from "lucide-react";
+import { Github, HelpCircle, LogOut, Twitter } from "lucide-react";
 import { useQuery } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../../convex/_generated/api";
@@ -49,12 +49,6 @@ const TONE_CLASS = {
   amber: "text-[var(--t-amber)]",
   red: "text-[var(--t-red)]",
 } as const;
-
-type Tone = keyof typeof TONE_CLASS;
-
-function toneClassFor(tone: Tone): string {
-  return TONE_CLASS[tone];
-}
 
 const EMPTY_PENDING: PendingApproval[] = [];
 
@@ -204,9 +198,10 @@ function Dashboard({ displayName }: { displayName: string }) {
 
   const pendingApprovals = approvals ?? EMPTY_PENDING;
 
-  const approvalIdByEntryId = useMemo(() => {
-    return buildApprovalIdByEntryId(filteredActivity, pendingApprovals);
-  }, [pendingApprovals, filteredActivity]);
+  const approvalIdByEntryId = useMemo(
+    () => buildApprovalIdByEntryId(filteredActivity, pendingApprovals),
+    [pendingApprovals, filteredActivity]
+  );
 
   const reviewCtaEntryIds = useMemo(
     () => buildReviewCtaEntryIds(filteredActivity),
@@ -322,12 +317,12 @@ function TopStatusBar({
 
   return (
     <header className="z-40 shrink-0 border-b border-[var(--t-bronze)] bg-[#050706]/95 px-2 py-2 backdrop-blur-sm">
-      <div className="grid gap-2 xl:grid-cols-[18rem_14rem_minmax(28rem,1fr)_16rem]">
+      <div className="grid gap-2 xl:grid-cols-[18rem_14rem_minmax(28rem,1fr)_max-content]">
         <div className="terminal-panel px-3 py-2">
           <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black leading-none tracking-wide text-[var(--t-accent)]">
             MARGIN CALL
           </h1>
-          <p className="mt-1 truncate text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+          <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)]">
             The 1980s Wall Street Trading Game
           </p>
         </div>
@@ -370,6 +365,15 @@ function TopStatusBar({
         </div>
 
         <div className="terminal-panel flex items-center justify-end gap-2 px-3 py-2">
+          <IconLink href="https://x.com/davidbhurley" label="X">
+            <Twitter className="h-4 w-4" />
+          </IconLink>
+          <IconLink
+            href="https://github.com/hurley87/margin-call"
+            label="GitHub"
+          >
+            <Github className="h-4 w-4" />
+          </IconLink>
           <IconLink
             href="https://margin-call.gitbook.io/product-docs"
             label="Docs"
@@ -403,7 +407,7 @@ function StatusCell({
   return (
     <div className="min-w-0 px-3 py-2">
       <p className="truncate text-[var(--t-muted)]">{label}</p>
-      <p className={`mt-1 truncate text-sm font-bold ${toneClassFor(tone)}`}>
+      <p className={`mt-1 truncate text-sm font-bold ${TONE_CLASS[tone]}`}>
         {value}
       </p>
     </div>
@@ -475,28 +479,47 @@ function NewswirePanel({
     <aside className="terminal-panel flex min-h-0 flex-col overflow-hidden">
       <PanelHeader title="Newswire" meta={items ? `${items.length}` : "WAIT"} />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        {items === undefined ? (
-          <LoadingLine label="TUNING PRIVATE WIRE" />
-        ) : items.length === 0 ? (
-          <div className="space-y-4">
-            {FALLBACK_WIRE_ITEMS.map((item) => (
-              <NewswireItem key={item.time + item.headline} {...item} />
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {items.map((item) => (
-              <NewswireItem
-                key={`${item.time}-${item.headline}`}
-                time={item.time}
-                headline={item.headline}
-                impact={`${item.category.toUpperCase()} // ${item.impact}`}
-              />
-            ))}
-          </div>
-        )}
+        <NewswireList items={items} />
       </div>
     </aside>
+  );
+}
+
+function NewswireList({
+  items,
+}: {
+  items:
+    | Array<{
+        time: string;
+        headline: string;
+        impact: string;
+        category: string;
+      }>
+    | undefined;
+}) {
+  if (items === undefined) {
+    return <LoadingLine label="TUNING PRIVATE WIRE" />;
+  }
+  if (items.length === 0) {
+    return (
+      <div className="space-y-4">
+        {FALLBACK_WIRE_ITEMS.map((item) => (
+          <NewswireItem key={item.time + item.headline} {...item} />
+        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4">
+      {items.map((item) => (
+        <NewswireItem
+          key={`${item.time}-${item.headline}`}
+          time={item.time}
+          headline={item.headline}
+          impact={`${item.category.toUpperCase()} // ${item.impact}`}
+        />
+      ))}
+    </div>
   );
 }
 
@@ -550,11 +573,12 @@ function TradingDeskPanel({
         }
       />
 
-      {portfolioLoading ? (
+      {portfolioLoading && (
         <div className="px-4 py-8">
           <LoadingLine label="LOADING DESK ROSTER" />
         </div>
-      ) : traders.length === 0 ? (
+      )}
+      {!portfolioLoading && traders.length === 0 && (
         <div className="px-4 py-10 text-center">
           <p className="text-sm uppercase tracking-wider text-[var(--t-muted)]">
             No traders on your desk
@@ -566,7 +590,8 @@ function TradingDeskPanel({
             Open hiring file
           </Link>
         </div>
-      ) : (
+      )}
+      {!portfolioLoading && traders.length > 0 && (
         <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,12rem))] content-start justify-start gap-2 overflow-y-auto p-3">
           {traders.map((trader, index) => {
             const cycleUi = getTraderCycleUi(
@@ -635,7 +660,7 @@ function TraderDatum({
   tone?: "text" | "green" | "amber" | "red";
   className?: string;
 }) {
-  const toneClass = className ?? toneClassFor(tone);
+  const toneClass = className ?? TONE_CLASS[tone];
 
   return (
     <p className="flex min-w-0 items-center gap-1 text-[11px] uppercase">
@@ -666,15 +691,16 @@ function TraderFeedPanel({
   approvalIdByEntryId: ReadonlyMap<string, string>;
   onReviewApproval: (ctx: { traderId: string; dealId: string | null }) => void;
 }) {
+  const feedMeta =
+    traderFilter && traderNames[traderFilter]
+      ? traderNames[traderFilter]
+      : "ALL DESKS";
+
   return (
     <section className="terminal-panel flex min-h-0 flex-col overflow-hidden">
       <PanelHeader
         title="Trader Feed"
-        meta={
-          traderFilter && traderNames[traderFilter]
-            ? traderNames[traderFilter]
-            : "ALL DESKS"
-        }
+        meta={feedMeta}
         action={
           approvalsCount > 0 ? (
             <span className="text-[10px] uppercase tracking-wider text-[var(--t-amber)]">
