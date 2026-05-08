@@ -1,8 +1,10 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
+import { Github, Twitter } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [
@@ -13,6 +15,28 @@ const NAV_ITEMS = [
 
 interface NavProps {
   containerClassName?: string;
+}
+
+function ExternalNavLink({
+  href,
+  "aria-label": ariaLabel,
+  children,
+}: {
+  href: string;
+  "aria-label"?: string;
+  children: ReactNode;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      {...(ariaLabel ? { "aria-label": ariaLabel } : {})}
+      className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+    >
+      {children}
+    </a>
+  );
 }
 
 export function Nav({ containerClassName }: NavProps) {
@@ -36,11 +60,12 @@ export function Nav({ containerClassName }: NavProps) {
               <Link
                 key={href}
                 href={href}
-                className={`shrink-0 transition-colors ${
+                className={cn(
+                  "shrink-0 transition-colors",
                   isActive
                     ? "text-[var(--t-accent)]"
                     : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
-                }`}
+                )}
               >
                 {label}
               </Link>
@@ -48,14 +73,21 @@ export function Nav({ containerClassName }: NavProps) {
           })}
         </div>
         <div className="flex items-center gap-3">
-          <a
-            href="https://margin-call.gitbook.io/product-docs"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+          <ExternalNavLink
+            href="https://x.com/davidbhurley"
+            aria-label="Open David Hurley on X"
           >
+            <Twitter className="size-4" aria-hidden="true" />
+          </ExternalNavLink>
+          <ExternalNavLink
+            href="https://github.com/hurley87/margin-call"
+            aria-label="Open Margin Call on GitHub"
+          >
+            <Github className="size-4" aria-hidden="true" />
+          </ExternalNavLink>
+          <ExternalNavLink href="https://margin-call.gitbook.io/product-docs">
             DOCS
-          </a>
+          </ExternalNavLink>
           <button
             onClick={logout}
             className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)]"
