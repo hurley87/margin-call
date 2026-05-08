@@ -8,6 +8,7 @@ import { useQuery } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../../convex/_generated/api";
 import { DealApprovalDialog } from "@/components/deal-approval-dialog";
+import { DealDetailDialog } from "@/components/deal-detail";
 import {
   FeedLine,
   buildApprovalIdByEntryId,
@@ -193,6 +194,7 @@ function Dashboard({ displayName }: { displayName: string }) {
     dealId: string | null;
   } | null>(null);
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
 
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
   const traderNames = feedData?.traderNames ?? {};
@@ -249,6 +251,7 @@ function Dashboard({ displayName }: { displayName: string }) {
             onHireTrader={() => setHireDialogOpen(true)}
             deals={myDeals}
             dealsLoading={myDealsLoading}
+            onOpenDeal={setSelectedDealId}
           />
           <TraderFeedPanel
             activity={filteredActivity}
@@ -284,6 +287,13 @@ function Dashboard({ displayName }: { displayName: string }) {
       <TraderCreationDialog
         open={hireDialogOpen}
         onOpenChange={setHireDialogOpen}
+      />
+      <DealDetailDialog
+        dealId={selectedDealId}
+        open={selectedDealId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedDealId(null);
+        }}
       />
     </div>
   );
@@ -704,6 +714,7 @@ function TradingDeskPanel({
   onHireTrader,
   deals,
   dealsLoading,
+  onOpenDeal,
 }: {
   nowMs: number;
   portfolio: Portfolio | undefined;
@@ -713,6 +724,7 @@ function TradingDeskPanel({
   onHireTrader: () => void;
   deals: Deal[] | undefined;
   dealsLoading: boolean;
+  onOpenDeal: (dealId: string) => void;
 }) {
   const traders = portfolio?.traders ?? [];
   const deskDeals = deals ?? [];
@@ -773,7 +785,11 @@ function TradingDeskPanel({
       />
 
       {showingDeals ? (
-        <DeskDealsView deals={deskDeals} isLoading={dealsLoading} />
+        <DeskDealsView
+          deals={deskDeals}
+          isLoading={dealsLoading}
+          onOpenDeal={onOpenDeal}
+        />
       ) : portfolioLoading ? (
         <div className="px-4 py-8">
           <LoadingLine label="LOADING DESK ROSTER" />
@@ -873,9 +889,11 @@ function DeskTradersView({
 function DeskDealsView({
   deals,
   isLoading,
+  onOpenDeal,
 }: {
   deals: Deal[];
   isLoading: boolean;
+  onOpenDeal: (dealId: string) => void;
 }) {
   if (isLoading) {
     return (
@@ -897,10 +915,11 @@ function DeskDealsView({
     <div className="min-h-0 flex-1 overflow-y-auto p-3">
       <div className="grid gap-2">
         {deals.map((deal) => (
-          <Link
+          <button
             key={deal.id}
-            href={`/deals/${deal.id}`}
-            className="group grid grid-cols-[minmax(0,1fr)_6.25rem] gap-3 border border-[var(--t-divider)] bg-[#070b09] px-3 py-2 text-left text-xs transition-colors hover:border-[var(--t-accent)]"
+            type="button"
+            onClick={() => onOpenDeal(deal.id)}
+            className="group grid grid-cols-[minmax(0,1fr)_6.25rem] gap-3 border border-[var(--t-divider)] bg-[#070b09] px-3 py-2 text-left text-xs transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none"
           >
             <div className="min-w-0">
               <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
@@ -943,7 +962,7 @@ function DeskDealsView({
                 <span className="text-[var(--t-text)]">{deal.entry_count}</span>
               </p>
             </div>
-          </Link>
+          </button>
         ))}
       </div>
     </div>
