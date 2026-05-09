@@ -104,6 +104,51 @@ describe("Activity feed visibility", () => {
     expect(logs[0].activityType).toBe("approval_required");
   });
 
+  it("listForDesk returns trader portrait profile data", async () => {
+    const t = convexTest(schema, modules);
+    const subject = "did:privy:owner-portraits";
+    const dmId = await seedDeskManager(t, { subject });
+    const traderId = await seedActiveTrader(t, dmId, {
+      name: "Portrait Trader",
+      ownerSubject: subject,
+    });
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(["portrait"], { type: "image/png" }))
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(traderId as never, {
+        imageStatus: "ready",
+        profileImageStorageId: storageId,
+      });
+    });
+    await t.mutation(internal.agentActivityLog.append, {
+      traderId: traderId as never,
+      activityType: "cycle_start",
+      message: "Cycle started",
+      correlationId: "corr-portraits",
+    });
+
+    const authed = t.withIdentity({
+      subject,
+      tokenIdentifier: subject,
+      issuer: "https://auth.privy.io",
+    });
+    const result = await authed.query(api.agentActivityLog.listForDesk, {
+      limit: 10,
+    });
+
+    expect(Array.isArray(result)).toBe(false);
+    if (Array.isArray(result)) throw new Error("Expected desk activity result");
+    expect(result.traderNames[traderId]).toBe("Portrait Trader");
+    expect(result.traderProfiles[traderId]).toMatchObject({
+      name: "Portrait Trader",
+      imageStatus: "ready",
+    });
+    expect(result.traderProfiles[traderId].profileImageUrl).toContain(
+      "https://some-deployment.convex.cloud/api/storage/"
+    );
+  });
+
   it("win/loss/wipeout entries appear after deal outcome step", async () => {
     const t = convexTest(schema, modules);
     const subject = "did:privy:owner-003";
@@ -424,6 +469,46 @@ describe("Approval flow idempotency", () => {
       ctx.db.query("dealApprovals").collect()
     );
     expect(rows.length).toBe(1);
+  });
+
+  it("listPending includes trader portrait profile data", async () => {
+    const t = convexTest(schema, modules);
+    const subject = "did:privy:approval-portrait-owner";
+    const dmId = await seedDeskManager(t, { subject });
+    const traderId = await seedActiveTrader(t, dmId, {
+      name: "Approval Portrait Trader",
+      ownerSubject: subject,
+    });
+    const dealId = await seedDeal(t);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(traderId as never, {
+        imageStatus: "pending",
+      });
+    });
+
+    await t.mutation(internal.dealApprovals.request, {
+      traderId: traderId as never,
+      dealId: dealId as never,
+      deskManagerId: dmId as never,
+      entryCostUsdc: 100,
+      potUsdc: 1000,
+      expiresAt: Date.now() + 60_000,
+    });
+
+    const authed = t.withIdentity({
+      subject,
+      tokenIdentifier: subject,
+      issuer: "https://auth.privy.io",
+    });
+    const approvals = await authed.query(api.dealApprovals.listPending, {});
+
+    expect(approvals).toHaveLength(1);
+    expect(approvals[0]).toMatchObject({
+      traderName: "Approval Portrait Trader",
+      traderImageStatus: "pending",
+      traderProfileImageUrl: "/trader-placeholder.svg",
+    });
   });
 
   it("approve transitions pending → approved; duplicate approve is no-op", async () => {

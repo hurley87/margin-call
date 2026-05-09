@@ -1,11 +1,12 @@
 import type { AgentActivity } from "@/hooks/use-agent";
-import type { PendingApproval } from "@/hooks/use-approvals";
-import { useApproveReject } from "@/hooks/use-approvals";
+import { useApproveReject, type PendingApproval } from "@/hooks/use-approvals";
+import { TraderAvatar } from "@/components/trader-avatar";
+import type { TraderProfile } from "@/hooks/use-activity-feed";
 import { pendingDealReviewKey } from "@/lib/pending-deal-key";
 
 export function getFeedGridClass(showTrader: boolean) {
   return showTrader
-    ? "grid grid-cols-[5.5rem_5.5rem_4rem_minmax(0,1fr)_8.5rem] items-start gap-2"
+    ? "grid grid-cols-[5.5rem_5.5rem_7rem_minmax(0,1fr)_8.5rem] items-start gap-2"
     : "grid grid-cols-[5.5rem_5.5rem_minmax(0,1fr)_8.5rem] items-start gap-2";
 }
 
@@ -111,6 +112,7 @@ function getFeedActionState(params: {
 export function FeedLine({
   entry,
   traderName,
+  traderProfile,
   showTrader,
   wrapMessage = false,
   onReviewApproval,
@@ -124,6 +126,7 @@ export function FeedLine({
 }: {
   entry: AgentActivity;
   traderName: string;
+  traderProfile?: TraderProfile;
   showTrader: boolean;
   wrapMessage?: boolean;
   /** Desk manager CTA: open approval dialog for this log line when applicable */
@@ -171,7 +174,15 @@ export function FeedLine({
         {display.label}
       </span>
       {showTrader && (
-        <span className="truncate text-[var(--t-accent)]">{traderName}</span>
+        <span className="flex min-w-0 items-center gap-1.5 text-[var(--t-accent)]">
+          <TraderAvatar
+            name={traderProfile?.name ?? traderName}
+            src={traderProfile?.profileImageUrl}
+            imageStatus={traderProfile?.imageStatus}
+            size="sm"
+          />
+          <span className="truncate">{traderProfile?.name ?? traderName}</span>
+        </span>
       )}
       <span
         className={`min-w-0 ${

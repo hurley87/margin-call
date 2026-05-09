@@ -25,12 +25,13 @@ import {
   getFeedGridClass,
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
+import { TraderAvatar } from "@/components/trader-avatar";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { TraderCreationDialog } from "@/components/trader-creation-flow";
 import { TraderDetailDialog } from "@/components/trader-detail";
 import { CreateDealDialog } from "@/components/wire/create-deal-dialog";
 import type { AgentActivity } from "@/hooks/use-agent";
-import { useActivityFeed } from "@/hooks/use-activity-feed";
+import { useActivityFeed, type TraderProfile } from "@/hooks/use-activity-feed";
 import {
   usePendingApprovals,
   type PendingApproval,
@@ -232,6 +233,7 @@ function Dashboard({ displayName }: { displayName: string }) {
 
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
   const traderNames = feedData?.traderNames ?? {};
+  const traderProfiles = feedData?.traderProfiles ?? {};
 
   const filteredActivity = useMemo(() => {
     if (!traderFilter) return activity;
@@ -299,6 +301,7 @@ function Dashboard({ displayName }: { displayName: string }) {
             traderFilterOptions={portfolio?.traders ?? []}
             onTraderFilter={setTraderFilter}
             traderNames={traderNames}
+            traderProfiles={traderProfiles}
             approvalsCount={pendingApprovals.length}
             approvals={pendingApprovals}
             reviewCtaEntryIds={reviewCtaEntryIds}
@@ -928,8 +931,6 @@ function DeskTradersView({
           nowMs
         );
         const role = DESK_ROLES[index % DESK_ROLES.length];
-        const showingFallbackPortrait =
-          trader.profile_image_url.includes("trader-placeholder");
 
         return (
           <button
@@ -939,17 +940,14 @@ function DeskTradersView({
             className="group min-w-0 border border-[var(--t-divider)] bg-[#070b09] text-left transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none"
           >
             <div className="relative aspect-[5/4] overflow-hidden border-b border-[var(--t-divider)] bg-[linear-gradient(135deg,rgba(104,166,82,0.16),rgba(218,173,94,0.08)_45%,rgba(0,0,0,0.42))]">
-              <div
-                className="absolute inset-0 bg-cover bg-center opacity-90"
-                style={{ backgroundImage: `url(${trader.profile_image_url})` }}
+              <TraderAvatar
+                name={trader.name}
+                src={trader.profile_image_url}
+                imageStatus={trader.image_status}
+                size="lg"
+                className="absolute inset-0"
               />
-              <div className="absolute inset-0 crt-line-grid opacity-45" />
               <div className="absolute right-2 top-2 h-2 w-2 bg-[var(--t-green)] shadow-[0_0_10px_var(--t-green)]" />
-              {showingFallbackPortrait ? (
-                <div className="absolute inset-x-0 bottom-4 text-center font-[family-name:var(--font-plex-sans)] text-4xl font-black text-[var(--t-accent)]/80">
-                  {initials(trader.name)}
-                </div>
-              ) : null}
             </div>
             <div className="space-y-2 px-3 py-3">
               <div>
@@ -1090,6 +1088,7 @@ function TraderFeedPanel({
   traderFilterOptions,
   onTraderFilter,
   traderNames,
+  traderProfiles,
   approvalsCount,
   approvals,
   reviewCtaEntryIds,
@@ -1102,16 +1101,17 @@ function TraderFeedPanel({
   traderFilterOptions: TraderSummary[];
   onTraderFilter: (id: string | null) => void;
   traderNames: Record<string, string>;
+  traderProfiles: Record<string, TraderProfile>;
   approvalsCount: number;
   approvals: PendingApproval[];
   reviewCtaEntryIds: ReadonlySet<string>;
   approvalIdByEntryId: ReadonlyMap<string, string>;
   onReviewApproval: (ctx: { traderId: string; dealId: string | null }) => void;
 }) {
-  const feedMeta =
-    traderFilter && traderNames[traderFilter]
-      ? traderNames[traderFilter]
-      : "ALL DESKS";
+  let feedMeta = "ALL DESKS";
+  if (traderFilter && traderNames[traderFilter]) {
+    feedMeta = traderNames[traderFilter];
+  }
 
   return (
     <section className="terminal-panel flex min-h-0 flex-col overflow-hidden">
@@ -1177,6 +1177,7 @@ function TraderFeedPanel({
               key={entry.id}
               entry={entry}
               traderName={traderNames[entry.trader_id] ?? "???"}
+              traderProfile={traderProfiles[entry.trader_id]}
               showTrader={traderFilter === null}
               onReviewApproval={onReviewApproval}
               reviewCtaEntryIds={reviewCtaEntryIds}
@@ -1453,15 +1454,6 @@ function groupLeaderboardByFirm(
   });
 
   return [...map.values()].sort((a, b) => b.equity - a.equity);
-}
-
-function initials(name: string) {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join("");
 }
 
 function riskLabel(trader: TraderSummary) {

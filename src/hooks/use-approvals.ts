@@ -22,6 +22,8 @@ export interface PendingApproval {
   resolved_at: string | null;
   created_at: string;
   trader_name: string;
+  trader_image_status?: "pending" | "generating" | "ready" | "error" | null;
+  trader_profile_image_url?: string | null;
   deal_prompt: string;
   deal_pot_usdc: number;
 }
@@ -57,6 +59,8 @@ export function usePendingApprovals(): {
             : null,
           created_at: new Date(a.createdAt).toISOString(),
           trader_name: a.traderName,
+          trader_image_status: a.traderImageStatus ?? null,
+          trader_profile_image_url: a.traderProfileImageUrl ?? null,
           deal_prompt: a.dealPrompt,
           deal_pot_usdc: a.dealPotUsdc,
         }));
@@ -77,21 +81,15 @@ export function useApproveReject() {
 
   const isPending = false;
 
-  function mutate({
-    approvalId,
-    action,
-    reason,
-  }: {
+  function mutate(args: {
     approvalId: string;
     action: "approve" | "reject";
     reason?: string;
   }) {
-    const id = approvalId as Id<"dealApprovals">;
-    if (action === "approve") {
-      return approve({ approvalId: id });
-    } else {
-      return reject({ approvalId: id, reason });
-    }
+    const id = args.approvalId as Id<"dealApprovals">;
+    return args.action === "approve"
+      ? approve({ approvalId: id })
+      : reject({ approvalId: id, reason: args.reason });
   }
 
   return { mutate, isPending };
