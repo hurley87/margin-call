@@ -1,4 +1,10 @@
-import { internalMutation, internalQuery, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
+import {
+  internalMutation,
+  internalQuery,
+  query,
+  type QueryCtx,
+} from "./_generated/server";
 import { v } from "convex/values";
 import { resolveTraderProfileImageUrl } from "./lib/profileImage";
 
@@ -7,6 +13,17 @@ type TraderProfileSummary = {
   imageStatus: "pending" | "generating" | "ready" | "error" | null;
   profileImageUrl: string;
 };
+
+async function traderProfileSummary(
+  ctx: QueryCtx,
+  trader: Doc<"traders">
+): Promise<TraderProfileSummary> {
+  return {
+    name: trader.name,
+    imageStatus: trader.imageStatus ?? null,
+    profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
+  };
+}
 
 // ── Public queries ─────────────────────────────────────────────────────────
 
@@ -81,12 +98,9 @@ export const listForDesk = query({
     const traderNames: Record<string, string> = {};
     const traderProfiles: Record<string, TraderProfileSummary> = {};
     for (const trader of traders) {
-      traderNames[trader._id] = trader.name;
-      traderProfiles[trader._id] = {
-        name: trader.name,
-        imageStatus: trader.imageStatus ?? null,
-        profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
-      };
+      const profile = await traderProfileSummary(ctx, trader);
+      traderNames[trader._id] = profile.name;
+      traderProfiles[trader._id] = profile;
     }
 
     const limited = limit ? allActivity.slice(0, limit) : allActivity;
@@ -111,12 +125,9 @@ export const listRecentGlobal = query({
       if (traderProfiles[tid]) continue;
       const trader = await ctx.db.get(e.traderId);
       if (trader) {
-        traderNames[tid] = trader.name;
-        traderProfiles[tid] = {
-          name: trader.name,
-          imageStatus: trader.imageStatus ?? null,
-          profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
-        };
+        const profile = await traderProfileSummary(ctx, trader);
+        traderNames[tid] = profile.name;
+        traderProfiles[tid] = profile;
       }
     }
 

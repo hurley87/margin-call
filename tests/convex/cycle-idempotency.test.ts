@@ -125,6 +125,33 @@ describe("Cycle lease: stale trader eligibility", () => {
     );
     expect(stale.length).toBe(0);
   });
+
+  it("does NOT return active ready traders without funding", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    await seedActiveTrader(t, dmId, { escrowBalance: 0 });
+
+    const stale = await t.query(
+      internal.agent.internal.listStaleTradersForCycle,
+      {}
+    );
+    expect(stale.length).toBe(0);
+  });
+
+  it("cycle skips active ready traders without funding", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId, { escrowBalance: 0 });
+
+    await t.action(internal.agent.cycle.cycle, {
+      traderId: traderId as never,
+    });
+
+    const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.lastCycleAt).toBeUndefined();
+    expect(trader?.cycleLeaseUntil).toBeUndefined();
+    expect(trader?.cycleGeneration).toBe(0);
+  });
 });
 
 describe("Cycle lease: compare-and-set (CAS)", () => {

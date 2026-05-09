@@ -27,7 +27,7 @@ export function PendingApprovalCard({
 }: {
   approval: PendingApproval;
 }) {
-  const { mutate, isPending } = useApproveReject();
+  const { mutate } = useApproveReject();
   const expiry = getPendingApprovalState(approval.expires_at);
 
   return (
@@ -65,8 +65,7 @@ export function PendingApprovalCard({
               onClick={() =>
                 mutate({ approvalId: approval.id, action: "approve" })
               }
-              disabled={isPending}
-              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] disabled:opacity-50"
+              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-green)] transition-colors hover:border-[var(--t-green)]"
             >
               APPROVE
             </button>
@@ -75,8 +74,7 @@ export function PendingApprovalCard({
               onClick={() =>
                 mutate({ approvalId: approval.id, action: "reject" })
               }
-              disabled={isPending}
-              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
+              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-red)] transition-colors hover:border-[var(--t-red)]"
             >
               DENY
             </button>

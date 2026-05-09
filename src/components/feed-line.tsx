@@ -133,7 +133,7 @@ export function FeedLine({
   reviewCtaEntryIds?: ReadonlySet<string>;
   approvalIdByEntryId?: ReadonlyMap<string, string>;
 }) {
-  const { mutate, isPending } = useApproveReject();
+  const { mutate } = useApproveReject();
   const display = FEED_DISPLAY[entry.activity_type] ?? {
     label: entry.activity_type.toUpperCase(),
     color: "text-[var(--t-muted)]",
@@ -189,16 +189,14 @@ export function FeedLine({
           <button
             type="button"
             onClick={() => mutate({ approvalId, action: "approve" })}
-            disabled={isPending}
-            className="border border-[var(--t-green)]/60 px-2 py-0.5 font-bold uppercase tracking-wide text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] hover:bg-[var(--t-green)]/10 disabled:opacity-50"
+            className="border border-[var(--t-green)]/60 px-2 py-0.5 font-bold uppercase tracking-wide text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] hover:bg-[var(--t-green)]/10"
           >
             Approve
           </button>
           <button
             type="button"
             onClick={() => mutate({ approvalId, action: "reject" })}
-            disabled={isPending}
-            className="border border-[var(--t-red)]/60 px-2 py-0.5 font-bold uppercase tracking-wide text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] hover:bg-[var(--t-red)]/10 disabled:opacity-50"
+            className="border border-[var(--t-red)]/60 px-2 py-0.5 font-bold uppercase tracking-wide text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] hover:bg-[var(--t-red)]/10"
           >
             Deny
           </button>

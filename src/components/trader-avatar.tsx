@@ -16,6 +16,12 @@ const SIZE_CLASS: Record<TraderAvatarSize, string> = {
   lg: "h-full w-full text-5xl",
 };
 
+const IMAGE_SIZES: Record<TraderAvatarSize, string> = {
+  sm: "1.75rem",
+  md: "2.5rem",
+  lg: "12rem",
+};
+
 const STATUS_LABEL: Record<
   Exclude<TraderAvatarImageStatus, "ready">,
   string
@@ -53,10 +59,11 @@ export function TraderAvatar({
   const isLoading = imageStatus === "pending" || imageStatus === "generating";
   const fallbackStatus =
     imageStatus === "ready" && !src ? "missing" : (imageStatus ?? "missing");
-  const label =
-    imageStatus && imageStatus !== "ready"
-      ? STATUS_LABEL[imageStatus]
-      : "Portrait unavailable";
+
+  let label = "Portrait unavailable";
+  if (imageStatus === "pending") label = STATUS_LABEL.pending;
+  else if (imageStatus === "generating") label = STATUS_LABEL.generating;
+  else if (imageStatus === "error") label = STATUS_LABEL.error;
 
   return (
     <div
@@ -74,7 +81,7 @@ export function TraderAvatar({
           alt={`${name} portrait`}
           fill
           unoptimized
-          sizes={size === "lg" ? "12rem" : size === "md" ? "2.5rem" : "1.75rem"}
+          sizes={IMAGE_SIZES[size]}
           className={cn(
             "object-cover opacity-95",
             size === "lg" ? "scale-[1.06]" : ""

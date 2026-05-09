@@ -25,6 +25,7 @@ export const SPEED_TOKEN_CYCLE_INTERVAL_MS = 5 * 60_000;
 export function resolveCycleIntervalMsForTrader(
   _trader: Doc<"traders">
 ): number {
+  void _trader;
   // Future: if (_trader.speedTokenEligible ?? false) return SPEED_TOKEN_CYCLE_INTERVAL_MS;
   return DEFAULT_CYCLE_INTERVAL_MS;
 }
@@ -46,6 +47,7 @@ export const loadTraderForCycle = internalQuery({
  * List traders eligible for a new cycle:
  *   - status === "active"
  *   - walletStatus === "ready"
+ *   - escrowBalanceUsdc > 0
  *   - lastCycleAt is either unset or older than resolveCycleIntervalMsForTrader(trader)
  *   - cycleLeaseUntil is either unset or in the past (no active lease)
  *
@@ -66,6 +68,7 @@ export const listStaleTradersForCycle = internalQuery({
 
     return active.filter((t) => {
       if (t.walletStatus !== "ready") return false;
+      if ((t.escrowBalanceUsdc ?? 0) <= 0) return false;
       // Skip if a cycle lease is still valid (another cycle is in flight)
       if (t.cycleLeaseUntil !== undefined && t.cycleLeaseUntil > now)
         return false;

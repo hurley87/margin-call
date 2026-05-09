@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { parseUnits } from "viem";
 import { useDepositFlow, useWithdrawFlow } from "@/hooks/use-escrow";
+import { authFetch } from "@/lib/api";
 
 const ZERO = BigInt(0);
 
@@ -43,6 +44,7 @@ export function WalletDialog({
   const [mode, setMode] = useState<"deposit" | "withdraw">("deposit");
   const [amount, setAmount] = useState("");
   const [ensureError, setEnsureError] = useState<string | undefined>();
+  const [syncError, setSyncError] = useState<string | undefined>();
 
   const {
     deposit,
@@ -62,6 +64,24 @@ export function WalletDialog({
   function switchMode(next: "deposit" | "withdraw") {
     setMode(next);
     setAmount("");
+    setEnsureError(undefined);
+    setSyncError(undefined);
+  }
+
+  async function syncBalance() {
+    const syncRes = await authFetch(
+      `/api/trader/${convexTraderId}/sync-balance`,
+      { method: "POST" }
+    );
+    if (!syncRes.ok) {
+      const body = await syncRes.json().catch(() => ({}));
+      setSyncError(
+        (body as { error?: string }).error ??
+          "Transaction confirmed, but balance sync failed"
+      );
+      return false;
+    }
+    return true;
   }
 
   async function handleDeposit(e: React.FormEvent) {
@@ -69,6 +89,7 @@ export function WalletDialog({
     const parsed = parseUnits(amount, 6);
     if (parsed === ZERO) return;
     setEnsureError(undefined);
+    setSyncError(undefined);
 
     // Skip pre-flight if escrow already has funds — depositor is confirmed set.
     if (!escrowUsdc) {
@@ -90,6 +111,7 @@ export function WalletDialog({
 
     try {
       await deposit(BigInt(traderId), parsed);
+      if (!(await syncBalance())) return;
       setAmount("");
       onSuccess();
     } catch {
@@ -115,9 +137,11 @@ export function WalletDialog({
     const parsed = parseUnits(amount, 6);
     if (parsed === ZERO) return;
     if (withdrawExceedsBalance) return;
+    setSyncError(undefined);
 
     try {
       await withdraw(BigInt(traderId), parsed);
+      if (!(await syncBalance())) return;
       setAmount("");
       onSuccess();
     } catch {
@@ -126,7 +150,8 @@ export function WalletDialog({
   }
 
   const showWelcome = isNewTrader && (escrowUsdc === null || escrowUsdc === 0);
-  const depositDisplayError = ensureError ?? depositError;
+  const depositDisplayError = ensureError ?? syncError ?? depositError;
+  const withdrawDisplayError = syncError ?? withdrawError;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -297,18 +322,20 @@ export function WalletDialog({
                   Withdrawal confirmed.
                 </p>
               )}
-              {withdrawError && (
+              {withdrawDisplayError && (
                 <div className="flex items-center gap-2">
                   <p className="text-xs text-[var(--t-red)]">
-                    {withdrawError.slice(0, 120)}
+                    {withdrawDisplayError.slice(0, 120)}
                   </p>
-                  <button
-                    type="button"
-                    onClick={resetWithdraw}
-                    className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
-                  >
-                    Retry
-                  </button>
+                  {withdrawError && !syncError && (
+                    <button
+                      type="button"
+                      onClick={resetWithdraw}
+                      className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
+                    >
+                      Retry
+                    </button>
+                  )}
                 </div>
               )}
             </form>

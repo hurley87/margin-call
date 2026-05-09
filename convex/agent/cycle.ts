@@ -307,10 +307,14 @@ export const cycle = internalAction({
       return;
     }
 
-    // Defensive guard: only run for active + ready traders
-    if (trader.status !== "active" || trader.walletStatus !== "ready") {
+    // Defensive guard: only run for active, wallet-ready, funded traders.
+    if (
+      trader.status !== "active" ||
+      trader.walletStatus !== "ready" ||
+      (trader.escrowBalanceUsdc ?? 0) <= 0
+    ) {
       console.log(
-        `[cycle] trader ${traderId} not eligible (status=${trader.status}, wallet=${trader.walletStatus}) — skipping`
+        `[cycle] trader ${traderId} not eligible (status=${trader.status}, wallet=${trader.walletStatus}, balance=${trader.escrowBalanceUsdc ?? 0}) — skipping`
       );
       return;
     }
