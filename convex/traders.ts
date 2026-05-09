@@ -96,6 +96,41 @@ async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
   };
 }
 
+function humanizeImageVariant(variant: string | undefined): string {
+  if (!variant) return "Wall Street Operator";
+  return variant
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
+}
+
+function deriveRiskProfile(mandate: unknown): string {
+  if (!mandate || typeof mandate !== "object" || Array.isArray(mandate)) {
+    return "Balanced";
+  }
+
+  const values = mandate as Record<string, unknown>;
+  const bankrollPct = Number(values.bankroll_pct ?? 0);
+  const maxEntryCost = Number(values.max_entry_cost_usdc ?? 0);
+
+  if (bankrollPct >= 50 || maxEntryCost >= 500) return "Aggressive";
+  if ((bankrollPct > 0 && bankrollPct <= 10) || maxEntryCost <= 25) {
+    return "Conservative";
+  }
+  return "Balanced";
+}
+
+async function resolveReadyProfileImageUrl(
+  ctx: QueryCtx,
+  trader: Doc<"traders">
+): Promise<string | null> {
+  if (trader.imageStatus !== "ready" || !trader.profileImageStorageId) {
+    return null;
+  }
+
+  return (await ctx.storage.getUrl(trader.profileImageStorageId)) ?? null;
+}
+
 /** Public: list traders owned by the calling desk manager. */
 export const listByDesk = query({
   args: {},
@@ -119,6 +154,30 @@ export const getById = query({
     const trader = await ctx.db.get(traderId);
     if (!trader || trader.ownerSubject !== identity.subject) return null;
     return toTraderReadModel(ctx, trader);
+  },
+});
+
+/**
+ * Public: curated trader metadata read model for NFT metadata routes.
+ * This intentionally excludes owner, wallet, mandate, personality, raw image
+ * prompt/source, dedupe, and error fields.
+ */
+export const getPublicMetadata = query({
+  args: { traderId: v.id("traders") },
+  handler: async (ctx, { traderId }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return null;
+
+    return {
+      traderId: trader._id,
+      name: trader.name,
+      status: trader.status,
+      portraitStatus: trader.imageStatus ?? "pending",
+      archetype: humanizeImageVariant(trader.imageVariant),
+      riskProfile: deriveRiskProfile(trader.mandate),
+      tokenId: trader.tokenId ?? null,
+      profileImageUrl: await resolveReadyProfileImageUrl(ctx, trader),
+    };
   },
 });
 

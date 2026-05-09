@@ -200,44 +200,15 @@ describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
 // ── x402 boundary: no public mutation surface for verified flags ───────────────
 
 describe("x402 boundary: public mutation surface regression", () => {
-  /**
-   * The PRD mandates: "no public mutation accepts verified, paid, settled, or
-   * paymentId flags from untrusted client input."
-   *
-   * We verify this at the TypeScript type level: `api.deals` must NOT expose
-   * `recordVerifiedEntry` as a public mutation. The `convex-test` harness uses
-   * `anyApi` for both `api` and `internal` at runtime (no production HTTP
-   * surface in tests), so the enforcement is the TypeScript FilterApi type
-   * (`FilterApi<..., "public">`) — which strips internal-only functions from
-   * the public api object. This test documents that contract explicitly.
-   *
-   * Additionally we verify at runtime that the internal path correctly writes
-   * the entry, which would be the only way a verified entry enters the system.
-   */
+  // PRD: no public mutation accepts verified/paid/paymentId from clients.
+  // FilterApi strips internal paths from `api` types; convex-test still proxies runtime.
   it("recordVerifiedEntry is NOT present on the TypeScript public api type (structural regression)", () => {
-    // TypeScript compile-time check: api.deals should not have recordVerifiedEntry.
-    // If someone converts internalMutation → mutation, TypeScript will error here.
-    // We cast to any to access it at runtime to check the structural contract.
-
+    // FilterApi strips internal-only paths from `api.deals` at compile time; runtime
+    // convex-test still exposes a Proxy (expect "object"). Accidental `mutation` export
+    // would widen types and fail CI typecheck.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const publicDealsApi = api.deals as any;
-
-    // The public api type (FilterApi) strips internal functions. At runtime in
-    // convex-test anyApi resolves all paths, but the TypeScript type guard is
-    // the enforcement mechanism for the public surface.
-    // We document the path does NOT appear in the generated public type declaration
-    // by asserting the type-level contract via a comment and verifying that
-    // production callers MUST use internal.deals.recordVerifiedEntry.
-
-    // Structural assertion: the path exists on anyApi at runtime (expected in test
-    // harness), but this test serves as a documentation + future regression marker.
-    // If the function were accidentally made public, the TypeScript type would widen
-    // and a type-check-only CI step would catch it. For runtime, we just verify
-    // that the internal path is the only tested path by asserting it's callable.
-    expect(typeof publicDealsApi.recordVerifiedEntry).toBe("object"); // anyApi proxy
-    // The above resolves because anyApi is a JS Proxy — this is expected in test env.
-    // The real enforcement is: `api.deals.recordVerifiedEntry` does NOT compile
-    // without `as any` because FilterApi removes internal functions from the type.
+    expect(typeof publicDealsApi.recordVerifiedEntry).toBe("object");
   });
 
   it("api.dealEntries does not exist as a public namespace", async () => {
@@ -479,6 +450,81 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     const traders = await authed.query(api.traders.listByDesk, {});
     expect(traders).toHaveLength(1);
     expect(traders[0].profileImageUrl).toBe("/trader-placeholder.svg");
+  });
+
+  it("traders.getPublicMetadata returns curated fallback metadata without auth", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+    const traderId = await seedActiveTrader(t, dmId, {
+      name: "Public Metadata Trader",
+      ownerSubject: mockIdentity.subject,
+      mandate: { bankroll_pct: 5, max_entry_cost_usdc: 20 },
+    });
+
+    const trader = await t.query(api.traders.getPublicMetadata, {
+      traderId: traderId as never,
+    });
+
+    expect(trader).toMatchObject({
+      traderId,
+      name: "Public Metadata Trader",
+      status: "active",
+      portraitStatus: "pending",
+      archetype: "Wall Street Operator",
+      riskProfile: "Conservative",
+      tokenId: null,
+      profileImageUrl: null,
+    });
+    expect(trader).not.toHaveProperty("ownerSubject");
+    expect(trader).not.toHaveProperty("mandate");
+    expect(trader).not.toHaveProperty("personality");
+    expect(trader).not.toHaveProperty("cdpWalletAddress");
+    expect(trader).not.toHaveProperty("walletError");
+    expect(trader).not.toHaveProperty("imagePrompt");
+    expect(trader).not.toHaveProperty("imageError");
+  });
+
+  it("traders.getPublicMetadata returns generated portrait URL when ready", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(["portrait"], { type: "image/png" }))
+    );
+    const traderId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return ctx.db.insert("traders", {
+        deskManagerId: dmId as never,
+        ownerSubject: mockIdentity.subject,
+        name: "Ready Portrait Trader",
+        status: "active",
+        mandate: { bankroll_pct: 75 },
+        profileImageStorageId: storageId,
+        imageStatus: "ready",
+        imageVariant: "junk_bond_operator",
+        walletStatus: "ready",
+        escrowBalanceUsdc: 1000,
+        tokenId: 99,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const trader = await t.query(api.traders.getPublicMetadata, {
+      traderId: traderId as never,
+    });
+
+    expect(trader).toMatchObject({
+      traderId,
+      name: "Ready Portrait Trader",
+      portraitStatus: "ready",
+      archetype: "Junk Bond Operator",
+      riskProfile: "Aggressive",
+      tokenId: 99,
+    });
+    expect(trader?.profileImageUrl).toContain(
+      "https://some-deployment.convex.cloud/api/storage/"
+    );
   });
 
   it("traders.listByDesk returns owned traders for authenticated caller", async () => {
