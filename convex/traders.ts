@@ -261,6 +261,18 @@ export const setStatus = mutation({
       throw new Error("Forbidden");
     }
 
+    if (status === "active") {
+      if (trader.status === "wiped_out") {
+        throw new Error("Cannot activate a wiped out trader");
+      }
+      if (trader.walletStatus !== "ready") {
+        throw new Error("Trader wallet must be ready before activation");
+      }
+      if ((trader.escrowBalanceUsdc ?? 0) <= 0) {
+        throw new Error("Fund trader before activating");
+      }
+    }
+
     await ctx.db.patch(traderId, { status, updatedAt: Date.now() });
     return { ok: true as const };
   },
@@ -310,7 +322,7 @@ export const create = mutation({
       deskManagerId: existing._id,
       ownerSubject: identity.subject,
       name: args.name,
-      status: "active",
+      status: "paused",
       mandate: args.mandate ?? {},
       personality: args.personality,
       ...portraitSeed,

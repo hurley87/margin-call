@@ -281,10 +281,11 @@ export const expirePending = internalMutation({
     const approval = await ctx.db.get(approvalId);
     if (!approval) return;
     if (approval.status !== "pending") return;
-    if (approval.expiresAt > Date.now()) return;
+    const now = Date.now();
+    if (approval.expiresAt > now) return;
     await ctx.db.patch(approvalId, {
       status: "expired",
-      resolvedAt: Date.now(),
+      resolvedAt: now,
     });
   },
 });

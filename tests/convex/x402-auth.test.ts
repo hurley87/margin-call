@@ -355,6 +355,67 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
       name: "Authorized Trader",
     });
     expect(traderId).toBeTruthy();
+
+    const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.status).toBe("paused");
+    expect(trader?.escrowBalanceUsdc).toBe(0);
+  });
+
+  it("traders.setStatus rejects activation before wallet is ready", async () => {
+    const t = makeT();
+    const authed = t.withIdentity(mockIdentity);
+
+    await authed.mutation(api.deskManagers.upsertMe, {
+      walletAddress: "0xtest",
+      displayName: "Test User",
+    });
+    const traderId = await authed.mutation(api.traders.create, {
+      name: "Pending Wallet Trader",
+    });
+
+    await expect(
+      authed.mutation(api.traders.setStatus, {
+        traderId: traderId as never,
+        status: "active",
+      })
+    ).rejects.toThrow("Trader wallet must be ready before activation");
+  });
+
+  it("traders.setStatus rejects activation before funding", async () => {
+    const t = makeT();
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+    const traderId = await seedActiveTrader(t, dmId, {
+      ownerSubject: mockIdentity.subject,
+      status: "paused",
+      escrowBalance: 0,
+    });
+    const authed = t.withIdentity(mockIdentity);
+
+    await expect(
+      authed.mutation(api.traders.setStatus, {
+        traderId: traderId as never,
+        status: "active",
+      })
+    ).rejects.toThrow("Fund trader before activating");
+  });
+
+  it("traders.setStatus activates funded ready paused traders", async () => {
+    const t = makeT();
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+    const traderId = await seedActiveTrader(t, dmId, {
+      ownerSubject: mockIdentity.subject,
+      status: "paused",
+      escrowBalance: 250,
+    });
+    const authed = t.withIdentity(mockIdentity);
+
+    await authed.mutation(api.traders.setStatus, {
+      traderId: traderId as never,
+      status: "active",
+    });
+
+    const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.status).toBe("active");
   });
 
   it("traders.create initializes pending deterministic portrait fields", async () => {

@@ -86,20 +86,19 @@ export function useApproveReject() {
   const approve = useConvexMutation(api.dealApprovals.approve);
   const reject = useConvexMutation(api.dealApprovals.reject);
 
-  const isPending = false;
-
   function mutate(args: {
     approvalId: string;
     action: "approve" | "reject";
     reason?: string;
   }) {
     const id = args.approvalId as Id<"dealApprovals">;
-    return args.action === "approve"
-      ? approve({ approvalId: id })
-      : reject({ approvalId: id, reason: args.reason });
+    if (args.action === "approve") {
+      return approve({ approvalId: id });
+    }
+    return reject({ approvalId: id, reason: args.reason });
   }
 
-  return { mutate, isPending };
+  return { mutate };
 }
 
 /**

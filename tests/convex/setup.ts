@@ -23,7 +23,6 @@ export function makeT() {
 // ── Seed helpers ─────────────────────────────────────────────────────────────
 
 import type { TestConvex } from "convex-test";
-import type { DataModelFromSchemaDefinition } from "convex/server";
 import type schema_ from "../../convex/schema";
 
 type T = TestConvex<typeof schema_>;
@@ -57,6 +56,8 @@ export async function seedActiveTrader(
     lastCycleAt?: number;
     cycleLeaseUntil?: number;
     cycleGeneration?: number;
+    status?: "active" | "paused" | "wiped_out";
+    walletStatus?: "pending" | "creating" | "ready" | "error";
     mandate?: Record<string, unknown>;
   } = {}
 ) {
@@ -66,8 +67,8 @@ export async function seedActiveTrader(
       deskManagerId: deskManagerId as never,
       ownerSubject: opts.ownerSubject ?? "did:privy:test-subject-001",
       name: opts.name ?? "Alpha Trader",
-      status: "active",
-      walletStatus: "ready",
+      status: opts.status ?? "active",
+      walletStatus: opts.walletStatus ?? "ready",
       escrowBalanceUsdc: opts.escrowBalance ?? 1000,
       lastCycleAt: opts.lastCycleAt,
       cycleLeaseUntil: opts.cycleLeaseUntil,
