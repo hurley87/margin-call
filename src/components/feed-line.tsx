@@ -1,6 +1,5 @@
 import type { AgentActivity } from "@/hooks/use-agent";
 import { useApproveReject, type PendingApproval } from "@/hooks/use-approvals";
-import { TraderAvatar } from "@/components/trader-avatar";
 import type { TraderProfile } from "@/hooks/use-activity-feed";
 import { pendingDealReviewKey } from "@/lib/pending-deal-key";
 
@@ -174,13 +173,7 @@ export function FeedLine({
         {display.label}
       </span>
       {showTrader && (
-        <span className="flex min-w-0 items-center gap-1.5 text-[var(--t-accent)]">
-          <TraderAvatar
-            name={traderProfile?.name ?? traderName}
-            src={traderProfile?.profileImageUrl}
-            imageStatus={traderProfile?.imageStatus}
-            size="sm"
-          />
+        <span className="min-w-0 text-[var(--t-accent)]">
           <span className="truncate">{traderProfile?.name ?? traderName}</span>
         </span>
       )}

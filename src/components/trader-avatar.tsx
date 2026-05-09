@@ -75,7 +75,10 @@ export function TraderAvatar({
           fill
           unoptimized
           sizes={size === "lg" ? "12rem" : size === "md" ? "2.5rem" : "1.75rem"}
-          className="object-cover opacity-95"
+          className={cn(
+            "object-cover opacity-95",
+            size === "lg" ? "scale-[1.06]" : ""
+          )}
         />
       ) : (
         <>

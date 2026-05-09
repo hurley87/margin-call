@@ -1,0 +1,6 @@
+interface:
+  display_name: "Build"
+  short_description: "Build Margin Call issues in worktrees"
+  default_prompt: "Use $build with a GitHub issue URL or a short description of what to build."
+policy:
+  allow_implicit_invocation: true
