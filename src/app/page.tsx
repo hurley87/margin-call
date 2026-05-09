@@ -283,7 +283,7 @@ function Dashboard({ displayName }: { displayName: string }) {
       <main className="mx-auto grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)] gap-2 overflow-hidden px-2 py-2 xl:w-full xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:grid-rows-1">
         <NewswirePanel drops={drops} />
 
-        <section className="grid min-h-0 grid-rows-[minmax(0,0.8fr)_minmax(0,1.2fr)] gap-2 xl:grid-rows-[minmax(13rem,18rem)_minmax(0,1fr)]">
+        <section className="grid min-h-0 grid-rows-[minmax(20rem,0.82fr)_minmax(0,1.18fr)] gap-2 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]">
           <TradingDeskPanel
             nowMs={nowMs}
             portfolio={portfolio}
@@ -924,7 +924,7 @@ function DeskTradersView({
   nowMs: number;
 }) {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,12rem))] content-start justify-start gap-2 overflow-y-auto p-3">
+    <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,12rem))] content-center justify-start gap-2 overflow-y-auto p-3">
       {traders.map((trader, index) => {
         const cycleUi = getTraderCycleUi(
           traderCycleDocFromDeskSummary(trader),
@@ -1108,10 +1108,10 @@ function TraderFeedPanel({
   approvalIdByEntryId: ReadonlyMap<string, string>;
   onReviewApproval: (ctx: { traderId: string; dealId: string | null }) => void;
 }) {
-  let feedMeta = "ALL DESKS";
-  if (traderFilter && traderNames[traderFilter]) {
-    feedMeta = traderNames[traderFilter];
-  }
+  const feedMeta =
+    traderFilter && traderNames[traderFilter]
+      ? traderNames[traderFilter]
+      : "ALL DESKS";
 
   return (
     <section className="terminal-panel flex min-h-0 flex-col overflow-hidden">

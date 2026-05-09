@@ -53,10 +53,10 @@ export function TraderAvatar({
   const isLoading = imageStatus === "pending" || imageStatus === "generating";
   const fallbackStatus =
     imageStatus === "ready" && !src ? "missing" : (imageStatus ?? "missing");
-  let label = "Portrait unavailable";
-  if (imageStatus && imageStatus !== "ready") {
-    label = STATUS_LABEL[imageStatus];
-  }
+  const label =
+    imageStatus && imageStatus !== "ready"
+      ? STATUS_LABEL[imageStatus]
+      : "Portrait unavailable";
 
   return (
     <div
@@ -75,7 +75,10 @@ export function TraderAvatar({
           fill
           unoptimized
           sizes={size === "lg" ? "12rem" : size === "md" ? "2.5rem" : "1.75rem"}
-          className="object-cover opacity-95"
+          className={cn(
+            "object-cover opacity-95",
+            size === "lg" ? "scale-[1.06]" : ""
+          )}
         />
       ) : (
         <>

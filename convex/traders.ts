@@ -12,63 +12,7 @@ import {
   resolveReadyProfileImageUrl,
   resolveTraderProfileImageUrl,
 } from "./lib/profileImage";
-
-const PORTRAIT_METADATA_VERSION = 1;
-const BASE_PORTRAIT_PROMPT =
-  "Create a square profile picture of a fictional 1987 Wall Street trader for a retro trading game. High-end retro game character portrait, pixel-art inspired, detailed face, head-and-shoulders portrait, serious expression, period-accurate suit and tie, dramatic trading floor or finance office background, green CRT terminal glow, warm amber lighting, dark moody palette, clean silhouette, no border, no text, no logos, no cryptocurrency, no modern devices.";
-const IMAGE_VARIANTS = [
-  "phone_trader",
-  "risk_manager",
-  "macro_analyst",
-  "junk_bond_operator",
-  "execution_desk",
-  "mna_dealmaker",
-  "commodities_broker",
-  "equity_salesman",
-] as const;
-
-function stableHash(input: string): number {
-  let hash = 2166136261;
-  for (let i = 0; i < input.length; i++) {
-    hash ^= input.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return hash >>> 0;
-}
-
-function buildPortraitSeed(args: {
-  ownerSubject: string;
-  name: string;
-  mandate: unknown;
-  personality?: string;
-}) {
-  const hash = stableHash(
-    JSON.stringify({
-      ownerSubject: args.ownerSubject,
-      name: args.name,
-      mandate: args.mandate ?? {},
-      personality: args.personality ?? "",
-      version: PORTRAIT_METADATA_VERSION,
-    })
-  );
-  const imageVariant = IMAGE_VARIANTS[hash % IMAGE_VARIANTS.length];
-  const imageStyleSeed = `portrait-v${PORTRAIT_METADATA_VERSION}-${hash.toString(36)}`;
-
-  return {
-    imageStatus: "pending" as const,
-    imagePrompt: `${BASE_PORTRAIT_PROMPT} Trader name: ${args.name}. Variant: ${imageVariant}. Style seed: ${imageStyleSeed}.`,
-    imagePromptSource: {
-      version: PORTRAIT_METADATA_VERSION,
-      traderName: args.name,
-      mandateSnapshot: args.mandate ?? {},
-      personalitySnapshot: args.personality ?? null,
-    },
-    imageStyleSeed,
-    imageVariant,
-    imageRetryCount: 0,
-    metadataVersion: PORTRAIT_METADATA_VERSION,
-  };
-}
+import { buildPortraitSeed } from "./lib/portraitSeed";
 
 async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
   return {
@@ -385,9 +329,40 @@ export const create = mutation({
       await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
         traderId,
       });
+      await ctx.scheduler.runAfter(0, internal.portraits.generateForTrader, {
+        traderId,
+      });
     }
 
     return traderId;
+  },
+});
+
+/** Public: retry portrait generation for an owned trader. */
+export const retryPortrait = mutation({
+  args: { traderId: v.id("traders") },
+  handler: async (ctx, { traderId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const trader = await ctx.db.get(traderId);
+    if (!trader || trader.ownerSubject !== identity.subject) {
+      throw new Error("Forbidden");
+    }
+
+    if (trader.imageStatus === "ready" && trader.profileImageStorageId) {
+      return { ok: true as const, status: "ready" as const };
+    }
+
+    await ctx.db.patch(traderId, {
+      imageStatus: "pending",
+      imageError: undefined,
+      updatedAt: Date.now(),
+    });
+    await ctx.scheduler.runAfter(0, internal.portraits.generateForTrader, {
+      traderId,
+    });
+    return { ok: true as const, status: "scheduled" as const };
   },
 });
 
@@ -449,6 +424,80 @@ export const applyWalletError = internalMutation({
     await ctx.db.patch(traderId, {
       walletStatus: "error",
       walletError: error,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/** Internal: transition portrait pending|error -> generating. */
+export const markPortraitGenerating = internalMutation({
+  args: { traderId: v.id("traders"), force: v.optional(v.boolean()) },
+  handler: async (ctx, { traderId, force }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return null;
+    if (
+      !force &&
+      trader.imageStatus === "ready" &&
+      trader.profileImageStorageId
+    ) {
+      return null;
+    }
+    if (trader.imageStatus === "generating") {
+      return trader;
+    }
+
+    const seedPatch =
+      trader.imagePrompt && trader.imageStyleSeed
+        ? {}
+        : buildPortraitSeed({
+            ownerSubject: trader.ownerSubject,
+            name: trader.name,
+            mandate: trader.mandate ?? {},
+            personality: trader.personality,
+          });
+    const patch = {
+      ...seedPatch,
+      imageStatus: "generating",
+      imageLastAttemptAt: Date.now(),
+      imageRetryCount: (trader.imageRetryCount ?? 0) + 1,
+      imageError: undefined,
+      updatedAt: Date.now(),
+    } as const;
+
+    await ctx.db.patch(traderId, patch);
+
+    return { ...trader, ...patch };
+  },
+});
+
+/** Internal: store successful portrait generation metadata. */
+export const applyPortraitReady = internalMutation({
+  args: {
+    traderId: v.id("traders"),
+    profileImageStorageId: v.id("_storage"),
+  },
+  handler: async (ctx, { traderId, profileImageStorageId }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return;
+    await ctx.db.patch(traderId, {
+      profileImageStorageId,
+      imageStatus: "ready",
+      imageError: undefined,
+      updatedAt: Date.now(),
+    });
+  },
+});
+
+/** Internal: record portrait generation failure. */
+export const applyPortraitError = internalMutation({
+  args: { traderId: v.id("traders"), error: v.string() },
+  handler: async (ctx, { traderId, error }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return;
+    if (trader.imageStatus === "ready" && trader.profileImageStorageId) return;
+    await ctx.db.patch(traderId, {
+      imageStatus: "error",
+      imageError: error,
       updatedAt: Date.now(),
     });
   },

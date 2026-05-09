@@ -9,6 +9,27 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { resolveTraderProfileImageUrl } from "./lib/profileImage";
 
+async function requireOwningDeskApproval(
+  ctx: MutationCtx,
+  approvalId: Id<"dealApprovals">
+): Promise<Doc<"dealApprovals">> {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthenticated");
+
+  const dm = await ctx.db
+    .query("deskManagers")
+    .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
+    .unique();
+  if (!dm) throw new Error("Desk manager not found");
+
+  const approval = await ctx.db.get(approvalId);
+  if (!approval) throw new Error("Approval not found");
+  if (approval.deskManagerId !== dm._id) {
+    throw new Error("Not authorized for this approval");
+  }
+  return approval;
+}
+
 async function finalizePendingApproval(
   ctx: MutationCtx,
   approvalId: Id<"dealApprovals">,
@@ -110,20 +131,7 @@ export const getById = query({
 export const approve = mutation({
   args: { approvalId: v.id("dealApprovals") },
   handler: async (ctx, { approvalId }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-
-    const dm = await ctx.db
-      .query("deskManagers")
-      .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
-      .unique();
-    if (!dm) throw new Error("Desk manager not found");
-
-    const approval = await ctx.db.get(approvalId);
-    if (!approval) throw new Error("Approval not found");
-    if (approval.deskManagerId !== dm._id)
-      throw new Error("Not authorized for this approval");
-
+    const approval = await requireOwningDeskApproval(ctx, approvalId);
     const now = Date.now();
     return finalizePendingApproval(ctx, approvalId, approval, now, "approved");
   },
@@ -140,21 +148,8 @@ export const reject = mutation({
     approvalId: v.id("dealApprovals"),
     reason: v.optional(v.string()),
   },
-  handler: async (ctx, { approvalId, reason: _reason }) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-
-    const dm = await ctx.db
-      .query("deskManagers")
-      .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
-      .unique();
-    if (!dm) throw new Error("Desk manager not found");
-
-    const approval = await ctx.db.get(approvalId);
-    if (!approval) throw new Error("Approval not found");
-    if (approval.deskManagerId !== dm._id)
-      throw new Error("Not authorized for this approval");
-
+  handler: async (ctx, { approvalId }) => {
+    const approval = await requireOwningDeskApproval(ctx, approvalId);
     const now = Date.now();
     return finalizePendingApproval(ctx, approvalId, approval, now, "rejected");
   },

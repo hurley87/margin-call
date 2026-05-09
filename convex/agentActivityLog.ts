@@ -2,6 +2,12 @@ import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveTraderProfileImageUrl } from "./lib/profileImage";
 
+type TraderProfileSummary = {
+  name: string;
+  imageStatus: "pending" | "generating" | "ready" | "error" | null;
+  profileImageUrl: string;
+};
+
 // ── Public queries ─────────────────────────────────────────────────────────
 
 /**
@@ -73,14 +79,7 @@ export const listForDesk = query({
 
     // Build trader identity maps
     const traderNames: Record<string, string> = {};
-    const traderProfiles: Record<
-      string,
-      {
-        name: string;
-        imageStatus: "pending" | "generating" | "ready" | "error" | null;
-        profileImageUrl: string;
-      }
-    > = {};
+    const traderProfiles: Record<string, TraderProfileSummary> = {};
     for (const trader of traders) {
       traderNames[trader._id] = trader.name;
       traderProfiles[trader._id] = {
@@ -106,14 +105,7 @@ export const listRecentGlobal = query({
       .take(limit);
 
     const traderNames: Record<string, string> = {};
-    const traderProfiles: Record<
-      string,
-      {
-        name: string;
-        imageStatus: "pending" | "generating" | "ready" | "error" | null;
-        profileImageUrl: string;
-      }
-    > = {};
+    const traderProfiles: Record<string, TraderProfileSummary> = {};
     for (const e of entries) {
       const tid = String(e.traderId);
       if (traderProfiles[tid]) continue;
