@@ -1108,10 +1108,10 @@ function TraderFeedPanel({
   approvalIdByEntryId: ReadonlyMap<string, string>;
   onReviewApproval: (ctx: { traderId: string; dealId: string | null }) => void;
 }) {
-  let feedMeta = "ALL DESKS";
-  if (traderFilter && traderNames[traderFilter]) {
-    feedMeta = traderNames[traderFilter];
-  }
+  const feedMeta =
+    traderFilter && traderNames[traderFilter]
+      ? traderNames[traderFilter]
+      : "ALL DESKS";
 
   return (
     <section className="terminal-panel flex min-h-0 flex-col overflow-hidden">

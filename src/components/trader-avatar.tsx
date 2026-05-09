@@ -53,10 +53,10 @@ export function TraderAvatar({
   const isLoading = imageStatus === "pending" || imageStatus === "generating";
   const fallbackStatus =
     imageStatus === "ready" && !src ? "missing" : (imageStatus ?? "missing");
-  let label = "Portrait unavailable";
-  if (imageStatus && imageStatus !== "ready") {
-    label = STATUS_LABEL[imageStatus];
-  }
+  const label =
+    imageStatus && imageStatus !== "ready"
+      ? STATUS_LABEL[imageStatus]
+      : "Portrait unavailable";
 
   return (
     <div

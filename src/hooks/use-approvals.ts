@@ -5,6 +5,8 @@ import {
   useMutation as useConvexMutation,
   useQuery as useConvexQuery,
 } from "convex/react";
+import type { FunctionReturnType } from "convex/server";
+
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -28,6 +30,32 @@ export interface PendingApproval {
   deal_pot_usdc: number;
 }
 
+type ConvexPendingApprovalRow = FunctionReturnType<
+  typeof api.dealApprovals.listPending
+>[number];
+
+function mapConvexPendingApproval(
+  a: ConvexPendingApprovalRow
+): PendingApproval {
+  return {
+    id: a._id,
+    trader_id: a.traderId,
+    deal_id: a.dealId,
+    desk_manager_id: a.deskManagerId,
+    status: a.status,
+    entry_cost_usdc: a.entryCostUsdc,
+    pot_usdc: a.potUsdc,
+    expires_at: new Date(a.expiresAt).toISOString(),
+    resolved_at: a.resolvedAt ? new Date(a.resolvedAt).toISOString() : null,
+    created_at: new Date(a.createdAt).toISOString(),
+    trader_name: a.traderName,
+    trader_image_status: a.traderImageStatus ?? null,
+    trader_profile_image_url: a.traderProfileImageUrl ?? null,
+    deal_prompt: a.dealPrompt,
+    deal_pot_usdc: a.dealPotUsdc,
+  };
+}
+
 // ── Hooks ─────────────────────────────────────────────────────────────────
 
 /**
@@ -41,29 +69,8 @@ export function usePendingApprovals(): {
 } {
   const result = useConvexQuery(api.dealApprovals.listPending);
 
-  // Map Convex camelCase → legacy snake_case interface expected by components
-  const mapped: PendingApproval[] | undefined =
-    result === undefined
-      ? undefined
-      : result.map((a) => ({
-          id: a._id,
-          trader_id: a.traderId,
-          deal_id: a.dealId,
-          desk_manager_id: a.deskManagerId,
-          status: a.status,
-          entry_cost_usdc: a.entryCostUsdc,
-          pot_usdc: a.potUsdc,
-          expires_at: new Date(a.expiresAt).toISOString(),
-          resolved_at: a.resolvedAt
-            ? new Date(a.resolvedAt).toISOString()
-            : null,
-          created_at: new Date(a.createdAt).toISOString(),
-          trader_name: a.traderName,
-          trader_image_status: a.traderImageStatus ?? null,
-          trader_profile_image_url: a.traderProfileImageUrl ?? null,
-          deal_prompt: a.dealPrompt,
-          deal_pot_usdc: a.dealPotUsdc,
-        }));
+  const mapped =
+    result === undefined ? undefined : result.map(mapConvexPendingApproval);
 
   return {
     data: mapped,
