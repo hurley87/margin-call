@@ -31,6 +31,8 @@ import type * as lib_profileImage from "../lib/profileImage.js";
 import type * as marketNarratives from "../marketNarratives.js";
 import type * as me from "../me.js";
 import type * as portfolio from "../portfolio.js";
+import type * as portraitActions from "../portraitActions.js";
+import type * as portraits from "../portraits.js";
 import type * as seasons from "../seasons.js";
 import type * as seeds_systemPrompts from "../seeds/systemPrompts.js";
 import type * as seeds_wireSeason01 from "../seeds/wireSeason01.js";
@@ -80,6 +82,8 @@ declare const fullApi: ApiFromModules<{
   marketNarratives: typeof marketNarratives;
   me: typeof me;
   portfolio: typeof portfolio;
+  portraitActions: typeof portraitActions;
+  portraits: typeof portraits;
   seasons: typeof seasons;
   "seeds/systemPrompts": typeof seeds_systemPrompts;
   "seeds/wireSeason01": typeof seeds_wireSeason01;

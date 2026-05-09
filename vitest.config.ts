@@ -4,10 +4,11 @@ import path from "path";
 export default defineConfig({
   test: {
     environment: "node",
-    // Skip scheduling wallet:createForTrader during Vitest — convex-test executes
-    // that internal action with incomplete transaction context (runQuery throws).
+    // Skip async creation side effects during Vitest — convex-test executes
+    // scheduled actions with incomplete external runtime context.
     env: {
       MC_SKIP_WALLET_SCHEDULE: "1",
+      MC_SKIP_PORTRAIT_SCHEDULE: "1",
     },
     include: [
       "src/**/*.test.ts",

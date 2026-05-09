@@ -384,15 +384,23 @@ export const create = mutation({
       updatedAt: now,
     });
 
-    // Schedule wallet creation as an internal action (no CDP inside mutations).
-    // Vitest sets MC_SKIP_WALLET_SCHEDULE (see vitest.config.ts):
-    // convex-test runs scheduled actions without a full transaction context, so
-    // createForTrader's ctx.runQuery fails with "Transaction not started" and
-    // spams stderr — behavior tests seed traders directly or use markCreating instead.
-    if (process.env.MC_SKIP_WALLET_SCHEDULE !== "1") {
+    // Vitest sets MC_SKIP_* (vitest.config.ts): convex-test runs scheduled work
+    // without full runtime context, so wallet/portrait actions are skipped
+    // there; integration relies on seeded traders or internal helpers.
+    const skipWalletSchedule = process.env.MC_SKIP_WALLET_SCHEDULE === "1";
+    const skipPortraitSchedule = process.env.MC_SKIP_PORTRAIT_SCHEDULE === "1";
+
+    if (!skipWalletSchedule) {
       await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
         traderId,
       });
+    }
+    if (!skipPortraitSchedule) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.portraitActions.generateForTrader,
+        { traderId }
+      );
     }
 
     return traderId;

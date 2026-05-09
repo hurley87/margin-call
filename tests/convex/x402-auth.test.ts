@@ -452,6 +452,95 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     expect(traders[0].profileImageUrl).toBe("/trader-placeholder.svg");
   });
 
+  it("portrait internals transition generating trader to ready after storage succeeds", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+    const traderId = await seedActiveTrader(t, dmId, {
+      name: "Ready Internal Trader",
+      ownerSubject: mockIdentity.subject,
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(traderId as never, {
+        imageStatus: "pending",
+        imagePrompt: "Generate a 1987 Wall Street trader portrait.",
+        imagePromptSource: { version: 1 },
+        imageStyleSeed: "portrait-v1-ready",
+        imageVariant: "execution_desk",
+        imageRetryCount: 0,
+      });
+    });
+
+    const mark = await t.mutation(internal.portraits.markGenerating, {
+      traderId: traderId as never,
+    });
+    expect(mark).toEqual({ ok: true });
+
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(["portrait"], { type: "image/png" }))
+    );
+    await t.mutation(internal.portraits.applyGeneratedImage, {
+      traderId: traderId as never,
+      profileImageStorageId: storageId as never,
+    });
+
+    const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.imageStatus).toBe("ready");
+    expect(trader?.profileImageStorageId).toBe(storageId);
+    expect(trader?.imageError).toBeUndefined();
+    expect(trader?.walletStatus).toBe("ready");
+  });
+
+  it("portrait internals retry failures up to the cap before marking error", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+    const traderId = await seedActiveTrader(t, dmId, {
+      name: "Retry Internal Trader",
+      ownerSubject: mockIdentity.subject,
+    });
+    await t.run(async (ctx) => {
+      await ctx.db.patch(traderId as never, {
+        imageStatus: "generating",
+        imagePrompt: "Generate a 1987 Wall Street trader portrait.",
+        imageRetryCount: 0,
+      });
+    });
+
+    const first = await t.mutation(internal.portraits.applyGenerationFailure, {
+      traderId: traderId as never,
+      error: "private provider failure one",
+    });
+    expect(first.shouldRetry).toBe(true);
+    let trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.imageStatus).toBe("pending");
+    expect(trader?.imageRetryCount).toBe(1);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(traderId as never, { imageStatus: "generating" });
+    });
+    const second = await t.mutation(internal.portraits.applyGenerationFailure, {
+      traderId: traderId as never,
+      error: "private provider failure two",
+    });
+    expect(second.shouldRetry).toBe(true);
+    trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.imageStatus).toBe("pending");
+    expect(trader?.imageRetryCount).toBe(2);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(traderId as never, { imageStatus: "generating" });
+    });
+    const third = await t.mutation(internal.portraits.applyGenerationFailure, {
+      traderId: traderId as never,
+      error: "private provider failure three",
+    });
+    expect(third.shouldRetry).toBe(false);
+    trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.imageStatus).toBe("error");
+    expect(trader?.imageRetryCount).toBe(3);
+    expect(trader?.imageError).toBe("private provider failure three");
+    expect(trader?.walletStatus).toBe("ready");
+  });
+
   it("traders.getPublicMetadata returns curated fallback metadata without auth", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
