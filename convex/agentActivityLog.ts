@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
+import { resolveTraderProfileImageUrl } from "./lib/profileImage";
 
 // ── Public queries ─────────────────────────────────────────────────────────
 
@@ -54,8 +55,6 @@ export const listForDesk = query({
 
     if (traders.length === 0) return [];
 
-    const traderIds = new Set(traders.map((t) => t._id));
-
     // Collect activity for all owned traders
     const allActivity = (
       await Promise.all(
@@ -72,14 +71,27 @@ export const listForDesk = query({
     // Sort merged results newest-first
     allActivity.sort((a, b) => b.createdAt - a.createdAt);
 
-    // Build traderNames map
+    // Build trader identity maps
     const traderNames: Record<string, string> = {};
-    for (const t of traders) {
-      if (traderIds.has(t._id)) traderNames[t._id] = t.name;
+    const traderProfiles: Record<
+      string,
+      {
+        name: string;
+        imageStatus: "pending" | "generating" | "ready" | "error" | null;
+        profileImageUrl: string;
+      }
+    > = {};
+    for (const trader of traders) {
+      traderNames[trader._id] = trader.name;
+      traderProfiles[trader._id] = {
+        name: trader.name,
+        imageStatus: trader.imageStatus ?? null,
+        profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
+      };
     }
 
     const limited = limit ? allActivity.slice(0, limit) : allActivity;
-    return { activity: limited, traderNames };
+    return { activity: limited, traderNames, traderProfiles };
   },
 });
 
@@ -94,14 +106,29 @@ export const listRecentGlobal = query({
       .take(limit);
 
     const traderNames: Record<string, string> = {};
+    const traderProfiles: Record<
+      string,
+      {
+        name: string;
+        imageStatus: "pending" | "generating" | "ready" | "error" | null;
+        profileImageUrl: string;
+      }
+    > = {};
     for (const e of entries) {
       const tid = String(e.traderId);
-      if (traderNames[tid]) continue;
+      if (traderProfiles[tid]) continue;
       const trader = await ctx.db.get(e.traderId);
-      if (trader) traderNames[tid] = trader.name;
+      if (trader) {
+        traderNames[tid] = trader.name;
+        traderProfiles[tid] = {
+          name: trader.name,
+          imageStatus: trader.imageStatus ?? null,
+          profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
+        };
+      }
     }
 
-    return { entries, traderNames };
+    return { entries, traderNames, traderProfiles };
   },
 });
 

@@ -4,9 +4,16 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { AgentActivity } from "./use-agent";
 
+export type TraderProfile = {
+  name: string;
+  imageStatus?: "pending" | "generating" | "ready" | "error" | null;
+  profileImageUrl?: string | null;
+};
+
 export interface ActivityFeedData {
   activity: AgentActivity[];
   traderNames: Record<string, string>;
+  traderProfiles: Record<string, TraderProfile>;
 }
 
 /**
@@ -24,11 +31,10 @@ export function useActivityFeed(): {
     return { data: undefined, isLoading: true, isError: false };
   }
 
-  // listForDesk returns { activity, traderNames } | []
-  // When no desk manager is found, returns []
+  // Unauthenticated or no desk row: Convex returns [] instead of the object shape.
   if (Array.isArray(result)) {
     return {
-      data: { activity: [], traderNames: {} },
+      data: { activity: [], traderNames: {}, traderProfiles: {} },
       isLoading: false,
       isError: false,
     };
@@ -49,6 +55,7 @@ export function useActivityFeed(): {
     data: {
       activity,
       traderNames: result.traderNames as Record<string, string>,
+      traderProfiles: result.traderProfiles as Record<string, TraderProfile>,
     },
     isLoading: false,
     isError: false,

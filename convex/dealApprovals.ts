@@ -3,8 +3,36 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { resolveTraderProfileImageUrl } from "./lib/profileImage";
+
+async function finalizePendingApproval(
+  ctx: MutationCtx,
+  approvalId: Id<"dealApprovals">,
+  approval: Doc<"dealApprovals">,
+  now: number,
+  successStatus: "approved" | "rejected"
+) {
+  if (approval.status === successStatus) return approval;
+  if (approval.status !== "pending") return approval;
+
+  if (approval.expiresAt <= now) {
+    await ctx.db.patch(approvalId, {
+      status: "expired",
+      resolvedAt: now,
+    });
+    return { ...approval, status: "expired" as const, resolvedAt: now };
+  }
+
+  await ctx.db.patch(approvalId, {
+    status: successStatus,
+    resolvedAt: now,
+  });
+  return { ...approval, status: successStatus, resolvedAt: now };
+}
 
 // ── Public queries ─────────────────────────────────────────────────────────
 
@@ -31,7 +59,7 @@ export const listPending = query({
       .order("desc")
       .collect();
 
-    const result = await Promise.all(
+    return Promise.all(
       approvals.map(async (approval) => {
         const [trader, deal] = await Promise.all([
           ctx.db.get(approval.traderId),
@@ -40,13 +68,15 @@ export const listPending = query({
         return {
           ...approval,
           traderName: trader?.name ?? "Unknown",
+          traderImageStatus: trader?.imageStatus ?? null,
+          traderProfileImageUrl: trader
+            ? await resolveTraderProfileImageUrl(ctx, trader)
+            : null,
           dealPrompt: deal?.prompt ?? "",
           dealPotUsdc: deal?.potUsdc ?? 0,
         };
       })
     );
-
-    return result;
   },
 });
 
@@ -95,27 +125,7 @@ export const approve = mutation({
       throw new Error("Not authorized for this approval");
 
     const now = Date.now();
-
-    if (approval.status === "approved") return approval;
-
-    if (approval.status !== "pending") {
-      return approval;
-    }
-
-    if (approval.expiresAt <= now) {
-      await ctx.db.patch(approvalId, {
-        status: "expired",
-        resolvedAt: now,
-      });
-      return { ...approval, status: "expired", resolvedAt: now };
-    }
-
-    await ctx.db.patch(approvalId, {
-      status: "approved",
-      resolvedAt: now,
-    });
-
-    return { ...approval, status: "approved", resolvedAt: now };
+    return finalizePendingApproval(ctx, approvalId, approval, now, "approved");
   },
 });
 
@@ -146,27 +156,7 @@ export const reject = mutation({
       throw new Error("Not authorized for this approval");
 
     const now = Date.now();
-
-    if (approval.status === "rejected") return approval;
-
-    if (approval.status !== "pending") {
-      return approval;
-    }
-
-    if (approval.expiresAt <= now) {
-      await ctx.db.patch(approvalId, {
-        status: "expired",
-        resolvedAt: now,
-      });
-      return { ...approval, status: "expired", resolvedAt: now };
-    }
-
-    await ctx.db.patch(approvalId, {
-      status: "rejected",
-      resolvedAt: now,
-    });
-
-    return { ...approval, status: "rejected", resolvedAt: now };
+    return finalizePendingApproval(ctx, approvalId, approval, now, "rejected");
   },
 });
 

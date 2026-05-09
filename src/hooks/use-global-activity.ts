@@ -3,10 +3,12 @@
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { AgentActivity } from "./use-agent";
+import type { TraderProfile } from "./use-activity-feed";
 
 export interface GlobalActivityData {
   activity: AgentActivity[];
   traderNames: Record<string, string>;
+  traderProfiles: Record<string, TraderProfile>;
 }
 
 /** Global activity feed (leaderboard) — Convex subscription, no TanStack. */
@@ -33,6 +35,7 @@ export function useGlobalActivity() {
     data: {
       activity,
       traderNames: result.traderNames,
+      traderProfiles: result.traderProfiles,
     } satisfies GlobalActivityData,
     isLoading: false,
     isError: false,
