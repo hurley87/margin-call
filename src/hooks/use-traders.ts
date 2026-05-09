@@ -5,6 +5,30 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 
+type TraderReadModel = Pick<
+  Doc<"traders">,
+  | "_id"
+  | "name"
+  | "tokenId"
+  | "tbaAddress"
+  | "cdpWalletAddress"
+  | "cdpOwnerAddress"
+  | "cdpAccountName"
+  | "status"
+  | "mandate"
+  | "personality"
+  | "imageStatus"
+  | "escrowBalanceUsdc"
+  | "walletStatus"
+  | "walletError"
+  | "lastCycleAt"
+  | "cycleLeaseUntil"
+  | "createdAt"
+  | "updatedAt"
+> & {
+  profileImageUrl: string;
+};
+
 export interface Trader {
   id: string;
   token_id: number;
@@ -17,6 +41,8 @@ export interface Trader {
   status: "active" | "paused" | "wiped_out";
   mandate: Record<string, unknown>;
   personality: string | null;
+  image_status: TraderReadModel["imageStatus"] | null;
+  profile_image_url: string;
   escrow_balance_usdc: number;
   wallet_status: Doc<"traders">["walletStatus"];
   wallet_error: string | null;
@@ -28,7 +54,7 @@ export interface Trader {
   updated_at: string;
 }
 
-function mapTrader(doc: Doc<"traders">, ownerAddress: string): Trader {
+function mapTrader(doc: TraderReadModel, ownerAddress: string): Trader {
   return {
     id: doc._id,
     token_id: doc.tokenId ?? 0,
@@ -41,6 +67,8 @@ function mapTrader(doc: Doc<"traders">, ownerAddress: string): Trader {
     status: doc.status,
     mandate: (doc.mandate as Record<string, unknown>) ?? {},
     personality: doc.personality ?? null,
+    image_status: doc.imageStatus ?? null,
+    profile_image_url: doc.profileImageUrl,
     escrow_balance_usdc: doc.escrowBalanceUsdc ?? 0,
     wallet_status: doc.walletStatus,
     wallet_error: doc.walletError ?? null,
@@ -56,14 +84,9 @@ function mapTrader(doc: Doc<"traders">, ownerAddress: string): Trader {
 
 export function useTraders() {
   const { authenticated, ready } = usePrivy();
-  const rows = useQuery(
-    api.traders.listByDesk,
-    authenticated && ready ? {} : "skip"
-  );
-  const dm = useQuery(
-    api.deskManagers.getMe,
-    authenticated && ready ? {} : "skip"
-  );
+  const canFetch = authenticated && ready;
+  const rows = useQuery(api.traders.listByDesk, canFetch ? {} : "skip");
+  const dm = useQuery(api.deskManagers.getMe, canFetch ? {} : "skip");
 
   if (!ready) {
     return { data: undefined, isLoading: true, isError: false };
@@ -87,14 +110,12 @@ export function useTraders() {
 
 export function useTrader(id: string) {
   const { authenticated, ready } = usePrivy();
+  const canFetch = Boolean(id) && authenticated && ready;
   const traderDoc = useQuery(
     api.traders.getById,
-    id && authenticated && ready ? { traderId: id as Id<"traders"> } : "skip"
+    canFetch ? { traderId: id as Id<"traders"> } : "skip"
   );
-  const dm = useQuery(
-    api.deskManagers.getMe,
-    id && authenticated && ready ? {} : "skip"
-  );
+  const dm = useQuery(api.deskManagers.getMe, canFetch ? {} : "skip");
 
   if (!id) {
     return {

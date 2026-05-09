@@ -390,6 +390,97 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     expect(traderId).toBeTruthy();
   });
 
+  it("traders.create initializes pending deterministic portrait fields", async () => {
+    const t = convexTest(schema, modules);
+    const authed = t.withIdentity(mockIdentity);
+
+    await authed.mutation(api.deskManagers.upsertMe, {
+      walletAddress: "0xtest",
+      displayName: "Test User",
+    });
+
+    const mandate = { max_entry_cost_usdc: 50, keywords: ["merger"] };
+    const traderId = await authed.mutation(api.traders.create, {
+      name: "Portrait Trader",
+      mandate,
+      personality: "Aggressive merger arbitrage specialist",
+    });
+
+    const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.imageStatus).toBe("pending");
+    expect(trader?.imageRetryCount).toBe(0);
+    expect(trader?.metadataVersion).toBe(1);
+    expect(trader?.imagePrompt).toContain("1987 Wall Street trader");
+    expect(trader?.imagePrompt).toContain("Portrait Trader");
+    expect(trader?.imageStyleSeed).toMatch(/^portrait-v1-/);
+    expect(trader?.imageVariant).toEqual(expect.any(String));
+    expect(trader?.imagePromptSource).toMatchObject({
+      version: 1,
+      traderName: "Portrait Trader",
+      mandateSnapshot: mandate,
+      personalitySnapshot: "Aggressive merger arbitrage specialist",
+    });
+    expect(trader?.walletStatus).toBe("pending");
+  });
+
+  it("traders schema accepts optional portrait state on the existing table", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+
+    const traderId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return ctx.db.insert("traders", {
+        deskManagerId: dmId as never,
+        ownerSubject: mockIdentity.subject,
+        name: "Schema Portrait Trader",
+        status: "active",
+        mandate: {},
+        personality: "Test personality",
+        imageStatus: "generating",
+        imagePrompt: "Generate a 1987 Wall Street trader portrait.",
+        imagePromptSource: { version: 1, traderName: "Schema Portrait Trader" },
+        imageStyleSeed: "portrait-v1-test",
+        imageVariant: "macro_analyst",
+        imageRetryCount: 1,
+        imageLastAttemptAt: now,
+        imageError: "temporary failure",
+        metadataVersion: 1,
+        walletStatus: "pending",
+        escrowBalanceUsdc: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(trader?.imageStatus).toBe("generating");
+    expect(trader?.imageVariant).toBe("macro_analyst");
+    expect(trader?.imageRetryCount).toBe(1);
+    expect(trader?.metadataVersion).toBe(1);
+  });
+
+  it("trader read queries return fallback profile image URL while portrait is pending", async () => {
+    const t = convexTest(schema, modules);
+    const authed = t.withIdentity(mockIdentity);
+
+    await authed.mutation(api.deskManagers.upsertMe, {
+      walletAddress: "0xtest",
+    });
+
+    const traderId = await authed.mutation(api.traders.create, {
+      name: "Fallback Trader",
+    });
+
+    const trader = await authed.query(api.traders.getById, {
+      traderId: traderId as never,
+    });
+    expect(trader?.profileImageUrl).toBe("/trader-placeholder.svg");
+
+    const traders = await authed.query(api.traders.listByDesk, {});
+    expect(traders).toHaveLength(1);
+    expect(traders[0].profileImageUrl).toBe("/trader-placeholder.svg");
+  });
+
   it("traders.listByDesk returns owned traders for authenticated caller", async () => {
     const t = convexTest(schema, modules);
     const authed = t.withIdentity(mockIdentity);
