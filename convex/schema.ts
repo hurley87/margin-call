@@ -25,6 +25,23 @@ export default defineSchema({
     ),
     mandate: v.optional(v.any()),
     personality: v.optional(v.string()),
+    profileImageStorageId: v.optional(v.id("_storage")),
+    imageStatus: v.optional(
+      v.union(
+        v.literal("pending"),
+        v.literal("generating"),
+        v.literal("ready"),
+        v.literal("error")
+      )
+    ),
+    imagePrompt: v.optional(v.string()),
+    imagePromptSource: v.optional(v.any()),
+    imageStyleSeed: v.optional(v.string()),
+    imageVariant: v.optional(v.string()),
+    imageRetryCount: v.optional(v.number()),
+    imageLastAttemptAt: v.optional(v.number()),
+    imageError: v.optional(v.string()),
+    metadataVersion: v.optional(v.number()),
     escrowBalanceUsdc: v.optional(v.number()),
     /** Last deal outcome applied to escrow (idempotency for applyOutcomeBalance). */
     lastOutcomeId: v.optional(v.id("dealOutcomes")),

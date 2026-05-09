@@ -745,6 +745,20 @@ function NewswireItem({
   );
 }
 
+function tradingDeskPanelMeta(
+  showingDeals: boolean,
+  dealsLoading: boolean,
+  dealCount: number,
+  traderCount: number
+): string {
+  if (showingDeals) {
+    return dealsLoading
+      ? "WAIT"
+      : `${dealCount} DEAL${dealCount === 1 ? "" : "S"}`;
+  }
+  return `${traderCount} TRADER${traderCount === 1 ? "" : "S"}`;
+}
+
 function TradingDeskPanel({
   nowMs,
   portfolio,
@@ -769,14 +783,12 @@ function TradingDeskPanel({
   const [deskView, setDeskView] = useState<"traders" | "deals">("traders");
   const showingDeals = deskView === "deals";
 
-  let deskPanelMeta: string;
-  if (showingDeals) {
-    deskPanelMeta = dealsLoading
-      ? "WAIT"
-      : `${deskDeals.length} DEAL${deskDeals.length === 1 ? "" : "S"}`;
-  } else {
-    deskPanelMeta = `${traders.length} TRADER${traders.length === 1 ? "" : "S"}`;
-  }
+  const deskPanelMeta = tradingDeskPanelMeta(
+    showingDeals,
+    dealsLoading,
+    deskDeals.length,
+    traders.length
+  );
 
   return (
     <section className="terminal-panel flex min-h-0 flex-col overflow-hidden">
@@ -916,6 +928,8 @@ function DeskTradersView({
           nowMs
         );
         const role = DESK_ROLES[index % DESK_ROLES.length];
+        const showingFallbackPortrait =
+          trader.profile_image_url.includes("trader-placeholder");
 
         return (
           <button
@@ -925,11 +939,17 @@ function DeskTradersView({
             className="group min-w-0 border border-[var(--t-divider)] bg-[#070b09] text-left transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none"
           >
             <div className="relative aspect-[5/4] overflow-hidden border-b border-[var(--t-divider)] bg-[linear-gradient(135deg,rgba(104,166,82,0.16),rgba(218,173,94,0.08)_45%,rgba(0,0,0,0.42))]">
+              <div
+                className="absolute inset-0 bg-cover bg-center opacity-90"
+                style={{ backgroundImage: `url(${trader.profile_image_url})` }}
+              />
               <div className="absolute inset-0 crt-line-grid opacity-45" />
               <div className="absolute right-2 top-2 h-2 w-2 bg-[var(--t-green)] shadow-[0_0_10px_var(--t-green)]" />
-              <div className="absolute inset-x-0 bottom-4 text-center font-[family-name:var(--font-plex-sans)] text-4xl font-black text-[var(--t-accent)]/80">
-                {initials(trader.name)}
-              </div>
+              {showingFallbackPortrait ? (
+                <div className="absolute inset-x-0 bottom-4 text-center font-[family-name:var(--font-plex-sans)] text-4xl font-black text-[var(--t-accent)]/80">
+                  {initials(trader.name)}
+                </div>
+              ) : null}
             </div>
             <div className="space-y-2 px-3 py-3">
               <div>

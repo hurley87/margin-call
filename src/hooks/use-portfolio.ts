@@ -11,6 +11,8 @@ export interface TraderSummary {
   last_cycle_at?: number;
   cycle_lease_until?: number;
   wallet_error?: string;
+  image_status?: "pending" | "generating" | "ready" | "error";
+  profile_image_url: string;
   escrow_usdc: number;
   asset_value_usdc: number;
   total_value_usdc: number;
@@ -55,6 +57,8 @@ export function usePortfolio(): {
       last_cycle_at: t.lastCycleAt,
       cycle_lease_until: t.cycleLeaseUntil,
       wallet_error: t.walletError,
+      image_status: t.imageStatus,
+      profile_image_url: t.profileImageUrl,
       escrow_usdc: t.escrowUsdc,
       asset_value_usdc: t.assetValueUsdc,
       total_value_usdc: t.totalValueUsdc,

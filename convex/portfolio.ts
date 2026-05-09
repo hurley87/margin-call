@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import { resolveTraderProfileImageUrl } from "./lib/profileImage";
 
 type DeskPortfolio = {
   totalValueUsdc: number;
@@ -11,6 +12,8 @@ type DeskPortfolio = {
     lastCycleAt?: number;
     cycleLeaseUntil?: number;
     walletError?: string;
+    imageStatus?: Doc<"traders">["imageStatus"];
+    profileImageUrl: string;
     escrowUsdc: number;
     assetValueUsdc: number;
     totalValueUsdc: number;
@@ -70,7 +73,8 @@ export const forDesk = query({
             .collect(),
         ]);
         const assetSum = assets.reduce((s, a) => s + (a.valueUsdc ?? 0), 0);
-        return { tr, assetSum, outs };
+        const profileImageUrl = await resolveTraderProfileImageUrl(ctx, tr);
+        return { tr, assetSum, outs, profileImageUrl };
       })
     );
 
@@ -109,7 +113,7 @@ export const forDesk = query({
 
     let totalValueUsdc = 0;
     const traderSummaries: DeskPortfolio["traders"] = perTrader.map(
-      ({ tr, assetSum }) => {
+      ({ tr, assetSum, profileImageUrl }) => {
         const escrow = tr.escrowBalanceUsdc ?? 0;
         const total = escrow + assetSum;
         totalValueUsdc += total;
@@ -121,6 +125,8 @@ export const forDesk = query({
           lastCycleAt: tr.lastCycleAt,
           cycleLeaseUntil: tr.cycleLeaseUntil,
           walletError: tr.walletError,
+          imageStatus: tr.imageStatus,
+          profileImageUrl,
           escrowUsdc: escrow,
           assetValueUsdc: assetSum,
           totalValueUsdc: total,
