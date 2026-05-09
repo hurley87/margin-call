@@ -3,6 +3,7 @@
 import { internalAction } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { buildTraderMetadataUrl } from "../src/lib/trader-metadata";
 
 /**
  * Required Convex env vars:
@@ -10,6 +11,7 @@ import { internal } from "./_generated/api";
  *   CDP_API_KEY_SECRET    — Coinbase CDP API key secret (PEM)
  *   CDP_WALLET_SECRET     — Coinbase CDP wallet encryption secret
  *   IDENTITY_REGISTRY_ADDRESS — ERC-8004 identity registry contract address
+ *   NEXT_PUBLIC_APP_URL   — public app URL used for ERC-721 metadata
  *
  * Set via: npx convex env set CDP_API_KEY_ID <value>
  *          npx convex env set CDP_API_KEY_SECRET <value>
@@ -60,10 +62,11 @@ export const createForTrader = internalAction({
       const identityRegistryAddress = requireEnv(
         "IDENTITY_REGISTRY_ADDRESS"
       ) as `0x${string}`;
+      const appUrl = requireEnv("NEXT_PUBLIC_APP_URL");
 
       const { CdpClient } = await import("@coinbase/cdp-sdk");
-      const { encodeFunctionData } = await import("viem");
-      const { createPublicClient, http, decodeEventLog } = await import("viem");
+      const { createPublicClient, decodeEventLog, encodeFunctionData, http } =
+        await import("viem");
       const { baseSepolia } = await import("viem/chains");
 
       const cdp = new CdpClient({
@@ -114,7 +117,7 @@ export const createForTrader = internalAction({
       });
 
       // Step 2: Mint ERC-8004 identity NFT
-      const agentURI = `data:application/json,${JSON.stringify({ name: trader.name })}`;
+      const agentURI = buildTraderMetadataUrl(appUrl, traderId);
       const mintData = encodeFunctionData({
         abi: identityRegistryAbi,
         functionName: "register",
