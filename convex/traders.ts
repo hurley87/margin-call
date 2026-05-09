@@ -131,6 +131,20 @@ async function resolveReadyProfileImageUrl(
   return (await ctx.storage.getUrl(trader.profileImageStorageId)) ?? null;
 }
 
+/** Shared slice for unauthenticated trader surfaces (metadata + public profile). */
+async function publicTraderBasics(ctx: QueryCtx, trader: Doc<"traders">) {
+  return {
+    traderId: trader._id,
+    name: trader.name,
+    status: trader.status,
+    portraitStatus: trader.imageStatus ?? "pending",
+    archetype: humanizeImageVariant(trader.imageVariant),
+    riskProfile: deriveRiskProfile(trader.mandate),
+    tokenId: trader.tokenId ?? null,
+    profileImageUrl: await resolveReadyProfileImageUrl(ctx, trader),
+  };
+}
+
 /** Public: list traders owned by the calling desk manager. */
 export const listByDesk = query({
   args: {},
@@ -167,16 +181,38 @@ export const getPublicMetadata = query({
   handler: async (ctx, { traderId }) => {
     const trader = await ctx.db.get(traderId);
     if (!trader) return null;
+    return publicTraderBasics(ctx, trader);
+  },
+});
 
+/**
+ * Public: curated trader profile read model for read-only profile pages.
+ * This intentionally excludes owner, desk manager, wallet internals, mandate,
+ * personality, raw portrait prompt/source, errors, lease fields, metadata blobs,
+ * and private controls.
+ */
+export const getPublicProfile = query({
+  args: { traderId: v.id("traders") },
+  handler: async (ctx, { traderId }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return null;
+
+    const recentActivity = await ctx.db
+      .query("agentActivityLog")
+      .withIndex("byTraderAndCreatedAt", (q) => q.eq("traderId", traderId))
+      .order("desc")
+      .take(5);
+
+    const basics = await publicTraderBasics(ctx, trader);
     return {
-      traderId: trader._id,
-      name: trader.name,
-      status: trader.status,
-      portraitStatus: trader.imageStatus ?? "pending",
-      archetype: humanizeImageVariant(trader.imageVariant),
-      riskProfile: deriveRiskProfile(trader.mandate),
-      tokenId: trader.tokenId ?? null,
-      profileImageUrl: await resolveReadyProfileImageUrl(ctx, trader),
+      ...basics,
+      escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,
+      recentActivity: recentActivity.map((entry) => ({
+        activityType: entry.activityType,
+        message: entry.message,
+        dealId: entry.dealId ?? null,
+        createdAt: entry.createdAt,
+      })),
     };
   },
 });
