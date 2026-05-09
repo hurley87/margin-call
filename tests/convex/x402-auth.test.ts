@@ -14,7 +14,7 @@ import { describe, it, expect } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { internal, api } from "../../convex/_generated/api";
-import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
@@ -525,6 +525,159 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     expect(trader?.profileImageUrl).toContain(
       "https://some-deployment.convex.cloud/api/storage/"
     );
+  });
+
+  it("traders.getPublicProfile returns a curated pending profile with public activity", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+    const traderId = await seedActiveTrader(t, dmId, {
+      name: "Public Profile Trader",
+      ownerSubject: mockIdentity.subject,
+      escrowBalance: 250,
+      mandate: { bankroll_pct: 20, max_entry_cost_usdc: 100 },
+    });
+    const dealId = await seedDeal(t);
+
+    await t.run(async (ctx) => {
+      const baseTime = 1_800_000_000_000;
+      for (let i = 0; i < 6; i++) {
+        await ctx.db.insert("agentActivityLog", {
+          traderId: traderId as never,
+          activityType: i === 0 ? "cycle_started" : "deal_evaluated",
+          message: `Public-safe activity ${i}`,
+          dealId: dealId as never,
+          metadata: { privateScore: i },
+          dedupeKey: `public-profile-${i}`,
+          createdAt: baseTime + i,
+        });
+      }
+    });
+
+    const trader = await t.query(api.traders.getPublicProfile, {
+      traderId: traderId as never,
+    });
+
+    expect(trader).toMatchObject({
+      traderId,
+      name: "Public Profile Trader",
+      status: "active",
+      tokenId: null,
+      portraitStatus: "pending",
+      archetype: "Wall Street Operator",
+      riskProfile: "Balanced",
+      escrowBalanceUsdc: 250,
+      profileImageUrl: null,
+    });
+    expect(trader?.recentActivity).toHaveLength(5);
+    expect(trader?.recentActivity[0]).toMatchObject({
+      activityType: "deal_evaluated",
+      message: "Public-safe activity 5",
+      dealId,
+      createdAt: 1_800_000_000_005,
+    });
+    expect(trader?.recentActivity[0]).not.toHaveProperty("metadata");
+    expect(trader?.recentActivity[0]).not.toHaveProperty("dedupeKey");
+    expect(trader).not.toHaveProperty("ownerSubject");
+    expect(trader).not.toHaveProperty("deskManagerId");
+    expect(trader).not.toHaveProperty("mandate");
+    expect(trader).not.toHaveProperty("personality");
+    expect(trader).not.toHaveProperty("cdpWalletAddress");
+    expect(trader).not.toHaveProperty("cdpOwnerAddress");
+    expect(trader).not.toHaveProperty("walletError");
+    expect(trader).not.toHaveProperty("imagePrompt");
+    expect(trader).not.toHaveProperty("imagePromptSource");
+    expect(trader).not.toHaveProperty("imageError");
+    expect(trader).not.toHaveProperty("cycleLeaseUntil");
+  });
+
+  it("traders.getPublicProfile returns ready portrait URL without private fields", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(["profile"], { type: "image/png" }))
+    );
+    const traderId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return ctx.db.insert("traders", {
+        deskManagerId: dmId as never,
+        ownerSubject: mockIdentity.subject,
+        name: "Ready Public Trader",
+        status: "active",
+        mandate: { bankroll_pct: 55 },
+        personality: "Do not expose this full personality text.",
+        profileImageStorageId: storageId,
+        imageStatus: "ready",
+        imageVariant: "execution_desk",
+        imagePrompt: "Private prompt",
+        imagePromptSource: { private: true },
+        walletStatus: "ready",
+        cdpWalletAddress: "0xwallet",
+        cdpOwnerAddress: "0xowner",
+        escrowBalanceUsdc: 1200,
+        tokenId: 77,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const trader = await t.query(api.traders.getPublicProfile, {
+      traderId: traderId as never,
+    });
+
+    expect(trader).toMatchObject({
+      traderId,
+      name: "Ready Public Trader",
+      portraitStatus: "ready",
+      archetype: "Execution Desk",
+      riskProfile: "Aggressive",
+      escrowBalanceUsdc: 1200,
+      tokenId: 77,
+      recentActivity: [],
+    });
+    expect(trader?.profileImageUrl).toContain(
+      "https://some-deployment.convex.cloud/api/storage/"
+    );
+    expect(trader).not.toHaveProperty("personality");
+    expect(trader).not.toHaveProperty("imagePrompt");
+    expect(trader).not.toHaveProperty("imagePromptSource");
+    expect(trader).not.toHaveProperty("cdpWalletAddress");
+  });
+
+  it("traders.getPublicProfile renders error portrait state without raw errors", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
+    const traderId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return ctx.db.insert("traders", {
+        deskManagerId: dmId as never,
+        ownerSubject: mockIdentity.subject,
+        name: "Error Portrait Trader",
+        status: "paused",
+        mandate: { bankroll_pct: 5 },
+        imageStatus: "error",
+        imageError: "Provider returned private failure details.",
+        walletStatus: "error",
+        walletError: "Wallet private failure details.",
+        escrowBalanceUsdc: 0,
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const trader = await t.query(api.traders.getPublicProfile, {
+      traderId: traderId as never,
+    });
+
+    expect(trader).toMatchObject({
+      traderId,
+      name: "Error Portrait Trader",
+      status: "paused",
+      portraitStatus: "error",
+      riskProfile: "Conservative",
+      profileImageUrl: null,
+    });
+    expect(trader).not.toHaveProperty("imageError");
+    expect(trader).not.toHaveProperty("walletError");
   });
 
   it("traders.listByDesk returns owned traders for authenticated caller", async () => {
