@@ -8,7 +8,10 @@ import {
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
-import { resolveTraderProfileImageUrl } from "./lib/profileImage";
+import {
+  resolveReadyProfileImageUrl,
+  resolveTraderProfileImageUrl,
+} from "./lib/profileImage";
 
 const PORTRAIT_METADATA_VERSION = 1;
 const BASE_PORTRAIT_PROMPT =
@@ -118,17 +121,6 @@ function deriveRiskProfile(mandate: unknown): string {
     return "Conservative";
   }
   return "Balanced";
-}
-
-async function resolveReadyProfileImageUrl(
-  ctx: QueryCtx,
-  trader: Doc<"traders">
-): Promise<string | null> {
-  if (trader.imageStatus !== "ready" || !trader.profileImageStorageId) {
-    return null;
-  }
-
-  return (await ctx.storage.getUrl(trader.profileImageStorageId)) ?? null;
 }
 
 /** Shared slice for unauthenticated trader surfaces (metadata + public profile). */

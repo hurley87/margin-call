@@ -11,18 +11,14 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { convexTest } from "convex-test";
-import schema from "../../convex/schema";
 import { internal, api } from "../../convex/_generated/api";
-import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
-
-const modules = import.meta.glob("../../convex/**/*.ts");
+import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
 
 // ── x402 verified path ────────────────────────────────────────────────────────
 
 describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
   it("records a verified entry for a new paymentId", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t);
@@ -44,7 +40,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
   });
 
   it("duplicate paymentId returns existing id without creating a second row", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t);
@@ -76,7 +72,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
   });
 
   it("increments deal entryCount on first verified entry", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t);
@@ -97,7 +93,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
   });
 
   it("duplicate paymentId does NOT increment entryCount a second time", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t);
@@ -121,7 +117,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
   });
 
   it("different paymentIds create separate entries and increment count each time", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const trader1 = await seedActiveTrader(t, dmId, { name: "T1" });
     const trader2 = await seedActiveTrader(t, dmId, { name: "T2" });
@@ -147,7 +143,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
 
 describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
   it("rejects entry when deal was created by the trader's desk", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t, { creatorDeskManagerId: dmId });
@@ -163,7 +159,7 @@ describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
   });
 
   it("allows entry when deal was created by another desk", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmA = await seedDeskManager(t, { subject: "sub-a" });
     const dmB = await seedDeskManager(t, {
       subject: "sub-b",
@@ -182,7 +178,7 @@ describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
   });
 
   it("allows entry for house deal (no creatorDeskManagerId)", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t);
@@ -214,7 +210,7 @@ describe("x402 boundary: public mutation surface regression", () => {
   it("api.dealEntries does not exist as a public namespace", async () => {
     // dealEntries has no public queries/mutations — only internal.
     // Attempting to access a non-existent public path throws at runtime.
-    const t = convexTest(schema, modules);
+    const t = makeT();
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const dealEntriesPublic = (api as any).dealEntries;
@@ -228,7 +224,7 @@ describe("x402 boundary: public mutation surface regression", () => {
 
   it("internal recordVerifiedEntry succeeds from server path but not from public api", async () => {
     // Double-check: internal path works, public path does not.
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t);
@@ -248,7 +244,7 @@ describe("x402 boundary: public mutation surface regression", () => {
 
 describe("Auth-protected mutations: unauthenticated callers are rejected", () => {
   it("traders.create throws when called without auth", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
 
     await expect(
       t.mutation(api.traders.create, {
@@ -258,7 +254,7 @@ describe("Auth-protected mutations: unauthenticated callers are rejected", () =>
   });
 
   it("traders.listByDesk returns empty array for unauthenticated caller", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     await seedActiveTrader(t, dmId);
 
@@ -267,7 +263,7 @@ describe("Auth-protected mutations: unauthenticated callers are rejected", () =>
   });
 
   it("traders.getById returns null for unauthenticated caller", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
 
@@ -278,7 +274,7 @@ describe("Auth-protected mutations: unauthenticated callers are rejected", () =>
   });
 
   it("deals.listOpen returns empty array for unauthenticated caller", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     await seedDeskManager(t);
     await seedDeal(t);
 
@@ -287,7 +283,7 @@ describe("Auth-protected mutations: unauthenticated callers are rejected", () =>
   });
 
   it("dealApprovals.approve throws when called without auth", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t);
@@ -313,7 +309,7 @@ describe("Auth-protected mutations: unauthenticated callers are rejected", () =>
   });
 
   it("dealApprovals.reject throws when called without auth", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t);
     const traderId = await seedActiveTrader(t, dmId);
     const dealId = await seedDeal(t);
@@ -346,7 +342,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   };
 
   it("traders.create succeeds with valid identity (after upsertMe)", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const authed = t.withIdentity(mockIdentity);
 
     // First upsert the desk manager
@@ -362,7 +358,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders.create initializes pending deterministic portrait fields", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const authed = t.withIdentity(mockIdentity);
 
     await authed.mutation(api.deskManagers.upsertMe, {
@@ -395,7 +391,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders schema accepts optional portrait state on the existing table", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
 
     const traderId = await t.run(async (ctx) => {
@@ -431,7 +427,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("trader read queries return fallback profile image URL while portrait is pending", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const authed = t.withIdentity(mockIdentity);
 
     await authed.mutation(api.deskManagers.upsertMe, {
@@ -453,7 +449,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders.getPublicMetadata returns curated fallback metadata without auth", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
     const traderId = await seedActiveTrader(t, dmId, {
       name: "Public Metadata Trader",
@@ -485,7 +481,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders.getPublicMetadata returns generated portrait URL when ready", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
 
     const storageId = await t.run(async (ctx) =>
@@ -528,7 +524,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders.getPublicProfile returns a curated pending profile with public activity", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
     const traderId = await seedActiveTrader(t, dmId, {
       name: "Public Profile Trader",
@@ -591,7 +587,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders.getPublicProfile returns ready portrait URL without private fields", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
     const storageId = await t.run(async (ctx) =>
       ctx.storage.store(new Blob(["profile"], { type: "image/png" }))
@@ -644,7 +640,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders.getPublicProfile renders error portrait state without raw errors", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t, { subject: mockIdentity.subject });
     const traderId = await t.run(async (ctx) => {
       const now = Date.now();
@@ -681,7 +677,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders.listByDesk returns owned traders for authenticated caller", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const authed = t.withIdentity(mockIdentity);
 
     await authed.mutation(api.deskManagers.upsertMe, {
@@ -695,7 +691,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("traders.listByDesk does not return traders owned by a different subject", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     // Seed trader owned by different subject
     const dm1 = await seedDeskManager(t, { subject: "did:privy:other-user" });
     await seedActiveTrader(t, dm1, {
@@ -709,7 +705,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
   });
 
   it("dealers.approve succeeds for the owning desk manager", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const authed = t.withIdentity(mockIdentity);
 
     // Set up desk manager
@@ -750,7 +746,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
 
 describe("Auth: cross-owner isolation", () => {
   it("dealOutcomes.listByTrader returns empty for non-owner", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t, { subject: "did:privy:owner-001" });
     const traderId = await seedActiveTrader(t, dmId, {
       ownerSubject: "did:privy:owner-001",
@@ -777,7 +773,7 @@ describe("Auth: cross-owner isolation", () => {
   });
 
   it("agentActivityLog.listByTrader returns empty for non-owner", async () => {
-    const t = convexTest(schema, modules);
+    const t = makeT();
     const dmId = await seedDeskManager(t, { subject: "did:privy:owner-001" });
     const traderId = await seedActiveTrader(t, dmId, {
       ownerSubject: "did:privy:owner-001",
