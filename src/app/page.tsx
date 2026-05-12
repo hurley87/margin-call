@@ -27,6 +27,7 @@ import {
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
+import { PublicTraderDialog } from "@/components/public-trader-dialog";
 import { TraderCreationDialog } from "@/components/trader-creation-flow";
 import { TraderDetailDialog } from "@/components/trader-detail";
 import { CreateDealDialog } from "@/components/wire/create-deal-dialog";
@@ -75,19 +76,6 @@ const DESK_ROLES = [
   { role: "Equity Analyst", focus: "Earnings" },
   { role: "Macro Strategist", focus: "Rates" },
   { role: "Arbitrage Lead", focus: "Takeovers" },
-] as const;
-
-const WALL_STREET_FIRMS = [
-  "Goldman Sachs Trading",
-  "Salomon Brothers",
-  "Morgan Stanley Desk",
-  "Drexel Burnham Lambert",
-  "Merrill Lynch Capital",
-  "First Boston",
-  "Bear Stearns",
-  "Kidder Peabody",
-  "Paine Webber Desk",
-  "Shearson Lehman",
 ] as const;
 
 // Fallback copy only appears when Convex has no generated wire epochs yet.
@@ -205,13 +193,22 @@ export default function Home() {
 
   return (
     <>
-      <Dashboard displayName={deskManager.display_name} />
+      <Dashboard
+        displayName={deskManager.display_name}
+        deskWalletAddress={deskManager.wallet_address}
+      />
       {process.env.NODE_ENV === "development" && <ConvexIdentityDebug />}
     </>
   );
 }
 
-function Dashboard({ displayName }: { displayName: string }) {
+function Dashboard({
+  displayName,
+  deskWalletAddress,
+}: {
+  displayName: string;
+  deskWalletAddress: string;
+}) {
   const { logout, user } = usePrivy();
   const nowMs = useSecondTick();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
@@ -230,6 +227,9 @@ function Dashboard({ displayName }: { displayName: string }) {
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
+  const [selectedPublicTraderId, setSelectedPublicTraderId] = useState<
+    string | null
+  >(null);
 
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
   const traderNames = feedData?.traderNames ?? {};
@@ -259,6 +259,7 @@ function Dashboard({ displayName }: { displayName: string }) {
   const deskMargin = Math.max(equity - cash, 0);
   const marginThreshold = Math.max(equity * 0.25, 250);
   const isMarginHot = equity > 0 && deskMargin >= marginThreshold;
+  const currentWallet = deskWalletAddress || user?.wallet?.address;
 
   return (
     <div className="crt-scanlines flex h-svh flex-col overflow-hidden bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
@@ -313,8 +314,14 @@ function Dashboard({ displayName }: { displayName: string }) {
         <MarketPlayersPanel
           leaderboard={leaderboard}
           isLoading={leaderboardLoading}
-          currentWallet={user?.wallet?.address}
-          displayName={displayName}
+          currentWallet={currentWallet}
+          onOpenTrader={(traderId, isCurrent) => {
+            if (isCurrent) {
+              setSelectedTraderId(traderId);
+              return;
+            }
+            setSelectedPublicTraderId(traderId);
+          }}
         />
       </main>
 
@@ -339,6 +346,11 @@ function Dashboard({ displayName }: { displayName: string }) {
         traderId={selectedTraderId}
         open={selectedTraderId !== null}
         onOpenChange={(open) => !open && setSelectedTraderId(null)}
+      />
+      <PublicTraderDialog
+        traderId={selectedPublicTraderId}
+        open={selectedPublicTraderId !== null}
+        onOpenChange={(open) => !open && setSelectedPublicTraderId(null)}
       />
     </div>
   );
@@ -1216,118 +1228,99 @@ function TraderFeedFilterButton({
   );
 }
 
-type FirmStanding = {
-  key: string;
-  name: string;
-  equity: number;
-  pnl: number;
-  traders: number;
-  current: boolean;
-};
-
 function MarketPlayersPanel({
   leaderboard,
   isLoading,
   currentWallet,
-  displayName,
+  onOpenTrader,
 }: {
   leaderboard: LeaderboardTrader[] | undefined;
   isLoading: boolean;
   currentWallet: string | undefined;
-  displayName: string;
+  onOpenTrader: (id: string, isCurrent: boolean) => void;
 }) {
-  const firms = useMemo(() => {
-    if (!leaderboard) return undefined;
-    return groupLeaderboardByFirm(leaderboard, currentWallet, displayName);
-  }, [leaderboard, currentWallet, displayName]);
+  const current = currentWallet?.toLowerCase();
 
   return (
     <aside className="terminal-panel flex min-h-0 flex-col overflow-hidden">
       <PanelHeader
-        title="Market Players"
-        meta={firms ? `${firms.length}` : "WAIT"}
+        title="Trading Floor"
+        meta={leaderboard ? `${leaderboard.length}` : "WAIT"}
       />
 
-      <div className="grid grid-cols-[2rem_minmax(0,1fr)_5.75rem_5rem] border-b border-[var(--t-divider)] px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+      <div className="grid grid-cols-[2rem_minmax(0,1fr)_6.5rem_5.75rem_5rem] border-b border-[var(--t-divider)] px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
         <span>#</span>
-        <span>Player / Firm</span>
+        <span>Trader</span>
+        <span>Owner</span>
         <span className="text-right">Equity</span>
         <span className="text-right">P&L</span>
       </div>
 
-      {isLoading || firms === undefined ? (
+      {isLoading || leaderboard === undefined ? (
         <div className="px-4 py-8">
           <LoadingLine label="POLLING EXCHANGE FLOOR" />
         </div>
-      ) : firms.length === 0 ? (
-        <FallbackMarketPlayers />
+      ) : leaderboard.length === 0 ? (
+        <div className="px-4 py-8 text-center text-xs uppercase tracking-wider text-[var(--t-muted)]">
+          No traders on the floor yet.
+        </div>
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
-          {firms.map((firm, index) => (
-            <div
-              key={firm.key}
-              className={`grid grid-cols-[2rem_minmax(0,1fr)_5.75rem_5rem] items-center border-b border-[var(--t-divider)] px-3 py-2 text-xs ${
-                firm.current
-                  ? "bg-[var(--t-green)]/10 text-[var(--t-green)]"
-                  : "text-[var(--t-muted)]"
-              }`}
-            >
-              <span className="tabular-nums">{index + 1}</span>
-              <div className="min-w-0">
-                <p className="truncate text-[var(--t-text)]">
-                  {firm.name}
-                  {firm.current ? " (You)" : ""}
-                </p>
-                <p className="text-[10px] uppercase text-[var(--t-muted)]">
-                  {firm.traders} trader{firm.traders === 1 ? "" : "s"}
-                </p>
-              </div>
-              <span className="text-right tabular-nums">
-                {formatCompactMoney(firm.equity)}
-              </span>
-              <span
+          {leaderboard.map((trader, index) => {
+            const isCurrent = current
+              ? trader.owner_address.toLowerCase() === current
+              : false;
+
+            return (
+              <button
+                key={trader.id}
+                type="button"
+                onClick={() => onOpenTrader(trader.id, isCurrent)}
                 className={cn(
-                  "text-right tabular-nums",
-                  pnlSignClass(firm.pnl)
+                  "grid w-full grid-cols-[2rem_minmax(0,1fr)_6.5rem_5.75rem_5rem] items-center border-b border-[var(--t-divider)] px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--t-accent)]/10 focus:bg-[var(--t-accent)]/10 focus:outline-none",
+                  isCurrent
+                    ? "bg-[var(--t-green)]/10 text-[var(--t-green)]"
+                    : "text-[var(--t-muted)]"
                 )}
               >
-                {firm.pnl >= 0 ? "+" : ""}
-                {formatCompactMoney(firm.pnl)}
-              </span>
-            </div>
-          ))}
+                <span className="tabular-nums">{index + 1}</span>
+                <div className="flex min-w-0 items-center gap-2">
+                  <TraderAvatar
+                    name={trader.name}
+                    src={trader.profileImageUrl}
+                    imageStatus={trader.imageStatus}
+                    size="sm"
+                  />
+                  <div className="min-w-0">
+                    <p className="truncate text-[var(--t-text)]">
+                      {trader.name}
+                    </p>
+                    <p className="truncate text-[10px] uppercase text-[var(--t-muted)]">
+                      {trader.status}
+                    </p>
+                  </div>
+                </div>
+                <span className="truncate text-[10px] text-[var(--t-muted)]">
+                  {formatOwnerWallet(trader.owner_address, isCurrent)}
+                </span>
+                <span className="text-right tabular-nums">
+                  {formatCompactMoney(trader.total_value)}
+                </span>
+                <span
+                  className={cn(
+                    "text-right tabular-nums",
+                    pnlSignClass(trader.total_pnl)
+                  )}
+                >
+                  {trader.total_pnl >= 0 ? "+" : ""}
+                  {formatCompactMoney(trader.total_pnl)}
+                </span>
+              </button>
+            );
+          })}
         </div>
       )}
     </aside>
-  );
-}
-
-function FallbackMarketPlayers() {
-  return (
-    <div className="min-h-0 flex-1 overflow-y-auto">
-      {WALL_STREET_FIRMS.slice(0, 8).map((name, index) => (
-        <div
-          key={name}
-          className="grid grid-cols-[2rem_minmax(0,1fr)_5.75rem_5rem] border-b border-[var(--t-divider)] px-3 py-2 text-xs text-[var(--t-muted)]"
-        >
-          <span>{index + 1}</span>
-          <span className="truncate">{name}</span>
-          <span className="text-right">
-            {formatCompactMoney(2500000 - index * 190000)}
-          </span>
-          <span
-            className={
-              index < 3
-                ? "text-right text-[var(--t-green)]"
-                : "text-right text-[var(--t-red)]"
-            }
-          >
-            {index < 3 ? "+" : "-"}
-            {(12.8 - index * 1.7).toFixed(1)}%
-          </span>
-        </div>
-      ))}
-    </div>
   );
 }
 
@@ -1408,53 +1401,11 @@ function LoadingLine({ label }: { label: string }) {
   );
 }
 
-function stableFirmRoll(key: string, modulus: number): number {
-  let h = 2166136261;
-  for (let i = 0; i < key.length; i++) {
-    h ^= key.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return Math.abs(h) % modulus;
-}
-
-function groupLeaderboardByFirm(
-  traders: LeaderboardTrader[],
-  currentWallet: string | undefined,
-  displayName: string
-): FirmStanding[] {
-  const current = currentWallet?.toLowerCase();
-  const map = new Map<string, FirmStanding>();
-
-  traders.forEach((trader) => {
-    const key = trader.owner_address || trader.id;
-    const normalizedKey = key.toLowerCase();
-    const existing = map.get(normalizedKey);
-    const isCurrent = current ? normalizedKey === current : false;
-    const name = isCurrent
-      ? displayName
-      : WALL_STREET_FIRMS[
-          stableFirmRoll(normalizedKey, WALL_STREET_FIRMS.length)
-        ];
-
-    if (!existing) {
-      map.set(normalizedKey, {
-        key: normalizedKey,
-        name,
-        equity: trader.total_value,
-        pnl: trader.total_pnl,
-        traders: 1,
-        current: isCurrent,
-      });
-      return;
-    }
-
-    existing.equity += trader.total_value;
-    existing.pnl += trader.total_pnl;
-    existing.traders += 1;
-    existing.current ||= isCurrent;
-  });
-
-  return [...map.values()].sort((a, b) => b.equity - a.equity);
+function formatOwnerWallet(ownerAddress: string, isCurrent: boolean) {
+  const suffix = isCurrent ? " (You)" : "";
+  if (!ownerAddress) return `Unknown${suffix}`;
+  if (ownerAddress.length <= 12) return `${ownerAddress}${suffix}`;
+  return `${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}${suffix}`;
 }
 
 function riskLabel(trader: TraderSummary) {

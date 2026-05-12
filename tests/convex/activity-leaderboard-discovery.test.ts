@@ -267,6 +267,44 @@ describe("Leaderboard consistency", () => {
     expect(outcomeCount).toBe(2); // exactly 2, not 4
   });
 
+  it("leaderboard returns individual trader identity, owner wallet, and portrait", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t, {
+      subject: leaderboardIdentity.subject,
+      walletAddress: "0xfeed00000000000000000000000000000000beef",
+    });
+    const traderId = await seedActiveTrader(t, dmId, {
+      ownerSubject: leaderboardIdentity.subject,
+      name: "Floor Trader",
+      escrowBalance: 500,
+    });
+    const storageId = await t.run(async (ctx) =>
+      ctx.storage.store(new Blob(["portrait"], { type: "image/png" }))
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(traderId as never, {
+        imageStatus: "ready",
+        profileImageStorageId: storageId,
+      });
+    });
+
+    const result = await t.query(api.leaderboard.listTraderStats, {
+      limit: 10,
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      id: traderId,
+      name: "Floor Trader",
+      owner_address: "0xfeed00000000000000000000000000000000beef",
+      imageStatus: "ready",
+      total_value: 500,
+    });
+    expect(result[0].profileImageUrl).toContain(
+      "https://some-deployment.convex.cloud/api/storage/"
+    );
+  });
+
   it("replaying same outcome does not double-count PnL (idempotent replay)", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);

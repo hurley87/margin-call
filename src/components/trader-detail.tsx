@@ -4,12 +4,7 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
 import { useReadContract } from "wagmi";
-import {
-  useTrader,
-  useTraderHistory,
-  type TraderHistoryEvent,
-  type Trader,
-} from "@/hooks/use-traders";
+import { useTrader, type Trader } from "@/hooks/use-traders";
 import { useSepoliaUsdcBalance } from "@/hooks/use-escrow";
 import {
   useTraderOutcomes,
@@ -29,7 +24,6 @@ import {
   useConfigureMandate,
   usePendingApprovals,
 } from "@/hooks/use-approvals";
-import { FEED_DISPLAY } from "@/components/feed-line";
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
@@ -186,25 +180,25 @@ export function TraderDetailContent({
       )}
     >
       <div className="sticky top-0 z-20 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="mx-auto flex max-w-[1600px] flex-wrap items-baseline justify-between gap-3 px-4 py-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
             {onClose ? (
               <button
                 type="button"
                 onClick={onClose}
-                className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+                className="text-xs leading-none text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
               >
                 Close
               </button>
             ) : (
               <Link
                 href="/"
-                className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+                className="text-xs leading-none text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
               >
                 &larr;
               </Link>
             )}
-            <h1 className="truncate text-base font-semibold text-[var(--t-text)] font-[family-name:var(--font-plex-sans)]">
+            <h1 className="truncate text-base font-semibold leading-none text-[var(--t-text)] font-[family-name:var(--font-plex-sans)]">
               {trader.name}
             </h1>
             <StatusBadge status={trader.status} />
@@ -212,11 +206,11 @@ export function TraderDetailContent({
               <TraderCycleLine trader={trader} />
             </span>
           </div>
-          <div className="flex shrink-0 items-center gap-4 text-xs">
+          <div className="flex shrink-0 items-baseline gap-4 text-xs leading-none">
             <button
               onClick={() => setWalletOpen(true)}
               className={cn(
-                "flex items-center gap-1 text-right transition-colors hover:text-[var(--t-accent)]",
+                "flex items-baseline gap-1 text-right transition-colors hover:text-[var(--t-accent)]",
                 unfunded ? "text-[var(--t-amber)]" : "text-[var(--t-text)]"
               )}
             >
@@ -247,7 +241,6 @@ export function TraderDetailContent({
           />
           <AssetInventory traderId={id} />
           <DealOutcomes traderId={id} />
-          <ActivityHistory id={id} />
           <div className="mt-8 border-t border-[var(--t-border)]/80 pt-8">
             <TraderActivityPanel key={id} traderId={id} />
           </div>
@@ -319,7 +312,7 @@ function TraderCycleLine({ trader }: { trader: Trader }) {
   return (
     <span
       title={ui.text}
-      className={`truncate text-[10px] font-bold uppercase tracking-wide ${ui.className}`}
+      className={`truncate text-[10px] font-bold uppercase leading-none tracking-wide ${ui.className}`}
     >
       {ui.text}
     </span>
@@ -373,7 +366,7 @@ function StatusBadge({ status }: { status: string }) {
   return (
     <span
       className={cn(
-        "text-[10px] font-bold uppercase",
+        "text-[10px] font-bold uppercase leading-none",
         preset?.className ?? "text-[var(--t-muted)]"
       )}
     >
@@ -628,67 +621,6 @@ function OutcomeCard({
         </div>
       )}
     </div>
-  );
-}
-
-function formatEvent(event: TraderHistoryEvent) {
-  const display = FEED_DISPLAY[event.activityType];
-  const label =
-    display?.label ?? event.activityType.replace(/_/g, " ").toUpperCase();
-  const color = display?.color ?? "text-[var(--t-muted)]";
-
-  if (event.activityType === "win" || event.activityType === "loss") {
-    const meta = event.metadata as Record<string, unknown> | undefined;
-    const pnl = typeof meta?.pnl === "number" ? meta.pnl : null;
-    const detail =
-      pnl !== null
-        ? `${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} USDC`
-        : event.message;
-    return { label, detail, color };
-  }
-
-  return { label, detail: event.message, color };
-}
-
-function ActivityHistory({ id }: { id: string }) {
-  const { data: events, isLoading } = useTraderHistory(id);
-
-  return (
-    <CollapsibleSection title="Activity Log">
-      {isLoading ? (
-        <p className="text-sm text-[var(--t-muted)]">Loading...</p>
-      ) : !events || events.length === 0 ? (
-        <p className="text-sm text-[var(--t-muted)]">No activity yet.</p>
-      ) : (
-        <div className="flex flex-col gap-[1px] bg-[var(--t-border)]">
-          {events.map((event) => {
-            const { label, detail, color } = formatEvent(event);
-            return (
-              <div
-                key={event._id}
-                className="flex items-center justify-between bg-[var(--t-bg)] px-3 py-2"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-24 shrink-0 text-xs font-medium capitalize text-[var(--t-muted)]">
-                    {label}
-                  </span>
-                  <span className={`text-sm ${color} line-clamp-1`}>
-                    {detail}
-                  </span>
-                </div>
-                <span className="shrink-0 text-xs text-[var(--t-muted)]">
-                  {new Date(event.createdAt).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    second: "2-digit",
-                  })}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </CollapsibleSection>
   );
 }
 

@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
+import { resolveTraderProfileImageUrl } from "./lib/profileImage";
 
 type Stats = {
   pnl: number;
@@ -9,7 +10,7 @@ type Stats = {
   deals: number;
 };
 
-/** Public leaderboard: all traders, sorted by cumulative P&amp;L. No auth. */
+/** Public leaderboard: all traders, sorted by total equity. No auth. */
 export const listTraderStats = query({
   args: { limit: v.optional(v.number()) },
   handler: async (ctx, { limit = 50 }) => {
@@ -52,36 +53,42 @@ export const listTraderStats = query({
       deskWalletById.set(String(deskId), dm?.walletAddress);
     }
 
-    const leaderboard = traders.map((t) => {
-      const tid = String(t._id);
-      const s = statsMap.get(tid) ?? {
-        pnl: 0,
-        wins: 0,
-        losses: 0,
-        wipeouts: 0,
-        deals: 0,
-      };
-      const assetValue = assetMap.get(tid) ?? 0;
-      const escrow = t.escrowBalanceUsdc ?? 0;
-      const totalDealsLogged = s.wins + s.losses + s.wipeouts;
-      const ownerWallet = deskWalletById.get(String(t.deskManagerId)) ?? "";
+    const leaderboard = await Promise.all(
+      traders.map(async (t) => {
+        const tid = String(t._id);
+        const s = statsMap.get(tid) ?? {
+          pnl: 0,
+          wins: 0,
+          losses: 0,
+          wipeouts: 0,
+          deals: 0,
+        };
+        const assetValue = assetMap.get(tid) ?? 0;
+        const escrow = t.escrowBalanceUsdc ?? 0;
+        const totalDealsLogged = s.wins + s.losses + s.wipeouts;
+        const ownerWallet = deskWalletById.get(String(t.deskManagerId)) ?? "";
+        const profileImageUrl = await resolveTraderProfileImageUrl(ctx, t);
 
-      return {
-        id: tid,
-        name: t.name,
-        status: t.status as string,
-        owner_address: ownerWallet,
-        total_pnl: s.pnl,
-        wins: s.wins,
-        losses: s.losses,
-        wipeouts: s.wipeouts,
-        deal_count: s.deals,
-        win_rate: totalDealsLogged > 0 ? (s.wins / totalDealsLogged) * 100 : 0,
-        total_value: escrow + assetValue,
-      };
-    });
+        return {
+          id: tid,
+          name: t.name,
+          status: t.status as string,
+          owner_address: ownerWallet,
+          imageStatus: t.imageStatus ?? null,
+          profileImageUrl,
+          total_pnl: s.pnl,
+          wins: s.wins,
+          losses: s.losses,
+          wipeouts: s.wipeouts,
+          deal_count: s.deals,
+          win_rate:
+            totalDealsLogged > 0 ? (s.wins / totalDealsLogged) * 100 : 0,
+          total_value: escrow + assetValue,
+        };
+      })
+    );
 
-    leaderboard.sort((a, b) => b.total_pnl - a.total_pnl);
+    leaderboard.sort((a, b) => b.total_value - a.total_value);
     return leaderboard.slice(0, limit);
   },
 });

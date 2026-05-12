@@ -9,6 +9,8 @@ export interface LeaderboardTrader {
   name: string;
   status: string;
   owner_address: string;
+  imageStatus: "pending" | "generating" | "ready" | "error" | null;
+  profileImageUrl: string;
   total_pnl: number;
   wins: number;
   losses: number;
