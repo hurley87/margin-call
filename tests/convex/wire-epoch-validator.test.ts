@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { normalizeGeneratedEpoch } from "../../convex/wire/epochNormalizer";
 import { validateEpoch } from "../../convex/wire/epochValidator";
 
 const arcSlugs = new Set(["arc-a", "arc-b"]);
@@ -49,7 +50,7 @@ function makeValidPayloadWithSeed() {
     arcSlug: "arc-b",
     prompt:
       "Vale tip says PanAtlantic books are missing $40M from Jersey desk.",
-    suggestedPotUsdc: 100,
+    suggestedPotUsdc: 10,
     suggestedEntryCostUsdc: 5,
   };
   return payload;
@@ -341,6 +342,94 @@ describe("validateEpoch: deal seed cadence + integrity", () => {
     const payload = makeValidPayloadWithSeed();
     (payload.dealSeed as Record<string, unknown>).dispatchKey = "no-match";
     const result = validateEpoch(payload, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /must match exactly one dispatch/
+    );
+  });
+
+  it("repairs a missing dealSeed dispatchKey when exactly one deal_seed dispatch exists", () => {
+    const payload = makeValidPayloadWithSeed();
+    (payload.dealSeed as Record<string, unknown>).dispatchKey =
+      "panatl-short-squeeze";
+
+    const normalized = normalizeGeneratedEpoch(payload);
+    expect(normalized.repairedDealSeedDispatchKey).toEqual({
+      from: "panatl-short-squeeze",
+      to: "supp-vale",
+    });
+
+    const result = validateEpoch(normalized.epoch, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+      requireDealSeed: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("does not repair a missing dealSeed dispatchKey without a deal_seed dispatch", () => {
+    const payload = makeValidPayloadWithSeed();
+    payload.dispatches[1].role = "supporting" as never;
+    (payload.dealSeed as Record<string, unknown>).dispatchKey =
+      "panatl-short-squeeze";
+
+    const normalized = normalizeGeneratedEpoch(payload);
+    expect(normalized.repairedDealSeedDispatchKey).toBeNull();
+
+    const result = validateEpoch(normalized.epoch, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /must match exactly one dispatch/
+    );
+  });
+
+  it("does not repair a missing dealSeed dispatchKey with ambiguous deal_seed dispatches", () => {
+    const payload = makeValidPayloadWithSeed();
+    payload.dispatches.push({
+      dispatchKey: "seed-second",
+      headline: "Second seed on the wire",
+      body: "Two playable rumors are competing for the same slot.",
+      category: "rumor",
+      role: "deal_seed" as const,
+      arcSlug: "arc-a",
+      referenceEpoch: null,
+    });
+    (payload.dealSeed as Record<string, unknown>).dispatchKey =
+      "panatl-short-squeeze";
+
+    const normalized = normalizeGeneratedEpoch(payload);
+    expect(normalized.repairedDealSeedDispatchKey).toBeNull();
+
+    const result = validateEpoch(normalized.epoch, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /must match exactly one dispatch/
+    );
+  });
+
+  it("does not repair a missing dealSeed dispatchKey when the lone deal_seed dispatch is for another arc", () => {
+    const payload = makeValidPayloadWithSeed();
+    payload.dispatches[1].arcSlug = "arc-a";
+    (payload.dealSeed as Record<string, unknown>).dispatchKey =
+      "panatl-short-squeeze";
+
+    const normalized = normalizeGeneratedEpoch(payload);
+    expect(normalized.repairedDealSeedDispatchKey).toBeNull();
+
+    const result = validateEpoch(normalized.epoch, {
       arcSlugs,
       entitySlugs,
       forbiddenLanguage,

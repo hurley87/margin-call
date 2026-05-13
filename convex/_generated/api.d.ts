@@ -43,6 +43,7 @@ import type * as wallet from "../wallet.js";
 import type * as wire__operatorUtils from "../wire/_operatorUtils.js";
 import type * as wire__schemas from "../wire/_schemas.js";
 import type * as wire_epochAssembler from "../wire/epochAssembler.js";
+import type * as wire_epochNormalizer from "../wire/epochNormalizer.js";
 import type * as wire_epochValidator from "../wire/epochValidator.js";
 import type * as wire_generator from "../wire/generator.js";
 import type * as wire_internal from "../wire/internal.js";
@@ -94,6 +95,7 @@ declare const fullApi: ApiFromModules<{
   "wire/_operatorUtils": typeof wire__operatorUtils;
   "wire/_schemas": typeof wire__schemas;
   "wire/epochAssembler": typeof wire_epochAssembler;
+  "wire/epochNormalizer": typeof wire_epochNormalizer;
   "wire/epochValidator": typeof wire_epochValidator;
   "wire/generator": typeof wire_generator;
   "wire/internal": typeof wire_internal;

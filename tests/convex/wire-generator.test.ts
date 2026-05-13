@@ -82,8 +82,8 @@ function makeLlmStubWithSeed(overrides: Record<string, unknown> = {}) {
       arcSlug: "pan-atlantic-blowup",
       prompt:
         "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
-      suggestedPotUsdc: 250,
-      suggestedEntryCostUsdc: 10,
+      suggestedPotUsdc: 10,
+      suggestedEntryCostUsdc: 5,
     },
     ...overrides,
   });
@@ -346,8 +346,8 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
     const seed = seeds[0];
     expect(seed.dispatchKey).toBe("seed-rourke-short");
     expect(seed.dispatchHeadline).toContain("Rourke");
-    expect(seed.suggestedPotUsdc).toBe(250);
-    expect(seed.suggestedEntryCostUsdc).toBe(10);
+    expect(seed.suggestedPotUsdc).toBe(10);
+    expect(seed.suggestedEntryCostUsdc).toBe(5);
     expect(seed.dispatchIndex).toBe(1);
     expect(seed.epochId).toEqual((result as { dropId: unknown }).dropId);
   });
@@ -415,7 +415,7 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
         dispatchKey: "seed-rourke-short",
         arcSlug: "arc-ghost",
         prompt: "Off-roster arc seed prompt for testing the rejection path.",
-        suggestedPotUsdc: 100,
+        suggestedPotUsdc: 10,
         suggestedEntryCostUsdc: 5,
       },
     });
@@ -423,6 +423,86 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
     const result = await t.action(internal.wire.generator.devForceEpoch, {
       ignoreSlot: true,
       _testLlmStub: badStub,
+    });
+
+    expect((result as { skipped?: string }).skipped).toBe("validation-failed");
+  });
+
+  it("repairs a mismatched dealSeed.dispatchKey when one deal_seed dispatch exists", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed({
+        dealSeed: {
+          dispatchKey: "panatl-short-squeeze",
+          arcSlug: "pan-atlantic-blowup",
+          prompt:
+            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
+          suggestedPotUsdc: 10,
+          suggestedEntryCostUsdc: 5,
+        },
+      }),
+    });
+
+    expect((result as { inserted?: boolean }).inserted).toBe(true);
+
+    const seeds = await t.run(async (ctx) =>
+      ctx.db.query("wireDealSeeds").collect()
+    );
+    expect(seeds.length).toBe(1);
+    expect(seeds[0].dispatchKey).toBe("seed-rourke-short");
+    expect(seeds[0].dispatchIndex).toBe(1);
+  });
+
+  it("rejects a mismatched dealSeed.dispatchKey when there is no clear repair", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const ambiguousStub = makeLlmStubWithSeed({
+      dispatches: [
+        {
+          dispatchKey: "main-panatl-halt",
+          headline: "PanAtlantic bonds halted at the exchange",
+          body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
+          category: "market",
+          role: "main",
+          arcSlug: "pan-atlantic-blowup",
+          referenceEpoch: null,
+        },
+        {
+          dispatchKey: "seed-rourke-short",
+          headline: "Rourke seen building short against PanAtl. bond block",
+          body: "Three orders crossed before lunch. Counterparty unconfirmed.",
+          category: "rumor",
+          role: "deal_seed",
+          arcSlug: "pan-atlantic-blowup",
+          referenceEpoch: null,
+        },
+        {
+          dispatchKey: "seed-marty-tip",
+          headline: "Marty Vale prices a rescue rumor",
+          body: "The buyer name keeps changing. The spread keeps widening.",
+          category: "floor_talk",
+          role: "deal_seed",
+          arcSlug: "pan-atlantic-blowup",
+          referenceEpoch: null,
+        },
+      ],
+      dealSeed: {
+        dispatchKey: "panatl-short-squeeze",
+        arcSlug: "pan-atlantic-blowup",
+        prompt:
+          "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
+        suggestedPotUsdc: 10,
+        suggestedEntryCostUsdc: 5,
+      },
+    });
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: ambiguousStub,
     });
 
     expect((result as { skipped?: string }).skipped).toBe("validation-failed");

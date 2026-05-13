@@ -6,6 +6,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { isMarketOpen, currentEpochSlot, dayPosture } from "./tradingHours";
 import { assembleUserMessage } from "./epochAssembler";
+import { normalizeGeneratedEpoch } from "./epochNormalizer";
 import { validateEpoch } from "./epochValidator";
 import type { NarrativeEpoch } from "./_schemas";
 import type { Id, Doc } from "../_generated/dataModel";
@@ -172,7 +173,14 @@ async function runGenerator(
   const arcSlugs = new Set(arcs.map((a) => a.slug));
   const entitySlugs = new Set(entities.map((e) => e.slug));
 
-  const validation = validateEpoch(parsed, {
+  const normalized = normalizeGeneratedEpoch(parsed);
+  if (normalized.repairedDealSeedDispatchKey) {
+    console.warn(
+      `[wire/generator] repaired dealSeed.dispatchKey "${normalized.repairedDealSeedDispatchKey.from}" -> "${normalized.repairedDealSeedDispatchKey.to}"`
+    );
+  }
+
+  const validation = validateEpoch(normalized.epoch, {
     arcSlugs,
     entitySlugs,
     forbiddenLanguage: season.forbiddenLanguage,
