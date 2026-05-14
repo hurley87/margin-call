@@ -6,6 +6,8 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { TraderAvatar } from "@/components/trader-avatar";
+import { DatumCell } from "@/components/datum-cell";
+import { formatStatus } from "@/lib/format-status";
 
 type PublicTraderProfile = {
   traderId: string;
@@ -115,8 +117,8 @@ function PublicTraderContent({
               />
             </div>
             <div className="grid grid-cols-2 border-t border-[var(--t-divider)] text-xs uppercase tracking-[0.16em]">
-              <PublicDatum label="Status" value={formatStatus(trader.status)} />
-              <PublicDatum
+              <DatumCell label="Status" value={formatStatus(trader.status)} />
+              <DatumCell
                 label="Portrait"
                 value={formatStatus(trader.portraitStatus)}
               />
@@ -126,10 +128,10 @@ function PublicTraderContent({
 
         <section className="grid min-w-0 content-start gap-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <PublicDatum label="Token" value={tokenLabel(trader.tokenId)} />
-            <PublicDatum label="Archetype" value={trader.archetype} />
-            <PublicDatum label="Risk" value={trader.riskProfile} />
-            <PublicDatum
+            <DatumCell label="Token" value={tokenLabel(trader.tokenId)} />
+            <DatumCell label="Archetype" value={trader.archetype} />
+            <DatumCell label="Risk" value={trader.riskProfile} />
+            <DatumCell
               label="Escrow"
               value={formatUsdc(trader.escrowBalanceUsdc)}
             />
@@ -192,23 +194,6 @@ function PublicTraderError({ onClose }: { onClose: () => void }) {
       </button>
     </div>
   );
-}
-
-function PublicDatum({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 border border-[var(--t-divider)] bg-[#070b09]/75 p-3">
-      <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        {label}
-      </p>
-      <p className="break-words text-sm font-bold uppercase tracking-wide text-[var(--t-text)]">
-        {value}
-      </p>
-    </div>
-  );
-}
-
-function formatStatus(status: string) {
-  return status.replaceAll("_", " ");
 }
 
 function tokenLabel(tokenId: number | null) {

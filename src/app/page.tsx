@@ -735,25 +735,14 @@ function NewswireItem({
       <h3 className="text-[var(--t-amber)]">{headline}</h3>
       <p className="mt-1 text-[var(--t-green)]">{displayBody}</p>
       <div className="mt-2 flex items-center gap-3">
-        {canExpand && (
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggle();
-            }}
-            className="text-[10px] uppercase tracking-wider text-[var(--t-muted)] hover:text-[var(--t-text)]"
-          >
-            {expanded ? "Show less" : "Show more"}
-          </button>
-        )}
         <button
           onClick={(event) => {
             event.stopPropagation();
             onCreate();
           }}
-          className="text-[10px] uppercase tracking-wider text-[var(--t-accent)]/75 hover:text-[var(--t-accent)]"
+          className="flex items-center gap-1 border border-[var(--t-accent)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
         >
-          Create Deal
+          $ Create Deal
         </button>
       </div>
     </article>

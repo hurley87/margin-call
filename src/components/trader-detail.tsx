@@ -5,6 +5,9 @@ import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
 import { useReadContract } from "wagmi";
 import { useTrader, type Trader } from "@/hooks/use-traders";
+import { TraderAvatar } from "@/components/trader-avatar";
+import { DatumCell } from "@/components/datum-cell";
+import { formatStatus } from "@/lib/format-status";
 import { useSepoliaUsdcBalance } from "@/hooks/use-escrow";
 import {
   useTraderOutcomes,
@@ -36,8 +39,6 @@ import {
 import { cn } from "@/lib/utils";
 
 const ZERO = BigInt(0);
-const TRADER_SECTION_CLASS =
-  "mt-6 border-t border-[var(--t-border)]/80 pt-6 first:mt-0 first:border-t-0 first:pt-0";
 const TRADER_SECTION_TITLE_CLASS =
   "text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]";
 
@@ -61,8 +62,13 @@ function CollapsibleSection({
   const [isOpen, setIsOpen] = useState(defaultOpen);
 
   return (
-    <section className={TRADER_SECTION_CLASS}>
-      <div className="flex items-center gap-3">
+    <section className="overflow-hidden border border-[var(--t-divider)] bg-[#070b09]">
+      <div
+        className={cn(
+          "flex items-center gap-3 p-3",
+          isOpen && "border-b border-[var(--t-divider)]"
+        )}
+      >
         {canCollapse ? (
           <button
             type="button"
@@ -81,7 +87,7 @@ function CollapsibleSection({
         )}
         {action}
       </div>
-      {isOpen && <div className="mt-3">{children}</div>}
+      {isOpen && <div className="p-4">{children}</div>}
     </section>
   );
 }
@@ -179,53 +185,73 @@ export function TraderDetailContent({
         !compact && "min-h-screen"
       )}
     >
-      <div className="sticky top-0 z-20 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
-        <div className="mx-auto flex max-w-[1600px] flex-wrap items-baseline justify-between gap-3 px-4 py-3">
-          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-3 gap-y-1">
-            {onClose ? (
-              <button
-                type="button"
-                onClick={onClose}
-                className="text-xs leading-none text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
-              >
-                Close
-              </button>
-            ) : (
-              <Link
-                href="/"
-                className="text-xs leading-none text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
-              >
-                &larr;
-              </Link>
-            )}
-            <h1 className="truncate text-base font-semibold leading-none text-[var(--t-text)] font-[family-name:var(--font-plex-sans)]">
+      <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+            Your trader
+          </p>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <h2 className="truncate font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-wide text-[var(--t-amber)]">
               {trader.name}
-            </h1>
+            </h2>
             <StatusBadge status={trader.status} />
-            <span className="max-w-[min(100%,14rem)] min-w-0 sm:max-w-[20rem]">
+            <span className="min-w-0">
               <TraderCycleLine trader={trader} />
             </span>
           </div>
-          <div className="flex shrink-0 items-baseline gap-4 text-xs leading-none">
+        </div>
+        <div className="flex shrink-0 items-center text-xs">
+          {onClose ? (
             <button
-              onClick={() => setWalletOpen(true)}
-              className={cn(
-                "flex items-baseline gap-1 text-right transition-colors hover:text-[var(--t-accent)]",
-                unfunded ? "text-[var(--t-amber)]" : "text-[var(--t-text)]"
-              )}
+              type="button"
+              onClick={onClose}
+              className="text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
             >
-              <span className="text-[var(--t-muted)]">[$$]</span>
-              <span>
-                {balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."}
-              </span>
+              Close
             </button>
-            <span className="text-[var(--t-muted)]">#{trader.token_id}</span>
-          </div>
+          ) : (
+            <Link
+              href="/"
+              className="text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+            >
+              &larr;
+            </Link>
+          )}
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-[1600px] px-4 py-6">
-        <div className="min-w-0">
+      <div className="grid gap-5 p-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+        <section className="min-w-0">
+          <div className="overflow-hidden border border-[var(--t-divider)] bg-[#070b09]">
+            <div className="relative aspect-square">
+              <TraderAvatar
+                name={trader.name}
+                src={trader.profile_image_url}
+                imageStatus={trader.image_status}
+                size="lg"
+                className="absolute inset-0"
+              />
+            </div>
+            <div className="grid grid-cols-2 border-t border-[var(--t-divider)]">
+              <DatumCell label="Status" value={formatStatus(trader.status)} />
+              <DatumCell label="Token" value={`#${trader.token_id}`} />
+            </div>
+            <button
+              onClick={() => setWalletOpen(true)}
+              className="w-full border-t border-[var(--t-divider)] text-left transition-colors hover:bg-[var(--t-surface)]"
+            >
+              <DatumCell
+                label="Escrow"
+                value={
+                  balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."
+                }
+                valueClassName={unfunded ? "text-[var(--t-amber)]" : undefined}
+              />
+            </button>
+          </div>
+        </section>
+
+        <section className="grid min-w-0 content-start gap-4">
           <AgentControls
             traderId={id}
             status={trader.status}
@@ -241,10 +267,10 @@ export function TraderDetailContent({
           />
           <AssetInventory traderId={id} />
           <DealOutcomes traderId={id} />
-          <div className="mt-8 border-t border-[var(--t-border)]/80 pt-8">
+          <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
             <TraderActivityPanel key={id} traderId={id} />
           </div>
-        </div>
+        </section>
       </div>
 
       {walletOpen && (
@@ -278,7 +304,7 @@ export function TraderDetailDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-6xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
+        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           <Dialog.Title className="sr-only">Trader detail</Dialog.Title>
           <div className="max-h-[88vh] overflow-y-auto">
             {traderId ? (
@@ -1008,44 +1034,31 @@ function ReputationSection({ traderId }: { traderId: string }) {
   if (totalDeals === 0) return null;
 
   return (
-    <section className={TRADER_SECTION_CLASS}>
-      <div className="grid grid-cols-3 gap-4 text-center sm:grid-cols-6">
-        <div>
-          <p className="text-lg font-semibold text-[var(--t-text)]">
-            {reputationScore}
-          </p>
-          <p className="text-xs text-[var(--t-muted)]">Score</p>
-        </div>
-        <div>
-          <p className="text-lg font-semibold text-[var(--t-green)]">{wins}</p>
-          <p className="text-xs text-[var(--t-muted)]">Wins</p>
-        </div>
-        <div>
-          <p className="text-lg font-semibold text-[var(--t-red)]">{losses}</p>
-          <p className="text-xs text-[var(--t-muted)]">Losses</p>
-        </div>
-        <div>
-          <p className="text-lg font-semibold text-[var(--t-text)]">
-            {winRate}%
-          </p>
-          <p className="text-xs text-[var(--t-muted)]">Win Rate</p>
-        </div>
-        <div>
-          <p className="text-lg font-semibold text-[var(--t-red)]">
-            {wipeouts}
-          </p>
-          <p className="text-xs text-[var(--t-muted)]">Wipeouts</p>
-        </div>
-        <div>
-          <p
-            className={`text-lg font-semibold ${totalPnl >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]"}`}
-          >
-            {totalPnl >= 0 ? "+" : ""}
-            {totalPnl.toFixed(2)}
-          </p>
-          <p className="text-xs text-[var(--t-muted)]">Total P&L</p>
-        </div>
-      </div>
-    </section>
+    <div className="grid grid-cols-3 gap-3">
+      <DatumCell label="Score" value={String(reputationScore)} />
+      <DatumCell
+        label="Wins"
+        value={String(wins)}
+        valueClassName="text-[var(--t-green)]"
+      />
+      <DatumCell
+        label="Losses"
+        value={String(losses)}
+        valueClassName="text-[var(--t-red)]"
+      />
+      <DatumCell label="Win Rate" value={`${winRate}%`} />
+      <DatumCell
+        label="Wipeouts"
+        value={String(wipeouts)}
+        valueClassName={wipeouts > 0 ? "text-[var(--t-red)]" : undefined}
+      />
+      <DatumCell
+        label="Total P&L"
+        value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}`}
+        valueClassName={
+          totalPnl >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]"
+        }
+      />
+    </div>
   );
 }

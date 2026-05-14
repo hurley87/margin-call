@@ -12,6 +12,8 @@ import {
   MIN_POT_AMOUNT,
   MIN_ENTRY_COST,
 } from "@/lib/constants";
+import { cn } from "@/lib/utils";
+import { DatumCell } from "@/components/datum-cell";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const STEP_LABELS: Record<string, string> = {
@@ -23,10 +25,16 @@ const STEP_LABELS: Record<string, string> = {
 
 type DialogState = "suggestions" | "configure" | "creating";
 
-const STATE_META: Record<DialogState, string> = {
-  suggestions: "IDEAS",
-  configure: "TERMS",
-  creating: "SENDING",
+const STAGE_ORDER_FULL: DialogState[] = [
+  "suggestions",
+  "configure",
+  "creating",
+];
+const STAGE_ORDER_DIRECT: DialogState[] = ["configure", "creating"];
+const STAGE_LABELS: Record<DialogState, string> = {
+  suggestions: "Pick",
+  configure: "Terms",
+  creating: "Send",
 };
 
 function createDealProgressWidth(step: string): "33%" | "66%" | "90%" | "100%" {
@@ -34,6 +42,42 @@ function createDealProgressWidth(step: string): "33%" | "66%" | "90%" | "100%" {
   if (step === "creating") return "66%";
   if (step === "syncing") return "90%";
   return "100%";
+}
+
+function StageIndicator({
+  current,
+  hideSuggestions,
+}: {
+  current: DialogState;
+  hideSuggestions: boolean;
+}) {
+  const stages = hideSuggestions ? STAGE_ORDER_DIRECT : STAGE_ORDER_FULL;
+  const currentIdx = stages.indexOf(current);
+  return (
+    <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.18em]">
+      {stages.map((stage, idx) => {
+        const isActive = idx === currentIdx;
+        const isDone = idx < currentIdx;
+        return (
+          <div key={stage} className="flex items-center gap-2">
+            <span
+              className={cn(
+                "transition-colors",
+                isActive && "text-[var(--t-accent)]",
+                isDone && "text-[var(--t-green)]",
+                !isActive && !isDone && "text-[var(--t-muted)]"
+              )}
+            >
+              {String(idx + 1).padStart(2, "0")} {STAGE_LABELS[stage]}
+            </span>
+            {idx < stages.length - 1 && (
+              <span className="text-[var(--t-muted)]/40">/</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 type SuggestPromptsQuery = ReturnType<typeof useSuggestPrompts>;
@@ -47,51 +91,56 @@ function DealSuggestionsPane({
 }) {
   if (suggestQuery.isPending || (!suggestQuery.data && !suggestQuery.isError)) {
     return (
-      <div className="px-4 py-8 text-center">
-        <p className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
-          GENERATING DEAL IDEAS...
-          <span className="cursor-blink">{"█"}</span>
+      <div className="border border-[var(--t-divider)] bg-[#070b09] p-8 text-center">
+        <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
+          Generating deal ideas
+          <span className="cursor-blink ml-1 text-[var(--t-accent)]">█</span>
         </p>
       </div>
     );
   }
   if (suggestQuery.data) {
     return (
-      <>
-        <div className="border-b border-[var(--t-divider)] bg-[#0b100d] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-          Choose deal text
+      <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
+        <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--t-divider)] pb-3">
+          <h3 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
+            Pick a deal angle
+          </h3>
+          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--t-accent)]">
+            {suggestQuery.data.length} drafts
+          </span>
         </div>
-        <div className="divide-y divide-[var(--t-divider)]/70">
+        <div className="grid gap-2">
           {suggestQuery.data.map((s, i) => (
             <button
               key={i}
               onClick={() => onPickSuggestion(s)}
-              className="group grid w-full grid-cols-[3.25rem_minmax(0,1fr)_4.25rem] items-start gap-3 px-3 py-3 text-left text-xs leading-relaxed transition-colors hover:bg-[var(--t-accent-soft)]"
+              className="group flex items-start gap-3 border border-[var(--t-divider)] bg-[var(--t-bg)] p-3 text-left transition-colors hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
             >
-              <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              <span className="shrink-0 pt-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--t-muted)] group-hover:text-[var(--t-accent)]">
                 {String(i + 1).padStart(2, "0")}
               </span>
-              <span className="text-[var(--t-text)] group-hover:text-[var(--t-accent)]">
+              <span className="min-w-0 flex-1 text-sm leading-relaxed text-[var(--t-text)]">
                 {s}
               </span>
-              <span className="pt-0.5 text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)] group-hover:text-[var(--t-accent)]">
-                Select
+              <span className="shrink-0 self-center text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors group-hover:text-[var(--t-accent)]">
+                Select &rarr;
               </span>
             </button>
           ))}
         </div>
-      </>
+      </div>
     );
   }
   return (
-    <div className="px-4 py-8 text-center">
-      <p className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
-        Suggestions failed.
+    <div className="border border-[var(--t-divider)] bg-[#070b09] p-8 text-center">
+      <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-red)]">
+        Suggestions failed
       </p>
       <button
         type="button"
         onClick={() => suggestQuery.refetch()}
-        className="mt-3 border border-[var(--t-divider)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+        className="mt-3 border border-[var(--t-divider)] px-3 py-1.5 text-[10px] uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
       >
         Retry
       </button>
@@ -202,183 +251,199 @@ export function CreateDealDialog({
     setEntryCost(MIN_ENTRY_COST.toString());
   };
 
+  const headerLabel = dealSeed ? "Wire seed deal" : "New deal";
+  const canSubmit =
+    authenticated &&
+    !!selectedPrompt.trim() &&
+    !isNaN(potNum) &&
+    potNum >= MIN_POT_AMOUNT &&
+    !isNaN(entryNum) &&
+    entryNum >= MIN_ENTRY_COST &&
+    !insufficientBalance;
+
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[86vh] w-[92vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-bronze)] bg-[linear-gradient(rgba(101,160,94,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(101,160,94,0.03)_1px,transparent_1px),radial-gradient(circle_at_top,rgba(214,166,96,0.08),transparent_34%),#040807] bg-[length:100%_18px,18px_100%,auto,auto] font-mono shadow-2xl shadow-black/45">
-          <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[var(--t-divider)] bg-[#0b100d] px-3 py-2">
-            <div className="min-w-0">
-              <Dialog.Title className="truncate font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
-                Create Deal
-              </Dialog.Title>
-              <p className="mt-0.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                {dealSeed ? "Wire seed" : "Newswire premise"}
-              </p>
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                {STATE_META[state]}
-              </span>
-              <Dialog.Close className="border border-[var(--t-divider)] px-2 py-1 text-[10px] text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]">
-                [X]
-              </Dialog.Close>
-            </div>
-          </div>
-
-          <div className="max-h-[calc(86vh-2.5rem)] overflow-y-auto">
-            {headline.headline && (
-              <div className="border-b border-[var(--t-divider)] px-3 py-2">
-                <div className="mb-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                  Source
-                </div>
-                <p className="text-xs font-bold leading-relaxed text-[var(--t-amber)]">
-                  {headline.headline}
-                </p>
-                {headline.body && (
-                  <p className="mt-1 text-[11px] leading-relaxed text-[var(--t-green)]">
-                    {headline.body}
+        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
+          <Dialog.Title className="sr-only">Create deal</Dialog.Title>
+          <div className="max-h-[88vh] overflow-y-auto">
+            <div className="crt-scanlines bg-[var(--t-bg)]">
+              <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
+                <div className="min-w-0">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+                    {headerLabel}
                   </p>
-                )}
+                  <h2 className="truncate font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-wide text-[var(--t-amber)]">
+                    Create deal
+                  </h2>
+                </div>
+                <Dialog.Close className="shrink-0 text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]">
+                  Close
+                </Dialog.Close>
               </div>
-            )}
 
-            {state === "suggestions" && (
-              <DealSuggestionsPane
-                suggestQuery={suggestQuery}
-                onPickSuggestion={handlePickSuggestion}
-              />
-            )}
-
-            {(state === "configure" || state === "creating") && (
-              <div className="px-3 py-3">
-                <label className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                  Deal text
-                </label>
-                <textarea
-                  value={selectedPrompt}
-                  onChange={(e) => setSelectedPrompt(e.target.value)}
-                  rows={8}
-                  disabled={isCreating}
-                  className="mt-1 w-full border border-[var(--t-divider)] bg-black/10 px-2 py-2 text-xs leading-relaxed text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
+              <div className="grid gap-4 p-4">
+                <StageIndicator
+                  current={state}
+                  hideSuggestions={openInConfigure}
                 />
 
-                <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <label className="border border-[var(--t-divider)] bg-black/10 px-2 py-2">
-                    <span className="block text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                      Pot (USDC)
-                    </span>
-                    <input
-                      type="number"
-                      value={potAmount}
-                      onChange={(e) => setPotAmount(e.target.value)}
-                      min={MIN_POT_AMOUNT}
-                      step="0.01"
-                      disabled={isCreating}
-                      className="mt-1 w-full bg-transparent text-sm font-bold text-[var(--t-green)] focus:outline-none disabled:opacity-50"
-                    />
-                  </label>
-                  <label className="border border-[var(--t-divider)] bg-black/10 px-2 py-2">
-                    <span className="block text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                      Entry
-                    </span>
-                    <input
-                      type="number"
-                      value={entryCost}
-                      onChange={(e) => setEntryCost(e.target.value)}
-                      min={MIN_ENTRY_COST}
-                      step="0.01"
-                      disabled={isCreating}
-                      className="mt-1 w-full bg-transparent text-sm font-bold text-[var(--t-green)] focus:outline-none disabled:opacity-50"
-                    />
-                  </label>
-                </div>
-
-                <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-                  {potNum > 0 && (
-                    <span>
-                      {DEAL_CREATION_FEE_PERCENTAGE}% fee / net{" "}
-                      <span className="text-[var(--t-green)]">
-                        ${netPot.toFixed(2)}
-                      </span>
-                    </span>
-                  )}
-                  {balance !== undefined && (
-                    <span>
-                      cash{" "}
-                      <span className="text-[var(--t-green)]">
-                        ${balance.toFixed(2)}
-                      </span>
-                    </span>
-                  )}
-                </div>
-
-                {insufficientBalance && (
-                  <p className="mt-2 text-[10px] font-bold uppercase tracking-wider text-[var(--t-amber)]">
-                    Insufficient balance
-                  </p>
-                )}
-
-                {!authenticated && (
-                  <p className="mt-2 text-[10px] uppercase tracking-wider text-[var(--t-amber)]">
-                    Connect wallet to create deals
-                  </p>
-                )}
-
-                {createError && (
-                  <div className="mt-2 text-[10px] text-[var(--t-red)]">
-                    {createError}
+                {headline.headline && (
+                  <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
+                    <p className="mb-2 text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+                      Newswire source
+                    </p>
+                    <p className="font-[family-name:var(--font-plex-sans)] text-base font-black uppercase leading-snug tracking-wide text-[var(--t-amber)]">
+                      {headline.headline}
+                    </p>
+                    {headline.body && (
+                      <p className="mt-2 text-xs leading-relaxed text-[var(--t-green)]">
+                        {headline.body}
+                      </p>
+                    )}
                   </div>
                 )}
 
-                {isCreating && (
-                  <div className="mt-3 border border-[var(--t-green)]/40 bg-[var(--t-green)]/5 px-2 py-1.5">
-                    <div className="flex items-center gap-2">
-                      <span className="text-[10px] uppercase tracking-wider text-[var(--t-green)]">
-                        {STEP_LABELS[step] ?? "PROCESSING..."}
-                      </span>
-                      <span className="cursor-blink text-[var(--t-green)]">
-                        {"█"}
-                      </span>
-                    </div>
-                    <div className="mt-1 h-0.5 overflow-hidden bg-[var(--t-border)]">
-                      <div
-                        className="h-full bg-[var(--t-green)] transition-all duration-500"
-                        style={{
-                          width: createDealProgressWidth(step),
-                        }}
+                {state === "suggestions" && (
+                  <DealSuggestionsPane
+                    suggestQuery={suggestQuery}
+                    onPickSuggestion={handlePickSuggestion}
+                  />
+                )}
+
+                {(state === "configure" || state === "creating") && (
+                  <>
+                    <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
+                      <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--t-divider)] pb-3">
+                        <h3 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
+                          Deal text
+                        </h3>
+                        <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+                          What traders will see
+                        </span>
+                      </div>
+                      <textarea
+                        value={selectedPrompt}
+                        onChange={(e) => setSelectedPrompt(e.target.value)}
+                        rows={6}
+                        disabled={isCreating}
+                        className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-sm leading-relaxed text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
                       />
                     </div>
-                  </div>
-                )}
 
-                {!isCreating && (
-                  <div className="mt-3 flex items-center gap-2">
-                    <button
-                      onClick={handleSubmitDeal}
-                      disabled={
-                        !authenticated ||
-                        !selectedPrompt.trim() ||
-                        isNaN(potNum) ||
-                        potNum < MIN_POT_AMOUNT ||
-                        isNaN(entryNum) ||
-                        entryNum < MIN_ENTRY_COST ||
-                        insufficientBalance
-                      }
-                      className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-40"
-                    >
-                      Create Deal
-                    </button>
-                    <button
-                      onClick={handleBack}
-                      className="border border-transparent px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:border-[var(--t-divider)] hover:text-[var(--t-text)]"
-                    >
-                      Back
-                    </button>
-                  </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="block border border-[var(--t-divider)] bg-[#070b09]/75 p-3">
+                        <span className="block text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+                          Pot (USDC)
+                        </span>
+                        <input
+                          type="number"
+                          value={potAmount}
+                          onChange={(e) => setPotAmount(e.target.value)}
+                          min={MIN_POT_AMOUNT}
+                          step="0.01"
+                          disabled={isCreating}
+                          className="mt-1 w-full bg-transparent text-2xl font-black uppercase tracking-wide text-[var(--t-green)] focus:outline-none disabled:opacity-50"
+                        />
+                      </label>
+                      <label className="block border border-[var(--t-divider)] bg-[#070b09]/75 p-3">
+                        <span className="block text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+                          Entry (USDC)
+                        </span>
+                        <input
+                          type="number"
+                          value={entryCost}
+                          onChange={(e) => setEntryCost(e.target.value)}
+                          min={MIN_ENTRY_COST}
+                          step="0.01"
+                          disabled={isCreating}
+                          className="mt-1 w-full bg-transparent text-2xl font-black uppercase tracking-wide text-[var(--t-green)] focus:outline-none disabled:opacity-50"
+                        />
+                      </label>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-px border border-[var(--t-divider)] bg-[var(--t-divider)] text-[10px] uppercase tracking-[0.18em]">
+                      <DatumCell
+                        className="border-0 bg-[#070b09]/85"
+                        label={`${DEAL_CREATION_FEE_PERCENTAGE}% fee`}
+                        value={
+                          potNum > 0
+                            ? `$${((potNum * DEAL_CREATION_FEE_PERCENTAGE) / 100).toFixed(2)}`
+                            : "$0.00"
+                        }
+                      />
+                      <DatumCell
+                        className="border-0 bg-[#070b09]/85"
+                        label="Net pot"
+                        value={`$${netPot.toFixed(2)}`}
+                        valueClassName="text-[var(--t-green)]"
+                      />
+                      <DatumCell
+                        className="border-0 bg-[#070b09]/85"
+                        label="Your cash"
+                        value={
+                          balance !== undefined
+                            ? `$${balance.toFixed(2)}`
+                            : "..."
+                        }
+                        valueClassName={
+                          insufficientBalance
+                            ? "text-[var(--t-red)]"
+                            : "text-[var(--t-green)]"
+                        }
+                      />
+                    </div>
+
+                    {(insufficientBalance || !authenticated || createError) && (
+                      <div className="border border-[var(--t-red)]/30 bg-[var(--t-red)]/[0.06] px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[var(--t-red)]">
+                        {createError ??
+                          (!authenticated
+                            ? "Connect wallet to create deals"
+                            : "Insufficient balance to fund this pot")}
+                      </div>
+                    )}
+
+                    {isCreating && (
+                      <div className="border border-[var(--t-green)]/40 bg-[var(--t-green)]/[0.06] p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--t-green)]">
+                            {STEP_LABELS[step] ?? "PROCESSING..."}
+                          </span>
+                          <span className="cursor-blink text-[var(--t-green)]">
+                            █
+                          </span>
+                        </div>
+                        <div className="mt-2 h-1 overflow-hidden bg-[var(--t-border)]">
+                          <div
+                            className="h-full bg-[var(--t-green)] transition-all duration-500"
+                            style={{ width: createDealProgressWidth(step) }}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    {!isCreating && (
+                      <div className="flex items-center justify-between gap-3 border-t border-[var(--t-border)]/80 pt-4">
+                        <button
+                          onClick={handleBack}
+                          className="text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+                        >
+                          &larr; Back
+                        </button>
+                        <button
+                          onClick={handleSubmitDeal}
+                          disabled={!canSubmit}
+                          className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+                        >
+                          Create deal &rarr;
+                        </button>
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
-            )}
+            </div>
           </div>
         </Dialog.Popup>
       </Dialog.Portal>

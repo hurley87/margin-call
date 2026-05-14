@@ -1,13 +1,24 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
+import { useReadContract } from "wagmi";
+import { parseUnits } from "viem";
 
 import {
   useConvexCreateTrader,
   useConvexTraders,
 } from "@/hooks/use-convex-traders";
+import { useTrader } from "@/hooks/use-traders";
+import { useDepositFlow } from "@/hooks/use-escrow";
+import { useResumeTrader } from "@/hooks/use-agent";
+import { authFetch } from "@/lib/api";
+import {
+  ESCROW_ADDRESS,
+  escrowAbi,
+  CONTRACTS_CHAIN_ID,
+} from "@/lib/contracts/escrow";
 import type { Mandate } from "@/lib/agent/evaluator";
 
 type Option<T> = { label: string; sub: string; value: T };
@@ -113,6 +124,7 @@ function TraderCreationFlow({
   const [mandate, setMandate] = useState<Mandate>({});
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
+  const [createdTraderId, setCreatedTraderId] = useState<string | null>(null);
 
   const trimmedName = name.trim();
   const nameTaken =
@@ -152,13 +164,23 @@ function TraderCreationFlow({
         mandate: finalMandate,
       });
       setIsCreating(false);
-      onCreated?.(traderId);
+      setCreatedTraderId(traderId);
     } catch (err) {
       setCreateError(
         err instanceof Error ? err.message : "Failed to create trader"
       );
       setIsCreating(false);
     }
+  }
+
+  if (createdTraderId) {
+    return (
+      <FundAndActivateStep
+        convexTraderId={createdTraderId}
+        traderName={trimmedName}
+        onDone={() => onCreated?.(createdTraderId)}
+      />
+    );
   }
 
   return (
@@ -282,6 +304,226 @@ function TraderCreationFlow({
         )}
       </div>
     </>
+  );
+}
+
+function FundAndActivateStep({
+  convexTraderId,
+  traderName,
+  onDone,
+}: {
+  convexTraderId: string;
+  traderName: string;
+  onDone: () => void;
+}) {
+  const { data: trader } = useTrader(convexTraderId);
+  const tokenId = trader?.token_id ?? 0;
+  const walletReady = trader?.wallet_status === "ready";
+
+  const { data: escrowBalance, refetch: refetchBalance } = useReadContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getBalance",
+    args: tokenId ? [BigInt(tokenId)] : undefined,
+    chainId: CONTRACTS_CHAIN_ID,
+    query: { enabled: !!tokenId, refetchInterval: 5_000 },
+  });
+  const balanceUsdc =
+    escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
+  const funded = !!escrowBalance && escrowBalance > BigInt(0);
+
+  const [amount, setAmount] = useState("");
+  const [ensureError, setEnsureError] = useState<string | undefined>();
+  const [syncError, setSyncError] = useState<string | undefined>();
+  const {
+    deposit,
+    reset: resetDeposit,
+    step: depositStep,
+    error: depositError,
+    isLoading: isDepositBusy,
+  } = useDepositFlow();
+
+  const resume = useResumeTrader();
+  const activating = useRef(false);
+
+  useEffect(() => {
+    if (activating.current && !resume.isPending && !resume.isError) {
+      activating.current = false;
+      onDone();
+    }
+  }, [resume.isPending, resume.isError, onDone]);
+
+  async function handleDeposit(e: React.FormEvent) {
+    e.preventDefault();
+    const parsed = parseUnits(amount, 6);
+    if (parsed === BigInt(0)) return;
+    setEnsureError(undefined);
+    setSyncError(undefined);
+
+    try {
+      const res = await fetch(
+        `/api/trader/${convexTraderId}/ensure-depositor`,
+        { method: "POST" }
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setEnsureError((body as { error?: string }).error ?? "Setup failed");
+        return;
+      }
+    } catch {
+      setEnsureError("Network error during depositor setup");
+      return;
+    }
+
+    try {
+      await deposit(BigInt(tokenId), parsed);
+      const syncRes = await authFetch(
+        `/api/trader/${convexTraderId}/sync-balance`,
+        { method: "POST" }
+      );
+      if (!syncRes.ok) {
+        setSyncError("Balance sync failed — check escrow then activate");
+      } else {
+        setAmount("");
+        refetchBalance();
+      }
+    } catch {
+      // depositError surfaced via hook state
+    }
+  }
+
+  function handleActivate() {
+    activating.current = true;
+    resume.mutate(convexTraderId);
+  }
+
+  const depositDisplayError = ensureError ?? syncError ?? depositError;
+  const canDeposit = !!tokenId && !!amount && !isDepositBusy;
+  const canActivate = walletReady && funded && !resume.isPending;
+
+  return (
+    <div className="mx-auto w-full max-w-2xl px-3 py-6">
+      <div className="border border-[var(--t-divider)] bg-[#070b09] p-5">
+        <p className="mb-1 text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+          Trader hired
+        </p>
+        <h2 className="mb-5 text-sm font-bold uppercase tracking-[0.08em] text-[var(--t-amber)]">
+          Fund {traderName} to activate
+        </h2>
+
+        {/* Wallet + balance status */}
+        <div className="mb-5 grid grid-cols-2 gap-3">
+          <div className="border border-[var(--t-divider)] p-3">
+            <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+              Wallet
+            </p>
+            {walletReady ? (
+              <p className="text-sm font-bold uppercase text-[var(--t-green)]">
+                Ready
+              </p>
+            ) : (
+              <p className="text-sm font-bold uppercase text-[var(--t-amber)]">
+                Setting up...
+              </p>
+            )}
+          </div>
+          <div className="border border-[var(--t-divider)] p-3">
+            <p className="mb-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+              Escrow
+            </p>
+            <p
+              className={`text-sm font-bold uppercase ${funded ? "text-[var(--t-green)]" : "text-[var(--t-amber)]"}`}
+            >
+              {balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."}
+            </p>
+          </div>
+        </div>
+
+        {/* Deposit form */}
+        <form onSubmit={handleDeposit} className="mb-5 flex flex-col gap-3">
+          <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+            Deposit USDC
+          </p>
+          <div className="flex gap-2">
+            <input
+              type="number"
+              step="0.000001"
+              min="0"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="0.00 USDC"
+              disabled={isDepositBusy || !tokenId}
+              className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={!canDeposit}
+            className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {depositStep === "approving"
+              ? "Approving USDC..."
+              : depositStep === "depositing"
+                ? "Depositing..."
+                : "Fund Escrow"}
+          </button>
+          {depositStep === "done" && !funded && (
+            <p className="text-xs text-[var(--t-green)]">
+              Deposit confirmed. Balance syncing...
+            </p>
+          )}
+          {depositStep === "done" && funded && (
+            <p className="text-xs text-[var(--t-green)]">Escrow funded ✓</p>
+          )}
+          {depositDisplayError && (
+            <div className="flex items-center gap-2">
+              <p className="text-xs text-[var(--t-red)]">
+                {depositDisplayError.slice(0, 120)}
+              </p>
+              {depositError && !ensureError && (
+                <button
+                  type="button"
+                  onClick={resetDeposit}
+                  className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
+                >
+                  Retry
+                </button>
+              )}
+            </div>
+          )}
+        </form>
+
+        {/* Activate */}
+        <div className="flex flex-col gap-3 border-t border-[var(--t-divider)] pt-5">
+          <button
+            onClick={handleActivate}
+            disabled={!canActivate}
+            className="border border-[var(--t-accent)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            {resume.isPending ? "Activating..." : "Activate Trading"}
+          </button>
+          {!canActivate && (
+            <p className="text-[10px] text-[var(--t-muted)]">
+              {!walletReady
+                ? "Waiting for wallet setup to complete..."
+                : "Fund escrow above to enable activation"}
+            </p>
+          )}
+          {resume.isError && (
+            <p className="text-xs text-[var(--t-red)]">
+              {resume.error?.message}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <button
+        onClick={onDone}
+        className="mt-4 text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+      >
+        Skip for now &rarr;
+      </button>
+    </div>
   );
 }
 
