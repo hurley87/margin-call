@@ -34,6 +34,22 @@ export const list = query({
   },
 });
 
+/** Recent created deals for authenticated global game-floor alerts. */
+export const listRecentCreatedForToasts = query({
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit = 25 }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return [];
+
+    const boundedLimit = Math.max(1, Math.min(limit, 50));
+    return ctx.db
+      .query("deals")
+      .withIndex("byCreatedAt")
+      .order("desc")
+      .take(boundedLimit);
+  },
+});
+
 /** Get a deal by id — visible to any authenticated user. */
 export const getById = query({
   args: { dealId: v.id("deals") },
@@ -222,6 +238,8 @@ export const recordDealEntry = internalMutation({
 
     const now = Date.now();
     const { idempotencyKey: _key, traderId: _traderId, ...dealData } = args;
+    void _key;
+    void _traderId;
     return ctx.db.insert("deals", {
       ...dealData,
       status: "open",

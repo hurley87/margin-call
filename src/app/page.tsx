@@ -2,6 +2,7 @@
 
 import {
   Suspense,
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -13,7 +14,15 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { Dialog } from "@base-ui/react/dialog";
-import { Github, HelpCircle, LogOut, Twitter, X } from "lucide-react";
+import {
+  Github,
+  HelpCircle,
+  LogOut,
+  Twitter,
+  Volume2,
+  VolumeX,
+  X,
+} from "lucide-react";
 import { useQuery } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../../convex/_generated/api";
@@ -28,6 +37,7 @@ import {
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
+import { LiveGameToasts } from "@/components/live-game-toasts";
 import { PublicTraderDialog } from "@/components/public-trader-dialog";
 import { TraderCreationDialog } from "@/components/trader-creation-flow";
 import { TraderDetailDialog } from "@/components/trader-detail";
@@ -44,6 +54,7 @@ import {
   useLeaderboard,
   type LeaderboardTrader,
 } from "@/hooks/use-leaderboard";
+import { useSfx } from "@/hooks/use-sfx";
 import {
   usePortfolio,
   type Portfolio,
@@ -55,7 +66,7 @@ import {
   getTraderCycleUi,
   traderCycleDocFromDeskSummary,
 } from "@/lib/trader-cycle";
-import { cn } from "@/lib/utils";
+import { cn, formatShortAddress } from "@/lib/utils";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const NY_TIME: Intl.DateTimeFormatOptions = {
@@ -143,10 +154,10 @@ const DEFAULT_CATEGORY_TONE = {
 
 function DeskDeepLinkHydration({
   setSelectedDealId,
-  setSelectedTraderId,
+  onOpenTraderId,
 }: {
   setSelectedDealId: Dispatch<SetStateAction<string | null>>;
-  setSelectedTraderId: Dispatch<SetStateAction<string | null>>;
+  onOpenTraderId: (traderId: string) => void;
 }) {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -157,9 +168,9 @@ function DeskDeepLinkHydration({
     if (!deal && !trader) return;
 
     if (deal) setSelectedDealId(deal);
-    if (trader) setSelectedTraderId(trader);
+    if (trader) onOpenTraderId(trader);
     router.replace("/", { scroll: false });
-  }, [searchParams, router, setSelectedDealId, setSelectedTraderId]);
+  }, [searchParams, router, setSelectedDealId, onOpenTraderId]);
 
   return null;
 }
@@ -257,6 +268,7 @@ function Dashboard({
   const { data: leaderboard, isLoading: leaderboardLoading } = useLeaderboard();
   const { balance: cashBalance } = useUsdcBalance();
   const drops = useQuery(api.marketNarratives.feedDrops, { limit: 6 });
+  const sfx = useSfx();
 
   const [traderFilter, setTraderFilter] = useState<string | null>(null);
   const [approvalCtx, setApprovalCtx] = useState<{
@@ -292,6 +304,22 @@ function Dashboard({
     [filteredActivity]
   );
 
+  const ownedTraderIds = useMemo(
+    () => new Set((portfolio?.traders ?? []).map((trader) => trader.id)),
+    [portfolio?.traders]
+  );
+
+  const handleOpenTraderId = useCallback(
+    (traderId: string) => {
+      if (ownedTraderIds.has(traderId)) {
+        setSelectedTraderId(traderId);
+        return;
+      }
+      setSelectedPublicTraderId(traderId);
+    },
+    [ownedTraderIds]
+  );
+
   const pnl = portfolio?.stats.total_pnl ?? 0;
   const equity = portfolio?.total_value_usdc ?? 0;
   const cash = cashBalance ?? 0;
@@ -302,15 +330,21 @@ function Dashboard({
       <Suspense fallback={null}>
         <DeskDeepLinkHydration
           setSelectedDealId={setSelectedDealId}
-          setSelectedTraderId={setSelectedTraderId}
+          onOpenTraderId={handleOpenTraderId}
         />
       </Suspense>
+      <LiveGameToasts
+        onDealSound={sfx.playDealToast}
+        onWipeoutSound={sfx.playWipeoutToast}
+      />
       <TopStatusBar
         displayName={displayName}
         nowMs={nowMs}
         cash={cash}
         equity={equity}
         portfolioLoading={portfolioLoading}
+        sfxEnabled={sfx.enabled}
+        onToggleSfx={sfx.toggleEnabled}
         onLogout={logout}
       />
 
@@ -451,6 +485,8 @@ function TopStatusBar({
   cash,
   equity,
   portfolioLoading,
+  sfxEnabled,
+  onToggleSfx,
   onLogout,
 }: {
   displayName: string;
@@ -458,6 +494,8 @@ function TopStatusBar({
   cash: number;
   equity: number;
   portfolioLoading: boolean;
+  sfxEnabled: boolean;
+  onToggleSfx: () => void;
   onLogout: () => void;
 }) {
   const marketDate = new Date(nowMs);
@@ -516,6 +554,20 @@ function TopStatusBar({
         </div>
 
         <div className="terminal-panel flex items-center justify-end gap-2 px-3 py-2">
+          <button
+            type="button"
+            onClick={onToggleSfx}
+            title={sfxEnabled ? "Mute live alerts" : "Enable live alerts"}
+            aria-label={sfxEnabled ? "Mute live alerts" : "Enable live alerts"}
+            aria-pressed={sfxEnabled}
+            className="grid h-9 w-9 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)] hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-text)]"
+          >
+            {sfxEnabled ? (
+              <Volume2 className="h-4 w-4" />
+            ) : (
+              <VolumeX className="h-4 w-4" />
+            )}
+          </button>
           <IconLink href="https://x.com/davidbhurley" label="X">
             <Twitter className="h-4 w-4" />
           </IconLink>
@@ -1611,9 +1663,7 @@ function LoadingLine({ label }: { label: string }) {
 
 function formatOwnerWallet(ownerAddress: string, isCurrent: boolean) {
   const suffix = isCurrent ? " (You)" : "";
-  if (!ownerAddress) return `Unknown${suffix}`;
-  if (ownerAddress.length <= 12) return `${ownerAddress}${suffix}`;
-  return `${ownerAddress.slice(0, 6)}...${ownerAddress.slice(-4)}${suffix}`;
+  return `${formatShortAddress(ownerAddress)}${suffix}`;
 }
 
 function riskLabel(trader: TraderSummary) {

@@ -5,6 +5,7 @@ import { useMutation, useQuery } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
+import { formatShortAddress } from "@/lib/utils";
 
 export interface DeskManager {
   id: string;
@@ -55,7 +56,7 @@ export function useDeskManager() {
 
     void upsert({
       walletAddress,
-      displayName: walletAddress.slice(0, 6) + "..." + walletAddress.slice(-4),
+      displayName: formatShortAddress(walletAddress),
     }).catch(() => {
       didUpsertWalletRef.current = null;
     });

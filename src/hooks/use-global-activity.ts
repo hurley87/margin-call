@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { AgentActivity } from "./use-agent";
@@ -17,27 +18,27 @@ export function useGlobalActivity() {
     limit: 100,
   });
 
-  if (result === undefined) {
-    return { data: undefined, isLoading: true, isError: false };
-  }
-
-  const activity: AgentActivity[] = result.entries.map((entry) => ({
-    id: entry._id,
-    trader_id: String(entry.traderId),
-    activity_type: entry.activityType,
-    message: entry.message,
-    deal_id: entry.dealId ?? null,
-    metadata: (entry.metadata as Record<string, unknown>) ?? {},
-    created_at: new Date(entry.createdAt).toISOString(),
-  }));
-
-  return {
-    data: {
+  const data = useMemo<GlobalActivityData | undefined>(() => {
+    if (result === undefined) return undefined;
+    const activity: AgentActivity[] = result.entries.map((entry) => ({
+      id: entry._id,
+      trader_id: String(entry.traderId),
+      activity_type: entry.activityType,
+      message: entry.message,
+      deal_id: entry.dealId ?? null,
+      metadata: (entry.metadata as Record<string, unknown>) ?? {},
+      created_at: new Date(entry.createdAt).toISOString(),
+    }));
+    return {
       activity,
       traderNames: result.traderNames,
       traderProfiles: result.traderProfiles,
-    } satisfies GlobalActivityData,
-    isLoading: false,
+    };
+  }, [result]);
+
+  return {
+    data,
+    isLoading: data === undefined,
     isError: false,
   };
 }

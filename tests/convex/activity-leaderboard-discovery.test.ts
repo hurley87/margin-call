@@ -19,7 +19,7 @@ import schema from "../../convex/schema";
 import { internal, api } from "../../convex/_generated/api";
 import { evaluateDeals } from "../../convex/agent/_evaluator";
 import type { Mandate, Deal } from "../../convex/agent/_types";
-import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
@@ -201,6 +201,68 @@ describe("Activity feed visibility", () => {
       limit: 3,
     });
     expect(limited.length).toBe(3);
+  });
+});
+
+describe("Live game deal toast query", () => {
+  it("returns newest created deals for authenticated users", async () => {
+    const t = convexTest(schema, modules);
+    const authed = t.withIdentity({
+      subject: "did:privy:toast-user",
+      tokenIdentifier: "did:privy:toast-user",
+      issuer: "https://auth.privy.io",
+    });
+
+    await t.run(async (ctx) => {
+      await ctx.db.insert("deals", {
+        creatorType: "desk_manager",
+        prompt: "Older risk arb setup",
+        potUsdc: 100,
+        entryCostUsdc: 10,
+        status: "open",
+        createdAt: 1000,
+        updatedAt: 1000,
+      });
+      await ctx.db.insert("deals", {
+        creatorType: "desk_manager",
+        creatorAddress: "0xabc",
+        prompt: "Fresh hostile takeover rumor",
+        potUsdc: 500,
+        entryCostUsdc: 50,
+        status: "open",
+        createdAt: 3000,
+        updatedAt: 3000,
+      });
+      await ctx.db.insert("deals", {
+        creatorType: "desk_manager",
+        prompt: "Middle merger spread",
+        potUsdc: 250,
+        entryCostUsdc: 25,
+        status: "open",
+        createdAt: 2000,
+        updatedAt: 2000,
+      });
+    });
+
+    const rows = await authed.query(api.deals.listRecentCreatedForToasts, {
+      limit: 2,
+    });
+
+    expect(rows.map((row) => row.prompt)).toEqual([
+      "Fresh hostile takeover rumor",
+      "Middle merger spread",
+    ]);
+  });
+
+  it("returns no deal toast rows for unauthenticated users", async () => {
+    const t = convexTest(schema, modules);
+    await seedDeal(t, { prompt: "Unauthed should not see this" });
+
+    const rows = await t.query(api.deals.listRecentCreatedForToasts, {
+      limit: 10,
+    });
+
+    expect(rows).toEqual([]);
   });
 });
 

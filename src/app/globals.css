@@ -230,6 +230,81 @@
   animation: desk-float 12s ease-in-out infinite;
 }
 
+@keyframes live-toast-enter {
+  0% {
+    opacity: 0;
+    transform: translate3d(18px, -6px, 0) scale(0.98);
+    filter: brightness(1.35);
+  }
+  42% {
+    opacity: 1;
+    transform: translate3d(-2px, 0, 0) scale(1.01);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+    filter: brightness(1);
+  }
+}
+
+@keyframes live-toast-flicker {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  12% {
+    opacity: 0.7;
+  }
+  18% {
+    opacity: 0.18;
+  }
+  26% {
+    opacity: 0.48;
+  }
+}
+
+@keyframes live-toast-wipeout-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  18% {
+    transform: translate3d(-2px, 0, 0);
+  }
+  36% {
+    transform: translate3d(2px, 0, 0);
+  }
+  54% {
+    transform: translate3d(-1px, 0, 0);
+  }
+  72% {
+    transform: translate3d(1px, 0, 0);
+  }
+}
+
+.live-toast-enter {
+  animation: live-toast-enter 360ms ease-out both;
+}
+
+.live-toast-wipeout {
+  animation:
+    live-toast-enter 360ms ease-out both,
+    live-toast-wipeout-shake 420ms ease-out 120ms both;
+}
+
+.live-toast-scan {
+  background:
+    repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.1) 0,
+      rgba(255, 255, 255, 0.1) 1px,
+      transparent 1px,
+      transparent 5px
+    ),
+    linear-gradient(90deg, transparent, rgba(214, 166, 96, 0.12), transparent);
+  animation: live-toast-flicker 1.4s steps(2, end) infinite;
+}
+
 .terminal-panel {
   position: relative;
   border: 1px solid var(--t-bronze);
