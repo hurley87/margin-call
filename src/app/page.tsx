@@ -84,23 +84,61 @@ const FALLBACK_WIRE_ITEMS = [
     time: "09:42",
     headline: "Treasury yields slip as desk managers watch Fed chatter",
     impact: "+2% bond desks / margin pressure easing",
+    category: "market_update",
   },
   {
     time: "09:36",
     headline: "Takeover rumors circle a battered industrial conglomerate",
     impact: "+3% special situations / SEC heat rising",
+    category: "rumor",
   },
   {
     time: "09:28",
     headline: "Junk bond syndicate tests appetite after rough open",
     impact: "risk bid firm / cautious credit desks",
+    category: "market",
   },
   {
     time: "09:17",
     headline: "Oil patch sells off on OPEC output concern",
     impact: "-2% energy names / macro desks alert",
+    category: "breaking",
   },
 ] as const;
+
+type WireCategory =
+  | "deal_seed"
+  | "breaking"
+  | "market_update"
+  | "market"
+  | "rumor";
+
+const CATEGORY_TONE: Record<WireCategory, { label: string; rail: string }> = {
+  deal_seed: {
+    label: "text-[var(--t-red)]",
+    rail: "bg-[var(--t-red)]",
+  },
+  breaking: {
+    label: "text-[var(--t-red)]",
+    rail: "bg-[var(--t-red)]",
+  },
+  market_update: {
+    label: "text-[var(--t-accent)]",
+    rail: "bg-[var(--t-accent)]",
+  },
+  market: {
+    label: "text-[var(--t-green)]",
+    rail: "bg-[var(--t-green)]",
+  },
+  rumor: {
+    label: "text-[var(--t-blue)]",
+    rail: "bg-[var(--t-blue)]",
+  },
+};
+const DEFAULT_CATEGORY_TONE = {
+  label: "text-[var(--t-muted)]",
+  rail: "bg-[var(--t-divider)]",
+};
 
 function DeskDeepLinkHydration({
   setSelectedDealId,
@@ -217,7 +255,7 @@ function Dashboard({
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
   const { data: leaderboard, isLoading: leaderboardLoading } = useLeaderboard();
   const { balance: cashBalance } = useUsdcBalance();
-  const drops = useQuery(api.marketNarratives.feedDrops, { limit: 12 });
+  const drops = useQuery(api.marketNarratives.feedDrops, { limit: 6 });
 
   const [traderFilter, setTraderFilter] = useState<string | null>(null);
   const [approvalCtx, setApprovalCtx] = useState<{
@@ -256,9 +294,6 @@ function Dashboard({
   const pnl = portfolio?.stats.total_pnl ?? 0;
   const equity = portfolio?.total_value_usdc ?? 0;
   const cash = cashBalance ?? 0;
-  const deskMargin = Math.max(equity - cash, 0);
-  const marginThreshold = Math.max(equity * 0.25, 250);
-  const isMarginHot = equity > 0 && deskMargin >= marginThreshold;
   const currentWallet = deskWalletAddress || user?.wallet?.address;
 
   return (
@@ -274,9 +309,6 @@ function Dashboard({
         nowMs={nowMs}
         cash={cash}
         equity={equity}
-        margin={deskMargin}
-        threshold={marginThreshold}
-        marginHot={isMarginHot}
         portfolioLoading={portfolioLoading}
         onLogout={logout}
       />
@@ -361,9 +393,6 @@ function TopStatusBar({
   nowMs,
   cash,
   equity,
-  margin,
-  threshold,
-  marginHot,
   portfolioLoading,
   onLogout,
 }: {
@@ -371,9 +400,6 @@ function TopStatusBar({
   nowMs: number;
   cash: number;
   equity: number;
-  margin: number;
-  threshold: number;
-  marginHot: boolean;
   portfolioLoading: boolean;
   onLogout: () => void;
 }) {
@@ -397,7 +423,7 @@ function TopStatusBar({
   });
 
   return (
-    <header className="z-40 shrink-0 border-b border-[var(--t-bronze)] bg-[#050706]/95 px-2 py-2 backdrop-blur-sm">
+    <header className="z-40 shrink-0 bg-[#050706]/95 px-2 pt-2 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm">
       <div className="grid gap-2 xl:grid-cols-[18rem_14rem_minmax(28rem,1fr)_max-content]">
         <div className="terminal-panel px-3 py-2">
           <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black leading-none tracking-wide text-[var(--t-accent)]">
@@ -421,7 +447,7 @@ function TopStatusBar({
           </div>
         </div>
 
-        <div className="terminal-panel grid grid-cols-2 divide-y divide-[var(--t-divider)] text-[11px] uppercase sm:grid-cols-5 sm:divide-x sm:divide-y-0">
+        <div className="terminal-panel grid grid-cols-3 divide-x divide-[var(--t-divider)] text-[11px] uppercase">
           <StatusCell label="Your Firm" value={displayName} />
           <StatusCell
             label="Cash"
@@ -432,16 +458,6 @@ function TopStatusBar({
             label="Equity"
             value={portfolioLoading ? "..." : formatMoney(equity)}
             tone="green"
-          />
-          <StatusCell
-            label="Margin"
-            value={portfolioLoading ? "..." : formatMoney(margin)}
-            tone="amber"
-          />
-          <StatusCell
-            label="Margin Call"
-            value={portfolioLoading ? "..." : formatMoney(threshold)}
-            tone={marginHot ? "red" : "green"}
           />
         </div>
 
@@ -559,23 +575,20 @@ function NewswirePanel({
         return drop.dispatches.map((dispatch) => ({
           time,
           headline: dispatch.headline,
-          impact:
-            dispatch.body.length > 112
-              ? `${dispatch.body.slice(0, 112)}...`
-              : dispatch.body,
+          impact: dispatch.body,
           category: dispatch.category,
           body: dispatch.body,
           dealSeed: dispatch.dealSeed,
         }));
       })
-      .slice(0, 28);
+      .slice(0, 10);
   }, [drops]);
 
   return (
     <aside className="terminal-panel flex min-h-0 flex-col overflow-hidden">
       <PanelHeader
         title="Newswire"
-        meta={items !== undefined ? `${items.length}` : "WAIT"}
+        meta={items === undefined ? "WAIT" : undefined}
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <NewswireList items={items} onCreate={setDealDialog} />
@@ -636,28 +649,20 @@ function NewswireList({
   items: NewswirePostItem[] | undefined;
   onCreate: (item: NewswireCreateDialog) => void;
 }) {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-
   if (items === undefined) {
     return <LoadingLine label="TUNING PRIVATE WIRE" />;
   }
   if (items.length === 0) {
     return (
-      <div className="space-y-4">
-        {FALLBACK_WIRE_ITEMS.map((item) => (
+      <div className="space-y-3">
+        {FALLBACK_WIRE_ITEMS.map((item, index) => (
           <NewswireItem
             key={item.time + item.headline}
             time={item.time}
             headline={item.headline}
             body={item.impact}
-            expanded={expanded[item.time + item.headline] ?? false}
-            onToggle={() =>
-              setExpanded((current) => ({
-                ...current,
-                [item.time + item.headline]:
-                  !current[item.time + item.headline],
-              }))
-            }
+            category={item.category}
+            isFirst={index === 0}
             onCreate={() =>
               onCreate({
                 headline: item.headline,
@@ -671,22 +676,16 @@ function NewswireList({
     );
   }
   return (
-    <div className="space-y-4">
-      {items.map((item) => (
+    <div className="space-y-3">
+      {items.map((item, index) => (
         <NewswireItem
           key={`${item.time}-${item.headline}`}
           time={item.time}
           headline={item.headline}
           body={item.body}
           category={item.category}
-          expanded={expanded[`${item.time}-${item.headline}`] ?? false}
-          onToggle={() =>
-            setExpanded((current) => ({
-              ...current,
-              [`${item.time}-${item.headline}`]:
-                !current[`${item.time}-${item.headline}`],
-            }))
-          }
+          dealSeed={item.dealSeed}
+          isFirst={index === 0}
           onCreate={() =>
             onCreate({
               headline: item.headline,
@@ -706,47 +705,85 @@ function NewswireItem({
   headline,
   body,
   category,
-  expanded,
-  onToggle,
+  dealSeed,
+  isFirst,
   onCreate,
 }: {
   time: string;
   headline: string;
   body: string;
   category?: string;
-  expanded: boolean;
-  onToggle: () => void;
+  dealSeed?: NewswireDealSeed;
+  isFirst?: boolean;
   onCreate: () => void;
 }) {
-  const canExpand = body.length > 112;
-  const displayBody =
-    !expanded && canExpand ? `${body.slice(0, 112)}...` : body;
+  const tone =
+    category && category in CATEGORY_TONE
+      ? CATEGORY_TONE[category as WireCategory]
+      : DEFAULT_CATEGORY_TONE;
+  const isSeed = Boolean(dealSeed);
+  const potLabel = dealSeed ? formatSeedPot(dealSeed.suggestedPotUsdc) : null;
 
   return (
     <article
-      onClick={canExpand ? onToggle : undefined}
-      className="cursor-pointer border-b border-[var(--t-divider)]/45 pb-3 text-xs leading-relaxed last:border-b-0 last:pb-0"
+      className={cn(
+        "group relative -mx-2 border-b border-[var(--t-divider)]/45 pb-3 pl-3 pr-2 text-xs leading-relaxed transition-colors last:border-b-0 last:pb-0",
+        "hover:bg-[var(--t-accent-soft)]/40"
+      )}
     >
-      <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-        {category && <span>{category.replaceAll("_", " ")}</span>}
-        {category && <span className="text-[var(--t-divider)]">/</span>}
-        <time className="tabular-nums text-[var(--t-green)]/80">{time}</time>
+      <span
+        aria-hidden
+        className={cn(
+          "absolute left-0 top-0 h-full w-[2px]",
+          tone.rail,
+          isSeed ? "opacity-90" : "opacity-60"
+        )}
+      />
+      <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider">
+        {isFirst && (
+          <span
+            aria-label="latest"
+            className="live-pulse inline-block h-1.5 w-1.5 rounded-full bg-[var(--t-green)]"
+          />
+        )}
+        {category && (
+          <span className={cn("font-semibold", tone.label)}>
+            {category.replaceAll("_", " ")}
+          </span>
+        )}
+        <time className="tabular-nums text-[var(--t-muted)]">{time}</time>
       </div>
-      <h3 className="text-[var(--t-amber)]">{headline}</h3>
-      <p className="mt-1 text-[var(--t-green)]">{displayBody}</p>
-      <div className="mt-2 flex items-center gap-3">
+      <h3 className="font-medium text-[var(--t-amber)]">{headline}</h3>
+      <p className="mt-1 text-[var(--t-green)]/90">{body}</p>
+      {isSeed && potLabel ? (
         <button
-          onClick={(event) => {
-            event.stopPropagation();
-            onCreate();
-          }}
-          className="flex items-center gap-1 border border-[var(--t-accent)] px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+          onClick={onCreate}
+          className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-red)] transition-colors hover:text-[var(--t-amber)]"
         >
-          $ Create Deal
+          <span>→ Take seed · {potLabel} pot</span>
+          {dealSeed && dealSeed.linkedDealCount > 0 && (
+            <span className="text-[var(--t-muted)]">
+              ({dealSeed.linkedDealCount} taken)
+            </span>
+          )}
         </button>
-      </div>
+      ) : (
+        <button
+          onClick={onCreate}
+          className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)]/70 transition-colors hover:text-[var(--t-amber)] group-hover:text-[var(--t-accent)]"
+        >
+          → Create deal
+        </button>
+      )}
     </article>
   );
+}
+
+function formatSeedPot(value: number): string {
+  if (!Number.isFinite(value)) return "$0";
+  return value >= 10 || Number.isInteger(value)
+    ? `$${Math.round(value)}`
+    : `$${value.toFixed(2)}`;
 }
 
 function tradingDeskPanelMeta(
