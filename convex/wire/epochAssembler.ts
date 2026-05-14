@@ -64,6 +64,11 @@ export interface AssemblerInput {
    * The validator will reject the epoch if this is true and no dealSeed is emitted.
    */
   mustIncludeDealSeed: boolean;
+  /**
+   * True when this is the first drop of the trading day (overnight gap detected).
+   * The assembler injects an opening-bell briefing instruction into the prompt.
+   */
+  isOpeningBell: boolean;
 }
 
 export function assembleUserMessage(input: AssemblerInput): string {
@@ -77,6 +82,7 @@ export function assembleUserMessage(input: AssemblerInput): string {
     worldState,
     recentSeedCadence,
     mustIncludeDealSeed,
+    isOpeningBell,
   } = input;
 
   const lines: string[] = [];
@@ -101,6 +107,22 @@ export function assembleUserMessage(input: AssemblerInput): string {
     lines.push(`  sec_heat: ${worldState.sec_heat ?? 5}/10`);
   } else {
     lines.push("  (no prior state — establish the opening conditions)");
+  }
+
+  if (isOpeningBell) {
+    lines.push(
+      `\nOPENING BELL: This is the first Wire Drop of the trading day. Structure it as a morning briefing:`
+    );
+    lines.push(
+      `  - Lead with what happened overnight or since yesterday's close`
+    );
+    lines.push(`  - State who is positioned how heading into today`);
+    lines.push(
+      `  - Name the one central flashpoint the floor will be watching`
+    );
+    lines.push(
+      `  - Tone: electric anticipation. The bell just rang. Not a recap — a call to arms.`
+    );
   }
 
   lines.push(`\nACTIVE STORYLINE ARCS (highest tension first):`);

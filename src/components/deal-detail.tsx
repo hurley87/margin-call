@@ -467,7 +467,8 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
     isLoadingOnChainDeal ||
     onChainDealError !== null ||
     pendingEntries === undefined;
-  const hasPendingEntries = pendingEntries !== undefined && pendingEntries > 0n;
+  const hasPendingEntries =
+    pendingEntries !== undefined && pendingEntries > BigInt(0);
 
   const syncClosedDeal = useCallback(async () => {
     setPhase("syncing");
@@ -551,7 +552,7 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
         <p className="text-[10px] text-[var(--t-muted)]">
           Withdraw remaining pot
           {pendingEntries !== undefined
-            ? ` (${pendingEntries.toString()} pending ${pendingEntries === 1n ? "entry" : "entries"})`
+            ? ` (${pendingEntries.toString()} pending ${pendingEntries === BigInt(1) ? "entry" : "entries"})`
             : " (checking pending entries...)"}
         </p>
         <button

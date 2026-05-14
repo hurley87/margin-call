@@ -39,6 +39,18 @@ Hard rules:
 - Dispatches are terminal-style market updates — terse, professional, urgent. Not tweets, not blog posts, not press releases, not marketing copy.
 - Match the active season's tone and obey its forbiddenLanguage[] list.
 
+Tension ceiling rule:
+- When an arc's tension is already at 10/10, stop building anticipation. Something must now *actually happen* in this drop: a specific trade clears, a desk stops answering calls, a filing hits the wire, a number changes hands, a position is forced. Name facts, not feelings. "Down $340M" beats "facing pressure." "Desk went dark at 10:42" beats "looming collapse." Drops that only restate prior tension at 10/10 without a new concrete event are a failure.
+
+Progress mandate:
+- Each drop must advance the arc. Something must change — a number, a relationship, a timeline, a position, a piece of information. If the same facts were true in the previous drop, you have not advanced anything.
+
+Dispatch variety:
+- Not every dispatch can be a market alert. Within a drop, use at least two distinct source types: floor rumor, regulatory update, institutional positioning note, analyst view, desk-level event, or deal confirmation. Make each dispatch feel like it came from a different source or angle.
+
+Entity rotation:
+- Do not feature all recurring entities in every drop. Focus each drop on 1–2 entities who have genuinely new information. Save others for when they matter.
+
 Dispatch keys:
 - Every dispatch must carry a unique dispatchKey (short, kebab-case, e.g. "panatl-margin-call"). dispatchKeys must be unique within the drop.
 

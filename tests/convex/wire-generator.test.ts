@@ -484,6 +484,54 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
     expect(seeds[0].dispatchIndex).toBe(1);
   });
 
+  it("repairs a mismatched dealSeed.dispatchKey when the lone deal_seed dispatch has different arc metadata", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed({
+        dispatches: [
+          {
+            dispatchKey: "main-panatl-halt",
+            headline: "PanAtlantic bonds halted at the exchange",
+            body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
+            category: "market",
+            role: "main",
+            arcSlug: "pan-atlantic-blowup",
+            referenceEpoch: null,
+          },
+          {
+            dispatchKey: "seed-rourke-short",
+            headline: "Rourke seen building short against PanAtl. bond block",
+            body: "Three orders crossed before lunch. Counterparty unconfirmed.",
+            category: "rumor",
+            role: "deal_seed",
+            arcSlug: "mercer-investigation",
+            referenceEpoch: null,
+          },
+        ],
+        dealSeed: {
+          dispatchKey: "deal-panatl-fallout",
+          arcSlug: "pan-atlantic-blowup",
+          prompt:
+            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
+          suggestedPotUsdc: 10,
+          suggestedEntryCostUsdc: 5,
+        },
+      }),
+    });
+
+    expect((result as { inserted?: boolean }).inserted).toBe(true);
+
+    const seeds = await t.run(async (ctx) =>
+      ctx.db.query("wireDealSeeds").collect()
+    );
+    expect(seeds.length).toBe(1);
+    expect(seeds[0].dispatchKey).toBe("seed-rourke-short");
+    expect(seeds[0].dispatchIndex).toBe(1);
+  });
+
   it("rejects a mismatched dealSeed.dispatchKey when there is no clear repair", async () => {
     const t = convexTest(schema, modules);
     await seedSeasonAndDrops(t);

@@ -32,13 +32,16 @@ crons.interval(
 );
 
 /**
- * Wire Drop generator — fires every hour at :05 ET.
+ * Wire Drop generator — fires every hour at :30 UTC.
+ * In EDT (UTC-4) this lands at 9:30 ET for the 13:00 UTC hour — exactly at
+ * market open. In EST (UTC-5) the 13:30 UTC fire is 8:30 ET (before open,
+ * skipped by isMarketOpen) and the 14:30 UTC fire is 9:30 ET — also at open.
  * The trading-hours guard inside the action (Mon–Fri 09:30–16:00 ET) gates
  * whether a drop is actually written; the cron just provides the trigger.
  */
 crons.hourly(
   "wire-epoch-generator",
-  { minuteUTC: 5 },
+  { minuteUTC: 30 },
   internal.wire.generator.generateNextEpoch,
   {}
 );

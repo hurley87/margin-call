@@ -4,7 +4,12 @@ import { internalAction } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { isMarketOpen, currentEpochSlot, dayPosture } from "./tradingHours";
+import {
+  isMarketOpen,
+  currentEpochSlot,
+  dayPosture,
+  isOpeningBell,
+} from "./tradingHours";
 import { assembleUserMessage } from "./epochAssembler";
 import { normalizeGeneratedEpoch } from "./epochNormalizer";
 import { validateEpoch } from "./epochValidator";
@@ -90,6 +95,8 @@ async function runGenerator(
     | undefined;
 
   const posture = dayPosture(now);
+  const lastDropSlot = recentDrops[0]?.epochSlot ?? null;
+  const openingBell = isOpeningBell(slot, lastDropSlot);
 
   const userMessage = assembleUserMessage({
     season: {
@@ -124,6 +131,7 @@ async function runGenerator(
     worldState: worldState ?? null,
     recentSeedCadence,
     mustIncludeDealSeed,
+    isOpeningBell: openingBell,
   });
 
   // ── LLM call (or test stub) ──────────────────────────────────────────────────

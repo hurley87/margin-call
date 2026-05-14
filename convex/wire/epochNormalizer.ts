@@ -34,12 +34,7 @@ export function normalizeGeneratedEpoch(
     return { epoch, repairedDealSeedDispatchKey: null };
   }
 
-  const [dealSeedDispatch] = dealSeedDispatches;
-  if (dealSeedDispatch.arcSlug !== dealSeed.arcSlug) {
-    return { epoch, repairedDealSeedDispatchKey: null };
-  }
-
-  const repairedDispatchKey = dealSeedDispatch.dispatchKey;
+  const repairedDispatchKey = dealSeedDispatches[0].dispatchKey;
   return {
     epoch: {
       ...epoch,
