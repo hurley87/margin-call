@@ -21,12 +21,15 @@ export default function WireAdminClient() {
 
   const forceGenerate = useAction(api.wire.operatorActions.forceGenerateDrop);
   const resetState = useAction(api.wire.operatorActions.resetNarrativeState);
+  const backfillPortraits = useAction(api.portraits.adminBackfillV3);
 
   const [generateStatus, setGenerateStatus] = useState<string | null>(null);
   const [generatePending, setGeneratePending] = useState(false);
   const [resetStatus, setResetStatus] = useState<string | null>(null);
   const [resetPending, setResetPending] = useState(false);
   const [resetConfirm, setResetConfirm] = useState(false);
+  const [backfillStatus, setBackfillStatus] = useState<string | null>(null);
+  const [backfillPending, setBackfillPending] = useState(false);
 
   if (ctx === undefined) {
     return (
@@ -77,6 +80,23 @@ export default function WireAdminClient() {
       );
     } finally {
       setGeneratePending(false);
+    }
+  }
+
+  async function handleBackfillPortraits() {
+    setBackfillPending(true);
+    setBackfillStatus(null);
+    try {
+      const result = await backfillPortraits({});
+      setBackfillStatus(
+        `OK — scheduled ${result.scheduled}${result.remaining > 0 ? ` · ${result.remaining} remaining (re-run)` : ""}`
+      );
+    } catch (err) {
+      setBackfillStatus(
+        `ERROR — ${err instanceof Error ? err.message : String(err)}`
+      );
+    } finally {
+      setBackfillPending(false);
     }
   }
 
@@ -172,6 +192,42 @@ export default function WireAdminClient() {
               <p className="mt-2 text-[10px] text-[var(--t-muted)]">
                 Bypasses market-hours gate. Writes a distinct row
                 (ignoreSlot=true).
+              </p>
+            </section>
+
+            {/* Portrait Backfill */}
+            <section className="px-4 py-4">
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[10px] uppercase tracking-widest text-[var(--t-muted)]">
+                  PORTRAIT BACKFILL (v3)
+                </span>
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={handleBackfillPortraits}
+                  disabled={backfillPending}
+                  className="cursor-pointer border border-[var(--t-accent)] bg-[var(--t-accent)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-[var(--t-bg)] transition-colors hover:bg-transparent hover:text-[var(--t-accent)] disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {backfillPending
+                    ? "SCHEDULING..."
+                    : "BACKFILL STALE PORTRAITS"}
+                </button>
+                {backfillStatus && (
+                  <span
+                    className={`text-xs ${
+                      backfillStatus.startsWith("ERROR")
+                        ? "text-[var(--t-red)]"
+                        : "text-[var(--t-green)]"
+                    }`}
+                  >
+                    {backfillStatus}
+                  </span>
+                )}
+              </div>
+              <p className="mt-2 text-[10px] text-[var(--t-muted)]">
+                Reseeds traders below the current portrait prompt version and
+                schedules regeneration. Caps at 100 per click; re-run until
+                remaining is 0.
               </p>
             </section>
 

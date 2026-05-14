@@ -2,6 +2,7 @@
 
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
+import type { PublicPortraitTraits } from "@/lib/trader-metadata";
 
 /** Shape returned by Convex `leaderboard.listTraderStats` — matches leaderboard UI expectations. */
 export interface LeaderboardTrader {
@@ -11,6 +12,7 @@ export interface LeaderboardTrader {
   owner_address: string;
   imageStatus: "pending" | "generating" | "ready" | "error" | null;
   profileImageUrl: string;
+  traits: PublicPortraitTraits | null;
   total_pnl: number;
   wins: number;
   losses: number;

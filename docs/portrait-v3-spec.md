@@ -9,18 +9,34 @@ adjusts `convex/portraits.ts`, expands the public NFT/trader read surface in
 
 It is the canonical reference for the change — code review against this doc.
 
+## /goal control header
+
+Use this section when handing the spec to a long-running Codex `/goal` session.
+
+- Run `git status --short --branch` first and preserve unrelated local changes.
+- Read `convex/_generated/ai/guidelines.md` before editing Convex code.
+- Implement code and tests only.
+- Do not deploy.
+- Do not call `portraits.adminBackfillV3`.
+- Do not run production Convex actions or production mutations.
+- Do not push, create a PR, close issues, or modify GitHub state.
+- Do not modify `.env*` files.
+- Treat the rollout steps in §11 as post-merge operator instructions, not tasks
+  for the implementation run.
+- Stop and report if implementation requires external credentials, destructive
+  cleanup, production access, or changes outside the scoped files.
+
 ---
 
 ## 1. Goals
 
-1. Eliminate the visual collapse where most portraits look like the same
-   "serious male trader, red tie, phone, CRT" archetype.
-2. Produce deterministic, collectible-feeling rogue-trader portraits with
-   meaningful variety across archetype, gender presentation, age, appearance,
-   hairstyle, clothing, props, scene, lighting, expression, and camera.
-3. **Guarantee that the generated image never contains text, name, ticker,
-   logo, watermark, label, nameplate, UI, crypto imagery, or readable
-   document/terminal content.**
+1. Replace the old narrow prompt variants with the deterministic v3 trait
+   system in §3.
+2. Produce deterministic portrait prompts that satisfy the trait distribution
+   tests in §8.
+3. **Guarantee that the generated prompt never includes the trader name or
+   internal seed and always includes the strict no-text/no-logo exclusions in
+   §5.** The returned image is not OCR-validated in this iteration.
 4. Keep image generation deterministic: same `(ownerSubject, name, mandate,
 personality, PORTRAIT_METADATA_VERSION)` ⇒ same `imagePrompt`,
    `imageStyleSeed`, and trait selection.
@@ -29,29 +45,29 @@ personality, PORTRAIT_METADATA_VERSION)` ⇒ same `imagePrompt`,
 
 ## 2. Decisions (locked)
 
-| #   | Decision                            | Choice                                                                                               |
-| --- | ----------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| 1   | Existing v2 portraits               | **Force regenerate everyone** via operator-only backfill action                                      |
-| 2   | Public NFT trait exposure           | **Expose all derived traits** as `attributes` on the NFT metadata route                              |
-| 3   | `appearanceVariant` prompt phrasing | **Descriptive features** (skin tone + hair/feature cues, no racial labels)                           |
-| 4   | Image quality                       | **`quality: "medium"`** at `size: "1024x1024"` on `gpt-image-1-mini`                                 |
-| 5   | Archetype label migration           | **Let it change.** New 12-archetype taxonomy replaces the old 8 verbatim                             |
-| 6   | Backfill execution                  | **Scheduled trickle**, 1 per 4 s, via operator-only action                                           |
-| 7   | Name dictionary scope               | **Small curated** (~40–60 per gender + ~10–20 explicit ambiguous)                                    |
-| 8   | Trait coupling                      | **Archetype dictates scene + prop + marketMoment**; other traits independent                         |
-| 9   | Hash distribution                   | **Per-trait re-hash**: `stableHash(baseHash + ':' + categoryName)`                                   |
-| 10  | Gender taxonomy                     | **Two presentations** (`feminine`, `masculine`); `unknown` falls back to hash                        |
-| 11  | UI during regen                     | **Keep v2 image** until new image is stored; do not null `profileImageStorageId`                     |
-| 12  | Re-roll capability                  | **None.** Same inputs ⇒ same portrait                                                                |
-| 13  | Schema field                        | **Reuse `imageVariant`** field, change value pool to new 12 archetype IDs                            |
-| 14  | `apparentAge` granularity           | **4 buckets** with **soft archetype-bias** via `preferredAgeBuckets`                                 |
-| 15  | Test location                       | **`tests/convex/portraitSeed.test.ts`** (new), vitest direct, no Convex harness                      |
-| 16  | `imageRetryCount` on reseed         | **Reset only on version bump** (v2→v3)                                                               |
-| 17  | Prompt format                       | **Multiline sections with bulleted trait lines** (literal `\n`)                                      |
-| 18  | "Internal style seed" sentinel      | **Dropped entirely** from `imagePrompt`                                                              |
-| 19  | Backfill trigger                    | **Operator-only action** `portraits.adminBackfillV3`                                                 |
-| 20  | `imagePromptSource` provenance      | **Include all derived trait values** + `traderName` + mandate/personality snapshots                  |
-| 21  | In-app surface                      | **Full trait list on public trader profile/dialog**; archetype + 1 flavor trait on leaderboard cards |
+| #   | Decision                            | Choice                                                                                           |
+| --- | ----------------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1   | Existing v2 portraits               | **Force regenerate everyone** via operator-only backfill action                                  |
+| 2   | Public trait exposure               | **Expose the curated public trait map** on trader read models; NFT `attributes` use §9.1 exactly |
+| 3   | `appearanceVariant` prompt phrasing | **Descriptive features** (skin tone + hair/feature cues, no racial labels)                       |
+| 4   | Image quality                       | **`quality: "medium"`** at `size: "1024x1024"` on `gpt-image-1-mini`                             |
+| 5   | Archetype label migration           | **Let it change.** New 12-archetype taxonomy replaces the old 8 verbatim                         |
+| 6   | Backfill execution                  | **Scheduled trickle**, 1 per 4 s, via operator-only action                                       |
+| 7   | Name dictionary scope               | **Use the exact curated name sets in §4.1**                                                      |
+| 8   | Trait coupling                      | **Archetype dictates scene + prop + marketMoment**; other traits independent                     |
+| 9   | Hash distribution                   | **Per-trait re-hash**: `stableHash(baseHash + ':' + categoryName)`                               |
+| 10  | Gender taxonomy                     | **Two presentations** (`feminine`, `masculine`); `unknown` falls back to hash                    |
+| 11  | UI during regen                     | **Keep v2 image** until new image is stored; do not null `profileImageStorageId`                 |
+| 12  | Re-roll capability                  | **None.** Same inputs ⇒ same portrait                                                            |
+| 13  | Schema field                        | **Reuse `imageVariant`** field, change value pool to new 12 archetype IDs                        |
+| 14  | `apparentAge` granularity           | **4 buckets**; select only from each archetype's `preferredAgeBuckets`                           |
+| 15  | Test location                       | **`tests/convex/portraitSeed.test.ts`** (new), vitest direct, no Convex harness                  |
+| 16  | `imageRetryCount` on reseed         | **Reset only on version bump** (v2→v3)                                                           |
+| 17  | Prompt format                       | **Multiline sections with bulleted trait lines** (literal `\n`)                                  |
+| 18  | "Internal style seed" sentinel      | **Dropped entirely** from `imagePrompt`                                                          |
+| 19  | Backfill trigger                    | **Operator-only action** `portraits.adminBackfillV3`                                             |
+| 20  | `imagePromptSource` provenance      | **Include all derived trait values** + `traderName` + mandate/personality snapshots              |
+| 21  | In-app surface                      | **Show all 13 public trait keys on public trader profile/dialog**; leaderboard cards use §9.2    |
 
 ---
 
@@ -65,20 +81,20 @@ persisted to `imagePromptSource` and exposed in NFT metadata.
 
 #### `archetype` — 12 entries (scene + prop + marketMoment are coupled here)
 
-| id                        | description (used in prompt)                                                                                                              | scene                                                        | prop                                            | marketMoment                     | preferredAgeBuckets              |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------- | -------------------------------- | -------------------------------- |
-| `mna_rainmaker`           | late-night hostile takeover war room, binders, fax paper, brass desk lamp, calm calculating presence                                      | private deal-room office at midnight, walnut paneling        | open binder of deal docs, brass desk lamp       | mid-deal closing crunch          | `mid_30s`, `mid_40s`             |
-| `junk_bond_operator`      | high-yield bond desk strewn with prospectuses, ash in the air, leaning forward over the desk                                              | high-yield bond desk, paper-stacked horizon                  | thick stapled prospectus, half-empty coffee mug | leveraged-buyout euphoria        | `mid_30s`, `mid_40s`             |
-| `risk_floor_captain`      | risk supervision pod overlooking a floor of traders, posture upright and watchful                                                         | risk pod overlooking a busy trading floor                    | clipboard with printed risk sheet               | mid-session volatility spike     | `mid_40s`, `late_50s`            |
-| `crash_day_survivor`      | chaotic trading floor during a crash, papers in motion, red and green terminal glow, intense expression                                   | chaotic trading floor mid-crash, papers tumbling             | crumpled order tickets in fist                  | black-monday-style crash session | `mid_30s`, `mid_40s`, `late_50s` |
-| `commodities_pit_veteran` | noisy commodities pit, light trading jacket, paper order slips, crowded floor of arms and hand signals                                    | open-outcry commodities pit, jackets and hand signals        | bundle of paper order slips                     | heating crude / grains squeeze   | `mid_40s`, `late_50s`            |
-| `execution_desk_closer`   | execution desk, order tickets, multiple corded phones in the background, aggressive focused posture                                       | execution desk, banks of corded phones along the wall behind | order ticket pad mid-write                      | block-trade execution rush       | `late_20s`, `mid_30s`, `mid_40s` |
-| `macro_crisis_analyst`    | macro research nook with global newspapers, charts, and a small globe, contemplative                                                      | macro research nook, oak desk, world newspapers              | folded Financial Times across the desk          | sovereign-debt crisis briefing   | `mid_30s`, `mid_40s`, `late_50s` |
-| `boiler_room_salesman`    | cramped boiler-room sales floor, pitching into a corded phone but phone not necessarily held up to ear, bullpen of identical desks behind | cramped boiler-room bullpen of desks                         | corded phone resting on shoulder                | retail penny-stock pump          | `late_20s`, `mid_30s`            |
-| `arbitrage_specialist`    | quiet arbitrage cubicle with two CRTs running abstract glowing market shapes, ruler and pencil notes (text unreadable), focused stare     | quiet arb cubicle, two CRTs side by side                     | mechanical pencil and ruler                     | merger-spread compression        | `late_20s`, `mid_30s`, `mid_40s` |
-| `rookie_quant`            | cramped back-office analytics room, oversized 1980s suit, thick glasses, stacked CRT monitors, abstract unreadable notes                  | back-office analytics room, stacked CRTs                     | basic four-function calculator                  | first big intraday rally         | `late_20s`                       |
-| `old_school_partner`      | corner partner office, walnut paneling, antique globe, leather chair, posture relaxed and powerful                                        | corner partner office, brass-and-walnut detail               | unlit cigar held casually                       | quiet partner-track afternoon    | `mid_40s`, `late_50s`            |
-| `margin_call_escapee`     | dark office after a catastrophic trade, loosened tie, red warning glow, scattered papers, exhausted expression                            | dark office post-blowup, single overhead lamp, red glow      | scattered crumpled paper, tie pulled loose      | post-margin-call wreckage        | `mid_30s`, `mid_40s`, `late_50s` |
+| id                        | description (used in prompt)                                                                                                          | scene                                                        | prop                                            | marketMoment                     | preferredAgeBuckets              |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ----------------------------------------------- | -------------------------------- | -------------------------------- |
+| `mna_rainmaker`           | late-night hostile takeover war room, binders, fax paper, brass desk lamp, calm calculating presence                                  | private deal-room office at midnight, walnut paneling        | open binder of deal docs, brass desk lamp       | mid-deal closing crunch          | `mid_30s`, `mid_40s`             |
+| `junk_bond_operator`      | high-yield bond desk strewn with prospectuses, ash in the air, leaning forward over the desk                                          | high-yield bond desk, paper-stacked horizon                  | thick stapled prospectus, half-empty coffee mug | leveraged-buyout euphoria        | `mid_30s`, `mid_40s`             |
+| `risk_floor_captain`      | risk supervision pod overlooking a floor of traders, posture upright and watchful                                                     | risk pod overlooking a busy trading floor                    | clipboard with printed risk sheet               | mid-session volatility spike     | `mid_40s`, `late_50s`            |
+| `crash_day_survivor`      | chaotic trading floor during a crash, papers in motion, red and green terminal glow, intense expression                               | chaotic trading floor mid-crash, papers tumbling             | crumpled order tickets in fist                  | black-monday-style crash session | `mid_30s`, `mid_40s`, `late_50s` |
+| `commodities_pit_veteran` | noisy commodities pit, light trading jacket, paper order slips, crowded floor of arms and hand signals                                | open-outcry commodities pit, jackets and hand signals        | bundle of paper order slips                     | heating crude / grains squeeze   | `mid_40s`, `late_50s`            |
+| `execution_desk_closer`   | execution desk, order tickets, multiple corded phones in the background, aggressive focused posture                                   | execution desk, banks of corded phones along the wall behind | order ticket pad mid-write                      | block-trade execution rush       | `late_20s`, `mid_30s`, `mid_40s` |
+| `macro_crisis_analyst`    | macro research nook with global newspapers, charts, and a small globe, contemplative                                                  | macro research nook, oak desk, world newspapers              | folded Financial Times across the desk          | sovereign-debt crisis briefing   | `mid_30s`, `mid_40s`, `late_50s` |
+| `boiler_room_salesman`    | cramped boiler-room sales floor, pitching into a corded phone resting on shoulder, bullpen of identical desks behind                  | cramped boiler-room bullpen of desks                         | corded phone resting on shoulder                | retail penny-stock pump          | `late_20s`, `mid_30s`            |
+| `arbitrage_specialist`    | quiet arbitrage cubicle with two CRTs running abstract glowing market shapes, ruler and pencil notes (text unreadable), focused stare | quiet arb cubicle, two CRTs side by side                     | mechanical pencil and ruler                     | merger-spread compression        | `late_20s`, `mid_30s`, `mid_40s` |
+| `rookie_quant`            | cramped back-office analytics room, oversized 1980s suit, thick glasses, stacked CRT monitors, abstract unreadable notes              | back-office analytics room, stacked CRTs                     | basic four-function calculator                  | first big intraday rally         | `late_20s`                       |
+| `old_school_partner`      | corner partner office, walnut paneling, antique globe, leather chair, posture relaxed and powerful                                    | corner partner office, brass-and-walnut detail               | unlit cigar held casually                       | quiet partner-track afternoon    | `mid_40s`, `late_50s`            |
+| `margin_call_escapee`     | dark office after a catastrophic trade, loosened tie, red warning glow, scattered papers, exhausted expression                        | dark office post-blowup, single overhead lamp, red glow      | scattered crumpled paper, tie pulled loose      | post-margin-call wreckage        | `mid_30s`, `mid_40s`, `late_50s` |
 
 > The archetype `description` field is what flows into the prompt's
 > `Archetype:` line. `scene`, `prop`, and `marketMoment` flow into their
@@ -111,8 +127,8 @@ Prompt phrasings: "calm calculating expression", "sharp focused gaze",
 `slight_low_angle` ("slight low angle, heroic framing"),
 `slight_high_angle` ("slight high angle, watchful framing").
 
-> All angles must still resolve to a square crop with the subject's upper
-> body or head-and-shoulders filling the frame.
+> Each camera-angle prompt must still request a square crop with the subject's
+> upper body or head-and-shoulders filling the frame.
 
 #### `genderPresentation` — 2 entries
 
@@ -133,13 +149,12 @@ Selection rules (see §4):
 
 Selection rule: filter the full pool down to the archetype's
 `preferredAgeBuckets` array, then take `subHash("apparentAge") % filtered.length`.
-This produces soft coherence (a `rookie_quant` is always late-20s, an
-`old_school_partner` is mid-40s or late-50s) while preserving determinism.
+Every archetype must define at least one preferred age bucket.
 
 #### `appearanceVariant` — 12 entries (descriptive features only — no racial labels)
 
 Each entry is a single short descriptive clause. Drawn independently from
-gender presentation; the model handles gendering naturally.
+gender presentation; do not add a gender-specific mapping table.
 
 1. "pale fair skin, freckled, light-blond hair"
 2. "fair skin, auburn hair with subtle waves"
@@ -166,8 +181,8 @@ Prompt phrasings:
 "hair pulled back in a low ponytail", "classic side part",
 "cropped natural coils", "buzz cut".
 
-> The selected hairstyle is paired naturally by the model with the appearance
-> variant; the prompt does not enforce a mapping table — keep it flexible.
+> The prompt includes the selected hairstyle exactly as written; do not add a
+> hairstyle-to-appearance mapping table.
 
 #### `clothingStyle` — 10 entries
 
@@ -195,9 +210,8 @@ Prompt phrasings:
 `silk_scarf_neck` ("silk scarf knotted at the neck"),
 `no_accessory` ("no notable accessory").
 
-> The prompt should be free to skip accessories where they would clash with
-> the archetype (e.g. commodities pit + pearl earrings is fine; the model
-> handles it). No hard exclusions.
+> The prompt includes the selected accessory exactly as written, including
+> `no_accessory` as "no notable accessory". No hard exclusions.
 
 ### 3.2 Independence summary
 
@@ -334,8 +348,8 @@ export function buildPortraitSeed(args: {
 ### 4.1 `inferGenderPresentationFromName(name)`
 
 ```ts
+// Exact lowercase sets; do not infer gender presentation beyond these entries.
 const FEMININE_NAMES = new Set([
-  // ~40-60 unambiguous, lowercase
   "hayley",
   "hailey",
   "haylee",
@@ -532,7 +546,7 @@ sections, joined by literal `\n\n` between sections and `\n` between lines
 within a section.
 
 ```
-Create a square profile-picture portrait of one fictional 1987 Wall Street trader for a competitive AI trading game called Margin Call. The portrait should feel like a collectible rogue-trader character NFT, not a corporate headshot.
+Create a square profile-picture portrait of one fictional 1987 Wall Street trader for the competitive AI trading game Margin Call. The portrait should feel like a collectible rogue-trader character NFT, not a corporate headshot.
 
 Character traits:
 - Gender presentation: {genderPresentation.prompt}
@@ -567,7 +581,8 @@ The trader's name and internal seed must not appear visually in the image.
   inside `inferGenderPresentationFromName`).
 - The strings "named", "called", "his name is", "her name is", "trader name",
   and the trader's actual `name` value must not appear anywhere in
-  `imagePrompt`.
+  `imagePrompt`. This applies to all prompt text, including static template
+  copy.
 - The strict-exclusions block is always emitted verbatim.
 - The closing safety sentence is always emitted verbatim.
 
@@ -593,6 +608,10 @@ seed, trader name, role, or variation as text."` — entirely dropped. The
 - Export typed trait pool constants (`ARCHETYPES`, `EXPRESSIONS`, etc.) so
   tests can introspect.
 - Export `composePrompt(traits)` for direct unit testing.
+- Export `readPublicTraits(source: unknown)`, a pure projection helper that
+  returns `null` unless `source.traits` contains all 13 public trait keys as
+  strings. It must return only those 13 keys and must drop every other
+  `imagePromptSource` field.
 - Rewrite `buildPortraitSeed` per §4.
 
 ### 6.2 `convex/portraits.ts`
@@ -650,13 +669,13 @@ seed, trader name, role, or variation as text."` — entirely dropped. The
     traits: readPublicTraits(trader.imagePromptSource), // null if v2 or unset
   };
   ```
-  where `readPublicTraits` reads `imagePromptSource.traits` and returns only
-  the trait id fields — never `traderName`, `mandateSnapshot`,
-  `personalitySnapshot`, `genderPresentationSource`, or the raw hash.
-- Update `humanizeImageVariant` to humanize the new 12 IDs identically
-  (it already does — it just splits underscores and Title Cases). Add a
-  small label map override for IDs whose underscore-humanization reads
-  awkwardly:
+  where `readPublicTraits` is imported from `convex/lib/portraitSeed.ts` and
+  returns only the 13 public trait id fields — never `traderName`,
+  `mandateSnapshot`, `personalitySnapshot`, `genderPresentationSource`, or the
+  raw hash.
+- Update `humanizeImageVariant` to humanize the new 12 IDs by splitting
+  underscores and Title Casing, then applying exactly these display
+  overrides:
   | id | display |
   |---|---|
   | `mna_rainmaker` | "M&A Rainmaker" |
@@ -683,8 +702,7 @@ No schema migration required.
 - `imageVariant` stays `v.string()` (it already is, in practice — the union
   is informational, not enforced).
 - If the field is declared as a union of the old 8 values, widen it to
-  `v.string()` (or to a union including the new 12). Confirm during
-  implementation.
+  `v.string()`.
 - `imagePromptSource` stays `v.any()` (or whatever opaque shape it currently
   uses).
 
@@ -747,14 +765,12 @@ export const listStaleForPortraitV3 = internalQuery({
 
 - **Operator-only.** Gated by `assertOperatorSubject(identity.subject)`.
 - **Idempotent on rerun.** Re-running it after partial completion only
-  schedules the remaining stale traders — once `markPortraitGenerating`
-  upgrades a trader to v3 and `applyPortraitReady` lands the new image,
-  `imagePromptSource.version` is 3 and it no longer matches the filter.
-  (Re-running mid-flight may double-schedule a trader currently in flight;
-  `markPortraitGenerating` early-returns when `imageStatus === "generating"`,
-  so this is safe.)
-- **Trickle:** Default 4 s between scheduled generations. Operator can
-  pass `delayMsBetween` to tune.
+  schedules traders whose `imagePromptSource.version` is still below 3. Once
+  `markPortraitGenerating` upgrades a trader to v3, it no longer matches the
+  stale filter even if the replacement image has not landed yet.
+- **Trickle:** Default 4 s between scheduled generations. If
+  `delayMsBetween` is provided, treat it as the number of milliseconds between
+  scheduled generations.
 - **Scope:** All traders with stale prompt version regardless of status —
   active, paused, and wiped-out alike.
 - **No UI blackout:** Because we don't null `profileImageStorageId` on
@@ -774,13 +790,14 @@ Vitest direct (no Convex test harness). Imports
 import { describe, it, expect } from "vitest";
 import {
   buildPortraitSeed,
+  readPublicTraits,
   inferGenderPresentationFromName,
   PORTRAIT_METADATA_VERSION,
   ARCHETYPES,
 } from "../../convex/lib/portraitSeed";
 ```
 
-Required cases (all 8 from the brief + 2 extras agreed in interview):
+Required cases:
 
 1. **Determinism.** Same `(ownerSubject, name, mandate, personality)` ⇒
    identical `imagePrompt`, `imageStyleSeed`, `imageVariant`,
@@ -795,8 +812,8 @@ Required cases (all 8 from the brief + 2 extras agreed in interview):
    `imagePromptSource.genderPresentationSource === "inferred-feminine"`.
 4. **Ambiguous name fallback.** `name:"Jordan"` ⇒
    `genderPresentationSource === "hashed"` and resulting presentation is
-   one of `"feminine" | "masculine"`. Changing the ownerSubject changes
-   the hashed pick deterministically.
+   one of `"feminine" | "masculine"`. Repeating the same inputs returns the
+   same hashed pick.
 5. **No raw name in prompt.** For 20 random first names including
    "Hayley", "David", "Marcus", "Olivia", `imagePrompt.toLowerCase()`
    must not contain the lowercase first name as a whole word. Assert
@@ -828,17 +845,18 @@ Required cases (all 8 from the brief + 2 extras agreed in interview):
    `(owner, name)` pairs. Every archetype appears at least once; no
    single archetype exceeds 25% of the sample (4× expected uniform =
    ~33% upper bound, 25% guards against the worst mod-bias regression).
-10. **Gender dictionary table.** Table-driven assertion over ~20 known
-    feminine, ~20 known masculine, ~10 known ambiguous, and ~5 unknown
-    names. Includes case-insensitivity ("DAVID" ⇒ masculine) and
-    multi-word handling ("Hayley Patel" ⇒ feminine).
+10. **Gender dictionary table.** Table-driven assertion over the explicit
+    examples listed in §4.1, including case-insensitivity ("DAVID" ⇒
+    masculine), multi-word handling ("Hayley Patel" ⇒ feminine), ambiguous
+    handling ("Jordan" ⇒ unknown), and unknown-name handling ("Zxqwer" ⇒
+    unknown).
 
 ### 8.2 Update: `src/lib/__tests__/trader-metadata.test.ts`
 
 The existing test asserts a specific archetype string. Update it to:
 
-- Use one of the new humanized archetype names (e.g. "Junk Bond Operator"
-  is still in the new set — likely lowest-touch).
+- Use "Junk Bond Operator" as the representative new humanized archetype
+  name.
 - Add a new case covering "M&A Rainmaker" to lock the special-case
   humanization.
 - If the test asserts the full `attributes` array, extend it to include
@@ -852,9 +870,7 @@ The existing test asserts a specific archetype string. Update it to:
 - The existing `markPortraitGenerating` semantics, which already have
   test coverage and gate on `promptVersion < PORTRAIT_METADATA_VERSION`.
 
-If adding harness coverage is cheap, add a single integration test that
-calls `adminBackfillV3` with two v2-fixture traders and asserts both
-get scheduled. This is a stretch goal, not a blocker.
+No `adminBackfillV3` integration test is required for this change.
 
 ---
 
@@ -916,11 +932,15 @@ overrides.
 
 - **Public trader profile page** (`src/app/traders/[traderId]/page.tsx`)
   and **PublicTraderDialog** (`src/components/public-trader-dialog.tsx`):
-  add a "Traits" section listing each derived trait as a `<DatumCell>` /
-  `<ProfileDatum>` row when `trader.traits` is present.
+  add a "Traits" section when `trader.traits` is present. Render exactly
+  these 13 rows from the public trait map: `archetype`, `scene`, `prop`,
+  `marketMoment`, `expression`, `lighting`, `cameraAngle`,
+  `genderPresentation`, `apparentAge`, `appearanceVariant`, `hairstyle`,
+  `clothingStyle`, and `accessory`.
 - **Leaderboard / discovery cards:** show one additional flavorful trait
   below the archetype. Pick `accessory` if present and not
-  `no_accessory`, else `marketMoment`. Keep the card visually compact.
+  `no_accessory`, else `marketMoment`. Render it as a single line using the
+  existing compact card text style.
 
 ### 9.3 Never exposed publicly
 
@@ -971,7 +991,7 @@ Public exposes only `imagePromptSource.traits.*`, via the curated
 ## 12. PR Checklist
 
 - [ ] `PORTRAIT_METADATA_VERSION` bumped to `3`.
-- [ ] All 13 trait pools defined with stable ids and prompt strings.
+- [ ] All trait pools in §3.1 are defined with stable ids and prompt strings.
 - [ ] `inferGenderPresentationFromName` covers feminine, masculine, and
       explicit-ambiguous sets; case-insensitive; first-token-only.
 - [ ] `buildPortraitSeed` uses per-trait `subHash` selection.
@@ -997,4 +1017,10 @@ Public exposes only `imagePromptSource.traits.*`, via the curated
 - [ ] New `tests/convex/portraitSeed.test.ts` covers all 10 cases in §8.1.
 - [ ] `src/lib/__tests__/trader-metadata.test.ts` updated for new
       archetype labels and new attribute traits.
-- [ ] `pnpm lint` and `pnpm test` pass.
+- [ ] `pnpm exec convex codegen` passes.
+- [ ] `pnpm exec tsc --noEmit` passes.
+- [ ] `pnpm exec vitest run tests/convex/portraitSeed.test.ts src/lib/__tests__/trader-metadata.test.ts` passes.
+- [ ] `git diff --check` passes.
+- [ ] `pnpm lint` is run and any failures are classified as pre-existing or
+      caused by this change. The repo has known pre-existing lint failures, so
+      do not expand scope to unrelated lint cleanup.

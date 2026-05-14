@@ -4,7 +4,14 @@ import { notFound } from "next/navigation";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import { TRADER_PLACEHOLDER_IMAGE_PATH } from "@/lib/trader-metadata";
+import {
+  TRADER_PLACEHOLDER_IMAGE_PATH,
+  type PublicPortraitTraits,
+} from "@/lib/trader-metadata";
+import {
+  PUBLIC_PORTRAIT_TRAIT_ROWS,
+  humanizePortraitTraitValue,
+} from "@/lib/portrait-traits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +24,7 @@ type PublicTraderProfile = {
   portraitStatus: "pending" | "generating" | "ready" | "error";
   archetype: string;
   riskProfile: string;
+  traits: PublicPortraitTraits | null;
   escrowBalanceUsdc: number;
   profileImageUrl: string | null;
   recentActivity: Array<{
@@ -145,6 +153,25 @@ export default async function PublicTraderPage({
                 />
               </div>
             </section>
+
+            {trader.traits ? (
+              <section className="terminal-panel p-4 sm:p-5">
+                <div className="mb-4 border-b border-[var(--t-divider)] pb-3">
+                  <h2 className="font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-wide text-[var(--t-amber)]">
+                    Traits
+                  </h2>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {PUBLIC_PORTRAIT_TRAIT_ROWS.map(([key, label]) => (
+                    <ProfileDatum
+                      key={key}
+                      label={label}
+                      value={humanizePortraitTraitValue(trader.traits![key])}
+                    />
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <section className="terminal-panel min-h-0 p-4 sm:p-5">
               <div className="mb-4 border-b border-[var(--t-divider)] pb-3">

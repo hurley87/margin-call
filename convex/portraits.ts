@@ -4,7 +4,11 @@ import OpenAI from "openai";
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { assertOperatorSubject } from "./wire/_operatorUtils";
+
+const FALLBACK_PROMPT =
+  "Create a square profile-picture portrait of one fictional 1987 Wall Street trader for a retro trading game. Painterly pixel-art inspired, cinematic 1980s financial thriller, detailed face, head-and-shoulders or upper-body composition. No readable text anywhere. No captions, no name, no nameplate, no labels, no job titles, no ticker symbols, no numbers, no letters, no logos, no watermarks, no UI text, no readable documents, no readable terminal text, no readable screen text, no modern devices, no cryptocurrency imagery, no border.";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -33,16 +37,14 @@ export const generateForTrader = internalAction({
 
     try {
       const apiKey = requireEnv("OPENAI_API_KEY");
-      const prompt =
-        trader.imagePrompt ??
-        `Create a square profile picture of a fictional 1987 Wall Street trader named ${trader.name}. No text, no logos.`;
+      const prompt = trader.imagePrompt ?? FALLBACK_PROMPT;
       const client = new OpenAI({ apiKey });
       const response = await client.images.generate(
         {
           model: "gpt-image-1-mini",
           prompt,
           size: "1024x1024",
-          quality: "low",
+          quality: "medium",
           output_format: "png",
           n: 1,
         },
@@ -99,5 +101,40 @@ export const adminRegenerateForTrader = action({
       force,
     });
     return { ok: true as const, status: "regenerated" as const };
+  },
+});
+
+const BACKFILL_MAX_PER_RUN = 100;
+const BACKFILL_MIN_STAGGER_MS = 1000;
+
+export const adminBackfillV3 = action({
+  args: { delayMsBetween: v.optional(v.number()) },
+  handler: async (
+    ctx,
+    { delayMsBetween }
+  ): Promise<{ ok: true; scheduled: number; remaining: number }> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    assertOperatorSubject(identity.subject);
+
+    const stale: Array<Id<"traders">> = await ctx.runQuery(
+      internal.traders.listStaleForPortraitV3,
+      {}
+    );
+    const stagger = Math.max(delayMsBetween ?? 4000, BACKFILL_MIN_STAGGER_MS);
+    const batch = stale.slice(0, BACKFILL_MAX_PER_RUN);
+
+    for (let i = 0; i < batch.length; i++) {
+      await ctx.scheduler.runAfter(
+        i * stagger,
+        internal.portraits.generateForTrader,
+        { traderId: batch[i], force: true }
+      );
+    }
+    return {
+      ok: true,
+      scheduled: batch.length,
+      remaining: Math.max(stale.length - batch.length, 0),
+    };
   },
 });

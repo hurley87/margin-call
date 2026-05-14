@@ -8,6 +8,11 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { DatumCell } from "@/components/datum-cell";
 import { formatStatus } from "@/lib/format-status";
+import {
+  PUBLIC_PORTRAIT_TRAIT_ROWS,
+  humanizePortraitTraitValue,
+} from "@/lib/portrait-traits";
+import type { PublicPortraitTraits } from "@/lib/trader-metadata";
 
 type PublicTraderProfile = {
   traderId: string;
@@ -17,6 +22,7 @@ type PublicTraderProfile = {
   portraitStatus: "pending" | "generating" | "ready" | "error";
   archetype: string;
   riskProfile: string;
+  traits: PublicPortraitTraits | null;
   escrowBalanceUsdc: number;
   profileImageUrl: string | null;
   recentActivity: Array<{
@@ -136,6 +142,25 @@ function PublicTraderContent({
               value={formatUsdc(trader.escrowBalanceUsdc)}
             />
           </div>
+
+          {trader.traits ? (
+            <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
+              <div className="mb-3 border-b border-[var(--t-divider)] pb-3">
+                <h3 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
+                  Traits
+                </h3>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {PUBLIC_PORTRAIT_TRAIT_ROWS.map(([key, label]) => (
+                  <DatumCell
+                    key={key}
+                    label={label}
+                    value={humanizePortraitTraitValue(trader.traits![key])}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
             <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--t-divider)] pb-3">

@@ -1,6 +1,7 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveTraderProfileImageUrl } from "./lib/profileImage";
+import { readPublicTraits } from "./lib/portraitSeed";
 
 type Stats = {
   pnl: number;
@@ -76,6 +77,7 @@ export const listTraderStats = query({
           owner_address: ownerWallet,
           imageStatus: t.imageStatus ?? null,
           profileImageUrl,
+          traits: readPublicTraits(t.imagePromptSource),
           total_pnl: s.pnl,
           wins: s.wins,
           losses: s.losses,

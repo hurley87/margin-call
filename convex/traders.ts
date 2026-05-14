@@ -16,6 +16,7 @@ import {
   buildPortraitSeed,
   getPortraitPromptVersion,
   PORTRAIT_METADATA_VERSION,
+  readPublicTraits,
 } from "./lib/portraitSeed";
 
 async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
@@ -42,13 +43,21 @@ async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
     tbaAddress: trader.tbaAddress,
     imageStatus: trader.imageStatus,
     profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
+    traits: readPublicTraits(trader.imagePromptSource),
     createdAt: trader.createdAt,
     updatedAt: trader.updatedAt,
   };
 }
 
+const ARCHETYPE_LABEL_OVERRIDES: Record<string, string> = {
+  mna_rainmaker: "M&A Rainmaker",
+  old_school_partner: "Old-School Partner",
+};
+
 function humanizeImageVariant(variant: string | undefined): string {
   if (!variant) return "Wall Street Operator";
+  if (ARCHETYPE_LABEL_OVERRIDES[variant])
+    return ARCHETYPE_LABEL_OVERRIDES[variant];
   return variant
     .split("_")
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -82,6 +91,7 @@ async function publicTraderBasics(ctx: QueryCtx, trader: Doc<"traders">) {
     riskProfile: deriveRiskProfile(trader.mandate),
     tokenId: trader.tokenId ?? null,
     profileImageUrl: await resolveReadyProfileImageUrl(ctx, trader),
+    traits: readPublicTraits(trader.imagePromptSource),
   };
 }
 
@@ -390,6 +400,20 @@ export const loadInternal = internalQuery({
   handler: async (ctx, { traderId }) => ctx.db.get(traderId),
 });
 
+export const listStaleForPortraitV3 = internalQuery({
+  args: {},
+  handler: async (ctx) => {
+    const all = await ctx.db.query("traders").collect();
+    return all
+      .filter(
+        (trader) =>
+          getPortraitPromptVersion(trader.imagePromptSource) <
+          PORTRAIT_METADATA_VERSION
+      )
+      .map((trader) => trader._id);
+  },
+});
+
 /** Internal: transition walletStatus pending|creating → creating. */
 export const markCreating = internalMutation({
   args: { traderId: v.id("traders") },
@@ -463,22 +487,24 @@ export const markPortraitGenerating = internalMutation({
     }
 
     const promptVersion = getPortraitPromptVersion(trader.imagePromptSource);
-    const seedPatch =
-      trader.imagePrompt &&
-      trader.imageStyleSeed &&
-      promptVersion >= PORTRAIT_METADATA_VERSION
-        ? {}
-        : buildPortraitSeed({
-            ownerSubject: trader.ownerSubject,
-            name: trader.name,
-            mandate: trader.mandate ?? {},
-            personality: trader.personality,
-          });
+    const shouldReseed =
+      !trader.imagePrompt ||
+      !trader.imageStyleSeed ||
+      promptVersion < PORTRAIT_METADATA_VERSION;
+    const seedPatch = shouldReseed
+      ? buildPortraitSeed({
+          ownerSubject: trader.ownerSubject,
+          name: trader.name,
+          mandate: trader.mandate ?? {},
+          personality: trader.personality,
+        })
+      : {};
+    const nextRetryCount = shouldReseed ? 0 : (trader.imageRetryCount ?? 0) + 1;
     const patch = {
       ...seedPatch,
       imageStatus: "generating",
       imageLastAttemptAt: Date.now(),
-      imageRetryCount: (trader.imageRetryCount ?? 0) + 1,
+      imageRetryCount: nextRetryCount,
       imageError: undefined,
       updatedAt: Date.now(),
     } as const;

@@ -66,6 +66,7 @@ import {
   getTraderCycleUi,
   traderCycleDocFromDeskSummary,
 } from "@/lib/trader-cycle";
+import { leaderboardFlavorTrait } from "@/lib/portrait-traits";
 import { cn, formatShortAddress } from "@/lib/utils";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -1530,6 +1531,7 @@ function MarketPlayersPanel({
             const isCurrent = current
               ? trader.owner_address.toLowerCase() === current
               : false;
+            const flavorTrait = leaderboardFlavorTrait(trader.traits);
 
             return (
               <button
@@ -1558,6 +1560,11 @@ function MarketPlayersPanel({
                     <p className="truncate text-[10px] uppercase text-[var(--t-muted)]">
                       {trader.status}
                     </p>
+                    {flavorTrait ? (
+                      <p className="truncate text-[10px] uppercase text-[var(--t-accent)]/80">
+                        {flavorTrait}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <span className="truncate text-[10px] text-[var(--t-muted)]">
