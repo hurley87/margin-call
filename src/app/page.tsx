@@ -997,7 +997,13 @@ function TradingDeskPanel({
 }) {
   const traders = portfolio?.traders ?? [];
   const deskDeals = deals ?? [];
-  const [deskView, setDeskView] = useState<"traders" | "deals">("traders");
+  const [manualDeskView, setDeskView] = useState<"traders" | "deals" | null>(
+    null
+  );
+  const deskView =
+    manualDeskView ??
+    (!dealsLoading && deskDeals.length > 0 ? "deals" : "traders");
+
   const showingDeals = deskView === "deals";
 
   const deskPanelMeta = tradingDeskPanelMeta(
@@ -1037,7 +1043,7 @@ function TradingDeskPanel({
                     : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
                 )}
               >
-                Deals
+                Deals{deskDeals.length > 0 && ` (${deskDeals.length})`}
               </button>
             </div>
             <button
