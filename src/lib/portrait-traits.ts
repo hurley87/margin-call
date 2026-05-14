@@ -42,14 +42,3 @@ export function humanizePortraitTraitValue(value: string): string {
       .join("-")
   );
 }
-
-export function leaderboardFlavorTrait(
-  traits: PublicPortraitTraits | null | undefined
-): string | null {
-  if (!traits) return null;
-  const value =
-    traits.accessory && traits.accessory !== "no_accessory"
-      ? traits.accessory
-      : traits.marketMoment;
-  return humanizePortraitTraitValue(value);
-}
