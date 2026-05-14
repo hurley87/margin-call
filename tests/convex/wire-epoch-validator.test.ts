@@ -458,24 +458,24 @@ describe("validateEpoch: deal seed cadence + integrity", () => {
     );
   });
 
-  it("does not repair a missing dealSeed dispatchKey when the lone deal_seed dispatch is for another arc", () => {
+  it("repairs a missing dealSeed dispatchKey when the lone deal_seed dispatch has different arc metadata", () => {
     const payload = makeValidPayloadWithSeed();
     payload.dispatches[1].arcSlug = "arc-a";
     (payload.dealSeed as Record<string, unknown>).dispatchKey =
       "panatl-short-squeeze";
 
     const normalized = normalizeGeneratedEpoch(payload);
-    expect(normalized.repairedDealSeedDispatchKey).toBeNull();
+    expect(normalized.repairedDealSeedDispatchKey).toEqual({
+      from: "panatl-short-squeeze",
+      to: "supp-vale",
+    });
 
     const result = validateEpoch(normalized.epoch, {
       arcSlugs,
       entitySlugs,
       forbiddenLanguage,
     });
-    expect(result.ok).toBe(false);
-    expect((result as { ok: false; error: string }).error).toMatch(
-      /must match exactly one dispatch/
-    );
+    expect(result.ok).toBe(true);
   });
 
   it("rejects dealSeed pointing at a non-deal_seed dispatch", () => {
