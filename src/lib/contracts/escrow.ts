@@ -2,6 +2,7 @@ import { baseSepolia } from "viem/chains";
 
 /** MarginCallEscrow deal status: 0 = Open, 1 = Closed. */
 export const DEAL_STATUS_OPEN = 0;
+export const DEAL_STATUS_CLOSED = 1;
 
 export const ESCROW_ADDRESS =
   "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;

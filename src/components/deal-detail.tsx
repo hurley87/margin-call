@@ -1,25 +1,29 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
 import { usePrivy } from "@privy-io/react-auth";
 import { useMutation } from "convex/react";
 import { formatUnits } from "viem";
-import {
-  useReadContract,
-  useWaitForTransactionReceipt,
-  useWriteContract,
-} from "wagmi";
+import { useReadContract, useWriteContract } from "wagmi";
 
 import { api } from "../../convex/_generated/api";
 import { NarrativeRenderer } from "@/components/narrative-renderer";
 import { shortAssetLabel } from "@/lib/format-asset-label";
 import {
   CONTRACTS_CHAIN_ID,
+  DEAL_STATUS_CLOSED,
   ESCROW_ADDRESS,
   escrowAbi,
 } from "@/lib/contracts/escrow";
+import { makePublicClient } from "@/lib/contracts/client";
+import {
+  closeDealButtonLabel,
+  closeDealErrorMessage,
+  isCloseDealBusy,
+  type CloseDealPhase,
+} from "@/lib/deal-close-state";
 import { useDeal, type DealOutcome } from "@/hooks/use-deals";
 import { useDeskManager } from "@/hooks/use-desk";
 
@@ -438,15 +442,11 @@ function DealOwnerStatusFooter({
   return null;
 }
 
-function closeDealButtonLabel(isPending: boolean, isConfirming: boolean) {
-  if (isPending) return "CONFIRM IN WALLET...";
-  if (isConfirming) return "CLOSING...";
-  return "CLOSE DEAL";
-}
-
 function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
-  const syncedRef = useRef(false);
-  const { writeContract, data: txHash, isPending, error } = useWriteContract();
+  const [phase, setPhase] = useState<CloseDealPhase>("idle");
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [error, setError] = useState<string | null>(null);
+  const { writeContractAsync } = useWriteContract();
   const {
     data: onChainDeal,
     isLoading: isLoadingOnChainDeal,
@@ -458,40 +458,74 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
     args: [BigInt(onChainDealId)],
     chainId: CONTRACTS_CHAIN_ID,
   });
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
   const setStatusByOnChainId = useMutation(api.deals.setStatusByOnChainId);
   const pendingEntries = onChainDeal?.pendingEntries;
+  const isOnChainClosed = onChainDeal?.status === DEAL_STATUS_CLOSED;
+  const hasConfirmedClose = txHash !== undefined;
+  const isBusy = isCloseDealBusy(phase);
   const isPendingEntriesUnknown =
     isLoadingOnChainDeal ||
     onChainDealError !== null ||
     pendingEntries === undefined;
-  const hasPendingEntries =
-    pendingEntries !== undefined && pendingEntries > BigInt(0);
+  const hasPendingEntries = pendingEntries !== undefined && pendingEntries > 0n;
+
+  const syncClosedDeal = useCallback(async () => {
+    setPhase("syncing");
+    setError(null);
+
+    try {
+      await setStatusByOnChainId({ onChainDealId, status: "closed" });
+      setPhase("done");
+    } catch (err) {
+      console.error("setStatusByOnChainId failed:", err);
+      setPhase("error");
+      setError(closeDealErrorMessage(err));
+    }
+  }, [onChainDealId, setStatusByOnChainId]);
 
   useEffect(() => {
-    if (!isSuccess || !txHash || syncedRef.current) return;
-    syncedRef.current = true;
-    void setStatusByOnChainId({ onChainDealId, status: "closed" }).catch(
-      (err) => {
-        console.error("setStatusByOnChainId failed:", err);
-        syncedRef.current = false;
-      }
-    );
-  }, [isSuccess, txHash, onChainDealId, setStatusByOnChainId]);
+    if (!isOnChainClosed || phase !== "idle") return;
+    void syncClosedDeal();
+  }, [isOnChainClosed, phase, syncClosedDeal]);
 
-  function handleClose() {
-    writeContract({
-      address: ESCROW_ADDRESS,
-      abi: escrowAbi,
-      functionName: "closeDeal",
-      args: [BigInt(onChainDealId)],
-      chainId: CONTRACTS_CHAIN_ID,
-    });
+  async function handleClose() {
+    if (isBusy || hasPendingEntries || isPendingEntriesUnknown) return;
+
+    if (isOnChainClosed || hasConfirmedClose) {
+      await syncClosedDeal();
+      return;
+    }
+
+    setPhase("wallet");
+    setError(null);
+
+    try {
+      const hash = await writeContractAsync({
+        address: ESCROW_ADDRESS,
+        abi: escrowAbi,
+        functionName: "closeDeal",
+        args: [BigInt(onChainDealId)],
+        chainId: CONTRACTS_CHAIN_ID,
+      });
+
+      setPhase("confirming");
+
+      const publicClient = makePublicClient();
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status === "reverted") {
+        throw new Error("Close deal transaction reverted");
+      }
+
+      setTxHash(hash);
+      await syncClosedDeal();
+    } catch (err) {
+      console.error("closeDeal failed:", err);
+      setPhase("error");
+      setError(closeDealErrorMessage(err));
+    }
   }
 
-  if (isSuccess) {
+  if (phase === "done") {
     return (
       <div className="border-t border-[var(--t-green)]/40 bg-[var(--t-green)]/5 px-3 py-2">
         <p className="text-[10px] text-[var(--t-green)]">
@@ -517,25 +551,25 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
         <p className="text-[10px] text-[var(--t-muted)]">
           Withdraw remaining pot
           {pendingEntries !== undefined
-            ? ` (${pendingEntries.toString()} pending ${pendingEntries === BigInt(1) ? "entry" : "entries"})`
+            ? ` (${pendingEntries.toString()} pending ${pendingEntries === 1n ? "entry" : "entries"})`
             : " (checking pending entries...)"}
         </p>
         <button
           onClick={handleClose}
           disabled={
-            isPending ||
-            isConfirming ||
-            isPendingEntriesUnknown ||
-            hasPendingEntries
+            isBusy ||
+            (!isOnChainClosed &&
+              !hasConfirmedClose &&
+              (isPendingEntriesUnknown || hasPendingEntries))
           }
           className="border border-[var(--t-border)] px-3 py-1 text-[10px] text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
         >
-          {closeDealButtonLabel(isPending, isConfirming)}
+          {closeDealButtonLabel(phase, isOnChainClosed || hasConfirmedClose)}
         </button>
       </div>
       {error && (
         <p className="mt-1 text-[10px] text-[var(--t-red)]">
-          {error.message.slice(0, 150)}
+          {error.slice(0, 150)}
         </p>
       )}
     </div>
