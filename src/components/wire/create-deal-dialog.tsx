@@ -86,13 +86,11 @@ function DealSuggestionsPane({
   suggestionsRequested,
   suggestQuery,
   onGenerateSuggestions,
-  onUseSource,
   onPickSuggestion,
 }: {
   suggestionsRequested: boolean;
   suggestQuery: SuggestPromptsQuery;
   onGenerateSuggestions: () => void;
-  onUseSource: () => void;
   onPickSuggestion: (prompt: string) => void;
 }) {
   if (!suggestionsRequested) {
@@ -103,26 +101,16 @@ function DealSuggestionsPane({
             Deal angle
           </h3>
           <p className="mt-2 text-xs leading-relaxed text-[var(--t-green)]/90">
-            Use the wire item as-is, or ask the desk to draft three playable
-            deal angles from it.
+            Ask the desk to draft three playable deal angles from the wire item.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={onGenerateSuggestions}
-            className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-          >
-            Generate deal ideas &rarr;
-          </button>
-          <button
-            type="button"
-            onClick={onUseSource}
-            className="text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
-          >
-            Use wire item
-          </button>
-        </div>
+        <button
+          type="button"
+          onClick={onGenerateSuggestions}
+          className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+        >
+          Generate deal ideas &rarr;
+        </button>
       </div>
     );
   }
@@ -257,11 +245,6 @@ export function CreateDealDialog({
     setSuggestionsRequested(true);
   };
 
-  const handleUseSource = () => {
-    setSelectedPrompt(initialPrompt);
-    setState("configure");
-  };
-
   const potNum = parseFloat(potAmount);
   const entryNum = parseFloat(entryCost);
   const netPot =
@@ -361,7 +344,6 @@ export function CreateDealDialog({
                     suggestionsRequested={suggestionsRequested}
                     suggestQuery={suggestQuery}
                     onGenerateSuggestions={handleGenerateSuggestions}
-                    onUseSource={handleUseSource}
                     onPickSuggestion={handlePickSuggestion}
                   />
                 )}
@@ -380,7 +362,7 @@ export function CreateDealDialog({
                       <textarea
                         value={selectedPrompt}
                         onChange={(e) => setSelectedPrompt(e.target.value)}
-                        rows={6}
+                        rows={3}
                         disabled={isCreating}
                         className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-sm leading-relaxed text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
                       />

@@ -186,7 +186,7 @@ export default function Home() {
             MARGIN CALL
           </h1>
           <p className="mt-2 text-sm uppercase tracking-[0.25em] text-[var(--t-muted)]">
-            The 1980s Wall Street Trading Game
+            Build your desk. Break theirs.
           </p>
         </div>
         <div className="flex flex-col items-center gap-3 text-xs text-[var(--t-muted)]">
@@ -389,6 +389,62 @@ function Dashboard({
   );
 }
 
+const MARKET_OPEN_SEC = 9 * 3600 + 30 * 60;
+const MARKET_CLOSE_SEC = 16 * 3600;
+const SECONDS_PER_DAY = 24 * 3600;
+
+const COUNTDOWN_FMT = new Intl.DateTimeFormat("en-US", {
+  ...NY_TIME,
+  hour: "numeric",
+  minute: "numeric",
+  second: "numeric",
+  weekday: "short",
+  hour12: false,
+});
+
+const DAYS_UNTIL_NEXT_OPEN: Record<string, number> = {
+  Sun: 1,
+  Mon: 1,
+  Tue: 1,
+  Wed: 1,
+  Thu: 1,
+  Fri: 3,
+  Sat: 2,
+};
+
+function getMarketCountdown(nowMs: number): { isOpen: boolean; hms: string } {
+  const parts = Object.fromEntries(
+    COUNTDOWN_FMT.formatToParts(new Date(nowMs)).map((p) => [p.type, p.value])
+  );
+  const secNow =
+    Number(parts.hour) * 3600 +
+    Number(parts.minute) * 60 +
+    Number(parts.second);
+  const weekday = parts.weekday;
+  const isWeekend = weekday === "Sat" || weekday === "Sun";
+  const isOpen =
+    !isWeekend && secNow >= MARKET_OPEN_SEC && secNow < MARKET_CLOSE_SEC;
+
+  let remaining: number;
+  if (isOpen) {
+    remaining = MARKET_CLOSE_SEC - secNow;
+  } else {
+    const beforeOpenToday = !isWeekend && secNow < MARKET_OPEN_SEC;
+    const daysToAdd = beforeOpenToday
+      ? 0
+      : (DAYS_UNTIL_NEXT_OPEN[weekday] ?? 1);
+    remaining = daysToAdd * SECONDS_PER_DAY + (MARKET_OPEN_SEC - secNow);
+  }
+
+  const rh = Math.floor(remaining / 3600);
+  const rm = Math.floor((remaining % 3600) / 60);
+  const rs = remaining % 60;
+  return {
+    isOpen,
+    hms: `${rh}:${String(rm).padStart(2, "0")}:${String(rs).padStart(2, "0")}`,
+  };
+}
+
 function TopStatusBar({
   displayName,
   nowMs,
@@ -416,12 +472,7 @@ function TopStatusBar({
     day: "2-digit",
     ...NY_TIME,
   });
-  const time = marketDate.toLocaleTimeString("en-US", {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-    ...NY_TIME,
-  });
+  const { isOpen, hms } = getMarketCountdown(nowMs);
 
   return (
     <header className="z-40 shrink-0 bg-[#050706]/95 px-2 pt-2 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm">
@@ -431,19 +482,21 @@ function TopStatusBar({
             MARGIN CALL
           </h1>
           <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)]">
-            The 1980s Wall Street Trading Game
+            Build your desk. Break theirs.
           </p>
         </div>
 
-        <div className="terminal-panel grid grid-cols-2 divide-x divide-[var(--t-divider)] px-3 py-2 text-xs uppercase">
+        <div className="terminal-panel grid grid-cols-2 items-center divide-x divide-[var(--t-divider)] px-3 py-2 text-xs uppercase">
           <div>
             <p className="text-[var(--t-green)]">{day}</p>
             <p className="mt-1 text-[var(--t-green)]">{date}</p>
           </div>
-          <div className="pl-4 text-right">
-            <p className="text-xl leading-none text-[var(--t-green)]">{time}</p>
+          <div className="flex flex-col items-end justify-center pl-4">
+            <p className="font-mono text-xl leading-none tabular-nums text-[var(--t-green)]">
+              {hms}
+            </p>
             <p className="mt-1 text-[10px] text-[var(--t-accent)]">
-              Market Open
+              {isOpen ? "CLOSES IN" : "OPENS IN"}
             </p>
           </div>
         </div>
