@@ -95,7 +95,7 @@ async function runGenerator(
     | undefined;
 
   const posture = dayPosture(now);
-  const lastDropSlot = recentDrops[0]?.epochSlot ?? null;
+  const lastDropSlot = lastDrop?.epochSlot ?? null;
   const openingBell = isOpeningBell(slot, lastDropSlot);
 
   const userMessage = assembleUserMessage({

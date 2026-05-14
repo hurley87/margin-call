@@ -64,10 +64,7 @@ export interface AssemblerInput {
    * The validator will reject the epoch if this is true and no dealSeed is emitted.
    */
   mustIncludeDealSeed: boolean;
-  /**
-   * True when this is the first drop of the trading day (overnight gap detected).
-   * The assembler injects an opening-bell briefing instruction into the prompt.
-   */
+  /** True when this is the first drop of the trading day. */
   isOpeningBell: boolean;
 }
 
@@ -111,17 +108,7 @@ export function assembleUserMessage(input: AssemblerInput): string {
 
   if (isOpeningBell) {
     lines.push(
-      `\nOPENING BELL: This is the first Wire Drop of the trading day. Structure it as a morning briefing:`
-    );
-    lines.push(
-      `  - Lead with what happened overnight or since yesterday's close`
-    );
-    lines.push(`  - State who is positioned how heading into today`);
-    lines.push(
-      `  - Name the one central flashpoint the floor will be watching`
-    );
-    lines.push(
-      `  - Tone: electric anticipation. The bell just rang. Not a recap — a call to arms.`
+      `\nOPENING BELL: This is the first Wire Drop of the trading day. Structure it as a morning briefing:\n  - Lead with what happened overnight or since yesterday's close\n  - State who is positioned how heading into today\n  - Name the one central flashpoint the floor will be watching\n  - Tone: electric anticipation. The bell just rang. Not a recap — a call to arms.`
     );
   }
 
@@ -198,8 +185,6 @@ export function assembleUserMessage(input: AssemblerInput): string {
     });
   }
 
-  // Deal Seed cadence — the validator enforces the cadence rule, so the LLM
-  // must respect it when mustIncludeDealSeed is true.
   lines.push(`\nDEAL SEED CADENCE (newest first):`);
   if (recentSeedCadence.length === 0) {
     lines.push("  (no recent drops)");
