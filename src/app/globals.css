@@ -185,6 +185,33 @@
   }
 }
 
+.cursor-money {
+  cursor:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 28 28'><circle cx='14' cy='14' r='12' fill='%23090b10' stroke='%23d6a660' stroke-width='1.5'/><text x='14' y='20' text-anchor='middle' font-family='monospace' font-size='18' font-weight='bold' fill='%23d6a660'>$</text></svg>")
+      14 14,
+    pointer;
+}
+
+@keyframes wire-cta-bounce {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(3px, 0, 0);
+  }
+}
+
+.wire-cta-bounce {
+  display: inline-flex;
+}
+
+.group:hover .wire-cta-bounce,
+.group:focus-visible .wire-cta-bounce,
+.group:focus-within .wire-cta-bounce {
+  animation: wire-cta-bounce 0.7s ease-in-out infinite;
+}
+
 @keyframes desk-float {
   0%,
   100% {

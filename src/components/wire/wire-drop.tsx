@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { heatColor } from "@/lib/utils";
+import { cn, heatColor } from "@/lib/utils";
 import { WireSourceLine } from "./wire-sources";
 import { CreateDealDialog } from "./create-deal-dialog";
 import { DealBadge } from "./deal-badge";
@@ -56,8 +56,21 @@ export function WireDispatch({ dispatch, headlineDeals }: WireDispatchProps) {
   const totalPot = headlineDeals?.reduce((sum, d) => sum + d.pot_usdc, 0) ?? 0;
   const seed = dispatch.dealSeed;
 
+  const openDialog = () => setDialogOpen(true);
+
   return (
-    <div className="px-3 py-3">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={openDialog}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          openDialog();
+        }
+      }}
+      className="group cursor-money px-3 py-3 transition-colors hover:bg-[var(--t-surface)] focus-visible:bg-[var(--t-surface)] focus-visible:outline-none"
+    >
       <WireSourceLine
         category={dispatch.category}
         createdAt={dispatch.createdAt}
@@ -72,7 +85,10 @@ export function WireDispatch({ dispatch, headlineDeals }: WireDispatchProps) {
       </p>
 
       {headlineDeals && headlineDeals.length > 0 && (
-        <div className="mt-2 flex flex-col gap-1">
+        <div
+          className="mt-2 flex flex-col gap-1"
+          onClick={(e) => e.stopPropagation()}
+        >
           {headlineDeals.map((d) => (
             <DealBadge key={d.id} deal={d} />
           ))}
@@ -80,16 +96,16 @@ export function WireDispatch({ dispatch, headlineDeals }: WireDispatchProps) {
       )}
 
       <div className="mt-2 flex items-center justify-between">
-        <button
-          onClick={() => setDialogOpen(true)}
-          className={
+        <span
+          className={cn(
+            "wire-cta-bounce transition-colors",
             seed
-              ? "flex items-center gap-1.5 border border-[var(--t-accent)] px-3 py-1 text-[11px] font-bold text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-              : "text-[10px] text-[var(--t-muted)] transition-colors hover:text-[var(--t-accent)]"
-          }
+              ? "items-center gap-1.5 border border-[var(--t-accent)] px-3 py-1 text-[11px] font-bold text-[var(--t-accent)] group-hover:bg-[var(--t-accent)] group-hover:text-[var(--t-bg)]"
+              : "text-[10px] text-[var(--t-muted)] group-hover:text-[var(--t-accent)]"
+          )}
         >
           {seed ? "$ CREATE DEAL FROM THIS" : "USE AS PREMISE →"}
-        </button>
+        </span>
 
         {seed && (
           <span className="text-[10px] text-[var(--t-muted)]">

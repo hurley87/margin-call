@@ -12,7 +12,8 @@ import {
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { Github, HelpCircle, LogOut, Twitter } from "lucide-react";
+import { Dialog } from "@base-ui/react/dialog";
+import { Github, HelpCircle, LogOut, Twitter, X } from "lucide-react";
 import { useQuery } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../../convex/_generated/api";
@@ -561,6 +562,7 @@ function NewswirePanel({
   const [dealDialog, setDealDialog] = useState<NewswireCreateDialog | null>(
     null
   );
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const items = useMemo(() => {
     if (!drops) return undefined;
@@ -589,6 +591,17 @@ function NewswirePanel({
       <PanelHeader
         title="Newswire"
         meta={items === undefined ? "WAIT" : undefined}
+        action={
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            title="How deals work"
+            aria-label="How deals work"
+            className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+          </button>
+        }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <NewswireList items={items} onCreate={setDealDialog} />
@@ -613,6 +626,113 @@ function NewswirePanel({
           startWithSuggestions={dealDialog.startWithSuggestions}
         />
       )}
+
+      <Dialog.Root open={helpOpen} onOpenChange={setHelpOpen}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+          <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-lg -translate-x-1/2 -translate-y-1/2 border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
+            <Dialog.Title className="sr-only">How deals work</Dialog.Title>
+            <div className="flex items-center justify-between border-b border-[var(--t-divider)] bg-[#0b100d] px-4 py-3">
+              <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
+                How Deals Work
+              </h2>
+              <button
+                type="button"
+                onClick={() => setHelpOpen(false)}
+                aria-label="Close"
+                className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-red)] hover:text-[var(--t-red)]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
+            <div className="divide-y divide-[var(--t-divider)] px-5 text-xs leading-relaxed text-[var(--t-text)]">
+              <section className="space-y-2 py-5">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
+                  Creating a Deal
+                </h3>
+                <p className="text-[var(--t-green)]/90">
+                  Every news item on the wire is a potential deal. Click{" "}
+                  <span className="font-bold text-[var(--t-accent)]">
+                    → Create deal
+                  </span>{" "}
+                  under any headline to open the deal creation dialog. Set a{" "}
+                  <span className="font-bold text-[var(--t-amber)]">pot</span>{" "}
+                  (the prize pool) and an{" "}
+                  <span className="font-bold text-[var(--t-amber)]">
+                    entry cost
+                  </span>{" "}
+                  — the fee other traders pay to send their agents in.
+                </p>
+                <p className="text-[var(--t-green)]/90">
+                  Wire seeds marked{" "}
+                  <span className="font-bold text-[var(--t-red)]">
+                    → Take seed
+                  </span>{" "}
+                  come pre-loaded with suggested pot and entry-cost values — hit
+                  the ground running or tune them to your liking.
+                </p>
+              </section>
+
+              <section className="space-y-2 py-5">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
+                  How You Make Money
+                </h3>
+                <p className="text-[var(--t-green)]/90">
+                  When a trader&apos;s agent enters your deal, they pay the{" "}
+                  <span className="font-bold text-[var(--t-amber)]">
+                    entry cost
+                  </span>{" "}
+                  in USDC. That fee goes directly into the pot — growing the
+                  prize pool with every new entrant.
+                </p>
+                <p className="text-[var(--t-green)]/90">
+                  GPT determines whether each agent&apos;s trade wins or loses.
+                  Winners collect from the pot; losers&apos; entry fees stay in
+                  it. As the deal creator you{" "}
+                  <span className="font-bold text-[var(--t-amber)]">
+                    keep a share of every entry fee
+                  </span>{" "}
+                  — the more agents that enter, the more you earn, win or lose.
+                </p>
+              </section>
+
+              <section className="space-y-2 py-5">
+                <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
+                  Strategy
+                </h3>
+                <ul className="space-y-1.5 text-[var(--t-green)]/90">
+                  <li>
+                    <span className="text-[var(--t-amber)]">▸</span> High entry
+                    cost + big pot attracts aggressive traders — more risk, more
+                    reward.
+                  </li>
+                  <li>
+                    <span className="text-[var(--t-amber)]">▸</span> Low entry
+                    cost drives volume — more agents enter, more fees you
+                    collect.
+                  </li>
+                  <li>
+                    <span className="text-[var(--t-amber)]">▸</span> Your own
+                    traders cannot enter deals you create — keep that in mind
+                    when sizing.
+                  </li>
+                </ul>
+              </section>
+            </div>
+
+            <div className="border-t border-[var(--t-divider)] px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setHelpOpen(false)}
+                className="w-full border border-[var(--t-divider)] py-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
+              >
+                Got it — Back to the wire
+              </button>
+            </div>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
     </aside>
   );
 }
@@ -726,9 +846,18 @@ function NewswireItem({
 
   return (
     <article
+      role="button"
+      tabIndex={0}
+      onClick={onCreate}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onCreate();
+        }
+      }}
       className={cn(
-        "group relative -mx-2 border-b border-[var(--t-divider)]/45 pb-3 pl-3 pr-2 text-xs leading-relaxed transition-colors last:border-b-0 last:pb-0",
-        "hover:bg-[var(--t-accent-soft)]/40"
+        "group relative -mx-2 cursor-money border-b border-[var(--t-divider)]/45 pb-3 pl-3 pr-2 text-xs leading-relaxed transition-colors last:border-b-0 last:pb-0",
+        "hover:bg-[var(--t-accent-soft)]/40 focus:bg-[var(--t-accent-soft)]/40 focus:outline-none"
       )}
     >
       <span
@@ -756,24 +885,18 @@ function NewswireItem({
       <h3 className="font-medium text-[var(--t-amber)]">{headline}</h3>
       <p className="mt-1 text-[var(--t-green)]/90">{body}</p>
       {isSeed && potLabel ? (
-        <button
-          onClick={onCreate}
-          className="mt-2 inline-flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-red)] transition-colors hover:text-[var(--t-amber)]"
-        >
+        <span className="wire-cta-bounce mt-2 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-red)]">
           <span>→ Take seed · {potLabel} pot</span>
           {dealSeed && dealSeed.linkedDealCount > 0 && (
             <span className="text-[var(--t-muted)]">
               ({dealSeed.linkedDealCount} taken)
             </span>
           )}
-        </button>
+        </span>
       ) : (
-        <button
-          onClick={onCreate}
-          className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)]/70 transition-colors hover:text-[var(--t-amber)] group-hover:text-[var(--t-accent)]"
-        >
+        <span className="wire-cta-bounce mt-2 items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)]/70 transition-colors group-hover:text-[var(--t-accent)]">
           → Create deal
-        </button>
+        </span>
       )}
     </article>
   );
