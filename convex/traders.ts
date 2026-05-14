@@ -12,7 +12,11 @@ import {
   resolveReadyProfileImageUrl,
   resolveTraderProfileImageUrl,
 } from "./lib/profileImage";
-import { buildPortraitSeed } from "./lib/portraitSeed";
+import {
+  buildPortraitSeed,
+  getPortraitPromptVersion,
+  PORTRAIT_METADATA_VERSION,
+} from "./lib/portraitSeed";
 
 async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
   return {
@@ -458,15 +462,11 @@ export const markPortraitGenerating = internalMutation({
       return trader;
     }
 
-    const promptVersion =
-      typeof trader.imagePromptSource === "object" &&
-      trader.imagePromptSource !== null &&
-      "version" in trader.imagePromptSource &&
-      typeof trader.imagePromptSource.version === "number"
-        ? trader.imagePromptSource.version
-        : 0;
+    const promptVersion = getPortraitPromptVersion(trader.imagePromptSource);
     const seedPatch =
-      trader.imagePrompt && trader.imageStyleSeed && promptVersion >= 2
+      trader.imagePrompt &&
+      trader.imageStyleSeed &&
+      promptVersion >= PORTRAIT_METADATA_VERSION
         ? {}
         : buildPortraitSeed({
             ownerSubject: trader.ownerSubject,

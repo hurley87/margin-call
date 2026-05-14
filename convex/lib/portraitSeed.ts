@@ -1,4 +1,16 @@
-const PORTRAIT_METADATA_VERSION = 2;
+export const PORTRAIT_METADATA_VERSION = 2;
+
+export function getPortraitPromptVersion(source: unknown): number {
+  if (
+    typeof source === "object" &&
+    source !== null &&
+    "version" in source &&
+    typeof (source as { version: unknown }).version === "number"
+  ) {
+    return (source as { version: number }).version;
+  }
+  return 0;
+}
 const BASE_PORTRAIT_PROMPT =
   "Create a square profile picture of one fictional 1987 Wall Street trader for a retro trading game. High-end retro game character portrait, pixel-art inspired, detailed face, head-and-shoulders composition, serious expression, period-accurate suit and tie, dramatic trading floor or finance office background, green CRT terminal glow, warm amber lighting, dark moody palette, clean silhouette, no border. The image must be a portrait only: no words, no captions, no nameplates, no labels, no job titles, no ticker symbols, no numbers, no letters, no logos, no watermarks, no UI text, and no typography anywhere in the image.";
 const IMAGE_VARIANTS = [
