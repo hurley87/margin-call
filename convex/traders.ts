@@ -458,8 +458,15 @@ export const markPortraitGenerating = internalMutation({
       return trader;
     }
 
+    const promptVersion =
+      typeof trader.imagePromptSource === "object" &&
+      trader.imagePromptSource !== null &&
+      "version" in trader.imagePromptSource &&
+      typeof trader.imagePromptSource.version === "number"
+        ? trader.imagePromptSource.version
+        : 0;
     const seedPatch =
-      trader.imagePrompt && trader.imageStyleSeed
+      trader.imagePrompt && trader.imageStyleSeed && promptVersion >= 2
         ? {}
         : buildPortraitSeed({
             ownerSubject: trader.ownerSubject,

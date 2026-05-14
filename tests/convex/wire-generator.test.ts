@@ -456,6 +456,34 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
     expect(seeds[0].dispatchIndex).toBe(1);
   });
 
+  it("repairs a dealSeed.dispatchKey that points at a main dispatch when one deal_seed dispatch exists", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed({
+        dealSeed: {
+          dispatchKey: "main-panatl-halt",
+          arcSlug: "pan-atlantic-blowup",
+          prompt:
+            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
+          suggestedPotUsdc: 10,
+          suggestedEntryCostUsdc: 5,
+        },
+      }),
+    });
+
+    expect((result as { inserted?: boolean }).inserted).toBe(true);
+
+    const seeds = await t.run(async (ctx) =>
+      ctx.db.query("wireDealSeeds").collect()
+    );
+    expect(seeds.length).toBe(1);
+    expect(seeds[0].dispatchKey).toBe("seed-rourke-short");
+    expect(seeds[0].dispatchIndex).toBe(1);
+  });
+
   it("rejects a mismatched dealSeed.dispatchKey when there is no clear repair", async () => {
     const t = convexTest(schema, modules);
     await seedSeasonAndDrops(t);

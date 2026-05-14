@@ -372,6 +372,25 @@ describe("validateEpoch: deal seed cadence + integrity", () => {
     expect(result.ok).toBe(true);
   });
 
+  it("repairs a dealSeed dispatchKey that points at a non-deal_seed dispatch when exactly one deal_seed dispatch exists", () => {
+    const payload = makeValidPayloadWithSeed();
+    (payload.dealSeed as Record<string, unknown>).dispatchKey = "main-panatl";
+
+    const normalized = normalizeGeneratedEpoch(payload);
+    expect(normalized.repairedDealSeedDispatchKey).toEqual({
+      from: "main-panatl",
+      to: "supp-vale",
+    });
+
+    const result = validateEpoch(normalized.epoch, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+      requireDealSeed: true,
+    });
+    expect(result.ok).toBe(true);
+  });
+
   it("does not repair a missing dealSeed dispatchKey without a deal_seed dispatch", () => {
     const payload = makeValidPayloadWithSeed();
     payload.dispatches[1].role = "supporting" as never;
@@ -389,6 +408,25 @@ describe("validateEpoch: deal seed cadence + integrity", () => {
     expect(result.ok).toBe(false);
     expect((result as { ok: false; error: string }).error).toMatch(
       /must match exactly one dispatch/
+    );
+  });
+
+  it("does not repair a wrong-role dealSeed dispatchKey without a deal_seed dispatch", () => {
+    const payload = makeValidPayloadWithSeed();
+    payload.dispatches[1].role = "supporting" as never;
+    (payload.dealSeed as Record<string, unknown>).dispatchKey = "main-panatl";
+
+    const normalized = normalizeGeneratedEpoch(payload);
+    expect(normalized.repairedDealSeedDispatchKey).toBeNull();
+
+    const result = validateEpoch(normalized.epoch, {
+      arcSlugs,
+      entitySlugs,
+      forbiddenLanguage,
+    });
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /role "deal_seed"/
     );
   });
 

@@ -437,13 +437,17 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
     expect(trader?.imageStatus).toBe("pending");
     expect(trader?.imageRetryCount).toBe(0);
-    expect(trader?.metadataVersion).toBe(1);
+    expect(trader?.metadataVersion).toBe(2);
     expect(trader?.imagePrompt).toContain("1987 Wall Street trader");
-    expect(trader?.imagePrompt).toContain("Portrait Trader");
-    expect(trader?.imageStyleSeed).toMatch(/^portrait-v1-/);
+    expect(trader?.imagePrompt).not.toContain("Portrait Trader");
+    expect(trader?.imagePrompt).not.toContain("equity_salesman");
+    expect(trader?.imagePrompt).toContain("no words");
+    expect(trader?.imagePrompt).toContain("no captions");
+    expect(trader?.imagePrompt).toContain("no labels");
+    expect(trader?.imageStyleSeed).toMatch(/^portrait-v2-/);
     expect(trader?.imageVariant).toEqual(expect.any(String));
     expect(trader?.imagePromptSource).toMatchObject({
-      version: 1,
+      version: 2,
       traderName: "Portrait Trader",
       mandateSnapshot: mandate,
       personalitySnapshot: "Aggressive merger arbitrage specialist",

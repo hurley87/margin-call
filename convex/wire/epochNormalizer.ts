@@ -19,7 +19,11 @@ export function normalizeGeneratedEpoch(
   const matchingDispatches = epoch.dispatches.filter(
     (d) => d.dispatchKey === dealSeed.dispatchKey
   );
-  if (matchingDispatches.length > 0) {
+  if (
+    matchingDispatches.length > 1 ||
+    (matchingDispatches.length === 1 &&
+      matchingDispatches[0].role === "deal_seed")
+  ) {
     return { epoch, repairedDealSeedDispatchKey: null };
   }
 
