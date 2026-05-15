@@ -4,7 +4,6 @@ import OpenAI from "openai";
 import { v } from "convex/values";
 import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
 import { assertOperatorSubject } from "./wire/_operatorUtils";
 
 const FALLBACK_PROMPT =
@@ -101,40 +100,5 @@ export const adminRegenerateForTrader = action({
       force,
     });
     return { ok: true as const, status: "regenerated" as const };
-  },
-});
-
-const BACKFILL_MAX_PER_RUN = 100;
-const BACKFILL_MIN_STAGGER_MS = 1000;
-
-export const adminBackfillV3 = action({
-  args: { delayMsBetween: v.optional(v.number()) },
-  handler: async (
-    ctx,
-    { delayMsBetween }
-  ): Promise<{ ok: true; scheduled: number; remaining: number }> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-    assertOperatorSubject(identity.subject);
-
-    const stale: Array<Id<"traders">> = await ctx.runQuery(
-      internal.traders.listStaleForPortraitV3,
-      {}
-    );
-    const stagger = Math.max(delayMsBetween ?? 4000, BACKFILL_MIN_STAGGER_MS);
-    const batch = stale.slice(0, BACKFILL_MAX_PER_RUN);
-
-    for (let i = 0; i < batch.length; i++) {
-      await ctx.scheduler.runAfter(
-        i * stagger,
-        internal.portraits.generateForTrader,
-        { traderId: batch[i], force: true }
-      );
-    }
-    return {
-      ok: true,
-      scheduled: batch.length,
-      remaining: Math.max(stale.length - batch.length, 0),
-    };
   },
 });

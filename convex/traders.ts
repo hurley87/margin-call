@@ -400,20 +400,6 @@ export const loadInternal = internalQuery({
   handler: async (ctx, { traderId }) => ctx.db.get(traderId),
 });
 
-export const listStaleForPortraitV3 = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    const all = await ctx.db.query("traders").collect();
-    return all
-      .filter(
-        (trader) =>
-          getPortraitPromptVersion(trader.imagePromptSource) <
-          PORTRAIT_METADATA_VERSION
-      )
-      .map((trader) => trader._id);
-  },
-});
-
 /** Internal: transition walletStatus pending|creating → creating. */
 export const markCreating = internalMutation({
   args: { traderId: v.id("traders") },
