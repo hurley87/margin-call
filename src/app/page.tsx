@@ -1196,7 +1196,7 @@ function DeskTradersView({
   nowMs: number;
 }) {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,12rem))] content-center justify-start gap-2 overflow-y-auto p-3">
+    <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,12rem))] content-start justify-start gap-2 overflow-y-auto p-3">
       {traders.map((trader, index) => {
         const cycleUi = getTraderCycleUi(
           traderCycleDocFromDeskSummary(trader),
