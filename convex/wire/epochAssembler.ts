@@ -13,6 +13,7 @@ export interface ArcCtx {
   title: string;
   summary: string;
   tensionScore: number;
+  phase?: string | null;
 }
 
 export interface EntityCtx {
@@ -26,6 +27,8 @@ export interface RecentDropCtx {
   dropTitle?: string | null;
   worldState?: { mood?: string; sec_heat?: number } | null;
   headlines?: Array<{ headline?: string; role?: string }> | null;
+  confirmedFacts?: string[] | null;
+  openQuestions?: string[] | null;
 }
 
 export interface GameEventCtx {
@@ -68,6 +71,34 @@ export interface AssemblerInput {
   isOpeningBell: boolean;
 }
 
+function dedupeStrings(values: string[], cap: number): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const trimmed = value.trim();
+    if (!trimmed || seen.has(trimmed)) continue;
+    seen.add(trimmed);
+    result.push(trimmed);
+    if (result.length >= cap) break;
+  }
+  return result;
+}
+
+function pushBulletSection(
+  lines: string[],
+  header: string,
+  items: string[]
+): void {
+  lines.push(`\n${header}`);
+  if (items.length === 0) {
+    lines.push("  (none)");
+    return;
+  }
+  for (const item of items) {
+    lines.push(`  - ${item}`);
+  }
+}
+
 export function assembleUserMessage(input: AssemblerInput): string {
   const {
     season,
@@ -97,6 +128,9 @@ export function assembleUserMessage(input: AssemblerInput): string {
   lines.push(
     `\nFORBIDDEN LANGUAGE (never use): ${season.forbiddenLanguage.join(", ")}`
   );
+  lines.push(
+    "\nPHASES: rumor -> crack -> panic -> rupture -> fallout -> countermove -> resolution. Emit a phase on arcUpdates only when the arc shifts."
+  );
 
   lines.push(`\nCURRENT WORLD STATE:`);
   if (worldState) {
@@ -118,11 +152,19 @@ export function assembleUserMessage(input: AssemblerInput): string {
   } else {
     arcs.forEach((arc, i) => {
       const primary = i === 0 ? " [PRIMARY]" : "";
+      const phase = arc.phase ? ` — phase: ${arc.phase}` : "";
       lines.push(
-        `  ${i + 1}.${primary} ${arc.title} (tension ${arc.tensionScore}/10, slug: ${arc.slug})`
+        `  ${i + 1}.${primary} ${arc.title} (tension ${arc.tensionScore}/10, slug: ${arc.slug})${phase}`
       );
       lines.push(`     ${arc.summary}`);
     });
+  }
+
+  const primaryArc = arcs[0] ?? null;
+  if (primaryArc && primaryArc.tensionScore >= 9) {
+    lines.push(
+      `\nMATERIAL EVENT REQUIRED: The PRIMARY arc "${primaryArc.title}" (slug: ${primaryArc.slug}) is at tension ${primaryArc.tensionScore}/10. The role=main dispatch carrying this arc MUST set materialChange: { kind, entitySlug, magnitude? }. kind must be one of asset_loss, personnel_exit, regulatory_action, counterparty_break, filing, position_unwind. entitySlug must come from the roster. Vague escalation language alone does not satisfy this.`
+    );
   }
 
   lines.push(`\nENTITY ROSTER (only reference entities on this list):`);
@@ -135,6 +177,33 @@ export function assembleUserMessage(input: AssemblerInput): string {
   }
 
   const dropsToShow = recentDrops.slice(0, 10);
+  pushBulletSection(
+    lines,
+    "CONFIRMED FACTS (do not contradict; do not re-announce):",
+    dedupeStrings(
+      dropsToShow.flatMap((drop) => drop.confirmedFacts ?? []),
+      20
+    )
+  );
+  pushBulletSection(
+    lines,
+    "OPEN QUESTIONS (still unresolved):",
+    dedupeStrings(
+      dropsToShow.flatMap((drop) => drop.openQuestions ?? []),
+      12
+    )
+  );
+  pushBulletSection(
+    lines,
+    "DO NOT RE-ANNOUNCE AS NEW (recent headlines):",
+    dedupeStrings(
+      dropsToShow.flatMap((drop) =>
+        (drop.headlines ?? []).map((dispatch) => dispatch.headline ?? "")
+      ),
+      30
+    )
+  );
+
   lines.push(`\nRECENT WIRE DROPS (newest first, for narrative continuity):`);
   if (dropsToShow.length === 0) {
     lines.push("  (none — this is the first drop)");

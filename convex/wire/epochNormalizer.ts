@@ -1,4 +1,8 @@
-import type { NarrativeEpoch } from "./_schemas";
+import type {
+  Dispatch,
+  GeneratedNarrativeEpoch,
+  NarrativeEpoch,
+} from "./_schemas";
 
 export type NormalizedEpochResult = {
   epoch: NarrativeEpoch;
@@ -6,17 +10,32 @@ export type NormalizedEpochResult = {
     from: string;
     to: string;
   } | null;
+  repairedCategoryAliases: number;
 };
 
 export function normalizeGeneratedEpoch(
-  epoch: NarrativeEpoch
+  epoch: GeneratedNarrativeEpoch
 ): NormalizedEpochResult {
-  const { dealSeed } = epoch;
+  let repairedCategoryAliases = 0;
+  const dispatches = epoch.dispatches.map((dispatch): Dispatch => {
+    if (dispatch.category === "market") {
+      repairedCategoryAliases++;
+      return { ...dispatch, category: "wire" };
+    }
+    return { ...dispatch, category: dispatch.category };
+  });
+  const categoryNormalizedEpoch: NarrativeEpoch = { ...epoch, dispatches };
+
+  const { dealSeed } = categoryNormalizedEpoch;
   if (!dealSeed) {
-    return { epoch, repairedDealSeedDispatchKey: null };
+    return {
+      epoch: categoryNormalizedEpoch,
+      repairedDealSeedDispatchKey: null,
+      repairedCategoryAliases,
+    };
   }
 
-  const matchingDispatches = epoch.dispatches.filter(
+  const matchingDispatches = categoryNormalizedEpoch.dispatches.filter(
     (d) => d.dispatchKey === dealSeed.dispatchKey
   );
   if (
@@ -24,20 +43,28 @@ export function normalizeGeneratedEpoch(
     (matchingDispatches.length === 1 &&
       matchingDispatches[0].role === "deal_seed")
   ) {
-    return { epoch, repairedDealSeedDispatchKey: null };
+    return {
+      epoch: categoryNormalizedEpoch,
+      repairedDealSeedDispatchKey: null,
+      repairedCategoryAliases,
+    };
   }
 
-  const dealSeedDispatches = epoch.dispatches.filter(
+  const dealSeedDispatches = categoryNormalizedEpoch.dispatches.filter(
     (d) => d.role === "deal_seed"
   );
   if (dealSeedDispatches.length !== 1) {
-    return { epoch, repairedDealSeedDispatchKey: null };
+    return {
+      epoch: categoryNormalizedEpoch,
+      repairedDealSeedDispatchKey: null,
+      repairedCategoryAliases,
+    };
   }
 
   const repairedDispatchKey = dealSeedDispatches[0].dispatchKey;
   return {
     epoch: {
-      ...epoch,
+      ...categoryNormalizedEpoch,
       dealSeed: {
         ...dealSeed,
         dispatchKey: repairedDispatchKey,
@@ -47,5 +74,6 @@ export function normalizeGeneratedEpoch(
       from: dealSeed.dispatchKey,
       to: repairedDispatchKey,
     },
+    repairedCategoryAliases,
   };
 }

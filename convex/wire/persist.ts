@@ -1,6 +1,16 @@
 import { internalMutation } from "../_generated/server";
 import { v } from "convex/values";
 
+const phaseValidator = v.union(
+  v.literal("rumor"),
+  v.literal("crack"),
+  v.literal("panic"),
+  v.literal("rupture"),
+  v.literal("fallout"),
+  v.literal("countermove"),
+  v.literal("resolution")
+);
+
 /**
  * Idempotent epoch writer.
  *
@@ -19,9 +29,15 @@ export const persistGeneratedEpoch = internalMutation({
     topArcTension: v.number(),
     dispatches: v.array(v.any()),
     worldState: v.any(),
+    confirmedFacts: v.optional(v.array(v.string())),
+    openQuestions: v.optional(v.array(v.string())),
     arcRefs: v.array(v.id("narrativeArcs")),
     arcUpdates: v.array(
-      v.object({ arcId: v.id("narrativeArcs"), tensionDelta: v.number() })
+      v.object({
+        arcId: v.id("narrativeArcs"),
+        tensionDelta: v.number(),
+        phase: v.optional(phaseValidator),
+      })
     ),
     eventsIngested: v.optional(v.any()),
     rawNarrative: v.string(),
@@ -51,6 +67,8 @@ export const persistGeneratedEpoch = internalMutation({
       topArcTension,
       dispatches,
       worldState,
+      confirmedFacts,
+      openQuestions,
       arcRefs,
       arcUpdates,
       eventsIngested,
@@ -87,13 +105,15 @@ export const persistGeneratedEpoch = internalMutation({
       topArcTension,
       headlines: dispatches,
       worldState,
+      confirmedFacts,
+      openQuestions,
       eventsIngested: eventsIngested ?? null,
       rawNarrative,
       createdAt: now,
     });
 
     // Apply arc tension updates (clamped 0–10)
-    for (const { arcId, tensionDelta } of arcUpdates) {
+    for (const { arcId, tensionDelta, phase } of arcUpdates) {
       const arc = await ctx.db.get(arcId);
       if (!arc) continue;
       const newTension = Math.min(
@@ -102,6 +122,7 @@ export const persistGeneratedEpoch = internalMutation({
       );
       await ctx.db.patch(arcId, {
         tensionScore: newTension,
+        ...(phase ? { phase } : {}),
         lastTouchedAt: now,
         updatedAt: now,
       });

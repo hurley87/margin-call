@@ -1,6 +1,16 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const phaseValidator = v.union(
+  v.literal("rumor"),
+  v.literal("crack"),
+  v.literal("panic"),
+  v.literal("rupture"),
+  v.literal("fallout"),
+  v.literal("countermove"),
+  v.literal("resolution")
+);
+
 export default defineSchema({
   deskManagers: defineTable({
     // Privy subject (e.g. "did:privy:xxx")
@@ -268,6 +278,7 @@ export default defineSchema({
       v.literal("abandoned")
     ),
     tensionScore: v.number(),
+    phase: v.optional(phaseValidator),
     entityRefs: v.array(v.id("narrativeEntities")),
     lastTouchedAt: v.number(),
     createdAt: v.number(),
@@ -316,6 +327,8 @@ export default defineSchema({
     dropTitle: v.optional(v.string()),
     topArcTitle: v.optional(v.string()),
     topArcTension: v.optional(v.number()),
+    confirmedFacts: v.optional(v.array(v.string())),
+    openQuestions: v.optional(v.array(v.string())),
     createdAt: v.number(),
   })
     .index("byEpoch", ["epoch"])

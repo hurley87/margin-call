@@ -13,6 +13,10 @@ export function validateEpoch(
      * Set by the generator when the previous market-hour drop did not include one.
      */
     requireDealSeed?: boolean;
+    /** Post-suppression primary arc slug shown to the LLM. */
+    topArcSlug?: string | null;
+    /** Post-suppression primary arc tension shown to the LLM. */
+    topArcTension?: number;
   }
 ): { ok: true; data: ValidatedEpoch } | { ok: false; error: string } {
   const result = NarrativeEpochSchema.safeParse(raw);
@@ -98,6 +102,56 @@ export function validateEpoch(
       return {
         ok: false,
         error: `dispatch referenced by dealSeed must have role "deal_seed"`,
+      };
+    }
+  }
+
+  // role/category pairing. Category is orthogonal to role except deal_seed,
+  // where persisted data must be unambiguous for the deal-seed rail.
+  for (const dispatch of data.dispatches) {
+    if (dispatch.role === "deal_seed" && dispatch.category !== "deal_seed") {
+      return {
+        ok: false,
+        error: `role=deal_seed dispatch "${dispatch.dispatchKey}" must use category "deal_seed"`,
+      };
+    }
+  }
+
+  // materialChange references must point at a known roster entity.
+  for (const dispatch of data.dispatches) {
+    const materialChange = dispatch.materialChange;
+    if (materialChange && !ctx.entitySlugs.has(materialChange.entitySlug)) {
+      return {
+        ok: false,
+        error: `Unknown entitySlug in materialChange: "${materialChange.entitySlug}"`,
+      };
+    }
+  }
+
+  const topArcSlug = ctx.topArcSlug ?? null;
+  const topArcTension = ctx.topArcTension ?? 0;
+  if (topArcSlug !== null && topArcTension >= 9) {
+    const primaryDispatches = data.dispatches.filter(
+      (d) => d.role === "main" && d.arcSlug === topArcSlug
+    );
+    if (primaryDispatches.length === 0) {
+      return {
+        ok: false,
+        error:
+          "max-tension primary arc must be carried by a role=main dispatch",
+      };
+    }
+    if (primaryDispatches.length > 1) {
+      return {
+        ok: false,
+        error:
+          "max-tension primary arc must be carried by exactly one role=main dispatch",
+      };
+    }
+    if (!primaryDispatches[0].materialChange) {
+      return {
+        ok: false,
+        error: `max-tension primary arc "${topArcSlug}" requires materialChange on its role=main dispatch`,
       };
     }
   }

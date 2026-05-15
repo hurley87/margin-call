@@ -13,7 +13,7 @@ import {
 import { assembleUserMessage } from "./epochAssembler";
 import { normalizeGeneratedEpoch } from "./epochNormalizer";
 import { validateEpoch } from "./epochValidator";
-import type { NarrativeEpoch } from "./_schemas";
+import type { GeneratedNarrativeEpoch, Phase } from "./_schemas";
 import type { Id, Doc } from "../_generated/dataModel";
 
 const FALLBACK_NARRATIVE_GENERATION_SYSTEM = `You are the Wire narrative engine for a 1980s Wall Street trading game.
@@ -22,11 +22,17 @@ You produce hourly Wire Drop dispatches that serialize an ongoing financial thri
 OUTPUT FORMAT: Return valid JSON matching the narrative_epoch schema.
 - dispatches: exactly 2-3 items; at least one must have role "main"
 - every dispatch carries a unique kebab-case dispatchKey (e.g. "panatl-margin-call")
+- dispatch categories must be one of: wire, floor_talk, sec_watch, boardroom, ticker, positioning, deal_seed. Use wire as the default channel.
+- role and category are separate fields; dispatches with role "deal_seed" must use category "deal_seed".
 - dispatch headlines: max 100 characters; present tense; terse
 - dispatch bodies: max 180 characters; 1-3 sentences
 - dealSeed: object or null. If the previous market-hour drop had no Deal Seed, dealSeed MUST be present and one dispatch must have role "deal_seed" whose dispatchKey matches dealSeed.dispatchKey. dealSeed.arcSlug must reference an active arc; supply prompt, suggestedPotUsdc, suggestedEntryCostUsdc.
-- arcUpdates: optional, max 3 arcs; tensionDelta between -3 and +3
+- arcUpdates: optional, max 3 arcs; tensionDelta between -3 and +3. phase is optional and must be one of: rumor, crack, panic, rupture, fallout, countermove, resolution. Emit phase only when the arc shifts.
 - entityMentions: list all entity slugs you referenced in dispatches
+- confirmedFacts: optional array, max 8 strings, each <= 160 chars. Use accepted facts from this drop that future drops must not contradict.
+- openQuestions: optional array, max 6 strings, each <= 160 chars. Use unresolved concrete questions this drop leaves open.
+- materialChange: optional on dispatches, null when absent. Shape: { kind, entitySlug, magnitude? }. kind must be one of asset_loss, personnel_exit, regulatory_action, counterparty_break, filing, position_unwind. entitySlug must be a known roster entity. magnitude may include unitsUsdc and/or label.
+- When the PRIMARY arc tension is >= 9, the role=main dispatch carrying that arc MUST set materialChange. Do not satisfy this with vague escalation language alone — the structured materialChange is what counts.
 
 TONE: Paranoid, predatory, terse. 1980s Wall Street financial thriller. Every dispatch implies danger. Funny, never goofy.
 
@@ -43,7 +49,7 @@ NARRATIVE CONTINUITY: Reference previous drops. Advance active arcs. Apply tensi
 
 async function runGenerator(
   ctx: ActionCtx,
-  opts: { slot: number; sinceMs: number; testLlmStub?: NarrativeEpoch }
+  opts: { slot: number; sinceMs: number; testLlmStub?: GeneratedNarrativeEpoch }
 ): Promise<
   | { skipped: "outside-market-hours" | "duplicate-slot" }
   | { skipped: "validation-failed"; error: string }
@@ -79,8 +85,24 @@ async function runGenerator(
 
   const { season, entities, arcs } = seasonData;
 
-  // Sort arcs by tension desc for the assembler
   const sortedArcs = [...arcs].sort((a, b) => b.tensionScore - a.tensionScore);
+  const topTitles = recentDrops
+    .slice(0, 2)
+    .map((d) => d.topArcTitle)
+    .filter(Boolean);
+  const repeatedTopTitle =
+    topTitles.length === 2 && topTitles[0] === topTitles[1]
+      ? topTitles[0]
+      : null;
+  const matchingActiveArcs = repeatedTopTitle
+    ? sortedArcs.filter((a) => a.title === repeatedTopTitle)
+    : [];
+  const suppressedSlug =
+    matchingActiveArcs.length === 1 ? matchingActiveArcs[0].slug : null;
+  const assemblerArcs = suppressedSlug
+    ? sortedArcs.filter((a) => a.slug !== suppressedSlug)
+    : sortedArcs;
+  const postSuppressionPrimaryArc = assemblerArcs[0] ?? null;
 
   // Cadence rule: if the previous drop did not include a Deal Seed, this drop must.
   // Cold start (no recent drops) → no requirement.
@@ -107,11 +129,12 @@ async function runGenerator(
       forbiddenLanguage: season.forbiddenLanguage,
     },
     dayPosture: posture,
-    arcs: sortedArcs.map((a) => ({
+    arcs: assemblerArcs.map((a) => ({
       slug: a.slug,
       title: a.title,
       summary: a.summary,
       tensionScore: a.tensionScore,
+      phase: a.phase ?? null,
     })),
     entities: entities.map((e) => ({
       slug: e.slug,
@@ -126,6 +149,8 @@ async function runGenerator(
         headline?: string;
         role?: string;
       }> | null,
+      confirmedFacts: d.confirmedFacts ?? null,
+      openQuestions: d.openQuestions ?? null,
     })),
     recentGameEvents,
     worldState: worldState ?? null,
@@ -135,14 +160,14 @@ async function runGenerator(
   });
 
   // ── LLM call (or test stub) ──────────────────────────────────────────────────
-  let parsed: NarrativeEpoch;
+  let parsed: GeneratedNarrativeEpoch;
 
   if (opts.testLlmStub) {
     parsed = opts.testLlmStub;
   } else {
     const OpenAI = (await import("openai")).default;
     const { zodResponseFormat } = await import("openai/helpers/zod");
-    const { NarrativeEpochSchema } = await import("./_schemas");
+    const { GeneratedNarrativeEpochSchema } = await import("./_schemas");
 
     const systemPromptContent = await ctx.runQuery(
       internal.systemPrompts.getActive,
@@ -160,7 +185,7 @@ async function runGenerator(
           { role: "user", content: userMessage },
         ],
         response_format: zodResponseFormat(
-          NarrativeEpochSchema,
+          GeneratedNarrativeEpochSchema,
           "narrative_epoch"
         ),
       },
@@ -174,7 +199,7 @@ async function runGenerator(
     if (!msg?.parsed) {
       throw new Error("[wire/generator] LLM returned no parsed response");
     }
-    parsed = msg.parsed as NarrativeEpoch;
+    parsed = msg.parsed as GeneratedNarrativeEpoch;
   }
 
   // ── Validate ──────────────────────────────────────────────────────────────────
@@ -187,12 +212,19 @@ async function runGenerator(
       `[wire/generator] repaired dealSeed.dispatchKey "${normalized.repairedDealSeedDispatchKey.from}" -> "${normalized.repairedDealSeedDispatchKey.to}"`
     );
   }
+  if (normalized.repairedCategoryAliases > 0) {
+    console.warn(
+      `[wire/generator] normalized ${normalized.repairedCategoryAliases} legacy dispatch category alias(es)`
+    );
+  }
 
   const validation = validateEpoch(normalized.epoch, {
     arcSlugs,
     entitySlugs,
     forbiddenLanguage: season.forbiddenLanguage,
     requireDealSeed: mustIncludeDealSeed,
+    topArcSlug: postSuppressionPrimaryArc?.slug ?? null,
+    topArcTension: postSuppressionPrimaryArc?.tensionScore ?? 0,
   });
 
   if (!validation.ok) {
@@ -205,7 +237,6 @@ async function runGenerator(
   // ── Map slugs → IDs ───────────────────────────────────────────────────────────
   const arcSlugToId = new Map(arcs.map((a) => [a.slug, a._id]));
 
-  // Collect unique arc IDs referenced in dispatches
   const arcRefSlugs = new Set<string>();
   for (const d of validated.dispatches) {
     if (d.arcSlug) arcRefSlugs.add(d.arcSlug);
@@ -214,48 +245,36 @@ async function runGenerator(
     .map((slug) => arcSlugToId.get(slug))
     .filter((id): id is Id<"narrativeArcs"> => id !== undefined);
 
-  // Map arcUpdates slugs → IDs
-  const arcUpdatesMapped = (validated.arcUpdates ?? [])
-    .map(({ arcSlug, tensionDelta }) => {
-      const arcId = arcSlugToId.get(arcSlug);
-      return arcId ? { arcId, tensionDelta } : null;
-    })
-    .filter(
-      (u): u is { arcId: Id<"narrativeArcs">; tensionDelta: number } =>
-        u !== null
-    );
-
-  // Compute topArc: apply deltas to current scores and find maximum
-  const arcTensionAfter = new Map(
-    arcs.map((a) => [a._id as string, a.tensionScore])
-  );
-  for (const { arcSlug, tensionDelta } of validated.arcUpdates ?? []) {
+  const arcUpdatesMapped: {
+    arcId: Id<"narrativeArcs">;
+    tensionDelta: number;
+    phase?: Phase;
+  }[] = [];
+  for (const { arcSlug, tensionDelta, phase } of validated.arcUpdates ?? []) {
     const arcId = arcSlugToId.get(arcSlug);
-    if (arcId) {
-      const cur = arcTensionAfter.get(arcId as string) ?? 0;
-      arcTensionAfter.set(
-        arcId as string,
-        Math.min(10, Math.max(0, cur + tensionDelta))
-      );
-    }
+    if (!arcId) continue;
+    arcUpdatesMapped.push(
+      phase ? { arcId, tensionDelta, phase } : { arcId, tensionDelta }
+    );
   }
 
   let topArcTitle = "Unknown";
   let topArcTension = 0;
-  let topArcScore = -1;
-  for (const arc of arcs) {
-    const score = arcTensionAfter.get(arc._id as string) ?? arc.tensionScore;
-    if (score > topArcScore) {
-      topArcScore = score;
-      topArcTitle = arc.title;
-      topArcTension = score;
-    }
+  if (postSuppressionPrimaryArc) {
+    const primaryDelta =
+      validated.arcUpdates?.find(
+        (update) => update.arcSlug === postSuppressionPrimaryArc.slug
+      )?.tensionDelta ?? 0;
+    topArcTitle = postSuppressionPrimaryArc.title;
+    topArcTension = Math.min(
+      10,
+      Math.max(0, postSuppressionPrimaryArc.tensionScore + primaryDelta)
+    );
   }
 
   const rawNarrative = validated.dispatches.map((d) => d.headline).join(" | ");
 
-  // Resolve dealSeed.arcSlug → arcId, locate the source dispatch.
-  // Validator guarantees the slug exists and dispatch resolves to exactly one entry.
+  // Validator guarantees the dealSeed slug exists and resolves to exactly one dispatch.
   let dealSeedPayload:
     | {
         arcId: Id<"narrativeArcs">;
@@ -295,6 +314,8 @@ async function runGenerator(
       topArcTension,
       dispatches: validated.dispatches,
       worldState: validated.worldState,
+      confirmedFacts: validated.confirmedFacts,
+      openQuestions: validated.openQuestions,
       arcRefs,
       arcUpdates: arcUpdatesMapped,
       eventsIngested:
@@ -342,10 +363,11 @@ export const generateNextEpoch = internalAction({
 
 /**
  * Dev helper: force-generate regardless of market hours.
- * With ignoreSlot: true, uses Date.now() as the slot so multiple dev runs
- * in the same clock hour each write a distinct row.
+ * With ignoreSlot: true, uses Date.now() + monotonic counter so back-to-back
+ * dev runs within the same millisecond still produce distinct slots.
  * Triggered via: npx convex run wire/generator:devForceEpoch '{}'
  */
+let devForceSlotCounter = 0;
 export const devForceEpoch = internalAction({
   args: {
     ignoreSlot: v.optional(v.boolean()),
@@ -353,8 +375,10 @@ export const devForceEpoch = internalAction({
   },
   handler: async (ctx, { ignoreSlot = false, _testLlmStub }) => {
     const now = Date.now();
-    const slot = ignoreSlot ? now : currentEpochSlot(now);
-    // When ignoreSlot=true, slot=Date.now() (ms). (slot-1)*3_600_000 overflows.
+    const slot = ignoreSlot
+      ? now + devForceSlotCounter++
+      : currentEpochSlot(now);
+    // When ignoreSlot=true, slot is ~Date.now() (ms). (slot-1)*3_600_000 overflows.
     const sinceMs = ignoreSlot ? now - 3_600_000 : (slot - 1) * 3_600_000;
 
     if (!ignoreSlot) {
@@ -372,7 +396,7 @@ export const devForceEpoch = internalAction({
     return runGenerator(ctx, {
       slot,
       sinceMs,
-      testLlmStub: _testLlmStub as NarrativeEpoch | undefined,
+      testLlmStub: _testLlmStub as GeneratedNarrativeEpoch | undefined,
     });
   },
 });

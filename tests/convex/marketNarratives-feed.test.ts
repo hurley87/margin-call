@@ -30,7 +30,7 @@ function makeSeededStub() {
         dispatchKey: "seed-rourke-short",
         headline: "Rourke seen building short against PanAtl. bond block",
         body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-        category: "rumor",
+        category: "deal_seed",
         role: "deal_seed" as const,
         arcSlug: "pan-atlantic-blowup",
         referenceEpoch: null,
@@ -40,8 +40,8 @@ function makeSeededStub() {
       dispatchKey: "seed-rourke-short",
       arcSlug: "pan-atlantic-blowup",
       prompt: "Rourke is shorting PanAtl. paper before the margin notice hits.",
-      suggestedPotUsdc: 250,
-      suggestedEntryCostUsdc: 10,
+      suggestedPotUsdc: 10,
+      suggestedEntryCostUsdc: 5,
     },
     arcUpdates: [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 1 }],
     entityMentions: ["marty-vale"],
@@ -68,8 +68,8 @@ describe("marketNarratives.feedDrops: deal seed surfacing", () => {
     );
     expect(seededDispatch).toBeDefined();
     expect(seededDispatch!.dealSeed).toBeDefined();
-    expect(seededDispatch!.dealSeed!.suggestedPotUsdc).toBe(250);
-    expect(seededDispatch!.dealSeed!.suggestedEntryCostUsdc).toBe(10);
+    expect(seededDispatch!.dealSeed!.suggestedPotUsdc).toBe(10);
+    expect(seededDispatch!.dealSeed!.suggestedEntryCostUsdc).toBe(5);
     expect(seededDispatch!.dealSeed!.linkedDealCount).toBe(0);
     expect(seededDispatch!.dealSeed!.linkedPotTotalUsdc).toBe(0);
 

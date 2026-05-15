@@ -21,7 +21,7 @@ function makeValidPayload() {
         dispatchKey: "main-panatl",
         headline: "PanAtlantic down 12%",
         body: "The bond desk is silent. Nobody is picking up calls from Jersey.",
-        category: "market",
+        category: "wire",
         role: "main" as const,
         arcSlug: "arc-a",
         referenceEpoch: null,
@@ -45,6 +45,7 @@ function makeValidPayload() {
 function makeValidPayloadWithSeed() {
   const payload = makeValidPayload();
   payload.dispatches[1].role = "deal_seed" as never;
+  payload.dispatches[1].category = "deal_seed";
   (payload as Record<string, unknown>).dealSeed = {
     dispatchKey: "supp-vale",
     arcSlug: "arc-b",
@@ -56,13 +57,21 @@ function makeValidPayloadWithSeed() {
   return payload;
 }
 
+function validateDefault(
+  raw: unknown,
+  overrides: Partial<Parameters<typeof validateEpoch>[1]> = {}
+) {
+  return validateEpoch(raw, {
+    arcSlugs,
+    entitySlugs,
+    forbiddenLanguage,
+    ...overrides,
+  });
+}
+
 describe("validateEpoch: accepts valid payloads", () => {
   it("accepts a valid 2-dispatch payload", () => {
-    const result = validateEpoch(makeValidPayload(), {
-      arcSlugs,
-      entitySlugs,
-      forbiddenLanguage,
-    });
+    const result = validateDefault(makeValidPayload());
     expect(result.ok).toBe(true);
   });
 
@@ -72,16 +81,12 @@ describe("validateEpoch: accepts valid payloads", () => {
       dispatchKey: "supp-sec",
       headline: "SEC files subpoena",
       body: "Document request covers three years of trading records.",
-      category: "regulatory",
+      category: "sec_watch",
       role: "supporting" as const,
       arcSlug: "arc-b",
       referenceEpoch: null,
     });
-    const result = validateEpoch(payload, {
-      arcSlugs,
-      entitySlugs,
-      forbiddenLanguage,
-    });
+    const result = validateDefault(payload);
     expect(result.ok).toBe(true);
   });
 
@@ -125,7 +130,7 @@ describe("validateEpoch: rejects invalid dispatch counts", () => {
         dispatchKey: `extra-${i}`,
         headline: `Extra dispatch ${i}`,
         body: "Extra body text here.",
-        category: "market",
+        category: "wire",
         role: "supporting" as const,
         arcSlug: null as unknown as string,
         referenceEpoch: null,
@@ -436,7 +441,7 @@ describe("validateEpoch: deal seed cadence + integrity", () => {
       dispatchKey: "seed-second",
       headline: "Second seed on the wire",
       body: "Two playable rumors are competing for the same slot.",
-      category: "rumor",
+      category: "deal_seed",
       role: "deal_seed" as const,
       arcSlug: "arc-a",
       referenceEpoch: null,
@@ -505,5 +510,161 @@ describe("validateEpoch: deal seed cadence + integrity", () => {
     expect((result as { ok: false; error: string }).error).toMatch(
       /duplicate dispatchkey/i
     );
+  });
+});
+
+describe("validateEpoch: strict categories, phases, and materialChange", () => {
+  it("rejects a max-tension primary dispatch without materialChange", () => {
+    const result = validateDefault(makeValidPayload(), {
+      topArcSlug: "arc-a",
+      topArcTension: 10,
+    });
+
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /requires materialChange/
+    );
+  });
+
+  it("accepts a max-tension primary dispatch with concrete materialChange", () => {
+    const payload = makeValidPayload();
+    payload.dispatches[0] = {
+      ...payload.dispatches[0],
+      materialChange: {
+        kind: "asset_loss",
+        entitySlug: "marty-vale",
+        magnitude: { unitsUsdc: 340_000_000 },
+      },
+    };
+
+    const result = validateDefault(payload, {
+      topArcSlug: "arc-a",
+      topArcTension: 10,
+    });
+
+    expect(result.ok).toBe(true);
+  });
+
+  it("rejects a category outside the strict enum", () => {
+    const payload = makeValidPayload();
+    payload.dispatches[0].category = "rumor-mill";
+
+    const result = validateDefault(payload);
+
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(/category/);
+  });
+
+  it("normalizes legacy market category before strict validation", () => {
+    const payload = makeValidPayload();
+    payload.dispatches[0].category = "market";
+
+    const normalized = normalizeGeneratedEpoch(payload);
+
+    expect(normalized.repairedCategoryAliases).toBe(1);
+    expect(normalized.epoch.dispatches[0].category).toBe("wire");
+    expect(validateDefault(normalized.epoch).ok).toBe(true);
+  });
+
+  it("rejects role=deal_seed with a non-deal_seed category", () => {
+    const payload = makeValidPayloadWithSeed();
+    payload.dispatches[1].category = "wire";
+
+    const result = validateDefault(payload);
+
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /category "deal_seed"/
+    );
+  });
+
+  it("rejects materialChange with an off-roster entitySlug", () => {
+    const payload = makeValidPayload();
+    payload.dispatches[0] = {
+      ...payload.dispatches[0],
+      materialChange: {
+        kind: "asset_loss",
+        entitySlug: "unknown-bank",
+      },
+    };
+
+    const result = validateDefault(payload);
+
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toContain(
+      "unknown-bank"
+    );
+  });
+
+  it("rejects duplicate role=main dispatches for a max-tension primary arc", () => {
+    const payload = makeValidPayload();
+    payload.dispatches.push({
+      dispatchKey: "main-panatl-second",
+      headline: "PanAtlantic second main dispatch",
+      body: "The same primary story is carried twice in the same drop.",
+      category: "wire",
+      role: "main" as const,
+      arcSlug: "arc-a",
+      referenceEpoch: null,
+      materialChange: {
+        kind: "filing",
+        entitySlug: "marty-vale",
+      },
+    });
+    payload.dispatches[0] = {
+      ...payload.dispatches[0],
+      materialChange: {
+        kind: "filing",
+        entitySlug: "marty-vale",
+      },
+    };
+
+    const result = validateDefault(payload, {
+      topArcSlug: "arc-a",
+      topArcTension: 9,
+    });
+
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /exactly one role=main/
+    );
+  });
+
+  it("rejects no role=main dispatch for a max-tension primary arc", () => {
+    const payload = makeValidPayload();
+    payload.dispatches[0].arcSlug = "arc-b";
+
+    const result = validateDefault(payload, {
+      topArcSlug: "arc-a",
+      topArcTension: 9,
+    });
+
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(
+      /carried by a role=main dispatch/
+    );
+  });
+
+  it("rejects an invalid arcUpdate phase", () => {
+    const payload = makeValidPayload();
+    payload.arcUpdates = [
+      { arcSlug: "arc-a", tensionDelta: 1, phase: "boom" as never },
+    ];
+
+    const result = validateDefault(payload);
+
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toMatch(/phase/);
+  });
+
+  it("accepts a valid arcUpdate phase", () => {
+    const payload = makeValidPayload();
+    payload.arcUpdates = [
+      { arcSlug: "arc-a", tensionDelta: 1, phase: "panic" as never },
+    ];
+
+    const result = validateDefault(payload);
+
+    expect(result.ok).toBe(true);
   });
 });

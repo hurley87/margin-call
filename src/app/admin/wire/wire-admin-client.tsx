@@ -218,10 +218,17 @@ export default function WireAdminClient() {
                           )}
                         </div>
                         <div className="shrink-0 text-right">
-                          <div
-                            className={`text-sm font-bold tabular-nums ${heatColor(arc.tensionScore)}`}
-                          >
-                            {arc.tensionScore}/10
+                          <div className="flex items-center justify-end gap-2">
+                            {arc.phase && (
+                              <span className="border border-[var(--t-border)] px-1 py-0.5 text-[9px] uppercase tracking-wider text-[var(--t-muted)]">
+                                {arc.phase}
+                              </span>
+                            )}
+                            <span
+                              className={`text-sm font-bold tabular-nums ${heatColor(arc.tensionScore)}`}
+                            >
+                              {arc.tensionScore}/10
+                            </span>
                           </div>
                           <div className="mt-0.5 text-[9px] text-[var(--t-muted)]">
                             {relativeTime(arc.lastTouchedAt)}

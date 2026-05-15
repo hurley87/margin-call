@@ -13,6 +13,35 @@ async function seedSeasonAndDrops(t: ReturnType<typeof convexTest>) {
   return t.mutation(api.seasons.importSeason, {});
 }
 
+async function setInitialTopTitle(
+  t: ReturnType<typeof convexTest>,
+  topArcTitle: string
+) {
+  await t.run(async (ctx) => {
+    const seedDrop = await ctx.db
+      .query("marketNarratives")
+      .withIndex("byEpochSlot", (q) => q.eq("epochSlot", 0))
+      .first();
+    if (seedDrop) {
+      await ctx.db.patch(seedDrop._id, { topArcTitle });
+    }
+  });
+}
+
+async function setArcTension(
+  t: ReturnType<typeof convexTest>,
+  slug: string,
+  tensionScore: number
+) {
+  await t.run(async (ctx) => {
+    const arcs = await ctx.db.query("narrativeArcs").collect();
+    const arc = arcs.find((candidate) => candidate.slug === slug);
+    if (arc) {
+      await ctx.db.patch(arc._id, { tensionScore });
+    }
+  });
+}
+
 /** A minimal valid LLM stub response for the wire generator.
  * Arc/entity slugs must match wireSeason01.ts:
  * arcs: "pan-atlantic-blowup", "mercer-investigation"
@@ -37,6 +66,11 @@ function makeLlmStub(overrides: Record<string, unknown> = {}) {
         role: "main",
         arcSlug: "pan-atlantic-blowup",
         referenceEpoch: null,
+        materialChange: {
+          kind: "asset_loss",
+          entitySlug: "pan-atlantic-holdings",
+          magnitude: { label: "settlement miss" },
+        },
       },
       {
         dispatchKey: "supp-vale-sec",
@@ -66,12 +100,17 @@ function makeLlmStubWithSeed(overrides: Record<string, unknown> = {}) {
         role: "main",
         arcSlug: "pan-atlantic-blowup",
         referenceEpoch: null,
+        materialChange: {
+          kind: "asset_loss",
+          entitySlug: "pan-atlantic-holdings",
+          magnitude: { label: "settlement miss" },
+        },
       },
       {
         dispatchKey: "seed-rourke-short",
         headline: "Rourke seen building short against PanAtl. bond block",
         body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-        category: "rumor",
+        category: "deal_seed",
         role: "deal_seed",
         arcSlug: "pan-atlantic-blowup",
         referenceEpoch: null,
@@ -85,6 +124,8 @@ function makeLlmStubWithSeed(overrides: Record<string, unknown> = {}) {
       suggestedPotUsdc: 10,
       suggestedEntryCostUsdc: 5,
     },
+    confirmedFacts: ["PanAtlantic missed three settlements"],
+    openQuestions: ["Who takes the other side of Rourke's short?"],
     ...overrides,
   });
 }
@@ -180,6 +221,94 @@ describe("wire/generator: writes a marketNarratives row on success", () => {
     );
     const arcAfter = arcsAfter.find((a) => a.slug === "pan-atlantic-blowup");
     expect(arcAfter?.tensionScore).toBe(Math.min(10, initialTension + 2));
+  });
+
+  it("persists continuity fields and arc phase when emitted", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed({
+        confirmedFacts: ["PanAtlantic missed settlement by noon."],
+        openQuestions: ["Who financed the failed PanAtlantic block?"],
+        arcUpdates: [
+          {
+            arcSlug: "pan-atlantic-blowup",
+            tensionDelta: 1,
+            phase: "panic",
+          },
+        ],
+      }),
+    });
+
+    expect((result as { inserted?: boolean }).inserted).toBe(true);
+
+    const row = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .first()
+    );
+    expect(row?.confirmedFacts).toEqual([
+      "PanAtlantic missed settlement by noon.",
+    ]);
+    expect(row?.openQuestions).toEqual([
+      "Who financed the failed PanAtlantic block?",
+    ]);
+
+    const arcs = await t.run(async (ctx) =>
+      ctx.db.query("narrativeArcs").collect()
+    );
+    expect(arcs.find((a) => a.slug === "pan-atlantic-blowup")?.phase).toBe(
+      "panic"
+    );
+  });
+});
+
+describe("wire/generator: primary arc rotation", () => {
+  it("suppresses a repeated primary arc for one generated drop, then lets it return", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const first = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed(),
+    });
+    expect((first as { inserted?: boolean }).inserted).toBe(true);
+
+    const suppressed = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub(),
+    });
+    expect((suppressed as { inserted?: boolean }).inserted).toBe(true);
+
+    const rowsAfterSuppression = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .take(2)
+    );
+    expect(rowsAfterSuppression[0].topArcTitle).toBe(
+      "Mercer investigation widens"
+    );
+
+    const returned = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed(),
+    });
+    expect((returned as { inserted?: boolean }).inserted).toBe(true);
+
+    const rowsAfterReturn = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .take(1)
+    );
+    expect(rowsAfterReturn[0].topArcTitle).toBe("PanAtlantic blow-up");
   });
 });
 
@@ -500,12 +629,17 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
             role: "main",
             arcSlug: "pan-atlantic-blowup",
             referenceEpoch: null,
+            materialChange: {
+              kind: "asset_loss",
+              entitySlug: "pan-atlantic-holdings",
+              magnitude: { label: "settlement miss" },
+            },
           },
           {
             dispatchKey: "seed-rourke-short",
             headline: "Rourke seen building short against PanAtl. bond block",
             body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-            category: "rumor",
+            category: "deal_seed",
             role: "deal_seed",
             arcSlug: "mercer-investigation",
             referenceEpoch: null,
@@ -551,7 +685,7 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
           dispatchKey: "seed-rourke-short",
           headline: "Rourke seen building short against PanAtl. bond block",
           body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-          category: "rumor",
+          category: "deal_seed",
           role: "deal_seed",
           arcSlug: "pan-atlantic-blowup",
           referenceEpoch: null,
@@ -560,7 +694,7 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
           dispatchKey: "seed-marty-tip",
           headline: "Marty Vale prices a rescue rumor",
           body: "The buyer name keeps changing. The spread keeps widening.",
-          category: "floor_talk",
+          category: "deal_seed",
           role: "deal_seed",
           arcSlug: "pan-atlantic-blowup",
           referenceEpoch: null,
@@ -582,5 +716,83 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
     });
 
     expect((result as { skipped?: string }).skipped).toBe("validation-failed");
+  });
+});
+
+describe("wire/generator: primary arc rotation", () => {
+  it("suppresses the same primary arc after two consecutive successful drops for one assembly", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+    await setInitialTopTitle(t, "Mercer investigation widens");
+    await setArcTension(t, "pan-atlantic-blowup", 9);
+
+    const flatPanUpdate = [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 0 }];
+    const noMaterialSeededStub = makeLlmStubWithSeed({
+      arcUpdates: flatPanUpdate,
+      dispatches: [
+        {
+          dispatchKey: "main-panatl-halt",
+          headline: "PanAtlantic bonds halted at the exchange",
+          body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
+          category: "market",
+          role: "main",
+          arcSlug: "pan-atlantic-blowup",
+          referenceEpoch: null,
+        },
+        {
+          dispatchKey: "seed-rourke-short",
+          headline: "Rourke seen building short against PanAtl. bond block",
+          body: "Three orders crossed before lunch. Counterparty unconfirmed.",
+          category: "deal_seed",
+          role: "deal_seed",
+          arcSlug: "pan-atlantic-blowup",
+          referenceEpoch: null,
+        },
+      ],
+    });
+
+    const r1 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed({ arcUpdates: flatPanUpdate }),
+    });
+    expect((r1 as { inserted?: boolean }).inserted).toBe(true);
+
+    const r2 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub({ arcUpdates: flatPanUpdate }),
+    });
+    expect((r2 as { inserted?: boolean }).inserted).toBe(true);
+
+    const r3 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: noMaterialSeededStub,
+    });
+    expect((r3 as { inserted?: boolean }).inserted).toBe(true);
+
+    const latestAfterSuppression = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .first()
+    );
+    expect(latestAfterSuppression?.topArcTitle).toBe(
+      "Mercer investigation widens"
+    );
+
+    const r4 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub({ arcUpdates: flatPanUpdate }),
+    });
+    expect((r4 as { inserted?: boolean }).inserted).toBe(true);
+
+    const latestAfterReturn = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .first()
+    );
+    expect(latestAfterReturn?.topArcTitle).toBe("PanAtlantic blow-up");
   });
 });

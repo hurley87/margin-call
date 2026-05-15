@@ -85,6 +85,46 @@ describe("assembleUserMessage: arc ordering", () => {
     expect(idxA).toBeLessThan(idxB);
     expect(idxB).toBeLessThan(idxC);
   });
+
+  it("renders phase beside an active arc when present", () => {
+    const msg = assembleUserMessage(
+      makeInput({
+        arcs: [
+          {
+            slug: "arc-a",
+            title: "Arc A",
+            summary: "High stakes arc",
+            tensionScore: 9,
+            phase: "panic",
+          },
+        ],
+      })
+    );
+
+    expect(msg).toContain("phase: panic");
+    expect(msg).toContain("PHASES: rumor -> crack -> panic");
+  });
+
+  it("renders material event guidance only for a max-tension primary arc", () => {
+    const high = assembleUserMessage(makeInput());
+    expect(high).toContain("MATERIAL EVENT REQUIRED");
+    expect(high).toContain("slug: arc-a");
+    expect(high).toContain("asset_loss");
+
+    const low = assembleUserMessage(
+      makeInput({
+        arcs: [
+          {
+            slug: "arc-low",
+            title: "Low Arc",
+            summary: "Not hot enough",
+            tensionScore: 8,
+          },
+        ],
+      })
+    );
+    expect(low).not.toContain("MATERIAL EVENT REQUIRED");
+  });
 });
 
 describe("assembleUserMessage: recent drops", () => {
@@ -124,6 +164,36 @@ describe("assembleUserMessage: recent drops", () => {
   it("handles empty recentDrops gracefully", () => {
     const msg = assembleUserMessage(makeInput({ recentDrops: [] }));
     expect(msg).toContain("first drop");
+  });
+
+  it("renders continuity facts, open questions, and do-not-repeat headlines", () => {
+    const msg = assembleUserMessage(
+      makeInput({
+        recentDrops: [
+          {
+            epochSlot: 11,
+            dropTitle: "DROP 11",
+            worldState: null,
+            headlines: [
+              { headline: "PanAtlantic prints the loss", role: "main" },
+              { headline: "Mercer subpoena widens", role: "supporting" },
+            ],
+            confirmedFacts: [
+              "PanAtlantic missed three settlements",
+              "PanAtlantic missed three settlements",
+            ],
+            openQuestions: ["Who takes the other side of Rourke's short?"],
+          },
+        ],
+      })
+    );
+
+    expect(msg).toContain("CONFIRMED FACTS");
+    expect(msg).toContain("PanAtlantic missed three settlements");
+    expect(msg).toContain("OPEN QUESTIONS");
+    expect(msg).toContain("Who takes the other side");
+    expect(msg).toContain("DO NOT RE-ANNOUNCE AS NEW");
+    expect(msg).toContain("PanAtlantic prints the loss");
   });
 });
 
