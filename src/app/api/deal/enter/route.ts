@@ -18,6 +18,10 @@ import {
   getClientIdentifier,
 } from "@/lib/rate-limit";
 import { isTraderEligibleToEnterDealByDesk } from "@/lib/deal-entry-eligibility";
+import {
+  getTradingHoursState,
+  marketClosedMessage,
+} from "../../../../../convex/lib/tradingHours";
 
 const LEGACY_PRIVY_ENTRY_MESSAGE =
   "Deprecated: Privy + Supabase deal enter has been removed; use Convex-backed flows. Agent cycles still use this route with SIWA (`_agent_cycle: true`).";
@@ -46,6 +50,32 @@ async function handleAgentCycleDealEnter(
     return NextResponse.json(
       { error: `Invalid SIWA auth: ${siwaResult.error ?? "unknown"}` },
       { status: 401 }
+    );
+  }
+
+  // Trading-hours gate (spec §5, §7.2). Runs after SIWA so unauthorised
+  // callers still hit 401 first, but before any Convex/RPC work so we
+  // don't burn quota when the market is closed.
+  const marketState = getTradingHoursState();
+  if (!marketState.isOpen) {
+    const nextOpenAt = marketState.nextOpenAt;
+    const retryAfterSeconds =
+      typeof nextOpenAt === "number"
+        ? Math.max(0, Math.ceil((nextOpenAt - Date.now()) / 1000))
+        : 0;
+    return NextResponse.json(
+      {
+        error: "market_closed",
+        message: marketClosedMessage(),
+        next_open_at:
+          typeof nextOpenAt === "number"
+            ? new Date(nextOpenAt).toISOString()
+            : null,
+      },
+      {
+        status: 423,
+        headers: { "Retry-After": String(retryAfterSeconds) },
+      }
     );
   }
 

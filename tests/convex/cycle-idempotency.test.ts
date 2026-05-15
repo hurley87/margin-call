@@ -12,7 +12,7 @@
  * - Wallet creation is at-most-once per trader (pending → creating → ready CAS)
  */
 
-import { describe, it, expect } from "vitest";
+import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { internal } from "../../convex/_generated/api";
@@ -20,6 +20,21 @@ import { DEFAULT_CYCLE_INTERVAL_MS } from "../../convex/agent/internal";
 import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
+
+// Some tests in this file call `recordVerifiedEntry`, which now enforces
+// trading hours. Force market-open for the file so wall-clock time doesn't
+// break unrelated assertions.
+const PRIOR_FORCE_OPEN = process.env.MC_FORCE_MARKET_OPEN;
+beforeAll(() => {
+  process.env.MC_FORCE_MARKET_OPEN = "1";
+});
+afterAll(() => {
+  if (PRIOR_FORCE_OPEN === undefined) {
+    delete process.env.MC_FORCE_MARKET_OPEN;
+  } else {
+    process.env.MC_FORCE_MARKET_OPEN = PRIOR_FORCE_OPEN;
+  }
+});
 
 describe("Cycle lease: stale trader eligibility", () => {
   it("returns stale trader (no lastCycleAt) as eligible", async () => {

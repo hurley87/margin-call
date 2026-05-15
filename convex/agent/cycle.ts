@@ -3,11 +3,17 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { CYCLE_LEASE_TTL_MS } from "./internal";
+import { CYCLE_LEASE_TTL_MS, DEFAULT_CYCLE_INTERVAL_MS } from "./internal";
 import { APPROVAL_EXPIRY_MS } from "./_constants";
 import { selectDeal } from "./dealSelection";
 import { resolveOutcome, type ResolvedOutcome } from "./outcomeResolver";
-import type { Mandate } from "./_types";
+import type { Deal, Mandate } from "./_types";
+import {
+  getTodayDateNY,
+  getTodayOpenMs,
+  getTradingHoursState,
+  isTradingHours,
+} from "../lib/tradingHours";
 
 const ESCROW_ADDRESS = "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
 const USDC_DECIMALS = 1_000_000;
@@ -319,6 +325,36 @@ export const cycle = internalAction({
       return;
     }
 
+    // ── 1b. Trading-hours pre-lease gate (spec §5.2 step 3) ──────────────────
+    // If the market is closed, only proceed when there is paid-but-unresolved
+    // recovery work; otherwise stamp lastCycleAt past the next-open boundary
+    // so the scheduler's staleness gate keeps the trader idle until the bell
+    // (spec §5.3 — recovery is always permitted). The post-lease re-query of
+    // findPendingRecoveryEntry handles the race where another worker resolved
+    // the orphan between this check and the lease grant.
+    const marketOpen = isTradingHours(now);
+    if (!marketOpen) {
+      const recoveryEntry = await ctx.runQuery(
+        internal.agent.internal.findPendingRecoveryEntry,
+        { traderId }
+      );
+      if (!recoveryEntry) {
+        // Stamp `lastCycleAt = nextOpenAt - intervalMs` so the trader becomes
+        // stale exactly at the next open. Falls back to `now` if the trading
+        // calendar can't resolve a next open (defensive — shouldn't happen).
+        const state = getTradingHoursState(now);
+        const lastCycleAt =
+          state.nextOpenAt !== undefined
+            ? state.nextOpenAt - DEFAULT_CYCLE_INTERVAL_MS
+            : now;
+        await ctx.runMutation(internal.agent.internal.stampLastCycleAt, {
+          traderId,
+          lastCycleAt,
+        });
+        return;
+      }
+    }
+
     // ── 2. Acquire lease (CAS) ────────────────────────────────────────────────
     const expectedGeneration = trader.cycleGeneration ?? 0;
     const leaseResult = await ctx.runMutation(
@@ -351,7 +387,24 @@ export const cycle = internalAction({
         correlationId,
       });
 
-      // ── 4. Deal selection ──────────────────────────────────────────────────
+      // ── 3b. First-cycle-of-trading-day marker (spec §5.2 step 5, §8) ──────
+      // Emit one `market_open` activity row per trader per ET trading day.
+      // dedupeKey ensures concurrent recovery + lease retries can't double-emit.
+      if (marketOpen) {
+        const todayOpenMs = getTodayOpenMs(now);
+        const lastCycleAt = trader.lastCycleAt;
+        if (lastCycleAt === undefined || lastCycleAt < todayOpenMs) {
+          const todayDateNY = getTodayDateNY(now);
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "market_open",
+            message: "Cycle resumed at market open",
+            eventId: `${traderId}-market_open-${todayDateNY}`,
+          });
+        }
+      }
+
+      // ── 4. Deal selection (only when market is open) ───────────────────────
       const mandate = (trader.mandate ?? {}) as Mandate;
 
       // Read live on-chain balance so stale Convex cache never blocks trading.
@@ -391,43 +444,109 @@ export const cycle = internalAction({
         }
       }
 
-      const selection = await selectDeal(ctx, {
-        traderId: traderId as string,
-        traderName: trader.name,
-        deskManagerId: trader.deskManagerId as string,
-        escrowBalanceUsdc,
-        personality: trader.personality,
-        mandate,
-      });
+      // Deal targeted by this cycle iteration. Populated by selectDeal when
+      // the market is open, or by the recovery probe when we're after-hours
+      // resolving an orphaned paid entry (spec §5.3).
+      let bestDeal: Deal | null = null;
 
-      await ctx.runMutation(internal.agentActivityLog.append, {
-        traderId,
-        activityType: "evaluate",
-        message: `Deal selection (${selection.method}): ${selection.reasoning.slice(0, 500)}`,
-        metadata: { selection_method: selection.method },
-        correlationId,
-      });
+      if (marketOpen) {
+        const selection = await selectDeal(ctx, {
+          traderId: traderId as string,
+          traderName: trader.name,
+          deskManagerId: trader.deskManagerId as string,
+          escrowBalanceUsdc,
+          personality: trader.personality,
+          mandate,
+        });
 
-      if (!selection.deal) {
-        // No deal to enter — complete the cycle cleanly
         await ctx.runMutation(internal.agentActivityLog.append, {
           traderId,
-          activityType: "cycle_end",
-          message: "Cycle complete — no deal selected",
+          activityType: "evaluate",
+          message: `Deal selection (${selection.method}): ${selection.reasoning.slice(0, 500)}`,
+          metadata: { selection_method: selection.method },
           correlationId,
         });
-        await ctx.runMutation(internal.agent.internal.markCycleComplete, {
-          traderId,
-          generation,
-          lastCycleAt: Date.now(),
-        });
-        console.log(
-          `[cycle] no deal selected for ${traderId} generation=${generation}`
+
+        if (!selection.deal) {
+          // No deal to enter — complete the cycle cleanly
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "cycle_end",
+            message: "Cycle complete — no deal selected",
+            correlationId,
+          });
+          await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+            traderId,
+            generation,
+            lastCycleAt: Date.now(),
+          });
+          console.log(
+            `[cycle] no deal selected for ${traderId} generation=${generation}`
+          );
+          return;
+        }
+
+        bestDeal = selection.deal;
+      } else {
+        // After-hours recovery (spec §5.3): the pre-lease gate already
+        // observed an orphan. Re-query under the lease as the authoritative
+        // check (another worker may have resolved it in the meantime), then
+        // rebuild a minimal Deal payload so the outcome-resolution path below
+        // can run without re-running selectDeal or callDealEnter.
+        const recoveryEntry = await ctx.runQuery(
+          internal.agent.internal.findPendingRecoveryEntry,
+          { traderId }
         );
-        return;
+        if (!recoveryEntry) {
+          // Race: recovery work disappeared between the probe and now. Stamp
+          // and exit cleanly — the lease is released by markCycleComplete.
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "cycle_end",
+            message: "Cycle complete — no recovery work after lease",
+            correlationId,
+          });
+          await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+            traderId,
+            generation,
+            lastCycleAt: Date.now(),
+          });
+          return;
+        }
+
+        const recoveryDeal = await ctx.runQuery(internal.deals.loadInternal, {
+          dealId: recoveryEntry.dealId,
+        });
+        if (!recoveryDeal) {
+          // Orphan entry references a deleted deal — nothing we can resolve.
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "cycle_end",
+            message: "Cycle complete — recovery deal missing",
+            correlationId,
+          });
+          await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+            traderId,
+            generation,
+            lastCycleAt: Date.now(),
+          });
+          return;
+        }
+
+        bestDeal = {
+          id: recoveryDeal._id as string,
+          prompt: recoveryDeal.prompt,
+          pot_usdc: recoveryDeal.potUsdc,
+          entry_cost_usdc: recoveryDeal.entryCostUsdc,
+          status: recoveryDeal.status,
+          on_chain_deal_id: recoveryDeal.onChainDealId ?? null,
+          creator_id: recoveryDeal.creatorDeskManagerId ?? null,
+          creator_address: recoveryDeal.creatorAddress ?? null,
+          entry_count: recoveryDeal.entryCount ?? 0,
+          wipeout_count: recoveryDeal.wipeoutCount ?? 0,
+        };
       }
 
-      const bestDeal = selection.deal;
       // Map to Convex id type for downstream mutations
       const dealId = bestDeal.id as Parameters<
         typeof ctx.runMutation
@@ -435,9 +554,13 @@ export const cycle = internalAction({
         ? T
         : never;
 
-      // ── 5. Approval gate ───────────────────────────────────────────────────
+      // ── 5. Approval gate (open-market only — recovery skips this) ──────────
       const threshold = mandate.approval_threshold_usdc;
-      if (threshold !== undefined && bestDeal.entry_cost_usdc >= threshold) {
+      if (
+        marketOpen &&
+        threshold !== undefined &&
+        bestDeal.entry_cost_usdc >= threshold
+      ) {
         const [pendingApproval, approvedApproval] = await Promise.all([
           ctx.runQuery(internal.dealApprovals.findPendingByTraderAndDeal, {
             traderId,
@@ -522,87 +645,109 @@ export const cycle = internalAction({
       }
 
       // ── 6. Log deal entry ──────────────────────────────────────────────────
-      await ctx.runMutation(internal.agentActivityLog.append, {
-        traderId,
-        activityType: "enter",
-        message: `Entering deal: "${bestDeal.prompt.slice(0, 80)}${bestDeal.prompt.length > 80 ? "..." : ""}" (entry: $${bestDeal.entry_cost_usdc}, pot: $${bestDeal.pot_usdc})`,
-        dealId: dealId as never,
-        correlationId,
-      });
-
-      // ── 7. Deal entry via Next.js HTTP boundary (transport only, #86) ─────
-      // Next.js `handleAgentCycleDealEnter`: on-chain enterDeal + recordVerifiedEntry.
-      // Outcome / PnL / narrative are applied below via Convex only.
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
       const traderTokenId = trader.tokenId;
-
       let entryPaymentId: string | undefined;
+      let marketClosedAtEntry = false;
 
-      if (traderTokenId !== undefined) {
-        try {
-          const entryResult = await callDealEnter(
-            traderId as string,
-            traderTokenId,
-            bestDeal.id,
-            appUrl
+      if (marketOpen) {
+        await ctx.runMutation(internal.agentActivityLog.append, {
+          traderId,
+          activityType: "enter",
+          message: `Entering deal: "${bestDeal.prompt.slice(0, 80)}${bestDeal.prompt.length > 80 ? "..." : ""}" (entry: $${bestDeal.entry_cost_usdc}, pot: $${bestDeal.pot_usdc})`,
+          dealId: dealId as never,
+          correlationId,
+        });
+
+        // ── 7. Deal entry via Next.js HTTP boundary (transport only, #86) ───
+        // Next.js `handleAgentCycleDealEnter`: on-chain enterDeal + recordVerifiedEntry.
+        // Outcome / PnL / narrative are applied below via Convex only.
+        const appUrl =
+          process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+        if (traderTokenId !== undefined) {
+          try {
+            const entryResult = await callDealEnter(
+              traderId as string,
+              traderTokenId,
+              bestDeal.id,
+              appUrl
+            );
+            entryPaymentId = entryResult.entry.payment_id;
+
+            if (entryResult.entry.already_entered) {
+              await ctx.runMutation(internal.agentActivityLog.append, {
+                traderId,
+                activityType: "enter",
+                message: `Deal entry already recorded (paymentId=${entryPaymentId}); reconciling Convex outcome`,
+                dealId: dealId as never,
+                metadata: {
+                  payment_id: entryPaymentId,
+                  already_entered: true,
+                },
+                correlationId,
+              });
+            } else {
+              await ctx.runMutation(internal.agentActivityLog.append, {
+                traderId,
+                activityType: "enter",
+                message: `On-chain deal entry recorded (paymentId=${entryPaymentId}${entryResult.summary?.enter_tx_hash ? `, enterTx=${entryResult.summary.enter_tx_hash}` : ""}) — outcome resolves in Convex`,
+                dealId: dealId as never,
+                metadata: { payment_id: entryPaymentId },
+                correlationId,
+              });
+            }
+          } catch (enterErr) {
+            const httpStatus = (enterErr as Error & { httpStatus?: number })
+              .httpStatus;
+
+            if (httpStatus === 409) {
+              // Legacy duplicate response: still run Convex outcome reconciliation
+              await ctx.runMutation(internal.agentActivityLog.append, {
+                traderId,
+                activityType: "enter",
+                message:
+                  "HTTP 409 duplicate deal entry — reconciling Convex outcome",
+                dealId: dealId as never,
+                correlationId,
+              });
+            } else if (httpStatus === 423) {
+              // Market closed at the HTTP boundary (spec §7.3). Log a single
+              // diagnostic line, do not append to activity log, exit the cycle
+              // cleanly. Non-retryable for this invocation; the next heartbeat
+              // at/after 09:30 will retry naturally.
+              console.log("[cycle] /api/deal/enter rejected — market closed");
+              marketClosedAtEntry = true;
+            } else {
+              // Non-409 / non-423 error: log and re-throw so the lease is released
+              const msg =
+                enterErr instanceof Error ? enterErr.message : String(enterErr);
+              await ctx.runMutation(internal.agentActivityLog.append, {
+                traderId,
+                activityType: "error",
+                message: `Deal entry HTTP failed: ${msg.slice(0, 500)}`,
+                dealId: dealId as never,
+                correlationId,
+              });
+              throw enterErr;
+            }
+          }
+        } else {
+          // tokenId not set — wallet not fully ready; skip the on-chain step
+          console.warn(
+            `[cycle] trader ${traderId} has no tokenId — skipping x402 entry`
           );
-          entryPaymentId = entryResult.entry.payment_id;
-
-          if (entryResult.entry.already_entered) {
-            await ctx.runMutation(internal.agentActivityLog.append, {
-              traderId,
-              activityType: "enter",
-              message: `Deal entry already recorded (paymentId=${entryPaymentId}); reconciling Convex outcome`,
-              dealId: dealId as never,
-              metadata: {
-                payment_id: entryPaymentId,
-                already_entered: true,
-              },
-              correlationId,
-            });
-          } else {
-            await ctx.runMutation(internal.agentActivityLog.append, {
-              traderId,
-              activityType: "enter",
-              message: `On-chain deal entry recorded (paymentId=${entryPaymentId}${entryResult.summary?.enter_tx_hash ? `, enterTx=${entryResult.summary.enter_tx_hash}` : ""}) — outcome resolves in Convex`,
-              dealId: dealId as never,
-              metadata: { payment_id: entryPaymentId },
-              correlationId,
-            });
-          }
-        } catch (enterErr) {
-          const httpStatus = (enterErr as Error & { httpStatus?: number })
-            .httpStatus;
-
-          if (httpStatus === 409) {
-            // Legacy duplicate response: still run Convex outcome reconciliation
-            await ctx.runMutation(internal.agentActivityLog.append, {
-              traderId,
-              activityType: "enter",
-              message:
-                "HTTP 409 duplicate deal entry — reconciling Convex outcome",
-              dealId: dealId as never,
-              correlationId,
-            });
-          } else {
-            // Non-409 error: log and re-throw so the lease is released
-            const msg =
-              enterErr instanceof Error ? enterErr.message : String(enterErr);
-            await ctx.runMutation(internal.agentActivityLog.append, {
-              traderId,
-              activityType: "error",
-              message: `Deal entry HTTP failed: ${msg.slice(0, 500)}`,
-              dealId: dealId as never,
-              correlationId,
-            });
-            throw enterErr;
-          }
         }
-      } else {
-        // tokenId not set — wallet not fully ready; skip the on-chain step
-        console.warn(
-          `[cycle] trader ${traderId} has no tokenId — skipping x402 entry`
-        );
+      }
+
+      // If /api/deal/enter rejected with 423 there is nothing to resolve this
+      // cycle; release the lease and bail before invoking the LLM.
+      if (marketClosedAtEntry) {
+        await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+          traderId,
+          generation,
+          lastCycleAt: Date.now(),
+        });
+        return;
       }
 
       // ── 8. Outcome resolution ──────────────────────────────────────────────

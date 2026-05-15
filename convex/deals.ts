@@ -7,6 +7,7 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { isOwnDeskCreatedDeal } from "./lib/dealEntryEligibility";
+import { assertTradingHoursWithCloseGrace } from "./lib/tradingHours";
 
 // ── Public queries (auth-checked) ──────────────────────────────────────────
 
@@ -103,6 +104,11 @@ export const recordOnChainCreation = mutation({
     wireDealSeedId: v.optional(v.id("wireDealSeeds")),
   },
   handler: async (ctx, args) => {
+    // Trading-hours guard with +60s close grace (see trading-hours spec §5.1).
+    // Rejects hard pre-open; on-chain settlements that surface just past
+    // 16:00 ET within the grace window are still accepted.
+    assertTradingHoursWithCloseGrace();
+
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
@@ -346,6 +352,11 @@ export const recordVerifiedEntry = internalMutation({
     traderWipedOut: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    // Defensive trading-hours guard with +60s close grace (spec §5.1).
+    // The HTTP route is the primary gate; this guards against any internal
+    // caller that bypasses /api/deal/enter.
+    assertTradingHoursWithCloseGrace();
+
     // CAS guard: one verified entry per paymentId
     const existing = await ctx.db
       .query("dealEntries")

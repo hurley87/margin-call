@@ -10,9 +10,24 @@
  * - Internal mutations are not callable as public mutations
  */
 
-import { describe, it, expect } from "vitest";
+import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import { internal, api } from "../../convex/_generated/api";
 import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+
+// These tests call `recordVerifiedEntry`, which now enforces trading hours.
+// The Convex mutations don't take a `now` arg, so force market-open for this
+// file regardless of wall-clock time. See `convex/lib/tradingHours.ts`.
+const PRIOR_FORCE_OPEN = process.env.MC_FORCE_MARKET_OPEN;
+beforeAll(() => {
+  process.env.MC_FORCE_MARKET_OPEN = "1";
+});
+afterAll(() => {
+  if (PRIOR_FORCE_OPEN === undefined) {
+    delete process.env.MC_FORCE_MARKET_OPEN;
+  } else {
+    process.env.MC_FORCE_MARKET_OPEN = PRIOR_FORCE_OPEN;
+  }
+});
 
 // ── x402 verified path ────────────────────────────────────────────────────────
 

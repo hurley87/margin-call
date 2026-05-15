@@ -21,6 +21,8 @@ import {
 } from "@/lib/contracts/escrow";
 import { cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
+import { MarketClosedButton } from "@/components/market-closed-button";
+import { useMarketHours } from "@/hooks/use-market-hours";
 import type { Mandate } from "@/lib/agent/evaluator";
 
 type Option<T> = { label: string; sub: string; value: T };
@@ -504,6 +506,8 @@ function FundAndActivateStep({
 
   const resume = useResumeTrader();
   const activating = useRef(false);
+  const { isOpen: marketOpen, countdownLabel: marketCountdown } =
+    useMarketHours();
 
   useEffect(() => {
     if (activating.current && !resume.isPending && !resume.isError) {
@@ -654,14 +658,19 @@ function FundAndActivateStep({
             Send {traderName} to the floor
           </span>
         </div>
-        <button
-          type="button"
+        <MarketClosedButton
+          // When wallet isn't ready or escrow isn't funded, keep the existing
+          // disabled state so the helper text below still applies. Only flip to
+          // MARKET CLOSED once the trader is actually ready to be activated.
+          isClosed={!marketOpen && walletReady && funded && !resume.isPending}
+          countdownLabel={marketCountdown}
+          enabledChildren={
+            <>{resume.isPending ? "Activating..." : "Activate trading"}</>
+          }
           onClick={handleActivate}
           disabled={!canActivate}
           className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          {resume.isPending ? "Activating..." : "Activate trading"}
-        </button>
+        />
         {!canActivate && (
           <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
             {!walletReady

@@ -30,7 +30,9 @@ import {
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
+import { MarketClosedButton } from "@/components/market-closed-button";
 import { shortAssetLabel } from "@/lib/format-asset-label";
+import { useMarketHours } from "@/hooks/use-market-hours";
 import { useSecondTick } from "@/hooks/use-second-tick";
 import {
   getTraderCycleUi,
@@ -417,6 +419,8 @@ function AgentControls({
   const revive = useReviveTrader();
   const pauseResumeError =
     pause.error?.message ?? resume.error?.message ?? null;
+  const { isOpen: marketOpen, countdownLabel: marketCountdown } =
+    useMarketHours();
 
   if (status === "wiped_out") {
     return (
@@ -461,13 +465,18 @@ function AgentControls({
         </>
       ) : (
         <>
-          <button
+          <MarketClosedButton
+            // Only surface the market-closed state once wallet is ready / funded;
+            // unfunded keeps the existing disabled "ACTIVATE TRADING" label.
+            isClosed={!marketOpen && !unfunded && !resume.isPending}
+            countdownLabel={marketCountdown}
+            enabledChildren={
+              <>{resume.isPending ? "ACTIVATING..." : "ACTIVATE TRADING"}</>
+            }
             onClick={() => resume.mutate(traderId)}
             disabled={resume.isPending || unfunded}
             className="border border-[var(--t-accent)] px-4 py-1.5 text-xs font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {resume.isPending ? "ACTIVATING..." : "ACTIVATE TRADING"}
-          </button>
+          />
           {unfunded ? (
             <button
               onClick={onOpenWallet}

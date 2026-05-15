@@ -7,6 +7,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { useSuggestPrompts } from "@/hooks/use-deals";
 import { useCreateDeal } from "@/hooks/use-create-deal";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
+import { useMarketHours } from "@/hooks/use-market-hours";
 import {
   DEAL_CREATION_FEE_PERCENTAGE,
   MIN_POT_AMOUNT,
@@ -14,6 +15,7 @@ import {
 } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
+import { MarketClosedButton } from "@/components/market-closed-button";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const STEP_LABELS: Record<string, string> = {
@@ -286,6 +288,8 @@ export function CreateDealDialog({
   };
 
   const headerLabel = dealSeed ? "Wire seed deal" : "New deal";
+  const { isOpen: marketOpen, countdownLabel: marketCountdown } =
+    useMarketHours();
   const canSubmit =
     authenticated &&
     !!selectedPrompt.trim() &&
@@ -293,7 +297,8 @@ export function CreateDealDialog({
     potNum >= MIN_POT_AMOUNT &&
     !isNaN(entryNum) &&
     entryNum >= MIN_ENTRY_COST &&
-    !insufficientBalance;
+    !insufficientBalance &&
+    marketOpen;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -467,13 +472,14 @@ export function CreateDealDialog({
                         >
                           &larr; Back
                         </button>
-                        <button
+                        <MarketClosedButton
+                          isClosed={!marketOpen}
+                          countdownLabel={marketCountdown}
+                          enabledChildren={<>Create deal &rarr;</>}
                           onClick={handleSubmitDeal}
                           disabled={!canSubmit}
                           className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-                        >
-                          Create deal &rarr;
-                        </button>
+                        />
                       </div>
                     )}
                   </>

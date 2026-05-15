@@ -60,6 +60,7 @@ import {
   type Portfolio,
   type TraderSummary,
 } from "@/hooks/use-portfolio";
+import { useMarketHours } from "@/hooks/use-market-hours";
 import { useSecondTick } from "@/hooks/use-second-tick";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import {
@@ -423,62 +424,6 @@ function Dashboard({
   );
 }
 
-const MARKET_OPEN_SEC = 9 * 3600 + 30 * 60;
-const MARKET_CLOSE_SEC = 16 * 3600;
-const SECONDS_PER_DAY = 24 * 3600;
-
-const COUNTDOWN_FMT = new Intl.DateTimeFormat("en-US", {
-  ...NY_TIME,
-  hour: "numeric",
-  minute: "numeric",
-  second: "numeric",
-  weekday: "short",
-  hour12: false,
-});
-
-const DAYS_UNTIL_NEXT_OPEN: Record<string, number> = {
-  Sun: 1,
-  Mon: 1,
-  Tue: 1,
-  Wed: 1,
-  Thu: 1,
-  Fri: 3,
-  Sat: 2,
-};
-
-function getMarketCountdown(nowMs: number): { isOpen: boolean; hms: string } {
-  const parts = Object.fromEntries(
-    COUNTDOWN_FMT.formatToParts(new Date(nowMs)).map((p) => [p.type, p.value])
-  );
-  const secNow =
-    Number(parts.hour) * 3600 +
-    Number(parts.minute) * 60 +
-    Number(parts.second);
-  const weekday = parts.weekday;
-  const isWeekend = weekday === "Sat" || weekday === "Sun";
-  const isOpen =
-    !isWeekend && secNow >= MARKET_OPEN_SEC && secNow < MARKET_CLOSE_SEC;
-
-  let remaining: number;
-  if (isOpen) {
-    remaining = MARKET_CLOSE_SEC - secNow;
-  } else {
-    const beforeOpenToday = !isWeekend && secNow < MARKET_OPEN_SEC;
-    const daysToAdd = beforeOpenToday
-      ? 0
-      : (DAYS_UNTIL_NEXT_OPEN[weekday] ?? 1);
-    remaining = daysToAdd * SECONDS_PER_DAY + (MARKET_OPEN_SEC - secNow);
-  }
-
-  const rh = Math.floor(remaining / 3600);
-  const rm = Math.floor((remaining % 3600) / 60);
-  const rs = remaining % 60;
-  return {
-    isOpen,
-    hms: `${rh}:${String(rm).padStart(2, "0")}:${String(rs).padStart(2, "0")}`,
-  };
-}
-
 function TopStatusBar({
   displayName,
   nowMs,
@@ -510,7 +455,7 @@ function TopStatusBar({
     day: "2-digit",
     ...NY_TIME,
   });
-  const { isOpen, hms } = getMarketCountdown(nowMs);
+  const { isOpen, countdownLabel: hms } = useMarketHours();
 
   return (
     <header className="z-40 shrink-0 bg-[#050706]/95 px-2 pt-2 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm">

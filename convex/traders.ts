@@ -12,6 +12,7 @@ import {
   resolveReadyProfileImageUrl,
   resolveTraderProfileImageUrl,
 } from "./lib/profileImage";
+import { assertTradingHours } from "./lib/tradingHours";
 import {
   buildPortraitSeed,
   getPortraitPromptVersion,
@@ -285,6 +286,9 @@ export const setStatus = mutation({
       if ((trader.escrowBalanceUsdc ?? 0) <= 0) {
         throw new Error("Fund trader before activating");
       }
+      // Trading-hours gate: only enforce when transitioning to "active".
+      // Must follow wallet-ready check so precedence stays intuitive (spec §9.2).
+      assertTradingHours(Date.now(), "(cannot activate trader)");
     }
 
     await ctx.db.patch(traderId, { status, updatedAt: Date.now() });

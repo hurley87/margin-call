@@ -82,7 +82,63 @@ export const listStaleTradersForCycle = internalQuery({
   },
 });
 
+/**
+ * Find one paid dealEntry from the last 24h that is missing its dealOutcome.
+ * Returns the orphan entry (oldest first) so the cycle can resume outcome
+ * resolution for it. Callers treat `null` as "no recovery work" (spec §5.2
+ * step 3, §5.3 — recovery is permitted at any time).
+ *
+ * 24h scope is deliberate — older orphans are an ops/manual problem and
+ * shouldn't keep the cycle waking every minute overnight.
+ */
+export const findPendingRecoveryEntry = internalQuery({
+  args: { traderId: v.id("traders") },
+  handler: async (ctx, { traderId }) => {
+    const since = Date.now() - 24 * 60 * 60_000;
+    const recent = await ctx.db
+      .query("dealEntries")
+      .withIndex("byTrader", (q) => q.eq("traderId", traderId as string))
+      .collect();
+
+    // Oldest first so retries make forward progress in submission order.
+    recent.sort((a, b) => a.createdAt - b.createdAt);
+
+    for (const entry of recent) {
+      if (entry.createdAt <= since) continue;
+      const outcome = await ctx.db
+        .query("dealOutcomes")
+        .withIndex("byTraderAndDeal", (q) =>
+          q.eq("traderId", traderId as string).eq("dealId", entry.dealId)
+        )
+        .unique();
+      if (!outcome) return entry;
+    }
+    return null;
+  },
+});
+
 // ── Mutations ─────────────────────────────────────────────────────────────────
+
+/**
+ * Stamp `lastCycleAt` on a trader without acquiring a lease or bumping
+ * generation. Used by the cycle (spec §5.2 step 3) when the market is closed
+ * and there is no recovery work — keeps the scheduler's interval gate accurate
+ * so it doesn't re-enqueue every minute overnight.
+ */
+export const stampLastCycleAt = internalMutation({
+  args: {
+    traderId: v.id("traders"),
+    lastCycleAt: v.number(),
+  },
+  handler: async (ctx, { traderId, lastCycleAt }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) return;
+    await ctx.db.patch(traderId, {
+      lastCycleAt,
+      updatedAt: Date.now(),
+    });
+  },
+});
 
 /**
  * Attempt to acquire a cycle lease via compare-and-set.
