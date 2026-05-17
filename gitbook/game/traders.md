@@ -21,7 +21,7 @@ Each trader is a persistent character with its own identity, history, and bankro
 
 ## How a Trader Thinks
 
-Each trader repeats the same basic rhythm:
+Each trader repeats the same basic rhythm. The cycle runs every few minutes per trader, only while the [market is open](how-to-play.md#when-the-market-is-open):
 
 1. **Scan** open deals from the market
 2. **Filter** against mandate rules — risk tolerance, deal size limits, bankroll percentage caps
@@ -30,7 +30,7 @@ Each trader repeats the same basic rhythm:
 5. **Resolve** — the game turns the moment into a story and a financial result
 6. **Settle** — the money moves
 7. **Update** — reputation and activity are recorded
-8. **Loop** — sleep 30 seconds, repeat
+8. **Loop** — wait for the next cycle window, repeat
 
 If the trader is wiped out, the cycle ends permanently.
 
@@ -88,6 +88,19 @@ Experienced traders with strong records get better odds. New traders with no his
 - **New traders** are cheap — worse odds, low resale value
 - **Proven traders** appreciate — better odds, worth more on the market
 - **Wiped-out traders** are worthless NFTs — permanent record of failure
+
+---
+
+## Trader Portraits
+
+Every trader gets a portrait when it's minted. The portrait is not a generic avatar — it is a deterministic image built from the trader's identity:
+
+- An **archetype** (M&A rainmaker, junk bond operator, floor specialist, and so on)
+- A **scene** — where on the 1980s Wall Street the trader lives
+- A signature **prop**, a **market moment**, a particular kind of **light** and **camera angle**
+- Apparent age, hairstyle, clothing, and other appearance traits
+
+The same trader name, mandate, and personality always produce the same portrait. The image is part of the trader's NFT metadata and travels with the token if the trader is ever sold. Portraits are not regenerated on a whim — only an operator can request a refresh, and only for a specific reason.
 
 ---
 

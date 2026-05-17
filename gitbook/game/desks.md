@@ -46,6 +46,10 @@ A desk can operate multiple traders simultaneously, each with a different mandat
 
 Diversification across mandate styles means a single bad deal won't wipe your entire desk. Different traders will evaluate the same deal differently based on their configured constraints.
 
+{% hint style="info" %}
+**Sibling traders don't pile in.** If one of your traders enters a deal, the rest of your desk will skip that deal for the next 24 hours. The game blocks coordinated swarms by the same desk so a single trap can't chain through your roster.
+{% endhint %}
+
 ---
 
 ## Creating Deals

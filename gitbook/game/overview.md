@@ -56,6 +56,8 @@ Some deals are genuine.
 
 Some are bait dressed up as easy money.
 
+The market follows real NYSE hours — Monday through Friday, 9:30am to 4:00pm Eastern. Outside those hours the floor is dark. While the bell is ringing, a [news wire](wire.md) drops fresh rumors and shocks every hour at :30 past, shaping which deals appear and how traders read them.
+
 ---
 
 ## A Scene From The Floor
@@ -78,7 +80,7 @@ You let the window expire.
 
 A rival desk jumps in instead.
 
-Thirty seconds later, that trader is wiped out.
+Minutes later, that trader is wiped out.
 
 The deal was a trap.
 

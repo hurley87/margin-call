@@ -4,7 +4,7 @@
 
 ### Abstract
 
-`Margin Call` is a zero-sum PvP trading game set on 1980s Wall Street. You run a trading desk of AI agents. You fund them, configure their mandates, and deploy them into a hostile market of deals written by other players. Some deals are real opportunities. Some are traps. GPT-5 mini resolves outcomes. USDC settles through an escrow contract on Base. Trader identity and reputation persist on-chain through ERC-8004, and each trader is represented as a transferable NFT with its own token-bound account.
+`Margin Call` is a zero-sum PvP trading game set on 1980s Wall Street. You run a trading desk of AI agents. You fund them, configure their mandates, and deploy them into a hostile market of deals written by other players. Some deals are real opportunities. Some are traps. GPT-4o-mini resolves outcomes. USDC settles through an escrow contract on Base. Trader identity and reputation persist on-chain through ERC-8004, and each trader is represented as a transferable NFT with its own token-bound account.
 
 Most AI games frame intelligence as an individual property — build a smarter bot, win more. `Margin Call` starts from a different premise. Markets are not won by isolated intelligence. They are won by institutions: by mandates, memory, risk controls, incentives, timing, and the ability to act under pressure while other actors are actively trying to deceive you.
 
@@ -34,7 +34,7 @@ This is the central design thesis: intelligence in markets is institutional befo
 
 Three developments make this game viable in its current form.
 
-First, language models have reached the threshold where AI agents can participate in repeated decision loops with enough coherence to sustain a strategic identity across dozens or hundreds of trades. A trader can maintain a style, accumulate a history, and produce decisions that meaningfully reflect its configured mandate — not perfectly, but well enough to create divergent outcomes between well-organized and poorly-organized desks. GPT-5 mini provides the specific balance of capability, speed, and cost that makes a 30-second autonomous trade cycle practical.
+First, language models have reached the threshold where AI agents can participate in repeated decision loops with enough coherence to sustain a strategic identity across dozens or hundreds of trades. A trader can maintain a style, accumulate a history, and produce decisions that meaningfully reflect its configured mandate — not perfectly, but well enough to create divergent outcomes between well-organized and poorly-organized desks. GPT-4o-mini provides the specific balance of capability, speed, and cost that makes a multi-minute autonomous trade cycle practical at fleet scale.
 
 Second, on-chain infrastructure on Ethereum L2s (specifically Base) has matured to the point where USDC settlement, NFT-based agent identity, and token-bound accounts can operate at low cost with sub-second finality. ERC-8004 identity registries are already deployed. ERC-6551 token-bound accounts are a production standard. The building blocks for portable, ownable AI agents with public history exist today in a way they did not two years ago.
 
@@ -119,7 +119,7 @@ Any desk manager can create a deal by calling `createDeal` on the escrow contrac
 
 ### Deal Dynamics
 
-Deals are not one-shot events. A deal sits open on the floor until the creator closes it or the pot is depleted. Multiple traders can enter the same deal sequentially. Each entry is resolved independently by GPT-5 mini — one trader might win, the next might lose, and a third might get wiped out entirely.
+Deals are not one-shot events. A deal sits open on the floor until the creator closes it or the pot is depleted. Multiple traders can enter the same deal sequentially. Each entry is resolved independently by GPT-4o-mini — one trader might win, the next might lose, and a third might get wiped out entirely.
 
 When a trader loses, the loss amount moves from the trader's escrow balance into the deal pot, making the pot larger and the deal more attractive to the next trader. When a trader wins, the winnings (minus a 10% rake) move from the pot into the trader's balance. The deal creator profits by closing the deal when the pot has grown — meaning more traders lost than won.
 
@@ -145,7 +145,7 @@ A trader's history is not decorative metadata. Reputation is visible, durable, a
 
 Deals are not neutral tasks. They are authored by opponents who may be trying to lure traders into bad decisions. This keeps the game from becoming a passive optimization exercise.
 
-To prevent deal prompts from directly gaming the resolution model, the system separates the deal prompt from the resolution context. The deal prompt provides the scenario narrative, but the outcome is determined by GPT-5 mini using a structured resolution framework that includes the trader's full context (balance, reputation, mandate, assets), a cryptographically secure random seed, and capped outcome ranges. The deal creator cannot embed instructions that override the resolution logic — the model receives the prompt as a scenario description within a system prompt that constrains output to a defined schema with bounded financial results.
+To prevent deal prompts from directly gaming the resolution model, the system separates the deal prompt from the resolution context. The deal prompt provides the scenario narrative, but the outcome is determined by GPT-4o-mini using a structured resolution framework that includes the trader's full context (balance, reputation, mandate, assets), a cryptographically secure random seed, and capped outcome ranges. The deal creator cannot embed instructions that override the resolution logic — the model receives the prompt as a scenario description within a system prompt that constrains output to a defined schema with bounded financial results.
 
 ### Constrained Autonomy
 
@@ -176,15 +176,15 @@ The end-to-end flow for a single deal entry:
 
 1. **Trader evaluates** — the agent runtime scans open deals, filters against mandate and bankroll rules, selects the best eligible deal.
 2. **Approval check** — if the deal exceeds the configured threshold, the workflow pauses and waits for desk manager approval. If approval expires or is rejected, the trader passes.
-3. **LLM resolution** — the server builds a structured prompt containing the deal scenario, the trader's balance, assets, reputation history, and a cryptographically secure random seed. GPT-5 mini returns a narrative and financial outcome within capped bounds.
+3. **LLM resolution** — the server builds a structured prompt containing the deal scenario, the trader's balance, assets, reputation history, and a cryptographically secure random seed. GPT-4o-mini returns a narrative and financial outcome within capped bounds.
 4. **Validation** — the server validates the outcome against game rules (winnings cannot exceed 25% of the deal pot, losses cannot exceed the trader's balance). If the outcome is adjusted, a second LLM call rewrites the narrative to match the corrected result.
 5. **On-chain settlement** — the server calls `resolveEntry` on the escrow contract, which distributes funds: winnings from pot to trader (minus rake), or losses from trader to pot.
 6. **Reputation update** — the server posts the outcome to the ERC-8004 Reputation Registry (score, tags, outcome link).
-7. **State sync** — the outcome is mirrored to Supabase for fast reads, realtime UI updates, and future prompt construction.
+7. **State sync** — the outcome is committed to Convex, the application's reactive backend, which powers fast reads, realtime UI updates, and future prompt construction.
 
 ### Source of Truth
 
-The escrow contract on Base is the source of truth for all financial state: balances, deal pots, and fee accumulation. Supabase mirrors this state for fast reads and realtime updates. If the two ever diverge, the contract state takes precedence. The application layer indexes on-chain events to keep the mirror consistent.
+The escrow contract on Base is the source of truth for all financial state: balances, deal pots, and fee accumulation. Convex holds the working game state — traders, deals, outcomes, reputation, wire dispatches — and serves it reactively to the UI. If the two ever diverge on a financial fact, the contract state takes precedence. The application layer indexes on-chain events to keep working state consistent.
 
 ### Trader Identity and Reputation
 
@@ -194,14 +194,27 @@ Traders are not entries in a private database. They are portable units of identi
 
 ### Application Layer
 
-The application layer is built with Next.js, Supabase, and a durable agent runtime:
+The application layer is built with Next.js and Convex, plus a CDP-managed operator wallet for settlement:
 
 - Next.js provides the interface, API routes, and application shell
-- Supabase mirrors working state for fast reads, realtime updates, and prompt construction
-- Vercel Workflow runs each active trader as an autonomous trade cycle (scan → evaluate → resolve → settle → loop every 30 seconds)
-- GPT-5 mini resolves deal outcomes in structured form
+- Convex stores working state and serves it reactively for fast reads, realtime updates, and prompt construction
+- Convex scheduled actions run the agent runtime — a one-minute heartbeat fans out per-trader cycles, and each active trader runs through scan → evaluate → resolve → settle every few minutes
+- GPT-4o-mini resolves deal outcomes in structured form
+- The agent's deal entry is authenticated with a SIWA-signed HTTP call to the application's deal-entry endpoint, which records a verified entry before resolution proceeds
 
 The server does not replace the market. It coordinates the runtime, validates outputs, settles outcomes through the contract, and records the resulting state back into the game.
+
+### Trading Hours
+
+The market follows real NYSE hours: Monday through Friday, 9:30am to 4:00pm Eastern, with normal daylight-savings handling. Outside those hours, the heartbeat does not spawn new cycles, no new deals are entered, and the wire stops dropping new dispatches. A short close grace window allows settlements already in flight to finish cleanly so nothing settles in limbo.
+
+Trading hours are enforced at multiple boundaries — trader creation, deal entry, agent cycle, and wire generation — so a single misbehaving caller cannot bypass the bell.
+
+### The Wire
+
+The application also runs a narrative engine that drops a short news bulletin on the hour during trading hours. The wire produces structured dispatches with phases (`rumor`, `crack`, `panic`, `rupture`, `fallout`, `countermove`, `resolution`), tension scores per arc, and occasional **deal seeds** that surface as fresh deals for traders to evaluate. Outputs go through strict validation: schema-checked, period-language enforced, and once an arc reaches maximum tension the next major dispatch must anchor to a material change (a deal, a wipeout, a public event) — preventing perpetually unresolved hype.
+
+The wire is not decoration. It is part of the game state that shapes which deals appear and how traders read them.
 
 ## 9. How a Trader Acts
 
@@ -212,14 +225,14 @@ Each active trader runs through a repeating cycle:
 3. Select the best eligible opportunity.
 4. Pause for approval if the deal exceeds the configured threshold.
 5. Build an outcome request containing the deal prompt, the trader's balance, assets, and reputation history.
-6. Resolve the deal through GPT-5 mini, which returns a narrative and financial outcome.
+6. Resolve the deal through GPT-4o-mini, which returns a narrative and financial outcome.
 7. Settle the result on-chain through the escrow contract.
 8. Update reputation, activity logs, and mirrored state.
-9. Sleep 30 seconds, then repeat.
+9. Wait for the next cycle window (a few minutes), then repeat — only while the market is open.
 
 ### Assets
 
-Traders can carry assets — items with narrative and monetary value, such as insider tips, industry contacts, or regulatory immunity. Assets are gained and lost through deal outcomes. They are part of the context sent to GPT-5 mini during resolution, meaning a trader carrying a valuable asset may have better odds in relevant deals. Assets add a layer of inventory management to the game: a trader with the right assets for a particular deal type has an edge, while losing a key asset in a bad trade can cascade into further vulnerability.
+Traders can carry assets — items with narrative and monetary value, such as insider tips, industry contacts, or regulatory immunity. Assets are gained and lost through deal outcomes. They are part of the context sent to GPT-4o-mini during resolution, meaning a trader carrying a valuable asset may have better odds in relevant deals. Assets add a layer of inventory management to the game: a trader with the right assets for a particular deal type has an edge, while losing a key asset in a bad trade can cascade into further vulnerability.
 
 ### Multiple Traders in the Same Deal
 
@@ -263,6 +276,8 @@ Left unchecked, the reputation flywheel would create a rich-get-richer dynamic. 
 - **Target painting** — high-reputation traders are visible targets. Deal creators specifically design traps for overconfident, high-performing agents. Success attracts predators.
 - **Pot caps** — a single winning entry can extract at most 25% of the deal pot, limiting how quickly a strong trader can compound gains.
 - **Wipeout severity** — a trader is destroyed only when validated PnL reduces the bankroll to zero. For normal deals, max downside is the entry amount; full-portfolio wipeout deals require explicit deal types and clear warnings.
+- **Desk-sibling dedup** — when one trader from a desk enters a deal, the rest of that desk's traders skip the same deal for the next 24 hours. A single hot read cannot chain through a stable of sibling agents.
+- **Own-desk block** — traders cannot enter deals created by their own desk's manager. Creating bait for yourself does not work as a self-deal.
 - **Deal creator adaptation** — the adversarial meta-game evolves. When a particular mandate configuration becomes dominant, deal creators learn to target it. Strategies that work well decay as the market adapts.
 
 These mechanics do not eliminate advantage. They ensure that advantage creates exposure.
@@ -284,8 +299,8 @@ The following are on-chain or directly anchored to on-chain infrastructure:
 
 The following depend on the application server and model layer:
 
-- autonomous trade orchestration (Vercel Workflow)
-- GPT-5 mini outcome generation
+- autonomous trade orchestration (Convex scheduled actions)
+- GPT-4o-mini outcome generation
 - validation and correction of model outputs
 - operator-triggered settlement calls
 - mirrored game reads and realtime feeds
@@ -305,7 +320,7 @@ The operator (server) holds the key that calls `resolveEntry` on the escrow cont
 
 - the operator key is managed through a Coinbase CDP server wallet — no raw private key stored on the server
 - `resolveEntry` can only be called for deals with valid, open status and traders with sufficient balance
-- all settlement calls are logged with their inputs (deal ID, trader ID, PnL, rake) and can be audited against the LLM resolution outputs stored in Supabase
+- all settlement calls are logged with their inputs (deal ID, trader ID, PnL, rake) and can be audited against the LLM resolution outputs stored in Convex
 - a public settlement log (contract events on Base) allows anyone to reconstruct the history of every deal resolution
 
 There is no on-chain dispute mechanism in the initial version. If the operator settles fraudulently, the recourse is reputational — the settlement history is public and auditable. Adding a time-locked dispute window is a planned improvement for a future version.
@@ -349,6 +364,12 @@ Because traders exist as transferable NFTs with linked reputation:
 - performance can outlive the original owner
 - the market can price judgment as an asset
 
+### The Portrait
+
+Each trader is minted with a deterministic portrait derived from its identity. A small set of traits — archetype, scene, signature prop, market moment, lighting, camera angle, apparent age, hairstyle, clothing, accessory — are hashed from the trader's name, mandate, and personality, then rendered through an image model. The same trader always produces the same portrait, and the trait set is captured in the NFT's metadata so the image is reproducible.
+
+Portraits are not stylistic decoration. They give each trader a stable, recognizable face on the floor and in the marketplace.
+
 ### What Transfers With the Trader
 
 When a trader NFT changes hands, the buyer receives:
@@ -369,8 +390,10 @@ This means buying a trader is buying a proven track record with real economic we
 The core product is the web-first game:
 
 - desk managers create and manage traders
-- traders operate through an autonomous 30-second trade cycle
+- traders operate through an autonomous trade cycle that runs every few minutes per active trader, gated by NYSE trading hours
 - deals are adversarial and zero-sum
+- a news wire drops on the hour during trading hours and seeds new deals
+- each trader is minted with a deterministic portrait tied to its identity
 - settlement occurs through an escrow contract on Base
 - identity and reputation persist around ERC-8004 trader NFTs
 

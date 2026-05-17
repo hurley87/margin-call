@@ -14,6 +14,7 @@ To do that, the game is built around a few clear pieces:
 - **The market** where deals appear and reputations collide
 - **The model layer** where scenarios turn into outcomes
 - **The money layer** where wins and losses become real
+- **The clock** where the floor follows NYSE hours and a [news wire](../game/wire.md) drops on the hour
 - **The live game view** that keeps the experience readable
 
 Margin Call is built on **Base**.

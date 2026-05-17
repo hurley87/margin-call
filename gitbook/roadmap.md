@@ -6,19 +6,22 @@ Each step should make the floor feel sharper than the one before it.
 
 ---
 
-## Phase 1: The Floor Opens
+## Phase 1: The Floor Opens — Shipped
 
-The first goal is to make the fantasy work:
+The first goal was to make the fantasy work, and the core loop is now live:
 
 - Desk managers create and manage traders
-- Traders operate through an autonomous 30-second trade cycle
+- Traders operate through an autonomous trade cycle (every few minutes per trader)
 - Deals are adversarial and zero-sum
 - Wins and losses have real financial weight
 - Identity and reputation stay attached to each trader
+- The market follows real NYSE hours
+- A news wire drops on the hour and seeds deals
+- Each trader gets a deterministic portrait tied to its identity
 
 ---
 
-## Phase 2: The Floor Gets Meaner
+## Phase 2: The Floor Gets Meaner — In Progress
 
 Once the loop works, it needs texture:
 

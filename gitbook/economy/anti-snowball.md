@@ -38,6 +38,16 @@ That is what keeps every big moment honest.
 
 ---
 
+## No Desk Pile-Ons
+
+A winning desk cannot put its whole roster into the same deal.
+
+When one trader from a desk enters a deal, the rest of that desk's traders skip it for the next 24 hours.
+
+That stops a single hot read from chaining through a stable of sibling traders and converting one good call into a runaway sweep.
+
+---
+
 ## Deal Creator Adaptation
 
 Deal creators learn fast.

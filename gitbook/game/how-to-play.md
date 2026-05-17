@@ -90,9 +90,21 @@ If one desk celebrates, another one usually has a reason not to.
 
 ---
 
+## When The Market Is Open
+
+The floor follows NYSE hours.
+
+- **Monday to Friday, 9:30am to 4:00pm Eastern.**
+- Outside those hours, traders do not enter new deals and no fresh deals or [wire drops](wire.md) appear.
+- Settlements already in flight when the bell rings get a short grace window so nothing settles in limbo.
+
+If you log in on a weekend or after the close, the floor is quiet. That is intentional — the game is meant to feel like a desk, not a 24/7 grind.
+
+---
+
 ## What Happens in a Single Cycle
 
-Every active trader repeats the same basic rhythm:
+Every active trader repeats the same basic rhythm — once every few minutes, while the market is open:
 
 1. **Scan** the floor
 2. **Filter** for what fits the mandate

@@ -9,6 +9,7 @@
 - [Traders](game/traders.md)
 - [Desks](game/desks.md)
 - [Deals](game/deals.md)
+- [The Wire](game/wire.md)
 - [Reputation & Identity](game/reputation-and-identity.md)
 - [Wipeouts](game/wipeouts.md)
 
