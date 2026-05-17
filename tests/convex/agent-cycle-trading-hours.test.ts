@@ -29,7 +29,12 @@ import {
   getTradingHoursState,
 } from "../../convex/lib/tradingHours";
 import { DEFAULT_CYCLE_INTERVAL_MS } from "../../convex/agent/internal";
-import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+import {
+  seedDeskManager,
+  seedActiveTrader,
+  seedDeal,
+  useRealMarketHours,
+} from "./setup";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
@@ -38,18 +43,6 @@ const modules = import.meta.glob("../../convex/**/*.ts");
 const SAT_NOON_ET = Date.UTC(2026, 4, 9, 16, 0, 0);
 // Mon 2026-05-04 09:30 ET → 13:30 UTC (market just opened)
 const MON_OPEN_ET = Date.UTC(2026, 4, 4, 13, 30, 0);
-
-function useRealMarketHours() {
-  const original = process.env.MC_FORCE_MARKET_OPEN;
-  delete process.env.MC_FORCE_MARKET_OPEN;
-  return () => {
-    if (original === undefined) {
-      delete process.env.MC_FORCE_MARKET_OPEN;
-    } else {
-      process.env.MC_FORCE_MARKET_OPEN = original;
-    }
-  };
-}
 
 // ── Saturday: silent skip when there is no recovery work ────────────────────
 

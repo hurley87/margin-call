@@ -6,6 +6,7 @@ import {
   type QueryCtx,
 } from "./_generated/server";
 import { v } from "convex/values";
+import { clampLimit } from "./lib/limits";
 import { resolveTraderProfileImageUrl } from "./lib/profileImage";
 
 type TraderProfileSummary = {
@@ -44,13 +45,12 @@ export const listByTrader = query({
     const trader = await ctx.db.get(traderId);
     if (!trader || trader.ownerSubject !== identity.subject) return [];
 
-    const results = await ctx.db
+    const query = ctx.db
       .query("agentActivityLog")
       .withIndex("byTraderAndCreatedAt", (q) => q.eq("traderId", traderId))
-      .order("desc")
-      .collect();
+      .order("desc");
 
-    return limit ? results.slice(0, limit) : results;
+    return limit ? query.take(clampLimit(limit, 200)) : query.collect();
   },
 });
 
@@ -78,7 +78,10 @@ export const listForDesk = query({
 
     if (traders.length === 0) return [];
 
-    // Collect activity for all owned traders
+    const boundedLimit = limit ? clampLimit(limit, 200) : 100;
+
+    // Each per-trader query is capped before the merge so desks with long
+    // histories don't read every row on each realtime subscription refresh.
     const allActivity = (
       await Promise.all(
         traders.map((t) =>
@@ -86,7 +89,7 @@ export const listForDesk = query({
             .query("agentActivityLog")
             .withIndex("byTraderAndCreatedAt", (q) => q.eq("traderId", t._id))
             .order("desc")
-            .collect()
+            .take(boundedLimit)
         )
       )
     ).flat();
@@ -103,7 +106,7 @@ export const listForDesk = query({
       traderProfiles[trader._id] = profile;
     }
 
-    const limited = limit ? allActivity.slice(0, limit) : allActivity;
+    const limited = allActivity.slice(0, boundedLimit);
     return { activity: limited, traderNames, traderProfiles };
   },
 });

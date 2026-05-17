@@ -594,6 +594,9 @@ export const syncEscrowBalance = internalMutation({
   handler: async (ctx, { traderId, balanceUsdc }) => {
     const trader = await ctx.db.get(traderId);
     if (!trader) return;
+    if ((trader.escrowBalanceUsdc ?? 0) === balanceUsdc) {
+      return;
+    }
     await ctx.db.patch(traderId, {
       escrowBalanceUsdc: balanceUsdc,
       updatedAt: Date.now(),

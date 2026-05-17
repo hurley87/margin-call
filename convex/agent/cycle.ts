@@ -432,10 +432,12 @@ export const cycle = internalAction({
             args: [BigInt(trader.tokenId)],
           });
           escrowBalanceUsdc = Number(raw) / USDC_DECIMALS;
-          await ctx.runMutation(internal.traders.syncEscrowBalance, {
-            traderId,
-            balanceUsdc: escrowBalanceUsdc,
-          });
+          if (escrowBalanceUsdc !== (trader.escrowBalanceUsdc ?? 0)) {
+            await ctx.runMutation(internal.traders.syncEscrowBalance, {
+              traderId,
+              balanceUsdc: escrowBalanceUsdc,
+            });
+          }
         } catch (err) {
           console.warn(
             "[cycle] on-chain balance read failed, using cached value",

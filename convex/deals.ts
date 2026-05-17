@@ -7,6 +7,7 @@ import {
 import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { isOwnDeskCreatedDeal } from "./lib/dealEntryEligibility";
+import { clampLimit } from "./lib/limits";
 import { assertTradingHoursWithCloseGrace } from "./lib/tradingHours";
 
 // ── Public queries (auth-checked) ──────────────────────────────────────────
@@ -42,7 +43,7 @@ export const listRecentCreatedForToasts = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
-    const boundedLimit = Math.max(1, Math.min(limit, 50));
+    const boundedLimit = clampLimit(limit, 50);
     return ctx.db
       .query("deals")
       .withIndex("byCreatedAt")

@@ -1,6 +1,7 @@
 import { Doc } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
+import { clampLimit } from "../lib/limits";
 
 /** Cycle lease TTL: 90 seconds. Longer than the cycle itself to avoid false-recovery. */
 export const CYCLE_LEASE_TTL_MS = 90_000;
@@ -55,30 +56,37 @@ export const loadTraderForCycle = internalQuery({
  * Called by the scheduler action — no auth context required.
  */
 export const listStaleTradersForCycle = internalQuery({
-  args: {},
-  handler: async (ctx) => {
+  args: { limit: v.optional(v.number()) },
+  handler: async (ctx, { limit }) => {
     const now = Date.now();
+    const boundedLimit =
+      limit === undefined ? undefined : clampLimit(limit, 25);
 
-    // Fetch active traders; Convex does not support multi-field inequality
-    // indexes so we filter in memory after the index scan.
-    const active = await ctx.db
+    // Convex can't index multi-field inequalities, so funding/lease/interval
+    // still post-filter the (status, walletStatus) index scan.
+    const readyActive = await ctx.db
       .query("traders")
-      .withIndex("byStatus", (q) => q.eq("status", "active"))
+      .withIndex("byStatusAndWalletStatus", (q) =>
+        q.eq("status", "active").eq("walletStatus", "ready")
+      )
       .collect();
 
-    return active.filter((t) => {
-      if (t.walletStatus !== "ready") return false;
-      if ((t.escrowBalanceUsdc ?? 0) <= 0) return false;
+    const eligible = [];
+    for (const t of readyActive) {
+      if ((t.escrowBalanceUsdc ?? 0) <= 0) continue;
       // Skip if a cycle lease is still valid (another cycle is in flight)
-      if (t.cycleLeaseUntil !== undefined && t.cycleLeaseUntil > now)
-        return false;
+      if (t.cycleLeaseUntil !== undefined && t.cycleLeaseUntil > now) continue;
       const intervalMs = resolveCycleIntervalMsForTrader(t);
       const staleThreshold = now - intervalMs;
       // Skip if within this trader's minimum cycle spacing
       if (t.lastCycleAt !== undefined && t.lastCycleAt > staleThreshold)
-        return false;
-      return true;
-    });
+        continue;
+      eligible.push(t);
+      if (boundedLimit !== undefined && eligible.length >= boundedLimit) {
+        break;
+      }
+    }
+    return eligible;
   },
 });
 
@@ -97,14 +105,13 @@ export const findPendingRecoveryEntry = internalQuery({
     const since = Date.now() - 24 * 60 * 60_000;
     const recent = await ctx.db
       .query("dealEntries")
-      .withIndex("byTrader", (q) => q.eq("traderId", traderId as string))
+      .withIndex("byTraderAndCreatedAt", (q) =>
+        q.eq("traderId", traderId as string).gt("createdAt", since)
+      )
+      .order("asc")
       .collect();
 
-    // Oldest first so retries make forward progress in submission order.
-    recent.sort((a, b) => a.createdAt - b.createdAt);
-
     for (const entry of recent) {
-      if (entry.createdAt <= since) continue;
       const outcome = await ctx.db
         .query("dealOutcomes")
         .withIndex("byTraderAndDeal", (q) =>

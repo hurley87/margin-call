@@ -80,6 +80,23 @@ export async function seedActiveTrader(
   });
 }
 
+/**
+ * Unset `MC_FORCE_MARKET_OPEN` for a single test so honest hours/timestamps
+ * are evaluated. The vitest config sets it for the whole convex-test suite.
+ * Returns a restorer that re-applies the prior value in `afterEach`.
+ */
+export function useRealMarketHours(): () => void {
+  const original = process.env.MC_FORCE_MARKET_OPEN;
+  delete process.env.MC_FORCE_MARKET_OPEN;
+  return () => {
+    if (original === undefined) {
+      delete process.env.MC_FORCE_MARKET_OPEN;
+    } else {
+      process.env.MC_FORCE_MARKET_OPEN = original;
+    }
+  };
+}
+
 /** Insert an open deal and return its _id. */
 export async function seedDeal(
   t: T,

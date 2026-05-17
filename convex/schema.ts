@@ -78,7 +78,7 @@ export default defineSchema({
   })
     .index("byOwner", ["ownerSubject"])
     .index("byDeskManager", ["deskManagerId"])
-    .index("byStatus", ["status"])
+    .index("byStatusAndWalletStatus", ["status", "walletStatus"])
     .index("byOwnerAndName", ["ownerSubject", "name"])
     .index("byCreatedAt", ["createdAt"]),
 
@@ -137,8 +137,8 @@ export default defineSchema({
   })
     .index("byPaymentId", ["paymentId"])
     .index("byDeal", ["dealId"])
-    .index("byTrader", ["traderId"])
     .index("byTraderAndDeal", ["traderId", "dealId"])
+    .index("byTraderAndCreatedAt", ["traderId", "createdAt"])
     .index("byCreatedAt", ["createdAt"])
     .index("byDealAndCreatedAt", ["dealId", "createdAt"]),
 

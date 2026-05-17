@@ -18,6 +18,7 @@
 
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
+import type { Doc } from "../_generated/dataModel";
 import type { RunActionCtx } from "./_ctx";
 import { internal } from "../_generated/api";
 import { DESK_DEAL_DEDUP_HOURS } from "./_constants";
@@ -119,7 +120,10 @@ export async function selectDeal(
   } = selCtx;
 
   // ── 1. Load open deals ──────────────────────────────────────────────────────
-  const rawDeals = await ctx.runQuery(internal.deals.listOpenInternal, {});
+  const rawDeals: Array<Doc<"deals">> = await ctx.runQuery(
+    internal.deals.listOpenInternal,
+    {}
+  );
 
   if (rawDeals.length === 0) {
     return { deal: null, reasoning: "No open deals available", method: "skip" };

@@ -25,7 +25,12 @@ import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { api, internal } from "../../convex/_generated/api";
 import { MARKET_CLOSED_MESSAGE } from "../../convex/lib/tradingHours";
-import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+import {
+  seedDeskManager,
+  seedActiveTrader,
+  seedDeal,
+  useRealMarketHours,
+} from "./setup";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
@@ -50,24 +55,6 @@ function asDeskManager(t: ReturnType<typeof convexTest<typeof schema>>) {
     subject: "did:privy:test-subject-001",
     issuer: "test",
   });
-}
-
-/**
- * Switch the test environment to honour wall-clock. The default for the
- * convex-test suite is `MC_FORCE_MARKET_OPEN=1` (see vitest.config.ts) so
- * legacy idempotency tests work; we drop it here to drive open/closed cases
- * from `vi.setSystemTime`.
- */
-function useRealMarketHours() {
-  const original = process.env.MC_FORCE_MARKET_OPEN;
-  delete process.env.MC_FORCE_MARKET_OPEN;
-  return () => {
-    if (original === undefined) {
-      delete process.env.MC_FORCE_MARKET_OPEN;
-    } else {
-      process.env.MC_FORCE_MARKET_OPEN = original;
-    }
-  };
 }
 
 // ── recordOnChainCreation ───────────────────────────────────────────────────
