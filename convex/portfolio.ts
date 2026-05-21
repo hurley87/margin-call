@@ -17,6 +17,11 @@ type DeskPortfolio = {
     escrowUsdc: number;
     assetValueUsdc: number;
     totalValueUsdc: number;
+    totalPnl: number;
+    wins: number;
+    losses: number;
+    wipeouts: number;
+    dealCount: number;
   }[];
   pnlHistory: { createdAt: number; cumulativePnl: number }[];
   stats: {
@@ -80,43 +85,59 @@ export const forDesk = query({
 
     const allOutcomes: {
       traderPnlUsdc: number;
-      traderWipedOut: boolean;
       createdAt: number;
     }[] = [];
 
+    type TraderStats = {
+      totalPnl: number;
+      wins: number;
+      losses: number;
+      wipeouts: number;
+    };
+    const traderStats = new Map<string, TraderStats>();
+    let totalWins = 0;
+    let totalLosses = 0;
+    let totalWipeouts = 0;
+    let totalPnl = 0;
+
     for (const row of perTrader) {
+      const s: TraderStats = { totalPnl: 0, wins: 0, losses: 0, wipeouts: 0 };
       for (const o of row.outs) {
-        allOutcomes.push({
-          traderPnlUsdc: o.traderPnlUsdc ?? 0,
-          traderWipedOut: o.traderWipedOut ?? false,
-          createdAt: o.createdAt,
-        });
+        const pnl = o.traderPnlUsdc ?? 0;
+        const wiped = o.traderWipedOut ?? false;
+        s.totalPnl += pnl;
+        totalPnl += pnl;
+        if (wiped) {
+          s.wipeouts++;
+          totalWipeouts++;
+        } else if (pnl > 0) {
+          s.wins++;
+          totalWins++;
+        } else {
+          s.losses++;
+          totalLosses++;
+        }
+        allOutcomes.push({ traderPnlUsdc: pnl, createdAt: o.createdAt });
       }
+      traderStats.set(String(row.tr._id), s);
     }
 
     allOutcomes.sort((a, b) => a.createdAt - b.createdAt);
 
     let cumPnl = 0;
-    let totalWins = 0;
-    let totalLosses = 0;
-    let totalWipeouts = 0;
     const pnlHistory: { createdAt: number; cumulativePnl: number }[] = [];
-
     for (const o of allOutcomes) {
-      const pnl = o.traderPnlUsdc;
-      cumPnl += pnl;
-      if (pnl > 0) totalWins++;
-      else if (pnl < 0) totalLosses++;
-      if (o.traderWipedOut) totalWipeouts++;
+      cumPnl += o.traderPnlUsdc;
       pnlHistory.push({ createdAt: o.createdAt, cumulativePnl: cumPnl });
     }
 
     let totalValueUsdc = 0;
     const traderSummaries: DeskPortfolio["traders"] = perTrader.map(
-      ({ tr, assetSum, profileImageUrl }) => {
+      ({ tr, assetSum, outs, profileImageUrl }) => {
         const escrow = tr.escrowBalanceUsdc ?? 0;
         const total = escrow + assetSum;
         totalValueUsdc += total;
+        const s = traderStats.get(String(tr._id))!;
         return {
           id: tr._id,
           name: tr.name,
@@ -130,6 +151,11 @@ export const forDesk = query({
           escrowUsdc: escrow,
           assetValueUsdc: assetSum,
           totalValueUsdc: total,
+          totalPnl: s.totalPnl,
+          wins: s.wins,
+          losses: s.losses,
+          wipeouts: s.wipeouts,
+          dealCount: outs.length,
         };
       }
     );
@@ -142,7 +168,7 @@ export const forDesk = query({
         totalWins,
         totalLosses,
         totalWipeouts,
-        totalPnl: cumPnl,
+        totalPnl,
       },
     };
   },

@@ -16,6 +16,11 @@ export interface TraderSummary {
   escrow_usdc: number;
   asset_value_usdc: number;
   total_value_usdc: number;
+  total_pnl: number;
+  wins: number;
+  losses: number;
+  wipeouts: number;
+  deal_count: number;
 }
 
 export interface PnlPoint {
@@ -62,6 +67,11 @@ export function usePortfolio(): {
       escrow_usdc: t.escrowUsdc,
       asset_value_usdc: t.assetValueUsdc,
       total_value_usdc: t.totalValueUsdc,
+      total_pnl: t.totalPnl,
+      wins: t.wins,
+      losses: t.losses,
+      wipeouts: t.wipeouts,
+      deal_count: t.dealCount,
     })),
     pnl_history: result.pnlHistory.map((p) => ({
       timestamp: new Date(p.createdAt).toISOString(),

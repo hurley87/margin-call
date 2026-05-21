@@ -63,11 +63,7 @@ import {
 import { useMarketHours } from "@/hooks/use-market-hours";
 import { useSecondTick } from "@/hooks/use-second-tick";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
-import {
-  getTraderCycleUi,
-  traderCycleDocFromDeskSummary,
-} from "@/lib/trader-cycle";
-import { cn, formatShortAddress } from "@/lib/utils";
+import { cn, formatShortAddress, relativeTime } from "@/lib/utils";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const NY_TIME: Intl.DateTimeFormatOptions = {
@@ -82,14 +78,6 @@ const TONE_CLASS = {
 } as const;
 
 const EMPTY_PENDING: PendingApproval[] = [];
-
-const DESK_ROLES = [
-  { role: "Block Desk", focus: "Industrials" },
-  { role: "Risk Manager", focus: "Margin" },
-  { role: "Equity Analyst", focus: "Earnings" },
-  { role: "Macro Strategist", focus: "Rates" },
-  { role: "Arbitrage Lead", focus: "Takeovers" },
-] as const;
 
 // Fallback copy only appears when Convex has no generated wire epochs yet.
 const FALLBACK_WIRE_ITEMS = [
@@ -1131,6 +1119,9 @@ function TradingDeskMain({
   );
 }
 
+const DESK_ROW_GRID =
+  "grid-cols-[2rem_2.25rem_minmax(0,1fr)_5rem_5.5rem_5rem_4.5rem_5rem]";
+
 function DeskTradersView({
   traders,
   onOpenTrader,
@@ -1140,58 +1131,112 @@ function DeskTradersView({
   onOpenTrader: (id: string) => void;
   nowMs: number;
 }) {
-  return (
-    <div className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,12rem))] content-start justify-start gap-2 overflow-y-auto p-3">
-      {traders.map((trader, index) => {
-        const cycleUi = getTraderCycleUi(
-          traderCycleDocFromDeskSummary(trader),
-          nowMs
-        );
-        const role = DESK_ROLES[index % DESK_ROLES.length];
+  const ranked = useMemo(
+    () => [...traders].sort((a, b) => b.total_pnl - a.total_pnl),
+    [traders]
+  );
 
-        return (
-          <button
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-3">
+      <div
+        className={cn(
+          "sticky top-0 z-10 grid items-center gap-2 border-b border-[var(--t-divider)] bg-[#070b09] px-2 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]",
+          DESK_ROW_GRID
+        )}
+      >
+        <span>#</span>
+        <span />
+        <span>Trader</span>
+        <span>Status</span>
+        <span className="text-right">Equity</span>
+        <span className="text-right">P&amp;L%</span>
+        <span className="text-right">W-L-X</span>
+        <span className="text-right">Last</span>
+      </div>
+      <div className="mt-1 flex flex-col gap-1">
+        {ranked.map((trader, index) => (
+          <DeskTraderRow
             key={trader.id}
-            type="button"
-            onClick={() => onOpenTrader(trader.id)}
-            className="group min-w-0 border border-[var(--t-divider)] bg-[#070b09] text-left transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none"
-          >
-            <div className="relative aspect-[5/4] overflow-hidden border-b border-[var(--t-divider)] bg-[linear-gradient(135deg,rgba(104,166,82,0.16),rgba(218,173,94,0.08)_45%,rgba(0,0,0,0.42))]">
-              <TraderAvatar
-                name={trader.name}
-                src={trader.profile_image_url}
-                imageStatus={trader.image_status}
-                size="lg"
-                className="absolute inset-0"
-              />
-              <div className="absolute right-2 top-2 h-2 w-2 bg-[var(--t-green)] shadow-[0_0_10px_var(--t-green)]" />
-            </div>
-            <div className="space-y-2 px-3 py-3">
-              <div>
-                <p className="truncate text-sm font-bold uppercase tracking-wider text-[var(--t-amber)]">
-                  {trader.name}
-                </p>
-                <p className="truncate text-[11px] uppercase text-[var(--t-muted)]">
-                  {role.role}
-                </p>
-              </div>
-              <TraderDatum label="Focus" value={role.focus} tone="green" />
-              <TraderDatum
-                label="Mood"
-                value={cycleUi.text}
-                className={cycleUi.className}
-              />
-              <TraderDatum
-                label="Risk"
-                value={riskLabel(trader)}
-                tone={trader.total_value_usdc > 0 ? "amber" : "red"}
-              />
-            </div>
-          </button>
-        );
-      })}
+            rank={index + 1}
+            trader={trader}
+            nowMs={nowMs}
+            onOpen={onOpenTrader}
+          />
+        ))}
+      </div>
     </div>
   );
+}
+
+function DeskTraderRow({
+  rank,
+  trader,
+  nowMs,
+  onOpen,
+}: {
+  rank: number;
+  trader: TraderSummary;
+  nowMs: number;
+  onOpen: (id: string) => void;
+}) {
+  const statusTone = statusToneClass(trader.status);
+  const pnlPct = pnlPercent(trader.total_pnl, trader.total_value_usdc);
+  const pnlText = pnlPct === null ? "—" : formatSignedPercent(pnlPct);
+  const pnlClass =
+    pnlPct === null ? "text-[var(--t-muted)]" : pnlSignClass(pnlPct);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onOpen(trader.id)}
+      className={cn(
+        "grid items-center gap-2 border border-[var(--t-divider)] bg-[#070b09] px-2 py-1.5 text-left text-xs transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none",
+        DESK_ROW_GRID
+      )}
+    >
+      <span className="tabular-nums text-[var(--t-muted)]">{rank}</span>
+      <TraderAvatar
+        name={trader.name}
+        src={trader.profile_image_url}
+        imageStatus={trader.image_status}
+        size="sm"
+      />
+      <span className="truncate font-bold uppercase tracking-wider text-[var(--t-amber)]">
+        {trader.name}
+      </span>
+      <span className={cn("uppercase tracking-wider text-[11px]", statusTone)}>
+        {trader.status}
+      </span>
+      <span className="tabular-nums text-right text-[var(--t-text)]">
+        {formatCompactMoney(trader.total_value_usdc)}
+      </span>
+      <span className={cn("tabular-nums text-right", pnlClass)}>{pnlText}</span>
+      <span className="tabular-nums text-right text-[var(--t-text)]">
+        {trader.wins}-{trader.losses}-{trader.wipeouts}
+      </span>
+      <span className="text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+        {relativeTime(trader.last_cycle_at, nowMs)}
+      </span>
+    </button>
+  );
+}
+
+function statusToneClass(status: string): string {
+  if (status === "active") return TONE_CLASS.green;
+  if (status === "paused") return TONE_CLASS.amber;
+  return TONE_CLASS.red;
+}
+
+function pnlPercent(pnl: number, totalValue: number): number | null {
+  if (totalValue === 0 && pnl < 0) return -100;
+  const basis = totalValue - pnl;
+  if (basis <= 0) return null;
+  return (pnl / basis) * 100;
+}
+
+function formatSignedPercent(value: number): string {
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)}%`;
 }
 
 function DeskDealsView({
@@ -1274,27 +1319,6 @@ function DeskDealsView({
         ))}
       </div>
     </div>
-  );
-}
-
-function TraderDatum({
-  label,
-  value,
-  tone = "text",
-  className,
-}: {
-  label: string;
-  value: string;
-  tone?: "text" | "green" | "amber" | "red";
-  className?: string;
-}) {
-  const toneClass = className ?? TONE_CLASS[tone];
-
-  return (
-    <p className="flex min-w-0 items-center gap-1 text-[11px] uppercase">
-      <span className="text-[var(--t-muted)]">• {label}:</span>
-      <span className={`min-w-0 truncate font-bold ${toneClass}`}>{value}</span>
-    </p>
   );
 }
 
@@ -1609,15 +1633,6 @@ function LoadingLine({ label }: { label: string }) {
 function formatOwnerWallet(ownerAddress: string, isCurrent: boolean) {
   const suffix = isCurrent ? " (You)" : "";
   return `${formatShortAddress(ownerAddress)}${suffix}`;
-}
-
-function riskLabel(trader: TraderSummary) {
-  if (trader.status !== "active") return trader.status.toUpperCase();
-  if (trader.total_value_usdc <= 0) return "WIPEOUT";
-  const assetRatio = trader.asset_value_usdc / trader.total_value_usdc;
-  if (assetRatio > 0.66) return "AGGRESSIVE";
-  if (assetRatio > 0.33) return "BALANCED";
-  return "CAUTIOUS";
 }
 
 function pnlSignClass(value: number) {
