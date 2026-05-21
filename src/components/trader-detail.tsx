@@ -98,10 +98,12 @@ export function TraderDetailContent({
   id,
   compact = false,
   onClose,
+  initialOpenWallet = false,
 }: {
   id: string;
   compact?: boolean;
   onClose?: () => void;
+  initialOpenWallet?: boolean;
 }) {
   const { data: trader, isLoading, error } = useTrader(id);
 
@@ -135,6 +137,17 @@ export function TraderDetailContent({
     hasAutoOpened.current = true;
     setWalletOpen(true);
   }, [compact, isNewTrader, walletUsdc]);
+
+  useEffect(() => {
+    hasAutoOpened.current = false;
+  }, [id]);
+
+  useEffect(() => {
+    if (!initialOpenWallet) return;
+    if (hasAutoOpened.current) return;
+    hasAutoOpened.current = true;
+    setWalletOpen(true);
+  }, [initialOpenWallet]);
 
   if (isLoading) {
     return (
@@ -297,10 +310,12 @@ export function TraderDetailDialog({
   traderId,
   open,
   onOpenChange,
+  initialOpenWallet = false,
 }: {
   traderId: string | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  initialOpenWallet?: boolean;
 }) {
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -314,6 +329,7 @@ export function TraderDetailDialog({
                 id={traderId}
                 compact
                 onClose={() => onOpenChange(false)}
+                initialOpenWallet={initialOpenWallet}
               />
             ) : (
               <div className="flex min-h-[24rem] flex-col items-center justify-center gap-4 bg-[var(--t-bg)]">

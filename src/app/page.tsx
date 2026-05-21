@@ -19,8 +19,10 @@ import {
   HelpCircle,
   LogOut,
   Twitter,
+  User,
   Volume2,
   VolumeX,
+  Wallet,
   X,
 } from "lucide-react";
 import { useQuery } from "convex/react";
@@ -267,9 +269,19 @@ function Dashboard({
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
+  const [traderDetailOpenWallet, setTraderDetailOpenWallet] = useState(false);
   const [selectedPublicTraderId, setSelectedPublicTraderId] = useState<
     string | null
   >(null);
+
+  const openTraderProfile = useCallback((traderId: string) => {
+    setTraderDetailOpenWallet(false);
+    setSelectedTraderId(traderId);
+  }, []);
+  const openTraderWallet = useCallback((traderId: string) => {
+    setTraderDetailOpenWallet(true);
+    setSelectedTraderId(traderId);
+  }, []);
 
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
   const traderNames = feedData?.traderNames ?? {};
@@ -301,12 +313,12 @@ function Dashboard({
   const handleOpenTraderId = useCallback(
     (traderId: string) => {
       if (ownedTraderIds.has(traderId)) {
-        setSelectedTraderId(traderId);
+        openTraderProfile(traderId);
         return;
       }
       setSelectedPublicTraderId(traderId);
     },
-    [ownedTraderIds]
+    [openTraderProfile, ownedTraderIds]
   );
 
   const pnl = portfolio?.stats.total_pnl ?? 0;
@@ -345,7 +357,8 @@ function Dashboard({
             nowMs={nowMs}
             portfolio={portfolio}
             portfolioLoading={portfolioLoading}
-            onOpenTrader={setSelectedTraderId}
+            onOpenProfile={openTraderProfile}
+            onManageWallet={openTraderWallet}
             onHireTrader={() => setHireDialogOpen(true)}
             deals={myDeals}
             dealsLoading={myDealsLoading}
@@ -373,7 +386,7 @@ function Dashboard({
           currentWallet={currentWallet}
           onOpenTrader={(traderId, isCurrent) => {
             if (isCurrent) {
-              setSelectedTraderId(traderId);
+              openTraderProfile(traderId);
               return;
             }
             setSelectedPublicTraderId(traderId);
@@ -402,6 +415,7 @@ function Dashboard({
         traderId={selectedTraderId}
         open={selectedTraderId !== null}
         onOpenChange={(open) => !open && setSelectedTraderId(null)}
+        initialOpenWallet={traderDetailOpenWallet}
       />
       <PublicTraderDialog
         traderId={selectedPublicTraderId}
@@ -965,7 +979,8 @@ function TradingDeskPanel({
   nowMs,
   portfolio,
   portfolioLoading,
-  onOpenTrader,
+  onOpenProfile,
+  onManageWallet,
   onHireTrader,
   deals,
   dealsLoading,
@@ -974,7 +989,8 @@ function TradingDeskPanel({
   nowMs: number;
   portfolio: Portfolio | undefined;
   portfolioLoading: boolean;
-  onOpenTrader: (id: string) => void;
+  onOpenProfile: (id: string) => void;
+  onManageWallet: (id: string) => void;
   onHireTrader: () => void;
   deals: Deal[] | undefined;
   dealsLoading: boolean;
@@ -1049,7 +1065,8 @@ function TradingDeskPanel({
         deskDeals={deskDeals}
         dealsLoading={dealsLoading}
         nowMs={nowMs}
-        onOpenTrader={onOpenTrader}
+        onOpenProfile={onOpenProfile}
+        onManageWallet={onManageWallet}
         onOpenDeal={onOpenDeal}
         onHireTrader={onHireTrader}
       />
@@ -1064,7 +1081,8 @@ function TradingDeskMain({
   deskDeals,
   dealsLoading,
   nowMs,
-  onOpenTrader,
+  onOpenProfile,
+  onManageWallet,
   onOpenDeal,
   onHireTrader,
 }: {
@@ -1074,7 +1092,8 @@ function TradingDeskMain({
   deskDeals: Deal[];
   dealsLoading: boolean;
   nowMs: number;
-  onOpenTrader: (id: string) => void;
+  onOpenProfile: (id: string) => void;
+  onManageWallet: (id: string) => void;
   onOpenDeal: (dealId: string) => void;
   onHireTrader: () => void;
 }) {
@@ -1113,22 +1132,25 @@ function TradingDeskMain({
   return (
     <DeskTradersView
       traders={traders}
-      onOpenTrader={onOpenTrader}
+      onOpenProfile={onOpenProfile}
+      onManageWallet={onManageWallet}
       nowMs={nowMs}
     />
   );
 }
 
 const DESK_ROW_GRID =
-  "grid-cols-[2rem_2.25rem_minmax(0,1fr)_5rem_5.5rem_5rem_4.5rem_5rem]";
+  "grid-cols-[2rem_2.25rem_minmax(0,1fr)_5rem_5.5rem_5rem_4.5rem_5rem_3.5rem]";
 
 function DeskTradersView({
   traders,
-  onOpenTrader,
+  onOpenProfile,
+  onManageWallet,
   nowMs,
 }: {
   traders: TraderSummary[];
-  onOpenTrader: (id: string) => void;
+  onOpenProfile: (id: string) => void;
+  onManageWallet: (id: string) => void;
   nowMs: number;
 }) {
   const ranked = useMemo(
@@ -1152,6 +1174,7 @@ function DeskTradersView({
         <span className="text-right">P&amp;L%</span>
         <span className="text-right">W-L-X</span>
         <span className="text-right">Last</span>
+        <span />
       </div>
       <div className="mt-1 flex flex-col gap-1">
         {ranked.map((trader, index) => (
@@ -1160,7 +1183,8 @@ function DeskTradersView({
             rank={index + 1}
             trader={trader}
             nowMs={nowMs}
-            onOpen={onOpenTrader}
+            onOpenProfile={onOpenProfile}
+            onManageWallet={onManageWallet}
           />
         ))}
       </div>
@@ -1172,12 +1196,14 @@ function DeskTraderRow({
   rank,
   trader,
   nowMs,
-  onOpen,
+  onOpenProfile,
+  onManageWallet,
 }: {
   rank: number;
   trader: TraderSummary;
   nowMs: number;
-  onOpen: (id: string) => void;
+  onOpenProfile: (id: string) => void;
+  onManageWallet: (id: string) => void;
 }) {
   const statusTone = statusToneClass(trader.status);
   const pnlPct = pnlPercent(trader.total_pnl, trader.total_value_usdc);
@@ -1186,11 +1212,9 @@ function DeskTraderRow({
     pnlPct === null ? "text-[var(--t-muted)]" : pnlSignClass(pnlPct);
 
   return (
-    <button
-      type="button"
-      onClick={() => onOpen(trader.id)}
+    <div
       className={cn(
-        "grid items-center gap-2 border border-[var(--t-divider)] bg-[#070b09] px-2 py-1.5 text-left text-xs transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none",
+        "grid items-center gap-2 border border-[var(--t-divider)] bg-[#070b09] px-2 py-1.5 text-left text-xs",
         DESK_ROW_GRID
       )}
     >
@@ -1217,9 +1241,32 @@ function DeskTraderRow({
       <span className="text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
         {relativeTime(trader.last_cycle_at, nowMs)}
       </span>
-    </button>
+      <div className="flex items-center justify-end gap-1">
+        <button
+          type="button"
+          onClick={() => onManageWallet(trader.id)}
+          title="Manage wallet"
+          aria-label={`Manage wallet for ${trader.name}`}
+          className={DESK_ROW_ICON_BTN}
+        >
+          <Wallet className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onOpenProfile(trader.id)}
+          title="View profile"
+          aria-label={`View ${trader.name} profile`}
+          className={DESK_ROW_ICON_BTN}
+        >
+          <User className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
   );
 }
+
+const DESK_ROW_ICON_BTN =
+  "grid h-6 w-6 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none";
 
 function statusToneClass(status: string): string {
   if (status === "active") return TONE_CLASS.green;
