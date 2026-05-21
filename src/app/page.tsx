@@ -42,7 +42,10 @@ import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
 import { PublicTraderDialog } from "@/components/public-trader-dialog";
 import { TraderCreationDialog } from "@/components/trader-creation-flow";
-import { TraderDetailDialog } from "@/components/trader-detail";
+import {
+  TraderDetailDialog,
+  TraderWalletDialog,
+} from "@/components/trader-detail";
 import { CreateDealDialog } from "@/components/wire/create-deal-dialog";
 import type { AgentActivity } from "@/hooks/use-agent";
 import { useActivityFeed, type TraderProfile } from "@/hooks/use-activity-feed";
@@ -269,18 +272,18 @@ function Dashboard({
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
-  const [traderDetailOpenWallet, setTraderDetailOpenWallet] = useState(false);
+  const [selectedWalletTraderId, setSelectedWalletTraderId] = useState<
+    string | null
+  >(null);
   const [selectedPublicTraderId, setSelectedPublicTraderId] = useState<
     string | null
   >(null);
 
   const openTraderProfile = useCallback((traderId: string) => {
-    setTraderDetailOpenWallet(false);
     setSelectedTraderId(traderId);
   }, []);
   const openTraderWallet = useCallback((traderId: string) => {
-    setTraderDetailOpenWallet(true);
-    setSelectedTraderId(traderId);
+    setSelectedWalletTraderId(traderId);
   }, []);
 
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
@@ -415,7 +418,11 @@ function Dashboard({
         traderId={selectedTraderId}
         open={selectedTraderId !== null}
         onOpenChange={(open) => !open && setSelectedTraderId(null)}
-        initialOpenWallet={traderDetailOpenWallet}
+      />
+      <TraderWalletDialog
+        traderId={selectedWalletTraderId}
+        open={selectedWalletTraderId !== null}
+        onOpenChange={(open) => !open && setSelectedWalletTraderId(null)}
       />
       <PublicTraderDialog
         traderId={selectedPublicTraderId}

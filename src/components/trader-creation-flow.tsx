@@ -3,7 +3,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { useReadContract } from "wagmi";
 import { parseUnits } from "viem";
 
 import {
@@ -11,14 +10,9 @@ import {
   useConvexTraders,
 } from "@/hooks/use-convex-traders";
 import { useTrader } from "@/hooks/use-traders";
-import { useDepositFlow } from "@/hooks/use-escrow";
+import { useDepositFlow, useTraderEscrowBalance } from "@/hooks/use-escrow";
 import { useResumeTrader } from "@/hooks/use-agent";
 import { authFetch } from "@/lib/api";
-import {
-  ESCROW_ADDRESS,
-  escrowAbi,
-  CONTRACTS_CHAIN_ID,
-} from "@/lib/contracts/escrow";
 import { cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
 import { MarketClosedButton } from "@/components/market-closed-button";
@@ -481,17 +475,12 @@ function FundAndActivateStep({
   const tokenId = trader?.token_id ?? 0;
   const walletReady = trader?.wallet_status === "ready";
 
-  const { data: escrowBalance, refetch: refetchBalance } = useReadContract({
-    address: ESCROW_ADDRESS,
-    abi: escrowAbi,
-    functionName: "getBalance",
-    args: tokenId ? [BigInt(tokenId)] : undefined,
-    chainId: CONTRACTS_CHAIN_ID,
-    query: { enabled: !!tokenId, refetchInterval: 5_000 },
-  });
-  const balanceUsdc =
-    escrowBalance !== undefined ? Number(escrowBalance) / 1_000_000 : null;
-  const funded = !!escrowBalance && escrowBalance > BigInt(0);
+  const {
+    balanceUsdc,
+    unfunded,
+    refetch: refetchBalance,
+  } = useTraderEscrowBalance(tokenId, { refetchInterval: 5_000 });
+  const funded = !unfunded;
 
   const [amount, setAmount] = useState("");
   const [ensureError, setEnsureError] = useState<string | undefined>();

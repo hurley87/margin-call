@@ -33,6 +33,29 @@ export function useSepoliaUsdcBalance() {
   return { balance, isLoading, error, refetch, walletAddress };
 }
 
+export function useTraderEscrowBalance(
+  tokenId: number | undefined,
+  options?: { refetchInterval?: number }
+) {
+  const { data: rawBalance, refetch } = useReadContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getBalance",
+    args: tokenId ? [BigInt(tokenId)] : undefined,
+    chainId: CONTRACTS_CHAIN_ID,
+    query: {
+      enabled: !!tokenId,
+      refetchInterval: options?.refetchInterval ?? 15_000,
+    },
+  });
+
+  const balanceUsdc =
+    rawBalance !== undefined ? Number(rawBalance) / 1_000_000 : null;
+  const unfunded = rawBalance === undefined || rawBalance === BigInt(0);
+
+  return { rawBalance, balanceUsdc, unfunded, refetch };
+}
+
 type DepositStep = "idle" | "approving" | "depositing" | "done";
 
 interface DepositState {
