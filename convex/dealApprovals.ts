@@ -5,6 +5,7 @@ import {
   query,
   type MutationCtx,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { resolveTraderProfileImageUrl } from "./lib/profileImage";
@@ -133,7 +134,26 @@ export const approve = mutation({
   handler: async (ctx, { approvalId }) => {
     const approval = await requireOwningDeskApproval(ctx, approvalId);
     const now = Date.now();
-    return finalizePendingApproval(ctx, approvalId, approval, now, "approved");
+    const updatedApproval = await finalizePendingApproval(
+      ctx,
+      approvalId,
+      approval,
+      now,
+      "approved"
+    );
+
+    // Trigger an immediate cycle so approved deals don't wait for the next
+    // scheduler heartbeat + trader interval window.
+    if (
+      approval.status === "pending" &&
+      updatedApproval.status === "approved"
+    ) {
+      await ctx.scheduler.runAfter(0, internal.agent.cycle.cycle, {
+        traderId: updatedApproval.traderId,
+      });
+    }
+
+    return updatedApproval;
   },
 });
 
