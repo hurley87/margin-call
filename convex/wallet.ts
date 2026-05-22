@@ -52,7 +52,11 @@ export const createForTrader = internalAction({
     }
 
     // CAS: mark creating so concurrent runs are idempotent
-    await ctx.runMutation(internal.traders.markCreating, { traderId });
+    const acquired = await ctx.runMutation(internal.traders.markCreating, {
+      traderId,
+      expectedUpdatedAt: trader.updatedAt,
+    });
+    if (!acquired) return;
 
     try {
       // Validate env vars with clear errors instead of opaque SDK failures.
@@ -209,7 +213,9 @@ export const createForTrader = internalAction({
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           if (
-            !msg.includes("initialize smart wallet") ||
+            (!msg.includes("initialize smart wallet") &&
+              !msg.includes("invalid account nonce") &&
+              !msg.includes("AA25")) ||
             attempt === MAX_RETRIES - 1
           )
             throw err;

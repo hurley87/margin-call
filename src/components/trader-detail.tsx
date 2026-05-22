@@ -276,6 +276,8 @@ export function TraderDetailContent({
           escrowUsdc={balanceUsdc}
           walletAddress={trader.cdp_wallet_address}
           ownerAddress={trader.owner_address}
+          walletStatus={trader.wallet_status}
+          walletError={trader.wallet_error}
           isNewTrader={isNewTrader}
           onSuccess={refetchBalance}
         />
@@ -373,6 +375,8 @@ function TraderWalletDialogInner({
       escrowUsdc={balanceUsdc}
       walletAddress={trader.cdp_wallet_address}
       ownerAddress={trader.owner_address}
+      walletStatus={trader.wallet_status}
+      walletError={trader.wallet_error}
       isNewTrader={isNewTrader}
       onSuccess={refetch}
     />

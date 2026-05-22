@@ -667,20 +667,62 @@ describe("Wallet creation idempotency (at-most-one per trader)", () => {
       });
     });
 
+    const before = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    if (!before) throw new Error("Trader not found");
+
     await t.mutation(internal.traders.markCreating, {
       traderId: traderId as never,
+      expectedUpdatedAt: before.updatedAt,
     });
 
     const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
     expect(trader?.walletStatus).toBe("creating");
 
-    // Calling again when already creating is a no-op
+    // Calling again with the stale snapshot is a no-op (CAS mismatch on updatedAt)
     await t.mutation(internal.traders.markCreating, {
       traderId: traderId as never,
+      expectedUpdatedAt: before.updatedAt,
     });
 
     const trader2 = await t.run(async (ctx) => ctx.db.get(traderId as never));
     expect(trader2?.walletStatus).toBe("creating"); // still creating, not re-transitioned
+  });
+
+  it("markCreating CAS denies stale lock acquisition", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+
+    const traderId = await t.run(async (ctx) => {
+      const now = Date.now();
+      return ctx.db.insert("traders", {
+        deskManagerId: dmId as never,
+        ownerSubject: "did:privy:test-subject-001",
+        name: "CAS Pending Trader",
+        status: "active",
+        walletStatus: "pending",
+        escrowBalanceUsdc: 0,
+        cycleGeneration: 0,
+        mandate: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+    });
+
+    const before = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(before).toBeTruthy();
+    if (!before) throw new Error("Trader not found");
+
+    const first = await t.mutation(internal.traders.markCreating, {
+      traderId: traderId as never,
+      expectedUpdatedAt: before.updatedAt,
+    });
+    expect(first).toBe(true);
+
+    const second = await t.mutation(internal.traders.markCreating, {
+      traderId: traderId as never,
+      expectedUpdatedAt: before.updatedAt,
+    });
+    expect(second).toBe(false);
   });
 
   it("applyWalletReady does not overwrite a ready wallet", async () => {

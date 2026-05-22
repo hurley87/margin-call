@@ -19,6 +19,14 @@ import {
   PORTRAIT_METADATA_VERSION,
   readPublicTraits,
 } from "./lib/portraitSeed";
+import { TRADER_NAME_REGEX } from "../src/lib/trader-name";
+
+// Vitest sets MC_SKIP_WALLET_SCHEDULE so any caller that would otherwise
+// enqueue wallet.createForTrader skips the scheduler. convex-test runs
+// scheduled actions without a full transaction context, so createForTrader's
+// ctx.runQuery fails with "Transaction not started" and spams stderr —
+// behavior tests seed traders directly or call markCreating instead.
+const skipWalletSchedule = () => process.env.MC_SKIP_WALLET_SCHEDULE === "1";
 
 async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
   return {
@@ -304,6 +312,11 @@ export const create = mutation({
     personality: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
+    const trimmedName = args.name.trim();
+    if (!TRADER_NAME_REGEX.test(trimmedName)) {
+      throw new Error("Invalid trader name");
+    }
+
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
 
@@ -319,27 +332,35 @@ export const create = mutation({
     const dupe = await ctx.db
       .query("traders")
       .withIndex("byOwnerAndName", (q) =>
-        q.eq("ownerSubject", identity.subject).eq("name", args.name)
+        q.eq("ownerSubject", identity.subject).eq("name", trimmedName)
       )
       .unique();
 
     if (dupe) {
-      // If wallet job is already in-flight or done, return existing trader
-      if (dupe.walletStatus !== "error") return dupe._id;
-      // Error state: allow retry — fall through to create new trader
+      // Re-hire never strands the existing row. Reschedule wallet setup only
+      // when the prior attempt is stuck (pending) or failed (error). A row
+      // already in `creating` has its own re-entry guard in wallet.createForTrader.
+      const needsRetry =
+        dupe.walletStatus === "pending" || dupe.walletStatus === "error";
+      if (needsRetry && !skipWalletSchedule()) {
+        await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
+          traderId: dupe._id,
+        });
+      }
+      return dupe._id;
     }
 
     const now = Date.now();
     const portraitSeed = buildPortraitSeed({
       ownerSubject: identity.subject,
-      name: args.name,
+      name: trimmedName,
       mandate: args.mandate ?? {},
       personality: args.personality,
     });
     const traderId = await ctx.db.insert("traders", {
       deskManagerId: existing._id,
       ownerSubject: identity.subject,
-      name: args.name,
+      name: trimmedName,
       status: "paused",
       mandate: args.mandate ?? {},
       personality: args.personality,
@@ -351,11 +372,7 @@ export const create = mutation({
     });
 
     // Schedule wallet creation as an internal action (no CDP inside mutations).
-    // Vitest sets MC_SKIP_WALLET_SCHEDULE (see vitest.config.ts):
-    // convex-test runs scheduled actions without a full transaction context, so
-    // createForTrader's ctx.runQuery fails with "Transaction not started" and
-    // spams stderr — behavior tests seed traders directly or use markCreating instead.
-    if (process.env.MC_SKIP_WALLET_SCHEDULE !== "1") {
+    if (!skipWalletSchedule()) {
       await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
         traderId,
       });
@@ -365,6 +382,44 @@ export const create = mutation({
     }
 
     return traderId;
+  },
+});
+
+/** Public: retry wallet provisioning for an owned trader. */
+export const retryWalletProvisioning = mutation({
+  args: { traderId: v.id("traders") },
+  handler: async (ctx, { traderId }) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const trader = await ctx.db.get(traderId);
+    if (!trader || trader.ownerSubject !== identity.subject) {
+      throw new Error("Forbidden");
+    }
+
+    if (trader.walletStatus === "ready" && trader.tokenId) {
+      return { ok: true as const, status: "ready" as const };
+    }
+
+    // Don't churn updatedAt or stack scheduler tasks if a run is already in
+    // flight — wallet.createForTrader's lease will time it out if it's wedged.
+    if (trader.walletStatus === "creating") {
+      return { ok: true as const, status: "in_progress" as const };
+    }
+
+    await ctx.db.patch(traderId, {
+      walletStatus: "pending",
+      walletError: undefined,
+      updatedAt: Date.now(),
+    });
+
+    if (!skipWalletSchedule()) {
+      await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
+        traderId,
+      });
+    }
+
+    return { ok: true as const, status: "scheduled" as const };
   },
 });
 
@@ -404,17 +459,32 @@ export const loadInternal = internalQuery({
   handler: async (ctx, { traderId }) => ctx.db.get(traderId),
 });
 
-/** Internal: transition walletStatus pending|creating → creating. */
+/**
+ * Internal: CAS transition walletStatus pending|creating → creating.
+ * Used by wallet.createForTrader to prevent concurrent provisioning workers
+ * from racing and producing nonce collisions.
+ */
 export const markCreating = internalMutation({
-  args: { traderId: v.id("traders") },
-  handler: async (ctx, { traderId }) => {
+  args: {
+    traderId: v.id("traders"),
+    expectedUpdatedAt: v.number(),
+  },
+  handler: async (ctx, { traderId, expectedUpdatedAt }) => {
     const trader = await ctx.db.get(traderId);
-    if (!trader) return;
-    if (trader.walletStatus !== "pending") return; // already progressed
+    if (!trader) return false;
+    if (
+      trader.walletStatus !== "pending" &&
+      trader.walletStatus !== "creating"
+    ) {
+      return false;
+    }
+    if (trader.updatedAt !== expectedUpdatedAt) return false;
+
     await ctx.db.patch(traderId, {
       walletStatus: "creating",
-      updatedAt: Date.now(),
+      updatedAt: Math.max(Date.now(), trader.updatedAt + 1),
     });
+    return true;
   },
 });
 

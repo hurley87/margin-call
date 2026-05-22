@@ -18,3 +18,8 @@ export function useConvexTrader(traderId: Id<"traders"> | undefined) {
 export function useConvexCreateTrader() {
   return useMutation(api.traders.create);
 }
+
+/** Retry provisioning if wallet setup errored or stalled. */
+export function useConvexRetryWalletProvisioning() {
+  return useMutation(api.traders.retryWalletProvisioning);
+}

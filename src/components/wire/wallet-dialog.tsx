@@ -4,7 +4,9 @@ import { useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { parseUnits } from "viem";
 import { useDepositFlow, useWithdrawFlow } from "@/hooks/use-escrow";
+import { WalletProvisioningError } from "@/components/wallet-provisioning-error";
 import { authFetch } from "@/lib/api";
+import type { Doc, Id } from "../../../convex/_generated/dataModel";
 
 const ZERO = BigInt(0);
 
@@ -25,6 +27,8 @@ interface WalletDialogProps {
   escrowUsdc: number | null;
   walletAddress: string | null;
   ownerAddress: string;
+  walletStatus: Doc<"traders">["walletStatus"];
+  walletError: string | null;
   isNewTrader: boolean;
   onSuccess: () => void;
 }
@@ -38,6 +42,8 @@ export function WalletDialog({
   escrowUsdc,
   walletAddress,
   ownerAddress,
+  walletStatus,
+  walletError,
   isNewTrader,
   onSuccess,
 }: WalletDialogProps) {
@@ -212,9 +218,18 @@ export function WalletDialog({
           {/* Deposit form */}
           {mode === "deposit" &&
             (traderId === 0 ? (
-              <p className="px-4 py-4 text-xs text-[var(--t-amber)]">
-                Wallet setup in progress — deposit will be available shortly.
-              </p>
+              <div className="px-4 py-4">
+                <p className="text-xs text-[var(--t-amber)]">
+                  Wallet setup in progress — deposit will be available shortly.
+                </p>
+                {walletStatus === "error" && (
+                  <WalletProvisioningError
+                    traderId={convexTraderId as Id<"traders">}
+                    walletError={walletError}
+                    className="mt-3"
+                  />
+                )}
+              </div>
             ) : (
               <form
                 onSubmit={handleDeposit}

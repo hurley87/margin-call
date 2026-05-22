@@ -17,7 +17,10 @@ import { cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
 import { MarketClosedButton } from "@/components/market-closed-button";
 import { useMarketHours } from "@/hooks/use-market-hours";
+import { WalletProvisioningError } from "@/components/wallet-provisioning-error";
 import type { Mandate } from "@/lib/agent/evaluator";
+import type { Id } from "../../convex/_generated/dataModel";
+import { TRADER_NAME_MAX, validateTraderName } from "@/lib/trader-name";
 
 type Option<T> = { label: string; sub: string; value: T };
 
@@ -166,12 +169,13 @@ function TraderCreationFlow({
   const [createdTraderId, setCreatedTraderId] = useState<string | null>(null);
 
   const trimmedName = name.trim();
+  const formatError = validateTraderName(name);
   const nameTaken =
     trimmedName.length > 0 &&
     (traders ?? []).some(
       (t) => t.name.toLowerCase() === trimmedName.toLowerCase()
     );
-  const canAdvanceName = trimmedName.length > 0 && !nameTaken;
+  const canAdvanceName = !formatError && !nameTaken;
   const allMandateTouched = touched.size === 4;
 
   function setMandateField(key: MandateKey, value: number | null) {
@@ -233,6 +237,7 @@ function TraderCreationFlow({
             name={name}
             setName={setName}
             nameTaken={nameTaken}
+            formatError={formatError}
             canAdvance={canAdvanceName}
             onNext={() => setStage("mandate")}
           />
@@ -259,15 +264,22 @@ function ProfileStage({
   name,
   setName,
   nameTaken,
+  formatError,
   canAdvance,
   onNext,
 }: {
   name: string;
   setName: (v: string) => void;
   nameTaken: boolean;
+  formatError: string | null;
   canAdvance: boolean;
   onNext: () => void;
 }) {
+  const nameMessage = nameTaken
+    ? "Name taken — choose a unique name"
+    : name.length > 0
+      ? formatError
+      : null;
   return (
     <>
       <form
@@ -290,13 +302,13 @@ function ProfileStage({
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Gecko"
-          maxLength={50}
+          maxLength={TRADER_NAME_MAX}
           autoFocus
           className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
         />
-        {nameTaken && (
+        {nameMessage && (
           <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--t-amber)]">
-            Name taken — choose a unique name
+            {nameMessage}
           </p>
         )}
       </form>
@@ -474,6 +486,8 @@ function FundAndActivateStep({
   const { data: trader } = useTrader(convexTraderId);
   const tokenId = trader?.token_id ?? 0;
   const walletReady = trader?.wallet_status === "ready";
+  const walletErrored = trader?.wallet_status === "error";
+  const walletErrorMsg = trader?.wallet_error ?? null;
 
   const {
     balanceUsdc,
@@ -588,6 +602,18 @@ function FundAndActivateStep({
             }
           />
         </div>
+        {walletErrored && (
+          <WalletProvisioningError
+            traderId={convexTraderId as Id<"traders">}
+            walletError={walletErrorMsg}
+            className="mb-4"
+          />
+        )}
+        {!walletReady && !walletErrored && (
+          <p className="mb-4 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+            Wallet provisioning can take a minute on first hire.
+          </p>
+        )}
 
         <form onSubmit={handleDeposit} className="flex flex-col gap-3">
           <label className="block">
