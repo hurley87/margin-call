@@ -379,6 +379,7 @@ function Dashboard({
             approvals={pendingApprovals}
             reviewCtaEntryIds={reviewCtaEntryIds}
             approvalIdByEntryId={approvalIdByEntryId}
+            onOpenDeal={setSelectedDealId}
             onReviewApproval={setApprovalCtx}
           />
         </section>
@@ -627,12 +628,7 @@ function NewswirePanel({
     if (!drops) return undefined;
     return drops
       .flatMap((drop) => {
-        const time = new Date(drop.createdAt).toLocaleTimeString("en-US", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-          ...NY_TIME,
-        });
+        const time = formatNewswireTime(drop.createdAt);
         return drop.dispatches.map((dispatch) => ({
           time,
           headline: dispatch.headline,
@@ -832,12 +828,13 @@ function NewswireList({
     return <LoadingLine label="TUNING PRIVATE WIRE" />;
   }
   if (items.length === 0) {
+    const today = formatNewswireDay(new Date());
     return (
       <div className="space-y-3">
         {FALLBACK_WIRE_ITEMS.map((item, index) => (
           <NewswireItem
             key={item.time + item.headline}
-            time={item.time}
+            time={`${today} ${item.time}`}
             headline={item.headline}
             body={item.impact}
             category={item.category}
@@ -966,6 +963,26 @@ function formatSeedPot(value: number): string {
   return value >= 10 || Number.isInteger(value)
     ? `$${Math.round(value)}`
     : `$${value.toFixed(2)}`;
+}
+
+function formatNewswireDay(date: Date): string {
+  return date
+    .toLocaleDateString("en-US", {
+      weekday: "short",
+      ...NY_TIME,
+    })
+    .toUpperCase();
+}
+
+function formatNewswireTime(createdAt: string): string {
+  const date = new Date(createdAt);
+  const time = date.toLocaleTimeString("en-US", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+    ...NY_TIME,
+  });
+  return `${formatNewswireDay(date)} ${time}`;
 }
 
 function tradingDeskPanelMeta(
@@ -1388,6 +1405,7 @@ function TraderFeedPanel({
   approvals,
   reviewCtaEntryIds,
   approvalIdByEntryId,
+  onOpenDeal,
   onReviewApproval,
 }: {
   activity: AgentActivity[];
@@ -1401,6 +1419,7 @@ function TraderFeedPanel({
   approvals: PendingApproval[];
   reviewCtaEntryIds: ReadonlySet<string>;
   approvalIdByEntryId: ReadonlyMap<string, string>;
+  onOpenDeal: (dealId: string) => void;
   onReviewApproval: (ctx: { traderId: string; dealId: string | null }) => void;
 }) {
   let feedMeta = "ALL DESKS";
@@ -1475,6 +1494,7 @@ function TraderFeedPanel({
               traderName={traderNames[entry.trader_id] ?? "???"}
               traderProfile={traderProfiles[entry.trader_id]}
               showTrader={traderFilter === null}
+              onOpenDeal={onOpenDeal}
               onReviewApproval={onReviewApproval}
               reviewCtaEntryIds={reviewCtaEntryIds}
               approvalIdByEntryId={approvalIdByEntryId}

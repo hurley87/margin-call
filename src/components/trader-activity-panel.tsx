@@ -8,6 +8,7 @@ import {
   getFeedGridClass,
 } from "@/components/feed-line";
 import { DealApprovalDialog } from "@/components/deal-approval-dialog";
+import { DealDetailDialog } from "@/components/deal-detail";
 import { useAgentActivity } from "@/hooks/use-agent";
 import { usePendingApprovals } from "@/hooks/use-approvals";
 
@@ -23,6 +24,7 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
     traderId: string;
     dealId: string | null;
   } | null>(null);
+  const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const {
     data: activity,
     isLoading,
@@ -100,6 +102,7 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
                 traderName=""
                 showTrader={false}
                 wrapMessage
+                onOpenDeal={setSelectedDealId}
                 onReviewApproval={(ctx) => setApprovalCtx(ctx)}
                 reviewCtaEntryIds={reviewCtaEntryIds}
                 approvalIdByEntryId={approvalIdByEntryId}
@@ -145,6 +148,13 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
         }}
         traderId={approvalCtx?.traderId ?? traderId}
         dealId={approvalCtx?.dealId ?? null}
+      />
+      <DealDetailDialog
+        dealId={selectedDealId}
+        open={selectedDealId !== null}
+        onOpenChange={(open) => {
+          if (!open) setSelectedDealId(null);
+        }}
       />
     </section>
   );

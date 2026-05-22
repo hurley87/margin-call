@@ -114,6 +114,7 @@ export function FeedLine({
   traderProfile,
   showTrader,
   wrapMessage = false,
+  onOpenDeal,
   onReviewApproval,
   /**
    * Activity row ids that may show a CTA — parent builds this so only one row
@@ -128,6 +129,7 @@ export function FeedLine({
   traderProfile?: TraderProfile;
   showTrader: boolean;
   wrapMessage?: boolean;
+  onOpenDeal?: (dealId: string) => void;
   /** Desk manager CTA: open approval dialog for this log line when applicable */
   onReviewApproval?: (ctx: { traderId: string; dealId: string | null }) => void;
   reviewCtaEntryIds?: ReadonlySet<string>;
@@ -157,10 +159,40 @@ export function FeedLine({
     approvalId,
     hasApprovalLookup: approvalIdByEntryId !== undefined,
   });
+  const canOpenDeal = Boolean(entry.deal_id && onOpenDeal);
+  const openDeal = () => {
+    if (canOpenDeal && entry.deal_id) {
+      onOpenDeal?.(entry.deal_id);
+    }
+  };
 
   return (
     <div
-      className={`${getFeedGridClass(showTrader)} border-b border-[var(--t-border)] last:border-b-0 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--t-surface)] ${
+      role={canOpenDeal ? "button" : undefined}
+      tabIndex={canOpenDeal ? 0 : undefined}
+      aria-label={
+        canOpenDeal
+          ? `Open deal for ${traderProfile?.name ?? traderName}`
+          : undefined
+      }
+      onClick={(event) => {
+        if (!canOpenDeal) return;
+        // Let inner buttons (approve/reject/review) handle their own clicks.
+        if ((event.target as HTMLElement).closest("button")) return;
+        openDeal();
+      }}
+      onKeyDown={(event) => {
+        if (!canOpenDeal) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          openDeal();
+        }
+      }}
+      className={`${getFeedGridClass(showTrader)} group border-b border-[var(--t-border)] last:border-b-0 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--t-surface)] ${
+        canOpenDeal
+          ? "cursor-pointer focus:bg-[var(--t-surface)] focus:outline-none"
+          : ""
+      } ${
         entry.activity_type === "wipeout"
           ? "bg-[#D48787]/5"
           : "bg-[var(--t-bg)]"
@@ -184,6 +216,11 @@ export function FeedLine({
       >
         {entry.message}
       </span>
+      {canOpenDeal && actionState === "hidden" && (
+        <span className="justify-self-end border border-[var(--t-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-accent)] transition-colors group-hover:border-[var(--t-accent)] group-hover:bg-[var(--t-accent-soft)] group-focus:border-[var(--t-accent)] group-focus:bg-[var(--t-accent-soft)]">
+          Deal
+        </span>
+      )}
       {actionState === "pending" && approvalId && (
         <div className="flex justify-self-end items-center justify-end gap-1 text-[10px]">
           <button
