@@ -37,10 +37,10 @@ export const AGENT_CRON_STALE_MS = 50_000;
  * Default minimum spacing between agent cycles (UI display + aligns with server eligibility).
  * Convex cron is a 1-minute heartbeat; per-trader eligibility uses this interval.
  */
-export const DEFAULT_CYCLE_INTERVAL_MS = 5 * 60_000;
+export const DEFAULT_CYCLE_INTERVAL_MS = 10 * 60_000;
 
 /**
  * Future: interval when speed-token acceleration applies (stored flags only; no on-chain reads).
  * Matches default today — reserved for UI/server parity when speed fields exist.
  */
-export const SPEED_TOKEN_CYCLE_INTERVAL_MS = 5 * 60_000;
+export const SPEED_TOKEN_CYCLE_INTERVAL_MS = 10 * 60_000;

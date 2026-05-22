@@ -11,13 +11,13 @@ export const CYCLE_LEASE_TTL_MS = 90_000;
  * The Convex cron runs every minute as a heartbeat; eligibility is gated by this
  * per-trader interval (not by the cron period).
  */
-export const DEFAULT_CYCLE_INTERVAL_MS = 5 * 60_000;
+export const DEFAULT_CYCLE_INTERVAL_MS = 10 * 60_000;
 
 /**
  * Future: interval when speed-token acceleration applies (stored flags only; no chain reads).
  * Matches default today — reserved so the resolver can branch without API churn later.
  */
-export const SPEED_TOKEN_CYCLE_INTERVAL_MS = 5 * 60_000;
+export const SPEED_TOKEN_CYCLE_INTERVAL_MS = 10 * 60_000;
 
 /**
  * Per-trader minimum spacing between cycles. Extend with stored fields such as

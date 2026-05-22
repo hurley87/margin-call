@@ -75,7 +75,7 @@ describe("Agent cycle: market closed, no recovery work → silent skip", () => {
     const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
     // Stamp lands on `nextOpenAt - DEFAULT_CYCLE_INTERVAL_MS` so the scheduler
     // keeps the trader idle until just before the next open (instead of
-    // re-firing every 5 min through the weekend).
+    // re-firing every 10 min through the weekend).
     const { nextOpenAt } = getTradingHoursState(SAT_NOON_ET);
     expect(nextOpenAt).toBeDefined();
     expect(trader?.lastCycleAt).toBe(
@@ -288,7 +288,7 @@ describe("Agent cycle: market_open activity event", () => {
       lastCycleAt: todayOpenMs + 60_000, // 1 minute past open
     });
 
-    // listStaleTradersForCycle would normally skip this trader (5-min spacing)
+    // listStaleTradersForCycle would normally skip this trader (10-min spacing)
     // but the cycle action itself doesn't gate on that — it just runs. We're
     // exercising the market_open-emit predicate directly here.
     await t.action(internal.agent.cycle.cycle, {

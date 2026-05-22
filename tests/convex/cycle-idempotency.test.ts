@@ -65,7 +65,7 @@ describe("Cycle lease: stale trader eligibility", () => {
   it("does NOT return trader with lastCycleAt within default cycle interval", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);
-    const freshCycleAt = Date.now() - 10_000; // well inside 5-minute spacing
+    const freshCycleAt = Date.now() - 10_000; // well inside the default interval
     await seedActiveTrader(t, dmId, { lastCycleAt: freshCycleAt });
 
     const stale = await t.query(
@@ -75,11 +75,12 @@ describe("Cycle lease: stale trader eligibility", () => {
     expect(stale.length).toBe(0);
   });
 
-  it("does NOT return trader whose lastCycleAt is 4 minutes ago (boundary: still fresh)", async () => {
+  it("does NOT return trader whose lastCycleAt is just inside the cycle interval (boundary: still fresh)", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);
-    const fourMinutesAgo = Date.now() - 4 * 60 * 1000;
-    await seedActiveTrader(t, dmId, { lastCycleAt: fourMinutesAgo });
+    const justInsideInterval =
+      Date.now() - (DEFAULT_CYCLE_INTERVAL_MS - 60_000);
+    await seedActiveTrader(t, dmId, { lastCycleAt: justInsideInterval });
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,

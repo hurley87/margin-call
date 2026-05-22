@@ -2,7 +2,7 @@
 
 ## Expected Reduction
 
-Before this change, the Convex cron woke the agent scheduler every minute and the scheduler queried for stale traders regardless of market state. Active funded traders were eligible roughly every 5 minutes, including nights and weekends unless the downstream cycle stamped itself idle.
+Before this change, the Convex cron woke the agent scheduler every minute and the scheduler queried for stale traders regardless of market state. Active funded traders were eligible roughly every 10 minutes, including nights and weekends unless the downstream cycle stamped itself idle.
 
 The scheduler now exits before the stale-trader query when the NYSE-style market window is closed: Monday-Friday, 9:30 AM-4:00 PM ET. That reduces normal scheduler fanout from 24/7 to 32.5 market hours per week, about 19% of the previous always-on window. Put another way, routine cycle scheduling work should drop by about 81% outside recovery/resume paths.
 
