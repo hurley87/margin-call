@@ -666,6 +666,146 @@ describe("wire/generator: deal seeds — persistence + cadence", () => {
     expect(seeds[0].dispatchIndex).toBe(1);
   });
 
+  it("repairs a mismatched dealSeed.dispatchKey when one dispatch only has deal_seed category", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed({
+        dispatches: [
+          {
+            dispatchKey: "main-panatl-halt",
+            headline: "PanAtlantic bonds halted at the exchange",
+            body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
+            category: "market",
+            role: "main",
+            arcSlug: "pan-atlantic-blowup",
+            referenceEpoch: null,
+            materialChange: {
+              kind: "asset_loss",
+              entitySlug: "pan-atlantic-holdings",
+              magnitude: { label: "settlement miss" },
+            },
+          },
+          {
+            dispatchKey: "seed-rourke-short",
+            headline: "Rourke seen building short against PanAtl. bond block",
+            body: "Three orders crossed before lunch. Counterparty unconfirmed.",
+            category: "deal_seed",
+            role: "supporting",
+            arcSlug: "pan-atlantic-blowup",
+            referenceEpoch: null,
+          },
+        ],
+        dealSeed: {
+          dispatchKey: "short-position-opportunity",
+          arcSlug: "pan-atlantic-blowup",
+          prompt:
+            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
+          suggestedPotUsdc: 10,
+          suggestedEntryCostUsdc: 5,
+        },
+      }),
+    });
+
+    expect((result as { inserted?: boolean }).inserted).toBe(true);
+
+    const rows = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .take(1)
+    );
+    expect(rows[0].headlines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dispatchKey: "seed-rourke-short",
+          category: "deal_seed",
+          role: "deal_seed",
+        }),
+      ])
+    );
+
+    const seeds = await t.run(async (ctx) =>
+      ctx.db.query("wireDealSeeds").collect()
+    );
+    expect(seeds.length).toBe(1);
+    expect(seeds[0].dispatchKey).toBe("seed-rourke-short");
+    expect(seeds[0].dispatchIndex).toBe(1);
+  });
+
+  it("repairs a mismatched dealSeed.dispatchKey when one non-main dispatch can source the seed", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+
+    const result = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStubWithSeed({
+        dispatches: [
+          {
+            dispatchKey: "main-panatl-halt",
+            headline: "PanAtlantic bonds halted at the exchange",
+            body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
+            category: "wire",
+            role: "main",
+            arcSlug: "pan-atlantic-blowup",
+            referenceEpoch: null,
+            materialChange: {
+              kind: "asset_loss",
+              entitySlug: "pan-atlantic-holdings",
+              magnitude: { label: "settlement miss" },
+            },
+          },
+          {
+            dispatchKey: "quick-entry-wire",
+            headline: "Rourke desk offers fast PanAtlantic entry",
+            body: "The price is moving while the street waits for the margin notice.",
+            category: "positioning",
+            role: "supporting",
+            arcSlug: "pan-atlantic-blowup",
+            referenceEpoch: null,
+          },
+        ],
+        dealSeed: {
+          dispatchKey: "panatl-quick-entry",
+          arcSlug: "pan-atlantic-blowup",
+          prompt:
+            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
+          suggestedPotUsdc: 10,
+          suggestedEntryCostUsdc: 5,
+        },
+      }),
+    });
+
+    expect((result as { inserted?: boolean }).inserted).toBe(true);
+
+    const rows = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .take(1)
+    );
+    expect(rows[0].headlines).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          dispatchKey: "quick-entry-wire",
+          category: "deal_seed",
+          role: "deal_seed",
+        }),
+      ])
+    );
+
+    const seeds = await t.run(async (ctx) =>
+      ctx.db.query("wireDealSeeds").collect()
+    );
+    expect(seeds.length).toBe(1);
+    expect(seeds[0].dispatchKey).toBe("quick-entry-wire");
+    expect(seeds[0].dispatchIndex).toBe(1);
+  });
+
   it("rejects a mismatched dealSeed.dispatchKey when there is no clear repair", async () => {
     const t = convexTest(schema, modules);
     await seedSeasonAndDrops(t);

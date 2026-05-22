@@ -399,6 +399,16 @@ describe("validateEpoch: deal seed cadence + integrity", () => {
   it("does not repair a missing dealSeed dispatchKey without a deal_seed dispatch", () => {
     const payload = makeValidPayloadWithSeed();
     payload.dispatches[1].role = "supporting" as never;
+    payload.dispatches[1].category = "floor_talk";
+    payload.dispatches.push({
+      dispatchKey: "supp-sec",
+      headline: "SEC files subpoena",
+      body: "Document request covers three years of trading records.",
+      category: "sec_watch",
+      role: "supporting" as const,
+      arcSlug: "arc-b",
+      referenceEpoch: null,
+    });
     (payload.dealSeed as Record<string, unknown>).dispatchKey =
       "panatl-short-squeeze";
 
@@ -419,6 +429,16 @@ describe("validateEpoch: deal seed cadence + integrity", () => {
   it("does not repair a wrong-role dealSeed dispatchKey without a deal_seed dispatch", () => {
     const payload = makeValidPayloadWithSeed();
     payload.dispatches[1].role = "supporting" as never;
+    payload.dispatches[1].category = "floor_talk";
+    payload.dispatches.push({
+      dispatchKey: "supp-sec",
+      headline: "SEC files subpoena",
+      body: "Document request covers three years of trading records.",
+      category: "sec_watch",
+      role: "supporting" as const,
+      arcSlug: "arc-b",
+      referenceEpoch: null,
+    });
     (payload.dealSeed as Record<string, unknown>).dispatchKey = "main-panatl";
 
     const normalized = normalizeGeneratedEpoch(payload);

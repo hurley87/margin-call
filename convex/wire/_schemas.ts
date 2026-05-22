@@ -46,6 +46,17 @@ export const MaterialChangeSchema = z.object({
     .optional(),
 });
 
+const GeneratedMaterialChangeSchema = z.object({
+  kind: MaterialChangeKindEnum,
+  entitySlug: z.string().min(1),
+  magnitude: z
+    .object({
+      unitsUsdc: z.number().positive().nullable(),
+      label: z.string().min(1).max(60).nullable(),
+    })
+    .nullable(),
+});
+
 const BaseDispatchSchema = z.object({
   /** Stable per-drop identifier the LLM emits so a deal seed can point at its source dispatch. */
   dispatchKey: z.string().min(1).max(64),
@@ -57,11 +68,17 @@ const BaseDispatchSchema = z.object({
   materialChange: MaterialChangeSchema.nullable().optional(),
 });
 
+const GeneratedBaseDispatchSchema = BaseDispatchSchema.omit({
+  materialChange: true,
+}).extend({
+  materialChange: GeneratedMaterialChangeSchema.nullable(),
+});
+
 const DispatchSchema = BaseDispatchSchema.extend({
   category: CategoryEnum,
 });
 
-const GeneratedDispatchSchema = BaseDispatchSchema.extend({
+const GeneratedDispatchSchema = GeneratedBaseDispatchSchema.extend({
   category: CategoryInputEnum,
 });
 
@@ -77,6 +94,12 @@ const ArcUpdateSchema = z.object({
   arcSlug: z.string(),
   tensionDelta: z.number().min(-3).max(3),
   phase: PhaseEnum.optional(),
+});
+
+const GeneratedArcUpdateSchema = z.object({
+  arcSlug: z.string(),
+  tensionDelta: z.number().min(-3).max(3),
+  phase: PhaseEnum.nullable(),
 });
 
 const DealSeedSchema = z.object({
@@ -104,6 +127,9 @@ export const NarrativeEpochSchema = z.object({
 
 export const GeneratedNarrativeEpochSchema = NarrativeEpochSchema.extend({
   dispatches: z.array(GeneratedDispatchSchema).min(2).max(3),
+  arcUpdates: z.array(GeneratedArcUpdateSchema).max(3).nullable(),
+  confirmedFacts: z.array(z.string().min(1).max(160)).max(8).nullable(),
+  openQuestions: z.array(z.string().min(1).max(160)).max(6).nullable(),
 });
 
 export type NarrativeEpoch = z.infer<typeof NarrativeEpochSchema>;
