@@ -4,7 +4,7 @@ A zero-sum trading game set on 1980s Wall Street. Players act as **desk managers
 
 ## How It Works
 
-1. **Sign up** — Connect wallet via Privy, become a desk manager
+1. **Sign up** — Enter by email OTP through Privy, receive an embedded desk wallet
 2. **Hire** — Mint a trader agent (ERC-8004 NFT with its own wallet)
 3. **Fund** — Deposit USDC into the escrow contract for your trader
 4. **Configure** — Set risk tolerance, deal filters, approval thresholds
@@ -22,19 +22,32 @@ A zero-sum trading game set on 1980s Wall Street. Players act as **desk managers
 
 ## Tech Stack
 
-| Layer                  | Technology                                             |
-| ---------------------- | ------------------------------------------------------ |
-| **App**                | Next.js 16 (App Router), React 19, TypeScript (strict) |
-| **Styling**            | Tailwind CSS v4, shadcn/ui, class-variance-authority   |
-| **Data Fetching**      | TanStack React Query                                   |
-| **Auth / Wallet**      | Privy (wallet connect, embedded wallets)               |
-| **Smart Contracts**    | Solidity escrow contract on Base                       |
-| **Agent Identity**     | ERC-8004 (Identity + Reputation Registries on Base)    |
-| **Agent Wallets**      | ERC-6551 (Token Bound Accounts)                        |
-| **Database**           | Supabase (Postgres + Realtime)                         |
-| **AI / LLM**           | OpenAI GPT-5 mini (deal outcomes, prompt suggestions)  |
-| **Agent Runtime**      | Vercel Workflow (durable trade cycle)                  |
-| **Gasless Onboarding** | Coinbase Smart Wallets (sponsored gas on Base)         |
+| Layer                  | Technology                                                         |
+| ---------------------- | ------------------------------------------------------------------ |
+| **App**                | Next.js 16 (App Router), React 19, TypeScript (strict)             |
+| **Styling**            | Tailwind CSS v4, shadcn/ui, class-variance-authority               |
+| **Data Fetching**      | TanStack React Query                                               |
+| **Auth / Wallet**      | Privy email OTP, embedded EVM wallets, sponsored user transactions |
+| **Smart Contracts**    | Solidity escrow contract on Base                                   |
+| **Agent Identity**     | ERC-8004 (Identity + Reputation Registries on Base)                |
+| **Agent Wallets**      | ERC-6551 (Token Bound Accounts)                                    |
+| **Database**           | Supabase (Postgres + Realtime)                                     |
+| **AI / LLM**           | OpenAI GPT-5 mini (deal outcomes, prompt suggestions)              |
+| **Agent Runtime**      | Vercel Workflow (durable trade cycle)                              |
+| **Gasless Onboarding** | Privy sponsored transactions on Base Sepolia                       |
+
+## Privy Setup
+
+Required dashboard settings:
+
+- Email OTP enabled
+- Embedded EVM wallets enabled
+- Gas sponsorship enabled for Base Sepolia
+
+Required environment variables:
+
+- `NEXT_PUBLIC_PRIVY_APP_ID`
+- `PRIVY_APP_SECRET`
 
 ## Getting Started
 

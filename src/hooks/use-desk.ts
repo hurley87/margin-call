@@ -6,6 +6,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { api } from "../../convex/_generated/api";
 import { formatShortAddress } from "@/lib/utils";
+import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
 
 export interface DeskManager {
   id: string;
@@ -43,12 +44,7 @@ export function useDeskManager() {
   useEffect(() => {
     if (!ready || !authenticated || !user) return;
 
-    const walletAccount = user.linkedAccounts?.find((a) => a.type === "wallet");
-    const walletAddress =
-      user.wallet?.address ??
-      (walletAccount && "address" in walletAccount
-        ? (walletAccount as { address: string }).address
-        : undefined);
+    const walletAddress = getEmbeddedEvmWalletAddress(user);
 
     if (!walletAddress) return;
     if (didUpsertWalletRef.current === walletAddress) return;

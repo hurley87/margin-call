@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { siwaAuthMatchesTrader } from "@/lib/siwa/binding";
 import { siwaAuthMatchesConvexTrader } from "@/lib/siwa/binding";
-import { getPrivyWalletAddress } from "@/lib/privy/server";
+import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
 
 describe("siwaAuthMatchesTrader", () => {
   it("returns true when SIWA agent and wallet match trader identity", () => {
@@ -86,28 +86,63 @@ describe("siwaAuthMatchesConvexTrader", () => {
   });
 });
 
-describe("getPrivyWalletAddress", () => {
-  it("prefers the primary wallet address when present", () => {
+describe("getEmbeddedEvmWalletAddress", () => {
+  it("prefers the primary embedded EVM wallet address when present", () => {
     expect(
-      getPrivyWalletAddress({
-        wallet: { address: "0xabc" },
-        linkedAccounts: [{ type: "wallet", address: "0xdef" }],
+      getEmbeddedEvmWalletAddress({
+        wallet: {
+          type: "wallet",
+          address: "0xabc",
+          chainType: "ethereum",
+          walletClientType: "privy",
+        },
+        linkedAccounts: [
+          {
+            type: "wallet",
+            address: "0xdef",
+            chainType: "ethereum",
+            walletClientType: "privy",
+          },
+        ],
       })
     ).toBe("0xabc");
   });
 
-  it("falls back to linked wallet address", () => {
+  it("falls back to linked embedded EVM wallet address", () => {
     expect(
-      getPrivyWalletAddress({
+      getEmbeddedEvmWalletAddress({
         wallet: null,
-        linkedAccounts: [{ type: "wallet", address: "0xdef" }],
+        linkedAccounts: [
+          {
+            type: "wallet",
+            address: "0xdef",
+            chainType: "ethereum",
+            walletClientType: "privy-v2",
+          },
+        ],
       })
     ).toBe("0xdef");
   });
 
+  it("ignores external wallets", () => {
+    expect(
+      getEmbeddedEvmWalletAddress({
+        wallet: null,
+        linkedAccounts: [
+          {
+            type: "wallet",
+            address: "0xdef",
+            chainType: "ethereum",
+            walletClientType: "metamask",
+          },
+        ],
+      })
+    ).toBeNull();
+  });
+
   it("returns null when no wallet is linked", () => {
     expect(
-      getPrivyWalletAddress({
+      getEmbeddedEvmWalletAddress({
         wallet: null,
         linkedAccounts: [{ type: "email" }],
       })

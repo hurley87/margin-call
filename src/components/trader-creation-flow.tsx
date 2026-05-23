@@ -12,7 +12,7 @@ import {
 import { useTrader } from "@/hooks/use-traders";
 import { useDepositFlow, useTraderEscrowBalance } from "@/hooks/use-escrow";
 import { useResumeTrader } from "@/hooks/use-agent";
-import { authFetch } from "@/lib/api";
+import { authFetch, syncDeskWalletBalance } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
 import { MarketClosedButton } from "@/components/market-closed-button";
@@ -200,6 +200,7 @@ function TraderCreationFlow({
     setIsCreating(true);
     setCreateError(undefined);
     try {
+      await syncDeskWalletBalance("Fund your wallet before hiring a trader");
       const traderId = await createTrader({
         name: trimmedName,
         mandate,

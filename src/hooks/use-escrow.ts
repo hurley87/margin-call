@@ -1,20 +1,23 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useWriteContract, useReadContract } from "wagmi";
+import { useReadContract } from "wagmi";
 import { erc20Abi } from "viem";
 import { usePrivy } from "@privy-io/react-auth";
 import { makePublicClient } from "@/lib/contracts/client";
+import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
+import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import {
   ESCROW_ADDRESS,
   escrowAbi,
   CONTRACTS_CHAIN_ID,
   USDC_SEPOLIA_ADDRESS,
 } from "@/lib/contracts/escrow";
+import { usdcFromRaw } from "@/lib/contracts/balance";
 
 export function useSepoliaUsdcBalance() {
   const { user } = usePrivy();
-  const walletAddress = user?.wallet?.address as `0x${string}` | undefined;
+  const walletAddress = getEmbeddedEvmWalletAddress(user) ?? undefined;
 
   const { data, isLoading, error, refetch } = useReadContract({
     address: USDC_SEPOLIA_ADDRESS as `0x${string}`,
@@ -28,7 +31,7 @@ export function useSepoliaUsdcBalance() {
     },
   });
 
-  const balance = data !== undefined ? Number(data) / 1_000_000 : undefined;
+  const balance = data !== undefined ? usdcFromRaw(data) : undefined;
 
   return { balance, isLoading, error, refetch, walletAddress };
 }
@@ -49,8 +52,7 @@ export function useTraderEscrowBalance(
     },
   });
 
-  const balanceUsdc =
-    rawBalance !== undefined ? Number(rawBalance) / 1_000_000 : null;
+  const balanceUsdc = rawBalance !== undefined ? usdcFromRaw(rawBalance) : null;
   const unfunded = rawBalance === undefined || rawBalance === BigInt(0);
 
   return { rawBalance, balanceUsdc, unfunded, refetch };
@@ -66,7 +68,7 @@ interface DepositState {
 /** Approve USDC then deposit into escrow. Awaits 2 confirmations. */
 export function useDepositFlow() {
   const [state, setState] = useState<DepositState>({ step: "idle" });
-  const { writeContractAsync } = useWriteContract();
+  const writeSponsoredContract = useSponsoredContractWrite();
 
   const deposit = useCallback(
     async (traderId: bigint, amount: bigint) => {
@@ -75,7 +77,7 @@ export function useDepositFlow() {
       try {
         const publicClient = makePublicClient();
 
-        const approveHash = await writeContractAsync({
+        const approveHash = await writeSponsoredContract({
           address: USDC_SEPOLIA_ADDRESS as `0x${string}`,
           abi: erc20Abi,
           functionName: "approve",
@@ -87,7 +89,7 @@ export function useDepositFlow() {
 
         setState({ step: "depositing" });
 
-        const depositHash = await writeContractAsync({
+        const depositHash = await writeSponsoredContract({
           address: ESCROW_ADDRESS,
           abi: escrowAbi,
           functionName: "depositFor",
@@ -107,7 +109,7 @@ export function useDepositFlow() {
         throw err;
       }
     },
-    [writeContractAsync]
+    [writeSponsoredContract]
   );
 
   const reset = useCallback(() => {
@@ -133,7 +135,7 @@ export function useWithdrawFlow() {
     busy: false,
     done: false,
   });
-  const { writeContractAsync } = useWriteContract();
+  const writeSponsoredContract = useSponsoredContractWrite();
 
   const withdraw = useCallback(
     async (traderId: bigint, amount: bigint) => {
@@ -142,7 +144,7 @@ export function useWithdrawFlow() {
       try {
         const publicClient = makePublicClient();
 
-        const hash = await writeContractAsync({
+        const hash = await writeSponsoredContract({
           address: ESCROW_ADDRESS,
           abi: escrowAbi,
           functionName: "withdraw",
@@ -162,7 +164,7 @@ export function useWithdrawFlow() {
         throw err;
       }
     },
-    [writeContractAsync]
+    [writeSponsoredContract]
   );
 
   const reset = useCallback(() => {

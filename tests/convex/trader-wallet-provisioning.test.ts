@@ -11,6 +11,18 @@ function asDeskManager(t: ReturnType<typeof makeT>) {
 }
 
 describe("trader wallet provisioning recovery", () => {
+  it("rejects trader creation until the desk wallet is funded", async () => {
+    const t = makeT();
+    await seedDeskManager(t, { walletBalance: 0 });
+
+    await expect(
+      asDeskManager(t).mutation(api.traders.create, {
+        name: "NoCash",
+        mandate: {},
+      })
+    ).rejects.toThrow("Fund your wallet before hiring a trader");
+  });
+
   it("re-hire with same name returns existing trader instead of creating duplicate", async () => {
     const t = makeT();
     await seedDeskManager(t);

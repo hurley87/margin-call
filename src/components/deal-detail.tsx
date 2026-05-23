@@ -6,7 +6,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { usePrivy } from "@privy-io/react-auth";
 import { useMutation } from "convex/react";
 import { formatUnits } from "viem";
-import { useReadContract, useWriteContract } from "wagmi";
+import { useReadContract } from "wagmi";
 
 import { api } from "../../convex/_generated/api";
 import { NarrativeRenderer } from "@/components/narrative-renderer";
@@ -26,6 +26,8 @@ import {
 } from "@/lib/deal-close-state";
 import { useDeal, type DealOutcome } from "@/hooks/use-deals";
 import { useDeskManager } from "@/hooks/use-desk";
+import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
+import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
 
 function formatOutcomeResult(outcome: DealOutcome) {
   const traderName = outcome.trader_name ?? "Trader";
@@ -116,14 +118,7 @@ export function DealDetailContent({
       enabled: onChainDealId !== undefined,
     },
   });
-  const linkedWalletAddress = user?.linkedAccounts?.find(
-    (account) => account.type === "wallet" && "address" in account
-  ) as { address?: unknown } | undefined;
-  const walletAddress =
-    user?.wallet?.address ??
-    (typeof linkedWalletAddress?.address === "string"
-      ? linkedWalletAddress.address
-      : undefined);
+  const walletAddress = getEmbeddedEvmWalletAddress(user) ?? undefined;
 
   if (isLoading) {
     return <DealLoadingState compact={compact} />;
@@ -446,7 +441,7 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
   const [phase, setPhase] = useState<CloseDealPhase>("idle");
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [error, setError] = useState<string | null>(null);
-  const { writeContractAsync } = useWriteContract();
+  const writeSponsoredContract = useSponsoredContractWrite();
   const {
     data: onChainDeal,
     isLoading: isLoadingOnChainDeal,
@@ -501,7 +496,7 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
     setError(null);
 
     try {
-      const hash = await writeContractAsync({
+      const hash = await writeSponsoredContract({
         address: ESCROW_ADDRESS,
         abi: escrowAbi,
         functionName: "closeDeal",

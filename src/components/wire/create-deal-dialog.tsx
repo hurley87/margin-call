@@ -251,8 +251,19 @@ export function CreateDealDialog({
   const entryNum = parseFloat(entryCost);
   const netPot =
     potNum > 0 ? potNum * (1 - DEAL_CREATION_FEE_PERCENTAGE / 100) : 0;
+  const walletBalanceUnknown = balance === undefined;
+  const walletUnfunded = balance !== undefined && balance <= 0;
   const insufficientBalance =
     balance !== undefined && potNum > 0 && balance < potNum;
+
+  const blockingMessage = (() => {
+    if (createError) return createError;
+    if (!authenticated) return "Enter by email to create deals";
+    if (walletBalanceUnknown) return "Checking wallet funding status";
+    if (walletUnfunded) return "Fund your wallet before creating deals";
+    if (insufficientBalance) return "Insufficient balance to fund this pot";
+    return null;
+  })();
 
   const handleSubmitDeal = async () => {
     if (!selectedPrompt.trim() || isNaN(potNum) || isNaN(entryNum)) return;
@@ -297,6 +308,8 @@ export function CreateDealDialog({
     potNum >= MIN_POT_AMOUNT &&
     !isNaN(entryNum) &&
     entryNum >= MIN_ENTRY_COST &&
+    !walletBalanceUnknown &&
+    !walletUnfunded &&
     !insufficientBalance &&
     marketOpen;
 
@@ -436,12 +449,9 @@ export function CreateDealDialog({
                       />
                     </div>
 
-                    {(insufficientBalance || !authenticated || createError) && (
+                    {blockingMessage && (
                       <div className="border border-[var(--t-red)]/30 bg-[var(--t-red)]/[0.06] px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[var(--t-red)]">
-                        {createError ??
-                          (!authenticated
-                            ? "Connect wallet to create deals"
-                            : "Insufficient balance to fund this pot")}
+                        {blockingMessage}
                       </div>
                     )}
 

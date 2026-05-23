@@ -1,4 +1,9 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 import { v } from "convex/values";
 
 /** Internal: fetch desk manager by document ID (for server-side lookups). */
@@ -22,7 +27,12 @@ export const getMe = query({
   },
 });
 
-/** Creates or updates the deskManager row keyed on Privy subject. */
+/**
+ * Creates or updates the deskManager row keyed on Privy subject.
+ * `walletAddress` is write-once: the first non-null value is persisted and
+ * subsequent calls leave it untouched, so a desk identity stays bound to its
+ * original embedded wallet.
+ */
 export const upsertMe = mutation({
   args: {
     walletAddress: v.optional(v.string()),
@@ -41,7 +51,10 @@ export const upsertMe = mutation({
 
     if (existing) {
       const patch: Record<string, unknown> = { updatedAt: now };
-      if (args.walletAddress !== undefined)
+      if (
+        args.walletAddress !== undefined &&
+        existing.walletAddress === undefined
+      )
         patch.walletAddress = args.walletAddress;
       if (args.displayName !== undefined) patch.displayName = args.displayName;
       if (args.settings !== undefined) patch.settings = args.settings;
@@ -57,5 +70,47 @@ export const upsertMe = mutation({
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/** Internal: sync the authenticated desk wallet's on-chain USDC balance. */
+export const syncWalletBalance = internalMutation({
+  args: {
+    subject: v.string(),
+    walletAddress: v.string(),
+    balanceUsdc: v.number(),
+  },
+  handler: async (ctx, { subject, walletAddress, balanceUsdc }) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("deskManagers")
+      .withIndex("bySubject", (q) => q.eq("subject", subject))
+      .unique();
+
+    if (!existing) {
+      await ctx.db.insert("deskManagers", {
+        subject,
+        walletAddress,
+        walletBalanceUsdc: balanceUsdc,
+        walletBalanceSyncedAt: now,
+        settings: {},
+        createdAt: now,
+        updatedAt: now,
+      });
+      return { ok: true as const };
+    }
+
+    const needsAddress = existing.walletAddress === undefined;
+    if (!needsAddress && existing.walletBalanceUsdc === balanceUsdc) {
+      return { ok: true as const };
+    }
+    const patch: Record<string, unknown> = {
+      walletBalanceUsdc: balanceUsdc,
+      walletBalanceSyncedAt: now,
+      updatedAt: now,
+    };
+    if (needsAddress) patch.walletAddress = walletAddress;
+    await ctx.db.patch(existing._id, patch);
+    return { ok: true as const };
   },
 });

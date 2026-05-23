@@ -1,11 +1,12 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { useWriteContract } from "wagmi";
 import { erc20Abi, parseUnits, decodeEventLog } from "viem";
 import { useMutation } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
+import { syncDeskWalletBalance } from "@/lib/api";
 import {
   ESCROW_ADDRESS,
   USDC_SEPOLIA_ADDRESS,
@@ -27,10 +28,7 @@ interface CreateDealState {
 
 export function useCreateDeal() {
   const [state, setState] = useState<CreateDealState>({ step: "idle" });
-
-  const { writeContractAsync: writeApprove } = useWriteContract();
-
-  const { writeContractAsync: writeCreateDeal } = useWriteContract();
+  const writeSponsoredContract = useSponsoredContractWrite();
 
   const recordOnChainCreation = useMutation(api.deals.recordOnChainCreation);
 
@@ -45,11 +43,12 @@ export function useCreateDeal() {
       setState({ step: "approving" });
 
       try {
+        await syncDeskWalletBalance("Fund your wallet before creating a deal");
+
         const potAmountRaw = parseUnits(potAmountUsdc.toString(), 6);
         const entryCostRaw = parseUnits(entryCostUsdc.toString(), 6);
 
-        // Step 1: Approve USDC spend
-        const approveHash = await writeApprove({
+        const approveHash = await writeSponsoredContract({
           address: USDC_SEPOLIA_ADDRESS,
           abi: erc20Abi,
           functionName: "approve",
@@ -59,15 +58,13 @@ export function useCreateDeal() {
 
         setState((s) => ({ ...s, approveHash }));
 
-        // Wait for approval confirmation inline via polling
         const publicClient = makePublicClient();
 
         await publicClient.waitForTransactionReceipt({ hash: approveHash });
 
-        // Step 2: Call createDeal on escrow
         setState((s) => ({ ...s, step: "creating" }));
 
-        const createHash = await writeCreateDeal({
+        const createHash = await writeSponsoredContract({
           address: ESCROW_ADDRESS,
           abi: escrowAbi,
           functionName: "createDeal",
@@ -81,7 +78,6 @@ export function useCreateDeal() {
           hash: createHash,
         });
 
-        // Extract dealId from DealCreated event
         let dealId: bigint | undefined;
         for (const log of createTxReceipt.logs) {
           try {
@@ -99,7 +95,6 @@ export function useCreateDeal() {
           }
         }
 
-        // Step 3: Record on-chain deal in Convex
         setState((s) => ({ ...s, step: "syncing", dealId }));
 
         let convexDealId: Id<"deals"> | undefined;
@@ -135,7 +130,7 @@ export function useCreateDeal() {
         throw err;
       }
     },
-    [writeApprove, writeCreateDeal, recordOnChainCreation]
+    [writeSponsoredContract, recordOnChainCreation]
   );
 
   const reset = useCallback(() => {

@@ -327,6 +327,9 @@ export const create = mutation({
       .unique();
     if (!existing)
       throw new Error("Desk manager not found — call upsertMe first");
+    if ((existing.walletBalanceUsdc ?? 0) <= 0) {
+      throw new Error("Fund your wallet before hiring a trader");
+    }
 
     // Idempotency: check for existing trader with same owner+name
     const dupe = await ctx.db

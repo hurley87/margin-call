@@ -16,6 +16,8 @@ export default defineSchema({
     // Privy subject (e.g. "did:privy:xxx")
     subject: v.string(),
     walletAddress: v.optional(v.string()),
+    walletBalanceUsdc: v.optional(v.number()),
+    walletBalanceSyncedAt: v.optional(v.number()),
     displayName: v.optional(v.string()),
     settings: v.optional(v.any()),
     createdAt: v.number(),

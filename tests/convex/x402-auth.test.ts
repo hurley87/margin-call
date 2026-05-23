@@ -12,7 +12,13 @@
 
 import { afterAll, beforeAll, describe, it, expect } from "vitest";
 import { internal, api } from "../../convex/_generated/api";
-import { makeT, seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
+import {
+  makeT,
+  seedDeskManager,
+  seedActiveTrader,
+  seedDeal,
+  setDeskWalletBalance,
+} from "./setup";
 
 // These tests call `recordVerifiedEntry`, which now enforces trading hours.
 // The Convex mutations don't take a `now` arg, so force market-open for this
@@ -263,7 +269,7 @@ describe("Auth-protected mutations: unauthenticated callers are rejected", () =>
 
     await expect(
       t.mutation(api.traders.create, {
-        name: "Unauthorized Trader",
+        name: "Unauthorized",
       })
     ).rejects.toThrow("Unauthenticated");
   });
@@ -365,15 +371,88 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
       walletAddress: "0xtest",
       displayName: "Test User",
     });
+    await setDeskWalletBalance(t, mockIdentity.subject, 1000);
 
     const traderId = await authed.mutation(api.traders.create, {
-      name: "Authorized Trader",
+      name: "Authorized",
     });
     expect(traderId).toBeTruthy();
 
     const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
     expect(trader?.status).toBe("paused");
     expect(trader?.escrowBalanceUsdc).toBe(0);
+  });
+
+  it("traders.create rejects before desk wallet funding is synced", async () => {
+    const t = makeT();
+    const authed = t.withIdentity(mockIdentity);
+
+    await authed.mutation(api.deskManagers.upsertMe, {
+      walletAddress: "0xtest",
+      displayName: "Test User",
+    });
+
+    await expect(
+      authed.mutation(api.traders.create, {
+        name: "UnfundedHire",
+      })
+    ).rejects.toThrow("Fund your wallet before hiring a trader");
+  });
+
+  it("recordOnChainCreation rejects unfunded desk managers", async () => {
+    const t = makeT();
+    await seedDeskManager(t, {
+      subject: mockIdentity.subject,
+      walletBalance: 0,
+    });
+    const authed = t.withIdentity(mockIdentity);
+
+    await expect(
+      authed.mutation(api.deals.recordOnChainCreation, {
+        onChainDealId: 9901,
+        onChainTxHash: "0xunfunded",
+        prompt: "Buy IBM",
+        potUsdc: 500,
+        entryCostUsdc: 50,
+      })
+    ).rejects.toThrow("Fund your wallet before creating a deal");
+  });
+
+  it("recordOnChainCreation succeeds for funded desks and preserves idempotency", async () => {
+    const t = makeT();
+    const dmId = await seedDeskManager(t, {
+      subject: mockIdentity.subject,
+      walletBalance: 1000,
+    });
+    const authed = t.withIdentity(mockIdentity);
+
+    const dealId = await authed.mutation(api.deals.recordOnChainCreation, {
+      onChainDealId: 9902,
+      onChainTxHash: "0xfunded",
+      prompt: "Buy IBM",
+      potUsdc: 500,
+      entryCostUsdc: 50,
+    });
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(dmId as never, {
+        walletBalanceUsdc: 0,
+        updatedAt: Date.now(),
+      });
+    });
+
+    const replayedDealId = await authed.mutation(
+      api.deals.recordOnChainCreation,
+      {
+        onChainDealId: 9902,
+        onChainTxHash: "0xfunded",
+        prompt: "Buy IBM",
+        potUsdc: 500,
+        entryCostUsdc: 50,
+      }
+    );
+
+    expect(replayedDealId).toBe(dealId);
   });
 
   it("traders.setStatus rejects activation before wallet is ready", async () => {
@@ -384,8 +463,9 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
       walletAddress: "0xtest",
       displayName: "Test User",
     });
+    await setDeskWalletBalance(t, mockIdentity.subject, 1000);
     const traderId = await authed.mutation(api.traders.create, {
-      name: "Pending Wallet Trader",
+      name: "PendingWallet",
     });
 
     await expect(
@@ -441,10 +521,11 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
       walletAddress: "0xtest",
       displayName: "Test User",
     });
+    await setDeskWalletBalance(t, mockIdentity.subject, 1000);
 
     const mandate = { max_entry_cost_usdc: 50, keywords: ["merger"] };
     const traderId = await authed.mutation(api.traders.create, {
-      name: "Portrait Trader",
+      name: "Portrait",
       mandate,
       personality: "Aggressive merger arbitrage specialist",
     });
@@ -454,7 +535,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     expect(trader?.imageRetryCount).toBe(0);
     expect(trader?.metadataVersion).toBe(3);
     expect(trader?.imagePrompt).toContain("1987 Wall Street trader");
-    expect(trader?.imagePrompt).not.toContain("Portrait Trader");
+    expect(trader?.imagePrompt).not.toContain("Portrait");
     expect(trader?.imagePrompt).not.toContain("equity_salesman");
     expect(trader?.imagePrompt).toContain("No readable text");
     expect(trader?.imagePrompt).toContain("No captions");
@@ -463,7 +544,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     expect(trader?.imageVariant).toEqual(expect.any(String));
     expect(trader?.imagePromptSource).toMatchObject({
       version: 3,
-      traderName: "Portrait Trader",
+      traderName: "Portrait",
       mandateSnapshot: mandate,
       personalitySnapshot: "Aggressive merger arbitrage specialist",
       genderPresentationSource: expect.any(String),
@@ -529,9 +610,10 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     await authed.mutation(api.deskManagers.upsertMe, {
       walletAddress: "0xtest",
     });
+    await setDeskWalletBalance(t, mockIdentity.subject, 1000);
 
     const traderId = await authed.mutation(api.traders.create, {
-      name: "Fallback Trader",
+      name: "Fallback",
     });
 
     const trader = await authed.query(api.traders.getById, {
@@ -779,11 +861,12 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     await authed.mutation(api.deskManagers.upsertMe, {
       walletAddress: "0xtest",
     });
-    await authed.mutation(api.traders.create, { name: "My Trader" });
+    await setDeskWalletBalance(t, mockIdentity.subject, 1000);
+    await authed.mutation(api.traders.create, { name: "MyTrader" });
 
     const traders = await authed.query(api.traders.listByDesk, {});
     expect(traders.length).toBe(1);
-    expect(traders[0].name).toBe("My Trader");
+    expect(traders[0].name).toBe("MyTrader");
   });
 
   it("traders.listByDesk does not return traders owned by a different subject", async () => {
@@ -808,13 +891,14 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     await authed.mutation(api.deskManagers.upsertMe, {
       walletAddress: "0xtest",
     });
+    await setDeskWalletBalance(t, mockIdentity.subject, 1000);
 
     // Get the dm record
     const dm = await authed.query(api.deskManagers.getMe, {});
     expect(dm).not.toBeNull();
 
     const traderId = await authed.mutation(api.traders.create, {
-      name: "Approval Trader",
+      name: "Approval",
     });
     const dealId = await seedDeal(t);
 

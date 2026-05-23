@@ -20,8 +20,8 @@ export function BaseNetworkGuard() {
       className="flex flex-wrap items-center justify-center gap-3 border-b border-amber-500/30 bg-amber-950/80 px-4 py-3 text-sm text-amber-100"
     >
       <span>
-        Your wallet is on a different network. Switch to {PAYMENT_CHAIN_NAME} to
-        use this app.
+        Your embedded desk wallet is on a different network. Switch to{" "}
+        {PAYMENT_CHAIN_NAME} to use this app.
       </span>
       <button
         type="button"
@@ -33,7 +33,7 @@ export function BaseNetworkGuard() {
       </button>
       {switchError && (
         <span className="w-full text-center text-amber-200/90">
-          {switchError} Try again or switch the network in your wallet.
+          {switchError} Try again or switch the embedded wallet network.
         </span>
       )}
     </div>

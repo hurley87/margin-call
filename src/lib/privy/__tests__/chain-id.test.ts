@@ -3,6 +3,7 @@ import {
   BASE_CHAIN_ID,
   BASE_CHAIN_ID_CAIP2,
   isChainIdBase,
+  privyConfig,
 } from "@/lib/privy/config";
 
 /**
@@ -20,6 +21,16 @@ describe("payment chain id helpers", () => {
 
     it("BASE_CHAIN_ID_CAIP2 matches the configured payment chain", () => {
       expect(BASE_CHAIN_ID_CAIP2).toBe(`eip155:${BASE_CHAIN_ID}`);
+    });
+  });
+
+  describe("Privy onboarding config", () => {
+    it("uses email-only hosted login with embedded EVM wallet creation", () => {
+      expect(privyConfig.loginMethods).toEqual(["email"]);
+      expect(privyConfig.appearance?.walletList).toBeUndefined();
+      expect(privyConfig.embeddedWallets?.ethereum?.createOnLogin).toBe(
+        "users-without-wallets"
+      );
     });
   });
 

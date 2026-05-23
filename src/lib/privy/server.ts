@@ -19,19 +19,20 @@ export async function verifyPrivyToken(request: NextRequest) {
   return { claims, user };
 }
 
-type PrivyWalletAccount = { type: string; address?: string };
-type PrivyLikeUser = {
-  wallet?: { address?: string | null } | null;
-  linkedAccounts?: PrivyWalletAccount[] | null;
-};
-
 /**
- * Extract the canonical wallet address from a Privy user payload.
+ * Returns the canonical `did:privy:*` subject for a verified Privy auth token.
+ * Prefers `user.id` (already DID-prefixed by Privy), falls back to `claims.userId`,
+ * prefixing if needed.
  */
-export function getPrivyWalletAddress(user: PrivyLikeUser): string | null {
-  const linkedWallet = user.linkedAccounts?.find(
-    (account) => account.type === "wallet" && typeof account.address === "string"
-  );
-  const walletAddress = user.wallet?.address ?? linkedWallet?.address ?? null;
-  return walletAddress;
+export function canonicalPrivySubject(
+  claimsUserId: string,
+  userId?: string
+): string {
+  if (typeof userId === "string" && userId.startsWith("did:privy:")) {
+    return userId;
+  }
+  if (claimsUserId.startsWith("did:privy:")) {
+    return claimsUserId;
+  }
+  return `did:privy:${claimsUserId}`;
 }

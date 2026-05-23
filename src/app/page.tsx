@@ -5,6 +5,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type Dispatch,
   type ReactNode,
@@ -15,6 +16,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Dialog } from "@base-ui/react/dialog";
 import {
+  Check,
+  Copy,
   Github,
   HelpCircle,
   LogOut,
@@ -202,10 +205,10 @@ export default function Home() {
           onClick={login}
           className="border border-[var(--t-border)] bg-[var(--t-panel-strong)] px-8 py-3 font-mono text-sm uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
         >
-          {">"} CONNECT DESK<span className="cursor-blink">█</span>
+          {">"} ENTER BY EMAIL<span className="cursor-blink">█</span>
         </button>
         <p className="text-[10px] uppercase tracking-widest text-[var(--t-muted)]">
-          Private settlement rail armed // trading floor access required
+          Email OTP access // embedded Base wallet assigned
         </p>
       </div>
     );
@@ -229,7 +232,7 @@ export default function Home() {
           onClick={logout}
           className="text-sm text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)]"
         >
-          [DISCONNECT]
+          [LOG OUT]
         </button>
       </div>
     );
@@ -237,30 +240,21 @@ export default function Home() {
 
   return (
     <>
-      <Dashboard
-        displayName={deskManager.display_name}
-        deskWalletAddress={deskManager.wallet_address}
-      />
+      <Dashboard deskWalletAddress={deskManager.wallet_address} />
       {process.env.NODE_ENV === "development" && <ConvexIdentityDebug />}
     </>
   );
 }
 
-function Dashboard({
-  displayName,
-  deskWalletAddress,
-}: {
-  displayName: string;
-  deskWalletAddress: string;
-}) {
-  const { logout, user } = usePrivy();
+function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
+  const { logout } = usePrivy();
   const nowMs = useSecondTick();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: myDeals, isLoading: myDealsLoading } = useMyDeals();
   const { data: approvals } = usePendingApprovals();
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
   const { data: leaderboard, isLoading: leaderboardLoading } = useLeaderboard();
-  const { balance: cashBalance } = useUsdcBalance();
+  const { balance: cashBalance, isLoading: cashLoading } = useUsdcBalance();
   const drops = useQuery(api.marketNarratives.feedDrops, { limit: 6 });
   const sfx = useSfx();
 
@@ -326,8 +320,8 @@ function Dashboard({
 
   const pnl = portfolio?.stats.total_pnl ?? 0;
   const equity = portfolio?.total_value_usdc ?? 0;
-  const cash = cashBalance ?? 0;
-  const currentWallet = deskWalletAddress || user?.wallet?.address;
+  const deskWalletFunded = cashBalance !== undefined && cashBalance > 0;
+  const deskWalletFundingKnown = !cashLoading && cashBalance !== undefined;
 
   return (
     <div className="crt-scanlines flex h-svh flex-col overflow-hidden bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
@@ -342,9 +336,10 @@ function Dashboard({
         onWipeoutSound={sfx.playWipeoutToast}
       />
       <TopStatusBar
-        displayName={displayName}
+        deskWalletAddress={deskWalletAddress}
         nowMs={nowMs}
-        cash={cash}
+        cash={cashBalance}
+        cashLoading={cashLoading}
         equity={equity}
         portfolioLoading={portfolioLoading}
         sfxEnabled={sfx.enabled}
@@ -353,7 +348,7 @@ function Dashboard({
       />
 
       <main className="mx-auto grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)] gap-2 overflow-hidden px-2 py-2 xl:w-full xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:grid-rows-1">
-        <NewswirePanel drops={drops} />
+        <NewswirePanel drops={drops} walletFunded={deskWalletFunded} />
 
         <section className="grid min-h-0 grid-rows-[minmax(20rem,0.82fr)_minmax(0,1.18fr)] gap-2 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]">
           <TradingDeskPanel
@@ -362,7 +357,14 @@ function Dashboard({
             portfolioLoading={portfolioLoading}
             onOpenProfile={openTraderProfile}
             onManageWallet={openTraderWallet}
-            onHireTrader={() => setHireDialogOpen(true)}
+            onHireTrader={() => {
+              if (!deskWalletFunded) return;
+              setHireDialogOpen(true);
+            }}
+            canHireTrader={deskWalletFunded}
+            hireDisabledReason={
+              deskWalletFundingKnown ? "Fund wallet first" : "Checking wallet"
+            }
             deals={myDeals}
             dealsLoading={myDealsLoading}
             onOpenDeal={setSelectedDealId}
@@ -387,7 +389,7 @@ function Dashboard({
         <MarketPlayersPanel
           leaderboard={leaderboard}
           isLoading={leaderboardLoading}
-          currentWallet={currentWallet}
+          currentWallet={deskWalletAddress}
           onOpenTrader={(traderId, isCurrent) => {
             if (isCurrent) {
               openTraderProfile(traderId);
@@ -435,24 +437,36 @@ function Dashboard({
 }
 
 function TopStatusBar({
-  displayName,
+  deskWalletAddress,
   nowMs,
   cash,
+  cashLoading,
   equity,
   portfolioLoading,
   sfxEnabled,
   onToggleSfx,
   onLogout,
 }: {
-  displayName: string;
+  deskWalletAddress: string;
   nowMs: number;
-  cash: number;
+  cash: number | undefined;
+  cashLoading: boolean;
   equity: number;
   portfolioLoading: boolean;
   sfxEnabled: boolean;
   onToggleSfx: () => void;
   onLogout: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
+  const [fundDialogOpen, setFundDialogOpen] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (copyTimerRef.current !== null)
+        window.clearTimeout(copyTimerRef.current);
+    },
+    []
+  );
   const marketDate = new Date(nowMs);
   const day = marketDate.toLocaleDateString("en-US", {
     month: "short",
@@ -466,10 +480,43 @@ function TopStatusBar({
     ...NY_TIME,
   });
   const { isOpen, countdownLabel: hms } = useMarketHours();
+  const shortDeskWallet = deskWalletAddress
+    ? formatShortAddress(deskWalletAddress)
+    : "Embedding...";
+  const showFundWallet =
+    !cashLoading && cash === 0 && Boolean(deskWalletAddress);
+
+  async function copyDeskWallet() {
+    if (!deskWalletAddress) return;
+    try {
+      await navigator.clipboard.writeText(deskWalletAddress);
+    } catch {
+      return;
+    }
+    setCopied(true);
+    if (copyTimerRef.current !== null)
+      window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(() => setCopied(false), 1200);
+  }
+
+  const copyButtonClass =
+    "grid shrink-0 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)] hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-text)] disabled:cursor-not-allowed disabled:opacity-40";
+  const copyButtonProps = {
+    type: "button" as const,
+    onClick: copyDeskWallet,
+    disabled: !deskWalletAddress,
+    title: "Copy desk wallet address",
+    "aria-label": "Copy desk wallet address",
+  };
+  const copyIcon = copied ? (
+    <Check className="h-4 w-4" />
+  ) : (
+    <Copy className="h-4 w-4" />
+  );
 
   return (
     <header className="z-40 shrink-0 bg-[#050706]/95 px-2 pt-2 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm">
-      <div className="grid gap-2 xl:grid-cols-[18rem_14rem_minmax(28rem,1fr)_max-content]">
+      <div className="grid gap-2 xl:grid-cols-[18rem_14rem_minmax(42rem,1fr)_max-content]">
         <div className="terminal-panel px-3 py-2">
           <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black leading-none tracking-wide text-[var(--t-accent)]">
             MARGIN CALL
@@ -494,11 +541,13 @@ function TopStatusBar({
           </div>
         </div>
 
-        <div className="terminal-panel grid grid-cols-3 divide-x divide-[var(--t-divider)] text-[11px] uppercase">
-          <StatusCell label="Your Firm" value={displayName} />
+        <div className="terminal-panel grid grid-cols-4 divide-x divide-[var(--t-divider)] text-[11px] uppercase">
+          <StatusCell label="Firm" value="Trading Desk" />
           <StatusCell
             label="Cash"
-            value={portfolioLoading ? "..." : formatMoney(cash)}
+            value={
+              cashLoading || cash === undefined ? "..." : formatMoney(cash)
+            }
             tone="green"
           />
           <StatusCell
@@ -506,9 +555,33 @@ function TopStatusBar({
             value={portfolioLoading ? "..." : formatMoney(equity)}
             tone="green"
           />
+          <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-2">
+            <div className="min-w-0">
+              <p className="truncate text-[var(--t-muted)]">Wallet</p>
+              <p className="mt-1 truncate text-sm font-bold text-[var(--t-text)]">
+                {shortDeskWallet}
+              </p>
+            </div>
+            <button
+              {...copyButtonProps}
+              className={`${copyButtonClass} h-9 w-9`}
+            >
+              {copyIcon}
+            </button>
+          </div>
         </div>
 
         <div className="terminal-panel flex items-center justify-end gap-2 px-3 py-2">
+          {showFundWallet && (
+            <button
+              type="button"
+              onClick={() => setFundDialogOpen(true)}
+              className="flex h-9 items-center gap-2 border border-[var(--t-amber)] px-3 text-[10px] font-bold uppercase tracking-wider text-[var(--t-amber)] hover:bg-[var(--t-amber)] hover:text-[var(--t-bg)]"
+            >
+              <Wallet className="h-4 w-4" />
+              Fund Wallet
+            </button>
+          )}
           <button
             type="button"
             onClick={onToggleSfx}
@@ -549,6 +622,92 @@ function TopStatusBar({
           </button>
         </div>
       </div>
+      <Dialog.Root
+        open={fundDialogOpen || showFundWallet}
+        onOpenChange={(open) => {
+          if (showFundWallet && !open) return;
+          setFundDialogOpen(open);
+        }}
+      >
+        <Dialog.Portal>
+          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+          <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
+            <Dialog.Title className="sr-only">
+              Fund Your Desk Wallet
+            </Dialog.Title>
+            <div className="flex items-center justify-between border-b border-[var(--t-divider)] bg-[#0b100d] px-4 py-3">
+              <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
+                Fund Wallet To Start
+              </h2>
+              {!showFundWallet && (
+                <Dialog.Close
+                  aria-label="Close"
+                  className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-red)] hover:text-[var(--t-red)]"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Dialog.Close>
+              )}
+            </div>
+
+            <div className="space-y-4 px-5 py-5 text-xs leading-relaxed text-[var(--t-text)]">
+              <p className="text-[var(--t-green)]/90">
+                Your desk wallet needs USDC before you can hire traders or
+                create deals. Use the Circle faucet to request free test USDC
+                for this wallet address. On the faucet page, be sure to select{" "}
+                <span className="font-bold text-[var(--t-accent)]">
+                  Base Sepolia
+                </span>{" "}
+                as the network.
+              </p>
+              {showFundWallet && (
+                <div className="border border-[var(--t-amber)]/50 bg-[var(--t-amber)]/[0.08] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--t-amber)]">
+                  Funding required: this prompt will clear once wallet cash is
+                  detected.
+                </div>
+              )}
+
+              <div className="border border-[var(--t-divider)] bg-[#070a08] p-3">
+                <p className="text-[10px] uppercase tracking-widest text-[var(--t-muted)]">
+                  Desk Wallet
+                </p>
+                <div className="mt-2 flex items-center gap-2">
+                  <p className="min-w-0 flex-1 truncate font-mono text-[13px] text-[var(--t-text)]">
+                    {deskWalletAddress || "Wallet not ready"}
+                  </p>
+                  <button
+                    {...copyButtonProps}
+                    className={`${copyButtonClass} h-8 w-8 shrink-0`}
+                  >
+                    {copyIcon}
+                  </button>
+                </div>
+              </div>
+
+              <a
+                href="https://faucet.circle.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex h-10 items-center justify-center border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 text-xs font-bold uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+              >
+                Open Circle Faucet
+              </a>
+
+              <p className="border-t border-[var(--t-divider)] pt-3 text-center text-[11px] text-[var(--t-muted)]">
+                Questions?{" "}
+                <a
+                  href="https://margin-call.gitbook.io/product-docs"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-[var(--t-accent)] underline-offset-2 hover:underline"
+                >
+                  Read the docs
+                </a>
+                .
+              </p>
+            </div>
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
     </header>
   );
 }
@@ -598,6 +757,7 @@ function IconLink({
 
 function NewswirePanel({
   drops,
+  walletFunded,
 }: {
   drops:
     | Array<{
@@ -618,6 +778,7 @@ function NewswirePanel({
         }>;
       }>
     | undefined;
+  walletFunded: boolean;
 }) {
   const [dealDialog, setDealDialog] = useState<NewswireCreateDialog | null>(
     null
@@ -659,7 +820,11 @@ function NewswirePanel({
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        <NewswireList items={items} onCreate={setDealDialog} />
+        <NewswireList
+          items={items}
+          walletFunded={walletFunded}
+          onCreate={setDealDialog}
+        />
       </div>
 
       {dealDialog && (
@@ -819,9 +984,11 @@ type NewswirePostItem = {
 
 function NewswireList({
   items,
+  walletFunded,
   onCreate,
 }: {
   items: NewswirePostItem[] | undefined;
+  walletFunded: boolean;
   onCreate: (item: NewswireCreateDialog) => void;
 }) {
   if (items === undefined) {
@@ -839,6 +1006,7 @@ function NewswireList({
             body={item.impact}
             category={item.category}
             isFirst={index === 0}
+            walletFunded={walletFunded}
             onCreate={() =>
               onCreate({
                 headline: item.headline,
@@ -862,6 +1030,7 @@ function NewswireList({
           category={item.category}
           dealSeed={item.dealSeed}
           isFirst={index === 0}
+          walletFunded={walletFunded}
           onCreate={() =>
             onCreate({
               headline: item.headline,
@@ -883,6 +1052,7 @@ function NewswireItem({
   category,
   dealSeed,
   isFirst,
+  walletFunded,
   onCreate,
 }: {
   time: string;
@@ -891,6 +1061,7 @@ function NewswireItem({
   category?: string;
   dealSeed?: NewswireDealSeed;
   isFirst?: boolean;
+  walletFunded: boolean;
   onCreate: () => void;
 }) {
   const tone =
@@ -902,18 +1073,25 @@ function NewswireItem({
 
   return (
     <article
-      role="button"
-      tabIndex={0}
-      onClick={onCreate}
+      role={walletFunded ? "button" : undefined}
+      tabIndex={walletFunded ? 0 : undefined}
+      aria-disabled={!walletFunded}
+      onClick={() => {
+        if (!walletFunded) return;
+        onCreate();
+      }}
       onKeyDown={(event) => {
+        if (!walletFunded) return;
         if (event.key === "Enter" || event.key === " ") {
           event.preventDefault();
           onCreate();
         }
       }}
       className={cn(
-        "group relative -mx-2 cursor-money border-b border-[var(--t-divider)]/45 pb-3 pl-3 pr-2 text-xs leading-relaxed transition-colors last:border-b-0 last:pb-0",
-        "hover:bg-[var(--t-accent-soft)]/40 focus:bg-[var(--t-accent-soft)]/40 focus:outline-none"
+        "group relative -mx-2 border-b border-[var(--t-divider)]/45 pb-3 pl-3 pr-2 text-xs leading-relaxed transition-colors last:border-b-0 last:pb-0",
+        walletFunded
+          ? "cursor-money hover:bg-[var(--t-accent-soft)]/40 focus:bg-[var(--t-accent-soft)]/40 focus:outline-none"
+          : "cursor-not-allowed opacity-60"
       )}
     >
       <span
@@ -942,7 +1120,10 @@ function NewswireItem({
       <p className="mt-1 text-[var(--t-green)]/90">{body}</p>
       {isSeed && potLabel ? (
         <span className="wire-cta-bounce mt-2 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-red)]">
-          <span>→ Take seed · {potLabel} pot</span>
+          <span>
+            {walletFunded ? "→ Take seed" : "Fund wallet first"} · {potLabel}{" "}
+            pot
+          </span>
           {dealSeed && dealSeed.linkedDealCount > 0 && (
             <span className="text-[var(--t-muted)]">
               ({dealSeed.linkedDealCount} taken)
@@ -951,7 +1132,7 @@ function NewswireItem({
         </span>
       ) : (
         <span className="wire-cta-bounce mt-2 items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)]/70 transition-colors group-hover:text-[var(--t-accent)]">
-          → Create deal
+          {walletFunded ? "→ Create deal" : "Fund wallet first"}
         </span>
       )}
     </article>
@@ -1006,6 +1187,8 @@ function TradingDeskPanel({
   onOpenProfile,
   onManageWallet,
   onHireTrader,
+  canHireTrader,
+  hireDisabledReason,
   deals,
   dealsLoading,
   onOpenDeal,
@@ -1016,6 +1199,8 @@ function TradingDeskPanel({
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
   onHireTrader: () => void;
+  canHireTrader: boolean;
+  hireDisabledReason: string;
   deals: Deal[] | undefined;
   dealsLoading: boolean;
   onOpenDeal: (dealId: string) => void;
@@ -1074,9 +1259,10 @@ function TradingDeskPanel({
             <button
               type="button"
               onClick={onHireTrader}
-              className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)]"
+              disabled={!canHireTrader}
+              className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Hire Trader
+              {canHireTrader ? "Hire Trader" : hireDisabledReason}
             </button>
           </div>
         }
@@ -1093,6 +1279,8 @@ function TradingDeskPanel({
         onManageWallet={onManageWallet}
         onOpenDeal={onOpenDeal}
         onHireTrader={onHireTrader}
+        canHireTrader={canHireTrader}
+        hireDisabledReason={hireDisabledReason}
       />
     </section>
   );
@@ -1109,6 +1297,8 @@ function TradingDeskMain({
   onManageWallet,
   onOpenDeal,
   onHireTrader,
+  canHireTrader,
+  hireDisabledReason,
 }: {
   showingDeals: boolean;
   traders: TraderSummary[];
@@ -1120,6 +1310,8 @@ function TradingDeskMain({
   onManageWallet: (id: string) => void;
   onOpenDeal: (dealId: string) => void;
   onHireTrader: () => void;
+  canHireTrader: boolean;
+  hireDisabledReason: string;
 }) {
   if (showingDeals) {
     return (
@@ -1146,9 +1338,10 @@ function TradingDeskMain({
         <button
           type="button"
           onClick={onHireTrader}
-          className="mt-4 inline-block border border-[var(--t-accent)] px-5 py-2 text-xs uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
+          disabled={!canHireTrader}
+          className="mt-4 inline-block border border-[var(--t-accent)] px-5 py-2 text-xs uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Hire Trader
+          {canHireTrader ? "Hire Trader" : hireDisabledReason}
         </button>
       </div>
     );

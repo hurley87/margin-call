@@ -127,6 +127,10 @@ export const recordOnChainCreation = mutation({
       .unique();
     if (existing) return existing._id;
 
+    if ((dm.walletBalanceUsdc ?? 0) <= 0) {
+      throw new Error("Fund your wallet before creating a deal");
+    }
+
     const now = Date.now();
     const dealId = await ctx.db.insert("deals", {
       creatorDeskManagerId: dm._id,

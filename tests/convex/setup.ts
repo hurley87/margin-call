@@ -30,7 +30,11 @@ type T = TestConvex<typeof schema_>;
 /** Insert a desk manager and return its _id. */
 export async function seedDeskManager(
   t: T,
-  opts: { subject?: string; walletAddress?: string } = {}
+  opts: {
+    subject?: string;
+    walletAddress?: string;
+    walletBalance?: number;
+  } = {}
 ) {
   const subject = opts.subject ?? "did:privy:test-subject-001";
   return t.run(async (ctx) => {
@@ -38,9 +42,31 @@ export async function seedDeskManager(
     return ctx.db.insert("deskManagers", {
       subject,
       walletAddress: opts.walletAddress ?? "0xabc123",
+      walletBalanceUsdc: opts.walletBalance ?? 1000,
+      walletBalanceSyncedAt: now,
       displayName: "Test Manager",
       createdAt: now,
       updatedAt: now,
+    });
+  });
+}
+
+/** Patch a desk manager's synced wallet balance after public upsertMe tests. */
+export async function setDeskWalletBalance(
+  t: T,
+  subject: string,
+  balanceUsdc: number
+) {
+  await t.run(async (ctx) => {
+    const desk = await ctx.db
+      .query("deskManagers")
+      .withIndex("bySubject", (q) => q.eq("subject", subject))
+      .unique();
+    if (!desk) throw new Error(`Desk manager not found for ${subject}`);
+    await ctx.db.patch(desk._id, {
+      walletBalanceUsdc: balanceUsdc,
+      walletBalanceSyncedAt: Date.now(),
+      updatedAt: Date.now(),
     });
   });
 }
@@ -107,6 +133,8 @@ export async function seedDeal(
     status?: "open" | "closed" | "depleted";
     /** When set, deal is treated as created by that desk (not house). */
     creatorDeskManagerId?: string;
+    onChainDealId?: number;
+    onChainTxHash?: string;
   } = {}
 ) {
   return t.run(async (ctx) => {
@@ -119,6 +147,12 @@ export async function seedDeal(
       creatorType: "desk_manager",
       ...(opts.creatorDeskManagerId !== undefined
         ? { creatorDeskManagerId: opts.creatorDeskManagerId as never }
+        : {}),
+      ...(opts.onChainDealId !== undefined
+        ? { onChainDealId: opts.onChainDealId }
+        : {}),
+      ...(opts.onChainTxHash !== undefined
+        ? { onChainTxHash: opts.onChainTxHash }
         : {}),
       createdAt: now,
       updatedAt: now,
