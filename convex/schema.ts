@@ -15,6 +15,7 @@ export default defineSchema({
   deskManagers: defineTable({
     // Privy subject (e.g. "did:privy:xxx")
     subject: v.string(),
+    email: v.optional(v.string()),
     walletAddress: v.optional(v.string()),
     walletBalanceUsdc: v.optional(v.number()),
     walletBalanceSyncedAt: v.optional(v.number()),
@@ -23,6 +24,27 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("bySubject", ["subject"]),
+
+  emailNotifications: defineTable({
+    type: v.union(v.literal("trader_wipeout")),
+    traderId: v.id("traders"),
+    deskManagerId: v.id("deskManagers"),
+    toEmail: v.optional(v.string()),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("sent"),
+      v.literal("skipped"),
+      v.literal("failed")
+    ),
+    reason: v.optional(
+      v.union(v.literal("missing_email"), v.literal("resend_unavailable"))
+    ),
+    resendId: v.optional(v.string()),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    sentAt: v.optional(v.number()),
+  }).index("byTraderAndType", ["traderId", "type"]),
 
   traders: defineTable({
     deskManagerId: v.id("deskManagers"),

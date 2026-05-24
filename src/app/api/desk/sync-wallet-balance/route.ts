@@ -6,6 +6,7 @@ import { USDC_SEPOLIA_ADDRESS } from "@/lib/contracts/escrow";
 import { usdcFromRaw } from "@/lib/contracts/balance";
 import { verifyPrivyToken, canonicalPrivySubject } from "@/lib/privy/server";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
+import { normalizeEmail } from "@/lib/email";
 import { internal } from "../../../../../convex/_generated/api";
 
 // Persists the embedded wallet's USDC balance to Convex so server-side
@@ -41,6 +42,7 @@ export async function POST(request: NextRequest) {
     subject: canonicalPrivySubject(auth.claims.userId, auth.user.id),
     walletAddress,
     balanceUsdc,
+    email: normalizeEmail(auth.user.email?.address),
   });
 
   return NextResponse.json({ ok: true, balanceUsdc });

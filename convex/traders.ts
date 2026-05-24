@@ -20,6 +20,7 @@ import {
   readPublicTraits,
 } from "./lib/portraitSeed";
 import { TRADER_NAME_REGEX } from "../src/lib/trader-name";
+import { normalizeEmail } from "../src/lib/email";
 
 // Vitest sets MC_SKIP_WALLET_SCHEDULE so any caller that would otherwise
 // enqueue wallet.createForTrader skips the scheduler. convex-test runs
@@ -639,6 +640,7 @@ export const applyOutcomeBalance = internalMutation({
     const currentBalance = trader.escrowBalanceUsdc ?? 0;
     const newBalance = Math.max(0, currentBalance + pnlUsdc);
     const wipedOut = newBalance <= 0;
+    const firstWipeout = wipedOut && trader.status !== "wiped_out";
 
     const patch: Partial<
       Pick<
@@ -656,6 +658,37 @@ export const applyOutcomeBalance = internalMutation({
     }
 
     await ctx.db.patch(traderId, patch);
+
+    if (firstWipeout) {
+      const existingNotification = await ctx.db
+        .query("emailNotifications")
+        .withIndex("byTraderAndType", (q) =>
+          q.eq("traderId", traderId).eq("type", "trader_wipeout")
+        )
+        .unique();
+
+      if (!existingNotification) {
+        const deskManager = await ctx.db.get(trader.deskManagerId);
+        const toEmail = normalizeEmail(deskManager?.email);
+        const now = Date.now();
+        const notificationId = await ctx.db.insert("emailNotifications", {
+          type: "trader_wipeout",
+          traderId,
+          deskManagerId: trader.deskManagerId,
+          toEmail,
+          status: toEmail ? "pending" : "skipped",
+          reason: toEmail ? undefined : "missing_email",
+          createdAt: now,
+          updatedAt: now,
+        });
+
+        if (toEmail) {
+          await ctx.scheduler.runAfter(0, internal.emails.sendWipeoutEmail, {
+            notificationId,
+          });
+        }
+      }
+    }
 
     return { escrowBalanceUsdc: newBalance, wipedOut };
   },

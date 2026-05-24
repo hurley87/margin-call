@@ -25,6 +25,8 @@ import type * as dealApprovals from "../dealApprovals.js";
 import type * as dealOutcomes from "../dealOutcomes.js";
 import type * as deals from "../deals.js";
 import type * as deskManagers from "../deskManagers.js";
+import type * as emailNotifications from "../emailNotifications.js";
+import type * as emails from "../emails.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as lib_dealEntryEligibility from "../lib/dealEntryEligibility.js";
 import type * as lib_limits from "../lib/limits.js";
@@ -79,6 +81,8 @@ declare const fullApi: ApiFromModules<{
   dealOutcomes: typeof dealOutcomes;
   deals: typeof deals;
   deskManagers: typeof deskManagers;
+  emailNotifications: typeof emailNotifications;
+  emails: typeof emails;
   leaderboard: typeof leaderboard;
   "lib/dealEntryEligibility": typeof lib_dealEntryEligibility;
   "lib/limits": typeof lib_limits;

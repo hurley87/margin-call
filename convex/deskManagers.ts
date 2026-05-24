@@ -5,11 +5,22 @@ import {
   query,
 } from "./_generated/server";
 import { v } from "convex/values";
+import { normalizeEmail } from "../src/lib/email";
 
 /** Internal: fetch desk manager by document ID (for server-side lookups). */
 export const getByIdInternal = internalQuery({
   args: { id: v.id("deskManagers") },
   handler: async (ctx, { id }) => ctx.db.get(id),
+});
+
+/** Internal: fetch desk manager by Privy subject. */
+export const getBySubject = internalQuery({
+  args: { subject: v.string() },
+  handler: async (ctx, { subject }) =>
+    ctx.db
+      .query("deskManagers")
+      .withIndex("bySubject", (q) => q.eq("subject", subject))
+      .unique(),
 });
 
 /** Returns the deskManager row for the authenticated Privy subject, or null. */
@@ -44,6 +55,7 @@ export const upsertMe = mutation({
     if (!identity) throw new Error("Unauthenticated");
 
     const now = Date.now();
+    const email = normalizeEmail(identity.email);
     const existing = await ctx.db
       .query("deskManagers")
       .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
@@ -58,12 +70,14 @@ export const upsertMe = mutation({
         patch.walletAddress = args.walletAddress;
       if (args.displayName !== undefined) patch.displayName = args.displayName;
       if (args.settings !== undefined) patch.settings = args.settings;
+      if (email !== undefined) patch.email = email;
       await ctx.db.patch(existing._id, patch);
       return existing._id;
     }
 
     return await ctx.db.insert("deskManagers", {
       subject: identity.subject,
+      email,
       walletAddress: args.walletAddress,
       displayName: args.displayName,
       settings: args.settings ?? {},
@@ -79,9 +93,11 @@ export const syncWalletBalance = internalMutation({
     subject: v.string(),
     walletAddress: v.string(),
     balanceUsdc: v.number(),
+    email: v.optional(v.string()),
   },
-  handler: async (ctx, { subject, walletAddress, balanceUsdc }) => {
+  handler: async (ctx, { subject, walletAddress, balanceUsdc, email }) => {
     const now = Date.now();
+    const normalizedEmail = normalizeEmail(email);
     const existing = await ctx.db
       .query("deskManagers")
       .withIndex("bySubject", (q) => q.eq("subject", subject))
@@ -90,6 +106,7 @@ export const syncWalletBalance = internalMutation({
     if (!existing) {
       await ctx.db.insert("deskManagers", {
         subject,
+        email: normalizedEmail,
         walletAddress,
         walletBalanceUsdc: balanceUsdc,
         walletBalanceSyncedAt: now,
@@ -101,7 +118,13 @@ export const syncWalletBalance = internalMutation({
     }
 
     const needsAddress = existing.walletAddress === undefined;
-    if (!needsAddress && existing.walletBalanceUsdc === balanceUsdc) {
+    const needsEmail =
+      normalizedEmail !== undefined && existing.email !== normalizedEmail;
+    if (
+      !needsAddress &&
+      !needsEmail &&
+      existing.walletBalanceUsdc === balanceUsdc
+    ) {
       return { ok: true as const };
     }
     const patch: Record<string, unknown> = {
@@ -110,6 +133,7 @@ export const syncWalletBalance = internalMutation({
       updatedAt: now,
     };
     if (needsAddress) patch.walletAddress = walletAddress;
+    if (needsEmail) patch.email = normalizedEmail;
     await ctx.db.patch(existing._id, patch);
     return { ok: true as const };
   },

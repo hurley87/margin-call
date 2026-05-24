@@ -32,6 +32,7 @@ export async function seedDeskManager(
   t: T,
   opts: {
     subject?: string;
+    email?: string;
     walletAddress?: string;
     walletBalance?: number;
   } = {}
@@ -41,6 +42,7 @@ export async function seedDeskManager(
     const now = Date.now();
     return ctx.db.insert("deskManagers", {
       subject,
+      email: opts.email,
       walletAddress: opts.walletAddress ?? "0xabc123",
       walletBalanceUsdc: opts.walletBalance ?? 1000,
       walletBalanceSyncedAt: now,
