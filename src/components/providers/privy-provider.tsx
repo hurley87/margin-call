@@ -3,9 +3,8 @@
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PrivyProvider as BasePrivyProvider } from "@privy-io/react-auth";
-import { WagmiProvider, createConfig } from "@privy-io/wagmi";
 import { base, baseSepolia } from "viem/chains";
-import { http } from "wagmi";
+import { WagmiProvider, createConfig, http } from "wagmi";
 import { BaseNetworkGuard } from "@/components/providers/base-network-guard";
 import { baseSepoliaRpcUrl } from "@/lib/contracts/client";
 import { privyConfig } from "@/lib/privy/config";
@@ -24,19 +23,23 @@ export function PrivyProvider({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
 
   if (!appId) {
-    return children;
+    return (
+      <QueryClientProvider client={queryClient}>
+        <WagmiProvider config={wagmiConfig}>{children}</WagmiProvider>
+      </QueryClientProvider>
+    );
   }
 
   return (
-    <BasePrivyProvider appId={appId} config={privyConfig}>
-      <QueryClientProvider client={queryClient}>
-        <WagmiProvider config={wagmiConfig}>
+    <QueryClientProvider client={queryClient}>
+      <WagmiProvider config={wagmiConfig}>
+        <BasePrivyProvider appId={appId} config={privyConfig}>
           <ConvexClientProvider>
             <BaseNetworkGuard />
             {children}
           </ConvexClientProvider>
-        </WagmiProvider>
-      </QueryClientProvider>
-    </BasePrivyProvider>
+        </BasePrivyProvider>
+      </WagmiProvider>
+    </QueryClientProvider>
   );
 }
