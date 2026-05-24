@@ -14,6 +14,10 @@ import {
   escrowAbi,
 } from "@/lib/contracts/escrow";
 import { makePublicClient } from "@/lib/contracts/client";
+import {
+  isTradingHours,
+  MARKET_CLOSED_MESSAGE,
+} from "../../convex/lib/tradingHours";
 
 type CreateDealStep = "idle" | "approving" | "creating" | "syncing" | "done";
 
@@ -40,6 +44,12 @@ export function useCreateDeal() {
       sourceHeadline?: string,
       wireDealSeedId?: Id<"wireDealSeeds">
     ) => {
+      if (!isTradingHours()) {
+        const error = new Error(MARKET_CLOSED_MESSAGE);
+        setState({ step: "idle", error: error.message });
+        throw error;
+      }
+
       setState({ step: "approving" });
 
       try {

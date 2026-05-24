@@ -89,11 +89,15 @@ function DealSuggestionsPane({
   suggestQuery,
   onGenerateSuggestions,
   onPickSuggestion,
+  marketOpen,
+  marketCountdown,
 }: {
   suggestionsRequested: boolean;
   suggestQuery: SuggestPromptsQuery;
   onGenerateSuggestions: () => void;
   onPickSuggestion: (prompt: string) => void;
+  marketOpen: boolean;
+  marketCountdown: string;
 }) {
   if (!suggestionsRequested) {
     return (
@@ -106,13 +110,22 @@ function DealSuggestionsPane({
             Ask the desk to draft three playable deal angles from the wire item.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onGenerateSuggestions}
-          className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-        >
-          Generate deal ideas &rarr;
-        </button>
+        {marketOpen ? (
+          <button
+            type="button"
+            onClick={onGenerateSuggestions}
+            className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+          >
+            Generate deal ideas &rarr;
+          </button>
+        ) : (
+          <div className="border border-[var(--t-accent)]/45 bg-[var(--t-accent-soft)] px-4 py-3 text-xs uppercase tracking-[0.16em] text-[var(--t-accent)]">
+            <p className="font-black">Trading hours only</p>
+            <p className="mt-2 leading-relaxed text-[var(--t-muted)]">
+              9:30 AM-4:00 PM ET, Monday-Friday. Opens in {marketCountdown}.
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -237,6 +250,8 @@ export function CreateDealDialog({
     isLoading: isCreating,
     error: createError,
   } = useCreateDeal();
+  const { isOpen: marketOpen, countdownLabel: marketCountdown } =
+    useMarketHours();
 
   const handlePickSuggestion = (prompt: string) => {
     setSelectedPrompt(prompt);
@@ -299,8 +314,6 @@ export function CreateDealDialog({
   };
 
   const headerLabel = dealSeed ? "Wire seed deal" : "New deal";
-  const { isOpen: marketOpen, countdownLabel: marketCountdown } =
-    useMarketHours();
   const canSubmit =
     authenticated &&
     !!selectedPrompt.trim() &&
@@ -363,6 +376,8 @@ export function CreateDealDialog({
                     suggestQuery={suggestQuery}
                     onGenerateSuggestions={handleGenerateSuggestions}
                     onPickSuggestion={handlePickSuggestion}
+                    marketOpen={marketOpen}
+                    marketCountdown={marketCountdown}
                   />
                 )}
 
