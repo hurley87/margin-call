@@ -116,8 +116,8 @@ const DealSeedSchema = z.object({
 export const NarrativeEpochSchema = z.object({
   dropTitle: z.string(),
   worldState: WorldStateSchema,
-  dispatches: z.array(DispatchSchema).min(2).max(3),
-  /** Optional structured Deal Seed; cadence rule enforced in validator. */
+  dispatches: z.array(DispatchSchema).length(1),
+  /** Structured Deal Seeds are retained for legacy rows but no longer generated. */
   dealSeed: DealSeedSchema.nullable(),
   arcUpdates: z.array(ArcUpdateSchema).max(3).nullable(),
   entityMentions: z.array(z.string()).nullable(),
@@ -126,7 +126,7 @@ export const NarrativeEpochSchema = z.object({
 });
 
 export const GeneratedNarrativeEpochSchema = NarrativeEpochSchema.extend({
-  dispatches: z.array(GeneratedDispatchSchema).min(2).max(3),
+  dispatches: z.array(GeneratedDispatchSchema).length(1),
   arcUpdates: z.array(GeneratedArcUpdateSchema).max(3).nullable(),
   confirmedFacts: z.array(z.string().min(1).max(160)).max(8).nullable(),
   openQuestions: z.array(z.string().min(1).max(160)).max(6).nullable(),

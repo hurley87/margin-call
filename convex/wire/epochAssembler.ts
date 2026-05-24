@@ -39,13 +39,6 @@ export interface GameEventCtx {
   deskName?: string;
 }
 
-export interface SeedCadenceEntry {
-  /** epochSlot of the drop, or null if unknown. Newest-first. */
-  epochSlot: number | null;
-  /** True if the drop persisted a wireDealSeeds row. */
-  hadSeed: boolean;
-}
-
 export interface AssemblerInput {
   season: SeasonCtx;
   dayPosture: string;
@@ -57,16 +50,6 @@ export interface AssemblerInput {
   recentGameEvents: GameEventCtx[];
   /** worldState from the most recent drop, or null. */
   worldState: { mood?: string; sec_heat?: number } | null;
-  /**
-   * Recent Deal Seed cadence, newest-first. The caller derives this from
-   * persisted wireDealSeeds rows, not from dispatch roles.
-   */
-  recentSeedCadence: SeedCadenceEntry[];
-  /**
-   * True if the most recent market-hour drop had no Deal Seed.
-   * The validator will reject the epoch if this is true and no dealSeed is emitted.
-   */
-  mustIncludeDealSeed: boolean;
   /** True when this is the first drop of the trading day. */
   isOpeningBell: boolean;
 }
@@ -108,8 +91,6 @@ export function assembleUserMessage(input: AssemblerInput): string {
     recentDrops,
     recentGameEvents,
     worldState,
-    recentSeedCadence,
-    mustIncludeDealSeed,
     isOpeningBell,
   } = input;
 
@@ -254,20 +235,9 @@ export function assembleUserMessage(input: AssemblerInput): string {
     });
   }
 
-  lines.push(`\nDEAL SEED CADENCE (newest first):`);
-  if (recentSeedCadence.length === 0) {
-    lines.push("  (no recent drops)");
-  } else {
-    recentSeedCadence.slice(0, 6).forEach((c) => {
-      const slot = c.epochSlot != null ? `slot ${c.epochSlot}` : "—";
-      lines.push(`  [${slot}] ${c.hadSeed ? "had Deal Seed" : "no Deal Seed"}`);
-    });
-  }
-
-  const dealSeedGuidance = mustIncludeDealSeed
-    ? 'The previous market-hour drop did NOT include a Deal Seed. This drop MUST include a `dealSeed` block AND a dispatch with role "deal_seed" whose dispatchKey matches dealSeed.dispatchKey. The dealSeed must reference an active arcSlug and supply prompt, suggestedPotUsdc, suggestedEntryCostUsdc.'
-    : 'A `dealSeed` is optional this drop, but include one when the storyline naturally creates a playable opportunity. If you do, the dealSeed.dispatchKey must match a dispatch with role "deal_seed".';
-  lines.push(`\nDEAL-SEED GUIDANCE: ${dealSeedGuidance}`);
+  lines.push(
+    '\nWIRE FORMAT OVERRIDE: Generate exactly one dispatch for this hour. It must have role "main". Set dealSeed to null and do not emit role "deal_seed" dispatches.'
+  );
 
   lines.push(
     `\nGenerate the next Wire Drop JSON for this hour. Advance the primary arc. Keep it terse and 1980s Wall Street. Every dispatch MUST have a unique dispatchKey (short, kebab-case, e.g. "panatl-margin-call").`

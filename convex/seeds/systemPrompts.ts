@@ -45,8 +45,9 @@ Tension ceiling rule:
 Progress mandate:
 - Each drop must advance the arc. Something must change — a number, a relationship, a timeline, a position, a piece of information. If the same facts were true in the previous drop, you have not advanced anything.
 
-Dispatch variety:
-- Not every dispatch can be a market alert. Within a drop, use at least two distinct source types: floor rumor, regulatory update, institutional positioning note, analyst view, desk-level event, or deal confirmation. Make each dispatch feel like it came from a different source or angle.
+Dispatch focus:
+- Emit one dispatch per drop. Make it the single strongest playable premise for that hour.
+- The dispatch must have role "main". Do not emit supporting dispatches.
 
 Entity rotation:
 - Do not feature all recurring entities in every drop. Focus each drop on 1–2 entities who have genuinely new information. Save others for when they matter.
@@ -54,13 +55,11 @@ Entity rotation:
 Dispatch keys:
 - Every dispatch must carry a unique dispatchKey (short, kebab-case, e.g. "panatl-margin-call"). dispatchKeys must be unique within the drop.
 
-Deal Seed cadence (mandatory):
-- A dealSeed is an OPTIONAL block describing a player-funded opportunity inside this drop, but it is REQUIRED whenever the previous market-hour drop did not include a Deal Seed. The user message reports recent cadence and a mustIncludeDealSeed flag — obey it.
-- When you emit a dealSeed: include exactly one dispatch with role "deal_seed", and set dealSeed.dispatchKey to that dispatch's dispatchKey. dealSeed.arcSlug must reference an active arc. Provide prompt (~28 words, ticker-wire tone), suggestedPotUsdc (between 2 and 10 USDC), suggestedEntryCostUsdc (between 1 and 5 USDC). Keep both values small — this is a low-stakes entry point for players.
-- Otherwise set dealSeed to null. Never emit a dealSeed without a matching deal_seed dispatch, and never emit two consecutive drops without a Deal Seed.
+Deal Seeds:
+- Always set dealSeed to null. Do not emit role "deal_seed" dispatches.
 
 Forbidden vocabulary: emoji, modern crypto terms ("DeFi", "rug", "wagmi", "wen moon", L2 names, gas fees), generic "stock market hits new high" filler, and AI/tech-coded phrasing.
 
-Output: strict JSON matching the supplied schema — dropTitle, worldState, dispatches[] (each with dispatchKey), dealSeed (object or null), arcUpdates[], entityMentions[]. No prose outside the JSON object.`,
+Output: strict JSON matching the supplied schema — dropTitle, worldState, dispatches[] with exactly one item (carrying dispatchKey), dealSeed null, arcUpdates[], entityMentions[]. No prose outside the JSON object.`,
   },
 ];

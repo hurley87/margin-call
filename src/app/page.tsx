@@ -95,24 +95,6 @@ const FALLBACK_WIRE_ITEMS = [
     impact: "+2% bond desks / margin pressure easing",
     category: "market_update",
   },
-  {
-    time: "09:36",
-    headline: "Takeover rumors circle a battered industrial conglomerate",
-    impact: "+3% special situations / SEC heat rising",
-    category: "rumor",
-  },
-  {
-    time: "09:28",
-    headline: "Junk bond syndicate tests appetite after rough open",
-    impact: "risk bid firm / cautious credit desks",
-    category: "market",
-  },
-  {
-    time: "09:17",
-    headline: "Oil patch sells off on OPEC output concern",
-    impact: "-2% energy names / macro desks alert",
-    category: "breaking",
-  },
 ] as const;
 
 type WireCategory =
@@ -884,14 +866,6 @@ function NewswirePanel({
                   </span>{" "}
                   — the fee other traders pay to send their agents in.
                 </p>
-                <p className="text-[var(--t-green)]/90">
-                  Wire seeds marked{" "}
-                  <span className="font-bold text-[var(--t-red)]">
-                    → Take seed
-                  </span>{" "}
-                  come pre-loaded with suggested pot and entry-cost values — hit
-                  the ground running or tune them to your liking.
-                </p>
               </section>
 
               <section className="space-y-2 py-5">
@@ -1069,7 +1043,6 @@ function NewswireItem({
       ? CATEGORY_TONE[category as WireCategory]
       : DEFAULT_CATEGORY_TONE;
   const isSeed = Boolean(dealSeed);
-  const potLabel = dealSeed ? formatSeedPot(dealSeed.suggestedPotUsdc) : null;
 
   return (
     <article
@@ -1118,32 +1091,16 @@ function NewswireItem({
       </div>
       <h3 className="font-medium text-[var(--t-amber)]">{headline}</h3>
       <p className="mt-1 text-[var(--t-green)]/90">{body}</p>
-      {isSeed && potLabel ? (
-        <span className="wire-cta-bounce mt-2 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-red)]">
-          <span>
-            {walletFunded ? "→ Take seed" : "Fund wallet first"} · {potLabel}{" "}
-            pot
+      <span className="wire-cta-bounce mt-2 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)]/70 transition-colors group-hover:text-[var(--t-accent)]">
+        <span>{walletFunded ? "→ Create deal" : "Fund wallet first"}</span>
+        {isSeed && dealSeed && dealSeed.linkedDealCount > 0 && (
+          <span className="text-[var(--t-muted)]">
+            ({dealSeed.linkedDealCount} taken)
           </span>
-          {dealSeed && dealSeed.linkedDealCount > 0 && (
-            <span className="text-[var(--t-muted)]">
-              ({dealSeed.linkedDealCount} taken)
-            </span>
-          )}
-        </span>
-      ) : (
-        <span className="wire-cta-bounce mt-2 items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)]/70 transition-colors group-hover:text-[var(--t-accent)]">
-          {walletFunded ? "→ Create deal" : "Fund wallet first"}
-        </span>
-      )}
+        )}
+      </span>
     </article>
   );
-}
-
-function formatSeedPot(value: number): string {
-  if (!Number.isFinite(value)) return "$0";
-  return value >= 10 || Number.isInteger(value)
-    ? `$${Math.round(value)}`
-    : `$${value.toFixed(2)}`;
 }
 
 function formatNewswireDay(date: Date): string {

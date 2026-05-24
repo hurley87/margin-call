@@ -161,14 +161,6 @@ export const season01: SeasonSeed = {
         role: "main",
         arcSlug: "pan-atlantic-blowup",
       },
-      {
-        headline:
-          "VALE: \"PANATL. BOYS AREN'T ANSWERING PHONES — THAT'S YOUR TELL RIGHT THERE\"",
-        body: "Marty Vale broadcasting from the pit that PanAtlantic's desk has gone dark. Three calls, no callbacks. Blackwell & Co. quietly reviewing counterparty exposure.",
-        category: "rumor",
-        role: "supporting",
-        arcSlug: "pan-atlantic-blowup",
-      },
     ],
     worldState: { mood: "tense", sec_heat: 6 },
   },

@@ -8,11 +8,6 @@ export function validateEpoch(
     arcSlugs: Set<string>;
     entitySlugs: Set<string>;
     forbiddenLanguage: string[];
-    /**
-     * When true, the cadence rule requires this epoch to include a dealSeed.
-     * Set by the generator when the previous market-hour drop did not include one.
-     */
-    requireDealSeed?: boolean;
     /** Post-suppression primary arc slug shown to the LLM. */
     topArcSlug?: string | null;
     /** Post-suppression primary arc tension shown to the LLM. */
@@ -31,7 +26,7 @@ export function validateEpoch(
     return { ok: false, error: "At least one dispatch must have role 'main'" };
   }
 
-  // Dispatch keys must be unique within the drop so a dealSeed can point at exactly one source.
+  // Dispatch keys must be unique within the drop.
   const seenKeys = new Set<string>();
   for (const d of data.dispatches) {
     if (seenKeys.has(d.dispatchKey)) {
@@ -73,48 +68,23 @@ export function validateEpoch(
     }
   }
 
-  // ── Deal seed cadence + integrity ─────────────────────────────────────────
-  if (ctx.requireDealSeed && data.dealSeed === null) {
+  if (
+    data.dispatches.some(
+      (dispatch) =>
+        dispatch.role === "deal_seed" || dispatch.category === "deal_seed"
+    )
+  ) {
     return {
       ok: false,
-      error: "deal seed required this epoch (cadence)",
+      error: 'wire drops no longer generate "deal_seed" dispatches',
     };
   }
 
-  if (data.dealSeed) {
-    if (!ctx.arcSlugs.has(data.dealSeed.arcSlug)) {
-      return {
-        ok: false,
-        error: `Unknown arcSlug in dealSeed: "${data.dealSeed.arcSlug}"`,
-      };
-    }
-
-    const matchingDispatches = data.dispatches.filter(
-      (d) => d.dispatchKey === data.dealSeed!.dispatchKey
-    );
-    if (matchingDispatches.length !== 1) {
-      return {
-        ok: false,
-        error: `dealSeed.dispatchKey "${data.dealSeed.dispatchKey}" must match exactly one dispatch`,
-      };
-    }
-    if (matchingDispatches[0].role !== "deal_seed") {
-      return {
-        ok: false,
-        error: `dispatch referenced by dealSeed must have role "deal_seed"`,
-      };
-    }
-  }
-
-  // role/category pairing. Category is orthogonal to role except deal_seed,
-  // where persisted data must be unambiguous for the deal-seed rail.
-  for (const dispatch of data.dispatches) {
-    if (dispatch.role === "deal_seed" && dispatch.category !== "deal_seed") {
-      return {
-        ok: false,
-        error: `role=deal_seed dispatch "${dispatch.dispatchKey}" must use category "deal_seed"`,
-      };
-    }
+  if (data.dealSeed !== null) {
+    return {
+      ok: false,
+      error: "wire drops no longer generate dealSeed blocks",
+    };
   }
 
   // materialChange references must point at a known roster entity.
@@ -160,7 +130,6 @@ export function validateEpoch(
   const fullText = [
     data.dropTitle,
     ...data.dispatches.map((d) => `${d.headline} ${d.body}`),
-    data.dealSeed?.prompt ?? "",
   ]
     .join(" ")
     .toLowerCase();

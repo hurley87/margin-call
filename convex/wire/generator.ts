@@ -20,13 +20,13 @@ const FALLBACK_NARRATIVE_GENERATION_SYSTEM = `You are the Wire narrative engine 
 You produce hourly Wire Drop dispatches that serialize an ongoing financial thriller.
 
 OUTPUT FORMAT: Return valid JSON matching the narrative_epoch schema.
-- dispatches: exactly 2-3 items; at least one must have role "main"
+- dispatches: exactly 1 item; it must have role "main"
 - every dispatch carries a unique kebab-case dispatchKey (e.g. "panatl-margin-call")
-- dispatch categories must be one of: wire, floor_talk, sec_watch, boardroom, ticker, positioning, deal_seed. Use wire as the default channel.
-- role and category are separate fields; dispatches with role "deal_seed" must use category "deal_seed".
+- dispatch categories must be one of: wire, floor_talk, sec_watch, boardroom, ticker, positioning. Use wire as the default channel.
+- role and category are separate fields. Do not emit role "deal_seed" dispatches.
 - dispatch headlines: max 100 characters; present tense; terse
 - dispatch bodies: max 180 characters; 1-3 sentences
-- dealSeed: object or null. If the previous market-hour drop had no Deal Seed, dealSeed MUST be present and one dispatch must have role "deal_seed" whose dispatchKey matches dealSeed.dispatchKey. dealSeed.arcSlug must reference an active arc; supply prompt, suggestedPotUsdc, suggestedEntryCostUsdc.
+- dealSeed: always null. Do not emit Deal Seed dispatches.
 - arcUpdates: optional, max 3 arcs; tensionDelta between -3 and +3. phase is optional and must be one of: rumor, crack, panic, rupture, fallout, countermove, resolution. Emit phase only when the arc shifts.
 - entityMentions: list all entity slugs you referenced in dispatches
 - confirmedFacts: optional array, max 8 strings, each <= 160 chars. Use accepted facts from this drop that future drops must not contradict.
@@ -59,24 +59,21 @@ async function runGenerator(
   const { slot, sinceMs } = opts;
 
   // Load all context in parallel
-  const [seasonData, recentDrops, recentGameEvents, recentSeedCadence] =
-    (await Promise.all([
-      ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
-      ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
-      ctx.runQuery(internal.wire.internal.listRecentGameEvents, {
-        since: sinceMs,
-      }),
-      ctx.runQuery(internal.wire.internal.listRecentSeedCadence, { limit: 6 }),
-    ])) as [
-      {
-        season: Doc<"narrativeSeasons">;
-        entities: Doc<"narrativeEntities">[];
-        arcs: Doc<"narrativeArcs">[];
-      } | null,
-      Doc<"marketNarratives">[],
-      import("./epochAssembler").GameEventCtx[],
-      { epochSlot: number | null; hadSeed: boolean }[],
-    ];
+  const [seasonData, recentDrops, recentGameEvents] = (await Promise.all([
+    ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
+    ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
+    ctx.runQuery(internal.wire.internal.listRecentGameEvents, {
+      since: sinceMs,
+    }),
+  ])) as [
+    {
+      season: Doc<"narrativeSeasons">;
+      entities: Doc<"narrativeEntities">[];
+      arcs: Doc<"narrativeArcs">[];
+    } | null,
+    Doc<"marketNarratives">[],
+    import("./epochAssembler").GameEventCtx[],
+  ];
 
   if (!seasonData) {
     console.warn("[wire/generator] no active season found — skipping");
@@ -103,11 +100,6 @@ async function runGenerator(
     ? sortedArcs.filter((a) => a.slug !== suppressedSlug)
     : sortedArcs;
   const postSuppressionPrimaryArc = assemblerArcs[0] ?? null;
-
-  // Cadence rule: if the previous drop did not include a Deal Seed, this drop must.
-  // Cold start (no recent drops) → no requirement.
-  const lastCadence = recentSeedCadence[0];
-  const mustIncludeDealSeed = lastCadence ? !lastCadence.hadSeed : false;
 
   // Current world state from latest drop
   const lastDrop = recentDrops[0];
@@ -154,8 +146,6 @@ async function runGenerator(
     })),
     recentGameEvents,
     worldState: worldState ?? null,
-    recentSeedCadence,
-    mustIncludeDealSeed,
     isOpeningBell: openingBell,
   });
 
@@ -207,11 +197,6 @@ async function runGenerator(
   const entitySlugs = new Set(entities.map((e) => e.slug));
 
   const normalized = normalizeGeneratedEpoch(parsed);
-  if (normalized.repairedDealSeedDispatchKey) {
-    console.warn(
-      `[wire/generator] repaired dealSeed.dispatchKey "${normalized.repairedDealSeedDispatchKey.from}" -> "${normalized.repairedDealSeedDispatchKey.to}"`
-    );
-  }
   if (normalized.repairedCategoryAliases > 0) {
     console.warn(
       `[wire/generator] normalized ${normalized.repairedCategoryAliases} legacy dispatch category alias(es)`
@@ -222,7 +207,6 @@ async function runGenerator(
     arcSlugs,
     entitySlugs,
     forbiddenLanguage: season.forbiddenLanguage,
-    requireDealSeed: mustIncludeDealSeed,
     topArcSlug: postSuppressionPrimaryArc?.slug ?? null,
     topArcTension: postSuppressionPrimaryArc?.tensionScore ?? 0,
   });
@@ -274,36 +258,6 @@ async function runGenerator(
 
   const rawNarrative = validated.dispatches.map((d) => d.headline).join(" | ");
 
-  // Validator guarantees the dealSeed slug exists and resolves to exactly one dispatch.
-  let dealSeedPayload:
-    | {
-        arcId: Id<"narrativeArcs">;
-        dispatchIndex: number;
-        dispatchKey: string;
-        dispatchHeadline: string;
-        prompt: string;
-        suggestedPotUsdc: number;
-        suggestedEntryCostUsdc: number;
-      }
-    | undefined;
-  if (validated.dealSeed) {
-    const seedArcId = arcSlugToId.get(validated.dealSeed.arcSlug);
-    const dispatchIndex = validated.dispatches.findIndex(
-      (d) => d.dispatchKey === validated.dealSeed!.dispatchKey
-    );
-    if (seedArcId && dispatchIndex >= 0) {
-      dealSeedPayload = {
-        arcId: seedArcId,
-        dispatchIndex,
-        dispatchKey: validated.dealSeed.dispatchKey,
-        dispatchHeadline: validated.dispatches[dispatchIndex].headline,
-        prompt: validated.dealSeed.prompt,
-        suggestedPotUsdc: validated.dealSeed.suggestedPotUsdc,
-        suggestedEntryCostUsdc: validated.dealSeed.suggestedEntryCostUsdc,
-      };
-    }
-  }
-
   const result = await ctx.runMutation(
     internal.wire.persist.persistGeneratedEpoch,
     {
@@ -321,7 +275,6 @@ async function runGenerator(
       eventsIngested:
         recentGameEvents.length > 0 ? recentGameEvents : undefined,
       rawNarrative,
-      dealSeed: dealSeedPayload,
     }
   );
 

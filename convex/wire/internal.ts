@@ -51,35 +51,6 @@ export const listRecentDrops = internalQuery({
 });
 
 /**
- * Recent Deal Seed cadence. Returns one entry per recent Wire Drop newest-first,
- * flagging whether a wireDealSeeds row exists for that drop.
- */
-export const listRecentSeedCadence = internalQuery({
-  args: { limit: v.number() },
-  handler: async (ctx, { limit }) => {
-    const cap = Math.min(Math.max(limit, 1), 12);
-    const drops = await ctx.db
-      .query("marketNarratives")
-      .withIndex("byEpoch")
-      .order("desc")
-      .take(cap);
-
-    return Promise.all(
-      drops.map(async (drop) => {
-        const seed = await ctx.db
-          .query("wireDealSeeds")
-          .withIndex("byEpoch", (q) => q.eq("epochId", drop._id))
-          .first();
-        return {
-          epochSlot: drop.epochSlot ?? null,
-          hadSeed: seed !== null,
-        };
-      })
-    );
-  },
-});
-
-/**
  * Recent game events since a given timestamp.
  * Returns dramatic events (wipeouts, big wins/losses, large entries, crowded
  * trades, high-pot deals) with optional trader/desk name enrichment, plus
