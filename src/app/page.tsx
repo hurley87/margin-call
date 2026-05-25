@@ -356,7 +356,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         approvalsCount={pendingApprovals.length}
       />
 
-      <main className="mx-auto grid w-full flex-1 gap-3 overflow-y-auto px-2 py-2 pb-4 xl:min-h-0 xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:overflow-hidden">
+      <main className="mx-auto grid w-full flex-1 gap-2 overflow-y-auto px-2 pb-3 xl:min-h-0 xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:overflow-hidden">
         <NewswirePanel
           drops={drops}
           deals={marketDeals}
@@ -365,7 +365,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
           onOpenDeal={setSelectedDealId}
         />
 
-        <section className="grid gap-3 xl:min-h-0 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]">
+        <section className="grid gap-2 xl:min-h-0 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]">
           <TradingDeskPanel
             nowMs={nowMs}
             portfolio={portfolio}
@@ -786,7 +786,7 @@ export function DeskCommandStrip({
   ] as const;
 
   return (
-    <section className="z-30 shrink-0 border-b border-[var(--t-bronze)] bg-[#060907]/95 px-2 py-2">
+    <section className="z-30 shrink-0 bg-[#060907]/95 px-2 py-2">
       <div className="mx-auto grid max-w-[112rem] gap-2 sm:grid-cols-2 xl:grid-cols-4">
         {steps.map((step, index) => (
           <div
