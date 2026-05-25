@@ -71,7 +71,13 @@ import {
 import { useMarketHours } from "@/hooks/use-market-hours";
 import { useSecondTick } from "@/hooks/use-second-tick";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
-import { cn, formatShortAddress, relativeTime } from "@/lib/utils";
+import {
+  DIALOG_BACKDROP_CLASS,
+  cn,
+  formatShortAddress,
+  relativeTime,
+} from "@/lib/utils";
+import { EmptyState } from "@/components/empty-state";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const NY_TIME: Intl.DateTimeFormatOptions = {
@@ -170,28 +176,54 @@ export default function Home() {
 
   if (!authenticated) {
     return (
-      <div className="crt-scanlines flex min-h-screen flex-col items-center justify-center gap-8 bg-[var(--t-bg)] font-mono">
-        <div className="text-center">
-          <h1 className="font-[family-name:var(--font-plex-sans)] text-3xl font-black tracking-wide text-[var(--t-accent)]">
-            MARGIN CALL
-          </h1>
-          <p className="mt-2 text-sm uppercase tracking-[0.25em] text-[var(--t-muted)]">
-            Build your desk. Break theirs.
+      <div className="crt-scanlines flex min-h-screen flex-col justify-center gap-8 bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
+        <div className="mx-auto grid w-full max-w-4xl gap-7 md:grid-cols-[minmax(0,1.25fr)_minmax(17rem,0.75fr)] md:items-end">
+          <section className="min-w-0">
+            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--t-green)]">
+              DESK_OS 1987 // PRIVATE WIRE
+            </p>
+            <h1 className="font-[family-name:var(--font-plex-sans)] text-4xl font-black uppercase leading-none tracking-wide text-[var(--t-accent)] sm:text-5xl">
+              MARGIN CALL
+            </h1>
+            <p className="mt-3 max-w-[42rem] text-sm leading-6 text-[var(--t-green)]/90 sm:text-base">
+              Run a hostile Wall Street desk. Fund your wallet, hire an AI
+              trader, then write deals that lure rival agents into bad rooms.
+            </p>
+          </section>
+
+          <section className="terminal-panel px-4 py-4">
+            <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.16em] text-[var(--t-amber)]">
+              First run
+            </h2>
+            <ol className="mt-4 grid gap-3 text-xs uppercase tracking-[0.14em] text-[var(--t-muted)]">
+              {[
+                "Enter by email",
+                "Fund desk wallet",
+                "Hire first trader",
+                "Create first deal",
+              ].map((step, index) => (
+                <li key={step} className="flex items-center gap-3">
+                  <span className="grid h-7 w-7 shrink-0 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)]">
+                    {String(index + 1).padStart(2, "0")}
+                  </span>
+                  <span>{step}</span>
+                </li>
+              ))}
+            </ol>
+          </section>
+        </div>
+
+        <div className="mx-auto flex w-full max-w-4xl flex-col items-start gap-3 sm:flex-row sm:items-center">
+          <button
+            onClick={login}
+            className="min-h-11 border border-[var(--t-border)] bg-[var(--t-panel-strong)] px-6 py-3 font-mono text-sm font-black uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)] focus:border-[var(--t-accent)] focus:outline-none"
+          >
+            {">"} Enter by email<span className="cursor-blink">█</span>
+          </button>
+          <p className="text-[11px] uppercase tracking-widest text-[var(--t-muted)]">
+            Email OTP access. Embedded Base wallet assigned after sign-in.
           </p>
         </div>
-        <div className="flex flex-col items-center gap-3 text-xs text-[var(--t-muted)]">
-          <p>DESK_OS 1987</p>
-          <p>OPENING PRIVATE WIRE...</p>
-        </div>
-        <button
-          onClick={login}
-          className="border border-[var(--t-border)] bg-[var(--t-panel-strong)] px-8 py-3 font-mono text-sm uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
-        >
-          {">"} ENTER BY EMAIL<span className="cursor-blink">█</span>
-        </button>
-        <p className="text-[10px] uppercase tracking-widest text-[var(--t-muted)]">
-          Email OTP access // embedded Base wallet assigned
-        </p>
       </div>
     );
   }
@@ -306,7 +338,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const deskWalletFundingKnown = !cashLoading && cashBalance !== undefined;
 
   return (
-    <div className="crt-scanlines flex h-svh flex-col overflow-hidden bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
+    <div className="crt-scanlines flex min-h-svh flex-col bg-[var(--t-bg)] font-mono text-[var(--t-text)] xl:h-svh xl:overflow-hidden">
       <Suspense fallback={null}>
         <DeskDeepLinkHydration
           setSelectedDealId={setSelectedDealId}
@@ -328,11 +360,20 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         onToggleSfx={sfx.toggleEnabled}
         onLogout={logout}
       />
+      <DeskCommandStrip
+        cash={cashBalance}
+        cashLoading={cashLoading}
+        traderCount={portfolio?.traders.length ?? 0}
+        portfolioLoading={portfolioLoading}
+        dealCount={myDeals?.length ?? 0}
+        dealsLoading={myDealsLoading}
+        approvalsCount={pendingApprovals.length}
+      />
 
-      <main className="mx-auto grid min-h-0 flex-1 grid-rows-[minmax(0,1fr)_minmax(0,1.35fr)_minmax(0,1fr)] gap-2 overflow-hidden px-2 py-2 xl:w-full xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:grid-rows-1">
+      <main className="mx-auto grid w-full flex-1 gap-3 overflow-y-auto px-2 py-2 pb-4 xl:min-h-0 xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:overflow-hidden">
         <NewswirePanel drops={drops} walletFunded={deskWalletFunded} />
 
-        <section className="grid min-h-0 grid-rows-[minmax(20rem,0.82fr)_minmax(0,1.18fr)] gap-2 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]">
+        <section className="grid gap-3 xl:min-h-0 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]">
           <TradingDeskPanel
             nowMs={nowMs}
             portfolio={portfolio}
@@ -612,7 +653,7 @@ function TopStatusBar({
         }}
       >
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+          <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
           <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
             <Dialog.Title className="sr-only">
               Fund Your Desk Wallet
@@ -691,6 +732,103 @@ function TopStatusBar({
         </Dialog.Portal>
       </Dialog.Root>
     </header>
+  );
+}
+
+const STEP_TONE_BADGE = {
+  green: "border-[var(--t-green)]/45 text-[var(--t-green)]",
+  amber: "border-[var(--t-amber)]/55 text-[var(--t-amber)]",
+  muted: "border-[var(--t-divider)] text-[var(--t-muted)]",
+} as const;
+
+const STEP_TONE_STATUS = {
+  green: "text-[var(--t-green)]",
+  amber: "text-[var(--t-amber)]",
+  muted: "text-[var(--t-text)]",
+} as const;
+
+export function DeskCommandStrip({
+  cash,
+  cashLoading,
+  traderCount,
+  portfolioLoading,
+  dealCount,
+  dealsLoading,
+  approvalsCount,
+}: {
+  cash: number | undefined;
+  cashLoading: boolean;
+  traderCount: number;
+  portfolioLoading: boolean;
+  dealCount: number;
+  dealsLoading: boolean;
+  approvalsCount: number;
+}) {
+  const walletFunded = cash !== undefined && cash > 0;
+  const steps = [
+    {
+      label: "Fund desk",
+      value: cashLoading || cash === undefined ? "Checking" : formatMoney(cash),
+      tone: walletFunded ? "green" : "amber",
+      status: walletFunded ? "Ready" : "Required",
+    },
+    {
+      label: "Hire trader",
+      value: portfolioLoading ? "Checking" : `${traderCount}`,
+      tone: traderCount > 0 ? "green" : walletFunded ? "amber" : "muted",
+      status:
+        traderCount > 0 ? "Roster live" : walletFunded ? "Next" : "Locked",
+    },
+    {
+      label: "Create deal",
+      value: dealsLoading ? "Checking" : `${dealCount}`,
+      tone: dealCount > 0 ? "green" : traderCount > 0 ? "amber" : "muted",
+      status: dealCount > 0 ? "In market" : traderCount > 0 ? "Next" : "Queued",
+    },
+    {
+      label: "Approvals",
+      value: `${approvalsCount}`,
+      tone: approvalsCount > 0 ? "amber" : "green",
+      status: approvalsCount > 0 ? "Needs call" : "Clear",
+    },
+  ] as const;
+
+  return (
+    <section className="z-30 shrink-0 border-b border-[var(--t-bronze)] bg-[#060907]/95 px-2 py-2">
+      <div className="mx-auto grid max-w-[112rem] gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        {steps.map((step, index) => (
+          <div
+            key={step.label}
+            className="grid min-h-14 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--t-divider)] bg-[#070b09]/90 px-3 py-2"
+          >
+            <span
+              className={cn(
+                "grid h-8 w-8 place-items-center border text-[10px] font-bold tabular-nums",
+                STEP_TONE_BADGE[step.tone]
+              )}
+            >
+              {String(index + 1).padStart(2, "0")}
+            </span>
+            <div className="min-w-0">
+              <p className="truncate text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
+                {step.label}
+              </p>
+              <p
+                className={cn(
+                  "mt-0.5 truncate text-sm font-black uppercase tracking-wide",
+                  STEP_TONE_STATUS[step.tone]
+                )}
+              >
+                {step.status}
+              </p>
+            </div>
+            <span className="shrink-0 text-right text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)]">
+              {step.value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -785,7 +923,7 @@ function NewswirePanel({
   }, [drops]);
 
   return (
-    <aside className="terminal-panel flex min-h-0 flex-col overflow-hidden">
+    <aside className="terminal-panel flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="Newswire"
         meta={items === undefined ? "WAIT" : undefined}
@@ -831,7 +969,7 @@ function NewswirePanel({
 
       <Dialog.Root open={helpOpen} onOpenChange={setHelpOpen}>
         <Dialog.Portal>
-          <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+          <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
           <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-lg -translate-x-1/2 -translate-y-1/2 border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
             <Dialog.Title className="sr-only">How deals work</Dialog.Title>
             <div className="flex items-center justify-between border-b border-[var(--t-divider)] bg-[#0b100d] px-4 py-3">
@@ -1181,7 +1319,7 @@ function TradingDeskPanel({
   );
 
   return (
-    <section className="terminal-panel flex min-h-0 flex-col overflow-hidden">
+    <section className="terminal-panel flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="Your Trading Desk"
         meta={deskPanelMeta}
@@ -1288,19 +1426,20 @@ function TradingDeskMain({
   }
   if (traders.length === 0) {
     return (
-      <div className="px-4 py-10 text-center">
-        <p className="text-sm uppercase tracking-wider text-[var(--t-muted)]">
-          No traders on your desk
-        </p>
-        <button
-          type="button"
-          onClick={onHireTrader}
-          disabled={!canHireTrader}
-          className="mt-4 inline-block border border-[var(--t-accent)] px-5 py-2 text-xs uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {canHireTrader ? "Hire Trader" : hireDisabledReason}
-        </button>
-      </div>
+      <EmptyState
+        title="No traders on your desk"
+        description="Hire one floor operator, set their mandate, then fund escrow so they can start reading the wire."
+        action={
+          <button
+            type="button"
+            onClick={onHireTrader}
+            disabled={!canHireTrader}
+            className="inline-flex min-h-11 items-center border border-[var(--t-accent)] px-5 py-2 text-xs font-black uppercase tracking-wider text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {canHireTrader ? "Hire Trader" : hireDisabledReason}
+          </button>
+        }
+      />
     );
   }
   return (
@@ -1314,7 +1453,7 @@ function TradingDeskMain({
 }
 
 const DESK_ROW_GRID =
-  "grid-cols-[2rem_2.25rem_minmax(0,1fr)_5rem_5.5rem_5rem_4.5rem_5rem_3.5rem]";
+  "grid-cols-[2rem_2.25rem_minmax(0,1fr)_3.5rem] sm:grid-cols-[2rem_2.25rem_minmax(0,1fr)_5rem_5.5rem_5rem_4.5rem_5rem_3.5rem]";
 
 function DeskTradersView({
   traders,
@@ -1343,11 +1482,11 @@ function DeskTradersView({
         <span>#</span>
         <span />
         <span>Trader</span>
-        <span>Status</span>
-        <span className="text-right">Equity</span>
-        <span className="text-right">P&amp;L%</span>
-        <span className="text-right">W-L-X</span>
-        <span className="text-right">Last</span>
+        <span className="hidden sm:inline">Status</span>
+        <span className="hidden text-right sm:inline">Equity</span>
+        <span className="hidden text-right sm:inline">P&amp;L%</span>
+        <span className="hidden text-right sm:inline">W-L-X</span>
+        <span className="hidden text-right sm:inline">Last</span>
         <span />
       </div>
       <div className="mt-1 flex flex-col gap-1">
@@ -1402,17 +1541,26 @@ function DeskTraderRow({
       <span className="truncate font-bold uppercase tracking-wider text-[var(--t-amber)]">
         {trader.name}
       </span>
-      <span className={cn("uppercase tracking-wider text-[11px]", statusTone)}>
+      <span
+        className={cn(
+          "hidden uppercase tracking-wider text-[11px] sm:inline",
+          statusTone
+        )}
+      >
         {trader.status}
       </span>
-      <span className="tabular-nums text-right text-[var(--t-text)]">
+      <span className="hidden tabular-nums text-right text-[var(--t-text)] sm:inline">
         {formatCompactMoney(trader.total_value_usdc)}
       </span>
-      <span className={cn("tabular-nums text-right", pnlClass)}>{pnlText}</span>
-      <span className="tabular-nums text-right text-[var(--t-text)]">
+      <span
+        className={cn("hidden tabular-nums text-right sm:inline", pnlClass)}
+      >
+        {pnlText}
+      </span>
+      <span className="hidden tabular-nums text-right text-[var(--t-text)] sm:inline">
         {trader.wins}-{trader.losses}-{trader.wipeouts}
       </span>
-      <span className="text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+      <span className="hidden text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)] sm:inline">
         {relativeTime(trader.last_cycle_at, nowMs)}
       </span>
       <div className="flex items-center justify-end gap-1">
@@ -1479,9 +1627,10 @@ function DeskDealsView({
 
   if (deals.length === 0) {
     return (
-      <div className="px-4 py-10 text-center text-sm uppercase tracking-wider text-[var(--t-muted)]">
-        No deals created by your desk
-      </div>
+      <EmptyState
+        title="No deals created by your desk"
+        description="Open the newswire and turn a live item into a funded trap for rival traders."
+      />
     );
   }
 
@@ -1579,7 +1728,7 @@ function TraderFeedPanel({
   }
 
   return (
-    <section className="terminal-panel flex min-h-0 flex-col overflow-hidden">
+    <section className="terminal-panel flex min-h-[26rem] flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="Trader Feed"
         meta={feedMeta}
@@ -1632,9 +1781,10 @@ function TraderFeedPanel({
           <LoadingLine label="READING TRADER TAPE" />
         </div>
       ) : activity.length === 0 ? (
-        <div className="px-4 py-10 text-center text-sm uppercase tracking-wider text-[var(--t-muted)]">
-          No trader activity yet
-        </div>
+        <EmptyState
+          title="No trader activity yet"
+          description="Fund escrow and activate a trader. Their scans, skips, approvals, wins, and losses will print here."
+        />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {activity.map((entry) => (
@@ -1695,7 +1845,7 @@ function MarketPlayersPanel({
   const current = currentWallet?.toLowerCase();
 
   return (
-    <aside className="terminal-panel flex min-h-0 flex-col overflow-hidden">
+    <aside className="terminal-panel flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="Trading Floor"
         meta={leaderboard ? `${leaderboard.length}` : "WAIT"}
@@ -1714,9 +1864,10 @@ function MarketPlayersPanel({
           <LoadingLine label="POLLING EXCHANGE FLOOR" />
         </div>
       ) : leaderboard.length === 0 ? (
-        <div className="px-4 py-8 text-center text-xs uppercase tracking-wider text-[var(--t-muted)]">
-          No traders on the floor yet.
-        </div>
+        <EmptyState
+          title="No traders on the floor yet"
+          description="Once desks activate traders, market rank and public profiles appear here."
+        />
       ) : (
         <div className="min-h-0 flex-1 overflow-y-auto">
           {leaderboard.map((trader, index) => {

@@ -13,7 +13,7 @@ import { useTrader } from "@/hooks/use-traders";
 import { useDepositFlow, useTraderEscrowBalance } from "@/hooks/use-escrow";
 import { useResumeTrader } from "@/hooks/use-agent";
 import { authFetch, syncDeskWalletBalance } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { DIALOG_BACKDROP_CLASS, cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
 import { MarketClosedButton } from "@/components/market-closed-button";
 import { useMarketHours } from "@/hooks/use-market-hours";
@@ -108,7 +108,7 @@ export function TraderCreationDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+        <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
         <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           <Dialog.Title className="sr-only">Hire trader</Dialog.Title>
           <div className="max-h-[88vh] overflow-y-auto">
@@ -141,7 +141,7 @@ function DialogHeader({ stage }: { stage: Stage }) {
             Hire Trader
           </h2>
         </div>
-        <Dialog.Close className="shrink-0 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]">
+        <Dialog.Close className="min-h-10 shrink-0 px-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none">
           Close
         </Dialog.Close>
       </div>
@@ -294,7 +294,7 @@ function ProfileStage({
           <h3 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
             Trader name
           </h3>
-          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]/70">
+          <span className="hidden text-right text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]/70 sm:inline">
             What do they call this trader on the floor?
           </span>
         </div>
@@ -305,7 +305,7 @@ function ProfileStage({
           placeholder="e.g. Gecko"
           maxLength={TRADER_NAME_MAX}
           autoFocus
-          className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+          className="min-h-11 w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none sm:text-sm"
         />
         {nameMessage && (
           <p className="mt-3 text-[11px] uppercase tracking-[0.16em] text-[var(--t-amber)]">
@@ -314,14 +314,14 @@ function ProfileStage({
         )}
       </form>
       <div className="flex items-center justify-between gap-3 border-t border-[var(--t-border)]/80 pt-4">
-        <Dialog.Close className="text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]">
+        <Dialog.Close className="min-h-10 px-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none">
           Cancel
         </Dialog.Close>
         <button
           type="button"
           onClick={onNext}
           disabled={!canAdvance}
-          className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+          className="min-h-11 border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
         >
           Next &rarr;
         </button>
@@ -462,7 +462,7 @@ function MandateSection<T extends number | null>({
         <h3 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
           {label}
         </h3>
-        <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]/70">
+        <span className="hidden text-right text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]/70 sm:inline">
           {subtitle}
         </span>
       </div>
@@ -737,7 +737,7 @@ function OptionGrid<T>({
             onClick={() => onSelect(opt.value)}
             disabled={disabled}
             className={cn(
-              "group flex flex-col items-start border p-3 text-left transition-colors disabled:opacity-50",
+              "group flex min-h-[4.75rem] flex-col items-start border p-3 text-left transition-colors disabled:opacity-50",
               isSelected
                 ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)]"
                 : "border-[var(--t-divider)] bg-[var(--t-bg)] hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"

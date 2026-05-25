@@ -6,6 +6,7 @@ import { parseUnits } from "viem";
 import { useDepositFlow, useWithdrawFlow } from "@/hooks/use-escrow";
 import { WalletProvisioningError } from "@/components/wallet-provisioning-error";
 import { authFetch } from "@/lib/api";
+import { DIALOG_BACKDROP_CLASS } from "@/lib/utils";
 import type { Doc, Id } from "../../../convex/_generated/dataModel";
 
 const ZERO = BigInt(0);
@@ -162,15 +163,20 @@ export function WalletDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/70" />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-md -translate-x-1/2 -translate-y-1/2 border border-[var(--t-border)] bg-[var(--t-bg)] font-mono">
+        <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
+        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-md -translate-x-1/2 -translate-y-1/2 border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           {/* Header */}
-          <div className="flex items-center justify-between border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-2">
-            <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-              WALLET
-            </span>
-            <Dialog.Close className="text-[10px] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]">
-              [X]
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
+            <div>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+                Trader cashier
+              </p>
+              <h2 className="font-[family-name:var(--font-plex-sans)] text-base font-black uppercase tracking-wide text-[var(--t-amber)]">
+                Escrow wallet
+              </h2>
+            </div>
+            <Dialog.Close className="min-h-10 shrink-0 px-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none">
+              Close
             </Dialog.Close>
           </div>
 
@@ -244,13 +250,13 @@ export function WalletDialog({
                     onChange={(e) => setAmount(e.target.value)}
                     placeholder="0.00 USDC"
                     disabled={isDepositBusy}
-                    className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
+                    className="min-h-11 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50 sm:text-sm"
                   />
                   {walletUsdc !== undefined && walletUsdc > 0 && (
                     <button
                       type="button"
                       onClick={() => setAmount(usdcToInputString(walletUsdc))}
-                      className="shrink-0 text-xs text-[var(--t-accent)] hover:underline"
+                      className="min-h-10 shrink-0 px-2 text-xs text-[var(--t-accent)] hover:underline focus:text-[var(--t-text)] focus:outline-none"
                     >
                       Max
                     </button>
@@ -259,7 +265,7 @@ export function WalletDialog({
                 <button
                   type="submit"
                   disabled={isDepositBusy || !amount}
-                  className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
+                  className="min-h-11 border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] focus:bg-[var(--t-accent)] focus:text-[var(--t-bg)] focus:outline-none disabled:opacity-50"
                 >
                   {depositStep === "approving"
                     ? "Approving USDC..."
@@ -283,7 +289,7 @@ export function WalletDialog({
                       <button
                         type="button"
                         onClick={resetDeposit}
-                        className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
+                        className="min-h-10 px-2 text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
                       >
                         Retry
                       </button>
@@ -308,13 +314,13 @@ export function WalletDialog({
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="0.00 USDC"
                   disabled={withdrawBusy}
-                  className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
+                  className="min-h-11 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50 sm:text-sm"
                 />
                 {escrowUsdc !== null && escrowUsdc > 0 && (
                   <button
                     type="button"
                     onClick={() => setAmount(usdcToInputString(escrowUsdc))}
-                    className="shrink-0 text-xs text-[var(--t-accent)] hover:underline"
+                    className="min-h-10 shrink-0 px-2 text-xs text-[var(--t-accent)] hover:underline focus:text-[var(--t-text)] focus:outline-none"
                   >
                     Max
                   </button>
@@ -328,7 +334,7 @@ export function WalletDialog({
               <button
                 type="submit"
                 disabled={withdrawBusy || !amount || withdrawExceedsBalance}
-                className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
+                className="min-h-11 border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] focus:bg-[var(--t-accent)] focus:text-[var(--t-bg)] focus:outline-none disabled:opacity-50"
               >
                 {withdrawBusy ? "Withdrawing..." : "Withdraw"}
               </button>
@@ -346,7 +352,7 @@ export function WalletDialog({
                     <button
                       type="button"
                       onClick={resetWithdraw}
-                      className="text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)]"
+                      className="min-h-10 px-2 text-xs text-[var(--t-muted)] underline hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
                     >
                       Retry
                     </button>

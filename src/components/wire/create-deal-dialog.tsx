@@ -13,7 +13,7 @@ import {
   MIN_POT_AMOUNT,
   MIN_ENTRY_COST,
 } from "@/lib/constants";
-import { cn } from "@/lib/utils";
+import { DIALOG_BACKDROP_CLASS, cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
 import { MarketClosedButton } from "@/components/market-closed-button";
 import type { Id } from "../../../convex/_generated/dataModel";
@@ -329,7 +329,7 @@ export function CreateDealDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+        <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
         <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           <Dialog.Title className="sr-only">Create deal</Dialog.Title>
           <div className="max-h-[88vh] overflow-y-auto">
@@ -343,7 +343,7 @@ export function CreateDealDialog({
                     Create deal
                   </h2>
                 </div>
-                <Dialog.Close className="shrink-0 text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]">
+                <Dialog.Close className="min-h-10 shrink-0 px-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none">
                   Close
                 </Dialog.Close>
               </div>
@@ -401,7 +401,7 @@ export function CreateDealDialog({
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <label className="block border border-[var(--t-divider)] bg-[#070b09]/75 p-3">
                         <span className="block text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
                           Pot (USDC)
@@ -413,7 +413,7 @@ export function CreateDealDialog({
                           min={MIN_POT_AMOUNT}
                           step="0.01"
                           disabled={isCreating}
-                          className="mt-1 w-full bg-transparent text-2xl font-black uppercase tracking-wide text-[var(--t-green)] focus:outline-none disabled:opacity-50"
+                          className="mt-1 min-h-11 w-full bg-transparent text-2xl font-black uppercase tracking-wide text-[var(--t-green)] focus:outline-none disabled:opacity-50"
                         />
                       </label>
                       <label className="block border border-[var(--t-divider)] bg-[#070b09]/75 p-3">
@@ -427,12 +427,12 @@ export function CreateDealDialog({
                           min={MIN_ENTRY_COST}
                           step="0.01"
                           disabled={isCreating}
-                          className="mt-1 w-full bg-transparent text-2xl font-black uppercase tracking-wide text-[var(--t-green)] focus:outline-none disabled:opacity-50"
+                          className="mt-1 min-h-11 w-full bg-transparent text-2xl font-black uppercase tracking-wide text-[var(--t-green)] focus:outline-none disabled:opacity-50"
                         />
                       </label>
                     </div>
 
-                    <div className="grid grid-cols-3 gap-px border border-[var(--t-divider)] bg-[var(--t-divider)] text-[10px] uppercase tracking-[0.18em]">
+                    <div className="grid gap-px border border-[var(--t-divider)] bg-[var(--t-divider)] text-[10px] uppercase tracking-[0.18em] sm:grid-cols-3">
                       <DatumCell
                         className="border-0 bg-[#070b09]/85"
                         label={`${DEAL_CREATION_FEE_PERCENTAGE}% fee`}
@@ -493,7 +493,7 @@ export function CreateDealDialog({
                       <div className="flex items-center justify-between gap-3 border-t border-[var(--t-border)]/80 pt-4">
                         <button
                           onClick={handleBack}
-                          className="text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+                          className="min-h-10 px-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
                         >
                           &larr; Back
                         </button>
@@ -503,7 +503,7 @@ export function CreateDealDialog({
                           enabledChildren={<>Create deal &rarr;</>}
                           onClick={handleSubmitDeal}
                           disabled={!canSubmit}
-                          className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+                          className="min-h-11 border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
                         />
                       </div>
                     )}

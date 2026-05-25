@@ -13,6 +13,7 @@ import {
   humanizePortraitTraitValue,
 } from "@/lib/portrait-traits";
 import type { PublicPortraitTraits } from "@/lib/trader-metadata";
+import { DIALOG_BACKDROP_CLASS } from "@/lib/utils";
 
 type PublicTraderProfile = {
   traderId: string;
@@ -50,7 +51,7 @@ export function PublicTraderDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+        <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
         <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           <Dialog.Title className="sr-only">Public trader dossier</Dialog.Title>
           <div className="max-h-[88vh] overflow-y-auto">
@@ -104,7 +105,7 @@ function PublicTraderContent({
         <button
           type="button"
           onClick={onClose}
-          className="shrink-0 text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+          className="min-h-10 shrink-0 px-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
         >
           Close
         </button>
@@ -213,7 +214,7 @@ function PublicTraderError({ onClose }: { onClose: () => void }) {
       <button
         type="button"
         onClick={onClose}
-        className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+        className="min-h-10 px-2 text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
       >
         [CLOSE]
       </button>

@@ -35,7 +35,7 @@ import {
   getTraderCycleUi,
   traderCycleDocFromDetailTrader,
 } from "@/lib/trader-cycle";
-import { cn } from "@/lib/utils";
+import { DIALOG_BACKDROP_CLASS, cn } from "@/lib/utils";
 
 const TRADER_SECTION_TITLE_CLASS =
   "text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]";
@@ -298,7 +298,7 @@ export function TraderDetailDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+        <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
         <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           <Dialog.Title className="sr-only">Trader detail</Dialog.Title>
           <div className="max-h-[88vh] overflow-y-auto">
@@ -507,7 +507,7 @@ function AgentControls({
           <button
             onClick={() => pause.mutate(traderId)}
             disabled={pause.isPending}
-            className="ml-auto border border-[var(--t-border)] px-3 py-1.5 text-xs text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] disabled:opacity-50"
+            className="ml-auto min-h-10 border border-[var(--t-border)] px-3 py-1.5 text-xs text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] disabled:opacity-50"
           >
             {pause.isPending ? "PAUSING..." : "PAUSE"}
           </button>
@@ -524,12 +524,12 @@ function AgentControls({
             }
             onClick={() => resume.mutate(traderId)}
             disabled={resume.isPending || unfunded}
-            className="border border-[var(--t-accent)] px-4 py-1.5 text-xs font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+            className="min-h-10 border border-[var(--t-accent)] px-4 py-1.5 text-xs font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
           />
           {unfunded ? (
             <button
               onClick={onOpenWallet}
-              className="text-xs text-[var(--t-amber)] transition-colors hover:text-[var(--t-accent)]"
+              className="min-h-10 px-2 text-xs text-[var(--t-amber)] transition-colors hover:text-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
             >
               Deposit USDC to enable &rarr;
             </button>

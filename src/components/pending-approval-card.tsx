@@ -65,7 +65,7 @@ export function PendingApprovalCard({
               onClick={() =>
                 mutate({ approvalId: approval.id, action: "approve" })
               }
-              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-green)] transition-colors hover:border-[var(--t-green)]"
+              className="min-h-10 border border-[var(--t-border)] px-3 py-1 text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] focus:border-[var(--t-green)] focus:outline-none"
             >
               APPROVE
             </button>
@@ -74,7 +74,7 @@ export function PendingApprovalCard({
               onClick={() =>
                 mutate({ approvalId: approval.id, action: "reject" })
               }
-              className="border border-[var(--t-border)] px-2 py-1 text-[var(--t-red)] transition-colors hover:border-[var(--t-red)]"
+              className="min-h-10 border border-[var(--t-border)] px-3 py-1 text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] focus:border-[var(--t-red)] focus:outline-none"
             >
               DENY
             </button>

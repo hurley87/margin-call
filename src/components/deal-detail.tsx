@@ -28,6 +28,7 @@ import { useDeal, type DealOutcome } from "@/hooks/use-deals";
 import { useDeskManager } from "@/hooks/use-desk";
 import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
+import { DIALOG_BACKDROP_CLASS } from "@/lib/utils";
 
 function formatOutcomeResult(outcome: DealOutcome) {
   const traderName = outcome.trader_name ?? "Trader";
@@ -78,7 +79,7 @@ function DealErrorState({
         <button
           type="button"
           onClick={onClose}
-          className="text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+          className="min-h-10 px-2 text-xs text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
         >
           [CLOSE]
         </button>
@@ -169,7 +170,7 @@ export function DealDetailContent({
               <button
                 type="button"
                 onClick={onClose}
-                className="text-xs uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+                className="min-h-10 px-2 text-xs uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
               >
                 [CLOSE]
               </button>
@@ -393,7 +394,7 @@ export function DealDetailDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Backdrop className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm" />
+        <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
         <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           <Dialog.Title className="sr-only">Deal detail</Dialog.Title>
           <div className="max-h-[88vh] overflow-y-auto">
@@ -558,7 +559,7 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
               !hasConfirmedClose &&
               (isPendingEntriesUnknown || hasPendingEntries))
           }
-          className="border border-[var(--t-border)] px-3 py-1 text-[10px] text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] disabled:opacity-50"
+          className="min-h-10 border border-[var(--t-border)] px-3 py-1 text-[10px] text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] focus:border-[var(--t-red)] focus:outline-none disabled:opacity-50"
         >
           {closeDealButtonLabel(phase, isOnChainClosed || hasConfirmedClose)}
         </button>

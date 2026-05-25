@@ -5,6 +5,9 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+export const DIALOG_BACKDROP_CLASS =
+  "fixed inset-0 z-50 bg-[#020403]/80 backdrop-blur-sm";
+
 export function heatColor(score: number): string {
   if (score >= 7) return "text-[var(--t-red)]";
   if (score >= 4) return "text-[var(--t-amber)]";

@@ -226,14 +226,14 @@ export function FeedLine({
           <button
             type="button"
             onClick={() => mutate({ approvalId, action: "approve" })}
-            className="border border-[var(--t-green)]/60 px-2 py-0.5 font-bold uppercase tracking-wide text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] hover:bg-[var(--t-green)]/10"
+            className="min-h-8 border border-[var(--t-green)]/60 px-2 py-1 font-bold uppercase tracking-wide text-[var(--t-green)] transition-colors hover:border-[var(--t-green)] hover:bg-[var(--t-green)]/10 focus:border-[var(--t-green)] focus:outline-none"
           >
             Approve
           </button>
           <button
             type="button"
             onClick={() => mutate({ approvalId, action: "reject" })}
-            className="border border-[var(--t-red)]/60 px-2 py-0.5 font-bold uppercase tracking-wide text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] hover:bg-[var(--t-red)]/10"
+            className="min-h-8 border border-[var(--t-red)]/60 px-2 py-1 font-bold uppercase tracking-wide text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] hover:bg-[var(--t-red)]/10 focus:border-[var(--t-red)] focus:outline-none"
           >
             Deny
           </button>
@@ -253,7 +253,7 @@ export function FeedLine({
               dealId: entry.deal_id,
             })
           }
-          className="justify-self-end border border-[var(--t-amber)]/60 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] hover:bg-[var(--t-amber)]/10"
+          className="min-h-8 justify-self-end border border-[var(--t-amber)]/60 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] hover:bg-[var(--t-amber)]/10 focus:border-[var(--t-amber)] focus:outline-none"
         >
           Review
         </button>
