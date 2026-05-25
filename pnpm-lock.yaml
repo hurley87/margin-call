@@ -9077,7 +9077,7 @@ packages:
   postal-mime@2.7.4:
     resolution:
       {
-        integrity: sha512-0WdnFQYUrPGGTFu1uOqD2s7omwua8xaeYGdO6rb88oD5yJ/4pPHDA4sdWqfCny563n/HQS7zTFft+f/g==,
+        integrity: sha512-0WdnFQYUrPGGTFu1uOqD2s7omwua8xaeYGdO6rb88oD5yJ/4pPHDA4sdWqfD8wQVfCny563n/HQS7zTFft+f/g==,
       }
 
   postcss-selector-parser@7.1.1:
