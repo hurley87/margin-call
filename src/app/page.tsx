@@ -111,32 +111,14 @@ type WireCategory =
   | "market"
   | "rumor";
 
-const CATEGORY_TONE: Record<WireCategory, { label: string; rail: string }> = {
-  deal_seed: {
-    label: "text-[var(--t-red)]",
-    rail: "bg-[var(--t-red)]",
-  },
-  breaking: {
-    label: "text-[var(--t-red)]",
-    rail: "bg-[var(--t-red)]",
-  },
-  market_update: {
-    label: "text-[var(--t-accent)]",
-    rail: "bg-[var(--t-accent)]",
-  },
-  market: {
-    label: "text-[var(--t-green)]",
-    rail: "bg-[var(--t-green)]",
-  },
-  rumor: {
-    label: "text-[var(--t-blue)]",
-    rail: "bg-[var(--t-blue)]",
-  },
+const CATEGORY_RAIL: Record<WireCategory, string> = {
+  deal_seed: "bg-[var(--t-red)]",
+  breaking: "bg-[var(--t-red)]",
+  market_update: "bg-[var(--t-accent)]",
+  market: "bg-[var(--t-green)]",
+  rumor: "bg-[var(--t-blue)]",
 };
-const DEFAULT_CATEGORY_TONE = {
-  label: "text-[var(--t-muted)]",
-  rail: "bg-[var(--t-divider)]",
-};
+const DEFAULT_CATEGORY_RAIL = "bg-[var(--t-divider)]";
 
 function DeskDeepLinkHydration({
   setSelectedDealId,
@@ -1208,10 +1190,10 @@ function NewswireItem({
   walletFunded: boolean;
   onCreate: () => void;
 }) {
-  const tone =
-    category && category in CATEGORY_TONE
-      ? CATEGORY_TONE[category as WireCategory]
-      : DEFAULT_CATEGORY_TONE;
+  const rail =
+    category && category in CATEGORY_RAIL
+      ? CATEGORY_RAIL[category as WireCategory]
+      : DEFAULT_CATEGORY_RAIL;
   const isSeed = Boolean(dealSeed);
 
   return (
@@ -1241,7 +1223,7 @@ function NewswireItem({
         aria-hidden
         className={cn(
           "absolute left-0 top-0 h-full w-[2px]",
-          tone.rail,
+          rail,
           isSeed ? "opacity-90" : "opacity-60"
         )}
       />
@@ -1251,11 +1233,6 @@ function NewswireItem({
             aria-label="latest"
             className="live-pulse inline-block h-1.5 w-1.5 rounded-full bg-[var(--t-green)]"
           />
-        )}
-        {category && (
-          <span className={cn("font-semibold", tone.label)}>
-            {category.replaceAll("_", " ")}
-          </span>
         )}
         <time className="tabular-nums text-[var(--t-muted)]">{time}</time>
       </div>
