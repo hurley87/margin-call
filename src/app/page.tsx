@@ -73,6 +73,7 @@ import { useSecondTick } from "@/hooks/use-second-tick";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import {
   DIALOG_BACKDROP_CLASS,
+  dialogPopupClass,
   cn,
   formatShortAddress,
   relativeTime,
@@ -970,102 +971,133 @@ function NewswirePanel({
       <Dialog.Root open={helpOpen} onOpenChange={setHelpOpen}>
         <Dialog.Portal>
           <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
-          <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 w-[90vw] max-w-lg -translate-x-1/2 -translate-y-1/2 border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
-            <Dialog.Title className="sr-only">How deals work</Dialog.Title>
-            <div className="flex items-center justify-between border-b border-[var(--t-divider)] bg-[#0b100d] px-4 py-3">
-              <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
-                How Deals Work
-              </h2>
-              <button
-                type="button"
-                onClick={() => setHelpOpen(false)}
-                aria-label="Close"
-                className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-red)] hover:text-[var(--t-red)]"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-
-            <div className="divide-y divide-[var(--t-divider)] px-5 text-xs leading-relaxed text-[var(--t-text)]">
-              <section className="space-y-2 py-5">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
-                  Creating a Deal
-                </h3>
-                <p className="text-[var(--t-green)]/90">
-                  Every news item on the wire is a potential deal. Click{" "}
-                  <span className="font-bold text-[var(--t-accent)]">
-                    → Create deal
-                  </span>{" "}
-                  under any headline to open the deal creation dialog. Set a{" "}
-                  <span className="font-bold text-[var(--t-amber)]">pot</span>{" "}
-                  (the prize pool) and an{" "}
-                  <span className="font-bold text-[var(--t-amber)]">
-                    entry cost
-                  </span>{" "}
-                  — the fee other traders pay to send their agents in.
-                </p>
-              </section>
-
-              <section className="space-y-2 py-5">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
-                  How You Make Money
-                </h3>
-                <p className="text-[var(--t-green)]/90">
-                  When a trader&apos;s agent enters your deal, they pay the{" "}
-                  <span className="font-bold text-[var(--t-amber)]">
-                    entry cost
-                  </span>{" "}
-                  in USDC. That fee goes directly into the pot — growing the
-                  prize pool with every new entrant.
-                </p>
-                <p className="text-[var(--t-green)]/90">
-                  GPT determines whether each agent&apos;s trade wins or loses.
-                  Winners collect from the pot; losers&apos; entry fees stay in
-                  it. As the deal creator you{" "}
-                  <span className="font-bold text-[var(--t-amber)]">
-                    keep a share of every entry fee
-                  </span>{" "}
-                  — the more agents that enter, the more you earn, win or lose.
-                </p>
-              </section>
-
-              <section className="space-y-2 py-5">
-                <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
-                  Strategy
-                </h3>
-                <ul className="space-y-1.5 text-[var(--t-green)]/90">
-                  <li>
-                    <span className="text-[var(--t-amber)]">▸</span> High entry
-                    cost + big pot attracts aggressive traders — more risk, more
-                    reward.
-                  </li>
-                  <li>
-                    <span className="text-[var(--t-amber)]">▸</span> Low entry
-                    cost drives volume — more agents enter, more fees you
-                    collect.
-                  </li>
-                  <li>
-                    <span className="text-[var(--t-amber)]">▸</span> Your own
-                    traders cannot enter deals you create — keep that in mind
-                    when sizing.
-                  </li>
-                </ul>
-              </section>
-            </div>
-
-            <div className="border-t border-[var(--t-divider)] px-5 py-3">
-              <button
-                type="button"
-                onClick={() => setHelpOpen(false)}
-                className="w-full border border-[var(--t-divider)] py-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
-              >
-                Got it — Back to the wire
-              </button>
-            </div>
+          <Dialog.Popup className={dialogPopupClass("lg")}>
+            <HowDealsWorkBrief onClose={() => setHelpOpen(false)} />
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
     </aside>
+  );
+}
+
+export function HowDealsWorkBrief({ onClose }: { onClose: () => void }) {
+  return (
+    <>
+      <Dialog.Title className="sr-only">How deals work</Dialog.Title>
+      <div className="flex items-center justify-between border-b border-[var(--t-divider)] bg-[#0b100d] px-4 py-3">
+        <div className="min-w-0">
+          <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--t-muted)]">
+            Desk brief
+          </p>
+          <h2 className="mt-1 font-[family-name:var(--font-plex-sans)] text-base font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
+            How Deals Work
+          </h2>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Close"
+          className="grid h-9 w-9 shrink-0 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-red)] hover:text-[var(--t-red)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      </div>
+
+      <div className="max-h-[calc(100dvh-9rem)] overflow-y-auto px-4 py-4 text-xs leading-relaxed text-[var(--t-text)] sm:max-h-[calc(88vh-9rem)]">
+        <div className="grid gap-3 sm:grid-cols-3">
+          {[
+            [
+              "01",
+              "Pick a wire",
+              "Each news item can become a live desk opportunity.",
+            ],
+            [
+              "02",
+              "Size the room",
+              "Set the pot and entry cost before rivals arrive.",
+            ],
+            [
+              "03",
+              "Let agents trade",
+              "GPT resolves each agent against the scenario.",
+            ],
+          ].map(([step, title, body]) => (
+            <section
+              key={step}
+              className="border border-[var(--t-divider)] bg-[#070b09] p-3"
+            >
+              <p className="text-[10px] text-[var(--t-muted)]">{step}</p>
+              <h3 className="mt-1 text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
+                {title}
+              </h3>
+              <p className="mt-2 text-[var(--t-green)]/90">{body}</p>
+            </section>
+          ))}
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_1fr]">
+          <section className="border border-[var(--t-divider)] bg-[#070b09] p-4">
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
+              Deal economics
+            </h3>
+            <dl className="mt-3 grid gap-2">
+              <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                <dt className="text-[var(--t-muted)]">Pot</dt>
+                <dd className="text-[var(--t-green)]">
+                  Prize pool winners draw from.
+                </dd>
+              </div>
+              <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                <dt className="text-[var(--t-muted)]">Entry</dt>
+                <dd className="text-[var(--t-amber)]">
+                  USDC rival traders pay to enter.
+                </dd>
+              </div>
+              <div className="grid grid-cols-[6rem_minmax(0,1fr)] gap-3">
+                <dt className="text-[var(--t-muted)]">Creator rake</dt>
+                <dd className="text-[var(--t-text)]">
+                  Your desk keeps a share of each entry fee.
+                </dd>
+              </div>
+            </dl>
+          </section>
+
+          <section className="border border-[var(--t-divider)] bg-[#070b09] p-4">
+            <h3 className="text-[10px] font-bold uppercase tracking-widest text-[var(--t-accent)]">
+              Sizing tactics
+            </h3>
+            <ul className="mt-3 space-y-2 text-[var(--t-green)]/90">
+              <li>
+                <span className="text-[var(--t-amber)]">▸</span> Big pot plus
+                high entry attracts aggressive agents.
+              </li>
+              <li>
+                <span className="text-[var(--t-amber)]">▸</span> Low entry
+                invites more volume and more rake attempts.
+              </li>
+              <li>
+                <span className="text-[var(--t-amber)]">▸</span> Your own
+                traders cannot enter deals your desk creates.
+              </li>
+            </ul>
+          </section>
+        </div>
+
+        <p className="mt-4 border border-[var(--t-amber)]/40 bg-[var(--t-amber)]/[0.07] px-3 py-2 text-[10px] uppercase tracking-[0.16em] text-[var(--t-amber)]">
+          Rule of thumb: price entry low for flow, high for conviction.
+        </p>
+      </div>
+
+      <div className="border-t border-[var(--t-divider)] px-4 py-3">
+        <button
+          type="button"
+          onClick={onClose}
+          className="min-h-10 w-full border border-[var(--t-divider)] py-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
+        >
+          Got it — Back to the wire
+        </button>
+      </div>
+    </>
   );
 }
 

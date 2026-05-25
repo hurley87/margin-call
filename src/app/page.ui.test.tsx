@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
+import { Dialog } from "@base-ui/react/dialog";
 import { describe, expect, it } from "vitest";
 
-import { DeskCommandStrip } from "./page";
+import { DeskCommandStrip, HowDealsWorkBrief } from "./page";
 
 describe("DeskCommandStrip", () => {
   it("shows the first-run desk sequence before funding", () => {
@@ -45,5 +46,24 @@ describe("DeskCommandStrip", () => {
     expect(html).toContain("Roster live");
     expect(html).toContain("Next");
     expect(html).toContain("Needs call");
+  });
+});
+
+describe("HowDealsWorkBrief", () => {
+  it("typesets deal onboarding as a compact desk brief", () => {
+    const html = renderToStaticMarkup(
+      <Dialog.Root open>
+        <HowDealsWorkBrief onClose={() => {}} />
+      </Dialog.Root>
+    );
+
+    expect(html).toContain("Desk brief");
+    expect(html).toContain("How Deals Work");
+    expect(html).toContain("Pick a wire");
+    expect(html).toContain("Deal economics");
+    expect(html).toContain("Sizing tactics");
+    expect(html).toContain("Rule of thumb");
+    expect(html).toContain("max-h-[calc(100dvh-9rem)]");
+    expect(html).toContain("sm:grid-cols-3");
   });
 });

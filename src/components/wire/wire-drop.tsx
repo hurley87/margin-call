@@ -100,7 +100,7 @@ export function WireDispatch({ dispatch, headlineDeals }: WireDispatchProps) {
           className={cn(
             "wire-cta-bounce transition-colors",
             seed
-              ? "items-center gap-1.5 border border-[var(--t-accent)] px-3 py-1 text-[11px] font-bold text-[var(--t-accent)] group-hover:bg-[var(--t-accent)] group-hover:text-[var(--t-bg)]"
+              ? "min-h-9 items-center gap-1.5 border border-[var(--t-accent)] px-3 py-1 text-[11px] font-bold uppercase tracking-[0.12em] text-[var(--t-accent)] group-hover:bg-[var(--t-accent)] group-hover:text-[var(--t-bg)] group-focus-visible:bg-[var(--t-accent)] group-focus-visible:text-[var(--t-bg)]"
               : "text-[10px] text-[var(--t-muted)] group-hover:text-[var(--t-accent)]"
           )}
         >

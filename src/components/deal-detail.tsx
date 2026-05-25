@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
 import { usePrivy } from "@privy-io/react-auth";
@@ -28,7 +28,7 @@ import { useDeal, type DealOutcome } from "@/hooks/use-deals";
 import { useDeskManager } from "@/hooks/use-desk";
 import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
-import { DIALOG_BACKDROP_CLASS } from "@/lib/utils";
+import { DIALOG_BACKDROP_CLASS, cn, dialogPopupClass } from "@/lib/utils";
 
 function formatOutcomeResult(outcome: DealOutcome) {
   const traderName = outcome.trader_name ?? "Trader";
@@ -43,6 +43,70 @@ function formatOutcomeResult(outcome: DealOutcome) {
   }
 
   return `${traderName} broke even`;
+}
+
+function DealMetricCell({
+  label,
+  value,
+  className = "text-[var(--t-text)]",
+}: {
+  label: string;
+  value: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className="min-w-0 border-b border-r border-[var(--t-border)] px-3 py-2.5 even:border-r-0 last:border-r-0 sm:border-b-0 sm:even:border-r sm:last:border-r-0">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+        {label}
+      </p>
+      <p className={`mt-1 truncate text-sm font-bold ${className}`}>{value}</p>
+    </div>
+  );
+}
+
+export function DealMetricGrid({
+  displayPotLabel,
+  entryCostUsdc,
+  feeUsdc,
+  entryCount,
+  wipeoutCount,
+}: {
+  displayPotLabel: string;
+  entryCostUsdc: number;
+  feeUsdc?: number;
+  entryCount: number;
+  wipeoutCount: number;
+}) {
+  const hasDealFee = feeUsdc !== undefined && feeUsdc > 0;
+
+  return (
+    <div
+      className={cn(
+        "grid grid-cols-2 border-t border-[var(--t-border)] text-xs",
+        hasDealFee ? "sm:grid-cols-5" : "sm:grid-cols-4"
+      )}
+    >
+      <DealMetricCell
+        label="Pot"
+        value={`$${displayPotLabel}`}
+        className="text-[var(--t-green)]"
+      />
+      <DealMetricCell
+        label="Entry"
+        value={`$${entryCostUsdc}`}
+        className="text-[var(--t-accent)]"
+      />
+      {hasDealFee && <DealMetricCell label="Fee" value={`$${feeUsdc}`} />}
+      <DealMetricCell label="Entries" value={entryCount} />
+      <DealMetricCell
+        label="Wipeouts"
+        value={wipeoutCount}
+        className={
+          wipeoutCount > 0 ? "text-[var(--t-red)]" : "text-[var(--t-text)]"
+        }
+      />
+    </div>
+  );
 }
 
 function DealLoadingState({ compact = false }: { compact?: boolean }) {
@@ -160,51 +224,65 @@ export function DealDetailContent({
   return (
     <>
       <div
-        className={`sticky z-20 border-b border-[var(--t-border)] bg-[var(--t-bg)] ${
+        className={`sticky z-20 border-b border-[var(--t-border)] bg-[var(--t-surface)] ${
           compact ? "top-0" : "top-[37px]"
         }`}
       >
-        <div className="flex items-center justify-between px-4 py-1.5">
-          <div className="flex items-center gap-3">
+        <div className="flex items-start justify-between gap-3 px-4 py-3">
+          <div className="min-w-0">
+            <p className="text-[10px] uppercase tracking-[0.22em] text-[var(--t-muted)]">
+              View deal
+            </p>
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 className="font-[family-name:var(--font-plex-sans)] text-lg font-black uppercase tracking-wide text-[var(--t-amber)]">
+                Deal dossier
+              </h2>
+              {deal.on_chain_deal_id !== undefined && (
+                <span className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
+                  #{deal.on_chain_deal_id}
+                </span>
+              )}
+              <span
+                className={`text-[10px] font-bold uppercase ${
+                  deal.status === "open"
+                    ? "text-[var(--t-green)]"
+                    : "text-[var(--t-muted)]"
+                }`}
+              >
+                [{deal.status}]
+              </span>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 text-xs">
             {onClose ? (
               <button
                 type="button"
                 onClick={onClose}
-                className="min-h-10 px-2 text-xs uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
+                className="min-h-10 border border-[var(--t-divider)] px-3 text-xs uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:border-[var(--t-red)] hover:text-[var(--t-red)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
               >
                 [CLOSE]
               </button>
             ) : (
               <Link
                 href="/"
-                className="text-xs uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+                className="grid min-h-10 place-items-center border border-[var(--t-divider)] px-3 text-xs uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
               >
                 {"<"} DESK
               </Link>
             )}
-            <span className="text-[10px] text-[var(--t-border)]">/</span>
-            {deal.on_chain_deal_id !== undefined && (
-              <span className="text-xs uppercase tracking-wider text-[var(--t-muted)]">
-                #{deal.on_chain_deal_id}
-              </span>
-            )}
           </div>
-          <span
-            className={`text-[10px] font-bold ${
-              deal.status === "open"
-                ? "text-[var(--t-green)]"
-                : "text-[var(--t-muted)]"
-            }`}
-          >
-            [{deal.status.toUpperCase()}]
-          </span>
         </div>
       </div>
 
-      <div className="px-4 py-4">
+      <div className="space-y-4 px-3 py-4 sm:px-4">
         <div className="border border-[var(--t-border)]">
-          <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-            SCENARIO
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-2">
+            <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              SCENARIO
+            </span>
+            <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+              {new Date(deal.created_at).toLocaleDateString()}
+            </span>
           </div>
           <div className="px-3 py-3">
             <p className="text-xs leading-relaxed text-[var(--t-text)]">
@@ -212,43 +290,15 @@ export function DealDetailContent({
             </p>
           </div>
 
-          <div className="flex items-center gap-0 border-t border-[var(--t-border)] text-xs">
-            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
-              <p className="text-[10px] text-[var(--t-muted)]">POT</p>
-              <p className="text-[var(--t-green)]">${displayPotLabel}</p>
-            </div>
-            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
-              <p className="text-[10px] text-[var(--t-muted)]">ENTRY</p>
-              <p className="text-[var(--t-accent)]">${deal.entry_cost_usdc}</p>
-            </div>
-            {deal.fee_usdc !== undefined && deal.fee_usdc > 0 && (
-              <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
-                <p className="text-[10px] text-[var(--t-muted)]">FEE</p>
-                <p className="text-[var(--t-text)]">${deal.fee_usdc}</p>
-              </div>
-            )}
-            <div className="flex-1 border-r border-[var(--t-border)] px-3 py-2.5">
-              <p className="text-[10px] text-[var(--t-muted)]">ENTRIES</p>
-              <p className="text-[var(--t-text)]">{deal.entry_count}</p>
-            </div>
-            <div className="flex-1 px-3 py-2.5">
-              <p className="text-[10px] text-[var(--t-muted)]">WIPEOUTS</p>
-              <p
-                className={
-                  wipeoutCount > 0
-                    ? "text-[var(--t-red)]"
-                    : "text-[var(--t-text)]"
-                }
-              >
-                {wipeoutCount}
-              </p>
-            </div>
-          </div>
+          <DealMetricGrid
+            displayPotLabel={displayPotLabel}
+            entryCostUsdc={deal.entry_cost_usdc}
+            feeUsdc={deal.fee_usdc}
+            entryCount={deal.entry_count}
+            wipeoutCount={wipeoutCount}
+          />
 
-          <div className="flex items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
-            <span className="text-[10px] text-[var(--t-muted)]">
-              {new Date(deal.created_at).toLocaleDateString()}
-            </span>
+          <div className="flex flex-wrap items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
             {deal.on_chain_tx_hash && (
               <a
                 href={`https://sepolia.basescan.org/tx/${deal.on_chain_tx_hash}`}
@@ -271,7 +321,7 @@ export function DealDetailContent({
             )}
         </div>
 
-        <div className="mt-4 border border-[var(--t-border)]">
+        <div className="border border-[var(--t-border)]">
           <div className="border-b border-[var(--t-border)] bg-[var(--t-surface)] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
             OUTCOMES ({outcomes.length})
           </div>
@@ -291,8 +341,8 @@ export function DealDetailContent({
                       : "bg-[var(--t-bg)]"
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="text-[10px] text-[var(--t-muted)]">
                         #{idx + 1}
                       </span>
@@ -306,7 +356,7 @@ export function DealDetailContent({
                         {formatOutcomeResult(outcome)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 flex-wrap items-center gap-2">
                       {outcome.trader_wiped_out && (
                         <span className="text-[10px] font-bold text-[var(--t-red)]">
                           [WIPED OUT
@@ -330,7 +380,7 @@ export function DealDetailContent({
 
                   {(outcome.assets_gained.length > 0 ||
                     outcome.assets_lost.length > 0) && (
-                    <div className="mt-2 flex items-center gap-3 text-[10px]">
+                    <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px]">
                       {outcome.assets_gained.length > 0 && (
                         <span className="text-[var(--t-green)]">
                           +{" "}
@@ -353,7 +403,7 @@ export function DealDetailContent({
                     </div>
                   )}
 
-                  <div className="mt-2 flex items-center gap-3 text-[10px] text-[var(--t-muted)]">
+                  <div className="mt-2 flex flex-wrap items-center gap-3 text-[10px] text-[var(--t-muted)]">
                     <span>{new Date(outcome.created_at).toLocaleString()}</span>
                     {outcome.on_chain_tx_hash && (
                       <a
@@ -395,9 +445,9 @@ export function DealDetailDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
+        <Dialog.Popup className={dialogPopupClass("xl")}>
           <Dialog.Title className="sr-only">Deal detail</Dialog.Title>
-          <div className="max-h-[88vh] overflow-y-auto">
+          <div className="max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-h-[88vh]">
             {dealId ? (
               <DealDetailContent
                 dealId={dealId}
@@ -482,6 +532,7 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
 
   useEffect(() => {
     if (!isOnChainClosed || phase !== "idle") return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void syncClosedDeal();
   }, [isOnChainClosed, phase, syncClosedDeal]);
 

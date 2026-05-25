@@ -33,7 +33,7 @@ function ExternalNavLink({
       target="_blank"
       rel="noopener noreferrer"
       aria-label={ariaLabel}
-      className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+      className="inline-flex min-h-10 shrink-0 items-center text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
     >
       {children}
     </a>
@@ -45,7 +45,7 @@ export function Nav({ containerClassName }: NavProps) {
   const { logout } = usePrivy();
 
   return (
-    <nav className="sticky top-0 z-50 border-b border-[var(--t-border)] bg-[var(--t-surface)]">
+    <nav className="sticky top-0 z-50 border-b border-[var(--t-border)] bg-[var(--t-surface)] font-mono">
       <div
         className={cn(
           "mx-auto flex max-w-4xl items-center justify-between px-4 py-2.5 text-xs tracking-wider",
@@ -58,10 +58,10 @@ export function Nav({ containerClassName }: NavProps) {
               key={href}
               href={href}
               className={cn(
-                "shrink-0 transition-colors",
+                "inline-flex min-h-10 shrink-0 items-center font-bold uppercase transition-colors focus:outline-none",
                 isNavItemActive(pathname, href)
                   ? "text-[var(--t-accent)]"
-                  : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
+                  : "text-[var(--t-muted)] hover:text-[var(--t-text)] focus:text-[var(--t-accent)]"
               )}
             >
               {label}
@@ -86,7 +86,7 @@ export function Nav({ containerClassName }: NavProps) {
           </ExternalNavLink>
           <button
             onClick={logout}
-            className="shrink-0 text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)]"
+            className="inline-flex min-h-10 shrink-0 items-center text-[var(--t-muted)] transition-colors hover:text-[var(--t-red)] focus:text-[var(--t-red)] focus:outline-none"
           >
             LOGOUT
           </button>

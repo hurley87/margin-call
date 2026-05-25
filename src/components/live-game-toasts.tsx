@@ -201,7 +201,7 @@ function LiveGameToastCard({
         onOpen();
       }}
       className={cn(
-        "live-toast-enter pointer-events-auto group relative w-full cursor-pointer overflow-hidden border p-3 text-left font-mono shadow-2xl shadow-black/50 backdrop-blur-md focus:outline-none",
+        "live-toast-enter pointer-events-auto group relative w-full cursor-pointer overflow-hidden border p-3 text-left font-mono shadow-2xl shadow-black/50 backdrop-blur-md focus:border-[var(--t-accent)] focus:outline-none",
         isWipeout
           ? "live-toast-wipeout border-[var(--t-red)]/70 bg-[#1d0808]/95"
           : "border-[var(--t-accent)]/70 bg-[#07100b]/95"
@@ -264,7 +264,7 @@ function LiveGameToastCard({
             event.stopPropagation();
             onDismiss();
           }}
-          className="grid h-7 w-7 shrink-0 place-items-center border border-white/10 text-[var(--t-muted)] transition-colors hover:border-white/30 hover:text-[var(--t-text)]"
+          className="grid h-10 w-10 shrink-0 place-items-center border border-white/10 text-[var(--t-muted)] transition-colors hover:border-white/30 hover:text-[var(--t-text)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
         >
           <X className="h-3.5 w-3.5" />
         </button>

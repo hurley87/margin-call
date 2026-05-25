@@ -9,9 +9,10 @@ export function MusicPlayer() {
     <div className="flex items-center gap-1.5 text-[10px] text-[var(--t-muted)]">
       <span>♫</span>
       <button
+        type="button"
         onClick={togglePlay}
         aria-label={playing ? "Pause music" : "Play music"}
-        className="transition-colors hover:text-[var(--t-text)]"
+        className="inline-flex min-h-10 min-w-10 items-center justify-center border border-[var(--t-divider)] text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
       >
         [{playing ? "■" : "▶"}]
       </button>

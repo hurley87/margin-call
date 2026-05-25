@@ -3,7 +3,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
-import { useTrader, type Trader } from "@/hooks/use-traders";
+import { useTrader, type Trader, type TraderStatus } from "@/hooks/use-traders";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { DatumCell } from "@/components/datum-cell";
 import { formatStatus } from "@/lib/format-status";
@@ -35,7 +35,7 @@ import {
   getTraderCycleUi,
   traderCycleDocFromDetailTrader,
 } from "@/lib/trader-cycle";
-import { DIALOG_BACKDROP_CLASS, cn } from "@/lib/utils";
+import { DIALOG_BACKDROP_CLASS, cn, dialogPopupClass } from "@/lib/utils";
 
 const TRADER_SECTION_TITLE_CLASS =
   "text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]";
@@ -87,6 +87,53 @@ function CollapsibleSection({
       </div>
       {isOpen && <div className="p-4">{children}</div>}
     </section>
+  );
+}
+
+export function TraderDeskSummaryStrip({
+  status,
+  balanceUsdc,
+  unfunded,
+  onOpenWallet,
+}: {
+  status: TraderStatus;
+  balanceUsdc: number | null;
+  unfunded: boolean;
+  onOpenWallet: () => void;
+}) {
+  return (
+    <div className="grid border border-[var(--t-divider)] bg-[#070b09] sm:grid-cols-3">
+      <DatumCell
+        label="Desk order"
+        value={status === "active" ? "Autonomous" : "Standing by"}
+        className="border-0 border-b border-[var(--t-divider)] sm:border-b-0 sm:border-r"
+        valueClassName={
+          status === "active"
+            ? "text-[var(--t-green)]"
+            : "text-[var(--t-amber)]"
+        }
+      />
+      <button
+        type="button"
+        onClick={onOpenWallet}
+        className="text-left transition-colors hover:bg-[var(--t-surface)] focus:bg-[var(--t-surface)] focus:outline-none"
+      >
+        <DatumCell
+          label="Cash at risk"
+          value={balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."}
+          className="border-0 border-b border-[var(--t-divider)] sm:border-b-0 sm:border-r"
+          valueClassName={unfunded ? "text-[var(--t-amber)]" : undefined}
+        />
+      </button>
+      <DatumCell
+        label="Next move"
+        value={unfunded ? "Fund first" : "Mandate driven"}
+        className="border-0"
+        valueClassName={
+          unfunded ? "text-[var(--t-amber)]" : "text-[var(--t-text)]"
+        }
+      />
+    </div>
   );
 }
 
@@ -178,10 +225,10 @@ export function TraderDetailContent({
         !compact && "min-h-screen"
       )}
     >
-      <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
+      <div className="sticky top-0 z-20 flex items-start justify-between gap-3 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
         <div className="min-w-0">
           <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
-            Your trader
+            View trader
           </p>
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
             <h2 className="truncate font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-wide text-[var(--t-amber)]">
@@ -198,22 +245,22 @@ export function TraderDetailContent({
             <button
               type="button"
               onClick={onClose}
-              className="text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+              className="min-h-10 border border-[var(--t-divider)] px-3 uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:border-[var(--t-red)] hover:text-[var(--t-red)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
             >
-              Close
+              [CLOSE]
             </button>
           ) : (
             <Link
               href="/"
-              className="text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
+              className="grid min-h-10 place-items-center border border-[var(--t-divider)] px-3 uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
             >
-              &larr;
+              &larr; DESK
             </Link>
           )}
         </div>
       </div>
 
-      <div className="grid gap-5 p-4 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <div className="grid gap-4 p-3 sm:p-4 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-5">
         <section className="min-w-0">
           <div className="overflow-hidden border border-[var(--t-divider)] bg-[#070b09]">
             <div className="relative aspect-square">
@@ -245,6 +292,12 @@ export function TraderDetailContent({
         </section>
 
         <section className="grid min-w-0 content-start gap-4">
+          <TraderDeskSummaryStrip
+            status={trader.status}
+            balanceUsdc={balanceUsdc}
+            unfunded={unfunded}
+            onOpenWallet={() => setWalletOpen(true)}
+          />
           <AgentControls
             traderId={id}
             status={trader.status}
@@ -299,9 +352,9 @@ export function TraderDetailDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
-        <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-4xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
+        <Dialog.Popup className={dialogPopupClass("xl")}>
           <Dialog.Title className="sr-only">Trader detail</Dialog.Title>
-          <div className="max-h-[88vh] overflow-y-auto">
+          <div className="max-h-[calc(100dvh-1rem)] overflow-y-auto sm:max-h-[88vh]">
             {traderId ? (
               <TraderDetailContent
                 id={traderId}
@@ -875,7 +928,7 @@ function MandateConfig({
             )}
             {Array.isArray(mandate.keywords) &&
               (mandate.keywords as string[]).length > 0 && (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <p className="text-xs text-[var(--t-muted)]">Keywords</p>
                   <p className="text-[10px] text-[var(--t-muted)]/60">
                     Only enter deals matching these keywords
@@ -891,7 +944,7 @@ function MandateConfig({
           <button
             type="button"
             onClick={openEdit}
-            className="border border-[var(--t-border)] px-3 py-1.5 text-xs text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+            className="min-h-10 border border-[var(--t-border)] px-3 py-1.5 text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)] focus:border-[var(--t-accent)] focus:text-[var(--t-text)] focus:outline-none"
           >
             Configure mandate
           </button>
@@ -907,7 +960,7 @@ function MandateConfig({
       defaultOpen
       canCollapse={false}
     >
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
             Max Entry Cost (USDC)
@@ -924,7 +977,7 @@ function MandateConfig({
               setForm({ ...form, max_entry_cost_usdc: e.target.value })
             }
             placeholder="No limit"
-            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+            className="min-h-11 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none sm:text-sm"
           />
         </div>
         <div>
@@ -941,7 +994,7 @@ function MandateConfig({
             value={form.min_pot_usdc}
             onChange={(e) => setForm({ ...form, min_pot_usdc: e.target.value })}
             placeholder="No limit"
-            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+            className="min-h-11 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none sm:text-sm"
           />
         </div>
         <div>
@@ -958,7 +1011,7 @@ function MandateConfig({
             value={form.max_pot_usdc}
             onChange={(e) => setForm({ ...form, max_pot_usdc: e.target.value })}
             placeholder="No limit"
-            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+            className="min-h-11 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none sm:text-sm"
           />
         </div>
         <div>
@@ -976,7 +1029,7 @@ function MandateConfig({
             value={form.bankroll_pct}
             onChange={(e) => setForm({ ...form, bankroll_pct: e.target.value })}
             placeholder="25"
-            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+            className="min-h-11 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none sm:text-sm"
           />
         </div>
         <div>
@@ -995,7 +1048,7 @@ function MandateConfig({
               setForm({ ...form, approval_threshold_usdc: e.target.value })
             }
             placeholder="No approval required"
-            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+            className="min-h-11 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none sm:text-sm"
           />
         </div>
         <div>
@@ -1010,10 +1063,10 @@ function MandateConfig({
             value={form.keywords}
             onChange={(e) => setForm({ ...form, keywords: e.target.value })}
             placeholder="e.g. oil, gold, tech"
-            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+            className="min-h-11 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none sm:text-sm"
           />
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <label className="mb-0.5 flex items-center gap-2 text-xs text-[var(--t-muted)]">
             <input
               type="checkbox"
@@ -1021,7 +1074,7 @@ function MandateConfig({
               onChange={(e) =>
                 setForm({ ...form, llm_deal_selection: e.target.checked })
               }
-              className="border-[var(--t-border)]"
+              className="min-h-5 min-w-5 border-[var(--t-border)] accent-[var(--t-accent)]"
             />
             Use GPT for deal selection (vs. pot/entry ratio only)
           </label>
@@ -1030,7 +1083,7 @@ function MandateConfig({
             history, and outcome stats. Requires OPENAI_API_KEY on the server.
           </p>
         </div>
-        <div className="col-span-2">
+        <div className="sm:col-span-2">
           <label className="mb-0.5 block text-xs text-[var(--t-muted)]">
             Personality / strategy (optional)
           </label>
@@ -1044,7 +1097,7 @@ function MandateConfig({
             rows={4}
             maxLength={2000}
             placeholder="e.g. Cautious: avoid large pots from unknown creators…"
-            className="w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none"
+            className="min-h-28 w-full border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-base text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none sm:text-sm"
           />
         </div>
       </div>
@@ -1052,13 +1105,13 @@ function MandateConfig({
         <button
           onClick={handleSave}
           disabled={configure.isPending}
-          className="border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
+          className="min-h-11 border border-[var(--t-accent)] bg-[var(--t-surface)] px-4 py-2 text-sm font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] focus:bg-[var(--t-accent)] focus:text-[var(--t-bg)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
         >
           {configure.isPending ? "Saving..." : "Save Mandate"}
         </button>
         <button
           onClick={() => setEditing(false)}
-          className="text-sm text-[var(--t-muted)] hover:text-[var(--t-text)]"
+          className="min-h-10 px-2 text-sm uppercase tracking-[0.14em] text-[var(--t-muted)] hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
         >
           Cancel
         </button>

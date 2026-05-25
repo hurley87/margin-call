@@ -8,6 +8,41 @@ export function cn(...inputs: ClassValue[]) {
 export const DIALOG_BACKDROP_CLASS =
   "fixed inset-0 z-50 bg-[#020403]/80 backdrop-blur-sm";
 
+const DIALOG_POPUP_BASE_CLASS =
+  "fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60 sm:max-h-[88vh]";
+
+const DIALOG_POPUP_SIZE_CLASS = {
+  lg: "max-w-2xl sm:w-[92vw]",
+  xl: "max-w-4xl sm:w-[94vw]",
+} as const;
+
+export function dialogPopupClass(size: keyof typeof DIALOG_POPUP_SIZE_CLASS) {
+  return `${DIALOG_POPUP_BASE_CLASS} ${DIALOG_POPUP_SIZE_CLASS[size]}`;
+}
+
+const USDC_FORMATTER = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
+
+export function formatUsdc(value: number): string {
+  return USDC_FORMATTER.format(value);
+}
+
+const ACTIVITY_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+  timeZoneName: "short",
+});
+
+export function formatActivityTime(timestamp: number): string {
+  return ACTIVITY_TIME_FORMATTER.format(new Date(timestamp));
+}
+
 export function heatColor(score: number): string {
   if (score >= 7) return "text-[var(--t-red)]";
   if (score >= 4) return "text-[var(--t-amber)]";

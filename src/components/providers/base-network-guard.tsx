@@ -17,22 +17,22 @@ export function BaseNetworkGuard() {
   return (
     <div
       role="alert"
-      className="flex flex-wrap items-center justify-center gap-3 border-b border-amber-500/30 bg-amber-950/80 px-4 py-3 text-sm text-amber-100"
+      className="flex flex-wrap items-center justify-center gap-3 border-b border-[var(--t-amber)]/45 bg-[#1a1208]/95 px-4 py-3 font-mono text-sm text-[var(--t-text)]"
     >
-      <span>
-        Your embedded desk wallet is on a different network. Switch to{" "}
+      <span className="text-xs uppercase tracking-[0.14em] text-[var(--t-amber)]">
+        Network mismatch: embedded desk wallet is off-floor. Switch to{" "}
         {PAYMENT_CHAIN_NAME} to use this app.
       </span>
       <button
         type="button"
         onClick={switchToBase}
         disabled={isSwitching}
-        className="rounded-full bg-amber-500 px-4 py-2 font-medium text-black transition-colors hover:bg-amber-400 disabled:opacity-50"
+        className="min-h-10 border border-[var(--t-amber)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-[var(--t-amber)] transition-colors hover:bg-[var(--t-amber)] hover:text-[var(--t-bg)] focus:bg-[var(--t-amber)] focus:text-[var(--t-bg)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
-        {isSwitching ? "Switching…" : `Switch to ${PAYMENT_CHAIN_NAME}`}
+        {isSwitching ? "Switching..." : `Switch to ${PAYMENT_CHAIN_NAME}`}
       </button>
       {switchError && (
-        <span className="w-full text-center text-amber-200/90">
+        <span className="w-full text-center text-xs uppercase tracking-[0.14em] text-[var(--t-red)]">
           {switchError} Try again or switch the embedded wallet network.
         </span>
       )}

@@ -9,6 +9,7 @@ import {
 } from "@/components/feed-line";
 import { DealApprovalDialog } from "@/components/deal-approval-dialog";
 import { DealDetailDialog } from "@/components/deal-detail";
+import { EmptyState } from "@/components/empty-state";
 import { useAgentActivity } from "@/hooks/use-agent";
 import { usePendingApprovals } from "@/hooks/use-approvals";
 
@@ -49,13 +50,16 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
   const canShowLess = visibleCount > ACTIVITY_PAGE_SIZE;
 
   return (
-    <section>
+    <section className="min-w-0">
       <div className="pb-4">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-              Live Activity
+            <h2 className="font-[family-name:var(--font-plex-sans)] text-base font-black uppercase tracking-wide text-[var(--t-amber)]">
+              Live activity
             </h2>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+              Newest calls, approvals, and deal outcomes print first.
+            </p>
           </div>
           <span className="shrink-0 text-[10px] uppercase tracking-[0.2em] text-[var(--t-accent)]">
             {totalCount > ACTIVITY_PAGE_SIZE
@@ -75,23 +79,26 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
       </div>
 
       {isLoading ? (
-        <div className="py-6 text-center text-sm text-[var(--t-muted)]">
-          Loading activity...<span className="cursor-blink">█</span>
+        <div className="border border-[var(--t-divider)] bg-[#070b09] px-4 py-6 text-center">
+          <p className="text-xs uppercase tracking-[0.18em] text-[var(--t-muted)]">
+            Reading trader tape
+            <span className="cursor-blink ml-1 text-[var(--t-accent)]">█</span>
+          </p>
         </div>
       ) : isError ? (
-        <div className="py-6 text-center">
-          <p className="text-sm text-[var(--t-red)]">
+        <div className="border border-[var(--t-red)]/35 bg-[var(--t-red)]/[0.06] px-4 py-4 text-center">
+          <p className="text-xs uppercase tracking-[0.16em] text-[var(--t-red)]">
             {error instanceof Error
               ? error.message
               : "Failed to load trader activity."}
           </p>
         </div>
       ) : !activity || activity.length === 0 ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-[var(--t-muted)]">
-            No realtime activity yet.
-          </p>
-        </div>
+        <EmptyState
+          title="No realtime activity yet"
+          description="When this trader scans the wire, asks for approval, or settles a deal, the tape will print here."
+          className="border border-[var(--t-divider)] bg-[#070b09]/75"
+        />
       ) : (
         <>
           <div className="max-h-[60vh] overflow-y-auto lg:max-h-[calc(100svh-12rem)]">
@@ -119,7 +126,7 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
                   <button
                     type="button"
                     onClick={() => setVisibleCount(ACTIVITY_PAGE_SIZE)}
-                    className="border border-[var(--t-border)] px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
+                    className="min-h-10 border border-[var(--t-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
                   >
                     Show Latest 10
                   </button>
@@ -130,7 +137,7 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
                     onClick={() =>
                       setVisibleCount((count) => count + ACTIVITY_PAGE_SIZE)
                     }
-                    className="border border-[var(--t-border)] px-3 py-1.5 text-[10px] uppercase tracking-[0.14em] text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+                    className="min-h-10 border border-[var(--t-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)] focus:border-[var(--t-accent)] focus:text-[var(--t-text)] focus:outline-none"
                   >
                     Load 10 More
                   </button>

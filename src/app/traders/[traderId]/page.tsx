@@ -12,6 +12,10 @@ import {
   PUBLIC_PORTRAIT_TRAIT_ROWS,
   humanizePortraitTraitValue,
 } from "@/lib/portrait-traits";
+import { DatumCell } from "@/components/datum-cell";
+import { EmptyState } from "@/components/empty-state";
+import { formatStatus } from "@/lib/format-status";
+import { formatActivityTime, formatUsdc } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,31 +76,67 @@ export default async function PublicTraderPage({
     notFound();
   }
 
+  return <PublicTraderDossier trader={trader} />;
+}
+
+export function PublicTraderDossier({
+  trader,
+}: {
+  trader: PublicTraderProfile;
+}) {
   let portraitUrl: string = TRADER_PLACEHOLDER_IMAGE_PATH;
   if (trader.portraitStatus === "ready" && trader.profileImageUrl) {
     portraitUrl = trader.profileImageUrl;
   }
   const showFallbackInitials = trader.portraitStatus !== "ready";
+  const statusTone = getStatusTone(trader.status);
+  const portraitTone = getPortraitTone(trader.portraitStatus);
 
   return (
-    <main className="min-h-screen bg-[var(--t-bg)] text-[var(--t-text)] crt-scanlines">
+    <main className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--t-divider)] pb-4">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.28em] text-[var(--t-muted)]">
-              Margin Call public trader dossier
+            <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--t-green)]">
+              Public trader dossier // floor tape
             </p>
             <h1 className="mt-1 font-[family-name:var(--font-plex-sans)] text-3xl font-black uppercase tracking-wide text-[var(--t-amber)] sm:text-5xl">
               {trader.name}
             </h1>
+            <p className="mt-2 max-w-2xl text-xs uppercase tracking-[0.16em] text-[var(--t-muted)]">
+              Read-only reputation, escrow posture, and last public calls from
+              the exchange floor.
+            </p>
           </div>
           <Link
             href="/"
-            className="border border-[var(--t-divider)] px-3 py-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
+            className="inline-flex min-h-11 items-center border border-[var(--t-divider)] px-4 py-2 text-xs font-bold uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
           >
-            DESK_OS
+            Back to desk
           </Link>
         </header>
+
+        <section className="mb-5 grid gap-2 sm:grid-cols-3">
+          <DatumCell
+            label="Desk status"
+            value={formatStatus(trader.status)}
+            valueClassName={statusTone}
+          />
+          <DatumCell
+            label="Escrow capital"
+            value={formatUsdc(trader.escrowBalanceUsdc)}
+            valueClassName={
+              trader.escrowBalanceUsdc > 0
+                ? "text-[var(--t-green)]"
+                : "text-[var(--t-amber)]"
+            }
+          />
+          <DatumCell
+            label="Portrait"
+            value={formatPortraitStatus(trader.portraitStatus)}
+            valueClassName={portraitTone}
+          />
+        </section>
 
         <section className="grid flex-1 gap-5 lg:grid-cols-[minmax(19rem,24rem)_minmax(0,1fr)]">
           <div className="min-w-0">
@@ -117,15 +157,13 @@ export default async function PublicTraderPage({
                   </div>
                 ) : null}
               </div>
-              <div className="grid grid-cols-2 border-t border-[var(--t-divider)] text-xs uppercase tracking-[0.16em]">
-                <ProfileDatum
-                  label="Status"
-                  value={formatStatus(trader.status)}
-                />
-                <ProfileDatum
-                  label="Portrait"
-                  value={formatPortraitStatus(trader.portraitStatus)}
-                />
+              <div className="border-t border-[var(--t-divider)] bg-[#070b09]/85 px-4 py-3">
+                <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+                  Token-bound operator
+                </p>
+                <p className="mt-1 text-sm font-bold uppercase tracking-wide text-[var(--t-text)]">
+                  {trader.archetype} / {trader.riskProfile}
+                </p>
               </div>
             </div>
           </div>
@@ -141,16 +179,12 @@ export default async function PublicTraderPage({
                 </span>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
-                <ProfileDatum
+                <DatumCell
                   label="Token ID"
                   value={tokenLabel(trader.tokenId)}
                 />
-                <ProfileDatum label="Archetype" value={trader.archetype} />
-                <ProfileDatum label="Risk" value={trader.riskProfile} />
-                <ProfileDatum
-                  label="Escrow Capital"
-                  value={formatUsdc(trader.escrowBalanceUsdc)}
-                />
+                <DatumCell label="Archetype" value={trader.archetype} />
+                <DatumCell label="Risk" value={trader.riskProfile} />
               </div>
             </section>
 
@@ -163,7 +197,7 @@ export default async function PublicTraderPage({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {PUBLIC_PORTRAIT_TRAIT_ROWS.map(([key, label]) => (
-                    <ProfileDatum
+                    <DatumCell
                       key={key}
                       label={label}
                       value={humanizePortraitTraitValue(trader.traits![key])}
@@ -188,10 +222,10 @@ export default async function PublicTraderPage({
                     >
                       <div className="mb-2 flex flex-wrap items-center justify-between gap-2 text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
                         <span className="text-[var(--t-green)]">
-                          {formatActivityType(item.activityType)}
+                          {formatStatus(item.activityType)}
                         </span>
                         <time dateTime={new Date(item.createdAt).toISOString()}>
-                          {formatTime(item.createdAt)}
+                          {formatActivityTime(item.createdAt)}
                         </time>
                       </div>
                       <p className="text-sm leading-6 text-[var(--t-text)]">
@@ -206,28 +240,17 @@ export default async function PublicTraderPage({
                   ))}
                 </ol>
               ) : (
-                <p className="border border-[var(--t-divider)] bg-[#070b09]/75 p-4 text-sm uppercase tracking-[0.14em] text-[var(--t-muted)]">
-                  No public activity on the tape yet
-                </p>
+                <EmptyState
+                  title="No public activity on the tape yet"
+                  description="Once this trader scans, skips, wins, loses, or gets wiped out, the public floor tape will print it here."
+                  className="border border-[var(--t-divider)] bg-[#070b09]/75"
+                />
               )}
             </section>
           </div>
         </section>
       </div>
     </main>
-  );
-}
-
-function ProfileDatum({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0 border border-[var(--t-divider)] bg-[#070b09]/75 p-3">
-      <p className="mb-1 text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        {label}
-      </p>
-      <p className="break-words text-sm font-bold uppercase tracking-wide text-[var(--t-text)]">
-        {value}
-      </p>
-    </div>
   );
 }
 
@@ -241,40 +264,27 @@ function initials(name: string): string {
     .toUpperCase();
 }
 
-function formatStatus(status: PublicTraderProfile["status"]): string {
-  return status.replaceAll("_", " ");
+function getStatusTone(status: PublicTraderProfile["status"]): string {
+  if (status === "active") return "text-[var(--t-green)]";
+  if (status === "wiped_out") return "text-[var(--t-red)]";
+  return "text-[var(--t-amber)]";
 }
 
 function formatPortraitStatus(
   status: PublicTraderProfile["portraitStatus"]
 ): string {
   if (status === "error") return "Fallback";
-  return status.replaceAll("_", " ");
+  return formatStatus(status);
+}
+
+function getPortraitTone(
+  status: PublicTraderProfile["portraitStatus"]
+): string {
+  if (status === "ready") return "text-[var(--t-green)]";
+  if (status === "error") return "text-[var(--t-red)]";
+  return "text-[var(--t-amber)]";
 }
 
 function tokenLabel(tokenId: number | null): string {
   return tokenId === null ? "Pending" : `#${tokenId}`;
-}
-
-function formatUsdc(value: number): string {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-function formatActivityType(activityType: string): string {
-  return activityType.replaceAll("_", " ");
-}
-
-function formatTime(timestamp: number): string {
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    timeZoneName: "short",
-  }).format(new Date(timestamp));
 }

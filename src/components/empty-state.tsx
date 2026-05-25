@@ -1,16 +1,19 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
 
 export function EmptyState({
   title,
   description,
   action,
+  className,
 }: {
   title: string;
   description?: string;
   action?: ReactNode;
+  className?: string;
 }) {
   return (
-    <div className="px-4 py-8 text-center">
+    <div className={cn("px-4 py-8 text-center", className)}>
       <p className="text-sm font-bold uppercase tracking-wider text-[var(--t-amber)]">
         {title}
       </p>

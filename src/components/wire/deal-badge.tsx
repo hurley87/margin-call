@@ -6,7 +6,7 @@ export function DealBadge({ deal }: { deal: Deal }) {
   return (
     <Link
       href={`/?deal=${encodeURIComponent(deal.id)}`}
-      className="flex items-center gap-2 border border-[var(--t-border)] px-2 py-1 text-[10px] transition-colors hover:bg-[var(--t-surface)]"
+      className="flex min-h-10 flex-wrap items-center gap-x-2 gap-y-1 border border-[var(--t-border)] px-2 py-1 text-[10px] transition-colors hover:border-[var(--t-accent)] hover:bg-[var(--t-surface)] focus:border-[var(--t-accent)] focus:bg-[var(--t-surface)] focus:outline-none"
     >
       <span className="text-[var(--t-accent)]">
         DEAL

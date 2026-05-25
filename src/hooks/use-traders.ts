@@ -29,6 +29,8 @@ type TraderReadModel = Pick<
   profileImageUrl: string;
 };
 
+export type TraderStatus = "active" | "paused" | "wiped_out";
+
 export interface Trader {
   id: string;
   token_id: number;
@@ -38,7 +40,7 @@ export interface Trader {
   cdp_wallet_address: string | null;
   cdp_owner_address: string | null;
   cdp_account_name: string | null;
-  status: "active" | "paused" | "wiped_out";
+  status: TraderStatus;
   mandate: Record<string, unknown>;
   personality: string | null;
   image_status: TraderReadModel["imageStatus"] | null;
