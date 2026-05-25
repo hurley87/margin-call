@@ -16,11 +16,13 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import { Dialog } from "@base-ui/react/dialog";
 import {
+  ArrowRight,
   Check,
   Copy,
   Github,
   HelpCircle,
   LogOut,
+  Plus,
   Twitter,
   User,
   Volume2,
@@ -57,7 +59,7 @@ import {
   type PendingApproval,
 } from "@/hooks/use-approvals";
 import { useDeskManager } from "@/hooks/use-desk";
-import { useMyDeals, type Deal } from "@/hooks/use-deals";
+import { useDeals, useMyDeals, type Deal } from "@/hooks/use-deals";
 import {
   useLeaderboard,
   type LeaderboardTrader,
@@ -248,6 +250,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const nowMs = useSecondTick();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: myDeals, isLoading: myDealsLoading } = useMyDeals();
+  const { data: marketDeals, isLoading: marketDealsLoading } = useDeals();
   const { data: approvals } = usePendingApprovals();
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
   const { data: leaderboard, isLoading: leaderboardLoading } = useLeaderboard();
@@ -354,7 +357,13 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
       />
 
       <main className="mx-auto grid w-full flex-1 gap-3 overflow-y-auto px-2 py-2 pb-4 xl:min-h-0 xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:overflow-hidden">
-        <NewswirePanel drops={drops} walletFunded={deskWalletFunded} />
+        <NewswirePanel
+          drops={drops}
+          deals={marketDeals}
+          dealsLoading={marketDealsLoading}
+          walletFunded={deskWalletFunded}
+          onOpenDeal={setSelectedDealId}
+        />
 
         <section className="grid gap-3 xl:min-h-0 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]">
           <TradingDeskPanel
@@ -860,7 +869,10 @@ function IconLink({
 
 function NewswirePanel({
   drops,
+  deals,
+  dealsLoading,
   walletFunded,
+  onOpenDeal,
 }: {
   drops:
     | Array<{
@@ -881,12 +893,34 @@ function NewswirePanel({
         }>;
       }>
     | undefined;
+  deals: Deal[] | undefined;
+  dealsLoading: boolean;
   walletFunded: boolean;
+  onOpenDeal: (dealId: string) => void;
 }) {
   const [dealDialog, setDealDialog] = useState<NewswireCreateDialog | null>(
     null
   );
   const [helpOpen, setHelpOpen] = useState(false);
+
+  const activeMarketDeals = useMemo(() => {
+    return (deals ?? []).filter(isActiveMarketDeal);
+  }, [deals]);
+
+  const activeDealsByHeadline = useMemo(() => {
+    const grouped = new Map<string, Deal[]>();
+    for (const deal of activeMarketDeals) {
+      if (!deal.source_headline) continue;
+      const key = normalizeHeadlineKey(deal.source_headline);
+      const existing = grouped.get(key);
+      if (existing) {
+        existing.push(deal);
+      } else {
+        grouped.set(key, [deal]);
+      }
+    }
+    return grouped;
+  }, [activeMarketDeals]);
 
   const items = useMemo(() => {
     if (!drops) return undefined;
@@ -900,16 +934,35 @@ function NewswirePanel({
           category: dispatch.category,
           body: dispatch.body,
           dealSeed: dispatch.dealSeed,
+          deals:
+            activeDealsByHeadline.get(
+              normalizeHeadlineKey(dispatch.headline)
+            ) ?? [],
         }));
       })
       .slice(0, 10);
-  }, [drops]);
+  }, [activeDealsByHeadline, drops]);
+
+  const marketStats = useMemo(() => {
+    return activeMarketDeals.reduce(
+      (acc, deal) => ({
+        count: acc.count + 1,
+        pot: acc.pot + deal.pot_usdc,
+        entries: acc.entries + deal.entry_count,
+      }),
+      { count: 0, pot: 0, entries: 0 }
+    );
+  }, [activeMarketDeals]);
 
   return (
     <aside className="terminal-panel flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
-        title="Newswire"
-        meta={items === undefined ? "WAIT" : undefined}
+        title="The Wire"
+        meta={
+          items === undefined || dealsLoading
+            ? "WAIT"
+            : `${marketStats.count} OPEN`
+        }
         action={
           <button
             type="button"
@@ -923,10 +976,13 @@ function NewswirePanel({
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
+        <NewswireMarketTape stats={marketStats} isLoading={dealsLoading} />
         <NewswireList
           items={items}
+          dealsLoading={dealsLoading}
           walletFunded={walletFunded}
           onCreate={setDealDialog}
+          onOpenDeal={onOpenDeal}
         />
       </div>
 
@@ -1106,16 +1162,60 @@ type NewswirePostItem = {
   impact: string;
   category?: string;
   dealSeed?: NewswireDealSeed;
+  deals: Deal[];
 };
+
+function NewswireMarketTape({
+  stats,
+  isLoading,
+}: {
+  stats: { count: number; pot: number; entries: number };
+  isLoading: boolean;
+}) {
+  if (isLoading) {
+    return (
+      <div className="mb-3 border border-[var(--t-divider)] bg-[#070b09] px-3 py-2">
+        <LoadingLine label="SCANNING ACTIVE DEALS" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mb-3 grid grid-cols-3 gap-1 border border-[var(--t-divider)] bg-[#070b09] px-2 py-2 text-center text-[10px] uppercase tracking-wider">
+      <div className="min-w-0 border-r border-[var(--t-divider)] px-1">
+        <p className="truncate text-[var(--t-muted)]">Open</p>
+        <p className="mt-1 tabular-nums text-[var(--t-accent)]">
+          {stats.count}
+        </p>
+      </div>
+      <div className="min-w-0 border-r border-[var(--t-divider)] px-1">
+        <p className="truncate text-[var(--t-muted)]">Pots</p>
+        <p className="mt-1 tabular-nums text-[var(--t-green)]">
+          {formatCompactMoney(stats.pot)}
+        </p>
+      </div>
+      <div className="min-w-0 px-1">
+        <p className="truncate text-[var(--t-muted)]">Entries</p>
+        <p className="mt-1 tabular-nums text-[var(--t-text)]">
+          {stats.entries}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 function NewswireList({
   items,
+  dealsLoading,
   walletFunded,
   onCreate,
+  onOpenDeal,
 }: {
   items: NewswirePostItem[] | undefined;
+  dealsLoading: boolean;
   walletFunded: boolean;
   onCreate: (item: NewswireCreateDialog) => void;
+  onOpenDeal: (dealId: string) => void;
 }) {
   if (items === undefined) {
     return <LoadingLine label="TUNING PRIVATE WIRE" />;
@@ -1132,7 +1232,10 @@ function NewswireList({
             body={item.impact}
             category={item.category}
             isFirst={index === 0}
+            deals={[]}
+            dealsLoading={dealsLoading}
             walletFunded={walletFunded}
+            onOpenDeal={onOpenDeal}
             onCreate={() =>
               onCreate({
                 headline: item.headline,
@@ -1156,7 +1259,10 @@ function NewswireList({
           category={item.category}
           dealSeed={item.dealSeed}
           isFirst={index === 0}
+          deals={item.deals}
+          dealsLoading={dealsLoading}
           walletFunded={walletFunded}
+          onOpenDeal={onOpenDeal}
           onCreate={() =>
             onCreate({
               headline: item.headline,
@@ -1178,7 +1284,10 @@ function NewswireItem({
   category,
   dealSeed,
   isFirst,
+  deals,
+  dealsLoading,
   walletFunded,
+  onOpenDeal,
   onCreate,
 }: {
   time: string;
@@ -1187,7 +1296,10 @@ function NewswireItem({
   category?: string;
   dealSeed?: NewswireDealSeed;
   isFirst?: boolean;
+  deals: Deal[];
+  dealsLoading: boolean;
   walletFunded: boolean;
+  onOpenDeal: (dealId: string) => void;
   onCreate: () => void;
 }) {
   const rail =
@@ -1195,28 +1307,16 @@ function NewswireItem({
       ? CATEGORY_RAIL[category as WireCategory]
       : DEFAULT_CATEGORY_RAIL;
   const isSeed = Boolean(dealSeed);
+  const dealCount = deals.length;
+  const hasDeals = dealCount > 0;
 
   return (
     <article
-      role={walletFunded ? "button" : undefined}
-      tabIndex={walletFunded ? 0 : undefined}
-      aria-disabled={!walletFunded}
-      onClick={() => {
-        if (!walletFunded) return;
-        onCreate();
-      }}
-      onKeyDown={(event) => {
-        if (!walletFunded) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          onCreate();
-        }
-      }}
       className={cn(
         "group relative -mx-2 border-b border-[var(--t-divider)]/45 pb-3 pl-3 pr-2 text-xs leading-relaxed transition-colors last:border-b-0 last:pb-0",
-        walletFunded
-          ? "cursor-money hover:bg-[var(--t-accent-soft)]/40 focus:bg-[var(--t-accent-soft)]/40 focus:outline-none"
-          : "cursor-not-allowed opacity-60"
+        hasDeals
+          ? "bg-[var(--t-accent-soft)]/20"
+          : "hover:bg-[var(--t-accent-soft)]/25"
       )}
     >
       <span
@@ -1224,7 +1324,7 @@ function NewswireItem({
         className={cn(
           "absolute left-0 top-0 h-full w-[2px]",
           rail,
-          isSeed ? "opacity-90" : "opacity-60"
+          hasDeals || isSeed ? "opacity-90" : "opacity-60"
         )}
       />
       <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase tracking-wider">
@@ -1235,19 +1335,180 @@ function NewswireItem({
           />
         )}
         <time className="tabular-nums text-[var(--t-muted)]">{time}</time>
+        <span className="text-[var(--t-divider)]">/</span>
+        <span
+          className={cn(
+            "tabular-nums",
+            hasDeals ? "text-[var(--t-green)]" : "text-[var(--t-muted)]"
+          )}
+        >
+          {dealStatusLabel(dealCount, dealsLoading)}
+        </span>
       </div>
-      <h3 className="font-medium text-[var(--t-amber)]">{headline}</h3>
+      <h3 className="line-clamp-3 break-words font-medium text-[var(--t-amber)]">
+        {headline}
+      </h3>
       <p className="mt-1 text-[var(--t-green)]/90">{body}</p>
-      <span className="wire-cta-bounce mt-2 items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)]/70 transition-colors group-hover:text-[var(--t-accent)]">
-        <span>{walletFunded ? "→ Create deal" : "Fund wallet first"}</span>
-        {isSeed && dealSeed && dealSeed.linkedDealCount > 0 && (
-          <span className="text-[var(--t-muted)]">
-            ({dealSeed.linkedDealCount} taken)
-          </span>
-        )}
-      </span>
+
+      {dealsLoading && (
+        <div className="mt-2 border border-[var(--t-divider)] bg-[#070b09] px-2 py-2">
+          <LoadingLine label="MATCHING DEALS" />
+        </div>
+      )}
+
+      {!dealsLoading && hasDeals && (
+        <>
+          <div className="mt-2 grid gap-1.5">
+            {deals.slice(0, 3).map((deal) => (
+              <NewswireDealCard
+                key={deal.id}
+                deal={deal}
+                onOpenDeal={onOpenDeal}
+              />
+            ))}
+            {deals.length > 3 && (
+              <p className="px-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+                +{deals.length - 3} more active{" "}
+                {deals.length - 3 === 1 ? "deal" : "deals"} from this wire
+              </p>
+            )}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={onCreate}
+              disabled={!walletFunded}
+              className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)] transition-colors hover:text-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Plus aria-hidden className="h-3 w-3" />
+              {walletFunded ? "Create another deal" : "Fund wallet first"}
+            </button>
+            {isSeed && dealSeed && dealSeed.linkedDealCount > 0 && (
+              <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+                Seed linked {dealSeed.linkedDealCount} ·{" "}
+                {formatCompactMoney(dealSeed.linkedPotTotalUsdc)}
+              </span>
+            )}
+          </div>
+        </>
+      )}
+
+      {!dealsLoading && !hasDeals && (
+        <div className="mt-2.5 space-y-1.5">
+          <p className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+            No deals yet
+          </p>
+          <button
+            type="button"
+            onClick={onCreate}
+            disabled={!walletFunded}
+            className="group/cta grid w-full min-h-9 grid-cols-[auto_1fr_auto] items-center gap-2 border border-[var(--t-divider)] bg-[#070b09] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)]/85 transition-colors hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]/30 hover:text-[var(--t-accent)] focus:border-[var(--t-accent)] focus:bg-[var(--t-accent-soft)]/30 focus:text-[var(--t-accent)] focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-[var(--t-divider)] disabled:hover:bg-[#070b09] disabled:hover:text-[var(--t-accent)]/85"
+          >
+            {walletFunded ? (
+              <Plus aria-hidden className="h-3 w-3 text-[var(--t-accent)]" />
+            ) : (
+              <span aria-hidden className="h-3 w-3" />
+            )}
+            <span className="text-left">
+              {walletFunded ? "Create deal" : "Fund wallet first"}
+            </span>
+            <ArrowRight
+              aria-hidden
+              className="wire-cta-bounce h-3 w-3 text-[var(--t-accent)]/80 transition-opacity group-hover/cta:text-[var(--t-accent)] group-focus/cta:text-[var(--t-accent)]"
+            />
+          </button>
+        </div>
+      )}
     </article>
   );
+}
+
+function NewswireDealCard({
+  deal,
+  onOpenDeal,
+}: {
+  deal: Deal;
+  onOpenDeal: (dealId: string) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onOpenDeal(deal.id)}
+      className="group/deal grid grid-cols-[minmax(0,1fr)_4.75rem] gap-2 border border-[var(--t-divider)] bg-[#070b09] px-2 py-2 text-left transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none"
+    >
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-wider">
+          <span
+            className={
+              isActiveMarketDeal(deal)
+                ? "text-[var(--t-green)]"
+                : "text-[var(--t-amber)]"
+            }
+          >
+            {deal.status.toUpperCase()}
+          </span>
+          <span className="text-[var(--t-divider)]">/</span>
+          <span className="text-[var(--t-muted)]">
+            {dealCreatorLabel(deal)}
+          </span>
+        </div>
+        <p className="mt-1 line-clamp-2 break-words text-[var(--t-text)] group-hover/deal:text-[var(--t-accent)]">
+          {deal.prompt}
+        </p>
+      </div>
+      <dl className="grid content-start gap-1 text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+        <div className="min-w-0">
+          <dt className="sr-only">Pot</dt>
+          <dd className="truncate">
+            Pot{" "}
+            <span className="tabular-nums text-[var(--t-green)]">
+              {formatCompactMoney(deal.pot_usdc)}
+            </span>
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="sr-only">Entry cost</dt>
+          <dd className="truncate">
+            In{" "}
+            <span className="tabular-nums text-[var(--t-text)]">
+              {formatCompactMoney(deal.entry_cost_usdc)}
+            </span>
+          </dd>
+        </div>
+        <div className="min-w-0">
+          <dt className="sr-only">Entries</dt>
+          <dd className="truncate">
+            Hits{" "}
+            <span className="tabular-nums text-[var(--t-amber)]">
+              {deal.entry_count}
+            </span>
+          </dd>
+        </div>
+      </dl>
+    </button>
+  );
+}
+
+function dealStatusLabel(dealCount: number, isLoading: boolean): string {
+  if (isLoading) return "MATCHING";
+  if (dealCount === 0) return "NO DEAL";
+  if (dealCount === 1) return "1 OPEN DEAL";
+  return `${dealCount} OPEN DEALS`;
+}
+
+function dealCreatorLabel(deal: Deal): string {
+  if (deal.creator_type === "agent") return "Agent source";
+  if (deal.creator_address) return formatShortAddress(deal.creator_address);
+  return "Desk source";
+}
+
+function isActiveMarketDeal(deal: Deal): boolean {
+  const status = deal.status.toLowerCase();
+  return status === "open" || status === "active";
+}
+
+function normalizeHeadlineKey(headline: string): string {
+  return headline.trim().replace(/\s+/g, " ").toLowerCase();
 }
 
 function formatNewswireDay(date: Date): string {
