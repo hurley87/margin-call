@@ -137,6 +137,7 @@ export default defineSchema({
   })
     .index("byStatus", ["status"])
     .index("byCreator", ["creatorDeskManagerId"])
+    .index("byCreatorAndStatus", ["creatorDeskManagerId", "status"])
     .index("byOnChainDealId", ["onChainDealId"])
     .index("byCreatedAt", ["createdAt"]),
 
@@ -381,4 +382,38 @@ export default defineSchema({
   })
     .index("byNonce", ["nonce"])
     .index("byExpiresAt", ["expiresAt"]),
+
+  /**
+   * Per-desk MCP API keys (Phase 1+). Keys are issued via Privy-authenticated
+   * web flow (or operator tooling) and stored only as HMAC hashes. One key
+   * maps to exactly one deskManager. Raw keys are never persisted.
+   */
+  mcpApiKeys: defineTable({
+    keyHash: v.string(),
+    deskManagerId: v.id("deskManagers"),
+    createdAt: v.number(),
+    lastUsedAt: v.optional(v.number()),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("byKeyHash", ["keyHash"])
+    .index("byDeskManager", ["deskManagerId"]),
+
+  /**
+   * Audit log for all MCP tool invocations (reads + writes). Written from the
+   * mcp/* Convex HTTP action namespace after service-token validation.
+   * requestBody is present for writes (idempotency), omitted for reads.
+   */
+  mcpRequests: defineTable({
+    deskManagerId: v.id("deskManagers"),
+    tool: v.string(),
+    requestBody: v.optional(v.any()),
+    idempotencyKey: v.optional(v.string()),
+    result: v.optional(v.any()),
+    txHash: v.optional(v.string()),
+    durationMs: v.number(),
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("byDeskManagerAndCreatedAt", ["deskManagerId", "createdAt"])
+    .index("byCreatedAt", ["createdAt"]),
 });
