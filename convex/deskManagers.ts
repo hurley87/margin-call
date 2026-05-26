@@ -4,6 +4,7 @@ import {
   mutation,
   query,
 } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { normalizeEmail } from "../src/lib/email";
 
@@ -38,6 +39,17 @@ export const getMe = query({
   },
 });
 
+/** Internal: mark welcome email sent after Resend succeeds (idempotency). */
+export const markWelcomeEmailSent = internalMutation({
+  args: { deskManagerId: v.id("deskManagers") },
+  handler: async (ctx, { deskManagerId }) => {
+    await ctx.db.patch(deskManagerId, {
+      welcomeEmailSentAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  },
+});
+
 /**
  * Creates or updates the deskManager row keyed on Privy subject.
  * `walletAddress` is write-once: the first non-null value is persisted and
@@ -63,6 +75,11 @@ export const upsertMe = mutation({
 
     if (existing) {
       const patch: Record<string, unknown> = { updatedAt: now };
+      const shouldScheduleWelcomeEmail =
+        existing.email === undefined &&
+        email !== undefined &&
+        existing.welcomeEmailSentAt === undefined;
+
       if (
         args.walletAddress !== undefined &&
         existing.walletAddress === undefined
@@ -72,10 +89,16 @@ export const upsertMe = mutation({
       if (args.settings !== undefined) patch.settings = args.settings;
       if (email !== undefined) patch.email = email;
       await ctx.db.patch(existing._id, patch);
+
+      if (shouldScheduleWelcomeEmail) {
+        await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
+          deskManagerId: existing._id,
+        });
+      }
       return existing._id;
     }
 
-    return await ctx.db.insert("deskManagers", {
+    const id = await ctx.db.insert("deskManagers", {
       subject: identity.subject,
       email,
       walletAddress: args.walletAddress,
@@ -84,6 +107,12 @@ export const upsertMe = mutation({
       createdAt: now,
       updatedAt: now,
     });
+    if (email !== undefined) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
+        deskManagerId: id,
+      });
+    }
+    return id;
   },
 });
 
@@ -104,7 +133,7 @@ export const syncWalletBalance = internalMutation({
       .unique();
 
     if (!existing) {
-      await ctx.db.insert("deskManagers", {
+      const id = await ctx.db.insert("deskManagers", {
         subject,
         email: normalizedEmail,
         walletAddress,
@@ -114,6 +143,11 @@ export const syncWalletBalance = internalMutation({
         createdAt: now,
         updatedAt: now,
       });
+      if (normalizedEmail !== undefined) {
+        await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
+          deskManagerId: id,
+        });
+      }
       return { ok: true as const };
     }
 
@@ -135,6 +169,11 @@ export const syncWalletBalance = internalMutation({
     if (needsAddress) patch.walletAddress = walletAddress;
     if (needsEmail) patch.email = normalizedEmail;
     await ctx.db.patch(existing._id, patch);
+    if (needsEmail && existing.welcomeEmailSentAt === undefined) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendWelcomeEmail, {
+        deskManagerId: existing._id,
+      });
+    }
     return { ok: true as const };
   },
 });
