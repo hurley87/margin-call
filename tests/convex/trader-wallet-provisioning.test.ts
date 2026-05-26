@@ -10,6 +10,13 @@ function asDeskManager(t: ReturnType<typeof makeT>) {
   });
 }
 
+function asOtherDeskManager(t: ReturnType<typeof makeT>) {
+  return t.withIdentity({
+    subject: "did:privy:test-subject-002",
+    issuer: "test",
+  });
+}
+
 describe("trader wallet provisioning recovery", () => {
   it("rejects trader creation until the desk wallet is funded", async () => {
     const t = makeT();
@@ -49,6 +56,27 @@ describe("trader wallet provisioning recovery", () => {
 
     const rows = await asDeskManager(t).query(api.traders.listByDesk, {});
     expect(rows).toHaveLength(1);
+  });
+
+  it("rejects duplicate trader names across desks (case-insensitive)", async () => {
+    const t = makeT();
+    await seedDeskManager(t, { subject: "did:privy:test-subject-001" });
+    await seedDeskManager(t, {
+      subject: "did:privy:test-subject-002",
+      walletAddress: "0xdef456",
+    });
+
+    await asDeskManager(t).mutation(api.traders.create, {
+      name: "Lilly",
+      mandate: {},
+    });
+
+    await expect(
+      asOtherDeskManager(t).mutation(api.traders.create, {
+        name: "lIlLy",
+        mandate: {},
+      })
+    ).rejects.toThrow("Trader name already taken");
   });
 
   it("retryWalletProvisioning clears walletError and sets status to pending", async () => {
