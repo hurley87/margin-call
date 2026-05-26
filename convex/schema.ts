@@ -51,6 +51,8 @@ export default defineSchema({
     // Privy subject for fast ownership queries without join
     ownerSubject: v.string(),
     name: v.string(),
+    // Case-insensitive uniqueness key for trader handles.
+    nameLower: v.optional(v.string()),
     // agent status
     status: v.union(
       v.literal("active"),
@@ -103,7 +105,9 @@ export default defineSchema({
     .index("byOwner", ["ownerSubject"])
     .index("byDeskManager", ["deskManagerId"])
     .index("byStatusAndWalletStatus", ["status", "walletStatus"])
+    .index("byName", ["name"])
     .index("byOwnerAndName", ["ownerSubject", "name"])
+    .index("byNameLower", ["nameLower"])
     .index("byCreatedAt", ["createdAt"]),
 
   deals: defineTable({

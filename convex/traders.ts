@@ -314,6 +314,7 @@ export const create = mutation({
   },
   handler: async (ctx, args) => {
     const trimmedName = args.name.trim();
+    const normalizedName = trimmedName.toLowerCase();
     if (!TRADER_NAME_REGEX.test(trimmedName)) {
       throw new Error("Invalid trader name");
     }
@@ -332,26 +333,74 @@ export const create = mutation({
       throw new Error("Fund your wallet before hiring a trader");
     }
 
-    // Idempotency: check for existing trader with same owner+name
-    const dupe = await ctx.db
+    // Idempotency (owner + exact name): preserve existing behavior for retries.
+    const dupeByOwnerAndName = await ctx.db
       .query("traders")
       .withIndex("byOwnerAndName", (q) =>
         q.eq("ownerSubject", identity.subject).eq("name", trimmedName)
       )
       .unique();
 
-    if (dupe) {
+    if (dupeByOwnerAndName) {
       // Re-hire never strands the existing row. Reschedule wallet setup only
       // when the prior attempt is stuck (pending) or failed (error). A row
       // already in `creating` has its own re-entry guard in wallet.createForTrader.
       const needsRetry =
-        dupe.walletStatus === "pending" || dupe.walletStatus === "error";
+        dupeByOwnerAndName.walletStatus === "pending" ||
+        dupeByOwnerAndName.walletStatus === "error";
       if (needsRetry && !skipWalletSchedule()) {
         await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
-          traderId: dupe._id,
+          traderId: dupeByOwnerAndName._id,
         });
       }
-      return dupe._id;
+      return dupeByOwnerAndName._id;
+    }
+
+    // Legacy fallback: rows created before `nameLower` existed still need a guard.
+    const exactNameConflicts = await ctx.db
+      .query("traders")
+      .withIndex("byName", (q) => q.eq("name", trimmedName))
+      .take(10);
+    if (exactNameConflicts.length > 0) {
+      const sameOwnerConflict = exactNameConflicts.find(
+        (trader) => trader.ownerSubject === identity.subject
+      );
+      if (sameOwnerConflict) {
+        const needsRetry =
+          sameOwnerConflict.walletStatus === "pending" ||
+          sameOwnerConflict.walletStatus === "error";
+        if (needsRetry && !skipWalletSchedule()) {
+          await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
+            traderId: sameOwnerConflict._id,
+          });
+        }
+        return sameOwnerConflict._id;
+      }
+      throw new Error("Trader name already taken");
+    }
+
+    // Global uniqueness (case-insensitive): prevent duplicate usernames.
+    const conflicts = await ctx.db
+      .query("traders")
+      .withIndex("byNameLower", (q) => q.eq("nameLower", normalizedName))
+      .take(10);
+    const matchingConflict = conflicts.find(
+      (trader) => trader.name.toLowerCase() === normalizedName
+    );
+    if (matchingConflict) {
+      // If this is the same owner creating a case-variant handle, treat as idempotent.
+      if (matchingConflict.ownerSubject === identity.subject) {
+        const needsRetry =
+          matchingConflict.walletStatus === "pending" ||
+          matchingConflict.walletStatus === "error";
+        if (needsRetry && !skipWalletSchedule()) {
+          await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
+            traderId: matchingConflict._id,
+          });
+        }
+        return matchingConflict._id;
+      }
+      throw new Error("Trader name already taken");
     }
 
     const now = Date.now();
@@ -365,6 +414,7 @@ export const create = mutation({
       deskManagerId: existing._id,
       ownerSubject: identity.subject,
       name: trimmedName,
+      nameLower: normalizedName,
       status: "paused",
       mandate: args.mandate ?? {},
       personality: args.personality,
@@ -707,6 +757,63 @@ export const syncEscrowBalance = internalMutation({
       escrowBalanceUsdc: balanceUsdc,
       updatedAt: Date.now(),
     });
+  },
+});
+
+/** Internal ops: rename trader with the same validation and uniqueness rules as create. */
+export const renameInternalForOps = internalMutation({
+  args: {
+    traderId: v.id("traders"),
+    name: v.string(),
+  },
+  handler: async (ctx, { traderId, name }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) throw new Error("Trader not found");
+
+    const trimmedName = name.trim();
+    const normalizedName = trimmedName.toLowerCase();
+    if (!TRADER_NAME_REGEX.test(trimmedName)) {
+      throw new Error("Invalid trader name");
+    }
+
+    if (trader.name === trimmedName) {
+      if (trader.nameLower !== normalizedName) {
+        await ctx.db.patch(traderId, {
+          nameLower: normalizedName,
+          updatedAt: Date.now(),
+        });
+      }
+      return { ok: true as const, traderId };
+    }
+
+    const exactNameConflicts = await ctx.db
+      .query("traders")
+      .withIndex("byName", (q) => q.eq("name", trimmedName))
+      .take(10);
+    const exactConflict = exactNameConflicts.find(
+      (doc) => doc._id !== traderId
+    );
+    if (exactConflict) {
+      throw new Error("Trader name already taken");
+    }
+
+    const normalizedConflicts = await ctx.db
+      .query("traders")
+      .withIndex("byNameLower", (q) => q.eq("nameLower", normalizedName))
+      .take(10);
+    const normalizedConflict = normalizedConflicts.find(
+      (doc) => doc._id !== traderId && doc.name.toLowerCase() === normalizedName
+    );
+    if (normalizedConflict) {
+      throw new Error("Trader name already taken");
+    }
+
+    await ctx.db.patch(traderId, {
+      name: trimmedName,
+      nameLower: normalizedName,
+      updatedAt: Date.now(),
+    });
+    return { ok: true as const, traderId };
   },
 });
 
