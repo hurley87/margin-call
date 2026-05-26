@@ -47,3 +47,70 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+## MCP development (Phase 1 scaffold)
+
+The initial thin end-to-end for external agents (Claude Code) lives under the MCP plan (`plans/mcp.md`, GitHub #137).
+
+### Required env (both .env.local and Convex)
+
+- `MCP_API_KEY_SECRET` — HMAC secret used to hash `mc_live_*` keys before storage.
+- `MCP_SERVICE_TOKEN` — authenticates the Next.js `/api/mcp/*` layer when it calls the Convex HTTP actions (`/mcp/*`). Must be identical in both places.
+
+Set the Convex one with:
+
+```
+npx convex env set MCP_API_KEY_SECRET "..." --dev
+npx convex env set MCP_SERVICE_TOKEN "..." --dev
+```
+
+### Issuing a per-desk key (for yourself or a test desk)
+
+While authenticated in the web app (Privy), POST to the issuance endpoint:
+
+```bash
+curl -X POST http://localhost:3000/api/mcp/keys \
+  -H "Authorization: Bearer $PRIVY_JWT_FROM_BROWSER" \
+  -H "Content-Type: application/json"
+```
+
+The response contains the raw `key` (shown once). The key is bound to your existing `deskManager` row.
+
+(You can also call the same route from browser devtools / a one-off script that re-uses your existing Convex client after login.)
+
+### Running the MCP server locally
+
+```bash
+MARGIN_CALL_MCP_KEY=mc_live_... \
+MARGIN_CALL_API_URL=http://localhost:3000 \
+npx tsx packages/mcp-server/src/index.ts
+```
+
+It speaks stdio and registers the `get_desk` tool.
+
+### Adding to Cursor / Claude Code (local path, before npm publish)
+
+Example entry (`.mcp.json` or via UI):
+
+```json
+{
+  "mcpServers": {
+    "margin-call": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "tsx",
+        "/absolute/path/to/margin-call/packages/mcp-server/src/index.ts"
+      ],
+      "env": {
+        "MARGIN_CALL_MCP_KEY": "mc_live_...",
+        "MARGIN_CALL_API_URL": "http://localhost:3000"
+      }
+    }
+  }
+}
+```
+
+After restart you should be able to call `get_desk` and receive the JSON snapshot (wallet, balance, counts, recent P&L, funding hint when zero).
+
+See also `packages/mcp-server/README.md` and the full architecture in `plans/mcp.md`.
