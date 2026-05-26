@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export const DIALOG_BACKDROP_CLASS =
-  "fixed inset-0 z-50 bg-[#020403]/80 backdrop-blur-sm";
+  "fixed inset-0 z-50 bg-[#020403]/55 backdrop-blur-[2px]";
 
 const DIALOG_POPUP_BASE_CLASS =
   "fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60 sm:max-h-[88vh]";
