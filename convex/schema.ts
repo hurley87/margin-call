@@ -19,6 +19,8 @@ export default defineSchema({
     walletAddress: v.optional(v.string()),
     walletBalanceUsdc: v.optional(v.number()),
     walletBalanceSyncedAt: v.optional(v.number()),
+    /** Set when welcome email finishes sending successfully (for idempotency). */
+    welcomeEmailSentAt: v.optional(v.number()),
     displayName: v.optional(v.string()),
     settings: v.optional(v.any()),
     createdAt: v.number(),
