@@ -215,7 +215,7 @@ function parseCloseDealBody(body: Record<string, unknown>) {
     parsed: {
       deskManagerId: base.deskManagerId,
       idempotencyKey: base.idempotencyKey,
-      requestBody: body,
+      requestBody: base.requestBody,
     },
   };
 }

@@ -3,10 +3,10 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Doc } from "../_generated/dataModel";
 import { mcpDeskCdpAccountName, parseAmountUsdc } from "./traders";
 import type { McpDealWriteResult } from "./deals";
-import { isTradingHours, MARKET_CLOSED_MESSAGE } from "../lib/tradingHours";
+import { assertTradingHours } from "../lib/tradingHours";
 
 const USDC_DECIMALS = 1_000_000;
 
@@ -119,9 +119,7 @@ export const createForMcp = internalAction({
     entryCostUsdc: v.number(),
   },
   handler: async (ctx, args): Promise<McpDealWriteResult> => {
-    if (!isTradingHours()) {
-      throw new Error(MARKET_CLOSED_MESSAGE);
-    }
+    assertTradingHours();
 
     if (typeof args.prompt !== "string" || args.prompt.trim() === "") {
       throw new Error("prompt is required");
@@ -276,23 +274,15 @@ export const closeForMcp = internalAction({
     dealId: v.id("deals"),
   },
   handler: async (ctx, args): Promise<McpDealWriteResult> => {
-    if (!isTradingHours()) {
-      throw new Error(MARKET_CLOSED_MESSAGE);
-    }
+    assertTradingHours();
 
-    const loaded: {
-      dealId: Id<"deals">;
-      onChainDealId: number;
-      walletAddress: string | undefined;
-      cdpAccountName: string | undefined;
-      subject: string;
-      status: "open" | "closed" | "depleted";
-      potUsdc: number;
-      entryCount: number;
-    } = await ctx.runQuery(internal.mcp.deals.loadOwnedDealForClose, {
-      deskManagerId: args.deskManagerId,
-      dealId: args.dealId,
-    });
+    const loaded = await ctx.runQuery(
+      internal.mcp.deals.loadOwnedDealForClose,
+      {
+        deskManagerId: args.deskManagerId,
+        dealId: args.dealId,
+      }
+    );
 
     if (!loaded.walletAddress) {
       throw new Error("Desk wallet not provisioned");
@@ -326,24 +316,17 @@ export const closeForMcp = internalAction({
     });
 
     // Pre-flight: confirm the escrow agrees there are no pending entries.
-    const onChainDeal = (await publicClient.readContract({
+    const onChainDeal = await publicClient.readContract({
       address: ESCROW_ADDRESS,
       abi: escrowAbi,
       functionName: "getDeal",
       args: [BigInt(loaded.onChainDealId)],
-    })) as {
-      creator: `0x${string}`;
-      prompt: string;
-      potAmount: bigint;
-      entryCost: bigint;
-      fee: bigint;
-      status: number;
-      pendingEntries: bigint;
-    };
+    });
+    const pendingEntries = onChainDeal.pendingEntries;
 
-    if (onChainDeal.pendingEntries > BigInt(0)) {
+    if (pendingEntries > BigInt(0)) {
       throw new Error(
-        `Cannot close deal: ${onChainDeal.pendingEntries.toString()} pending entr${onChainDeal.pendingEntries === BigInt(1) ? "y" : "ies"} on-chain. Wait for the agent cycle to resolve them.`
+        `Cannot close deal: ${pendingEntries.toString()} pending entr${pendingEntries === BigInt(1) ? "y" : "ies"} on-chain. Wait for the agent cycle to resolve them.`
       );
     }
 

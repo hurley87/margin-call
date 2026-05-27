@@ -1,6 +1,6 @@
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
-import type { Doc, Id } from "../_generated/dataModel";
+import type { Id } from "../_generated/dataModel";
 
 export type McpDealWriteResult = {
   dealId: string;
@@ -126,29 +126,15 @@ export const recordOnChainCreationForMcp = internalMutation({
 });
 
 /**
- * MCP `close_deal` pre-flight: load a deal by Convex id and confirm it is
- * owned by this MCP desk and currently open. Returns the on-chain deal id
- * (required by the escrow `closeDeal(uint256)` call) and the desk wallet
- * address so the wrapping action can verify the CDP signer matches.
+ * MCP `close_deal` pre-flight: load + ownership-check a deal, returning the
+ * fields the wrapping action needs to sign and submit `escrow.closeDeal`.
  */
 export const loadOwnedDealForClose = internalQuery({
   args: {
     deskManagerId: v.id("deskManagers"),
     dealId: v.id("deals"),
   },
-  handler: async (
-    ctx,
-    { deskManagerId, dealId }
-  ): Promise<{
-    dealId: Id<"deals">;
-    onChainDealId: number;
-    walletAddress: string | undefined;
-    cdpAccountName: string | undefined;
-    subject: string;
-    status: Doc<"deals">["status"];
-    potUsdc: number;
-    entryCount: number;
-  }> => {
+  handler: async (ctx, { deskManagerId, dealId }) => {
     const deal = await ctx.db.get(dealId);
     if (!deal) throw new Error("Deal not found");
     if (deal.creatorDeskManagerId !== deskManagerId) {
@@ -165,14 +151,9 @@ export const loadOwnedDealForClose = internalQuery({
     if (!desk?.subject) throw new Error("Desk not found");
 
     return {
-      dealId: deal._id,
       onChainDealId: deal.onChainDealId,
       walletAddress: desk.walletAddress,
-      cdpAccountName: desk.cdpAccountName,
       subject: desk.subject,
-      status: deal.status,
-      potUsdc: deal.potUsdc,
-      entryCount: deal.entryCount ?? 0,
     };
   },
 });
