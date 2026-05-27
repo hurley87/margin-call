@@ -22,62 +22,99 @@ import {
 
 const http = httpRouter();
 
-function parseCreateTraderBody(body: Record<string, unknown>) {
+type McpWriteParseFail = { ok: false; message: string };
+type McpWriteParseOk = {
+  deskManagerId: Id<"deskManagers">;
+  idempotencyKey: string;
+  requestBody: Record<string, unknown>;
+};
+
+function parseMcpWriteBase(
+  body: Record<string, unknown>
+): McpWriteParseFail | McpWriteParseOk {
   if (typeof body.deskManagerId !== "string" || !body.deskManagerId) {
-    return { ok: false as const, message: "deskManagerId required" };
+    return { ok: false, message: "deskManagerId required" };
   }
   if (
     typeof body.idempotencyKey !== "string" ||
     body.idempotencyKey.trim() === ""
   ) {
-    return { ok: false as const, message: "idempotencyKey required" };
+    return { ok: false, message: "idempotencyKey required" };
   }
+  return {
+    deskManagerId: body.deskManagerId as Id<"deskManagers">,
+    idempotencyKey: body.idempotencyKey.trim(),
+    requestBody: body,
+  };
+}
+
+function parseTraderIdField(
+  body: Record<string, unknown>
+): { ok: false; message: string } | { ok: true; traderId: Id<"traders"> } {
+  if (typeof body.traderId !== "string" || body.traderId.trim() === "") {
+    return { ok: false, message: "traderId required" };
+  }
+  return { ok: true, traderId: body.traderId.trim() as Id<"traders"> };
+}
+
+function parseCreateTraderBody(body: Record<string, unknown>) {
+  const base = parseMcpWriteBase(body);
+  if ("ok" in base) return base;
   if (typeof body.name !== "string" || body.name.trim() === "") {
     return { ok: false as const, message: "name required" };
   }
   return {
     ok: true as const,
     parsed: {
-      deskManagerId: body.deskManagerId as Id<"deskManagers">,
-      idempotencyKey: body.idempotencyKey.trim(),
-      requestBody: body,
+      deskManagerId: base.deskManagerId,
+      idempotencyKey: base.idempotencyKey,
+      requestBody: base.requestBody,
     },
   };
 }
 
 function parseRegisterWithdrawAddressBody(body: Record<string, unknown>) {
-  if (typeof body.deskManagerId !== "string" || !body.deskManagerId) {
-    return { ok: false as const, message: "deskManagerId required" };
-  }
-  if (
-    typeof body.idempotencyKey !== "string" ||
-    body.idempotencyKey.trim() === ""
-  ) {
-    return { ok: false as const, message: "idempotencyKey required" };
-  }
+  const base = parseMcpWriteBase(body);
+  if ("ok" in base) return base;
   if (typeof body.address !== "string" || body.address.trim() === "") {
     return { ok: false as const, message: "address required" };
   }
   return {
     ok: true as const,
     parsed: {
-      deskManagerId: body.deskManagerId as Id<"deskManagers">,
-      idempotencyKey: body.idempotencyKey.trim(),
-      requestBody: body,
+      deskManagerId: base.deskManagerId,
+      idempotencyKey: base.idempotencyKey,
+      requestBody: base.requestBody,
+    },
+  };
+}
+
+function parseConfigureTraderBody(body: Record<string, unknown>) {
+  const base = parseMcpWriteBase(body);
+  if ("ok" in base) return base;
+  const tid = parseTraderIdField(body);
+  if (!tid.ok) return tid;
+  if (
+    !body.mandate ||
+    typeof body.mandate !== "object" ||
+    Array.isArray(body.mandate)
+  ) {
+    return { ok: false as const, message: "mandate required (object)" };
+  }
+  return {
+    ok: true as const,
+    parsed: {
+      deskManagerId: base.deskManagerId,
+      idempotencyKey: base.idempotencyKey,
+      requestBody: base.requestBody,
+      traderId: tid.traderId,
     },
   };
 }
 
 function parseWithdrawToAddressBody(body: Record<string, unknown>) {
-  if (typeof body.deskManagerId !== "string" || !body.deskManagerId) {
-    return { ok: false as const, message: "deskManagerId required" };
-  }
-  if (
-    typeof body.idempotencyKey !== "string" ||
-    body.idempotencyKey.trim() === ""
-  ) {
-    return { ok: false as const, message: "idempotencyKey required" };
-  }
+  const base = parseMcpWriteBase(body);
+  if ("ok" in base) return base;
   if (typeof body.address !== "string" || body.address.trim() === "") {
     return { ok: false as const, message: "address required" };
   }
@@ -91,11 +128,44 @@ function parseWithdrawToAddressBody(body: Record<string, unknown>) {
   return {
     ok: true as const,
     parsed: {
-      deskManagerId: body.deskManagerId as Id<"deskManagers">,
-      idempotencyKey: body.idempotencyKey.trim(),
-      requestBody: body,
+      deskManagerId: base.deskManagerId,
+      idempotencyKey: base.idempotencyKey,
+      requestBody: base.requestBody,
     },
   };
+}
+
+function parseTraderLifecycleBody(body: Record<string, unknown>) {
+  const base = parseMcpWriteBase(body);
+  if ("ok" in base) return base;
+  const tid = parseTraderIdField(body);
+  if (!tid.ok) return tid;
+  return {
+    ok: true as const,
+    parsed: {
+      deskManagerId: base.deskManagerId,
+      idempotencyKey: base.idempotencyKey,
+      requestBody: base.requestBody,
+      traderId: tid.traderId,
+    },
+  };
+}
+
+function parseFundTraderBody(body: Record<string, unknown>) {
+  const base = parseTraderLifecycleBody(body);
+  if (!base.ok) return base;
+  const amountUsdc = Number(body.amountUsdc);
+  if (!Number.isFinite(amountUsdc) || amountUsdc <= 0) {
+    return {
+      ok: false as const,
+      message: "amountUsdc must be a positive number",
+    };
+  }
+  return { ok: true as const, parsed: { ...base.parsed, amountUsdc } };
+}
+
+function parseWithdrawTraderBody(body: Record<string, unknown>) {
+  return parseFundTraderBody(body);
 }
 
 http.route({
@@ -321,6 +391,130 @@ http.route({
         return {
           error: e instanceof Error ? e.message : String(e),
         };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/traders/configure",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "configure_trader",
+    parseBody: parseConfigureTraderBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      try {
+        const result = await ctx.runMutation(
+          internal.mcp.traders.configureForMcp,
+          {
+            deskManagerId,
+            traderId: requestBody.traderId as Id<"traders">,
+            mandate: requestBody.mandate,
+            personality:
+              requestBody.personality === null ||
+              typeof requestBody.personality === "string"
+                ? (requestBody.personality as string | null | undefined)
+                : undefined,
+          }
+        );
+        return { result };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/traders/fund",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "fund_trader",
+    parseBody: parseFundTraderBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      try {
+        const result = await ctx.runAction(
+          internal.mcp.tradersEscrow.fundForMcp,
+          {
+            deskManagerId,
+            traderId: requestBody.traderId as Id<"traders">,
+            amountUsdc: Number(requestBody.amountUsdc),
+          }
+        );
+        return { result, txHash: result.txHash };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/traders/resume",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "resume_trader",
+    parseBody: parseTraderLifecycleBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      const now = Date.now();
+      try {
+        const result = await ctx.runMutation(
+          internal.mcp.traders.resumeForMcp,
+          {
+            deskManagerId,
+            traderId: requestBody.traderId as Id<"traders">,
+            now,
+          }
+        );
+        return { result };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/traders/pause",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "pause_trader",
+    parseBody: parseTraderLifecycleBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      const now = Date.now();
+      try {
+        const result = await ctx.runMutation(internal.mcp.traders.pauseForMcp, {
+          deskManagerId,
+          traderId: requestBody.traderId as Id<"traders">,
+          now,
+        });
+        return { result };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/traders/withdraw",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "withdraw_from_trader",
+    parseBody: parseWithdrawTraderBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      try {
+        const result = await ctx.runAction(
+          internal.mcp.tradersEscrow.withdrawForMcp,
+          {
+            deskManagerId,
+            traderId: requestBody.traderId as Id<"traders">,
+            amountUsdc: Number(requestBody.amountUsdc),
+          }
+        );
+        return { result, txHash: result.txHash };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
       }
     },
   }),

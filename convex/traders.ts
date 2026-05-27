@@ -210,6 +210,90 @@ const MANDATE_NUMERIC_KEYS = [
   "approval_threshold_usdc",
 ] as const;
 
+export type MandatePatch = Partial<
+  Pick<Doc<"traders">, "mandate" | "personality" | "updatedAt">
+>;
+
+/**
+ * Validates mandate fields and builds a patch for mandate/personality updates.
+ * Shared by browser `updateMandate` and MCP `updateMandateForMcp`.
+ */
+export function buildMandatePatch(
+  trader: Doc<"traders">,
+  mandate: unknown,
+  personality: string | null | undefined
+): MandatePatch {
+  if (!mandate || typeof mandate !== "object" || Array.isArray(mandate)) {
+    throw new Error("mandate must be an object");
+  }
+
+  const cleaned: Record<string, unknown> = {};
+
+  for (const key of MANDATE_NUMERIC_KEYS) {
+    if (!(key in mandate)) continue;
+    const val = (mandate as Record<string, unknown>)[key];
+    if (val === null || val === undefined) continue;
+    const num = Number(val);
+    if (Number.isNaN(num) || num < 0) {
+      throw new Error(`${key} must be a non-negative number`);
+    }
+    if (key === "bankroll_pct" && (num <= 0 || num > 100)) {
+      throw new Error("bankroll_pct must be between 1 and 100");
+    }
+    cleaned[key] = num;
+  }
+
+  if ("keywords" in mandate) {
+    const val = (mandate as Record<string, unknown>).keywords;
+    if (
+      !Array.isArray(val) ||
+      !val.every((entry) => typeof entry === "string")
+    ) {
+      throw new Error("keywords must be an array of strings");
+    }
+    cleaned.keywords = val;
+  }
+
+  if ("llm_deal_selection" in mandate) {
+    const val = (mandate as Record<string, unknown>).llm_deal_selection;
+    if (typeof val !== "boolean") {
+      throw new Error("llm_deal_selection must be a boolean");
+    }
+    cleaned.llm_deal_selection = val;
+  }
+
+  const existingMandate =
+    (trader.mandate as Record<string, unknown> | undefined) ?? {};
+
+  const patch: MandatePatch = {
+    mandate: { ...existingMandate, ...cleaned },
+    updatedAt: Date.now(),
+  };
+
+  if (personality !== undefined) {
+    if (personality !== null && typeof personality !== "string") {
+      throw new Error("personality must be a string or null");
+    }
+    if (typeof personality === "string" && personality.length > 2000) {
+      throw new Error("personality must be at most 2000 characters");
+    }
+    patch.personality =
+      personality === null ? undefined : personality.trim() || undefined;
+  }
+
+  return patch;
+}
+
+/** Assert trader belongs to the given desk (MCP + internal callers). */
+export function assertTraderOwnedByDesk(
+  trader: Doc<"traders"> | null,
+  deskManagerId: Id<"deskManagers">
+): asserts trader is Doc<"traders"> {
+  if (!trader || trader.deskManagerId !== deskManagerId) {
+    throw new Error("Forbidden");
+  }
+}
+
 /** Update mandate + personality for owned trader (Convex-native; replaces desk/configure for game UI). */
 export const updateMandate = mutation({
   args: {
@@ -226,70 +310,45 @@ export const updateMandate = mutation({
       throw new Error("Forbidden");
     }
 
-    if (!mandate || typeof mandate !== "object" || Array.isArray(mandate)) {
-      throw new Error("mandate must be an object");
-    }
-
-    const cleaned: Record<string, unknown> = {};
-
-    for (const key of MANDATE_NUMERIC_KEYS) {
-      if (!(key in mandate)) continue;
-      const val = (mandate as Record<string, unknown>)[key];
-      if (val === null || val === undefined) continue;
-      const num = Number(val);
-      if (Number.isNaN(num) || num < 0) {
-        throw new Error(`${key} must be a non-negative number`);
-      }
-      if (key === "bankroll_pct" && (num <= 0 || num > 100)) {
-        throw new Error("bankroll_pct must be between 1 and 100");
-      }
-      cleaned[key] = num;
-    }
-
-    if ("keywords" in mandate) {
-      const val = (mandate as Record<string, unknown>).keywords;
-      if (
-        !Array.isArray(val) ||
-        !val.every((entry) => typeof entry === "string")
-      ) {
-        throw new Error("keywords must be an array of strings");
-      }
-      cleaned.keywords = val;
-    }
-
-    if ("llm_deal_selection" in mandate) {
-      const val = (mandate as Record<string, unknown>).llm_deal_selection;
-      if (typeof val !== "boolean") {
-        throw new Error("llm_deal_selection must be a boolean");
-      }
-      cleaned.llm_deal_selection = val;
-    }
-
-    const existingMandate =
-      (trader.mandate as Record<string, unknown> | undefined) ?? {};
-
-    const patch: Partial<
-      Pick<Doc<"traders">, "mandate" | "personality" | "updatedAt">
-    > = {
-      mandate: { ...existingMandate, ...cleaned },
-      updatedAt: Date.now(),
-    };
-
-    if (personality !== undefined) {
-      if (personality !== null && typeof personality !== "string") {
-        throw new Error("personality must be a string or null");
-      }
-      if (typeof personality === "string" && personality.length > 2000) {
-        throw new Error("personality must be at most 2000 characters");
-      }
-      patch.personality =
-        personality === null ? undefined : personality.trim() || undefined;
-    }
-
+    const patch = buildMandatePatch(trader, mandate, personality);
     await ctx.db.patch(traderId, patch);
     return { ok: true as const };
   },
 });
+
+/** Internal (MCP): update mandate + personality for a desk-owned trader. */
+export const updateMandateForMcp = internalMutation({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    traderId: v.id("traders"),
+    mandate: v.any(),
+    personality: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, { deskManagerId, traderId, mandate, personality }) => {
+    const trader = await ctx.db.get(traderId);
+    assertTraderOwnedByDesk(trader, deskManagerId);
+    const patch = buildMandatePatch(trader, mandate, personality);
+    await ctx.db.patch(traderId, patch);
+    return { ok: true as const, traderName: trader.name };
+  },
+});
+
+/** Shared activation guards for resume/setStatus active transitions. */
+export function assertCanActivateTrader(
+  trader: Doc<"traders">,
+  nowMs: number
+): void {
+  if (trader.status === "wiped_out") {
+    throw new Error("Cannot activate a wiped out trader");
+  }
+  if (trader.walletStatus !== "ready") {
+    throw new Error("Trader wallet must be ready before activation");
+  }
+  if ((trader.escrowBalanceUsdc ?? 0) <= 0) {
+    throw new Error("Fund trader before activating");
+  }
+  assertTradingHours(nowMs, "(cannot activate trader)");
+}
 
 /** Public: set status (pause/resume/revive) for an owned trader. */
 export const setStatus = mutation({
@@ -311,22 +370,36 @@ export const setStatus = mutation({
     }
 
     if (status === "active") {
-      if (trader.status === "wiped_out") {
-        throw new Error("Cannot activate a wiped out trader");
-      }
-      if (trader.walletStatus !== "ready") {
-        throw new Error("Trader wallet must be ready before activation");
-      }
-      if ((trader.escrowBalanceUsdc ?? 0) <= 0) {
-        throw new Error("Fund trader before activating");
-      }
-      // Trading-hours gate: only enforce when transitioning to "active".
-      // Must follow wallet-ready check so precedence stays intuitive (spec §9.2).
-      assertTradingHours(Date.now(), "(cannot activate trader)");
+      assertCanActivateTrader(trader, Date.now());
     }
 
     await ctx.db.patch(traderId, { status, updatedAt: Date.now() });
     return { ok: true as const };
+  },
+});
+
+/** Internal (MCP): set trader status for a desk-owned trader. */
+export const setStatusForMcp = internalMutation({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    traderId: v.id("traders"),
+    status: v.union(
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("wiped_out")
+    ),
+    now: v.number(),
+  },
+  handler: async (ctx, { deskManagerId, traderId, status, now }) => {
+    const trader = await ctx.db.get(traderId);
+    assertTraderOwnedByDesk(trader, deskManagerId);
+
+    if (status === "active") {
+      assertCanActivateTrader(trader, now);
+    }
+
+    await ctx.db.patch(traderId, { status, updatedAt: now });
+    return { ok: true as const, traderName: trader.name, status };
   },
 });
 
