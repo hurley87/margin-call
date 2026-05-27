@@ -168,6 +168,28 @@ function parseWithdrawTraderBody(body: Record<string, unknown>) {
   return parseFundTraderBody(body);
 }
 
+function parseAnswerApprovalBody(body: Record<string, unknown>) {
+  const base = parseMcpWriteBase(body);
+  if ("ok" in base) return base;
+  if (typeof body.approvalId !== "string" || body.approvalId.trim() === "") {
+    return { ok: false as const, message: "approvalId required" };
+  }
+  if (body.decision !== "approve" && body.decision !== "reject") {
+    return {
+      ok: false as const,
+      message: 'decision must be "approve" or "reject"',
+    };
+  }
+  return {
+    ok: true as const,
+    parsed: {
+      deskManagerId: base.deskManagerId,
+      idempotencyKey: base.idempotencyKey,
+      requestBody: base.requestBody,
+    },
+  };
+}
+
 http.route({
   path: "/mcp/desks/get",
   method: "POST",
@@ -513,6 +535,35 @@ http.route({
           }
         );
         return { result, txHash: result.txHash };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/approvals/answer",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "answer_approval",
+    parseBody: parseAnswerApprovalBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      try {
+        const result = await ctx.runMutation(
+          internal.mcp.approvals.answerForMcp,
+          {
+            deskManagerId,
+            approvalId: requestBody.approvalId as Id<"dealApprovals">,
+            decision: requestBody.decision as "approve" | "reject",
+            reason:
+              typeof requestBody.reason === "string"
+                ? requestBody.reason
+                : undefined,
+            now: Date.now(),
+          }
+        );
+        return { result };
       } catch (e: unknown) {
         return { error: e instanceof Error ? e.message : String(e) };
       }
