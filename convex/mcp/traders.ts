@@ -143,9 +143,10 @@ export const configureForMcp = internalMutation({
     assertTraderOwnedByDesk(trader, args.deskManagerId);
     const patch = buildMandatePatch(trader, args.mandate, args.personality);
     await ctx.db.patch(args.traderId, patch);
+    const escrow = trader.escrowBalanceUsdc ?? 0;
     return {
       traderId: String(args.traderId),
-      summary: `Updated trader "${trader.name}" mandate and personality.`,
+      summary: `Updated trader "${trader.name}" mandate and personality (status ${trader.status}, escrow ${escrow.toFixed(2)} USDC). No on-chain change; takes effect on the next cycle.`,
     };
   },
 });
@@ -164,9 +165,10 @@ export const pauseForMcp = internalMutation({
       status: "paused",
       updatedAt: args.now,
     });
+    const escrow = trader.escrowBalanceUsdc ?? 0;
     return {
       traderId: String(args.traderId),
-      summary: `Paused trader "${trader.name}".`,
+      summary: `Paused trader "${trader.name}" — autonomous cycle will skip them. Escrow balance retained at ${escrow.toFixed(2)} USDC; resume_trader reactivates with no on-chain change.`,
     };
   },
 });
@@ -188,9 +190,11 @@ export const resumeForMcp = internalMutation({
         now: args.now,
       }
     );
+    const trader = await ctx.db.get(args.traderId);
+    const escrow = trader?.escrowBalanceUsdc ?? 0;
     return {
       traderId: String(args.traderId),
-      summary: `Resumed trader "${traderName}" — autonomous deal cycle will pick entries while the market is open.`,
+      summary: `Resumed trader "${traderName}" — autonomous deal cycle will pick entries while the market is open (escrow ${escrow.toFixed(2)} USDC available).`,
     };
   },
 });
