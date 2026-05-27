@@ -45,6 +45,59 @@ function parseCreateTraderBody(body: Record<string, unknown>) {
   };
 }
 
+function parseRegisterWithdrawAddressBody(body: Record<string, unknown>) {
+  if (typeof body.deskManagerId !== "string" || !body.deskManagerId) {
+    return { ok: false as const, message: "deskManagerId required" };
+  }
+  if (
+    typeof body.idempotencyKey !== "string" ||
+    body.idempotencyKey.trim() === ""
+  ) {
+    return { ok: false as const, message: "idempotencyKey required" };
+  }
+  if (typeof body.address !== "string" || body.address.trim() === "") {
+    return { ok: false as const, message: "address required" };
+  }
+  return {
+    ok: true as const,
+    parsed: {
+      deskManagerId: body.deskManagerId as Id<"deskManagers">,
+      idempotencyKey: body.idempotencyKey.trim(),
+      requestBody: body,
+    },
+  };
+}
+
+function parseWithdrawToAddressBody(body: Record<string, unknown>) {
+  if (typeof body.deskManagerId !== "string" || !body.deskManagerId) {
+    return { ok: false as const, message: "deskManagerId required" };
+  }
+  if (
+    typeof body.idempotencyKey !== "string" ||
+    body.idempotencyKey.trim() === ""
+  ) {
+    return { ok: false as const, message: "idempotencyKey required" };
+  }
+  if (typeof body.address !== "string" || body.address.trim() === "") {
+    return { ok: false as const, message: "address required" };
+  }
+  const amt = Number(body.amountUsdc);
+  if (!Number.isFinite(amt) || amt <= 0) {
+    return {
+      ok: false as const,
+      message: "amountUsdc must be positive number",
+    };
+  }
+  return {
+    ok: true as const,
+    parsed: {
+      deskManagerId: body.deskManagerId as Id<"deskManagers">,
+      idempotencyKey: body.idempotencyKey.trim(),
+      requestBody: body,
+    },
+  };
+}
+
 http.route({
   path: "/mcp/desks/get",
   method: "POST",
@@ -221,6 +274,55 @@ http.route({
     }),
     runQuery: (ctx, args) =>
       ctx.runQuery(internal.mcp.approvals.getPending, args),
+  }),
+});
+
+// Phase 6: Withdrawal allowlist + cash-out (ceremony gated)
+http.route({
+  path: "/mcp/desks/register-withdraw-address",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "register_withdraw_address",
+    parseBody: parseRegisterWithdrawAddressBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      try {
+        const raw = await ctx.runMutation(
+          internal.mcp.desks.registerWithdrawAddress,
+          {
+            deskManagerId,
+            address: requestBody.address as string,
+          }
+        );
+        return { result: raw };
+      } catch (e: unknown) {
+        return {
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/desks/withdraw-to-address",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "withdraw_to_address",
+    parseBody: parseWithdrawToAddressBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      try {
+        const raw = await ctx.runAction(internal.mcp.desks.withdrawToAddress, {
+          deskManagerId,
+          address: requestBody.address as string,
+          amountUsdc: Number(requestBody.amountUsdc),
+        });
+        return { result: raw };
+      } catch (e: unknown) {
+        return {
+          error: e instanceof Error ? e.message : String(e),
+        };
+      }
+    },
   }),
 });
 

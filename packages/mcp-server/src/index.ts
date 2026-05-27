@@ -4,7 +4,7 @@
  *
  * Tools:
  *   get_desk, list_traders, list_deals, get_activity, get_outcomes,
- *   get_pending_approvals, sync_wallet, create_trader
+ *   get_pending_approvals, sync_wallet, create_trader, register_withdraw_address, withdraw_to_address
  *
  * Each MCP key maps 1:1 to a dedicated desk with subject `mcp:cdp-wallet:<id>`
  * and its own CDP server wallet (provisioned at key issuance).
@@ -47,7 +47,7 @@ const server = new McpServer({
   name: "margin-call",
   version: "0.1.0-phase1",
   description:
-    "Margin Call 1980s Wall Street desk manager for Claude (read + MCP desk writes where implemented). Inspect state via get_desk, list_traders, list_deals, activity, outcomes, approvals; sync balances; hire traders via create_trader.",
+    "Margin Call 1980s Wall Street desk manager for Claude (read + MCP desk writes where implemented). Inspect state via get_desk, list_traders, list_deals, activity, outcomes, approvals; sync balances; hire traders via create_trader; cash out via register_withdraw_address + withdraw_to_address (ceremony gated).",
 });
 
 function buildQueryString(
@@ -257,12 +257,66 @@ server.tool(
     })
 );
 
+server.tool(
+  "register_withdraw_address",
+  "Submit a destination address for this desk's withdrawal allowlist (USDC cash-out target). FIRST registration per desk requires a one-time human-in-the-loop confirmation ceremony in the Margin Call web UI (the Privy user who issued the MCP key must log in and confirm the exact address to bind the human operator to the agent desk). After the ceremony succeeds, subsequent registrations append to the allowlist automatically. Always supply a stable idempotencyKey. Returns the normalized address and current allowlist on success, or a clear 'ceremony pending' error. Claude should surface the ceremony URL/guidance to the user when this fails with pending:true.",
+  {
+    address: z
+      .string()
+      .describe(
+        "Destination 0x EVM address on Base (will be normalized to lowercase)"
+      ),
+    idempotencyKey: z
+      .string()
+      .min(8)
+      .describe(
+        "Stable key for this registration intent. Same key on retry returns cached result (no duplicate ceremony trigger)."
+      ),
+  },
+  async ({ address, idempotencyKey }) =>
+    callMcpApi("/api/mcp/desks/register-withdraw-address", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address, idempotencyKey }),
+    })
+);
+
+server.tool(
+  "withdraw_to_address",
+  "Transfer USDC from this MCP desk's CDP wallet to a previously allowlisted address. Rejects non-allowlisted destinations and amounts that would exceed the desk's daily withdrawal cap. Requires ceremony to have been completed for the first address. Slow on-chain operation (~5-30s). Supply stable idempotencyKey. Returns txHash, amount, and updated daily used. Call get_desk + sync_wallet before/after to see balances. Claude must not attempt withdrawals until get_desk shows withdraw.ceremonyCompleted === true and at least one address in allowlist.",
+  {
+    address: z
+      .string()
+      .describe(
+        "Allowlisted destination 0x address (must have been successfully registered and confirmed)"
+      ),
+    amountUsdc: z
+      .number()
+      .positive()
+      .describe(
+        "Amount in USDC (human units, e.g. 123.45). Must not exceed daily remaining cap."
+      ),
+    idempotencyKey: z
+      .string()
+      .min(8)
+      .describe(
+        "Stable key for this cash-out intent. Retry with same key returns prior txHash without re-sending."
+      ),
+  },
+  async ({ address, amountUsdc, idempotencyKey }) =>
+    callMcpApi("/api/mcp/desks/withdraw-to-address", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ address, amountUsdc, idempotencyKey }),
+    })
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Log to stderr only (stdio transport uses stdout for protocol)
   console.error(
-    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,sync_wallet,create_trader  (key last4=${API_KEY.slice(-4)})`
+    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,sync_wallet,create_trader,register_withdraw_address,withdraw_to_address  (key last4=${API_KEY.slice(-4)})`
   );
 }
 
