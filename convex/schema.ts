@@ -103,6 +103,10 @@ export default defineSchema({
     cdpAccountName: v.optional(v.string()),
     tokenId: v.optional(v.number()),
     tbaAddress: v.optional(v.string()),
+    /** ERC-8004 mint transaction hash (wallet pipeline). */
+    mintTxHash: v.optional(v.string()),
+    /** ERC-8004 transfer NFT to canonical smart-account tx hash. */
+    transferTxHash: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -417,5 +421,9 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("byDeskManagerAndCreatedAt", ["deskManagerId", "createdAt"])
+    .index("byDeskManagerAndIdempotencyKey", [
+      "deskManagerId",
+      "idempotencyKey",
+    ])
     .index("byCreatedAt", ["createdAt"]),
 });

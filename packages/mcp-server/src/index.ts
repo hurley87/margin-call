@@ -4,7 +4,7 @@
  *
  * Tools:
  *   get_desk, list_traders, list_deals, get_activity, get_outcomes,
- *   get_pending_approvals, sync_wallet
+ *   get_pending_approvals, sync_wallet, create_trader
  *
  * Each MCP key maps 1:1 to a dedicated desk with subject `mcp:cdp-wallet:<id>`
  * and its own CDP server wallet (provisioned at key issuance).
@@ -47,7 +47,7 @@ const server = new McpServer({
   name: "margin-call",
   version: "0.1.0-phase1",
   description:
-    "Margin Call 1980s Wall Street desk manager for Claude. Phase 1 read-only surface: get_desk, list_traders, list_deals, get_activity, get_outcomes, get_pending_approvals. Inspect full game state from the terminal without browser auth.",
+    "Margin Call 1980s Wall Street desk manager for Claude (read + MCP desk writes where implemented). Inspect state via get_desk, list_traders, list_deals, activity, outcomes, approvals; sync balances; hire traders via create_trader.",
 });
 
 function buildQueryString(
@@ -224,12 +224,45 @@ server.tool(
   async () => callMcpApi("/api/mcp/desks/sync-wallet")
 );
 
+server.tool(
+  "create_trader",
+  "Hire a new trader for this MCP desk. Performs the SAME on-chain flow as the web app: ERC-8004 NFT mint plus CDP smart-account provisioning on Base Sepolia. Expect roughly 5–15 seconds wall-clock latency (multiple sponsored user ops). REQUIRED: stable idempotencyKey — reuse the exact same key when retrying timeouts so the API returns cached trader + tx hashes without re-submitting on-chain txs; generating a fresh key intentionally starts another hire attempt. Prerequisites: funded desk wallet and positive synced balance (get_desk, send USDC, sync_wallet). Returns traderId, tokenId, walletAddress, txHashes {mint,transfer}, summary.",
+  {
+    name: z
+      .string()
+      .min(1)
+      .describe(
+        "Trader handle (same rules as web: letters, digits, underscore, max 15 chars after trim)"
+      ),
+    mandate: z
+      .any()
+      .optional()
+      .describe("Optional mandate object (strategy knobs) — JSON-serializable"),
+    personality: z
+      .string()
+      .optional()
+      .describe("Optional trader personality text"),
+    idempotencyKey: z
+      .string()
+      .min(8)
+      .describe(
+        "Stable key for this hire intent (e.g. UUID). Mandatory on retries: same key within 24h replays cached result without new transactions."
+      ),
+  },
+  async ({ name, mandate, personality, idempotencyKey }) =>
+    callMcpApi("/api/mcp/traders/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, mandate, personality, idempotencyKey }),
+    })
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Log to stderr only (stdio transport uses stdout for protocol)
   console.error(
-    `[margin-call-mcp] Phase 2 ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,sync_wallet  (key last4=${API_KEY.slice(-4)})`
+    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,sync_wallet,create_trader  (key last4=${API_KEY.slice(-4)})`
   );
 }
 
