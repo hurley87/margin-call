@@ -297,7 +297,7 @@ server.tool(
 
 server.tool(
   "fund_trader",
-  "Fund a trader escrow from the desk CDP wallet: USDC approve (if needed), escrow depositFor, sync escrow balance. Expect ~2–8s (on-chain txs). Requires idempotencyKey, positive amountUsdc, funded desk (get_desk → send USDC → sync_wallet). Trader wallet must be ready. Returns txHash and summary.",
+  "Fund a trader escrow from the desk CDP wallet. Performs USDC approve (large allowance when needed — this step is rare after the first funding) + escrow depositFor + Convex balance sync. Expect ~2–8s wall time. REQUIRES: stable idempotencyKey (reuse on transient failure replays the cached error; generate a *fresh* key to re-attempt the funding intent). Prerequisites: positive synced desk balance, trader wallet ready. Returns txHash + concise summary. The large allowance makes retries after partial failures cheap (usually just the deposit tx).",
   {
     traderId: traderIdSchema,
     amountUsdc: z
