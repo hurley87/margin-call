@@ -23,6 +23,7 @@ import {
   HelpCircle,
   LogOut,
   Plus,
+  Terminal,
   Twitter,
   User,
   Volume2,
@@ -44,6 +45,7 @@ import {
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import { McpOperatorDialog } from "@/components/mcp-operator-dialog";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
 import { PublicTraderDialog } from "@/components/public-trader-dialog";
@@ -265,6 +267,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
     dealId: string | null;
   } | null>(null);
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
+  const [mcpOperatorOpen, setMcpOperatorOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
   const [selectedWalletTraderId, setSelectedWalletTraderId] = useState<
@@ -346,6 +349,11 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         sfxEnabled={sfx.enabled}
         onToggleSfx={sfx.toggleEnabled}
         onLogout={logout}
+        onOpenMcp={() => setMcpOperatorOpen(true)}
+      />
+      <McpOperatorDialog
+        open={mcpOperatorOpen}
+        onOpenChange={setMcpOperatorOpen}
       />
       <DeskCommandStrip
         cash={cashBalance}
@@ -462,6 +470,7 @@ function TopStatusBar({
   sfxEnabled,
   onToggleSfx,
   onLogout,
+  onOpenMcp,
 }: {
   deskWalletAddress: string;
   nowMs: number;
@@ -472,6 +481,7 @@ function TopStatusBar({
   sfxEnabled: boolean;
   onToggleSfx: () => void;
   onLogout: () => void;
+  onOpenMcp: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [fundDialogOpen, setFundDialogOpen] = useState(false);
@@ -627,6 +637,15 @@ function TopStatusBar({
           >
             <HelpCircle className="h-4 w-4" />
           </IconLink>
+          <button
+            type="button"
+            onClick={onOpenMcp}
+            title="MCP Operator Console (agent desks, ceremony, audit)"
+            aria-label="Open MCP operator panel"
+            className="grid h-9 w-9 place-items-center border border-[var(--t-amber)]/40 text-[var(--t-amber)] hover:border-[var(--t-green)] hover:text-[var(--t-green)]"
+          >
+            <Terminal className="h-4 w-4" />
+          </button>
           <button
             type="button"
             onClick={onLogout}
@@ -2170,11 +2189,11 @@ function MarketPlayersPanel({
                     size="sm"
                   />
                   <div className="min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <p className="truncate text-[var(--t-text)]">
+                    <div className="flex min-w-0 items-center gap-1.5">
+                      <p className="min-w-0 truncate text-[var(--t-text)]">
                         {trader.name}
                       </p>
-                      {trader.is_agent_desk ? <AgentDeskBadge /> : null}
+                      {trader.is_agent_desk ? <AgentDeskBadge compact /> : null}
                     </div>
                     <p className="truncate text-[10px] uppercase text-[var(--t-muted)]">
                       {trader.status}

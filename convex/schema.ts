@@ -24,6 +24,18 @@ export default defineSchema({
     welcomeEmailSentAt: v.optional(v.number()),
     displayName: v.optional(v.string()),
     settings: v.optional(v.any()),
+    // MCP desk wallet (Phase 2+)
+    cdpAccountName: v.optional(v.string()), // e.g. "mcp-desk-abc123def456" for getOrCreateAccount
+    // Withdrawal allowlist + safety rails (Phase 6)
+    withdrawAllowlist: v.optional(v.array(v.string())), // normalized lowercase 0x addresses
+    withdrawAllowlistUpdatedAt: v.optional(v.number()),
+    dailyWithdrawCapUsdc: v.optional(v.number()), // per-desk daily cap in USDC (human units)
+    dailyWithdrawUsedUsdc: v.optional(v.number()),
+    dailyWithdrawResetAt: v.optional(v.number()),
+    withdrawCeremonyCompletedAt: v.optional(v.number()),
+    boundHumanSubject: v.optional(v.string()), // Privy DID of human who completed ceremony
+    pendingWithdrawAddress: v.optional(v.string()), // proposed by first register_withdraw_address
+    pendingWithdrawCeremonyAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("bySubject", ["subject"]),
@@ -397,12 +409,15 @@ export default defineSchema({
   mcpApiKeys: defineTable({
     keyHash: v.string(),
     deskManagerId: v.id("deskManagers"),
+    /** Privy DID of the human who issued this MCP key (used for ceremony gating + operator views). */
+    issuedByPrivySubject: v.optional(v.string()),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
   })
     .index("byKeyHash", ["keyHash"])
-    .index("byDeskManager", ["deskManagerId"]),
+    .index("byDeskManager", ["deskManagerId"])
+    .index("byIssuedBy", ["issuedByPrivySubject"]),
 
   /**
    * Audit log for all MCP tool invocations (reads + writes). Written from the

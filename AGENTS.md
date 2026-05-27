@@ -48,7 +48,7 @@ Convex agent skills for common tasks can be installed by running
 
 <!-- convex-ai-end -->
 
-## MCP development (Phase 2 complete — MCP desk identity + CDP wallets + sync_wallet)
+## MCP development (Phase 6 partial complete — withdrawal allowlist ceremony + withdraw_to_address + operator UI + mcpRequests debug)
 
 The initial thin end-to-end for external agents (Claude Code) lives under the MCP plan (`plans/mcp.md`, GitHub #137).
 

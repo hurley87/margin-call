@@ -188,8 +188,9 @@ export const createForMcp = internalMutation({
   args: {
     subject: v.string(),
     walletAddress: v.string(),
+    cdpAccountName: v.optional(v.string()),
   },
-  handler: async (ctx, { subject, walletAddress }) => {
+  handler: async (ctx, { subject, walletAddress, cdpAccountName }) => {
     const existing = await ctx.db
       .query("deskManagers")
       .withIndex("bySubject", (q) => q.eq("subject", subject))
@@ -198,11 +199,15 @@ export const createForMcp = internalMutation({
     const now = Date.now();
 
     if (existing) {
+      const patch: Record<string, unknown> = { updatedAt: now };
       if (existing.walletAddress !== walletAddress) {
-        await ctx.db.patch(existing._id, {
-          walletAddress,
-          updatedAt: now,
-        });
+        patch.walletAddress = walletAddress;
+      }
+      if (cdpAccountName && existing.cdpAccountName !== cdpAccountName) {
+        patch.cdpAccountName = cdpAccountName;
+      }
+      if (Object.keys(patch).length > 1) {
+        await ctx.db.patch(existing._id, patch);
       }
       return existing._id;
     }
@@ -210,9 +215,40 @@ export const createForMcp = internalMutation({
     return await ctx.db.insert("deskManagers", {
       subject,
       walletAddress,
+      cdpAccountName,
+      // Default per-desk daily withdrawal cap (Phase 6). Adjust via operator tooling.
+      dailyWithdrawCapUsdc: 1000,
       settings: {},
       createdAt: now,
       updatedAt: now,
     });
+  },
+});
+
+/**
+ * Internal: record a successful MCP desk withdrawal (updates daily used, reset marker,
+ * and can be used to log the tx for audit). Called after on-chain transfer succeeds.
+ */
+export const recordWithdrawUsage = internalMutation({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    amountUsdc: v.number(),
+    newDailyUsed: v.number(),
+    resetAt: v.number(),
+    txHash: v.optional(v.string()),
+  },
+  handler: async (
+    ctx,
+    { deskManagerId, amountUsdc, newDailyUsed, resetAt, txHash }
+  ) => {
+    const now = Date.now();
+    const patch: Record<string, unknown> = {
+      dailyWithdrawUsedUsdc: newDailyUsed,
+      dailyWithdrawResetAt: resetAt,
+      updatedAt: now,
+    };
+    // Optional: could store lastWithdrawTxHash or append to a log, but mcpRequests already captures it.
+    await ctx.db.patch(deskManagerId, patch);
+    return { ok: true as const };
   },
 });

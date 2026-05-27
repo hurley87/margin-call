@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { verifyPrivyToken } from "@/lib/privy/server";
+import { verifyPrivyToken, canonicalPrivySubject } from "@/lib/privy/server";
 import { createConvexAdminClient } from "@/lib/convex/server-client";
 import { generateMcpKey, hashMcpKey } from "@/lib/mcp/keys";
 import { getCdpClient } from "@/lib/cdp/client";
@@ -26,8 +26,10 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  let issuedByPrivySubject: string | undefined;
   try {
-    await verifyPrivyToken(request);
+    const { claims, user } = await verifyPrivyToken(request);
+    issuedByPrivySubject = canonicalPrivySubject(claims.userId, user.id);
   } catch {
     return NextResponse.json({ error: "Unauthenticated" }, { status: 401 });
   }
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
   const mcpDeskId = (await convex.mutation(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     internal.deskManagers.createForMcp as any,
-    { subject: mcpSubject, walletAddress }
+    { subject: mcpSubject, walletAddress, cdpAccountName }
   )) as Id<"deskManagers">;
 
   // Bind the one-time key to this MCP desk (not to the issuer's browser desk).
@@ -61,6 +63,7 @@ export async function POST(request: NextRequest) {
   await convex.mutation(internal.mcpApiKeys.create as any, {
     keyHash,
     deskManagerId: mcpDeskId,
+    issuedByPrivySubject,
   });
 
   return NextResponse.json({
