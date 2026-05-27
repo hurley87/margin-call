@@ -4,7 +4,7 @@
  *
  * Tools:
  *   get_desk, list_traders, list_deals, get_activity, get_outcomes,
- *   get_pending_approvals, sync_wallet, create_trader,
+ *   get_pending_approvals, answer_approval, sync_wallet, create_trader,
  *   configure_trader, fund_trader, resume_trader, pause_trader, withdraw_from_trader,
  *   register_withdraw_address, withdraw_to_address,
  *   create_deal, close_deal
@@ -410,6 +410,40 @@ server.tool(
 );
 
 server.tool(
+  "answer_approval",
+  "Approve or reject a pending high-stakes deal approval for one of your traders. Use after get_desk shows pendingApprovals.count > 0 (call get_pending_approvals to inspect prompt + remaining TTL). Ownership is enforced server-side. `approve` schedules an immediate trader cycle so the deal is entered without waiting for the next scheduler tick. `reject` lets the trader pick a different deal. Approvals not answered before their TTL are auto-rejected server-side; calling answer_approval on an already-resolved row returns the current status without mutating state. Requires stable idempotencyKey — same key within 24h replays the cached result. Response.summary includes trader name, deal prompt snippet, escrow balance, and the remaining pendingApprovals count so portfolio change is visible without another get_desk call.",
+  {
+    approvalId: z
+      .string()
+      .min(1)
+      .describe(
+        "Convex dealApprovals document id from get_pending_approvals.approvals[].approvalId"
+      ),
+    decision: z
+      .enum(["approve", "reject"])
+      .describe(
+        '"approve" to authorize the high-stakes deal entry; "reject" to skip it and free the trader to pick another deal'
+      ),
+    reason: z
+      .string()
+      .optional()
+      .describe("Optional free-text reason recorded in the audit log"),
+    idempotencyKey: idempotencyKeySchema,
+  },
+  async ({ approvalId, decision, reason, idempotencyKey }) =>
+    callMcpApi("/api/mcp/approvals/answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        approvalId,
+        decision,
+        reason,
+        idempotencyKey,
+      }),
+    })
+);
+
+server.tool(
   "create_deal",
   "Create a NEW market deal as a trap for rival desks, signed and submitted by this MCP desk's CDP wallet. Performs: USDC.approve (rare after first call thanks to large allowance) + escrow.createDeal + Convex record. Expect ~3–10s wall time. The desk's traders are blocked from entering this deal (own-desk rule) — both in selection and at recordVerifiedEntry. Requires the market to be open (9:30–16:00 ET, weekdays); errors explicitly when closed. Prerequisites: synced desk wallet balance >= potUsdc. REQUIRED: stable idempotencyKey — reusing the same key within 24h returns the cached result without re-submitting on-chain txs; generate a *fresh* key to intentionally create another deal. Returns Convex deal id, on-chain deal id, tx hash, walletAddress, and summary.",
   {
@@ -464,7 +498,7 @@ async function main() {
   await server.connect(transport);
   // Log to stderr only (stdio transport uses stdout for protocol)
   console.error(
-    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,sync_wallet,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader,register_withdraw_address,withdraw_to_address,create_deal,close_deal  (key last4=${API_KEY.slice(-4)})`
+    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,answer_approval,sync_wallet,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader,register_withdraw_address,withdraw_to_address,create_deal,close_deal  (key last4=${API_KEY.slice(-4)})`
   );
 }
 

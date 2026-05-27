@@ -46,4 +46,16 @@ crons.hourly(
   {}
 );
 
+/**
+ * Auto-reject MCP high-stakes deal approvals that have passed their TTL.
+ * Unanswered pending rows would otherwise block the trader cycle
+ * (see `findPendingByTraderAndDeal` in convex/dealApprovals.ts).
+ */
+crons.interval(
+  "mcp-approvals-auto-reject-expired",
+  { minutes: 5 },
+  internal.mcp.approvals.autoRejectExpired,
+  {}
+);
+
 export default crons;
