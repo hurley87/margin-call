@@ -151,7 +151,6 @@ function DeskDeepLinkHydration({
 export default function Home() {
   const { ready, authenticated, login, logout } = usePrivy();
   const { data: deskManager, isLoading: deskLoading } = useDeskManager();
-  const [mcpOperatorOpen, setMcpOperatorOpen] = useState(false);
 
   if (!ready) {
     return (
@@ -268,6 +267,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
     dealId: string | null;
   } | null>(null);
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
+  const [mcpOperatorOpen, setMcpOperatorOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
   const [selectedWalletTraderId, setSelectedWalletTraderId] = useState<

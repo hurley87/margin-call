@@ -4,8 +4,10 @@ import {
   mutation,
   query,
 } from "./_generated/server";
+import type { MutationCtx, QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 
 /**
  * Internal helpers for MCP API key lifecycle. Keys are issued from
@@ -13,6 +15,42 @@ import { internal } from "./_generated/api";
  */
 
 const LAST_USED_DEBOUNCE_MS = 5 * 60 * 1000;
+
+type MyIssuedMcpDesk = {
+  keyId: Id<"mcpApiKeys">;
+  deskManagerId: Id<"deskManagers">;
+  deskSubject?: string;
+  walletAddress?: string;
+  cdpAccountName?: string;
+  createdAt: number;
+  lastUsedAt?: number;
+  withdraw: {
+    ceremonyCompleted: boolean;
+    allowlistCount: number;
+    pendingProposal?: string;
+    dailyCap?: number;
+    dailyUsed?: number;
+  };
+};
+
+type ConfirmWithdrawCeremonyResult = {
+  ok: true;
+  alreadyDone?: true;
+  address?: string;
+  allowlist?: string[];
+  ceremonyCompletedAt?: number;
+};
+
+type McpRequestDebugRow = {
+  _id: string;
+  tool: string;
+  idempotencyKey?: string;
+  result?: unknown;
+  error?: string;
+  txHash?: string;
+  durationMs: number;
+  createdAt: number;
+};
 
 export const create = internalMutation({
   args: {
@@ -143,7 +181,7 @@ export const confirmWithdrawCeremony = internalMutation({
     const now = Date.now();
 
     // Already done for this or any? If ceremony done, allow adding the addr if not present
-    const currentList = desk.withdrawAllowlist ?? [];
+    const currentList: string[] = desk.withdrawAllowlist ?? [];
     if (desk.withdrawCeremonyCompletedAt && currentList.includes(norm)) {
       return { ok: true as const, alreadyDone: true };
     }
@@ -174,13 +212,16 @@ export const confirmWithdrawCeremony = internalMutation({
 /** Public (browser) wrapper: list MCP desks issued by the currently authenticated Privy user. */
 export const listMyIssuedMcpDesks = query({
   args: { limit: v.optional(v.number()) },
-  handler: async (ctx: any, { limit }: any) => {
+  handler: async (
+    ctx: QueryCtx,
+    { limit }: { limit?: number }
+  ): Promise<MyIssuedMcpDesk[]> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
-    return await ctx.runQuery(internal.mcpApiKeys.listIssuedBy, {
+    return (await ctx.runQuery(internal.mcpApiKeys.listIssuedBy, {
       issuedBy: identity.subject,
       limit,
-    });
+    })) as MyIssuedMcpDesk[];
   },
 });
 
@@ -190,14 +231,20 @@ export const confirmMyWithdrawCeremony = mutation({
     deskManagerId: v.id("deskManagers"),
     address: v.string(),
   },
-  handler: async (ctx: any, { deskManagerId, address }: any) => {
+  handler: async (
+    ctx: MutationCtx,
+    {
+      deskManagerId,
+      address,
+    }: { deskManagerId: Id<"deskManagers">; address: string }
+  ): Promise<ConfirmWithdrawCeremonyResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
-    return await ctx.runMutation(internal.mcpApiKeys.confirmWithdrawCeremony, {
+    return (await ctx.runMutation(internal.mcpApiKeys.confirmWithdrawCeremony, {
       deskManagerId,
       address,
       confirmedByPrivySubject: identity.subject,
-    });
+    })) as ConfirmWithdrawCeremonyResult;
   },
 });
 
@@ -207,7 +254,13 @@ export const listRecentMcpRequestsForMyDesk = query({
     deskManagerId: v.id("deskManagers"),
     limit: v.optional(v.number()),
   },
-  handler: async (ctx: any, { deskManagerId, limit = 50 }: any) => {
+  handler: async (
+    ctx: QueryCtx,
+    {
+      deskManagerId,
+      limit = 50,
+    }: { deskManagerId: Id<"deskManagers">; limit?: number }
+  ): Promise<McpRequestDebugRow[]> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 

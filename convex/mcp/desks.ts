@@ -153,6 +153,14 @@ function startOfUtcDay(ts: number): number {
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
+type WithdrawToAddressResult = {
+  ok: true;
+  txHash: string;
+  to: string;
+  amountUsdc: number;
+  dailyUsedAfter: number;
+};
+
 /**
  * MCP `register_withdraw_address` (internal mutation, called from http write route).
  * Enforces: first registration per desk requires completed ceremony (human confirmation in web UI).
@@ -199,7 +207,7 @@ export const registerWithdrawAddress = internalMutation({
     }
 
     // Ceremony complete → allow append (or dedupe)
-    const current = desk.withdrawAllowlist ?? [];
+    const current: string[] = desk.withdrawAllowlist ?? [];
     if (current.some((a) => a.toLowerCase() === norm)) {
       return {
         ok: true as const,
@@ -236,7 +244,10 @@ export const withdrawToAddress = internalAction({
     address: v.string(),
     amountUsdc: v.number(), // human units, e.g. 123.45
   },
-  handler: async (ctx: any, { deskManagerId, address, amountUsdc }: any) => {
+  handler: async (
+    ctx: any,
+    { deskManagerId, address, amountUsdc }: any
+  ): Promise<WithdrawToAddressResult> => {
     const desk = await ctx.runQuery(internal.deskManagers.getByIdInternal, {
       id: deskManagerId,
     });
@@ -248,7 +259,7 @@ export const withdrawToAddress = internalAction({
       );
     }
 
-    const normDest = normalizeAddress(address); // reuse local? wait, will hoist helper or duplicate for action scope
+    const normDest = normalizeAddress(address);
     if (!isAllowlisted(desk.withdrawAllowlist, normDest)) {
       throw new Error(
         `Destination ${normDest} is not on this desk's withdrawal allowlist. Use register_withdraw_address (after ceremony) to add it.`
