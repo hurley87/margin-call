@@ -1,0 +1,10 @@
+{
+  "setup-worktree-unix": [
+    "pnpm install",
+    "test -f \"$ROOT_WORKTREE_PATH/.env.local\" && cp \"$ROOT_WORKTREE_PATH/.env.local\" .env.local || echo \"worktree-setup: no .env.local on root checkout — copy from .env.example or your main worktree\""
+  ],
+  "setup-worktree-windows": [
+    "pnpm install",
+    "if exist \"%ROOT_WORKTREE_PATH%\\.env.local\" (copy \"%ROOT_WORKTREE_PATH%\\.env.local\" .env.local) else (echo worktree-setup: no .env.local on root checkout — copy from .env.example or your main worktree)"
+  ]
+}
