@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 
 type MyDesk = {
+  keyId: Id<"mcpApiKeys">;
   deskManagerId: Id<"deskManagers">;
   deskSubject?: string;
   walletAddress?: string;
@@ -66,6 +67,12 @@ export function McpOperatorDialog({
   const [confirmError, setConfirmError] = useState<string | null>(null);
   const [requests, setRequests] = useState<McpRequestRow[]>([]);
   const [loadingRequests, setLoadingRequests] = useState(false);
+
+  // Rotation / revocation UI state.
+  const [isRotating, setIsRotating] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
+  const [keyOpError, setKeyOpError] = useState<string | null>(null);
+  const [rotatedKey, setRotatedKey] = useState<string | null>(null);
 
   const confirmCeremony = useMutation(api.mcpApiKeys.confirmMyWithdrawCeremony);
   const listRequests = useQuery; // we call manually via refetch pattern, but use the query fn? For simplicity use direct in effect no, use lazy via button
@@ -116,6 +123,68 @@ export function McpOperatorDialog({
 
   const copy = (text: string) => {
     navigator.clipboard?.writeText(text).catch(() => {});
+  };
+
+  // Reset any previously-displayed new key when the user switches desks.
+  React.useEffect(() => {
+    setRotatedKey(null);
+    setKeyOpError(null);
+  }, [selectedDeskId]);
+
+  const handleRotate = async (keyId: Id<"mcpApiKeys">) => {
+    const confirmed = window.confirm(
+      "Rotate this MCP key?\n\nThe old key stops working IMMEDIATELY. Update your MCP client (Claude Code / Cursor) with the new key before continuing.\n\nThe new key is shown ONCE and never again."
+    );
+    if (!confirmed) return;
+    setIsRotating(true);
+    setKeyOpError(null);
+    setRotatedKey(null);
+    try {
+      const res = await fetch(`/api/mcp/keys/${keyId}/rotate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        key?: string;
+        error?: string;
+      };
+      if (!res.ok || !data.key) {
+        throw new Error(data.error ?? `Rotate failed (${res.status})`);
+      }
+      setRotatedKey(data.key);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Rotation failed";
+      setKeyOpError(msg);
+    } finally {
+      setIsRotating(false);
+    }
+  };
+
+  const handleRevoke = async (keyId: Id<"mcpApiKeys">) => {
+    const confirmed = window.confirm(
+      "Revoke this MCP key?\n\nThe key stops working IMMEDIATELY. This is permanent — to keep using this desk you must rotate (or issue a fresh key)."
+    );
+    if (!confirmed) return;
+    setIsRevoking(true);
+    setKeyOpError(null);
+    try {
+      const res = await fetch(`/api/mcp/keys/${keyId}`, { method: "DELETE" });
+      const data = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(data.error ?? `Revoke failed (${res.status})`);
+      }
+      // Reactive listIssuedBy will drop this row from `myDesks` automatically.
+      setSelectedDeskId(null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Revocation failed";
+      setKeyOpError(msg);
+    } finally {
+      setIsRevoking(false);
+    }
   };
 
   if (!open) return null;
@@ -346,6 +415,72 @@ export function McpOperatorDialog({
                     </div>
                   )}
                 </div>
+              </div>
+
+              {/* Key actions: rotate / revoke */}
+              <div className="mt-5 rounded border border-[var(--t-border)]/40 bg-black/20 p-3">
+                <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest text-[var(--t-text)]/60">
+                  <ShieldCheck className="h-3.5 w-3.5" /> KEY ACTIONS
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => handleRotate(selectedDesk.keyId)}
+                    disabled={isRotating || isRevoking}
+                    className="inline-flex items-center gap-1.5 rounded border border-[var(--t-amber)]/50 bg-[var(--t-amber)]/10 px-3 py-1 text-xs font-semibold text-[var(--t-amber)] hover:bg-[var(--t-amber)]/20 disabled:opacity-50"
+                    title="Issue a new key bound to this same desk; the old key is revoked immediately."
+                  >
+                    {isRotating ? (
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3 w-3" />
+                    )}
+                    ROTATE KEY
+                  </button>
+                  <button
+                    onClick={() => handleRevoke(selectedDesk.keyId)}
+                    disabled={isRotating || isRevoking}
+                    className="inline-flex items-center gap-1.5 rounded border border-[var(--t-red)]/50 bg-[var(--t-red)]/10 px-3 py-1 text-xs font-semibold text-[var(--t-red)] hover:bg-[var(--t-red)]/20 disabled:opacity-50"
+                    title="Permanently disable this key. Desk remains; traders/deals continue under any other unrevoked key for this desk."
+                  >
+                    {isRevoking ? (
+                      <RefreshCw className="h-3 w-3 animate-spin" />
+                    ) : (
+                      <X className="h-3 w-3" />
+                    )}
+                    REVOKE KEY
+                  </button>
+                  <div className="ml-auto font-mono text-[10px] text-[var(--t-text)]/50">
+                    keyId {String(selectedDesk.keyId).slice(0, 8)}…
+                  </div>
+                </div>
+                {keyOpError && (
+                  <div className="mt-2 text-[10px] text-[var(--t-red)]">
+                    {keyOpError}
+                  </div>
+                )}
+                {rotatedKey && (
+                  <div className="mt-3 rounded border border-[var(--t-green)]/50 bg-[var(--t-green)]/5 p-3">
+                    <div className="mb-1 text-[10px] uppercase tracking-widest text-[var(--t-green)]">
+                      NEW KEY — SHOWN ONCE
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <code className="flex-1 break-all rounded bg-black/40 p-2 font-mono text-[11px] text-[var(--t-text)]">
+                        {rotatedKey}
+                      </code>
+                      <button
+                        onClick={() => copy(rotatedKey)}
+                        className="inline-flex items-center gap-1 rounded bg-[var(--t-green)]/90 px-2 py-1 text-[10px] font-semibold text-black"
+                      >
+                        <Clipboard className="h-3 w-3" /> COPY
+                      </button>
+                    </div>
+                    <div className="mt-2 text-[10px] text-[var(--t-text)]/60">
+                      Paste this into <code>MARGIN_CALL_MCP_KEY</code> in your
+                      MCP client config (Claude Code / Cursor). The old key has
+                      already been revoked.
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Recent mcpRequests debug table */}
