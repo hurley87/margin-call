@@ -1,31 +1,26 @@
 #!/usr/bin/env node
 /**
- * Margin Call MCP Server (Phase 2 - MCP Desk Identity + Read Surface)
+ * Margin Call MCP Server
  *
  * Tools:
  *   get_desk, list_traders, list_deals, get_activity, get_outcomes,
  *   get_pending_approvals, answer_approval, sync_wallet, create_trader,
- *   configure_trader, fund_trader, resume_trader, pause_trader, withdraw_from_trader,
- *   register_withdraw_address, withdraw_to_address,
- *   create_deal, close_deal
+ *   configure_trader, fund_trader, resume_trader, pause_trader,
+ *   withdraw_from_trader, register_withdraw_address, withdraw_to_address,
+ *   create_deal, close_deal.
  *
- * Each MCP key maps 1:1 to a dedicated desk with subject `mcp:cdp-wallet:<id>`
- * and its own CDP server wallet (provisioned at key issuance).
+ * Each MCP key maps 1:1 to a dedicated AGENT DESK with subject
+ * `mcp:cdp-wallet:<id>` and its own CDP server wallet (provisioned at key
+ * issuance). Authenticates via per-desk Bearer token (mc_live_...) read
+ * from `MARGIN_CALL_MCP_KEY`. All responses are structured JSON.
  *
- * Authenticates via per-desk Bearer token (mc_live_...) from env.
- * All responses are structured JSON (pretty-printed for terminal).
+ * Install (recommended):
+ *   claude mcp add margin-call -- npx -y @margin-call/mcp-server
  *
- * Usage (local dev / contributors):
+ * Local development:
  *   MARGIN_CALL_MCP_KEY=mc_live_xxx \
  *   MARGIN_CALL_API_URL=http://localhost:3000 \
- *   npx tsx /path/to/packages/mcp-server/src/index.ts
- *
- * In Claude Code / Cursor MCP settings (local path):
- *   command: npx
- *   args: ["-y", "tsx", "/absolute/path/to/margin-call/packages/mcp-server/src/index.ts"]
- *   env: { MARGIN_CALL_MCP_KEY, MARGIN_CALL_API_URL }
- *
- * Later (Phase 6): `claude mcp add margin-call -- npx -y @margin-call/mcp-server`
+ *   npx tsx packages/mcp-server/src/index.ts
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -48,9 +43,9 @@ if (!API_KEY) {
 
 const server = new McpServer({
   name: "margin-call",
-  version: "0.1.0-phase1",
+  version: "0.2.0",
   description:
-    "Margin Call 1980s Wall Street desk manager for Claude. Read desk state; hire and manage traders (configure, fund, pause, resume, withdraw); sync wallet balances; cash out via register_withdraw_address + withdraw_to_address (ceremony gated). Autonomous cron picks deals for active funded traders.",
+    "Margin Call 1980s Wall Street desk manager for Claude. Read desk state; hire and manage traders (configure, fund, pause, resume, withdraw); create + close trap deals for rival desks; answer high-stakes approvals; sync wallet balances; cash out via register_withdraw_address + withdraw_to_address (one-time browser-confirmed ceremony). Autonomous cron picks deals for active funded traders. Per-desk daily and per-action USDC caps, server-side transaction simulation, 24h idempotency replay, and per-desk + IP rate limits enforce production safety.",
 });
 
 function buildQueryString(
