@@ -5,6 +5,8 @@ import {
 } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
+import { assertPerActionCap } from "./limits";
+import { simulateUsdcTransfer } from "./simulate";
 
 /**
  * Read-only desk snapshot for MCP get_desk. Called from the mcp/* HTTP action
@@ -248,6 +250,13 @@ export const withdrawToAddress = internalAction({
     ctx: any,
     { deskManagerId, address, amountUsdc }: any
   ): Promise<WithdrawToAddressResult> => {
+    await assertPerActionCap(
+      ctx,
+      deskManagerId,
+      "withdraw_to_address",
+      amountUsdc
+    );
+
     const desk = await ctx.runQuery(internal.deskManagers.getByIdInternal, {
       id: deskManagerId,
     });
@@ -314,6 +323,26 @@ export const withdrawToAddress = internalAction({
 
     // amount in USDC smallest units (6 decimals)
     const amountUnits = BigInt(Math.floor(amountUsdc * 1_000_000));
+
+    // Pre-flight: simulate the USDC transfer against the desk wallet. Catches
+    // insufficient balance / paused USDC / blacklisted recipient *before*
+    // any user-op is submitted; the revert reason is surfaced as a clear
+    // error and cached under the idempotency key by mcpWriteRoute.
+    const { createPublicClient, http } = await import("viem");
+    const { baseSepolia } = await import("viem/chains");
+    const publicClient = createPublicClient({
+      chain: baseSepolia,
+      transport: http(),
+    });
+    const USDC_SEPOLIA_ADDRESS =
+      "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
+    await simulateUsdcTransfer(
+      publicClient,
+      USDC_SEPOLIA_ADDRESS,
+      account.address as `0x${string}`,
+      normDest as `0x${string}`,
+      amountUnits
+    );
 
     const { transactionHash } = await account.transfer({
       to: normDest as `0x${string}`,

@@ -7,6 +7,12 @@ import type { Doc } from "../_generated/dataModel";
 import { mcpDeskCdpAccountName, parseAmountUsdc } from "./traders";
 import type { McpDealWriteResult } from "./deals";
 import { assertTradingHours } from "../lib/tradingHours";
+import { assertPerActionCap } from "./limits";
+import {
+  simulateUsdcApprove,
+  simulateEscrowCreateDeal,
+  simulateEscrowCloseDeal,
+} from "./simulate";
 
 const USDC_DECIMALS = 1_000_000;
 
@@ -125,6 +131,13 @@ export const createForMcp = internalAction({
       throw new Error("prompt is required");
     }
 
+    await assertPerActionCap(
+      ctx,
+      args.deskManagerId,
+      "create_deal",
+      args.potUsdc
+    );
+
     const potAtomic = parseAmountUsdc(args.potUsdc);
     const entryCostAtomic = parseAmountUsdc(args.entryCostUsdc);
     if (entryCostAtomic > potAtomic) {
@@ -184,6 +197,13 @@ export const createForMcp = internalAction({
     })) as bigint;
 
     if (currentAllowance < potAtomic) {
+      await simulateUsdcApprove(
+        publicClient,
+        USDC_SEPOLIA_ADDRESS,
+        deskAddress,
+        ESCROW_ADDRESS,
+        LARGE_APPROVE_ALLOWANCE
+      );
       const approveData = encodeFunctionData({
         abi: erc20Abi,
         functionName: "approve",
@@ -204,6 +224,18 @@ export const createForMcp = internalAction({
     }
 
     // ── escrow.createDeal ────────────────────────────────────────────────────
+    // Pre-flight: simulate the createDeal call against the desk wallet.
+    // Surfaces escrow reverts (insufficient allowance, paused, bad params)
+    // before any tx is submitted.
+    await simulateEscrowCreateDeal(
+      publicClient,
+      ESCROW_ADDRESS,
+      deskAddress,
+      args.prompt,
+      potAtomic,
+      entryCostAtomic
+    );
+
     const createData = encodeFunctionData({
       abi: escrowAbi,
       functionName: "createDeal",
@@ -329,6 +361,14 @@ export const closeForMcp = internalAction({
         `Cannot close deal: ${pendingEntries.toString()} pending entr${pendingEntries === BigInt(1) ? "y" : "ies"} on-chain. Wait for the agent cycle to resolve them.`
       );
     }
+
+    // Pre-flight: simulate the escrow.closeDeal call before submitting.
+    await simulateEscrowCloseDeal(
+      publicClient,
+      ESCROW_ADDRESS,
+      deskAddress,
+      BigInt(loaded.onChainDealId)
+    );
 
     const closeData = encodeFunctionData({
       abi: escrowAbi,

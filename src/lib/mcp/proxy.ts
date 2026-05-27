@@ -4,6 +4,12 @@ import { createConvexAdminClient } from "@/lib/convex/server-client";
 import { hashMcpKey, MCP_KEY_PREFIX } from "./keys";
 import { internal } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import {
+  checkRateLimit,
+  deskLimit,
+  getClientIdentifier,
+  mcpIpLimit,
+} from "@/lib/rate-limit";
 
 const API_KEY_SECRET = process.env.MCP_API_KEY_SECRET;
 const SERVICE_TOKEN = process.env.MCP_SERVICE_TOKEN;
@@ -159,9 +165,20 @@ export async function proxyMcpWrite(
     );
   }
 
+  // Pre-auth IP rate limit: protects against malformed-key floods.
+  const ipLimited = await checkRateLimit(
+    mcpIpLimit,
+    getClientIdentifier(request)
+  );
+  if (ipLimited) return ipLimited;
+
   const authResult = await validateMcpKey(request);
   if (authResult instanceof NextResponse) return authResult;
   const { deskManagerId } = authResult;
+
+  // Post-auth per-desk ceiling.
+  const deskLimited = await checkRateLimit(deskLimit, `mcp:${deskManagerId}`);
+  if (deskLimited) return deskLimited;
 
   let body: Record<string, unknown>;
   try {
@@ -203,9 +220,20 @@ export async function proxyMcpRead(
     );
   }
 
+  // Pre-auth IP rate limit: protects against malformed-key floods.
+  const ipLimited = await checkRateLimit(
+    mcpIpLimit,
+    getClientIdentifier(request)
+  );
+  if (ipLimited) return ipLimited;
+
   const authResult = await validateMcpKey(request);
   if (authResult instanceof NextResponse) return authResult;
   const { deskManagerId } = authResult;
+
+  // Post-auth per-desk ceiling.
+  const deskLimited = await checkRateLimit(deskLimit, `mcp:${deskManagerId}`);
+  if (deskLimited) return deskLimited;
 
   const search = request.nextUrl.searchParams;
   const body: Record<string, unknown> = {

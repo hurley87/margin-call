@@ -56,6 +56,14 @@ export const deskLimit = createLimit("rl:desk", 30, "1 m");
 /** /api/trader/* — 30 requests per minute per wallet */
 export const traderLimit = createLimit("rl:trader", 30, "1 m");
 
+/**
+ * /api/mcp/* — 60 requests per minute per client IP. Applied BEFORE
+ * Bearer-key validation so that floods from malformed keys can't burn
+ * CPU on hashing + DB lookups. The post-auth per-desk ceiling is the
+ * existing `deskLimit` (30/min), applied with a `mcp:` identifier.
+ */
+export const mcpIpLimit = createLimit("rl:mcp-ip", 60, "1 m");
+
 // ---------------------------------------------------------------------------
 // Helper: apply rate limit and return 429 if exceeded
 // ---------------------------------------------------------------------------
