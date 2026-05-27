@@ -13,7 +13,8 @@ const phaseValidator = v.union(
 
 export default defineSchema({
   deskManagers: defineTable({
-    // Privy subject (e.g. "did:privy:xxx")
+    // Identity subject. Either a Privy DID ("did:privy:xxx") for browser desks
+    // or an MCP identity ("mcp:cdp-wallet:<walletId>") for agent desks (Phase 2+).
     subject: v.string(),
     email: v.optional(v.string()),
     walletAddress: v.optional(v.string()),
@@ -50,7 +51,8 @@ export default defineSchema({
 
   traders: defineTable({
     deskManagerId: v.id("deskManagers"),
-    // Privy subject for fast ownership queries without join
+    // Desk identity subject (Privy DID or `mcp:cdp-wallet:*` for agent desks).
+    // Used for fast ownership queries without joining deskManagers.
     ownerSubject: v.string(),
     name: v.string(),
     // Case-insensitive uniqueness key for trader handles.

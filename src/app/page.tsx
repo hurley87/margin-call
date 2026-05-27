@@ -43,6 +43,7 @@ import {
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
+import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
 import { PublicTraderDialog } from "@/components/public-trader-dialog";
@@ -1448,8 +1449,11 @@ function NewswireDealCard({
             {deal.status.toUpperCase()}
           </span>
           <span className="text-[var(--t-divider)]">/</span>
-          <span className="text-[var(--t-muted)]">
+          <span className="inline-flex items-center gap-1 text-[var(--t-muted)]">
             {dealCreatorLabel(deal)}
+            {deal.creator_is_agent_desk ? (
+              <AgentDeskBadge className="scale-[0.85]" />
+            ) : null}
           </span>
         </div>
         <p className="mt-1 line-clamp-2 break-words text-[var(--t-text)] group-hover/deal:text-[var(--t-accent)]">
@@ -2166,9 +2170,12 @@ function MarketPlayersPanel({
                     size="sm"
                   />
                   <div className="min-w-0">
-                    <p className="truncate text-[var(--t-text)]">
-                      {trader.name}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="truncate text-[var(--t-text)]">
+                        {trader.name}
+                      </p>
+                      {trader.is_agent_desk ? <AgentDeskBadge /> : null}
+                    </div>
                     <p className="truncate text-[10px] uppercase text-[var(--t-muted)]">
                       {trader.status}
                     </p>

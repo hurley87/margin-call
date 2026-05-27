@@ -25,6 +25,8 @@ export interface Deal {
   on_chain_tx_hash?: string;
   creator_address?: string;
   source_headline?: string;
+  /** Populated for desk_manager creators via lightweight desk join in Convex list/get queries (public Wire + detail surfaces). */
+  creator_is_agent_desk?: boolean;
 }
 
 export interface DealOutcome {

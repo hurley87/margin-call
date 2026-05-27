@@ -28,7 +28,13 @@ import { useDeal, type DealOutcome } from "@/hooks/use-deals";
 import { useDeskManager } from "@/hooks/use-desk";
 import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
-import { DIALOG_BACKDROP_CLASS, cn, dialogPopupClass } from "@/lib/utils";
+import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import {
+  DIALOG_BACKDROP_CLASS,
+  cn,
+  dialogPopupClass,
+  formatShortAddress,
+} from "@/lib/utils";
 
 function formatOutcomeResult(outcome: DealOutcome) {
   const traderName = outcome.trader_name ?? "Trader";
@@ -289,6 +295,20 @@ export function DealDetailContent({
               {deal.prompt}
             </p>
           </div>
+
+          {(deal.creator_address || deal.creator_is_agent_desk) && (
+            <div className="flex items-center gap-2 border-t border-[var(--t-border)] bg-[var(--t-surface)]/60 px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              <span>CREATOR</span>
+              <span className="font-mono text-[var(--t-text)]">
+                {deal.creator_address
+                  ? formatShortAddress(deal.creator_address)
+                  : "Desk"}
+              </span>
+              {deal.creator_is_agent_desk ? (
+                <AgentDeskBadge className="scale-[0.8]" />
+              ) : null}
+            </div>
+          )}
 
           <DealMetricGrid
             displayPotLabel={displayPotLabel}

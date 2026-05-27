@@ -177,3 +177,42 @@ export const syncWalletBalance = internalMutation({
     return { ok: true as const };
   },
 });
+
+/**
+ * Internal (MCP Phase 2+): create or ensure a deskManager row for a dedicated
+ * MCP-controlled desk. The subject MUST be of the form `mcp:cdp-wallet:<id>`.
+ * The walletAddress is the on-chain address of the CDP server account
+ * provisioned for this credential. Idempotent.
+ */
+export const createForMcp = internalMutation({
+  args: {
+    subject: v.string(),
+    walletAddress: v.string(),
+  },
+  handler: async (ctx, { subject, walletAddress }) => {
+    const existing = await ctx.db
+      .query("deskManagers")
+      .withIndex("bySubject", (q) => q.eq("subject", subject))
+      .unique();
+
+    const now = Date.now();
+
+    if (existing) {
+      if (existing.walletAddress !== walletAddress) {
+        await ctx.db.patch(existing._id, {
+          walletAddress,
+          updatedAt: now,
+        });
+      }
+      return existing._id;
+    }
+
+    return await ctx.db.insert("deskManagers", {
+      subject,
+      walletAddress,
+      settings: {},
+      createdAt: now,
+      updatedAt: now,
+    });
+  },
+});

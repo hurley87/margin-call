@@ -49,9 +49,15 @@ export const listTraderStats = query({
 
     const deskIds = [...new Set(traders.map((t) => t.deskManagerId))];
     const deskWalletById = new Map<string, string | undefined>();
+    const isAgentDeskById = new Map<string, boolean>();
     for (const deskId of deskIds) {
       const dm = await ctx.db.get(deskId);
       deskWalletById.set(String(deskId), dm?.walletAddress);
+      isAgentDeskById.set(
+        String(deskId),
+        typeof dm?.subject === "string" &&
+          dm.subject.startsWith("mcp:cdp-wallet:")
+      );
     }
 
     const leaderboard = await Promise.all(
@@ -69,6 +75,8 @@ export const listTraderStats = query({
         const totalDealsLogged = s.wins + s.losses + s.wipeouts;
         const ownerWallet = deskWalletById.get(String(t.deskManagerId)) ?? "";
         const profileImageUrl = await resolveTraderProfileImageUrl(ctx, t);
+        const isAgentDesk =
+          isAgentDeskById.get(String(t.deskManagerId)) ?? false;
 
         return {
           id: tid,
@@ -86,6 +94,7 @@ export const listTraderStats = query({
           win_rate:
             totalDealsLogged > 0 ? (s.wins / totalDealsLogged) * 100 : 0,
           total_value: escrow + assetValue,
+          is_agent_desk: isAgentDesk,
         };
       })
     );

@@ -3,12 +3,48 @@ import {
   internalQuery,
   mutation,
   query,
+  type QueryCtx,
 } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { isOwnDeskCreatedDeal } from "./lib/dealEntryEligibility";
 import { clampLimit } from "./lib/limits";
 import { assertTradingHoursWithCloseGrace } from "./lib/tradingHours";
+
+/** Lightweight enrichment for public deal reads: join creator desk subject to expose is_agent_desk flag (no DB write, mirrors leaderboard pattern). */
+async function enrichWithCreatorAgentStatus(
+  ctx: QueryCtx,
+  deals: Doc<"deals">[]
+): Promise<Array<Doc<"deals"> & { creatorIsAgentDesk?: boolean }>> {
+  if (deals.length === 0) {
+    return [] as Array<Doc<"deals"> & { creatorIsAgentDesk?: boolean }>;
+  }
+  const deskIdSet = new Set<string>();
+  for (const d of deals) {
+    if (d.creatorType === "desk_manager" && d.creatorDeskManagerId) {
+      deskIdSet.add(String(d.creatorDeskManagerId));
+    }
+  }
+  const deskIds = Array.from(deskIdSet);
+  const isAgentMap = new Map<string, boolean>();
+  await Promise.all(
+    deskIds.map(async (id) => {
+      const dm = await ctx.db.get(id as Id<"deskManagers">);
+      const isAgent =
+        typeof dm?.subject === "string" &&
+        dm.subject.startsWith("mcp:cdp-wallet:");
+      isAgentMap.set(id, isAgent);
+    })
+  );
+  return deals.map((d) => {
+    let creatorIsAgentDesk: boolean | undefined;
+    if (d.creatorType === "desk_manager" && d.creatorDeskManagerId) {
+      creatorIsAgentDesk =
+        isAgentMap.get(String(d.creatorDeskManagerId)) ?? false;
+    }
+    return { ...d, creatorIsAgentDesk };
+  });
+}
 
 // ── Public queries (auth-checked) ──────────────────────────────────────────
 
@@ -18,11 +54,12 @@ export const listOpen = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
-    return ctx.db
+    const raw = await ctx.db
       .query("deals")
       .withIndex("byStatus", (q) => q.eq("status", "open"))
       .order("desc")
       .collect();
+    return enrichWithCreatorAgentStatus(ctx, raw);
   },
 });
 
@@ -32,7 +69,8 @@ export const list = query({
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
-    return ctx.db.query("deals").order("desc").collect();
+    const raw = await ctx.db.query("deals").order("desc").collect();
+    return enrichWithCreatorAgentStatus(ctx, raw);
   },
 });
 
@@ -44,11 +82,12 @@ export const listRecentCreatedForToasts = query({
     if (!identity) return [];
 
     const boundedLimit = clampLimit(limit, 50);
-    return ctx.db
+    const raw = await ctx.db
       .query("deals")
       .withIndex("byCreatedAt")
       .order("desc")
       .take(boundedLimit);
+    return enrichWithCreatorAgentStatus(ctx, raw);
   },
 });
 
@@ -58,7 +97,10 @@ export const getById = query({
   handler: async (ctx, { dealId }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
-    return ctx.db.get(dealId);
+    const deal = await ctx.db.get(dealId);
+    if (!deal) return null;
+    const enriched = await enrichWithCreatorAgentStatus(ctx, [deal]);
+    return enriched[0];
   },
 });
 
@@ -75,11 +117,12 @@ export const listMine = query({
       .unique();
     if (!dm) return [];
 
-    return ctx.db
+    const raw = await ctx.db
       .query("deals")
       .withIndex("byCreator", (q) => q.eq("creatorDeskManagerId", dm._id))
       .order("desc")
       .collect();
+    return enrichWithCreatorAgentStatus(ctx, raw);
   },
 });
 

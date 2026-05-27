@@ -164,9 +164,15 @@ export const getPublicProfile = query({
       .take(5);
 
     const basics = await publicTraderBasics(ctx, trader);
+    const dm = await ctx.db.get(trader.deskManagerId);
+    const isAgentDesk =
+      typeof dm?.subject === "string" &&
+      dm.subject.startsWith("mcp:cdp-wallet:");
     return {
       ...basics,
       escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,
+      ownerAddress: dm?.walletAddress ?? null,
+      isAgentDesk,
       recentActivity: recentActivity.map((entry) => ({
         activityType: entry.activityType,
         message: entry.message,

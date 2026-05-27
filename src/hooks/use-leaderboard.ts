@@ -20,6 +20,7 @@ export interface LeaderboardTrader {
   deal_count: number;
   win_rate: number;
   total_value: number;
+  is_agent_desk?: boolean;
 }
 
 /** Public leaderboard — Convex subscription. */

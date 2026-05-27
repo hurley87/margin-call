@@ -48,7 +48,7 @@ Convex agent skills for common tasks can be installed by running
 
 <!-- convex-ai-end -->
 
-## MCP development (Phase 1 scaffold)
+## MCP development (Phase 2 complete — MCP desk identity + CDP wallets + sync_wallet)
 
 The initial thin end-to-end for external agents (Claude Code) lives under the MCP plan (`plans/mcp.md`, GitHub #137).
 
@@ -69,14 +69,18 @@ npx convex env set MCP_SERVICE_TOKEN "..." --dev
 While authenticated in the web app (Privy), POST to the issuance endpoint:
 
 ```bash
+# Recommended (easiest)
+PRIVY_JWT="paste_real_privy_jwt_from_browser" pnpm mcp:issue-key
+
+# Or raw curl if you prefer
 curl -X POST http://localhost:3000/api/mcp/keys \
   -H "Authorization: Bearer $PRIVY_JWT_FROM_BROWSER" \
   -H "Content-Type: application/json"
 ```
 
-The response contains the raw `key` (shown once). The key is bound to your existing `deskManager` row.
+The response (or the script output) contains the raw `key` (shown once) plus the dedicated MCP desk wallet address.
 
-(You can also call the same route from browser devtools / a one-off script that re-uses your existing Convex client after login.)
+See `scripts/issue-mcp-key.ts` for the helper (recommended for Phase 2+).
 
 ### Running the MCP server locally
 
@@ -86,7 +90,7 @@ MARGIN_CALL_API_URL=http://localhost:3000 \
 npx tsx packages/mcp-server/src/index.ts
 ```
 
-It speaks stdio and registers the `get_desk` tool.
+It speaks stdio and registers the Phase 2 surface: dedicated per-key CDP server wallets (subject `mcp:cdp-wallet:*`), `sync_wallet`, plus the full read-only inspection tools.
 
 ### Adding to Cursor / Claude Code (local path, before npm publish)
 
@@ -111,6 +115,6 @@ Example entry (`.mcp.json` or via UI):
 }
 ```
 
-After restart you should be able to call `get_desk` and receive the JSON snapshot (wallet, balance, counts, recent P&L, funding hint when zero).
+After restart you should be able to call the tools and see MCP desks as first-class identities (their own CDP wallet address on issuance, AGENT DESK badges across Wire deal cards, deal detail, public trader profiles + leaderboard, `sync_wallet` to refresh balances, full ownership/ blocking for future trader/deal ops).
 
 See also `packages/mcp-server/README.md` and the full architecture in `plans/mcp.md`.
