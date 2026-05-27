@@ -43,6 +43,7 @@ import type * as mcp_httpHelpers from "../mcp/httpHelpers.js";
 import type * as mcp_outcomes from "../mcp/outcomes.js";
 import type * as mcp_requests from "../mcp/requests.js";
 import type * as mcp_traders from "../mcp/traders.js";
+import type * as mcp_tradersEscrow from "../mcp/tradersEscrow.js";
 import type * as mcpApiKeys from "../mcpApiKeys.js";
 import type * as me from "../me.js";
 import type * as portfolio from "../portfolio.js";
@@ -109,6 +110,7 @@ declare const fullApi: ApiFromModules<{
   "mcp/outcomes": typeof mcp_outcomes;
   "mcp/requests": typeof mcp_requests;
   "mcp/traders": typeof mcp_traders;
+  "mcp/tradersEscrow": typeof mcp_tradersEscrow;
   mcpApiKeys: typeof mcpApiKeys;
   me: typeof me;
   portfolio: typeof portfolio;

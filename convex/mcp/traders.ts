@@ -1,7 +1,12 @@
-import { internalAction, internalQuery } from "../_generated/server";
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
+import { assertTraderOwnedByDesk, buildMandatePatch } from "../traders";
 
 export type McpCreateTraderResult = {
   traderId: string;
@@ -11,6 +16,15 @@ export type McpCreateTraderResult = {
   summary: string;
   auditTxHash: string | undefined;
 };
+
+export type McpTraderWriteResult = {
+  traderId: string;
+  summary: string;
+  txHash?: string;
+};
+
+const USDC_DECIMALS = 1_000_000;
+const MAX_AMOUNT_USDC = 1_000_000;
 
 /** Terminal + audit payload for a successfully provisioned MCP trader. */
 export function buildCreateTraderResult(
@@ -38,6 +52,34 @@ export function buildCreateTraderResult(
     summary,
     auditTxHash: trader.transferTxHash ?? trader.mintTxHash ?? undefined,
   };
+}
+
+/** Validates human USDC amount and returns atomic units. */
+export function parseAmountUsdc(amountUsdc: number): bigint {
+  if (!Number.isFinite(amountUsdc) || amountUsdc <= 0) {
+    throw new Error("amountUsdc must be a positive number");
+  }
+  if (amountUsdc > MAX_AMOUNT_USDC) {
+    throw new Error(`amountUsdc must be at most ${MAX_AMOUNT_USDC}`);
+  }
+  const atomic = Math.round(amountUsdc * USDC_DECIMALS);
+  if (atomic <= 0) {
+    throw new Error("amountUsdc is too small after conversion");
+  }
+  return BigInt(atomic);
+}
+
+/** Derive CDP account name from MCP desk subject `mcp:cdp-wallet:<id>`. */
+export function mcpDeskCdpAccountName(subject: string): string {
+  const prefix = "mcp:cdp-wallet:";
+  if (!subject.startsWith(prefix)) {
+    throw new Error("Desk is not an MCP CDP wallet subject");
+  }
+  const walletId = subject.slice(prefix.length);
+  if (!walletId) {
+    throw new Error("Invalid MCP desk subject");
+  }
+  return `mcp-desk-${walletId}`;
 }
 
 /**
@@ -85,6 +127,71 @@ export const createForMcp = internalAction({
     }
 
     return buildCreateTraderResult(trader);
+  },
+});
+
+/** MCP `configure_trader`: update mandate + personality for owned trader. */
+export const configureForMcp = internalMutation({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    traderId: v.id("traders"),
+    mandate: v.any(),
+    personality: v.optional(v.union(v.string(), v.null())),
+  },
+  handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+    const trader = await ctx.db.get(args.traderId);
+    assertTraderOwnedByDesk(trader, args.deskManagerId);
+    const patch = buildMandatePatch(trader, args.mandate, args.personality);
+    await ctx.db.patch(args.traderId, patch);
+    return {
+      traderId: String(args.traderId),
+      summary: `Updated trader "${trader.name}" mandate and personality.`,
+    };
+  },
+});
+
+/** MCP `pause_trader`: pause an owned trader. */
+export const pauseForMcp = internalMutation({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    traderId: v.id("traders"),
+    now: v.number(),
+  },
+  handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+    const trader = await ctx.db.get(args.traderId);
+    assertTraderOwnedByDesk(trader, args.deskManagerId);
+    await ctx.db.patch(args.traderId, {
+      status: "paused",
+      updatedAt: args.now,
+    });
+    return {
+      traderId: String(args.traderId),
+      summary: `Paused trader "${trader.name}".`,
+    };
+  },
+});
+
+/** MCP `resume_trader`: activate owned funded trader when market is open. */
+export const resumeForMcp = internalMutation({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    traderId: v.id("traders"),
+    now: v.number(),
+  },
+  handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+    const { traderName } = await ctx.runMutation(
+      internal.traders.setStatusForMcp,
+      {
+        deskManagerId: args.deskManagerId,
+        traderId: args.traderId,
+        status: "active",
+        now: args.now,
+      }
+    );
+    return {
+      traderId: String(args.traderId),
+      summary: `Resumed trader "${traderName}" — autonomous deal cycle will pick entries while the market is open.`,
+    };
   },
 });
 
