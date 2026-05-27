@@ -6,7 +6,8 @@
  *   get_desk, list_traders, list_deals, get_activity, get_outcomes,
  *   get_pending_approvals, answer_approval, sync_wallet, create_trader,
  *   configure_trader, fund_trader, resume_trader, pause_trader, withdraw_from_trader,
- *   register_withdraw_address, withdraw_to_address
+ *   register_withdraw_address, withdraw_to_address,
+ *   create_deal, close_deal
  *
  * Each MCP key maps 1:1 to a dedicated desk with subject `mcp:cdp-wallet:<id>`
  * and its own CDP server wallet (provisioned at key issuance).
@@ -442,12 +443,62 @@ server.tool(
     })
 );
 
+server.tool(
+  "create_deal",
+  "Create a NEW market deal as a trap for rival desks, signed and submitted by this MCP desk's CDP wallet. Performs: USDC.approve (rare after first call thanks to large allowance) + escrow.createDeal + Convex record. Expect ~3–10s wall time. The desk's traders are blocked from entering this deal (own-desk rule) — both in selection and at recordVerifiedEntry. Requires the market to be open (9:30–16:00 ET, weekdays); errors explicitly when closed. Prerequisites: synced desk wallet balance >= potUsdc. REQUIRED: stable idempotencyKey — reusing the same key within 24h returns the cached result without re-submitting on-chain txs; generate a *fresh* key to intentionally create another deal. Returns Convex deal id, on-chain deal id, tx hash, walletAddress, and summary.",
+  {
+    prompt: z
+      .string()
+      .min(1)
+      .describe(
+        "Deal prompt (the headline/scenario the LLM uses to resolve outcomes)"
+      ),
+    potUsdc: z
+      .number()
+      .positive()
+      .describe(
+        "Total USDC pot funded from the desk wallet (human units, e.g. 100 for $100)"
+      ),
+    entryCostUsdc: z
+      .number()
+      .positive()
+      .describe(
+        "Cost per trader entry in USDC (human units). Must be <= potUsdc."
+      ),
+    idempotencyKey: idempotencyKeySchema,
+  },
+  async ({ prompt, potUsdc, entryCostUsdc, idempotencyKey }) =>
+    callMcpApi("/api/mcp/deals/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt, potUsdc, entryCostUsdc, idempotencyKey }),
+    })
+);
+
+server.tool(
+  "close_deal",
+  "Close an MCP-desk-owned open deal via escrow.closeDeal from the desk CDP wallet, returning any remaining pot to the desk wallet. Refuses to close if the on-chain deal still has pending entries (the autonomous cycle is mid-resolution); wait for those to resolve and retry. Refuses to close deals not owned by this desk. Requires the market to be open. Slow on-chain operation (~3–10s). Supply stable idempotencyKey. Call sync_wallet after success to refresh the desk balance.",
+  {
+    dealId: z
+      .string()
+      .min(1)
+      .describe("Convex deal id (from list_deals or create_deal)"),
+    idempotencyKey: idempotencyKeySchema,
+  },
+  async ({ dealId, idempotencyKey }) =>
+    callMcpApi("/api/mcp/deals/close", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ dealId, idempotencyKey }),
+    })
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Log to stderr only (stdio transport uses stdout for protocol)
   console.error(
-    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,answer_approval,sync_wallet,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader,register_withdraw_address,withdraw_to_address  (key last4=${API_KEY.slice(-4)})`
+    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,answer_approval,sync_wallet,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader,register_withdraw_address,withdraw_to_address,create_deal,close_deal  (key last4=${API_KEY.slice(-4)})`
   );
 }
 

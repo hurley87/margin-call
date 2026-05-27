@@ -168,6 +168,58 @@ function parseWithdrawTraderBody(body: Record<string, unknown>) {
   return parseFundTraderBody(body);
 }
 
+function parseCreateDealBody(body: Record<string, unknown>) {
+  const base = parseMcpWriteBase(body);
+  if ("ok" in base) return base;
+  if (typeof body.prompt !== "string" || body.prompt.trim() === "") {
+    return { ok: false as const, message: "prompt required" };
+  }
+  const pot = Number(body.potUsdc);
+  if (!Number.isFinite(pot) || pot <= 0) {
+    return {
+      ok: false as const,
+      message: "potUsdc must be a positive number",
+    };
+  }
+  const entryCost = Number(body.entryCostUsdc);
+  if (!Number.isFinite(entryCost) || entryCost <= 0) {
+    return {
+      ok: false as const,
+      message: "entryCostUsdc must be a positive number",
+    };
+  }
+  if (entryCost > pot) {
+    return {
+      ok: false as const,
+      message: "entryCostUsdc must be <= potUsdc",
+    };
+  }
+  return {
+    ok: true as const,
+    parsed: {
+      deskManagerId: base.deskManagerId,
+      idempotencyKey: base.idempotencyKey,
+      requestBody: base.requestBody,
+    },
+  };
+}
+
+function parseCloseDealBody(body: Record<string, unknown>) {
+  const base = parseMcpWriteBase(body);
+  if ("ok" in base) return base;
+  if (typeof body.dealId !== "string" || body.dealId.trim() === "") {
+    return { ok: false as const, message: "dealId required" };
+  }
+  return {
+    ok: true as const,
+    parsed: {
+      deskManagerId: base.deskManagerId,
+      idempotencyKey: base.idempotencyKey,
+      requestBody: base.requestBody,
+    },
+  };
+}
+
 function parseAnswerApprovalBody(body: Record<string, unknown>) {
   const base = parseMcpWriteBase(body);
   if ("ok" in base) return base;
@@ -532,6 +584,54 @@ http.route({
             deskManagerId,
             traderId: requestBody.traderId as Id<"traders">,
             amountUsdc: Number(requestBody.amountUsdc),
+          }
+        );
+        return { result, txHash: result.txHash };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/deals/create",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "create_deal",
+    parseBody: parseCreateDealBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      try {
+        const result = await ctx.runAction(
+          internal.mcp.dealsEscrow.createForMcp,
+          {
+            deskManagerId,
+            prompt: requestBody.prompt as string,
+            potUsdc: Number(requestBody.potUsdc),
+            entryCostUsdc: Number(requestBody.entryCostUsdc),
+          }
+        );
+        return { result, txHash: result.txHash };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }),
+});
+
+http.route({
+  path: "/mcp/deals/close",
+  method: "POST",
+  handler: mcpWriteRoute({
+    tool: "close_deal",
+    parseBody: parseCloseDealBody,
+    execute: async (ctx, { deskManagerId, requestBody }) => {
+      try {
+        const result = await ctx.runAction(
+          internal.mcp.dealsEscrow.closeForMcp,
+          {
+            deskManagerId,
+            dealId: requestBody.dealId as Id<"deals">,
           }
         );
         return { result, txHash: result.txHash };
