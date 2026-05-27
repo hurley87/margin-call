@@ -3,10 +3,11 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import { v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { internal } from "./_generated/api";
 import {
   resolveReadyProfileImageUrl,
@@ -28,6 +29,22 @@ import { normalizeEmail } from "../src/lib/email";
 // ctx.runQuery fails with "Transaction not started" and spams stderr —
 // behavior tests seed traders directly or call markCreating instead.
 const skipWalletSchedule = () => process.env.MC_SKIP_WALLET_SCHEDULE === "1";
+
+/** Browser create path: schedule async wallet pipeline when row is pending/error. */
+async function scheduleWalletForTrader(
+  ctx: MutationCtx,
+  traderId: Id<"traders">
+) {
+  if (skipWalletSchedule()) return;
+  const trader = await ctx.db.get(traderId);
+  if (!trader || trader.walletStatus === "ready") return;
+  if (trader.walletStatus === "creating") return;
+  if (trader.walletStatus === "pending" || trader.walletStatus === "error") {
+    await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
+      traderId,
+    });
+  }
+}
 
 async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
   return {
@@ -51,6 +68,8 @@ async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
     cdpAccountName: trader.cdpAccountName,
     tokenId: trader.tokenId,
     tbaAddress: trader.tbaAddress,
+    mintTxHash: trader.mintTxHash,
+    transferTxHash: trader.transferTxHash,
     imageStatus: trader.imageStatus,
     profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
     traits: readPublicTraits(trader.imagePromptSource),
@@ -311,9 +330,15 @@ export const setStatus = mutation({
   },
 });
 
-/** Public: create a trader, schedule wallet creation. Idempotent on (ownerSubject, name). */
-export const create = mutation({
+/**
+ * Internal: insert trader row + schedule portrait. Wallet provisioning is
+ * owned by callers (browser `create` schedules; MCP action awaits).
+ * Idempotent on (ownerSubject, name).
+ */
+export const createRecord = internalMutation({
   args: {
+    deskManagerId: v.id("deskManagers"),
+    ownerSubject: v.string(),
     name: v.string(),
     mandate: v.optional(v.any()),
     personality: v.optional(v.string()),
@@ -325,40 +350,17 @@ export const create = mutation({
       throw new Error("Invalid trader name");
     }
 
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-
-    // Resolve or create deskManager row
-    const existing = await ctx.db
-      .query("deskManagers")
-      .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
-      .unique();
-    if (!existing)
-      throw new Error("Desk manager not found — call upsertMe first");
-    if ((existing.walletBalanceUsdc ?? 0) <= 0) {
-      throw new Error("Fund your wallet before hiring a trader");
-    }
+    const { ownerSubject, deskManagerId } = args;
 
     // Idempotency (owner + exact name): preserve existing behavior for retries.
     const dupeByOwnerAndName = await ctx.db
       .query("traders")
       .withIndex("byOwnerAndName", (q) =>
-        q.eq("ownerSubject", identity.subject).eq("name", trimmedName)
+        q.eq("ownerSubject", ownerSubject).eq("name", trimmedName)
       )
       .unique();
 
     if (dupeByOwnerAndName) {
-      // Re-hire never strands the existing row. Reschedule wallet setup only
-      // when the prior attempt is stuck (pending) or failed (error). A row
-      // already in `creating` has its own re-entry guard in wallet.createForTrader.
-      const needsRetry =
-        dupeByOwnerAndName.walletStatus === "pending" ||
-        dupeByOwnerAndName.walletStatus === "error";
-      if (needsRetry && !skipWalletSchedule()) {
-        await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
-          traderId: dupeByOwnerAndName._id,
-        });
-      }
       return dupeByOwnerAndName._id;
     }
 
@@ -369,17 +371,9 @@ export const create = mutation({
       .take(10);
     if (exactNameConflicts.length > 0) {
       const sameOwnerConflict = exactNameConflicts.find(
-        (trader) => trader.ownerSubject === identity.subject
+        (trader) => trader.ownerSubject === ownerSubject
       );
       if (sameOwnerConflict) {
-        const needsRetry =
-          sameOwnerConflict.walletStatus === "pending" ||
-          sameOwnerConflict.walletStatus === "error";
-        if (needsRetry && !skipWalletSchedule()) {
-          await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
-            traderId: sameOwnerConflict._id,
-          });
-        }
         return sameOwnerConflict._id;
       }
       throw new Error("Trader name already taken");
@@ -394,16 +388,7 @@ export const create = mutation({
       (trader) => trader.name.toLowerCase() === normalizedName
     );
     if (matchingConflict) {
-      // If this is the same owner creating a case-variant handle, treat as idempotent.
-      if (matchingConflict.ownerSubject === identity.subject) {
-        const needsRetry =
-          matchingConflict.walletStatus === "pending" ||
-          matchingConflict.walletStatus === "error";
-        if (needsRetry && !skipWalletSchedule()) {
-          await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
-            traderId: matchingConflict._id,
-          });
-        }
+      if (matchingConflict.ownerSubject === ownerSubject) {
         return matchingConflict._id;
       }
       throw new Error("Trader name already taken");
@@ -411,14 +396,14 @@ export const create = mutation({
 
     const now = Date.now();
     const portraitSeed = buildPortraitSeed({
-      ownerSubject: identity.subject,
+      ownerSubject,
       name: trimmedName,
       mandate: args.mandate ?? {},
       personality: args.personality,
     });
     const traderId = await ctx.db.insert("traders", {
-      deskManagerId: existing._id,
-      ownerSubject: identity.subject,
+      deskManagerId,
+      ownerSubject,
       name: trimmedName,
       nameLower: normalizedName,
       status: "paused",
@@ -431,16 +416,48 @@ export const create = mutation({
       updatedAt: now,
     });
 
-    // Schedule wallet creation as an internal action (no CDP inside mutations).
     if (!skipWalletSchedule()) {
-      await ctx.scheduler.runAfter(0, internal.wallet.createForTrader, {
-        traderId,
-      });
       await ctx.scheduler.runAfter(0, internal.portraits.generateForTrader, {
         traderId,
       });
     }
 
+    return traderId;
+  },
+});
+
+/** Public: create a trader, schedule wallet creation. Idempotent on (ownerSubject, name). */
+export const create = mutation({
+  args: {
+    name: v.string(),
+    mandate: v.optional(v.any()),
+    personality: v.optional(v.string()),
+  },
+  handler: async (ctx, args): Promise<Id<"traders">> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const existing = await ctx.db
+      .query("deskManagers")
+      .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
+      .unique();
+    if (!existing)
+      throw new Error("Desk manager not found — call upsertMe first");
+    if ((existing.walletBalanceUsdc ?? 0) <= 0) {
+      throw new Error("Fund your wallet before hiring a trader");
+    }
+
+    const traderId: Id<"traders"> = await ctx.runMutation(
+      internal.traders.createRecord,
+      {
+        deskManagerId: existing._id,
+        ownerSubject: identity.subject,
+        name: args.name,
+        mandate: args.mandate,
+        personality: args.personality,
+      }
+    );
+    await scheduleWalletForTrader(ctx, traderId);
     return traderId;
   },
 });
@@ -556,6 +573,8 @@ export const applyWalletReady = internalMutation({
     cdpOwnerAddress: v.string(),
     cdpAccountName: v.string(),
     tokenId: v.number(),
+    mintTxHash: v.optional(v.string()),
+    transferTxHash: v.optional(v.string()),
   },
   handler: async (ctx, { traderId, ...walletMeta }) => {
     const trader = await ctx.db.get(traderId);
@@ -568,6 +587,8 @@ export const applyWalletReady = internalMutation({
       cdpOwnerAddress: walletMeta.cdpOwnerAddress,
       cdpAccountName: walletMeta.cdpAccountName,
       tokenId: walletMeta.tokenId,
+      mintTxHash: walletMeta.mintTxHash,
+      transferTxHash: walletMeta.transferTxHash,
       walletError: undefined,
       updatedAt: Date.now(),
     });

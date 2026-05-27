@@ -142,6 +142,12 @@ export const createForTrader = internalAction({
         throw new Error(`Mint UserOp failed: ${mintReceipt.status}`);
       }
 
+      const mintTxHash =
+        typeof mintReceipt.transactionHash === "string"
+          ? mintReceipt.transactionHash
+          : "";
+      let transferTxHash = "";
+
       // Parse Transfer event to get tokenId
       const publicClient = createPublicClient({
         chain: baseSepolia,
@@ -209,6 +215,10 @@ export const createForTrader = internalAction({
               `Transfer UserOp failed: ${transferReceipt.status}`
             );
           }
+          transferTxHash =
+            typeof transferReceipt.transactionHash === "string"
+              ? transferReceipt.transactionHash
+              : "";
           break;
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
@@ -229,6 +239,8 @@ export const createForTrader = internalAction({
         cdpOwnerAddress: owner.address,
         cdpAccountName: `trader-sa-${tokenId}`,
         tokenId,
+        mintTxHash: mintTxHash || undefined,
+        transferTxHash: transferTxHash || undefined,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -63,54 +63,31 @@ export async function validateMcpKey(
   return { deskManagerId };
 }
 
-export interface ProxyMcpReadOptions {
-  /** The Convex HTTP action path under /mcp, e.g. "traders/list" */
-  convexAction: string;
+/** Convex MCP HTTP endpoints are hosted on *.convex.site (not *.convex.cloud). */
+function convexMcpActionUrl(convexAction: string): string | null {
+  if (!CONVEX_URL) return null;
+  const httpActionBase = CONVEX_URL.replace(/\/$/, "").replace(
+    /\.convex\.cloud$/,
+    ".convex.site"
+  );
+  return `${httpActionBase}/mcp/${convexAction}`;
 }
 
-/**
- * Shared handler for all MCP read-only Next.js routes.
- * Validates the mc_live_* Bearer key, touches lastUsed (debounced), then
- * proxies the request (with whitelisted URL params) as JSON body to the
- * corresponding Convex /mcp/* httpAction (authenticated by SERVICE_TOKEN).
- *
- * Returns the upstream payload + _meta (duration, deskManagerId).
- */
-export async function proxyMcpRead(
-  request: NextRequest,
-  { convexAction }: ProxyMcpReadOptions
+async function proxyMcpUpstream(
+  deskManagerId: Id<"deskManagers">,
+  body: Record<string, unknown>,
+  convexAction: string
 ) {
-  if (!SERVICE_TOKEN || !CONVEX_URL) {
+  const mcpActionUrl = convexMcpActionUrl(convexAction);
+  if (!mcpActionUrl) {
     return NextResponse.json(
       { error: "MCP is not configured on this server" },
       { status: 500 }
     );
   }
 
-  const authResult = await validateMcpKey(request);
-  if (authResult instanceof NextResponse) return authResult;
-  const { deskManagerId } = authResult;
-
-  const search = request.nextUrl.searchParams;
-  const body: Record<string, unknown> = {
-    deskManagerId: String(deskManagerId),
-  };
-  const limit = search.get("limit");
-  if (limit) body.limit = Number(limit);
-  const traderId = search.get("traderId");
-  if (traderId) body.traderId = traderId;
-  const includeClosed = search.get("includeClosed");
-  if (includeClosed) body.includeClosed = includeClosed === "true";
-
-  // Convex HTTP actions are served on .convex.site, not .convex.cloud.
-  const httpActionBase = CONVEX_URL.replace(/\/$/, "").replace(
-    /\.convex\.cloud$/,
-    ".convex.site"
-  );
-  const mcpActionUrl = `${httpActionBase}/mcp/${convexAction}`;
-
-  let upstream: Response;
   const started = Date.now();
+  let upstream: Response;
   try {
     upstream = await fetch(mcpActionUrl, {
       method: "POST",
@@ -155,4 +132,91 @@ export async function proxyMcpRead(
       deskManagerId: String(deskManagerId),
     },
   });
+}
+
+export interface ProxyMcpReadOptions {
+  /** The Convex HTTP action path under /mcp, e.g. "traders/list" */
+  convexAction: string;
+}
+
+/**
+ * MCP write helper: validates API key + forwards JSON body to Convex /mcp/*.
+ */
+export interface ProxyMcpWriteOptions {
+  convexAction: string;
+  /** When true, rejects missing/blank `idempotencyKey` before hitting Convex. */
+  requireIdempotencyKey?: boolean;
+}
+
+export async function proxyMcpWrite(
+  request: NextRequest,
+  { convexAction, requireIdempotencyKey }: ProxyMcpWriteOptions
+) {
+  if (!SERVICE_TOKEN || !CONVEX_URL) {
+    return NextResponse.json(
+      { error: "MCP is not configured on this server" },
+      { status: 500 }
+    );
+  }
+
+  const authResult = await validateMcpKey(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { deskManagerId } = authResult;
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (
+    requireIdempotencyKey &&
+    (typeof body.idempotencyKey !== "string" || !body.idempotencyKey.trim())
+  ) {
+    return NextResponse.json(
+      { error: "idempotencyKey is required for this write" },
+      { status: 400 }
+    );
+  }
+
+  body.deskManagerId = String(deskManagerId);
+  return proxyMcpUpstream(deskManagerId, body, convexAction);
+}
+
+/**
+ * Shared handler for all MCP read-only Next.js routes.
+ * Validates the mc_live_* Bearer key, touches lastUsed (debounced), then
+ * proxies the request (with whitelisted URL params) as JSON body to the
+ * corresponding Convex /mcp/* httpAction (authenticated by SERVICE_TOKEN).
+ *
+ * Returns the upstream payload + _meta (duration, deskManagerId).
+ */
+export async function proxyMcpRead(
+  request: NextRequest,
+  { convexAction }: ProxyMcpReadOptions
+) {
+  if (!SERVICE_TOKEN || !CONVEX_URL) {
+    return NextResponse.json(
+      { error: "MCP is not configured on this server" },
+      { status: 500 }
+    );
+  }
+
+  const authResult = await validateMcpKey(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { deskManagerId } = authResult;
+
+  const search = request.nextUrl.searchParams;
+  const body: Record<string, unknown> = {
+    deskManagerId: String(deskManagerId),
+  };
+  const limit = search.get("limit");
+  if (limit) body.limit = Number(limit);
+  const traderId = search.get("traderId");
+  if (traderId) body.traderId = traderId;
+  const includeClosed = search.get("includeClosed");
+  if (includeClosed) body.includeClosed = includeClosed === "true";
+
+  return proxyMcpUpstream(deskManagerId, body, convexAction);
 }

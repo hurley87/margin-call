@@ -1,5 +1,40 @@
-import { internalMutation } from "../_generated/server";
+import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
+
+/** For HTTP write idempotency: latest matching audit row within the TTL window. */
+export const findRecentByKey = internalQuery({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    idempotencyKey: v.string(),
+    tool: v.string(),
+    /** Only consider rows with createdAt >= minCreatedAt (caller: now - 24h). */
+    minCreatedAt: v.number(),
+  },
+  handler: async (
+    ctx,
+    { deskManagerId, idempotencyKey, tool, minCreatedAt }
+  ) => {
+    const rows = await ctx.db
+      .query("mcpRequests")
+      .withIndex("byDeskManagerAndIdempotencyKey", (q) =>
+        q
+          .eq("deskManagerId", deskManagerId)
+          .eq("idempotencyKey", idempotencyKey)
+      )
+      .collect();
+
+    let newest: (typeof rows)[number] | null = null;
+    for (const row of rows) {
+      if (row.tool !== tool) continue;
+      if (row.createdAt < minCreatedAt) continue;
+      if (row.result === undefined && row.error === undefined) continue;
+      if (!newest || row.createdAt > newest.createdAt) {
+        newest = row;
+      }
+    }
+    return newest;
+  },
+});
 
 /**
  * Audit logger for MCP tool invocations. `requestBody` and `idempotencyKey`
