@@ -2,27 +2,57 @@
 
 Thin MCP server that lets Claude Code (or any MCP-compatible agent) read the state of a Margin Call desk using a scoped API key.
 
-## Phase 1 scope
+## Phase 2 scope (MCP desk identity)
 
-Only one tool is exposed:
+Each `mc_live_*` key now maps 1:1 to a **dedicated autonomous AGENT DESK**:
 
-- `get_desk` — wallet address, USDC balance, trader count, open deals you created, recent P&L, and a funding-hint summary when the desk is unfunded.
+- At key issuance (from the web UI while Privy-logged), a CDP server wallet is provisioned and a Convex `deskManager` row is created with subject `mcp:cdp-wallet:<walletId>`.
+- The desk has its own on-chain wallet address (separate from any browser Privy desk).
+- `sync_wallet` — refreshes the on-chain USDC balance into the desk record.
+- All prior Phase 1 read tools continue to work against the MCP desk.
 
-All writes, trader creation, deal creation, approvals, etc. come in later phases.
+The key can be used from Claude Code with no further browser session. MCP desks are first-class owners of traders and deals (own-desk blocking, etc. apply using the desk's ID).
+
+Public UI surfaces now tag these desks with an **AGENT DESK** badge (terminal glyph).
+
+Writes (create trader, fund, create deal, answer approvals...) are Phase 3+.
+
+All tools log compact rows to the `mcpRequests` audit table.
 
 ## Local development setup (for contributors)
 
-1. In the Margin Call web app (while logged in via Privy), issue yourself a key:
+### 1. Get a per-desk MCP key (recommended)
 
-   ```bash
-   curl -X POST http://localhost:3000/api/mcp/keys \
-     -H "Authorization: Bearer $YOUR_PRIVY_SESSION_TOKEN" \
-     -H "Content-Type: application/json"
-   ```
+The easiest way is to use the built-in helper script after you have a valid Privy session:
 
-   (Easier: after login, use browser devtools → Network or a tiny script that re-uses the Convex client.)
+```bash
+# 1. Make sure your dev server is running
+pnpm dev
 
-   The response contains a one-time `key: "mc_live_..."`.
+# 2. In another terminal, while logged into the app in your browser:
+#    - Open DevTools → Network tab
+#    - Do something authenticated
+#    - Copy the long JWT from any request's Authorization header (after "Bearer ")
+
+PRIVY_JWT="paste_the_long_jwt_here" pnpm mcp:issue-key
+```
+
+The script will:
+
+- Call `POST /api/mcp/keys` with the proper header
+- Print the fresh `mc_live_...` key (shown only once)
+- Give you the exact command to run the MCP server
+- Show the snippet for your `.mcp.json` / Cursor settings
+
+Alternative (if you prefer raw curl):
+
+```bash
+curl -X POST http://localhost:3000/api/mcp/keys \
+  -H "Authorization: Bearer $PRIVY_JWT" \
+  -H "Content-Type: application/json"
+```
+
+The response contains a one-time `key: "mc_live_..."` plus the new dedicated desk wallet address (Phase 2+).
 
 2. Run the dev server:
 
@@ -62,7 +92,7 @@ All writes, trader creation, deal creation, approvals, etc. come in later phases
    }
    ```
 
-   Restart Claude. You should now have the `get_desk` tool.
+   Restart Claude. You should now have the full Phase 2 surface (including `sync_wallet` and dedicated per-key CDP desk wallets with `mcp:cdp-wallet:*` identity).
 
 ## Production (future)
 

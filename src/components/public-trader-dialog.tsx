@@ -6,6 +6,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { TraderAvatar } from "@/components/trader-avatar";
+import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { DatumCell } from "@/components/datum-cell";
 import { formatStatus } from "@/lib/format-status";
 import {
@@ -26,6 +27,8 @@ type PublicTraderProfile = {
   traits: PublicPortraitTraits | null;
   escrowBalanceUsdc: number;
   profileImageUrl: string | null;
+  ownerAddress?: string | null;
+  isAgentDesk?: boolean;
   recentActivity: Array<{
     activityType: string;
     message: string;
@@ -100,6 +103,9 @@ function PublicTraderContent({
           </p>
           <h2 className="truncate font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-wide text-[var(--t-amber)]">
             {trader.name}
+            {trader.isAgentDesk ? (
+              <AgentDeskBadge className="ml-1.5 align-middle" />
+            ) : null}
           </h2>
         </div>
         <button

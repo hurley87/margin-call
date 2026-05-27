@@ -10,8 +10,9 @@ export const getState = internalQuery({
   args: {
     deskManagerId: v.id("deskManagers"),
     since: v.number(),
+    now: v.optional(v.number()),
   },
-  handler: async (ctx, { deskManagerId, since }) => {
+  handler: async (ctx, { deskManagerId, since, now }) => {
     const desk = await ctx.db.get(deskManagerId);
     if (!desk) {
       throw new Error("Desk not found");
@@ -58,6 +59,28 @@ export const getState = internalQuery({
     const traderCount = traders.length;
     const openDealCount = openDeals.length;
 
+    // Optional pending approvals snapshot (when caller supplies `now`)
+    let pendingApprovals:
+      | { count: number; oldestAgeSeconds: number | null }
+      | undefined;
+    if (typeof now === "number") {
+      const pending = await ctx.db
+        .query("dealApprovals")
+        .withIndex("byDeskManagerAndStatus", (q) =>
+          q.eq("deskManagerId", deskManagerId).eq("status", "pending")
+        )
+        .filter((q) => q.gt(q.field("expiresAt"), now))
+        .collect();
+      const count = pending.length;
+      const oldestAgeSeconds =
+        count > 0
+          ? Math.floor(
+              (now - Math.min(...pending.map((p) => p.createdAt))) / 1000
+            )
+          : null;
+      pendingApprovals = { count, oldestAgeSeconds };
+    }
+
     let summary: string;
     if (!walletAddress) {
       summary =
@@ -65,7 +88,10 @@ export const getState = internalQuery({
     } else if (balance <= 0) {
       summary = `Send USDC to ${walletAddress} (Base Sepolia) to fund this desk.`;
     } else {
-      summary = `Balance: ${balance.toFixed(2)} USDC • ${traderCount} trader(s) • ${openDealCount} open deal(s) • Recent P&L: ${recentPnlUsdc.toFixed(2)} USDC`;
+      const pa = pendingApprovals
+        ? ` • ${pendingApprovals.count} pending approval(s)`
+        : "";
+      summary = `Balance: ${balance.toFixed(2)} USDC • ${traderCount} trader(s) • ${openDealCount} open deal(s) • Recent P&L: ${recentPnlUsdc.toFixed(2)} USDC${pa}`;
     }
 
     return {
@@ -76,6 +102,7 @@ export const getState = internalQuery({
       traderCount,
       openDealCount,
       recentPnlUsdc,
+      pendingApprovals,
       summary,
     };
   },

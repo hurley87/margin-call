@@ -14,6 +14,7 @@ import {
 } from "@/lib/portrait-traits";
 import { DatumCell } from "@/components/datum-cell";
 import { EmptyState } from "@/components/empty-state";
+import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { formatStatus } from "@/lib/format-status";
 import { formatActivityTime, formatUsdc } from "@/lib/utils";
 
@@ -31,6 +32,8 @@ type PublicTraderProfile = {
   traits: PublicPortraitTraits | null;
   escrowBalanceUsdc: number;
   profileImageUrl: string | null;
+  ownerAddress?: string | null;
+  isAgentDesk?: boolean;
   recentActivity: Array<{
     activityType: string;
     message: string;
@@ -102,6 +105,9 @@ export function PublicTraderDossier({
             </p>
             <h1 className="mt-1 font-[family-name:var(--font-plex-sans)] text-3xl font-black uppercase tracking-wide text-[var(--t-amber)] sm:text-5xl">
               {trader.name}
+              {trader.isAgentDesk ? (
+                <AgentDeskBadge className="ml-2 scale-125 align-baseline" />
+              ) : null}
             </h1>
             <p className="mt-2 max-w-2xl text-xs uppercase tracking-[0.16em] text-[var(--t-muted)]">
               Read-only reputation, escrow posture, and last public calls from

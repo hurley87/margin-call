@@ -1,7 +1,7 @@
 {
   "name": "@margin-call/mcp-server",
   "version": "0.1.0-phase1",
-  "description": "Margin Call MCP server — Phase 1 (read-only get_desk). Lets Claude Code (or any MCP client) inspect a per-desk wallet, balances, trader counts, open deals, and recent P&L using a scoped mc_live_* API key.",
+  "description": "Margin Call MCP server — Phase 2 (MCP desk identity + full read surface). Dedicated CDP server wallets per key (mcp:cdp-wallet:* subjects), sync_wallet, plus get_desk + list_traders/list_deals/get_activity/get_outcomes/get_pending_approvals. Lets Claude Code run autonomous agent desks from the terminal.",
   "private": true,
   "type": "module",
   "main": "src/index.ts",
