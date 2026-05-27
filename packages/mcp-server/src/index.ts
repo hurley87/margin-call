@@ -4,7 +4,8 @@
  *
  * Tools:
  *   get_desk, list_traders, list_deals, get_activity, get_outcomes,
- *   get_pending_approvals, sync_wallet, create_trader
+ *   get_pending_approvals, sync_wallet, create_trader,
+ *   configure_trader, fund_trader, resume_trader, pause_trader, withdraw_from_trader
  *
  * Each MCP key maps 1:1 to a dedicated desk with subject `mcp:cdp-wallet:<id>`
  * and its own CDP server wallet (provisioned at key issuance).
@@ -47,7 +48,7 @@ const server = new McpServer({
   name: "margin-call",
   version: "0.1.0-phase1",
   description:
-    "Margin Call 1980s Wall Street desk manager for Claude (read + MCP desk writes where implemented). Inspect state via get_desk, list_traders, list_deals, activity, outcomes, approvals; sync balances; hire traders via create_trader.",
+    "Margin Call 1980s Wall Street desk manager for Claude. Read desk state; hire and manage traders (configure, fund, pause, resume, withdraw); sync wallet balances. Autonomous cron picks deals for active funded traders.",
 });
 
 function buildQueryString(
@@ -257,12 +258,117 @@ server.tool(
     })
 );
 
+const idempotencyKeySchema = z
+  .string()
+  .min(8)
+  .describe(
+    "Stable key for this intent (e.g. UUID). Reuse the same key on retries within 24h to replay cached results without re-submitting on-chain txs."
+  );
+
+const traderIdSchema = z
+  .string()
+  .min(1)
+  .describe("Convex trader document id from list_traders or create_trader");
+
+server.tool(
+  "configure_trader",
+  "Update mandate and personality for a trader owned by this MCP desk. Requires idempotencyKey. Does not change trader status or on-chain state.",
+  {
+    traderId: traderIdSchema,
+    mandate: z
+      .any()
+      .describe(
+        "Mandate object (strategy knobs): bankroll_pct, keywords, etc."
+      ),
+    personality: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Trader personality text, or null to clear"),
+    idempotencyKey: idempotencyKeySchema,
+  },
+  async ({ traderId, mandate, personality, idempotencyKey }) =>
+    callMcpApi(`/api/mcp/traders/${traderId}/configure`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ traderId, mandate, personality, idempotencyKey }),
+    })
+);
+
+server.tool(
+  "fund_trader",
+  "Fund a trader escrow from the desk CDP wallet. Performs USDC approve (large allowance when needed — this step is rare after the first funding) + escrow depositFor + Convex balance sync. Expect ~2–8s wall time. REQUIRES: stable idempotencyKey (reuse on transient failure replays the cached error; generate a *fresh* key to re-attempt the funding intent). Prerequisites: positive synced desk balance, trader wallet ready. Returns txHash + concise summary. The large allowance makes retries after partial failures cheap (usually just the deposit tx).",
+  {
+    traderId: traderIdSchema,
+    amountUsdc: z
+      .number()
+      .positive()
+      .describe("USDC amount in human units (e.g. 50 for $50)"),
+    idempotencyKey: idempotencyKeySchema,
+  },
+  async ({ traderId, amountUsdc, idempotencyKey }) =>
+    callMcpApi(`/api/mcp/traders/${traderId}/fund`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ traderId, amountUsdc, idempotencyKey }),
+    })
+);
+
+server.tool(
+  "resume_trader",
+  "Activate an owned trader for the autonomous deal cycle. Same gates as the web app: wallet ready, escrow balance > 0, not wiped out, market open. Requires idempotencyKey.",
+  {
+    traderId: traderIdSchema,
+    idempotencyKey: idempotencyKeySchema,
+  },
+  async ({ traderId, idempotencyKey }) =>
+    callMcpApi(`/api/mcp/traders/${traderId}/resume`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ traderId, idempotencyKey }),
+    })
+);
+
+server.tool(
+  "pause_trader",
+  "Pause an owned trader (stops autonomous deal entry). Requires idempotencyKey.",
+  {
+    traderId: traderIdSchema,
+    idempotencyKey: idempotencyKeySchema,
+  },
+  async ({ traderId, idempotencyKey }) =>
+    callMcpApi(`/api/mcp/traders/${traderId}/pause`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ traderId, idempotencyKey }),
+    })
+);
+
+server.tool(
+  "withdraw_from_trader",
+  "Withdraw USDC from trader escrow to the desk CDP wallet (escrow withdraw). Syncs escrow balance; call sync_wallet to refresh desk balance. Expect ~2–8s. Requires explicit positive amountUsdc and idempotencyKey.",
+  {
+    traderId: traderIdSchema,
+    amountUsdc: z
+      .number()
+      .positive()
+      .describe("USDC to withdraw in human units"),
+    idempotencyKey: idempotencyKeySchema,
+  },
+  async ({ traderId, amountUsdc, idempotencyKey }) =>
+    callMcpApi(`/api/mcp/traders/${traderId}/withdraw`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ traderId, amountUsdc, idempotencyKey }),
+    })
+);
+
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   // Log to stderr only (stdio transport uses stdout for protocol)
   console.error(
-    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,sync_wallet,create_trader  (key last4=${API_KEY.slice(-4)})`
+    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,sync_wallet,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader  (key last4=${API_KEY.slice(-4)})`
   );
 }
 

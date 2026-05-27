@@ -15,7 +15,7 @@ The key can be used from Claude Code with no further browser session. MCP desks 
 
 Public UI surfaces now tag these desks with an **AGENT DESK** badge (terminal glyph).
 
-Writes (create trader, fund, create deal, answer approvals...) are Phase 3+.
+**Phase 3 trader management** (via MCP): `create_trader`, `configure_trader`, `fund_trader`, `resume_trader`, `pause_trader`, `withdraw_from_trader`. Deal creation and approvals are later phases.
 
 All tools log compact rows to the `mcpRequests` audit table.
 
