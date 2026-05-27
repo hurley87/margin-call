@@ -48,16 +48,13 @@ crons.hourly(
 
 /**
  * Auto-reject MCP high-stakes deal approvals that have passed their TTL.
- * Without this sweep an unanswered pending row would block the trader cycle
- * (see `findPendingByTraderAndDeal` in convex/dealApprovals.ts) indefinitely —
- * the trader would keep selecting the same deal and stalling out. Running
- * every 5 minutes keeps Claude's approval loop honest while staying well
- * inside the agent scheduler's per-minute heartbeat.
+ * Unanswered pending rows would otherwise block the trader cycle
+ * (see `findPendingByTraderAndDeal` in convex/dealApprovals.ts).
  */
 crons.interval(
   "mcp-approvals-auto-reject-expired",
   { minutes: 5 },
-  internal.mcp.approvals.autoRejectExpiredAction,
+  internal.mcp.approvals.autoRejectExpired,
   {}
 );
 

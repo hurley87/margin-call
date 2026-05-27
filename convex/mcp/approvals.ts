@@ -1,12 +1,7 @@
-import {
-  internalAction,
-  internalMutation,
-  internalQuery,
-  type MutationCtx,
-} from "../_generated/server";
+import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import type { Doc, Id } from "../_generated/dataModel";
+import { assertTraderOwnedByDesk } from "../traders";
 
 /**
  * Pending high-stakes approvals for the desk (MCP `get_pending_approvals`).
@@ -68,26 +63,6 @@ export const getPending = internalQuery({
   },
 });
 
-/**
- * Count remaining pending (non-expired) approvals for a desk at `now`.
- * Used by `answer_approval` to enrich the action's summary with portfolio
- * context (how many approvals still need attention after this decision).
- */
-async function countRemainingPendingApprovals(
-  ctx: MutationCtx,
-  deskManagerId: Id<"deskManagers">,
-  now: number
-): Promise<number> {
-  const rows = await ctx.db
-    .query("dealApprovals")
-    .withIndex("byDeskManagerAndStatus", (q) =>
-      q.eq("deskManagerId", deskManagerId).eq("status", "pending")
-    )
-    .filter((q) => q.gt(q.field("expiresAt"), now))
-    .take(51);
-  return rows.length;
-}
-
 export type McpAnswerApprovalResult = {
   approvalId: string;
   traderId: string;
@@ -97,19 +72,17 @@ export type McpAnswerApprovalResult = {
   summary: string;
 };
 
+function truncatePrompt(p: string): string {
+  return p.length <= 80 ? p : `${p.slice(0, 77)}…`;
+}
+
 /**
  * MCP `answer_approval`: approve or reject a pending high-stakes deal for an
- * owned trader. Ownership is enforced server-side; only the desk that owns
- * the trader (and the approval row) may answer it. Transitions only fire on
- * pending rows that have not yet expired; everything else is a no-op replay
- * that returns the current status.
- *
- * On approve, schedules an immediate trader cycle so the autonomous loop
- * picks the deal up without waiting for the next scheduler heartbeat.
- *
- * Summary includes the deal prompt snippet, trader name + escrow balance, and
- * remaining pending approval count so Claude can reason about portfolio change
- * from the action result alone.
+ * owned trader. On approve, schedules an immediate trader cycle so the entry
+ * doesn't wait for the next scheduler heartbeat (same as the web mutation in
+ * convex/dealApprovals.ts). Already-resolved or expired rows are no-op
+ * replays — the HTTP idempotency cache handles identical retries earlier;
+ * this path handles legitimate races (e.g. the cron expired it first).
  */
 export const answerForMcp = internalMutation({
   args: {
@@ -129,55 +102,45 @@ export const answerForMcp = internalMutation({
       throw new Error("Forbidden: approval belongs to another desk");
     }
 
-    const trader: Doc<"traders"> | null = await ctx.db.get(approval.traderId);
-    if (!trader || trader.deskManagerId !== deskManagerId) {
-      throw new Error("Forbidden: trader not owned by this desk");
-    }
+    const trader = await ctx.db.get(approval.traderId);
+    assertTraderOwnedByDesk(trader, deskManagerId);
 
     const deal = await ctx.db.get(approval.dealId);
-
-    const dealPromptSnippet = (() => {
-      const p = deal?.prompt ?? "";
-      if (p.length <= 80) return p;
-      return `${p.slice(0, 77)}…`;
-    })();
+    const dealPromptSnippet = truncatePrompt(deal?.prompt ?? "");
     const escrow = trader.escrowBalanceUsdc ?? 0;
 
-    // Replay-safe: if already resolved, return the current status without
-    // changing state. The HTTP idempotency cache layer will catch identical
-    // (deskId, idempotencyKey) replays earlier; this handles legitimate races
-    // where the approval was already finalized (e.g. expired by the cron).
+    const countRemaining = async () => {
+      const rows = await ctx.db
+        .query("dealApprovals")
+        .withIndex("byDeskManagerAndStatus", (q) =>
+          q.eq("deskManagerId", deskManagerId).eq("status", "pending")
+        )
+        .filter((q) => q.gt(q.field("expiresAt"), now))
+        .collect();
+      return rows.length;
+    };
+
+    const baseResult = {
+      approvalId: String(approvalId),
+      traderId: String(approval.traderId),
+      dealId: String(approval.dealId),
+    };
+
     if (approval.status !== "pending") {
-      const remaining = await countRemainingPendingApprovals(
-        ctx,
-        deskManagerId,
-        now
-      );
+      const remaining = await countRemaining();
       return {
-        approvalId: String(approvalId),
-        traderId: String(approval.traderId),
-        dealId: String(approval.dealId),
+        ...baseResult,
         status: "noop",
         remainingPendingApprovals: remaining,
         summary: `Approval for "${trader.name}" already ${approval.status} — no change. ${remaining} pending approval(s) remain on this desk.`,
       };
     }
 
-    // Pending but already expired → record expiry, treat as no-op for caller.
     if (approval.expiresAt <= now) {
-      await ctx.db.patch(approvalId, {
-        status: "expired",
-        resolvedAt: now,
-      });
-      const remaining = await countRemainingPendingApprovals(
-        ctx,
-        deskManagerId,
-        now
-      );
+      await ctx.db.patch(approvalId, { status: "expired", resolvedAt: now });
+      const remaining = await countRemaining();
       return {
-        approvalId: String(approvalId),
-        traderId: String(approval.traderId),
-        dealId: String(approval.dealId),
+        ...baseResult,
         status: "expired",
         remainingPendingApprovals: remaining,
         summary: `Approval for "${trader.name}" expired before you answered — the trader's cycle will pick a fresh deal on its next tick. ${remaining} pending approval(s) remain on this desk.`,
@@ -185,26 +148,15 @@ export const answerForMcp = internalMutation({
     }
 
     const newStatus = decision === "approve" ? "approved" : "rejected";
-    await ctx.db.patch(approvalId, {
-      status: newStatus,
-      resolvedAt: now,
-    });
+    await ctx.db.patch(approvalId, { status: newStatus, resolvedAt: now });
 
-    // On approve, kick the trader cycle immediately so the entry doesn't
-    // wait for the next scheduler heartbeat — same behaviour as the web
-    // mutation in convex/dealApprovals.ts.
     if (newStatus === "approved") {
       await ctx.scheduler.runAfter(0, internal.agent.cycle.cycle, {
         traderId: approval.traderId,
       });
     }
 
-    const remaining = await countRemainingPendingApprovals(
-      ctx,
-      deskManagerId,
-      now
-    );
-
+    const remaining = await countRemaining();
     const verb = newStatus === "approved" ? "Approved" : "Rejected";
     const tail =
       newStatus === "approved"
@@ -212,10 +164,8 @@ export const answerForMcp = internalMutation({
         : `Trader cycle will pick a different deal on its next tick. Escrow balance ${escrow.toFixed(2)} USDC; ${remaining} pending approval(s) remain.`;
 
     return {
-      approvalId: String(approvalId),
-      traderId: String(approval.traderId),
-      dealId: String(approval.dealId),
-      status: newStatus as "approved" | "rejected",
+      ...baseResult,
+      status: newStatus,
       remainingPendingApprovals: remaining,
       summary: `${verb} "${trader.name}" on deal: ${dealPromptSnippet || "(no prompt)"} (entry ${approval.entryCostUsdc.toFixed(2)} / pot ${approval.potUsdc.toFixed(2)} USDC). ${tail}`,
     };
@@ -223,55 +173,29 @@ export const answerForMcp = internalMutation({
 });
 
 /**
- * Internal: scan and auto-reject pending approvals past their TTL. Mutations
- * have transaction limits, so we cap the batch at 50 per invocation — the
- * cron tick rate (~5 min) keeps this comfortably ahead of normal load.
- * Returns the number of approvals expired so the cron logs are useful.
+ * Cron entrypoint: scan and auto-reject pending approvals past their TTL.
+ * Without this sweep an unanswered pending row blocks the trader cycle
+ * (see `findPendingByTraderAndDeal` in convex/dealApprovals.ts) indefinitely.
+ * Batch cap of 200 stays well within Convex mutation transaction limits.
  */
 export const autoRejectExpired = internalMutation({
-  args: { now: v.number(), limit: v.optional(v.number()) },
-  handler: async (ctx, { now, limit = 50 }) => {
-    const bounded = Math.min(Math.max(1, limit), 200);
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
     const rows = await ctx.db
       .query("dealApprovals")
       .withIndex("byStatus", (q) => q.eq("status", "pending"))
       .filter((q) => q.lte(q.field("expiresAt"), now))
-      .take(bounded);
+      .take(200);
 
-    let expired = 0;
     for (const row of rows) {
-      // Defensive: re-check status + expiry inside the batch.
-      if (row.status !== "pending") continue;
-      if (row.expiresAt > now) continue;
-      await ctx.db.patch(row._id, {
-        status: "expired",
-        resolvedAt: now,
-      });
-      expired += 1;
+      await ctx.db.patch(row._id, { status: "expired", resolvedAt: now });
     }
-    return { expired, scanned: rows.length };
-  },
-});
-
-/**
- * Internal action: cron entrypoint for auto-rejecting expired approvals.
- * Wrapping the mutation in an action lets us call Date.now() once outside
- * the transaction (Convex guideline: queries/mutations should not embed
- * non-deterministic time) and emits a single log line per tick.
- */
-export const autoRejectExpiredAction = internalAction({
-  args: {},
-  handler: async (ctx): Promise<{ expired: number; scanned: number }> => {
-    const now = Date.now();
-    const result: { expired: number; scanned: number } = await ctx.runMutation(
-      internal.mcp.approvals.autoRejectExpired,
-      { now }
-    );
-    if (result.expired > 0) {
+    if (rows.length > 0) {
       console.log(
-        `[mcp/approvals] auto-rejected ${result.expired} expired approval(s) (scanned ${result.scanned})`
+        `[mcp/approvals] auto-rejected ${rows.length} expired approval(s)`
       );
     }
-    return result;
+    return { expired: rows.length };
   },
 });
