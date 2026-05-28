@@ -32,6 +32,11 @@ export default defineSchema({
     dailyWithdrawCapUsdc: v.optional(v.number()), // per-desk daily cap in USDC (human units)
     dailyWithdrawUsedUsdc: v.optional(v.number()),
     dailyWithdrawResetAt: v.optional(v.number()),
+    // Per-action USDC ceiling for MCP writes (single-tx). Default in code is
+    // 500 USDC when unset. The optional `perToolCapUsdc` override map (e.g.
+    // { withdraw_to_address: 250, create_deal: 1000 }) takes precedence per tool.
+    perActionCapUsdc: v.optional(v.number()),
+    perToolCapUsdc: v.optional(v.any()),
     withdrawCeremonyCompletedAt: v.optional(v.number()),
     boundHumanSubject: v.optional(v.string()), // Privy DID of human who completed ceremony
     pendingWithdrawAddress: v.optional(v.string()), // proposed by first register_withdraw_address

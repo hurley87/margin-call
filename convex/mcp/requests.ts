@@ -1,6 +1,19 @@
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 
+/**
+ * MCP audit log helpers. The `mcpRequests` table doubles as both:
+ *
+ *   1. A durable audit log (every read + write logged, never purged).
+ *   2. The 24h idempotency replay cache (write tools only).
+ *
+ * The 24h replay window is enforced **purely by the `minCreatedAt` filter in
+ * `findRecentByKey`** — the caller in `mcpWriteRoute` passes `now - 24h`.
+ * There is intentionally NO cleanup cron: rows older than 24h are simply
+ * invisible to the replay query but remain available for operator audit /
+ * forensics indefinitely. This is by design.
+ */
+
 /** For HTTP write idempotency: latest matching audit row within the TTL window. */
 export const findRecentByKey = internalQuery({
   args: {

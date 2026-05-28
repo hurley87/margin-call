@@ -10,6 +10,12 @@ import {
   type McpTraderWriteResult,
 } from "./traders";
 import { assertTraderOwnedByDesk } from "../traders";
+import { assertPerActionCap } from "./limits";
+import {
+  simulateUsdcApprove,
+  simulateEscrowDepositFor,
+  simulateEscrowTraderWithdraw,
+} from "./simulate";
 
 const USDC_DECIMALS = 1_000_000;
 
@@ -163,6 +169,13 @@ export const fundForMcp = internalAction({
     amountUsdc: v.number(),
   },
   handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+    await assertPerActionCap(
+      ctx,
+      args.deskManagerId,
+      "fund_trader",
+      args.amountUsdc
+    );
+
     const amountAtomic = parseAmountUsdc(args.amountUsdc);
 
     const dm: Doc<"deskManagers"> | null = await ctx.runQuery(
@@ -217,6 +230,14 @@ export const fundForMcp = internalAction({
 
     await ensureDepositorOnChain(trader.tokenId, deskAddress);
 
+    await simulateEscrowDepositFor(
+      publicClient,
+      ESCROW_ADDRESS,
+      deskAddress,
+      BigInt(trader.tokenId),
+      amountAtomic
+    );
+
     // ── Allowance top-up (rare thanks to LARGE_APPROVE_ALLOWANCE) ─────────────
     // We deliberately approve a *large* amount (not the exact per-call amount)
     // when the current allowance is insufficient. This turns the approve tx
@@ -236,6 +257,13 @@ export const fundForMcp = internalAction({
     })) as bigint;
 
     if (currentAllowance < amountAtomic) {
+      await simulateUsdcApprove(
+        publicClient,
+        USDC_SEPOLIA_ADDRESS,
+        deskAddress,
+        ESCROW_ADDRESS,
+        LARGE_APPROVE_ALLOWANCE
+      );
       const approveData = encodeFunctionData({
         abi: erc20Abi,
         functionName: "approve",
@@ -311,6 +339,13 @@ export const withdrawForMcp = internalAction({
     amountUsdc: v.number(),
   },
   handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+    await assertPerActionCap(
+      ctx,
+      args.deskManagerId,
+      "withdraw_from_trader",
+      args.amountUsdc
+    );
+
     const amountAtomic = parseAmountUsdc(args.amountUsdc);
 
     const dm: Doc<"deskManagers"> | null = await ctx.runQuery(
@@ -359,6 +394,14 @@ export const withdrawForMcp = internalAction({
       chain: baseSepolia,
       transport: http(),
     });
+
+    await simulateEscrowTraderWithdraw(
+      publicClient,
+      ESCROW_ADDRESS,
+      deskAccount.address as `0x${string}`,
+      BigInt(trader.tokenId),
+      amountAtomic
+    );
 
     const withdrawData = encodeFunctionData({
       abi: escrowAbi,

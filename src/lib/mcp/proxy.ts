@@ -4,6 +4,12 @@ import { createConvexAdminClient } from "@/lib/convex/server-client";
 import { hashMcpKey, MCP_KEY_PREFIX } from "./keys";
 import { internal } from "../../../convex/_generated/api";
 import type { Id } from "../../../convex/_generated/dataModel";
+import {
+  checkRateLimit,
+  deskLimit,
+  getClientIdentifier,
+  mcpIpLimit,
+} from "@/lib/rate-limit";
 
 const API_KEY_SECRET = process.env.MCP_API_KEY_SECRET;
 const SERVICE_TOKEN = process.env.MCP_SERVICE_TOKEN;
@@ -148,6 +154,31 @@ export interface ProxyMcpWriteOptions {
   requireIdempotencyKey?: boolean;
 }
 
+/**
+ * Apply IP + per-desk rate limits for an MCP request. Returns a 429
+ * NextResponse when limited, or `{ deskManagerId }` on success.
+ */
+async function applyMcpRateLimits(
+  request: NextRequest
+): Promise<{ deskManagerId: Id<"deskManagers"> } | NextResponse> {
+  // Pre-auth IP rate limit: protects against malformed-key floods.
+  const ipLimited = await checkRateLimit(
+    mcpIpLimit,
+    getClientIdentifier(request)
+  );
+  if (ipLimited) return ipLimited;
+
+  const authResult = await validateMcpKey(request);
+  if (authResult instanceof NextResponse) return authResult;
+  const { deskManagerId } = authResult;
+
+  // Post-auth per-desk ceiling.
+  const deskLimited = await checkRateLimit(deskLimit, `mcp:${deskManagerId}`);
+  if (deskLimited) return deskLimited;
+
+  return { deskManagerId };
+}
+
 export async function proxyMcpWrite(
   request: NextRequest,
   { convexAction, requireIdempotencyKey }: ProxyMcpWriteOptions
@@ -159,9 +190,9 @@ export async function proxyMcpWrite(
     );
   }
 
-  const authResult = await validateMcpKey(request);
-  if (authResult instanceof NextResponse) return authResult;
-  const { deskManagerId } = authResult;
+  const rateLimitResult = await applyMcpRateLimits(request);
+  if (rateLimitResult instanceof NextResponse) return rateLimitResult;
+  const { deskManagerId } = rateLimitResult;
 
   let body: Record<string, unknown>;
   try {
@@ -203,9 +234,9 @@ export async function proxyMcpRead(
     );
   }
 
-  const authResult = await validateMcpKey(request);
-  if (authResult instanceof NextResponse) return authResult;
-  const { deskManagerId } = authResult;
+  const rateLimitResult = await applyMcpRateLimits(request);
+  if (rateLimitResult instanceof NextResponse) return rateLimitResult;
+  const { deskManagerId } = rateLimitResult;
 
   const search = request.nextUrl.searchParams;
   const body: Record<string, unknown> = {
