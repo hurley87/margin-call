@@ -1,16 +1,23 @@
 {
   "name": "@margin-call/mcp-server",
-  "version": "0.1.0-phase1",
-  "description": "Margin Call MCP server — Phase 2 (MCP desk identity + full read surface). Dedicated CDP server wallets per key (mcp:cdp-wallet:* subjects), sync_wallet, plus get_desk + list_traders/list_deals/get_activity/get_outcomes/get_pending_approvals. Lets Claude Code run autonomous agent desks from the terminal.",
-  "private": true,
+  "version": "0.2.0",
+  "description": "Margin Call MCP server — lets Claude Code (or any MCP-compatible agent) run an autonomous AGENT DESK on the Wall Street trading game. Per-desk MCP API keys map to dedicated CDP server wallets; tools cover read state, hire/fund/configure traders, create/close deals, approvals loop, allowlisted withdrawals, and wallet sync. All writes are idempotent and fully audited server-side.",
   "type": "module",
-  "main": "src/index.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "bin": {
-    "margin-call-mcp": "src/index.ts"
+    "margin-call-mcp": "dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "dev": "tsx src/index.ts",
-    "start": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.json && chmod +x dist/index.js",
+    "prepublishOnly": "pnpm run build",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -29,9 +36,21 @@
     "mcp",
     "model-context-protocol",
     "claude",
+    "claude-code",
     "margin-call",
     "trading",
-    "ai-agent"
+    "ai-agent",
+    "base",
+    "x402"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "homepage": "https://github.com/hurley87/margin-call/tree/main/packages/mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/hurley87/margin-call.git",
+    "directory": "packages/mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/hurley87/margin-call/issues"
+  }
 }
