@@ -41,6 +41,19 @@ type ConfirmWithdrawCeremonyResult = {
   ceremonyCompletedAt?: number;
 };
 
+type RevokeKeyResult = {
+  ok: true;
+  alreadyRevoked: boolean;
+  revokedAt: number;
+  deskManagerId: Id<"deskManagers">;
+};
+
+type RotateKeyResult = {
+  ok: true;
+  newKeyId: Id<"mcpApiKeys">;
+  deskManagerId: Id<"deskManagers">;
+};
+
 type McpRequestDebugRow = {
   _id: string;
   tool: string;
@@ -209,11 +222,8 @@ export const confirmWithdrawCeremony = internalMutation({
   },
 });
 
-/**
- * Internal: revoke an MCP key. Verifies the caller is the original issuer
- * (via Privy DID), sets `revokedAt = Date.now()`. Idempotent — re-calling
- * on an already-revoked key returns the existing revocation time.
- */
+/** Revoke an MCP key. Verifies the caller is the original issuer (Privy DID).
+ * Idempotent — re-calling on an already-revoked key returns the existing revocation time. */
 export const revoke = internalMutation({
   args: {
     keyId: v.id("mcpApiKeys"),
@@ -246,13 +256,9 @@ export const revoke = internalMutation({
   },
 });
 
-/**
- * Internal: atomically rotate an MCP key — revoke the old hash and insert a
- * new one bound to the SAME `deskManagerId` (so the desk's CDP wallet,
- * traders, deals, allowlist, etc. all carry over). Hard cut: the old hash
- * stops working immediately. Raw-key generation happens in Next.js; Convex
- * only ever sees the HMAC hashes.
- */
+/** Atomically rotate an MCP key — revoke the old hash and insert a new one bound to the
+ * SAME deskManagerId. Hard cut: the old hash stops working immediately. Raw-key
+ * generation happens in Next.js; Convex only ever sees the HMAC hashes. */
 export const rotate = internalMutation({
   args: {
     keyId: v.id("mcpApiKeys"),
@@ -294,53 +300,31 @@ export const revokeMyKey = mutation({
   handler: async (
     ctx: MutationCtx,
     { keyId }: { keyId: Id<"mcpApiKeys"> }
-  ): Promise<{
-    ok: true;
-    alreadyRevoked: boolean;
-    revokedAt: number;
-    deskManagerId: Id<"deskManagers">;
-  }> => {
+  ): Promise<RevokeKeyResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
     return (await ctx.runMutation(internal.mcpApiKeys.revoke, {
       keyId,
       revokedByPrivySubject: identity.subject,
-    })) as {
-      ok: true;
-      alreadyRevoked: boolean;
-      revokedAt: number;
-      deskManagerId: Id<"deskManagers">;
-    };
+    })) as RevokeKeyResult;
   },
 });
 
-/**
- * Public (browser) wrapper: atomically rotate one of my issued MCP keys.
- * The raw key + hash are generated in the Next.js route; Convex only sees
- * the hash. Response shape matches `POST /api/mcp/keys` so the UI reuses
- * the same "shown once" panel.
- */
+/** Public (browser) wrapper: atomically rotate one of my issued MCP keys.
+ * Raw key + hash are generated in the Next.js route; Convex only sees the hash. */
 export const rotateMyKey = mutation({
   args: { keyId: v.id("mcpApiKeys"), newKeyHash: v.string() },
   handler: async (
     ctx: MutationCtx,
     { keyId, newKeyHash }: { keyId: Id<"mcpApiKeys">; newKeyHash: string }
-  ): Promise<{
-    ok: true;
-    newKeyId: Id<"mcpApiKeys">;
-    deskManagerId: Id<"deskManagers">;
-  }> => {
+  ): Promise<RotateKeyResult> => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthenticated");
     return (await ctx.runMutation(internal.mcpApiKeys.rotate, {
       keyId,
       newKeyHash,
       rotatedByPrivySubject: identity.subject,
-    })) as {
-      ok: true;
-      newKeyId: Id<"mcpApiKeys">;
-      deskManagerId: Id<"deskManagers">;
-    };
+    })) as RotateKeyResult;
   },
 });
 

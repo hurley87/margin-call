@@ -69,8 +69,7 @@ export function McpOperatorDialog({
   const [loadingRequests, setLoadingRequests] = useState(false);
 
   // Rotation / revocation UI state.
-  const [isRotating, setIsRotating] = useState(false);
-  const [isRevoking, setIsRevoking] = useState(false);
+  const [keyOp, setKeyOp] = useState<"rotating" | "revoking" | null>(null);
   const [keyOpError, setKeyOpError] = useState<string | null>(null);
   const [rotatedKey, setRotatedKey] = useState<string | null>(null);
 
@@ -131,61 +130,53 @@ export function McpOperatorDialog({
     setKeyOpError(null);
   }, [selectedDeskId]);
 
-  const handleRotate = async (keyId: Id<"mcpApiKeys">) => {
-    const confirmed = window.confirm(
-      "Rotate this MCP key?\n\nThe old key stops working IMMEDIATELY. Update your MCP client (Claude Code / Cursor) with the new key before continuing.\n\nThe new key is shown ONCE and never again."
-    );
-    if (!confirmed) return;
-    setIsRotating(true);
+  const runKeyOp = async (
+    op: "rotating" | "revoking",
+    confirmMsg: string,
+    doFetch: () => Promise<Response>,
+    onSuccess: (data: Record<string, unknown>) => void
+  ) => {
+    if (!window.confirm(confirmMsg)) return;
+    setKeyOp(op);
     setKeyOpError(null);
-    setRotatedKey(null);
     try {
-      const res = await fetch(`/api/mcp/keys/${keyId}/rotate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        key?: string;
-        error?: string;
-      };
-      if (!res.ok || !data.key) {
-        throw new Error(data.error ?? `Rotate failed (${res.status})`);
-      }
-      setRotatedKey(data.key);
+      const res = await doFetch();
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok)
+        throw new Error(
+          (data.error as string) ?? `${op} failed (${res.status})`
+        );
+      onSuccess(data);
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Rotation failed";
-      setKeyOpError(msg);
+      setKeyOpError(e instanceof Error ? e.message : `${op} failed`);
     } finally {
-      setIsRotating(false);
+      setKeyOp(null);
     }
   };
 
-  const handleRevoke = async (keyId: Id<"mcpApiKeys">) => {
-    const confirmed = window.confirm(
-      "Revoke this MCP key?\n\nThe key stops working IMMEDIATELY. This is permanent — to keep using this desk you must rotate (or issue a fresh key)."
-    );
-    if (!confirmed) return;
-    setIsRevoking(true);
-    setKeyOpError(null);
-    try {
-      const res = await fetch(`/api/mcp/keys/${keyId}`, { method: "DELETE" });
-      const data = (await res.json()) as {
-        ok?: boolean;
-        error?: string;
-      };
-      if (!res.ok) {
-        throw new Error(data.error ?? `Revoke failed (${res.status})`);
+  const handleRotate = (keyId: Id<"mcpApiKeys">) =>
+    runKeyOp(
+      "rotating",
+      "Rotate this MCP key?\n\nThe old key stops working IMMEDIATELY. Update your MCP client (Claude Code / Cursor) with the new key before continuing.\n\nThe new key is shown ONCE and never again.",
+      () =>
+        fetch(`/api/mcp/keys/${keyId}/rotate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }),
+      (data) => {
+        if (!data.key) throw new Error("No key returned");
+        setRotatedKey(data.key as string);
       }
+    );
+
+  const handleRevoke = (keyId: Id<"mcpApiKeys">) =>
+    runKeyOp(
+      "revoking",
+      "Revoke this MCP key?\n\nThe key stops working IMMEDIATELY. This is permanent — to keep using this desk you must rotate (or issue a fresh key).",
+      () => fetch(`/api/mcp/keys/${keyId}`, { method: "DELETE" }),
       // Reactive listIssuedBy will drop this row from `myDesks` automatically.
-      setSelectedDeskId(null);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Revocation failed";
-      setKeyOpError(msg);
-    } finally {
-      setIsRevoking(false);
-    }
-  };
+      () => setSelectedDeskId(null)
+    );
 
   if (!open) return null;
 
@@ -425,24 +416,22 @@ export function McpOperatorDialog({
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => handleRotate(selectedDesk.keyId)}
-                    disabled={isRotating || isRevoking}
+                    disabled={keyOp != null}
                     className="inline-flex items-center gap-1.5 rounded border border-[var(--t-amber)]/50 bg-[var(--t-amber)]/10 px-3 py-1 text-xs font-semibold text-[var(--t-amber)] hover:bg-[var(--t-amber)]/20 disabled:opacity-50"
                     title="Issue a new key bound to this same desk; the old key is revoked immediately."
                   >
-                    {isRotating ? (
-                      <RefreshCw className="h-3 w-3 animate-spin" />
-                    ) : (
-                      <RefreshCw className="h-3 w-3" />
-                    )}
+                    <RefreshCw
+                      className={`h-3 w-3${keyOp === "rotating" ? " animate-spin" : ""}`}
+                    />
                     ROTATE KEY
                   </button>
                   <button
                     onClick={() => handleRevoke(selectedDesk.keyId)}
-                    disabled={isRotating || isRevoking}
+                    disabled={keyOp != null}
                     className="inline-flex items-center gap-1.5 rounded border border-[var(--t-red)]/50 bg-[var(--t-red)]/10 px-3 py-1 text-xs font-semibold text-[var(--t-red)] hover:bg-[var(--t-red)]/20 disabled:opacity-50"
                     title="Permanently disable this key. Desk remains; traders/deals continue under any other unrevoked key for this desk."
                   >
-                    {isRevoking ? (
+                    {keyOp === "revoking" ? (
                       <RefreshCw className="h-3 w-3 animate-spin" />
                     ) : (
                       <X className="h-3 w-3" />

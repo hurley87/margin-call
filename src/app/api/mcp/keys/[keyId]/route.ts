@@ -30,10 +30,6 @@ export async function DELETE(
   }
 
   const { keyId } = await context.params;
-  if (!keyId) {
-    return NextResponse.json({ error: "keyId required" }, { status: 400 });
-  }
-
   const convex = createConvexAdminClient();
 
   try {

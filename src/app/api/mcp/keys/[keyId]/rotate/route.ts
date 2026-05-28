@@ -32,9 +32,6 @@ export async function POST(
   }
 
   const { keyId } = await context.params;
-  if (!keyId) {
-    return NextResponse.json({ error: "keyId required" }, { status: 400 });
-  }
 
   const rawKey = generateMcpKey();
   const newKeyHash = hashMcpKey(rawKey);
