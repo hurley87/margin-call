@@ -455,11 +455,14 @@ http.route({
     parseBody: parseWithdrawToAddressBody,
     execute: async (ctx, { deskManagerId, requestBody }) => {
       try {
-        const raw = await ctx.runAction(internal.mcp.desks.withdrawToAddress, {
-          deskManagerId,
-          address: requestBody.address as string,
-          amountUsdc: Number(requestBody.amountUsdc),
-        });
+        const raw = await ctx.runAction(
+          internal.mcp.desksEscrow.withdrawToAddress,
+          {
+            deskManagerId,
+            address: requestBody.address as string,
+            amountUsdc: Number(requestBody.amountUsdc),
+          }
+        );
         return { result: raw };
       } catch (e: unknown) {
         return {
