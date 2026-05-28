@@ -41,6 +41,19 @@ type ConfirmWithdrawCeremonyResult = {
   ceremonyCompletedAt?: number;
 };
 
+type RevokeKeyResult = {
+  ok: true;
+  alreadyRevoked: boolean;
+  revokedAt: number;
+  deskManagerId: Id<"deskManagers">;
+};
+
+type RotateKeyResult = {
+  ok: true;
+  newKeyId: Id<"mcpApiKeys">;
+  deskManagerId: Id<"deskManagers">;
+};
+
 type McpRequestDebugRow = {
   _id: string;
   tool: string;
@@ -206,6 +219,112 @@ export const confirmWithdrawCeremony = internalMutation({
       allowlist: updatedList,
       ceremonyCompletedAt: now,
     };
+  },
+});
+
+/** Revoke an MCP key. Verifies the caller is the original issuer (Privy DID).
+ * Idempotent — re-calling on an already-revoked key returns the existing revocation time. */
+export const revoke = internalMutation({
+  args: {
+    keyId: v.id("mcpApiKeys"),
+    revokedByPrivySubject: v.string(),
+  },
+  handler: async (ctx, { keyId, revokedByPrivySubject }) => {
+    const keyDoc = await ctx.db.get(keyId);
+    if (!keyDoc) throw new Error("Key not found");
+    if (keyDoc.issuedByPrivySubject !== revokedByPrivySubject) {
+      throw new Error(
+        "Not authorized: you did not issue this MCP key (only the original issuer can revoke it)"
+      );
+    }
+    if (keyDoc.revokedAt != null) {
+      return {
+        ok: true as const,
+        alreadyRevoked: true,
+        revokedAt: keyDoc.revokedAt,
+        deskManagerId: keyDoc.deskManagerId,
+      };
+    }
+    const now = Date.now();
+    await ctx.db.patch(keyId, { revokedAt: now });
+    return {
+      ok: true as const,
+      alreadyRevoked: false,
+      revokedAt: now,
+      deskManagerId: keyDoc.deskManagerId,
+    };
+  },
+});
+
+/** Atomically rotate an MCP key — revoke the old hash and insert a new one bound to the
+ * SAME deskManagerId. Hard cut: the old hash stops working immediately. Raw-key
+ * generation happens in Next.js; Convex only ever sees the HMAC hashes. */
+export const rotate = internalMutation({
+  args: {
+    keyId: v.id("mcpApiKeys"),
+    newKeyHash: v.string(),
+    rotatedByPrivySubject: v.string(),
+  },
+  handler: async (ctx, { keyId, newKeyHash, rotatedByPrivySubject }) => {
+    const oldKey = await ctx.db.get(keyId);
+    if (!oldKey) throw new Error("Key not found");
+    if (oldKey.issuedByPrivySubject !== rotatedByPrivySubject) {
+      throw new Error(
+        "Not authorized: you did not issue this MCP key (only the original issuer can rotate it)"
+      );
+    }
+    if (oldKey.revokedAt != null) {
+      throw new Error(
+        "Cannot rotate an already-revoked key. Issue a fresh key from the operator dialog instead."
+      );
+    }
+    const now = Date.now();
+    await ctx.db.patch(keyId, { revokedAt: now });
+    const newKeyId = await ctx.db.insert("mcpApiKeys", {
+      keyHash: newKeyHash,
+      deskManagerId: oldKey.deskManagerId,
+      issuedByPrivySubject: rotatedByPrivySubject,
+      createdAt: now,
+    });
+    return {
+      ok: true as const,
+      newKeyId,
+      deskManagerId: oldKey.deskManagerId,
+    };
+  },
+});
+
+/** Public (browser) wrapper: revoke one of my issued MCP keys. */
+export const revokeMyKey = mutation({
+  args: { keyId: v.id("mcpApiKeys") },
+  handler: async (
+    ctx: MutationCtx,
+    { keyId }: { keyId: Id<"mcpApiKeys"> }
+  ): Promise<RevokeKeyResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    return (await ctx.runMutation(internal.mcpApiKeys.revoke, {
+      keyId,
+      revokedByPrivySubject: identity.subject,
+    })) as RevokeKeyResult;
+  },
+});
+
+/** Public (browser) wrapper: atomically rotate one of my issued MCP keys.
+ * Raw key + hash are generated in the Next.js route; Convex only sees the hash. */
+export const rotateMyKey = mutation({
+  args: { keyId: v.id("mcpApiKeys"), newKeyHash: v.string() },
+  handler: async (
+    ctx: MutationCtx,
+    { keyId, newKeyHash }: { keyId: Id<"mcpApiKeys">; newKeyHash: string }
+  ): Promise<RotateKeyResult> => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+    return (await ctx.runMutation(internal.mcpApiKeys.rotate, {
+      keyId,
+      newKeyHash,
+      rotatedByPrivySubject: identity.subject,
+    })) as RotateKeyResult;
   },
 });
 
