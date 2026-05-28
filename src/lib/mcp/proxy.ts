@@ -154,17 +154,13 @@ export interface ProxyMcpWriteOptions {
   requireIdempotencyKey?: boolean;
 }
 
-export async function proxyMcpWrite(
-  request: NextRequest,
-  { convexAction, requireIdempotencyKey }: ProxyMcpWriteOptions
-) {
-  if (!SERVICE_TOKEN || !CONVEX_URL) {
-    return NextResponse.json(
-      { error: "MCP is not configured on this server" },
-      { status: 500 }
-    );
-  }
-
+/**
+ * Apply IP + per-desk rate limits for an MCP request. Returns a 429
+ * NextResponse when limited, or `{ deskManagerId }` on success.
+ */
+async function applyMcpRateLimits(
+  request: NextRequest
+): Promise<{ deskManagerId: Id<"deskManagers"> } | NextResponse> {
   // Pre-auth IP rate limit: protects against malformed-key floods.
   const ipLimited = await checkRateLimit(
     mcpIpLimit,
@@ -179,6 +175,24 @@ export async function proxyMcpWrite(
   // Post-auth per-desk ceiling.
   const deskLimited = await checkRateLimit(deskLimit, `mcp:${deskManagerId}`);
   if (deskLimited) return deskLimited;
+
+  return { deskManagerId };
+}
+
+export async function proxyMcpWrite(
+  request: NextRequest,
+  { convexAction, requireIdempotencyKey }: ProxyMcpWriteOptions
+) {
+  if (!SERVICE_TOKEN || !CONVEX_URL) {
+    return NextResponse.json(
+      { error: "MCP is not configured on this server" },
+      { status: 500 }
+    );
+  }
+
+  const rateLimitResult = await applyMcpRateLimits(request);
+  if (rateLimitResult instanceof NextResponse) return rateLimitResult;
+  const { deskManagerId } = rateLimitResult;
 
   let body: Record<string, unknown>;
   try {
@@ -220,20 +234,9 @@ export async function proxyMcpRead(
     );
   }
 
-  // Pre-auth IP rate limit: protects against malformed-key floods.
-  const ipLimited = await checkRateLimit(
-    mcpIpLimit,
-    getClientIdentifier(request)
-  );
-  if (ipLimited) return ipLimited;
-
-  const authResult = await validateMcpKey(request);
-  if (authResult instanceof NextResponse) return authResult;
-  const { deskManagerId } = authResult;
-
-  // Post-auth per-desk ceiling.
-  const deskLimited = await checkRateLimit(deskLimit, `mcp:${deskManagerId}`);
-  if (deskLimited) return deskLimited;
+  const rateLimitResult = await applyMcpRateLimits(request);
+  if (rateLimitResult instanceof NextResponse) return rateLimitResult;
+  const { deskManagerId } = rateLimitResult;
 
   const search = request.nextUrl.searchParams;
   const body: Record<string, unknown> = {

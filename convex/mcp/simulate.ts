@@ -28,7 +28,7 @@ import type { Abi } from "viem";
  * incompatibility across callers that construct clients with different
  * transport/chain combos).
  */
-type SimClient = {
+export type SimClient = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   simulateContract: (args: any) => Promise<unknown>;
 };
@@ -97,12 +97,25 @@ const escrowAbi = [
   },
 ] as const satisfies Abi;
 
-async function runSimulation<T>(
+async function simulate(
+  client: SimClient,
   label: string,
-  fn: () => Promise<T>
-): Promise<T> {
+  address: `0x${string}`,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  abi: any,
+  functionName: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  args: any[],
+  account: `0x${string}`
+): Promise<void> {
   try {
-    return await fn();
+    await client.simulateContract({
+      address,
+      abi,
+      functionName,
+      args,
+      account,
+    });
   } catch (err) {
     // Lazy-import the viem error class so this file stays cheap to load.
     const viem = await import("viem");
@@ -118,110 +131,110 @@ async function runSimulation<T>(
   }
 }
 
-export async function simulateUsdcTransfer(
-  publicClient: SimClient,
+export function simulateUsdcTransfer(
+  client: SimClient,
   usdcAddress: `0x${string}`,
   account: `0x${string}`,
   to: `0x${string}`,
   amountAtomic: bigint
 ): Promise<void> {
-  await runSimulation("USDC.transfer", () =>
-    publicClient.simulateContract({
-      address: usdcAddress,
-      abi: erc20Abi,
-      functionName: "transfer",
-      args: [to, amountAtomic],
-      account,
-    })
+  return simulate(
+    client,
+    "USDC.transfer",
+    usdcAddress,
+    erc20Abi,
+    "transfer",
+    [to, amountAtomic],
+    account
   );
 }
 
-export async function simulateUsdcApprove(
-  publicClient: SimClient,
+export function simulateUsdcApprove(
+  client: SimClient,
   usdcAddress: `0x${string}`,
   account: `0x${string}`,
   spender: `0x${string}`,
   amountAtomic: bigint
 ): Promise<void> {
-  await runSimulation("USDC.approve", () =>
-    publicClient.simulateContract({
-      address: usdcAddress,
-      abi: erc20Abi,
-      functionName: "approve",
-      args: [spender, amountAtomic],
-      account,
-    })
+  return simulate(
+    client,
+    "USDC.approve",
+    usdcAddress,
+    erc20Abi,
+    "approve",
+    [spender, amountAtomic],
+    account
   );
 }
 
-export async function simulateEscrowDepositFor(
-  publicClient: SimClient,
+export function simulateEscrowDepositFor(
+  client: SimClient,
   escrowAddress: `0x${string}`,
   account: `0x${string}`,
   traderId: bigint,
   amountAtomic: bigint
 ): Promise<void> {
-  await runSimulation("escrow.depositFor", () =>
-    publicClient.simulateContract({
-      address: escrowAddress,
-      abi: escrowAbi,
-      functionName: "depositFor",
-      args: [traderId, amountAtomic],
-      account,
-    })
+  return simulate(
+    client,
+    "escrow.depositFor",
+    escrowAddress,
+    escrowAbi,
+    "depositFor",
+    [traderId, amountAtomic],
+    account
   );
 }
 
-export async function simulateEscrowTraderWithdraw(
-  publicClient: SimClient,
+export function simulateEscrowTraderWithdraw(
+  client: SimClient,
   escrowAddress: `0x${string}`,
   account: `0x${string}`,
   traderId: bigint,
   amountAtomic: bigint
 ): Promise<void> {
-  await runSimulation("escrow.withdraw", () =>
-    publicClient.simulateContract({
-      address: escrowAddress,
-      abi: escrowAbi,
-      functionName: "withdraw",
-      args: [traderId, amountAtomic],
-      account,
-    })
+  return simulate(
+    client,
+    "escrow.withdraw",
+    escrowAddress,
+    escrowAbi,
+    "withdraw",
+    [traderId, amountAtomic],
+    account
   );
 }
 
-export async function simulateEscrowCreateDeal(
-  publicClient: SimClient,
+export function simulateEscrowCreateDeal(
+  client: SimClient,
   escrowAddress: `0x${string}`,
   account: `0x${string}`,
   prompt: string,
   potAtomic: bigint,
   entryCostAtomic: bigint
 ): Promise<void> {
-  await runSimulation("escrow.createDeal", () =>
-    publicClient.simulateContract({
-      address: escrowAddress,
-      abi: escrowAbi,
-      functionName: "createDeal",
-      args: [prompt, potAtomic, entryCostAtomic],
-      account,
-    })
+  return simulate(
+    client,
+    "escrow.createDeal",
+    escrowAddress,
+    escrowAbi,
+    "createDeal",
+    [prompt, potAtomic, entryCostAtomic],
+    account
   );
 }
 
-export async function simulateEscrowCloseDeal(
-  publicClient: SimClient,
+export function simulateEscrowCloseDeal(
+  client: SimClient,
   escrowAddress: `0x${string}`,
   account: `0x${string}`,
   dealId: bigint
 ): Promise<void> {
-  await runSimulation("escrow.closeDeal", () =>
-    publicClient.simulateContract({
-      address: escrowAddress,
-      abi: escrowAbi,
-      functionName: "closeDeal",
-      args: [dealId],
-      account,
-    })
+  return simulate(
+    client,
+    "escrow.closeDeal",
+    escrowAddress,
+    escrowAbi,
+    "closeDeal",
+    [dealId],
+    account
   );
 }

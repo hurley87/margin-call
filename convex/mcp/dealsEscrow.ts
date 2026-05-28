@@ -224,9 +224,6 @@ export const createForMcp = internalAction({
     }
 
     // ── escrow.createDeal ────────────────────────────────────────────────────
-    // Pre-flight: simulate the createDeal call against the desk wallet.
-    // Surfaces escrow reverts (insufficient allowance, paused, bad params)
-    // before any tx is submitted.
     await simulateEscrowCreateDeal(
       publicClient,
       ESCROW_ADDRESS,
@@ -362,7 +359,6 @@ export const closeForMcp = internalAction({
       );
     }
 
-    // Pre-flight: simulate the escrow.closeDeal call before submitting.
     await simulateEscrowCloseDeal(
       publicClient,
       ESCROW_ADDRESS,

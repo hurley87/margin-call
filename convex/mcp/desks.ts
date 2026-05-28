@@ -324,10 +324,6 @@ export const withdrawToAddress = internalAction({
     // amount in USDC smallest units (6 decimals)
     const amountUnits = BigInt(Math.floor(amountUsdc * 1_000_000));
 
-    // Pre-flight: simulate the USDC transfer against the desk wallet. Catches
-    // insufficient balance / paused USDC / blacklisted recipient *before*
-    // any user-op is submitted; the revert reason is surfaced as a clear
-    // error and cached under the idempotency key by mcpWriteRoute.
     const { createPublicClient, http } = await import("viem");
     const { baseSepolia } = await import("viem/chains");
     const publicClient = createPublicClient({

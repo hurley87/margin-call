@@ -230,10 +230,6 @@ export const fundForMcp = internalAction({
 
     await ensureDepositorOnChain(trader.tokenId, deskAddress);
 
-    // Pre-flight: simulate the depositFor call (the actual money movement).
-    // Surfaces escrow reverts (paused, bad trader id, allowance issues) before
-    // any on-chain tx is submitted. The approve simulate is gated on the
-    // allowance check below.
     await simulateEscrowDepositFor(
       publicClient,
       ESCROW_ADDRESS,
@@ -261,7 +257,6 @@ export const fundForMcp = internalAction({
     })) as bigint;
 
     if (currentAllowance < amountAtomic) {
-      // Simulate the approve before submitting (catches paused USDC, etc.).
       await simulateUsdcApprove(
         publicClient,
         USDC_SEPOLIA_ADDRESS,
@@ -400,7 +395,6 @@ export const withdrawForMcp = internalAction({
       transport: http(),
     });
 
-    // Pre-flight: simulate the escrow withdraw before submitting.
     await simulateEscrowTraderWithdraw(
       publicClient,
       ESCROW_ADDRESS,
