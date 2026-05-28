@@ -4,10 +4,7 @@ import { notFound } from "next/navigation";
 import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
-import {
-  TRADER_PLACEHOLDER_IMAGE_PATH,
-  type PublicPortraitTraits,
-} from "@/lib/trader-metadata";
+import { TRADER_PLACEHOLDER_IMAGE_PATH } from "@/lib/trader-metadata";
 import {
   PUBLIC_PORTRAIT_TRAIT_ROWS,
   humanizePortraitTraitValue,
@@ -16,31 +13,18 @@ import { DatumCell } from "@/components/datum-cell";
 import { EmptyState } from "@/components/empty-state";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { formatStatus } from "@/lib/format-status";
+import {
+  formatPortraitStatus,
+  getEscrowTone,
+  getPortraitTone,
+  getStatusTone,
+  tokenLabel,
+  type PublicTraderProfile,
+} from "@/lib/trader-display";
 import { formatActivityTime, formatUsdc } from "@/lib/utils";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-
-type PublicTraderProfile = {
-  traderId: string;
-  name: string;
-  status: "active" | "paused" | "wiped_out";
-  tokenId: number | null;
-  portraitStatus: "pending" | "generating" | "ready" | "error";
-  archetype: string;
-  riskProfile: string;
-  traits: PublicPortraitTraits | null;
-  escrowBalanceUsdc: number;
-  profileImageUrl: string | null;
-  ownerAddress?: string | null;
-  isAgentDesk?: boolean;
-  recentActivity: Array<{
-    activityType: string;
-    message: string;
-    dealId: string | null;
-    createdAt: number;
-  }>;
-};
 
 function createPublicConvexClient(): ConvexHttpClient {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -131,11 +115,7 @@ export function PublicTraderDossier({
           <DatumCell
             label="Escrow capital"
             value={formatUsdc(trader.escrowBalanceUsdc)}
-            valueClassName={
-              trader.escrowBalanceUsdc > 0
-                ? "text-[var(--t-green)]"
-                : "text-[var(--t-amber)]"
-            }
+            valueClassName={getEscrowTone(trader.escrowBalanceUsdc)}
           />
           <DatumCell
             label="Portrait"
@@ -268,29 +248,4 @@ function initials(name: string): string {
     .map((part) => part[0])
     .join("")
     .toUpperCase();
-}
-
-function getStatusTone(status: PublicTraderProfile["status"]): string {
-  if (status === "active") return "text-[var(--t-green)]";
-  if (status === "wiped_out") return "text-[var(--t-red)]";
-  return "text-[var(--t-amber)]";
-}
-
-function formatPortraitStatus(
-  status: PublicTraderProfile["portraitStatus"]
-): string {
-  if (status === "error") return "Fallback";
-  return formatStatus(status);
-}
-
-function getPortraitTone(
-  status: PublicTraderProfile["portraitStatus"]
-): string {
-  if (status === "ready") return "text-[var(--t-green)]";
-  if (status === "error") return "text-[var(--t-red)]";
-  return "text-[var(--t-amber)]";
-}
-
-function tokenLabel(tokenId: number | null): string {
-  return tokenId === null ? "Pending" : `#${tokenId}`;
 }
