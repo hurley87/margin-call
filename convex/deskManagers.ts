@@ -181,13 +181,13 @@ export const syncWalletBalance = internalMutation({
 /**
  * Internal (MCP Phase 2+): create or ensure a deskManager row for a dedicated
  * MCP-controlled desk. The subject MUST be of the form `mcp:cdp-wallet:<id>`.
- * The walletAddress is the on-chain address of the CDP server account
- * provisioned for this credential. Idempotent.
+ * walletAddress is optional at issuance; the agent binds a Base Account via
+ * set_desk_wallet. Idempotent.
  */
 export const createForMcp = internalMutation({
   args: {
     subject: v.string(),
-    walletAddress: v.string(),
+    walletAddress: v.optional(v.string()),
     cdpAccountName: v.optional(v.string()),
   },
   handler: async (ctx, { subject, walletAddress, cdpAccountName }) => {
@@ -200,7 +200,7 @@ export const createForMcp = internalMutation({
 
     if (existing) {
       const patch: Record<string, unknown> = { updatedAt: now };
-      if (existing.walletAddress !== walletAddress) {
+      if (walletAddress && existing.walletAddress !== walletAddress) {
         patch.walletAddress = walletAddress;
       }
       if (cdpAccountName && existing.cdpAccountName !== cdpAccountName) {
@@ -216,8 +216,6 @@ export const createForMcp = internalMutation({
       subject,
       walletAddress,
       cdpAccountName,
-      // Default per-desk daily withdrawal cap (Phase 6). Adjust via operator tooling.
-      dailyWithdrawCapUsdc: 1000,
       settings: {},
       createdAt: now,
       updatedAt: now,

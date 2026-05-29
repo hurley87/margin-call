@@ -6,12 +6,12 @@
  *   get_desk, list_traders, list_deals, get_activity, get_outcomes,
  *   get_pending_approvals, answer_approval, sync_wallet, create_trader,
  *   configure_trader, fund_trader, resume_trader, pause_trader,
- *   withdraw_from_trader, register_withdraw_address, withdraw_to_address,
- *   create_deal, close_deal.
+ *   withdraw_from_trader, create_deal, close_deal, set_desk_wallet,
+ *   confirm_intent.
  *
- * Each MCP key maps 1:1 to a dedicated AGENT DESK with subject
- * `mcp:cdp-wallet:<id>` and its own CDP server wallet (provisioned at key
- * issuance). Authenticates via per-desk Bearer token (mc_live_...) read
+ * Each MCP key maps 1:1 to a dedicated AGENT DESK. Treasury uses your Base
+ * Account (BYO via Base MCP): prepare → send_calls → confirm_intent.
+ * Authenticates via per-desk Bearer token (mc_live_...) read
  * from `MARGIN_CALL_MCP_KEY`. All responses are structured JSON.
  *
  * Install (recommended):
@@ -45,8 +45,11 @@ const server = new McpServer({
   name: "margin-call",
   version: "0.2.0",
   description:
-    "Margin Call 1980s Wall Street desk manager for Claude. Read desk state; hire and manage traders (configure, fund, pause, resume, withdraw); create + close trap deals for rival desks; answer high-stakes approvals; sync wallet balances; cash out via register_withdraw_address + withdraw_to_address (one-time browser-confirmed ceremony). Autonomous cron picks deals for active funded traders. Per-desk daily and per-action USDC caps, server-side transaction simulation, 24h idempotency replay, and per-desk + IP rate limits enforce production safety.",
+    "Margin Call 1980s Wall Street desk manager for Claude. Connect Base MCP for your desk wallet. Read desk state; set_desk_wallet; hire traders (server-side ERC-8004 mint); fund/create/close via prepare + Base MCP approval + confirm_intent. Autonomous cron picks deals for active funded traders. Per-action USDC caps, simulation, 24h idempotency, rate limits.",
 });
+
+const treasuryPrepareHint =
+  "Returns phase=prepare with intentId, chain, calls[]. Execute via Base MCP send_calls, get user approval, then confirm_intent with intentId + txHash.";
 
 function buildQueryString(
   params: Record<string, string | number | boolean | undefined>
@@ -61,15 +64,16 @@ function buildQueryString(
 
 async function callMcpApi(path: string, init?: RequestInit) {
   try {
+    const { headers: initHeaders, ...restInit } = init ?? {};
     const res = await fetch(`${API_URL}${path}`, {
       method: "GET",
+      ...restInit,
       headers: {
         Authorization: `Bearer ${API_KEY}`,
         Accept: "application/json",
         "User-Agent": "margin-call-mcp-server/0.1-phase1",
-        ...(init?.headers ?? {}),
+        ...(initHeaders ?? {}),
       },
-      ...(init ?? {}),
     });
 
     const text = await res.text();
@@ -123,7 +127,7 @@ server.tool(
 
 server.tool(
   "list_traders",
-  "List your desk's traders with status (active/paused/wiped_out), ERC-8004 tokenId, escrow balance, mandate object, personality, walletStatus, CDP address, recent 30d P&L, and latest activity snippet. Use to decide who to fund, resume, pause, or configure. Optional: limit (default 20, max 50).",
+  "List your desk's traders with status (active/paused/wiped_out), ERC-8004 tokenId, escrow balance, mandate object, personality, walletStatus, CDP address, recent 30d P&L, latest activity snippet, profileImageUrl (signed Convex Storage URL or null until portrait is ready), and imageStatus. Use to decide who to fund, resume, pause, or configure. Optional: limit (default 20, max 50).",
   {
     limit: z
       .number()
@@ -217,14 +221,48 @@ server.tool(
 
 server.tool(
   "sync_wallet",
-  "Reads the live on-chain USDC balance (Base Sepolia) of this MCP desk's CDP server wallet and writes it into the desk record. This makes get_desk, funding gates, and the web UI see the correct balance after you (or anyone) send USDC to the wallet address. Call it shortly after funding. No parameters. Pure read (logged compactly).",
+  "Reads the live on-chain USDC balance (Base Sepolia) of this desk's bound Base Account and writes it into the desk record. Call after funding your Base Account and after treasury confirms. No parameters.",
   {},
   async () => callMcpApi("/api/mcp/desks/sync-wallet")
 );
 
 server.tool(
+  "set_desk_wallet",
+  "Bind your Base Account address to this MCP desk (from Base MCP 'show my wallets'). Required before fund_trader, create_deal, or create_trader. Body: walletAddress 0x...",
+  {
+    walletAddress: z
+      .string()
+      .describe("Your Base Account address on Base Sepolia (0x..., 42 chars)"),
+  },
+  async ({ walletAddress }) =>
+    callMcpApi("/api/mcp/desks/set-wallet", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ walletAddress }),
+    })
+);
+
+server.tool(
+  "confirm_intent",
+  "After executing a prepare response via Base MCP send_calls and receiving a tx hash, confirm the intent so margin-call records escrow/deal state. Body: intentId (from prepare), txHash (from get_request_status).",
+  {
+    intentId: z.string().min(1).describe("intentId from prepare response"),
+    txHash: z
+      .string()
+      .min(1)
+      .describe("Transaction hash after Base MCP approval completes"),
+  },
+  async ({ intentId, txHash }) =>
+    callMcpApi("/api/mcp/intents/confirm", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ intentId, txHash }),
+    })
+);
+
+server.tool(
   "create_trader",
-  "Hire a new trader for this MCP desk. Performs the SAME on-chain flow as the web app: ERC-8004 NFT mint plus CDP smart-account provisioning on Base Sepolia. Expect roughly 5–15 seconds wall-clock latency (multiple sponsored user ops). REQUIRED: stable idempotencyKey — reuse the exact same key when retrying timeouts so the API returns cached trader + tx hashes without re-submitting on-chain txs; generating a fresh key intentionally starts another hire attempt. Prerequisites: funded desk wallet and positive synced balance (get_desk, send USDC, sync_wallet). Returns traderId, tokenId, walletAddress, txHashes {mint,transfer}, summary.",
+  "Hire a new trader (one-shot server call, no Base MCP approval). ERC-8004 NFT mint + trader identity wallet on Base Sepolia (gas sponsored). Prerequisites: set_desk_wallet, fund Base Account, sync_wallet, positive balance. REQUIRED: stable idempotencyKey for retries. Returns traderId, tokenId, walletAddress, txHashes, summary.",
   {
     name: z
       .string()
@@ -268,50 +306,6 @@ const traderIdSchema = z
   .describe("Convex trader document id from list_traders or create_trader");
 
 server.tool(
-  "register_withdraw_address",
-  "Submit a destination address for this desk's withdrawal allowlist (USDC cash-out target). FIRST registration per desk requires a one-time human-in-the-loop confirmation ceremony in the Margin Call web UI (the Privy user who issued the MCP key must log in and confirm the exact address to bind the human operator to the agent desk). After the ceremony succeeds, subsequent registrations append to the allowlist automatically. Always supply a stable idempotencyKey. Returns the normalized address and current allowlist on success, or a clear 'ceremony pending' error. Claude should surface the ceremony URL/guidance to the user when this fails with pending:true.",
-  {
-    address: z
-      .string()
-      .describe(
-        "Destination 0x EVM address on Base (will be normalized to lowercase)"
-      ),
-    idempotencyKey: idempotencyKeySchema,
-  },
-  async ({ address, idempotencyKey }) =>
-    callMcpApi("/api/mcp/desks/register-withdraw-address", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address, idempotencyKey }),
-    })
-);
-
-server.tool(
-  "withdraw_to_address",
-  "Transfer USDC from this MCP desk's CDP wallet to a previously allowlisted address. Rejects non-allowlisted destinations and amounts that would exceed the desk's daily withdrawal cap. Requires ceremony to have been completed for the first address. Slow on-chain operation (~5-30s). Supply stable idempotencyKey. Returns txHash, amount, and updated daily used. Call get_desk + sync_wallet before/after to see balances. Claude must not attempt withdrawals until get_desk shows withdraw.ceremonyCompleted === true and at least one address in allowlist.",
-  {
-    address: z
-      .string()
-      .describe(
-        "Allowlisted destination 0x address (must have been successfully registered and confirmed)"
-      ),
-    amountUsdc: z
-      .number()
-      .positive()
-      .describe(
-        "Amount in USDC (human units, e.g. 123.45). Must not exceed daily remaining cap."
-      ),
-    idempotencyKey: idempotencyKeySchema,
-  },
-  async ({ address, amountUsdc, idempotencyKey }) =>
-    callMcpApi("/api/mcp/desks/withdraw-to-address", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ address, amountUsdc, idempotencyKey }),
-    })
-);
-
-server.tool(
   "configure_trader",
   "Update mandate and personality for a trader owned by this MCP desk. Requires idempotencyKey. Does not change trader status or on-chain state.",
   {
@@ -338,7 +332,7 @@ server.tool(
 
 server.tool(
   "fund_trader",
-  "Fund a trader escrow from the desk CDP wallet. Performs USDC approve (large allowance when needed — this step is rare after the first funding) + escrow depositFor + Convex balance sync. Expect ~2–8s wall time. REQUIRES: stable idempotencyKey (reuse on transient failure replays the cached error; generate a *fresh* key to re-attempt the funding intent). Prerequisites: positive synced desk balance, trader wallet ready. Returns txHash + concise summary. The large allowance makes retries after partial failures cheap (usually just the deposit tx).",
+  `Prepare funding a trader escrow from your Base Account (approve + depositFor batched when needed). ${treasuryPrepareHint} Prerequisites: set_desk_wallet, sync_wallet, positive balance, trader ready. idempotencyKey required.`,
   {
     traderId: traderIdSchema,
     amountUsdc: z
@@ -387,7 +381,7 @@ server.tool(
 
 server.tool(
   "withdraw_from_trader",
-  "Withdraw USDC from trader escrow to the desk CDP wallet (escrow withdraw). Syncs escrow balance; call sync_wallet to refresh desk balance. Expect ~2–8s. Requires explicit positive amountUsdc and idempotencyKey.",
+  `Prepare withdrawing USDC from trader escrow to your Base Account. ${treasuryPrepareHint} Then sync_wallet.`,
   {
     traderId: traderIdSchema,
     amountUsdc: z
@@ -440,7 +434,7 @@ server.tool(
 
 server.tool(
   "create_deal",
-  "Create a NEW market deal as a trap for rival desks, signed and submitted by this MCP desk's CDP wallet. Performs: USDC.approve (rare after first call thanks to large allowance) + escrow.createDeal + Convex record. Expect ~3–10s wall time. The desk's traders are blocked from entering this deal (own-desk rule) — both in selection and at recordVerifiedEntry. Requires the market to be open (9:30–16:00 ET, weekdays); errors explicitly when closed. Prerequisites: synced desk wallet balance >= potUsdc. REQUIRED: stable idempotencyKey — reusing the same key within 24h returns the cached result without re-submitting on-chain txs; generate a *fresh* key to intentionally create another deal. Returns Convex deal id, on-chain deal id, tx hash, walletAddress, and summary.",
+  `Prepare creating a market deal (trap for rivals) from your Base Account. ${treasuryPrepareHint} Own-desk traders cannot enter. Market must be open. Balance >= potUsdc. confirm returns dealId + onChainDealId.`,
   {
     prompt: z
       .string()
@@ -472,7 +466,7 @@ server.tool(
 
 server.tool(
   "close_deal",
-  "Close an MCP-desk-owned open deal via escrow.closeDeal from the desk CDP wallet, returning any remaining pot to the desk wallet. Refuses to close if the on-chain deal still has pending entries (the autonomous cycle is mid-resolution); wait for those to resolve and retry. Refuses to close deals not owned by this desk. Requires the market to be open. Slow on-chain operation (~3–10s). Supply stable idempotencyKey. Call sync_wallet after success to refresh the desk balance.",
+  `Prepare closing an owned open deal (pot returns to your Base Account). ${treasuryPrepareHint} Fails if pending on-chain entries remain. Market open. sync_wallet after confirm.`,
   {
     dealId: z
       .string()
@@ -493,7 +487,7 @@ async function main() {
   await server.connect(transport);
   // Log to stderr only (stdio transport uses stdout for protocol)
   console.error(
-    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,answer_approval,sync_wallet,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader,register_withdraw_address,withdraw_to_address,create_deal,close_deal  (key last4=${API_KEY.slice(-4)})`
+    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,set_desk_wallet,sync_wallet,confirm_intent,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,answer_approval,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader,create_deal,close_deal  (key last4=${API_KEY.slice(-4)})`
   );
 }
 

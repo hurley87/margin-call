@@ -446,4 +446,39 @@ export default defineSchema({
       "idempotencyKey",
     ])
     .index("byCreatedAt", ["createdAt"]),
+
+  /**
+   * Pending on-chain intents for MCP treasury tools (prepare → Base MCP → confirm).
+   * The agent executes `calls` via Base MCP send_calls; confirm supplies txHash.
+   */
+  mcpIntents: defineTable({
+    deskManagerId: v.id("deskManagers"),
+    intentType: v.string(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("confirmed"),
+      v.literal("expired")
+    ),
+    chain: v.string(),
+    calls: v.array(
+      v.object({
+        to: v.string(),
+        value: v.string(),
+        data: v.string(),
+      })
+    ),
+    payload: v.any(),
+    idempotencyKey: v.optional(v.string()),
+    expiresAt: v.number(),
+    txHash: v.optional(v.string()),
+    confirmResult: v.optional(v.any()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("byDeskManagerAndStatus", ["deskManagerId", "status"])
+    .index("byDeskManagerAndIdempotencyKey", [
+      "deskManagerId",
+      "idempotencyKey",
+    ])
+    .index("byTxHash", ["txHash"]),
 });

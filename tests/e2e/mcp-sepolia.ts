@@ -11,10 +11,9 @@
  *   3. list_traders / list_deals
  *   4. create_trader (fresh idempotencyKey)
  *   5. create_trader REPEAT (same key) → asserts `cached: true`
- *   6. fund_trader 1 USDC → withdraw_from_trader 0.5 USDC
- *   7. register_withdraw_address (pauses for the browser ceremony)
- *   8. withdraw_to_address 0.1 USDC (after ceremony)
- *   9. create_deal 10 USDC pot / 1 USDC entry → close_deal
+ *   6. set_desk_wallet (if desk unbound; uses desk wallet or MARGIN_CALL_DESK_WALLET)
+ *   7. fund_trader / withdraw_from_trader / create_deal / close_deal → prepare phase only
+ *      (on-chain execution requires Base MCP + confirm_intent — manual)
  *
  * Hard-fails on any non-2xx. Logs but does not abort if the desk lacks
  * funds for a given step (so partial runs against a fresh testnet desk
@@ -52,7 +51,8 @@ function shortPreview(json: unknown): string {
 async function call(
   method: "GET" | "POST",
   path: string,
-  body?: JsonRecord
+  body?: JsonRecord,
+  opts?: { allowFail?: boolean }
 ): Promise<JsonRecord> {
   const started = Date.now();
   const res = await fetch(`${API_URL}${path}`, {
@@ -74,6 +74,15 @@ async function call(
   const durationMs = Date.now() - started;
   const tool = path.replace("/api/mcp/", "");
   if (!res.ok) {
+    // allowFail: surface the error but let the caller decide whether it is an
+    // expected outcome (e.g. withdraw before any confirmed deposit) vs a real
+    // failure. The returned envelope is tagged so the caller can branch on it.
+    if (opts?.allowFail) {
+      console.warn(
+        `⚠️  [${tool} ${durationMs}ms] ${res.status} ${shortPreview(json)}`
+      );
+      return { ...json, _httpStatus: res.status, _failed: true };
+    }
     console.error(
       `❌ [${tool} ${durationMs}ms] ${res.status} ${shortPreview(json)}`
     );
@@ -104,21 +113,38 @@ async function main() {
     walletBalanceUsdc?: number;
     summary?: string;
   };
-  if (!desk.walletAddress) {
-    throw new Error("Desk has no wallet address — issue a fresh key");
+  const bindAddress = process.env.MARGIN_CALL_DESK_WALLET ?? desk.walletAddress;
+  if (!desk.walletAddress && bindAddress) {
+    await call("POST", "/api/mcp/desks/set-wallet", {
+      walletAddress: bindAddress,
+    });
+    desk.walletAddress = bindAddress;
   }
-  if ((desk.walletBalanceUsdc ?? 0) <= 0) {
+  if (!desk.walletAddress) {
+    throw new Error(
+      "Desk wallet not bound — set MARGIN_CALL_DESK_WALLET or call set_desk_wallet"
+    );
+  }
+
+  // 2. Refresh on-chain balance BEFORE gating. get_desk only returns the cached
+  // walletBalanceUsdc (0 for a freshly-bound desk); sync-wallet performs the live
+  // balanceOf read and writes it back, so it must run before the funding check.
+  const sync = (await call(
+    "GET",
+    "/api/mcp/desks/sync-wallet"
+  )) as JsonRecord & {
+    balanceUsdc?: number;
+  };
+  const syncedBalance = sync.balanceUsdc ?? desk.walletBalanceUsdc ?? 0;
+  if (syncedBalance <= 0) {
     console.warn(
-      `\n⚠️  Desk balance is ${desk.walletBalanceUsdc ?? 0} USDC. ${desk.summary ?? ""}`
+      `\n⚠️  Desk balance is ${syncedBalance} USDC after sync. ${desk.summary ?? ""}`
     );
     console.warn(
       `   Send Base Sepolia USDC to ${desk.walletAddress} and re-run.`
     );
     return;
   }
-
-  // 2. Refresh on-chain balance.
-  await call("GET", "/api/mcp/desks/sync-wallet");
 
   // 3. Read surfaces.
   await call("GET", "/api/mcp/traders?limit=5");
@@ -151,67 +177,90 @@ async function main() {
     throw new Error("create_trader did not return a traderId");
   }
 
-  // 6. Fund + withdraw small amounts.
-  await call("POST", `/api/mcp/traders/${traderId}/fund`, {
+  // 6. Treasury prepare (BYO — confirm via Base MCP is manual).
+  const fundPrep = (await call("POST", `/api/mcp/traders/${traderId}/fund`, {
     amountUsdc: 1,
     idempotencyKey: randomUUID(),
-  });
-  await call("POST", `/api/mcp/traders/${traderId}/withdraw`, {
-    amountUsdc: 0.5,
-    idempotencyKey: randomUUID(),
-  });
+  })) as JsonRecord & { phase?: string; intentId?: string };
+  if (fundPrep.phase !== "prepare" && !fundPrep.cached) {
+    console.warn("  → fund_trader: expected phase=prepare (or cached confirm)");
+  } else {
+    console.log(
+      "  → fund_trader prepare OK — execute calls via Base MCP, then POST /api/mcp/intents/confirm"
+    );
+  }
 
-  // 7. Register a withdrawal address — pauses for the browser ceremony.
-  const destAddr =
-    process.env.MARGIN_CALL_SMOKE_DEST_ADDRESS ?? desk.walletAddress;
-  const regRes = (await call(
+  // withdraw_from_trader gates on the trader's escrow balance, which is only
+  // non-zero after a fund intent is executed via Base MCP + confirm_intent.
+  // In this prepare-only smoke run a freshly-created trader always has 0 escrow,
+  // so an "Insufficient escrow balance" 400/500 here is the expected outcome,
+  // not a failure — only a different error should abort.
+  const withdrawPrep = (await call(
     "POST",
-    "/api/mcp/desks/register-withdraw-address",
+    `/api/mcp/traders/${traderId}/withdraw`,
     {
-      address: destAddr,
+      amountUsdc: 0.5,
       idempotencyKey: randomUUID(),
+    },
+    { allowFail: true }
+  )) as JsonRecord & { phase?: string; _failed?: boolean; error?: string };
+  if (withdrawPrep.phase === "prepare") {
+    console.log("  → withdraw_from_trader prepare OK (confirm manually)");
+  } else if (withdrawPrep._failed) {
+    const msg = withdrawPrep.error ?? "";
+    if (/insufficient escrow balance/i.test(msg)) {
+      console.log(
+        "  → withdraw_from_trader skipped (no confirmed escrow deposit yet — expected in prepare-only run)"
+      );
+    } else {
+      throw new Error(`withdraw_from_trader failed unexpectedly: ${msg}`);
     }
-  ).catch((e) => {
-    console.warn(
-      `(register_withdraw_address surfaced expected ceremony pause: ${(e as Error).message})`
-    );
-    return { ok: false, pending: true } as JsonRecord;
-  })) as JsonRecord & { ok?: boolean; pending?: boolean };
-
-  if (regRes.pending) {
-    await pause(
-      `Open the Margin Call web app → MCP operator dialog → confirm withdrawal address ${destAddr} for this desk.`
-    );
-    // Re-register after ceremony to append the address.
-    await call("POST", "/api/mcp/desks/register-withdraw-address", {
-      address: destAddr,
-      idempotencyKey: randomUUID(),
-    });
   }
 
-  // 8. Withdraw to the now-allowlisted address.
-  await call("POST", "/api/mcp/desks/withdraw-to-address", {
-    address: destAddr,
-    amountUsdc: 0.1,
-    idempotencyKey: randomUUID(),
-  });
-
-  // 9. Create + close a deal (requires market hours).
-  const dealRes = (await call("POST", "/api/mcp/deals/create", {
-    prompt: `[smoke] A distressed airline merger rumor — ${Date.now()}`,
-    potUsdc: 10,
-    entryCostUsdc: 1,
-    idempotencyKey: randomUUID(),
-  })) as JsonRecord & { dealId?: string };
-
-  if (typeof dealRes.dealId === "string") {
-    await call("POST", "/api/mcp/deals/close", {
-      dealId: dealRes.dealId,
+  // create_deal is gated by assertTradingHours() (9:30 AM–4:00 PM ET, Mon–Fri).
+  // Outside those hours a "Market is closed" 400/500 is the expected outcome,
+  // so tolerate it here; any other error still aborts.
+  const dealPrep = (await call(
+    "POST",
+    "/api/mcp/deals/create",
+    {
+      prompt: `[smoke] A distressed airline merger rumor — ${Date.now()}`,
+      potUsdc: 10,
+      entryCostUsdc: 1,
       idempotencyKey: randomUUID(),
-    });
+    },
+    { allowFail: true }
+  )) as JsonRecord & {
+    phase?: string;
+    dealId?: string;
+    _failed?: boolean;
+    error?: string;
+  };
+
+  if (dealPrep._failed) {
+    const msg = dealPrep.error ?? "";
+    if (/market is closed/i.test(msg)) {
+      console.log(
+        "  → create_deal skipped (market closed — expected outside trading hours)"
+      );
+    } else {
+      throw new Error(`create_deal failed unexpectedly: ${msg}`);
+    }
+  } else if (dealPrep.phase === "prepare") {
+    console.log("  → create_deal prepare OK (confirm manually before close)");
+  } else if (typeof dealPrep.dealId === "string") {
+    const closePrep = (await call("POST", "/api/mcp/deals/close", {
+      dealId: dealPrep.dealId,
+      idempotencyKey: randomUUID(),
+    })) as JsonRecord & { phase?: string };
+    if (closePrep.phase === "prepare") {
+      console.log("  → close_deal prepare OK (confirm manually)");
+    }
   }
 
-  console.log("\n✓ All smoke-test steps completed successfully.");
+  console.log(
+    "\n✓ Smoke test completed (prepare-phase treasury; full on-chain flow needs Base MCP + confirm_intent)."
+  );
 }
 
 main().catch((err) => {

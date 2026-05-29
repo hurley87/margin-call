@@ -48,41 +48,51 @@ Convex agent skills for common tasks can be installed by running
 
 <!-- convex-ai-end -->
 
-## MCP development (Phase 6 partial complete — withdrawal allowlist ceremony + withdraw_to_address + operator UI + mcpRequests debug)
+## MCP development (BYO Base Account + prepare/confirm)
 
-The initial thin end-to-end for external agents (Claude Code) lives under the MCP plan (`plans/mcp.md`, GitHub #137).
+External agents (Claude Code) use the MCP plan (`plans/mcp.md`). **MCP desk treasury is non-custodial:** the agent brings its own wallet via [Base MCP](https://mcp.base.org).
 
 ### Required env (both .env.local and Convex)
 
 - `MCP_API_KEY_SECRET` — HMAC secret used to hash `mc_live_*` keys before storage.
-- `MCP_SERVICE_TOKEN` — authenticates the Next.js `/api/mcp/*` layer when it calls the Convex HTTP actions (`/mcp/*`). Must be identical in both places.
+- `MCP_SERVICE_TOKEN` — authenticates the Next.js `/api/mcp/*` layer when it calls Convex HTTP actions (`/mcp/*`). Must be identical in both places.
+- `OPERATOR_PRIVATE_KEY` — still required for `setDepositor` and autonomous deal entry (unchanged).
+- CDP env (`CDP_API_KEY_ID`, `CDP_API_KEY_SECRET`, `CDP_WALLET_SECRET`) — still required for **trader identity wallets** and the agent cron SIWA flow (not for desk treasury).
 
-Set the Convex one with:
+### Base MCP (agent wallet)
 
+Add to `.cursor/mcp.json` or global MCP config:
+
+```json
+{
+  "mcpServers": {
+    "base-mcp": {
+      "url": "https://mcp.base.org"
+    }
+  }
+}
 ```
-npx convex env set MCP_API_KEY_SECRET "..." --dev
-npx convex env set MCP_SERVICE_TOKEN "..." --dev
-```
 
-### Issuing a per-desk key (for yourself or a test desk)
+Authorize once in Base Account when prompted.
 
-While authenticated in the web app (Privy), POST to the issuance endpoint:
+### Issuing a per-desk key
 
 ```bash
-# Recommended (easiest)
 PRIVY_JWT="paste_real_privy_jwt_from_browser" pnpm mcp:issue-key
-
-# Or raw curl if you prefer
-curl -X POST http://localhost:3000/api/mcp/keys \
-  -H "Authorization: Bearer $PRIVY_JWT_FROM_BROWSER" \
-  -H "Content-Type: application/json"
 ```
 
-The response (or the script output) contains the raw `key` (shown once) plus the dedicated MCP desk wallet address.
+Returns `key` (once) and `deskId`. **No wallet address at issuance** — bind via `set_desk_wallet`.
 
-See `scripts/issue-mcp-key.ts` for the helper (recommended for Phase 2+).
+### Agent desk onboarding sequence
 
-### Running the MCP server locally
+1. `get_desk` — check binding + balance
+2. Base MCP — fund your Base Account with USDC on Base Sepolia
+3. `set_desk_wallet` — register that address
+4. `sync_wallet` — refresh Convex balance
+5. `create_trader` — one-shot server mint (no Base MCP approval)
+6. Treasury ops: `fund_trader` / `create_deal` / `close_deal` / `withdraw_from_trader` → **prepare** → Base MCP `send_calls` (approve) → `confirm_intent` with `intentId` + `txHash`
+
+### Running the margin-call MCP server locally
 
 ```bash
 MARGIN_CALL_MCP_KEY=mc_live_... \
@@ -90,11 +100,7 @@ MARGIN_CALL_API_URL=http://localhost:3000 \
 npx tsx packages/mcp-server/src/index.ts
 ```
 
-It speaks stdio and registers the Phase 2 surface: dedicated per-key CDP server wallets (subject `mcp:cdp-wallet:*`), `sync_wallet`, plus the full read-only inspection tools.
-
-### Adding to Cursor / Claude Code (local path, before npm publish)
-
-Example entry (`.mcp.json` or via UI):
+### Adding to Cursor / Claude Code
 
 ```json
 {
@@ -110,11 +116,12 @@ Example entry (`.mcp.json` or via UI):
         "MARGIN_CALL_MCP_KEY": "mc_live_...",
         "MARGIN_CALL_API_URL": "http://localhost:3000"
       }
+    },
+    "base-mcp": {
+      "url": "https://mcp.base.org"
     }
   }
 }
 ```
 
-After restart you should be able to call the tools and see MCP desks as first-class identities (their own CDP wallet address on issuance, AGENT DESK badges across Wire deal cards, deal detail, public trader profiles + leaderboard, `sync_wallet` to refresh balances, full ownership/ blocking for future trader/deal ops).
-
-See also `packages/mcp-server/README.md` and the full architecture in `plans/mcp.md`.
+See `packages/mcp-server/README.md` and `plans/mcp.md`.

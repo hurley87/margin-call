@@ -43,9 +43,10 @@ async function setArcTension(
 }
 
 /** A minimal valid LLM stub response for the wire generator.
+ * Wire drops now emit exactly one role="main" dispatch and never a Deal Seed.
  * Arc/entity slugs must match wireSeason01.ts:
- * arcs: "pan-atlantic-blowup", "mercer-investigation"
- * entities: "marty-vale", "diane-mercer", "pan-atlantic-holdings", etc.
+ *   arcs: "pan-atlantic-blowup", "mercer-investigation"
+ *   entities: "marty-vale", "diane-mercer", "pan-atlantic-holdings", etc.
  */
 function makeLlmStub(overrides: Record<string, unknown> = {}) {
   return {
@@ -72,62 +73,12 @@ function makeLlmStub(overrides: Record<string, unknown> = {}) {
           magnitude: { label: "settlement miss" },
         },
       },
-      {
-        dispatchKey: "supp-vale-sec",
-        headline: "Marty Vale spotted outside SEC building",
-        body: "No comment from his office. His assistant hung up.",
-        category: "floor_talk",
-        role: "supporting",
-        arcSlug: "mercer-investigation",
-        referenceEpoch: null,
-      },
     ],
     dealSeed: null,
     arcUpdates: [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 2 }],
     entityMentions: ["marty-vale"],
     ...overrides,
   };
-}
-
-function makeLlmStubWithSeed(overrides: Record<string, unknown> = {}) {
-  return makeLlmStub({
-    dispatches: [
-      {
-        dispatchKey: "main-panatl-halt",
-        headline: "PanAtlantic bonds halted at the exchange",
-        body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
-        category: "market",
-        role: "main",
-        arcSlug: "pan-atlantic-blowup",
-        referenceEpoch: null,
-        materialChange: {
-          kind: "asset_loss",
-          entitySlug: "pan-atlantic-holdings",
-          magnitude: { label: "settlement miss" },
-        },
-      },
-      {
-        dispatchKey: "seed-rourke-short",
-        headline: "Rourke seen building short against PanAtl. bond block",
-        body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-        category: "deal_seed",
-        role: "deal_seed",
-        arcSlug: "pan-atlantic-blowup",
-        referenceEpoch: null,
-      },
-    ],
-    dealSeed: {
-      dispatchKey: "seed-rourke-short",
-      arcSlug: "pan-atlantic-blowup",
-      prompt:
-        "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
-      suggestedPotUsdc: 10,
-      suggestedEntryCostUsdc: 5,
-    },
-    confirmedFacts: ["PanAtlantic missed three settlements"],
-    openQuestions: ["Who takes the other side of Rourke's short?"],
-    ...overrides,
-  });
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
@@ -137,9 +88,7 @@ describe("wire/generator: idempotency on duplicate epochSlot", () => {
     const t = convexTest(schema, modules);
     await seedSeasonAndDrops(t);
 
-    // Initial seed drop has no Deal Seed, so cadence requires the first
-    // generator drop to include one.
-    const stub = makeLlmStubWithSeed();
+    const stub = makeLlmStub();
 
     // First run — force a specific slot
     const result1 = await t.action(internal.wire.generator.devForceEpoch, {
@@ -172,7 +121,7 @@ describe("wire/generator: writes a marketNarratives row on success", () => {
     const t = convexTest(schema, modules);
     await seedSeasonAndDrops(t);
 
-    const stub = makeLlmStubWithSeed();
+    const stub = makeLlmStub();
 
     const result = await t.action(internal.wire.generator.devForceEpoch, {
       ignoreSlot: true, // unique slot per run
@@ -192,7 +141,7 @@ describe("wire/generator: writes a marketNarratives row on success", () => {
     expect(row.seasonId).toBeTruthy();
     expect(row.epochSlot).toBeDefined();
     expect(Array.isArray(row.headlines)).toBe(true);
-    expect((row.headlines as unknown[]).length).toBe(2);
+    expect((row.headlines as unknown[]).length).toBe(1);
   });
 
   it("applies arcUpdates to the narrative arc tensionScore", async () => {
@@ -207,7 +156,7 @@ describe("wire/generator: writes a marketNarratives row on success", () => {
     expect(arc).toBeDefined();
     const initialTension = arc!.tensionScore;
 
-    const stub = makeLlmStubWithSeed({
+    const stub = makeLlmStub({
       arcUpdates: [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 2 }],
     });
 
@@ -229,7 +178,7 @@ describe("wire/generator: writes a marketNarratives row on success", () => {
 
     const result = await t.action(internal.wire.generator.devForceEpoch, {
       ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed({
+      _testLlmStub: makeLlmStub({
         confirmedFacts: ["PanAtlantic missed settlement by noon."],
         openQuestions: ["Who financed the failed PanAtlantic block?"],
         arcUpdates: [
@@ -274,7 +223,7 @@ describe("wire/generator: primary arc rotation", () => {
 
     const first = await t.action(internal.wire.generator.devForceEpoch, {
       ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed(),
+      _testLlmStub: makeLlmStub(),
     });
     expect((first as { inserted?: boolean }).inserted).toBe(true);
 
@@ -297,7 +246,7 @@ describe("wire/generator: primary arc rotation", () => {
 
     const returned = await t.action(internal.wire.generator.devForceEpoch, {
       ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed(),
+      _testLlmStub: makeLlmStub(),
     });
     expect((returned as { inserted?: boolean }).inserted).toBe(true);
 
@@ -309,6 +258,75 @@ describe("wire/generator: primary arc rotation", () => {
         .take(1)
     );
     expect(rowsAfterReturn[0].topArcTitle).toBe("PanAtlantic blow-up");
+  });
+
+  it("suppresses the same primary arc after two consecutive successful drops for one assembly", async () => {
+    const t = convexTest(schema, modules);
+    await seedSeasonAndDrops(t);
+    await setInitialTopTitle(t, "Mercer investigation widens");
+    await setArcTension(t, "pan-atlantic-blowup", 9);
+
+    const flatPanUpdate = [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 0 }];
+    // A role=main dispatch with no materialChange — only valid while the
+    // pan-atlantic arc is suppressed (so it is not the post-suppression top arc).
+    const noMaterialStub = makeLlmStub({
+      arcUpdates: flatPanUpdate,
+      dispatches: [
+        {
+          dispatchKey: "main-panatl-halt",
+          headline: "PanAtlantic bonds halted at the exchange",
+          body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
+          category: "market",
+          role: "main",
+          arcSlug: "pan-atlantic-blowup",
+          referenceEpoch: null,
+        },
+      ],
+    });
+
+    const r1 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub({ arcUpdates: flatPanUpdate }),
+    });
+    expect((r1 as { inserted?: boolean }).inserted).toBe(true);
+
+    const r2 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub({ arcUpdates: flatPanUpdate }),
+    });
+    expect((r2 as { inserted?: boolean }).inserted).toBe(true);
+
+    const r3 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: noMaterialStub,
+    });
+    expect((r3 as { inserted?: boolean }).inserted).toBe(true);
+
+    const latestAfterSuppression = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .first()
+    );
+    expect(latestAfterSuppression?.topArcTitle).toBe(
+      "Mercer investigation widens"
+    );
+
+    const r4 = await t.action(internal.wire.generator.devForceEpoch, {
+      ignoreSlot: true,
+      _testLlmStub: makeLlmStub({ arcUpdates: flatPanUpdate }),
+    });
+    expect((r4 as { inserted?: boolean }).inserted).toBe(true);
+
+    const latestAfterReturn = await t.run(async (ctx) =>
+      ctx.db
+        .query("marketNarratives")
+        .withIndex("byEpoch")
+        .order("desc")
+        .first()
+    );
+    expect(latestAfterReturn?.topArcTitle).toBe("PanAtlantic blow-up");
   });
 });
 
@@ -380,15 +398,6 @@ describe("wire/generator: validation rejection", () => {
           arcSlug: "nonexistent-arc-xyz",
           referenceEpoch: null,
         },
-        {
-          dispatchKey: "supp-pad",
-          headline: "Second dispatch for count",
-          body: "Padding dispatch body here.",
-          category: "market",
-          role: "supporting",
-          arcSlug: "pan-atlantic-blowup",
-          referenceEpoch: null,
-        },
       ],
     });
 
@@ -427,12 +436,9 @@ describe("wire/generator: activity ingestion — wipeout captured in eventsInges
       });
     });
 
-    // Cadence requires a seeded stub for the first generator drop after import.
-    const stub = makeLlmStubWithSeed();
-
     const result = await t.action(internal.wire.generator.devForceEpoch, {
       ignoreSlot: true,
-      _testLlmStub: stub,
+      _testLlmStub: makeLlmStub(),
     });
 
     expect((result as { inserted?: boolean }).inserted).toBe(true);
@@ -452,487 +458,5 @@ describe("wire/generator: activity ingestion — wipeout captured in eventsInges
     );
     expect(wipeout).toBeDefined();
     expect(wipeout!.dramatic).toBe(true);
-  });
-});
-
-describe("wire/generator: deal seeds — persistence + cadence", () => {
-  it("persists a wireDealSeeds row when the LLM stub includes a dealSeed", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const stub = makeLlmStubWithSeed();
-
-    const result = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: stub,
-    });
-    expect((result as { inserted?: boolean }).inserted).toBe(true);
-
-    const seeds = await t.run(async (ctx) =>
-      ctx.db.query("wireDealSeeds").collect()
-    );
-    expect(seeds.length).toBe(1);
-    const seed = seeds[0];
-    expect(seed.dispatchKey).toBe("seed-rourke-short");
-    expect(seed.dispatchHeadline).toContain("Rourke");
-    expect(seed.suggestedPotUsdc).toBe(10);
-    expect(seed.suggestedEntryCostUsdc).toBe(5);
-    expect(seed.dispatchIndex).toBe(1);
-    expect(seed.epochId).toEqual((result as { dropId: unknown }).dropId);
-  });
-
-  it("rejects a second consecutive drop with no dealSeed (cadence)", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    // Drop 1: with seed (seed-imported initial drop has no seed, so cadence requires one).
-    const r1 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed(),
-    });
-    expect((r1 as { inserted?: boolean }).inserted).toBe(true);
-
-    // Drop 2: no seed — cadence satisfied because previous drop had a seed.
-    const r2 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStub(),
-    });
-    expect((r2 as { inserted?: boolean }).inserted).toBe(true);
-
-    // Drop 3: also no seed — second consecutive no-seed drop, must be rejected.
-    const r3 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStub(),
-    });
-    expect((r3 as { skipped?: string }).skipped).toBe("validation-failed");
-
-    // Only two generator-produced drops persisted; only the first carries a seed.
-    const rows = await t.run(async (ctx) =>
-      ctx.db.query("marketNarratives").collect()
-    );
-    const generated = rows.filter((r) => r.epochSlot !== 0);
-    expect(generated.length).toBe(2);
-    const seeds = await t.run(async (ctx) =>
-      ctx.db.query("wireDealSeeds").collect()
-    );
-    expect(seeds.length).toBe(1);
-  });
-
-  it("accepts a no-seed drop immediately after a seeded drop (cadence satisfied)", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const r1 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed(),
-    });
-    expect((r1 as { inserted?: boolean }).inserted).toBe(true);
-
-    const r2 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStub(),
-    });
-    expect((r2 as { inserted?: boolean }).inserted).toBe(true);
-  });
-
-  it("rejects a dealSeed pointing at an off-roster arcSlug", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const badStub = makeLlmStubWithSeed({
-      dealSeed: {
-        dispatchKey: "seed-rourke-short",
-        arcSlug: "arc-ghost",
-        prompt: "Off-roster arc seed prompt for testing the rejection path.",
-        suggestedPotUsdc: 10,
-        suggestedEntryCostUsdc: 5,
-      },
-    });
-
-    const result = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: badStub,
-    });
-
-    expect((result as { skipped?: string }).skipped).toBe("validation-failed");
-  });
-
-  it("repairs a mismatched dealSeed.dispatchKey when one deal_seed dispatch exists", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const result = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed({
-        dealSeed: {
-          dispatchKey: "panatl-short-squeeze",
-          arcSlug: "pan-atlantic-blowup",
-          prompt:
-            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
-          suggestedPotUsdc: 10,
-          suggestedEntryCostUsdc: 5,
-        },
-      }),
-    });
-
-    expect((result as { inserted?: boolean }).inserted).toBe(true);
-
-    const seeds = await t.run(async (ctx) =>
-      ctx.db.query("wireDealSeeds").collect()
-    );
-    expect(seeds.length).toBe(1);
-    expect(seeds[0].dispatchKey).toBe("seed-rourke-short");
-    expect(seeds[0].dispatchIndex).toBe(1);
-  });
-
-  it("repairs a dealSeed.dispatchKey that points at a main dispatch when one deal_seed dispatch exists", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const result = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed({
-        dealSeed: {
-          dispatchKey: "main-panatl-halt",
-          arcSlug: "pan-atlantic-blowup",
-          prompt:
-            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
-          suggestedPotUsdc: 10,
-          suggestedEntryCostUsdc: 5,
-        },
-      }),
-    });
-
-    expect((result as { inserted?: boolean }).inserted).toBe(true);
-
-    const seeds = await t.run(async (ctx) =>
-      ctx.db.query("wireDealSeeds").collect()
-    );
-    expect(seeds.length).toBe(1);
-    expect(seeds[0].dispatchKey).toBe("seed-rourke-short");
-    expect(seeds[0].dispatchIndex).toBe(1);
-  });
-
-  it("repairs a mismatched dealSeed.dispatchKey when the lone deal_seed dispatch has different arc metadata", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const result = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed({
-        dispatches: [
-          {
-            dispatchKey: "main-panatl-halt",
-            headline: "PanAtlantic bonds halted at the exchange",
-            body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
-            category: "market",
-            role: "main",
-            arcSlug: "pan-atlantic-blowup",
-            referenceEpoch: null,
-            materialChange: {
-              kind: "asset_loss",
-              entitySlug: "pan-atlantic-holdings",
-              magnitude: { label: "settlement miss" },
-            },
-          },
-          {
-            dispatchKey: "seed-rourke-short",
-            headline: "Rourke seen building short against PanAtl. bond block",
-            body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-            category: "deal_seed",
-            role: "deal_seed",
-            arcSlug: "mercer-investigation",
-            referenceEpoch: null,
-          },
-        ],
-        dealSeed: {
-          dispatchKey: "deal-panatl-fallout",
-          arcSlug: "pan-atlantic-blowup",
-          prompt:
-            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
-          suggestedPotUsdc: 10,
-          suggestedEntryCostUsdc: 5,
-        },
-      }),
-    });
-
-    expect((result as { inserted?: boolean }).inserted).toBe(true);
-
-    const seeds = await t.run(async (ctx) =>
-      ctx.db.query("wireDealSeeds").collect()
-    );
-    expect(seeds.length).toBe(1);
-    expect(seeds[0].dispatchKey).toBe("seed-rourke-short");
-    expect(seeds[0].dispatchIndex).toBe(1);
-  });
-
-  it("repairs a mismatched dealSeed.dispatchKey when one dispatch only has deal_seed category", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const result = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed({
-        dispatches: [
-          {
-            dispatchKey: "main-panatl-halt",
-            headline: "PanAtlantic bonds halted at the exchange",
-            body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
-            category: "market",
-            role: "main",
-            arcSlug: "pan-atlantic-blowup",
-            referenceEpoch: null,
-            materialChange: {
-              kind: "asset_loss",
-              entitySlug: "pan-atlantic-holdings",
-              magnitude: { label: "settlement miss" },
-            },
-          },
-          {
-            dispatchKey: "seed-rourke-short",
-            headline: "Rourke seen building short against PanAtl. bond block",
-            body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-            category: "deal_seed",
-            role: "supporting",
-            arcSlug: "pan-atlantic-blowup",
-            referenceEpoch: null,
-          },
-        ],
-        dealSeed: {
-          dispatchKey: "short-position-opportunity",
-          arcSlug: "pan-atlantic-blowup",
-          prompt:
-            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
-          suggestedPotUsdc: 10,
-          suggestedEntryCostUsdc: 5,
-        },
-      }),
-    });
-
-    expect((result as { inserted?: boolean }).inserted).toBe(true);
-
-    const rows = await t.run(async (ctx) =>
-      ctx.db
-        .query("marketNarratives")
-        .withIndex("byEpoch")
-        .order("desc")
-        .take(1)
-    );
-    expect(rows[0].headlines).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          dispatchKey: "seed-rourke-short",
-          category: "deal_seed",
-          role: "deal_seed",
-        }),
-      ])
-    );
-
-    const seeds = await t.run(async (ctx) =>
-      ctx.db.query("wireDealSeeds").collect()
-    );
-    expect(seeds.length).toBe(1);
-    expect(seeds[0].dispatchKey).toBe("seed-rourke-short");
-    expect(seeds[0].dispatchIndex).toBe(1);
-  });
-
-  it("repairs a mismatched dealSeed.dispatchKey when one non-main dispatch can source the seed", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const result = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed({
-        dispatches: [
-          {
-            dispatchKey: "main-panatl-halt",
-            headline: "PanAtlantic bonds halted at the exchange",
-            body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
-            category: "wire",
-            role: "main",
-            arcSlug: "pan-atlantic-blowup",
-            referenceEpoch: null,
-            materialChange: {
-              kind: "asset_loss",
-              entitySlug: "pan-atlantic-holdings",
-              magnitude: { label: "settlement miss" },
-            },
-          },
-          {
-            dispatchKey: "quick-entry-wire",
-            headline: "Rourke desk offers fast PanAtlantic entry",
-            body: "The price is moving while the street waits for the margin notice.",
-            category: "positioning",
-            role: "supporting",
-            arcSlug: "pan-atlantic-blowup",
-            referenceEpoch: null,
-          },
-        ],
-        dealSeed: {
-          dispatchKey: "panatl-quick-entry",
-          arcSlug: "pan-atlantic-blowup",
-          prompt:
-            "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
-          suggestedPotUsdc: 10,
-          suggestedEntryCostUsdc: 5,
-        },
-      }),
-    });
-
-    expect((result as { inserted?: boolean }).inserted).toBe(true);
-
-    const rows = await t.run(async (ctx) =>
-      ctx.db
-        .query("marketNarratives")
-        .withIndex("byEpoch")
-        .order("desc")
-        .take(1)
-    );
-    expect(rows[0].headlines).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          dispatchKey: "quick-entry-wire",
-          category: "deal_seed",
-          role: "deal_seed",
-        }),
-      ])
-    );
-
-    const seeds = await t.run(async (ctx) =>
-      ctx.db.query("wireDealSeeds").collect()
-    );
-    expect(seeds.length).toBe(1);
-    expect(seeds[0].dispatchKey).toBe("quick-entry-wire");
-    expect(seeds[0].dispatchIndex).toBe(1);
-  });
-
-  it("rejects a mismatched dealSeed.dispatchKey when there is no clear repair", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-
-    const ambiguousStub = makeLlmStubWithSeed({
-      dispatches: [
-        {
-          dispatchKey: "main-panatl-halt",
-          headline: "PanAtlantic bonds halted at the exchange",
-          body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
-          category: "market",
-          role: "main",
-          arcSlug: "pan-atlantic-blowup",
-          referenceEpoch: null,
-        },
-        {
-          dispatchKey: "seed-rourke-short",
-          headline: "Rourke seen building short against PanAtl. bond block",
-          body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-          category: "deal_seed",
-          role: "deal_seed",
-          arcSlug: "pan-atlantic-blowup",
-          referenceEpoch: null,
-        },
-        {
-          dispatchKey: "seed-marty-tip",
-          headline: "Marty Vale prices a rescue rumor",
-          body: "The buyer name keeps changing. The spread keeps widening.",
-          category: "deal_seed",
-          role: "deal_seed",
-          arcSlug: "pan-atlantic-blowup",
-          referenceEpoch: null,
-        },
-      ],
-      dealSeed: {
-        dispatchKey: "panatl-short-squeeze",
-        arcSlug: "pan-atlantic-blowup",
-        prompt:
-          "Rourke is shorting PanAtl. paper before the margin notice hits the tape — front-run or fade.",
-        suggestedPotUsdc: 10,
-        suggestedEntryCostUsdc: 5,
-      },
-    });
-
-    const result = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: ambiguousStub,
-    });
-
-    expect((result as { skipped?: string }).skipped).toBe("validation-failed");
-  });
-});
-
-describe("wire/generator: primary arc rotation", () => {
-  it("suppresses the same primary arc after two consecutive successful drops for one assembly", async () => {
-    const t = convexTest(schema, modules);
-    await seedSeasonAndDrops(t);
-    await setInitialTopTitle(t, "Mercer investigation widens");
-    await setArcTension(t, "pan-atlantic-blowup", 9);
-
-    const flatPanUpdate = [{ arcSlug: "pan-atlantic-blowup", tensionDelta: 0 }];
-    const noMaterialSeededStub = makeLlmStubWithSeed({
-      arcUpdates: flatPanUpdate,
-      dispatches: [
-        {
-          dispatchKey: "main-panatl-halt",
-          headline: "PanAtlantic bonds halted at the exchange",
-          body: "Trading desk confirms three consecutive missed settlements. Phones ringing.",
-          category: "market",
-          role: "main",
-          arcSlug: "pan-atlantic-blowup",
-          referenceEpoch: null,
-        },
-        {
-          dispatchKey: "seed-rourke-short",
-          headline: "Rourke seen building short against PanAtl. bond block",
-          body: "Three orders crossed before lunch. Counterparty unconfirmed.",
-          category: "deal_seed",
-          role: "deal_seed",
-          arcSlug: "pan-atlantic-blowup",
-          referenceEpoch: null,
-        },
-      ],
-    });
-
-    const r1 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStubWithSeed({ arcUpdates: flatPanUpdate }),
-    });
-    expect((r1 as { inserted?: boolean }).inserted).toBe(true);
-
-    const r2 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStub({ arcUpdates: flatPanUpdate }),
-    });
-    expect((r2 as { inserted?: boolean }).inserted).toBe(true);
-
-    const r3 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: noMaterialSeededStub,
-    });
-    expect((r3 as { inserted?: boolean }).inserted).toBe(true);
-
-    const latestAfterSuppression = await t.run(async (ctx) =>
-      ctx.db
-        .query("marketNarratives")
-        .withIndex("byEpoch")
-        .order("desc")
-        .first()
-    );
-    expect(latestAfterSuppression?.topArcTitle).toBe(
-      "Mercer investigation widens"
-    );
-
-    const r4 = await t.action(internal.wire.generator.devForceEpoch, {
-      ignoreSlot: true,
-      _testLlmStub: makeLlmStub({ arcUpdates: flatPanUpdate }),
-    });
-    expect((r4 as { inserted?: boolean }).inserted).toBe(true);
-
-    const latestAfterReturn = await t.run(async (ctx) =>
-      ctx.db
-        .query("marketNarratives")
-        .withIndex("byEpoch")
-        .order("desc")
-        .first()
-    );
-    expect(latestAfterReturn?.topArcTitle).toBe("PanAtlantic blow-up");
   });
 });

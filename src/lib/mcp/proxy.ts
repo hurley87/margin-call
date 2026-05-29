@@ -152,6 +152,12 @@ export interface ProxyMcpWriteOptions {
   convexAction: string;
   /** When true, rejects missing/blank `idempotencyKey` before hitting Convex. */
   requireIdempotencyKey?: boolean;
+  /**
+   * Fields merged into the request body after parsing, overriding any
+   * caller-supplied values. Use to inject URL path parameters (e.g.
+   * `traderId` from `/traders/[id]/fund`) so the path is canonical.
+   */
+  bodyOverrides?: Record<string, unknown>;
 }
 
 /**
@@ -181,7 +187,7 @@ async function applyMcpRateLimits(
 
 export async function proxyMcpWrite(
   request: NextRequest,
-  { convexAction, requireIdempotencyKey }: ProxyMcpWriteOptions
+  { convexAction, requireIdempotencyKey, bodyOverrides }: ProxyMcpWriteOptions
 ) {
   if (!SERVICE_TOKEN || !CONVEX_URL) {
     return NextResponse.json(
@@ -211,8 +217,79 @@ export async function proxyMcpWrite(
     );
   }
 
+  if (bodyOverrides) {
+    Object.assign(body, bodyOverrides);
+  }
   body.deskManagerId = String(deskManagerId);
   return proxyMcpUpstream(deskManagerId, body, convexAction);
+}
+
+export interface ProxyMcpConfirmOptions {
+  convexAction: string;
+}
+
+/** Confirm a prepared treasury intent after Base MCP execution. */
+export async function proxyMcpConfirm(
+  request: NextRequest,
+  { convexAction }: ProxyMcpConfirmOptions
+) {
+  if (!SERVICE_TOKEN || !CONVEX_URL) {
+    return NextResponse.json(
+      { error: "MCP is not configured on this server" },
+      { status: 500 }
+    );
+  }
+
+  const rateLimitResult = await applyMcpRateLimits(request);
+  if (rateLimitResult instanceof NextResponse) return rateLimitResult;
+  const { deskManagerId } = rateLimitResult;
+
+  let body: Record<string, unknown>;
+  try {
+    body = (await request.json()) as Record<string, unknown>;
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+  }
+
+  if (typeof body.intentId !== "string" || !body.intentId.trim()) {
+    return NextResponse.json(
+      { error: "intentId is required" },
+      { status: 400 }
+    );
+  }
+  if (typeof body.txHash !== "string" || !body.txHash.trim()) {
+    return NextResponse.json({ error: "txHash is required" }, { status: 400 });
+  }
+
+  body.deskManagerId = String(deskManagerId);
+  return proxyMcpUpstream(deskManagerId, body, convexAction);
+}
+
+/** POST write without idempotency (e.g. set_desk_wallet). */
+export async function proxyMcpWriteSimple(
+  request: NextRequest,
+  convexAction: string
+) {
+  return proxyMcpWrite(request, { convexAction, requireIdempotencyKey: false });
+}
+
+/**
+ * Factory for `/api/mcp/traders/[id]/{action}` POST handlers. Extracts `id`
+ * from the URL path and injects it as `traderId` so the path — not the body —
+ * is canonical.
+ */
+export function makeTraderIdRoute(convexAction: string) {
+  return async function POST(
+    request: NextRequest,
+    context: { params: Promise<{ id: string }> }
+  ) {
+    const { id } = await context.params;
+    return proxyMcpWrite(request, {
+      convexAction,
+      requireIdempotencyKey: true,
+      bodyOverrides: { traderId: id },
+    });
+  };
 }
 
 /**

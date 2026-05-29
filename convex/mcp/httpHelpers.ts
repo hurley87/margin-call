@@ -2,6 +2,8 @@ import { httpAction, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 
+export type McpIntentId = Id<"mcpIntents">;
+
 export const SERVICE_TOKEN = process.env.MCP_SERVICE_TOKEN ?? "";
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 export const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
@@ -21,9 +23,20 @@ export function badRequest(msg: string) {
   return jsonResponse({ error: msg }, 400);
 }
 
+/** Length-independent constant-time string compare (no Node crypto in runtime). */
+function constantTimeEquals(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let mismatch = 0;
+  for (let i = 0; i < a.length; i++) {
+    mismatch |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return mismatch === 0;
+}
+
 export function authorizeMcpServiceRequest(req: Request): Response | null {
   if (!SERVICE_TOKEN) return unauthorized();
-  if (req.headers.get("authorization") !== `Bearer ${SERVICE_TOKEN}`) {
+  const header = req.headers.get("authorization") ?? "";
+  if (!constantTimeEquals(header, `Bearer ${SERVICE_TOKEN}`)) {
     return unauthorized();
   }
   return null;
@@ -162,6 +175,61 @@ export function mcpWriteRoute(spec: McpWriteRouteSpec) {
       return jsonResponse({ ok: false, error: outcome.error }, 500);
     }
     return jsonResponse({ ok: true, ...outcome.result }, 200);
+  });
+}
+
+export type McpConfirmParsedBody = {
+  deskManagerId: Id<"deskManagers">;
+  intentId: McpIntentId;
+  txHash: string;
+};
+
+export type McpConfirmRouteSpec = {
+  tool: string;
+  parseBody: (
+    body: Record<string, unknown>
+  ) =>
+    | { ok: true; parsed: McpConfirmParsedBody }
+    | { ok: false; message: string };
+  execute: (
+    ctx: ActionCtx,
+    parsed: McpConfirmParsedBody
+  ) => Promise<McpWriteExecuteResult>;
+};
+
+/** Confirm treasury intents after Base MCP execution (no idempotency key). */
+export function mcpConfirmRoute(spec: McpConfirmRouteSpec) {
+  return httpAction(async (ctx, req) => {
+    const authErr = authorizeMcpServiceRequest(req);
+    if (authErr) return authErr;
+
+    const raw = await parseJsonBody<Record<string, unknown>>(req);
+    if (!raw) return badRequest("Invalid JSON body");
+
+    const parsedBody = spec.parseBody(raw);
+    if (!parsedBody.ok) return badRequest(parsedBody.message);
+
+    const { deskManagerId, intentId, txHash } = parsedBody.parsed;
+    const startedAt = Date.now();
+
+    const outcome = await spec.execute(ctx, parsedBody.parsed);
+    const durationMs = Date.now() - startedAt;
+
+    await logMcpRequest(ctx, {
+      deskManagerId,
+      tool: spec.tool,
+      requestBody: { intentId, txHash },
+      result: outcome.error ? undefined : outcome.result,
+      error: outcome.error,
+      durationMs,
+      txHash: outcome.txHash ?? txHash,
+      createdAt: startedAt,
+    });
+
+    if (outcome.error) {
+      return jsonResponse({ ok: false, error: outcome.error }, 500);
+    }
+    return jsonResponse({ ok: true, phase: "confirm", ...outcome.result }, 200);
   });
 }
 

@@ -40,8 +40,6 @@ function makeInput(overrides: Partial<AssemblerInput> = {}): AssemblerInput {
     recentDrops: [],
     recentGameEvents: [],
     worldState: { mood: "tense", sec_heat: 7 },
-    recentSeedCadence: [],
-    mustIncludeDealSeed: false,
     ...overrides,
   };
 }
@@ -360,33 +358,6 @@ describe("assembleUserMessage: recent game events — dramatic vs routine", () =
     expect(routineIdx).toBeGreaterThan(-1);
     expect(lines[dramaticIdx + 1]).toContain("(none)");
     expect(lines[routineIdx + 1]).toContain("(none)");
-  });
-});
-
-describe("assembleUserMessage: deal-seed cadence", () => {
-  it("requires a dealSeed when mustIncludeDealSeed is true", () => {
-    const msg = assembleUserMessage(makeInput({ mustIncludeDealSeed: true }));
-    expect(msg).toMatch(/MUST include a `dealSeed`/);
-  });
-
-  it("permits an optional dealSeed when mustIncludeDealSeed is false", () => {
-    const msg = assembleUserMessage(makeInput({ mustIncludeDealSeed: false }));
-    expect(msg).toMatch(/`dealSeed` is optional/);
-  });
-
-  it("renders the recent seed cadence list", () => {
-    const msg = assembleUserMessage(
-      makeInput({
-        recentSeedCadence: [
-          { epochSlot: 100, hadSeed: false },
-          { epochSlot: 99, hadSeed: true },
-        ],
-      })
-    );
-    expect(msg).toContain("DEAL SEED CADENCE");
-    expect(msg).toContain("slot 100");
-    expect(msg).toContain("no Deal Seed");
-    expect(msg).toContain("had Deal Seed");
   });
 });
 

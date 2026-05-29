@@ -1,14 +1,10 @@
 "use node";
 
-import { internalAction } from "../_generated/server";
+import { internalAction, type ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import {
-  mcpDeskCdpAccountName,
-  parseAmountUsdc,
-  type McpTraderWriteResult,
-} from "./traders";
+import { parseAmountUsdc, type McpTraderWriteResult } from "./traders";
 import { assertTraderOwnedByDesk } from "../traders";
 import { assertPerActionCap } from "./limits";
 import {
@@ -16,92 +12,23 @@ import {
   simulateEscrowDepositFor,
   simulateEscrowTraderWithdraw,
 } from "./simulate";
-
-const USDC_DECIMALS = 1_000_000;
-
-/**
- * Large allowance used when topping up the desk's USDC approval for the escrow.
- * Using a large value (instead of the exact per-fund amount) makes the approve
- * transaction a rare, one-time (or very infrequent) setup cost per desk.
- * All subsequent fund calls — including retries with fresh idempotencyKeys after
- * a prior partial failure — will see a sufficient allowance and skip the approve
- * step entirely, keeping the expensive on-chain leg to the actual depositFor.
- */
-const LARGE_APPROVE_ALLOWANCE = BigInt(10_000_000) * BigInt(USDC_DECIMALS); // 10M USDC
-
-const ESCROW_ADDRESS = "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
-const USDC_SEPOLIA_ADDRESS =
-  "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
-
-const erc20Abi = [
-  {
-    type: "function",
-    name: "approve",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "allowance",
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
-    ],
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-  },
-] as const;
-
-const escrowAbi = [
-  {
-    type: "function",
-    name: "depositFor",
-    inputs: [
-      { name: "traderId", type: "uint256" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "withdraw",
-    inputs: [
-      { name: "traderId", type: "uint256" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "depositors",
-    inputs: [{ name: "", type: "uint256" }],
-    outputs: [{ name: "", type: "address" }],
-    stateMutability: "view",
-  },
-  {
-    type: "function",
-    name: "setDepositor",
-    inputs: [
-      { name: "traderId", type: "uint256" },
-      { name: "depositor", type: "address" },
-    ],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "getBalance",
-    inputs: [{ name: "traderId", type: "uint256" }],
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-  },
-] as const;
+import {
+  ESCROW_ADDRESS,
+  USDC_SEPOLIA_ADDRESS,
+  USDC_DECIMALS,
+  MCP_CHAIN,
+  LARGE_APPROVE_ALLOWANCE,
+  erc20Abi,
+  escrowAbi,
+  serializeCall,
+  type PreparedCall,
+} from "./escrowConstants";
+import {
+  requireDeskWallet,
+  verifyTxSucceeded,
+  getBaseSepoliaPublicClient,
+} from "./deskByo";
+import { shapePrepareResult } from "./intents";
 
 function requireEnv(name: string): string {
   const value = process.env[name];
@@ -111,7 +38,7 @@ function requireEnv(name: string): string {
   return value;
 }
 
-/** Operator-signed setDepositor when desk wallet is not yet registered. */
+/** Operator-signed setDepositor when desk wallet is not yet registered on-chain. */
 async function ensureDepositorOnChain(
   tokenId: number,
   depositorAddress: string
@@ -127,11 +54,7 @@ async function ensureDepositorOnChain(
     chain: baseSepolia,
     transport: http(),
   });
-  const { createPublicClient } = await import("viem");
-  const publicClient = createPublicClient({
-    chain: baseSepolia,
-    transport: http(),
-  });
+  const publicClient = await getBaseSepoliaPublicClient();
 
   const current = (await publicClient.readContract({
     address: ESCROW_ADDRESS,
@@ -150,25 +73,65 @@ async function ensureDepositorOnChain(
     functionName: "setDepositor",
     args: [BigInt(tokenId), depositorAddress as `0x${string}`],
   });
-  await publicClient.waitForTransactionReceipt({ hash });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status === "reverted") {
+    throw new Error(
+      `setDepositor reverted on-chain (tx ${hash}) — operator ${account.address} may not be authorized on the escrow`
+    );
+  }
+
+  // The public Base Sepolia RPC is load-balanced, so the very next read (and
+  // the depositFor simulation that follows) can land on a node that has not yet
+  // imported the block containing this setDepositor. Poll until the new
+  // depositor is visible before returning, otherwise depositFor simulates
+  // against stale state and reverts with "Not depositor".
+  const want = depositorAddress.toLowerCase();
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const seen = (await publicClient.readContract({
+      address: ESCROW_ADDRESS,
+      abi: escrowAbi,
+      functionName: "depositors",
+      args: [BigInt(tokenId)],
+    })) as string;
+    if (seen.toLowerCase() === want) return;
+    await new Promise((r) => setTimeout(r, 500));
+  }
+  throw new Error(
+    `setDepositor confirmed (tx ${hash}) but depositor not yet visible on the RPC for token ${tokenId} — retry the fund in a few seconds`
+  );
 }
 
-/**
- * MCP `fund_trader`: ensure depositor, top-up allowance (large amount when needed),
- * call escrow depositFor, then sync the Convex escrow balance.
- *
- * The large allowance strategy + fresh-key-on-error contract makes the overall
- * flow resilient to the inherent non-atomicity of two on-chain transactions
- * from a plain EVM server account. See the LARGE_APPROVE_ALLOWANCE constant
- * and the comments inside the implementation for the detailed rationale.
- */
-export const fundForMcp = internalAction({
+type PrepareActionResult = Record<string, unknown>;
+
+/** Read escrow.getBalance and mirror it into the Convex trader row. Returns the new USDC balance. */
+async function syncTraderEscrowFromChain(
+  ctx: ActionCtx,
+  publicClient: Awaited<ReturnType<typeof getBaseSepoliaPublicClient>>,
+  tokenId: number,
+  traderId: Id<"traders">
+): Promise<number> {
+  const escrowRaw = await publicClient.readContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getBalance",
+    args: [BigInt(tokenId)],
+  });
+  const balanceUsdc = Number(escrowRaw) / USDC_DECIMALS;
+  await ctx.runMutation(internal.traders.syncEscrowBalance, {
+    traderId,
+    balanceUsdc,
+  });
+  return balanceUsdc;
+}
+
+export const fundPrepareForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
     traderId: v.id("traders"),
     amountUsdc: v.number(),
+    idempotencyKey: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+  handler: async (ctx, args): Promise<PrepareActionResult> => {
     await assertPerActionCap(
       ctx,
       args.deskManagerId,
@@ -177,17 +140,17 @@ export const fundForMcp = internalAction({
     );
 
     const amountAtomic = parseAmountUsdc(args.amountUsdc);
+    const now = Date.now();
 
     const dm: Doc<"deskManagers"> | null = await ctx.runQuery(
       internal.deskManagers.getByIdInternal,
       { id: args.deskManagerId }
     );
-    if (!dm?.subject || !dm.walletAddress) {
-      throw new Error("Desk not found or wallet not provisioned");
-    }
+    if (!dm?.subject) throw new Error("Desk not found");
+    const deskAddress = requireDeskWallet(dm);
     if ((dm.walletBalanceUsdc ?? 0) < args.amountUsdc) {
       throw new Error(
-        "Insufficient desk wallet balance — sync_wallet after funding the desk"
+        "Insufficient desk wallet balance — sync_wallet after funding your Base Account"
       );
     }
 
@@ -200,54 +163,12 @@ export const fundForMcp = internalAction({
       throw new Error("Trader wallet must be ready before funding");
     }
 
-    const cdpApiKeyId = requireEnv("CDP_API_KEY_ID");
-    const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
-    const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
-
-    const { CdpClient } = await import("@coinbase/cdp-sdk");
-    const { encodeFunctionData, createPublicClient, http } =
-      await import("viem");
-    const { baseSepolia } = await import("viem/chains");
-
-    const cdp = new CdpClient({
-      apiKeyId: cdpApiKeyId,
-      apiKeySecret: cdpApiKeySecret,
-      walletSecret: cdpWalletSecret,
-    });
-
-    const accountName = mcpDeskCdpAccountName(dm.subject);
-    const deskAccount = await cdp.evm.getOrCreateAccount({ name: accountName });
-    const deskAddress = deskAccount.address as `0x${string}`;
-
-    if (deskAddress.toLowerCase() !== dm.walletAddress.toLowerCase()) {
-      throw new Error("Desk CDP wallet address mismatch — contact support");
-    }
-
-    const publicClient = createPublicClient({
-      chain: baseSepolia,
-      transport: http(),
-    });
-
     await ensureDepositorOnChain(trader.tokenId, deskAddress);
 
-    await simulateEscrowDepositFor(
-      publicClient,
-      ESCROW_ADDRESS,
-      deskAddress,
-      BigInt(trader.tokenId),
-      amountAtomic
-    );
+    const { encodeFunctionData } = await import("viem");
+    const publicClient = await getBaseSepoliaPublicClient();
 
-    // ── Allowance top-up (rare thanks to LARGE_APPROVE_ALLOWANCE) ─────────────
-    // We deliberately approve a *large* amount (not the exact per-call amount)
-    // when the current allowance is insufficient. This turns the approve tx
-    // into a one-time (or extremely rare) setup cost for the desk. Any later
-    // fund_trader call — including a retry with a *fresh* idempotencyKey after
-    // a previous partial failure (approve succeeded, deposit failed, etc.) —
-    // will see a sufficient allowance and execute *only* the single depositFor
-    // transaction. This is the practical mitigation for the non-atomic nature
-    // of funding from a plain EVM server account (two separate on-chain txs).
-    let lastTxHash: string | undefined;
+    const calls: PreparedCall[] = [];
 
     const currentAllowance = (await publicClient.readContract({
       address: USDC_SEPOLIA_ADDRESS,
@@ -256,7 +177,8 @@ export const fundForMcp = internalAction({
       args: [deskAddress, ESCROW_ADDRESS],
     })) as bigint;
 
-    if (currentAllowance < amountAtomic) {
+    const needsApprove = currentAllowance < amountAtomic;
+    if (needsApprove) {
       await simulateUsdcApprove(
         publicClient,
         USDC_SEPOLIA_ADDRESS,
@@ -264,81 +186,129 @@ export const fundForMcp = internalAction({
         ESCROW_ADDRESS,
         LARGE_APPROVE_ALLOWANCE
       );
-      const approveData = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [ESCROW_ADDRESS, LARGE_APPROVE_ALLOWANCE],
-      });
-      const { transactionHash } = await deskAccount.sendTransaction({
-        transaction: {
-          to: USDC_SEPOLIA_ADDRESS,
-          value: BigInt(0),
-          data: approveData,
-        },
-        network: "base-sepolia",
-      });
-      lastTxHash = transactionHash;
-      await publicClient.waitForTransactionReceipt({
-        hash: transactionHash as `0x${string}`,
+      calls.push({
+        to: USDC_SEPOLIA_ADDRESS,
+        value: BigInt(0),
+        data: encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [ESCROW_ADDRESS, LARGE_APPROVE_ALLOWANCE],
+        }),
       });
     }
 
-    // ── Core money movement for this funding intent ───────────────────────────
-    // The depositFor is the on-chain step that actually moves the USDC into
-    // the trader's escrow. It is the last on-chain write on the happy path.
-    // Per the documented contract for all MCP writes, any failure (including
-    // after the tx has confirmed but before Convex is updated) requires a
-    // *fresh* idempotencyKey to re-attempt. The large allowance above ensures
-    // such retries are cheap (usually just the deposit tx).
-    const depositData = encodeFunctionData({
-      abi: escrowAbi,
-      functionName: "depositFor",
-      args: [BigInt(trader.tokenId), amountAtomic],
+    // depositFor performs usdc.safeTransferFrom(deskAddress, escrow, amount),
+    // which requires allowance >= amount. When we batch a fresh approve above,
+    // that approve has NOT executed on-chain yet, so simulating depositFor
+    // against current state would always revert with "insufficient allowance".
+    // The Base MCP send_calls batch runs approve→depositFor atomically and
+    // confirm_intent verifies the tx succeeded, so only pre-simulate the
+    // deposit when the allowance already exists.
+    if (!needsApprove) {
+      await simulateEscrowDepositFor(
+        publicClient,
+        ESCROW_ADDRESS,
+        deskAddress,
+        BigInt(trader.tokenId),
+        amountAtomic
+      );
+    }
+
+    calls.push({
+      to: ESCROW_ADDRESS,
+      value: BigInt(0),
+      data: encodeFunctionData({
+        abi: escrowAbi,
+        functionName: "depositFor",
+        args: [BigInt(trader.tokenId), amountAtomic],
+      }),
     });
-    const { transactionHash: depositHash } = await deskAccount.sendTransaction({
-      transaction: {
-        to: ESCROW_ADDRESS,
-        value: BigInt(0),
-        data: depositData,
+
+    const intent = await ctx.runMutation(internal.mcp.intents.create, {
+      deskManagerId: args.deskManagerId,
+      intentType: "fund_trader",
+      chain: MCP_CHAIN,
+      calls: calls.map(serializeCall),
+      payload: {
+        traderId: args.traderId,
+        amountUsdc: args.amountUsdc,
+        traderName: trader.name,
+        tokenId: trader.tokenId,
       },
-      network: "base-sepolia",
-    });
-    lastTxHash = depositHash;
-    await publicClient.waitForTransactionReceipt({
-      hash: depositHash as `0x${string}`,
-      confirmations: 2,
+      idempotencyKey: args.idempotencyKey,
+      now,
     });
 
-    const escrowRaw = await publicClient.readContract({
-      address: ESCROW_ADDRESS,
-      abi: escrowAbi,
-      functionName: "getBalance",
-      args: [BigInt(trader.tokenId)],
-    });
-    const escrowBalanceUsdc = Number(escrowRaw) / USDC_DECIMALS;
-    await ctx.runMutation(internal.traders.syncEscrowBalance, {
-      traderId: args.traderId,
-      balanceUsdc: escrowBalanceUsdc,
-    });
-
-    return {
-      traderId: String(args.traderId),
-      txHash: lastTxHash,
-      summary: `Funded trader "${trader.name}" with ${args.amountUsdc.toFixed(2)} USDC (escrow balance now ${escrowBalanceUsdc.toFixed(2)} USDC).`,
-    };
+    return shapePrepareResult(
+      intent,
+      `Prepared fund ${args.amountUsdc.toFixed(2)} USDC for trader "${trader.name}" (${calls.length} call(s)).`
+    );
   },
 });
 
-/**
- * MCP `withdraw_from_trader`: escrow withdraw → desk wallet, sync escrow balance.
- */
-export const withdrawForMcp = internalAction({
+export const fundConfirmForMcp = internalAction({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    intentId: v.id("mcpIntents"),
+    txHash: v.string(),
+  },
+  handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+    const now = Date.now();
+    const loaded = await ctx.runQuery(internal.mcp.intents.getForConfirm, {
+      intentId: args.intentId,
+      deskManagerId: args.deskManagerId,
+      now,
+    });
+
+    if (loaded.alreadyConfirmed && loaded.intent.confirmResult) {
+      return loaded.intent.confirmResult as McpTraderWriteResult;
+    }
+
+    const intent = loaded.intent;
+    if (intent.intentType !== "fund_trader") {
+      throw new Error("Intent type mismatch");
+    }
+
+    const payload = intent.payload as {
+      traderId: Id<"traders">;
+      amountUsdc: number;
+      traderName: string;
+      tokenId: number;
+    };
+
+    const { publicClient } = await verifyTxSucceeded(args.txHash);
+    const escrowBalanceUsdc = await syncTraderEscrowFromChain(
+      ctx,
+      publicClient,
+      payload.tokenId,
+      payload.traderId
+    );
+
+    const result: McpTraderWriteResult = {
+      traderId: String(payload.traderId),
+      txHash: args.txHash,
+      summary: `Funded trader "${payload.traderName}" with ${payload.amountUsdc.toFixed(2)} USDC (escrow balance now ${escrowBalanceUsdc.toFixed(2)} USDC).`,
+    };
+
+    await ctx.runMutation(internal.mcp.intents.markConfirmed, {
+      intentId: args.intentId,
+      txHash: args.txHash,
+      confirmResult: result,
+      now,
+    });
+
+    return result;
+  },
+});
+
+export const withdrawPrepareForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
     traderId: v.id("traders"),
     amountUsdc: v.number(),
+    idempotencyKey: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+  handler: async (ctx, args): Promise<PrepareActionResult> => {
     await assertPerActionCap(
       ctx,
       args.deskManagerId,
@@ -347,14 +317,14 @@ export const withdrawForMcp = internalAction({
     );
 
     const amountAtomic = parseAmountUsdc(args.amountUsdc);
+    const now = Date.now();
 
     const dm: Doc<"deskManagers"> | null = await ctx.runQuery(
       internal.deskManagers.getByIdInternal,
       { id: args.deskManagerId }
     );
-    if (!dm?.subject || !dm.walletAddress) {
-      throw new Error("Desk not found or wallet not provisioned");
-    }
+    if (!dm?.subject) throw new Error("Desk not found");
+    const deskAddress = requireDeskWallet(dm);
 
     const trader: Doc<"traders"> | null = await ctx.runQuery(
       internal.traders.loadInternal,
@@ -372,71 +342,102 @@ export const withdrawForMcp = internalAction({
       );
     }
 
-    const cdpApiKeyId = requireEnv("CDP_API_KEY_ID");
-    const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
-    const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
-
-    const { CdpClient } = await import("@coinbase/cdp-sdk");
-    const { encodeFunctionData, createPublicClient, http } =
-      await import("viem");
-    const { baseSepolia } = await import("viem/chains");
-
-    const cdp = new CdpClient({
-      apiKeyId: cdpApiKeyId,
-      apiKeySecret: cdpApiKeySecret,
-      walletSecret: cdpWalletSecret,
-    });
-
-    const accountName = mcpDeskCdpAccountName(dm.subject);
-    const deskAccount = await cdp.evm.getOrCreateAccount({ name: accountName });
-
-    const publicClient = createPublicClient({
-      chain: baseSepolia,
-      transport: http(),
-    });
+    const { encodeFunctionData } = await import("viem");
+    const publicClient = await getBaseSepoliaPublicClient();
 
     await simulateEscrowTraderWithdraw(
       publicClient,
       ESCROW_ADDRESS,
-      deskAccount.address as `0x${string}`,
+      deskAddress,
       BigInt(trader.tokenId),
       amountAtomic
     );
 
-    const withdrawData = encodeFunctionData({
-      abi: escrowAbi,
-      functionName: "withdraw",
-      args: [BigInt(trader.tokenId), amountAtomic],
-    });
-    const { transactionHash } = await deskAccount.sendTransaction({
-      transaction: {
+    const withdrawCalls: PreparedCall[] = [
+      {
         to: ESCROW_ADDRESS,
         value: BigInt(0),
-        data: withdrawData,
+        data: encodeFunctionData({
+          abi: escrowAbi,
+          functionName: "withdraw",
+          args: [BigInt(trader.tokenId), amountAtomic] as const,
+        }),
       },
-      network: "base-sepolia",
-    });
-    await publicClient.waitForTransactionReceipt({
-      hash: transactionHash as `0x${string}`,
-      confirmations: 2,
+    ];
+
+    const intent = await ctx.runMutation(internal.mcp.intents.create, {
+      deskManagerId: args.deskManagerId,
+      intentType: "withdraw_from_trader",
+      chain: MCP_CHAIN,
+      calls: withdrawCalls.map(serializeCall),
+      payload: {
+        traderId: args.traderId,
+        amountUsdc: args.amountUsdc,
+        traderName: trader.name,
+        tokenId: trader.tokenId,
+      },
+      idempotencyKey: args.idempotencyKey,
+      now,
     });
 
-    const escrowRaw = await publicClient.readContract({
-      address: ESCROW_ADDRESS,
-      abi: escrowAbi,
-      functionName: "getBalance",
-      args: [BigInt(trader.tokenId)],
-    });
-    const escrowBalanceUsdc = Number(escrowRaw) / USDC_DECIMALS;
-    await ctx.runMutation(internal.traders.syncEscrowBalance, {
-      traderId: args.traderId,
-      balanceUsdc: escrowBalanceUsdc,
+    return shapePrepareResult(
+      intent,
+      `Prepared withdraw ${args.amountUsdc.toFixed(2)} USDC from trader "${trader.name}" to your Base Account.`
+    );
+  },
+});
+
+export const withdrawConfirmForMcp = internalAction({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    intentId: v.id("mcpIntents"),
+    txHash: v.string(),
+  },
+  handler: async (ctx, args): Promise<McpTraderWriteResult> => {
+    const now = Date.now();
+    const loaded = await ctx.runQuery(internal.mcp.intents.getForConfirm, {
+      intentId: args.intentId,
+      deskManagerId: args.deskManagerId,
+      now,
     });
 
-    return {
-      traderId: String(args.traderId),
-      txHash: transactionHash,
-      summary: `Withdrew ${args.amountUsdc.toFixed(2)} USDC from trader "${trader.name}" to desk wallet (escrow balance now ${escrowBalanceUsdc.toFixed(2)} USDC). Use sync_wallet to refresh desk balance.`,
+    if (loaded.alreadyConfirmed && loaded.intent.confirmResult) {
+      return loaded.intent.confirmResult as McpTraderWriteResult;
+    }
+
+    const intent = loaded.intent;
+    if (intent.intentType !== "withdraw_from_trader") {
+      throw new Error("Intent type mismatch");
+    }
+
+    const payload = intent.payload as {
+      traderId: Id<"traders">;
+      amountUsdc: number;
+      traderName: string;
+      tokenId: number;
     };
+
+    const { publicClient } = await verifyTxSucceeded(args.txHash);
+    const escrowBalanceUsdc = await syncTraderEscrowFromChain(
+      ctx,
+      publicClient,
+      payload.tokenId,
+      payload.traderId
+    );
+
+    const result: McpTraderWriteResult = {
+      traderId: String(payload.traderId),
+      txHash: args.txHash,
+      summary: `Withdrew ${payload.amountUsdc.toFixed(2)} USDC from trader "${payload.traderName}" to your Base Account (escrow ${escrowBalanceUsdc.toFixed(2)} USDC). Call sync_wallet to refresh desk balance.`,
+    };
+
+    await ctx.runMutation(internal.mcp.intents.markConfirmed, {
+      intentId: args.intentId,
+      txHash: args.txHash,
+      confirmResult: result,
+      now,
+    });
+
+    return result;
   },
 });

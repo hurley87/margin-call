@@ -84,7 +84,7 @@ export const getState = internalQuery({
     let summary: string;
     if (!walletAddress) {
       summary =
-        "Desk wallet not yet provisioned. Sign in to the Margin Call web app to finish setup.";
+        "Desk wallet not bound. Connect Base MCP, then call set_desk_wallet with your Base Account address.";
     } else if (balance <= 0) {
       summary = `Send USDC to ${walletAddress} (Base Sepolia) to fund this desk.`;
     } else {
@@ -93,12 +93,6 @@ export const getState = internalQuery({
         : "";
       summary = `Balance: ${balance.toFixed(2)} USDC • ${traderCount} trader(s) • ${openDealCount} open deal(s) • Recent P&L: ${recentPnlUsdc.toFixed(2)} USDC${pa}`;
     }
-
-    const allowlist = desk.withdrawAllowlist ?? [];
-    const ceremonyDone = !!desk.withdrawCeremonyCompletedAt;
-    const dailyCap = desk.dailyWithdrawCapUsdc ?? 1000;
-    const dailyUsed = desk.dailyWithdrawUsedUsdc ?? 0;
-    const pendingProposal = desk.pendingWithdrawAddress;
 
     return {
       deskId: deskManagerId,
@@ -110,15 +104,39 @@ export const getState = internalQuery({
       recentPnlUsdc,
       pendingApprovals,
       summary,
-      // Phase 6 withdrawal surface for Claude / MCP
-      withdraw: {
-        allowlistCount: allowlist.length,
-        ceremonyCompleted: ceremonyDone,
-        dailyCapUsdc: dailyCap,
-        dailyUsedUsdc: dailyUsed,
-        pendingProposal: pendingProposal ?? undefined,
-        allowlistSample: allowlist.slice(0, 3), // first few for visibility (never log secrets)
+      walletBinding: {
+        bound: !!walletAddress,
+        note: walletAddress
+          ? "Treasury writes use prepare → Base MCP send_calls → confirm_intent."
+          : "Call set_desk_wallet after connecting Base MCP.",
       },
+    };
+  },
+});
+
+/**
+ * MCP `set_desk_wallet`: bind the agent's Base Account as this desk's treasury wallet.
+ */
+export const setWalletForMcp = internalMutation({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    walletAddress: v.string(),
+  },
+  handler: async (ctx, { deskManagerId, walletAddress }) => {
+    const desk = await ctx.db.get(deskManagerId);
+    if (!desk) throw new Error("Desk not found");
+
+    const norm = normalizeAddress(walletAddress);
+    const now = Date.now();
+    await ctx.db.patch(deskManagerId, {
+      walletAddress: norm,
+      updatedAt: now,
+    });
+
+    return {
+      ok: true as const,
+      walletAddress: norm,
+      summary: `Desk wallet bound to ${norm}. Fund this Base Account with USDC on Base Sepolia, then sync_wallet.`,
     };
   },
 });
@@ -147,75 +165,3 @@ export function startOfUtcDay(ts: number): number {
   const d = new Date(ts);
   return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
-
-/**
- * MCP `register_withdraw_address` (internal mutation, called from http write route).
- * Enforces: first registration per desk requires completed ceremony (human confirmation in web UI).
- * After ceremony, subsequent registrations append to allowlist (policy allows post-ceremony).
- * Always requires idempotencyKey (handled by caller).
- */
-export const registerWithdrawAddress = internalMutation({
-  args: {
-    deskManagerId: v.id("deskManagers"),
-    address: v.string(),
-  },
-  handler: async (ctx: any, { deskManagerId, address }: any) => {
-    const desk = await ctx.db.get(deskManagerId);
-    if (!desk) throw new Error("Desk not found");
-
-    const norm = normalizeAddress(address);
-
-    const now = Date.now();
-    const ceremonyDone = !!desk.withdrawCeremonyCompletedAt;
-
-    if (!ceremonyDone) {
-      // First (or unconfirmed) registration → queue ceremony
-      if (desk.pendingWithdrawAddress === norm) {
-        return {
-          ok: false as const,
-          error:
-            "Withdrawal address registration ceremony is pending. The human operator who issued the MCP key must confirm this address in the Margin Call web app (My Agent Desks section).",
-          pending: true,
-          proposedAddress: norm,
-        };
-      }
-      await ctx.db.patch(deskManagerId, {
-        pendingWithdrawAddress: norm,
-        pendingWithdrawCeremonyAt: now,
-        updatedAt: now,
-      });
-      return {
-        ok: false as const,
-        error:
-          "First withdrawal address registration requires a one-time Privy-authenticated confirmation ceremony. The proposed address has been recorded; the issuing human must confirm it in the web UI to bind and activate withdrawals.",
-        pending: true,
-        proposedAddress: norm,
-      };
-    }
-
-    // Ceremony complete → allow append (or dedupe)
-    const current: string[] = desk.withdrawAllowlist ?? [];
-    if (current.some((a) => a.toLowerCase() === norm)) {
-      return {
-        ok: true as const,
-        address: norm,
-        allowlist: current,
-        alreadyRegistered: true,
-      };
-    }
-
-    const updated = [...current, norm];
-    await ctx.db.patch(deskManagerId, {
-      withdrawAllowlist: updated,
-      withdrawAllowlistUpdatedAt: now,
-      updatedAt: now,
-    });
-
-    return {
-      ok: true as const,
-      address: norm,
-      allowlist: updated,
-      alreadyRegistered: false,
-    };
-  },
-});

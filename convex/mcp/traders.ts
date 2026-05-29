@@ -7,6 +7,7 @@ import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { assertTraderOwnedByDesk, buildMandatePatch } from "../traders";
+import { resolveReadyProfileImageUrl } from "../lib/profileImage";
 
 export type McpCreateTraderResult = {
   traderId: string;
@@ -39,7 +40,7 @@ export function buildCreateTraderResult(
     );
   }
 
-  const summary = `Hired trader "${trader.name}" (ERC-8004 token #${trader.tokenId}). CDP smart-account wallet ${trader.cdpWalletAddress ?? "?"} (${trader.cdpAccountName ?? ""}).`;
+  const summary = `Hired trader "${trader.name}" (ERC-8004 token #${trader.tokenId}). Trader identity wallet ${trader.cdpWalletAddress ?? "?"}. Fund escrow via fund_trader (Base MCP approval).`;
 
   return {
     traderId: String(trader._id),
@@ -69,19 +70,6 @@ export function parseAmountUsdc(amountUsdc: number): bigint {
   return BigInt(atomic);
 }
 
-/** Derive CDP account name from MCP desk subject `mcp:cdp-wallet:<id>`. */
-export function mcpDeskCdpAccountName(subject: string): string {
-  const prefix = "mcp:cdp-wallet:";
-  if (!subject.startsWith(prefix)) {
-    throw new Error("Desk is not an MCP CDP wallet subject");
-  }
-  const walletId = subject.slice(prefix.length);
-  if (!walletId) {
-    throw new Error("Invalid MCP desk subject");
-  }
-  return `mcp-desk-${walletId}`;
-}
-
 /**
  * MCP `create_trader`: desk gate → shared createRecord → blocking wallet pipeline.
  * Called from the /mcp/traders/create HTTP action (after idempotency shell).
@@ -101,8 +89,15 @@ export const createForMcp = internalAction({
     if (!dm?.subject) {
       throw new Error("Desk not found");
     }
+    if (!dm.walletAddress) {
+      throw new Error(
+        "Bind your Base Account with set_desk_wallet before hiring a trader"
+      );
+    }
     if ((dm.walletBalanceUsdc ?? 0) <= 0) {
-      throw new Error("Fund your wallet before hiring a trader");
+      throw new Error(
+        "Fund your Base Account and sync_wallet before hiring a trader"
+      );
     }
 
     const traderId: Id<"traders"> = await ctx.runMutation(
@@ -247,6 +242,8 @@ export const list = internalQuery({
               }
             : null;
 
+        const profileImageUrl = await resolveReadyProfileImageUrl(ctx, t);
+
         return {
           traderId: t._id,
           name: t.name,
@@ -261,6 +258,8 @@ export const list = internalQuery({
           lastCycleAt: t.lastCycleAt ?? null,
           lastActivity,
           createdAt: t.createdAt,
+          profileImageUrl,
+          imageStatus: t.imageStatus ?? null,
         };
       })
     );

@@ -2144,7 +2144,7 @@ function MarketPlayersPanel({
         meta={leaderboard ? `${leaderboard.length}` : "WAIT"}
       />
 
-      <div className="grid grid-cols-[2rem_minmax(0,1fr)_6.5rem_5.75rem_5rem] border-b border-[var(--t-divider)] px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+      <div className="grid grid-cols-[1.5rem_minmax(0,1fr)_6rem_4.25rem_4rem] gap-x-2 border-b border-[var(--t-divider)] px-3 py-2 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
         <span>#</span>
         <span>Trader</span>
         <span>Owner</span>
@@ -2174,7 +2174,7 @@ function MarketPlayersPanel({
                 type="button"
                 onClick={() => onOpenTrader(trader.id, isCurrent)}
                 className={cn(
-                  "grid w-full grid-cols-[2rem_minmax(0,1fr)_6.5rem_5.75rem_5rem] items-center border-b border-[var(--t-divider)] px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--t-accent)]/10 focus:bg-[var(--t-accent)]/10 focus:outline-none",
+                  "grid w-full grid-cols-[1.5rem_minmax(0,1fr)_6rem_4.25rem_4rem] gap-x-2 items-center border-b border-[var(--t-divider)] px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--t-accent)]/10 focus:bg-[var(--t-accent)]/10 focus:outline-none",
                   isCurrent
                     ? "bg-[var(--t-green)]/10 text-[var(--t-green)]"
                     : "text-[var(--t-muted)]"

@@ -9,6 +9,7 @@ import {
   logMcpRequest,
   mcpReadRoute,
   mcpWriteRoute,
+  mcpConfirmRoute,
   parseJsonBody,
   THIRTY_DAYS_MS,
 } from "./mcp/httpHelpers";
@@ -73,18 +74,48 @@ function parseCreateTraderBody(body: Record<string, unknown>) {
   };
 }
 
-function parseRegisterWithdrawAddressBody(body: Record<string, unknown>) {
-  const base = parseMcpWriteBase(body);
-  if ("ok" in base) return base;
-  if (typeof body.address !== "string" || body.address.trim() === "") {
-    return { ok: false as const, message: "address required" };
+function parseSetDeskWalletBody(body: Record<string, unknown>) {
+  if (typeof body.deskManagerId !== "string" || !body.deskManagerId) {
+    return { ok: false as const, message: "deskManagerId required" };
+  }
+  if (
+    typeof body.walletAddress !== "string" ||
+    body.walletAddress.trim() === ""
+  ) {
+    return { ok: false as const, message: "walletAddress required" };
   }
   return {
     ok: true as const,
     parsed: {
-      deskManagerId: base.deskManagerId,
-      idempotencyKey: base.idempotencyKey,
-      requestBody: base.requestBody,
+      deskManagerId: body.deskManagerId as Id<"deskManagers">,
+      walletAddress: body.walletAddress.trim(),
+    },
+  };
+}
+
+function parseConfirmIntentBody(body: Record<string, unknown>) {
+  if (typeof body.deskManagerId !== "string" || !body.deskManagerId) {
+    return { ok: false as const, message: "deskManagerId required" };
+  }
+  if (typeof body.intentId !== "string" || body.intentId.trim() === "") {
+    return { ok: false as const, message: "intentId required" };
+  }
+  if (typeof body.txHash !== "string" || body.txHash.trim() === "") {
+    return { ok: false as const, message: "txHash required" };
+  }
+  const txHash = body.txHash.trim();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHash)) {
+    return {
+      ok: false as const,
+      message: "txHash must be a 0x-prefixed 32-byte hex string",
+    };
+  }
+  return {
+    ok: true as const,
+    parsed: {
+      deskManagerId: body.deskManagerId as Id<"deskManagers">,
+      intentId: body.intentId.trim() as Id<"mcpIntents">,
+      txHash,
     },
   };
 }
@@ -108,29 +139,6 @@ function parseConfigureTraderBody(body: Record<string, unknown>) {
       idempotencyKey: base.idempotencyKey,
       requestBody: base.requestBody,
       traderId: tid.traderId,
-    },
-  };
-}
-
-function parseWithdrawToAddressBody(body: Record<string, unknown>) {
-  const base = parseMcpWriteBase(body);
-  if ("ok" in base) return base;
-  if (typeof body.address !== "string" || body.address.trim() === "") {
-    return { ok: false as const, message: "address required" };
-  }
-  const amt = Number(body.amountUsdc);
-  if (!Number.isFinite(amt) || amt <= 0) {
-    return {
-      ok: false as const,
-      message: "amountUsdc must be positive number",
-    };
-  }
-  return {
-    ok: true as const,
-    parsed: {
-      deskManagerId: base.deskManagerId,
-      idempotencyKey: base.idempotencyKey,
-      requestBody: base.requestBody,
     },
   };
 }
@@ -421,55 +429,45 @@ http.route({
   }),
 });
 
-// Phase 6: Withdrawal allowlist + cash-out (ceremony gated)
 http.route({
-  path: "/mcp/desks/register-withdraw-address",
+  path: "/mcp/desks/set-wallet",
   method: "POST",
-  handler: mcpWriteRoute({
-    tool: "register_withdraw_address",
-    parseBody: parseRegisterWithdrawAddressBody,
-    execute: async (ctx, { deskManagerId, requestBody }) => {
-      try {
-        const raw = await ctx.runMutation(
-          internal.mcp.desks.registerWithdrawAddress,
-          {
-            deskManagerId,
-            address: requestBody.address as string,
-          }
-        );
-        return { result: raw };
-      } catch (e: unknown) {
-        return {
-          error: e instanceof Error ? e.message : String(e),
-        };
-      }
-    },
-  }),
-});
+  handler: httpAction(async (ctx, req) => {
+    const authErr = authorizeMcpServiceRequest(req);
+    if (authErr) return authErr;
 
-http.route({
-  path: "/mcp/desks/withdraw-to-address",
-  method: "POST",
-  handler: mcpWriteRoute({
-    tool: "withdraw_to_address",
-    parseBody: parseWithdrawToAddressBody,
-    execute: async (ctx, { deskManagerId, requestBody }) => {
-      try {
-        const raw = await ctx.runAction(
-          internal.mcp.desksEscrow.withdrawToAddress,
-          {
-            deskManagerId,
-            address: requestBody.address as string,
-            amountUsdc: Number(requestBody.amountUsdc),
-          }
-        );
-        return { result: raw };
-      } catch (e: unknown) {
-        return {
-          error: e instanceof Error ? e.message : String(e),
-        };
-      }
-    },
+    const body = await parseJsonBody<Record<string, unknown>>(req);
+    if (!body) return badRequest("Invalid JSON body");
+
+    const parsed = parseSetDeskWalletBody(body);
+    if (!parsed.ok) return badRequest(parsed.message);
+
+    const startedAt = Date.now();
+    let result: Record<string, unknown> | undefined;
+    let errMsg: string | undefined;
+    try {
+      result = (await ctx.runMutation(internal.mcp.desks.setWalletForMcp, {
+        deskManagerId: parsed.parsed.deskManagerId,
+        walletAddress: parsed.parsed.walletAddress,
+      })) as Record<string, unknown>;
+    } catch (e: unknown) {
+      errMsg = e instanceof Error ? e.message : String(e);
+    }
+
+    const durationMs = Date.now() - startedAt;
+    await logMcpRequest(ctx, {
+      deskManagerId: parsed.parsed.deskManagerId,
+      tool: "set_desk_wallet",
+      durationMs,
+      result: errMsg ? undefined : result,
+      error: errMsg,
+      createdAt: startedAt,
+    });
+
+    return jsonResponse(
+      errMsg ? { ok: false, error: errMsg } : { ok: true, ...result },
+      errMsg ? 500 : 200
+    );
   }),
 });
 
@@ -508,17 +506,18 @@ http.route({
   handler: mcpWriteRoute({
     tool: "fund_trader",
     parseBody: parseFundTraderBody,
-    execute: async (ctx, { deskManagerId, requestBody }) => {
+    execute: async (ctx, { deskManagerId, requestBody, idempotencyKey }) => {
       try {
         const result = await ctx.runAction(
-          internal.mcp.tradersEscrow.fundForMcp,
+          internal.mcp.tradersEscrow.fundPrepareForMcp,
           {
             deskManagerId,
             traderId: requestBody.traderId as Id<"traders">,
             amountUsdc: Number(requestBody.amountUsdc),
+            idempotencyKey,
           }
         );
-        return { result, txHash: result.txHash };
+        return { result: result as Record<string, unknown> };
       } catch (e: unknown) {
         return { error: e instanceof Error ? e.message : String(e) };
       }
@@ -579,17 +578,18 @@ http.route({
   handler: mcpWriteRoute({
     tool: "withdraw_from_trader",
     parseBody: parseWithdrawTraderBody,
-    execute: async (ctx, { deskManagerId, requestBody }) => {
+    execute: async (ctx, { deskManagerId, requestBody, idempotencyKey }) => {
       try {
         const result = await ctx.runAction(
-          internal.mcp.tradersEscrow.withdrawForMcp,
+          internal.mcp.tradersEscrow.withdrawPrepareForMcp,
           {
             deskManagerId,
             traderId: requestBody.traderId as Id<"traders">,
             amountUsdc: Number(requestBody.amountUsdc),
+            idempotencyKey,
           }
         );
-        return { result, txHash: result.txHash };
+        return { result: result as Record<string, unknown> };
       } catch (e: unknown) {
         return { error: e instanceof Error ? e.message : String(e) };
       }
@@ -603,18 +603,19 @@ http.route({
   handler: mcpWriteRoute({
     tool: "create_deal",
     parseBody: parseCreateDealBody,
-    execute: async (ctx, { deskManagerId, requestBody }) => {
+    execute: async (ctx, { deskManagerId, requestBody, idempotencyKey }) => {
       try {
         const result = await ctx.runAction(
-          internal.mcp.dealsEscrow.createForMcp,
+          internal.mcp.dealsEscrow.createPrepareForMcp,
           {
             deskManagerId,
             prompt: requestBody.prompt as string,
             potUsdc: Number(requestBody.potUsdc),
             entryCostUsdc: Number(requestBody.entryCostUsdc),
+            idempotencyKey,
           }
         );
-        return { result, txHash: result.txHash };
+        return { result: result as Record<string, unknown> };
       } catch (e: unknown) {
         return { error: e instanceof Error ? e.message : String(e) };
       }
@@ -628,16 +629,58 @@ http.route({
   handler: mcpWriteRoute({
     tool: "close_deal",
     parseBody: parseCloseDealBody,
-    execute: async (ctx, { deskManagerId, requestBody }) => {
+    execute: async (ctx, { deskManagerId, requestBody, idempotencyKey }) => {
       try {
         const result = await ctx.runAction(
-          internal.mcp.dealsEscrow.closeForMcp,
+          internal.mcp.dealsEscrow.closePrepareForMcp,
           {
             deskManagerId,
             dealId: requestBody.dealId as Id<"deals">,
+            idempotencyKey,
           }
         );
-        return { result, txHash: result.txHash };
+        return { result: result as Record<string, unknown> };
+      } catch (e: unknown) {
+        return { error: e instanceof Error ? e.message : String(e) };
+      }
+    },
+  }),
+});
+
+const CONFIRM_HANDLERS = {
+  fund_trader: internal.mcp.tradersEscrow.fundConfirmForMcp,
+  withdraw_from_trader: internal.mcp.tradersEscrow.withdrawConfirmForMcp,
+  create_deal: internal.mcp.dealsEscrow.createConfirmForMcp,
+  close_deal: internal.mcp.dealsEscrow.closeConfirmForMcp,
+} as const;
+
+http.route({
+  path: "/mcp/intents/confirm",
+  method: "POST",
+  handler: mcpConfirmRoute({
+    tool: "confirm_intent",
+    parseBody: parseConfirmIntentBody,
+    execute: async (ctx, { deskManagerId, intentId, txHash }) => {
+      try {
+        const intent = await ctx.runQuery(internal.mcp.intents.getForConfirm, {
+          intentId,
+          deskManagerId,
+          now: Date.now(),
+        });
+        const type = intent.intent.intentType as keyof typeof CONFIRM_HANDLERS;
+        const handler = CONFIRM_HANDLERS[type];
+        if (!handler) {
+          return { error: `Unknown intent type: ${type}` };
+        }
+        const result = (await ctx.runAction(handler, {
+          deskManagerId,
+          intentId,
+          txHash,
+        })) as Record<string, unknown>;
+        return {
+          result,
+          txHash: (result.txHash as string | undefined) ?? txHash,
+        };
       } catch (e: unknown) {
         return { error: e instanceof Error ? e.message : String(e) };
       }

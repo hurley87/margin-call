@@ -9,10 +9,7 @@ import {
   buildMandatePatch,
   assertCanActivateTrader,
 } from "../../convex/traders";
-import {
-  mcpDeskCdpAccountName,
-  parseAmountUsdc,
-} from "../../convex/mcp/traders";
+import { parseAmountUsdc } from "../../convex/mcp/traders";
 import { seedDeskManager, seedActiveTrader, useRealMarketHours } from "./setup";
 import { MARKET_CLOSED_MESSAGE } from "../../convex/lib/tradingHours";
 
@@ -27,20 +24,6 @@ describe("parseAmountUsdc", () => {
   it("rejects non-positive amounts", () => {
     expect(() => parseAmountUsdc(0)).toThrow(/positive/i);
     expect(() => parseAmountUsdc(-1)).toThrow(/positive/i);
-  });
-});
-
-describe("mcpDeskCdpAccountName", () => {
-  it("derives CDP account name from MCP subject", () => {
-    expect(mcpDeskCdpAccountName("mcp:cdp-wallet:abc123")).toBe(
-      "mcp-desk-abc123"
-    );
-  });
-
-  it("rejects non-MCP subjects", () => {
-    expect(() => mcpDeskCdpAccountName("did:privy:x")).toThrow(
-      /not an MCP CDP wallet/i
-    );
   });
 });
 

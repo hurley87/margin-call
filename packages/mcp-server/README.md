@@ -3,10 +3,9 @@
 MCP server that lets Claude Code (and any MCP-compatible agent) run an
 autonomous **AGENT DESK** in the Margin Call 1980s Wall Street trading game
 from the terminal. Each `mc_live_*` API key maps 1:1 to a dedicated desk
-with its own CDP server wallet (TEE-managed keys), so Claude can hire and
-fund traders, create trap deals for rival desks, answer high-stakes
-approvals, sync balances, and cash out via an allowlisted withdrawal —
-all without a browser session.
+with a **bring-your-own Base Account** (via [Base MCP](https://mcp.base.org)).
+Claude can hire traders, fund escrow, create trap deals, answer approvals,
+and sync balances — treasury writes use prepare → Base MCP approval → confirm.
 
 The autonomous deal-entry cycle continues to run server-side and picks
 per-deal entries on behalf of MCP-owned traders.
@@ -45,21 +44,14 @@ without re-submitting the underlying transaction.
 - `get_activity` — chronological recent activity (desk- or trader-scoped).
 - `get_outcomes` — resolved deal outcomes, P&L, wipeouts, tx hashes.
 - `get_pending_approvals` — high-stakes approvals awaiting decision + TTL.
-- `sync_wallet` — refresh on-chain USDC balance into the desk record.
+- `sync_wallet` — refresh on-chain USDC balance for the bound Base Account.
+- `set_desk_wallet` — bind your Base Account address (required once per desk).
 
-### Writes (require `idempotencyKey`)
+### Writes
 
-- `create_trader` — ERC-8004 NFT mint + CDP smart-account provisioning.
-- `configure_trader` — update mandate + personality.
-- `fund_trader` — USDC approve (if needed) + escrow `depositFor`.
-- `resume_trader` / `pause_trader` — toggle autonomous deal entry.
-- `withdraw_from_trader` — escrow withdraw to desk wallet.
-- `create_deal` — USDC approve (if needed) + escrow `createDeal`.
-- `close_deal` — escrow `closeDeal` (rejects if pending entries on-chain).
-- `answer_approval` — approve/reject a high-stakes deal entry.
-- `register_withdraw_address` — first registration requires browser
-  ceremony; subsequent registrations append after binding.
-- `withdraw_to_address` — USDC.transfer to an allowlisted address.
+- `create_trader` — one-shot ERC-8004 mint + trader wallet (server-side; requires `idempotencyKey`).
+- `configure_trader`, `resume_trader`, `pause_trader`, `answer_approval` — Convex-only (`idempotencyKey`).
+- **Treasury (prepare + confirm):** `fund_trader`, `withdraw_from_trader`, `create_deal`, `close_deal` return `{ phase: "prepare", intentId, chain, calls[] }`. Execute via Base MCP `send_calls`, then `confirm_intent` with `{ intentId, txHash }`.
 
 ## Production safety rails
 
@@ -67,10 +59,7 @@ Every write is gated server-side by:
 
 - **Per-action USDC caps** — single-tx ceiling (default 500 USDC,
   per-desk configurable via `perActionCapUsdc` + per-tool override map).
-- **Per-desk daily withdrawal cap** — cumulative cap (default 1 000 USDC,
-  resets at UTC midnight).
-- **Withdrawal allowlist** — `withdraw_to_address` rejects any
-  destination not registered through the browser-confirmed ceremony.
+- **Intent TTL** — prepared calls expire after 1 hour if not confirmed.
 - **Transaction simulation** — viem `simulateContract` runs before every
   on-chain user-op; revert reasons are surfaced verbatim.
 - **24 h idempotency replay** — same `idempotencyKey` returns the same

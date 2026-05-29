@@ -1,14 +1,8 @@
-import { NextRequest } from "next/server";
-import { proxyMcpWrite } from "@/lib/mcp/proxy";
+import { makeTraderIdRoute } from "@/lib/mcp/proxy";
 
 /**
  * POST /api/mcp/traders/[id]/fund
  * MCP write: approve USDC if needed, escrow depositFor, sync escrow balance.
- * Body: traderId, amountUsdc, idempotencyKey.
+ * Body: amountUsdc, idempotencyKey. (traderId is taken from the URL path.)
  */
-export async function POST(request: NextRequest) {
-  return proxyMcpWrite(request, {
-    convexAction: "traders/fund",
-    requireIdempotencyKey: true,
-  });
-}
+export const POST = makeTraderIdRoute("traders/fund");
