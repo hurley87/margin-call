@@ -53,6 +53,7 @@ import type * as mcp_tradersEscrow from "../mcp/tradersEscrow.js";
 import type * as mcp_wipeMcpDesks from "../mcp/wipeMcpDesks.js";
 import type * as mcpApiKeys from "../mcpApiKeys.js";
 import type * as me from "../me.js";
+import type * as ops_wipeSmokeTraders from "../ops/wipeSmokeTraders.js";
 import type * as portfolio from "../portfolio.js";
 import type * as portraits from "../portraits.js";
 import type * as seasons from "../seasons.js";
@@ -127,6 +128,7 @@ declare const fullApi: ApiFromModules<{
   "mcp/wipeMcpDesks": typeof mcp_wipeMcpDesks;
   mcpApiKeys: typeof mcpApiKeys;
   me: typeof me;
+  "ops/wipeSmokeTraders": typeof ops_wipeSmokeTraders;
   portfolio: typeof portfolio;
   portraits: typeof portraits;
   seasons: typeof seasons;
