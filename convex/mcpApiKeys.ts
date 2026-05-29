@@ -24,21 +24,6 @@ type MyIssuedMcpDesk = {
   cdpAccountName?: string;
   createdAt: number;
   lastUsedAt?: number;
-  withdraw: {
-    ceremonyCompleted: boolean;
-    allowlistCount: number;
-    pendingProposal?: string;
-    dailyCap?: number;
-    dailyUsed?: number;
-  };
-};
-
-type ConfirmWithdrawCeremonyResult = {
-  ok: true;
-  alreadyDone?: true;
-  address?: string;
-  allowlist?: string[];
-  ceremonyCompletedAt?: number;
 };
 
 type RevokeKeyResult = {
@@ -122,7 +107,7 @@ export const touchLastUsed = internalMutation({
 
 /**
  * List MCP desks (and their key info) issued by the given Privy subject.
- * Used by web UI for "My Agent Desks" + ceremony + operator debug.
+ * Used by web UI for "My Agent Desks" + operator debug.
  */
 export const listIssuedBy = internalQuery({
   args: { issuedBy: v.string(), limit: v.optional(v.number()) },
@@ -145,80 +130,10 @@ export const listIssuedBy = internalQuery({
           cdpAccountName: desk?.cdpAccountName,
           createdAt: k.createdAt,
           lastUsedAt: k.lastUsedAt,
-          withdraw: {
-            ceremonyCompleted: !!desk?.withdrawCeremonyCompletedAt,
-            allowlistCount: (desk?.withdrawAllowlist ?? []).length,
-            pendingProposal: desk?.pendingWithdrawAddress,
-            dailyCap: desk?.dailyWithdrawCapUsdc,
-            dailyUsed: desk?.dailyWithdrawUsedUsdc,
-          },
         };
       })
     );
     return results;
-  },
-});
-
-/**
- * Confirm a pending withdrawal address ceremony for an MCP desk.
- * Caller must be the issuedBy for at least one active key on this desk.
- * Idempotent: if already confirmed for this address, no-op success.
- */
-export const confirmWithdrawCeremony = internalMutation({
-  args: {
-    deskManagerId: v.id("deskManagers"),
-    address: v.string(),
-    confirmedByPrivySubject: v.string(),
-  },
-  handler: async (ctx, { deskManagerId, address, confirmedByPrivySubject }) => {
-    const desk = await ctx.db.get(deskManagerId);
-    if (!desk) throw new Error("Desk not found");
-
-    // Verify the caller issued a key for this desk
-    const keys = await ctx.db
-      .query("mcpApiKeys")
-      .withIndex("byDeskManager", (q) => q.eq("deskManagerId", deskManagerId))
-      .filter((q) => q.eq(q.field("revokedAt"), undefined))
-      .collect();
-
-    const isIssuer = keys.some(
-      (k) => k.issuedByPrivySubject === confirmedByPrivySubject
-    );
-    if (!isIssuer) {
-      throw new Error(
-        "Not authorized: you did not issue any active MCP key for this desk"
-      );
-    }
-
-    const norm = address.trim().toLowerCase();
-    const now = Date.now();
-
-    // Already done for this or any? If ceremony done, allow adding the addr if not present
-    const currentList: string[] = desk.withdrawAllowlist ?? [];
-    if (desk.withdrawCeremonyCompletedAt && currentList.includes(norm)) {
-      return { ok: true as const, alreadyDone: true };
-    }
-
-    const updatedList = currentList.includes(norm)
-      ? currentList
-      : [...currentList, norm];
-
-    await ctx.db.patch(deskManagerId, {
-      withdrawAllowlist: updatedList,
-      withdrawAllowlistUpdatedAt: now,
-      withdrawCeremonyCompletedAt: desk.withdrawCeremonyCompletedAt ?? now,
-      boundHumanSubject: confirmedByPrivySubject,
-      pendingWithdrawAddress: undefined,
-      pendingWithdrawCeremonyAt: undefined,
-      updatedAt: now,
-    });
-
-    return {
-      ok: true as const,
-      address: norm,
-      allowlist: updatedList,
-      ceremonyCompletedAt: now,
-    };
   },
 });
 
@@ -341,29 +256,6 @@ export const listMyIssuedMcpDesks = query({
       issuedBy: identity.subject,
       limit,
     })) as MyIssuedMcpDesk[];
-  },
-});
-
-/** Public (browser) wrapper: confirm ceremony for one of my issued MCP desks. */
-export const confirmMyWithdrawCeremony = mutation({
-  args: {
-    deskManagerId: v.id("deskManagers"),
-    address: v.string(),
-  },
-  handler: async (
-    ctx: MutationCtx,
-    {
-      deskManagerId,
-      address,
-    }: { deskManagerId: Id<"deskManagers">; address: string }
-  ): Promise<ConfirmWithdrawCeremonyResult> => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-    return (await ctx.runMutation(internal.mcpApiKeys.confirmWithdrawCeremony, {
-      deskManagerId,
-      address,
-      confirmedByPrivySubject: identity.subject,
-    })) as ConfirmWithdrawCeremonyResult;
   },
 });
 

@@ -145,6 +145,34 @@ export const getForConfirm = internalQuery({
   },
 });
 
+/**
+ * Cron entrypoint: mark pending intents past their TTL as `expired`.
+ * Rows are kept (not deleted) so the idempotency-key lookup in `create`
+ * won't reuse an abandoned envelope and the audit trail survives.
+ * Batch cap of 200 stays well within Convex mutation transaction limits.
+ */
+export const expirePending = internalMutation({
+  args: {},
+  handler: async (ctx) => {
+    const now = Date.now();
+    const rows = await ctx.db
+      .query("mcpIntents")
+      .withIndex("byStatus", (q) => q.eq("status", "pending"))
+      .filter((q) => q.lt(q.field("expiresAt"), now))
+      .take(200);
+
+    for (const row of rows) {
+      await ctx.db.patch(row._id, { status: "expired", updatedAt: now });
+    }
+    if (rows.length > 0) {
+      console.log(
+        `[mcp/intents] expired ${rows.length} pending intent(s) past TTL`
+      );
+    }
+    return { expired: rows.length };
+  },
+});
+
 export const markConfirmed = internalMutation({
   args: {
     intentId: v.id("mcpIntents"),

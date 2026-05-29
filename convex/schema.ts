@@ -480,5 +480,6 @@ export default defineSchema({
       "deskManagerId",
       "idempotencyKey",
     ])
+    .index("byStatus", ["status"])
     .index("byTxHash", ["txHash"]),
 });

@@ -222,31 +222,3 @@ export const createForMcp = internalMutation({
     });
   },
 });
-
-/**
- * Internal: record a successful MCP desk withdrawal (updates daily used, reset marker,
- * and can be used to log the tx for audit). Called after on-chain transfer succeeds.
- */
-export const recordWithdrawUsage = internalMutation({
-  args: {
-    deskManagerId: v.id("deskManagers"),
-    amountUsdc: v.number(),
-    newDailyUsed: v.number(),
-    resetAt: v.number(),
-    txHash: v.optional(v.string()),
-  },
-  handler: async (
-    ctx,
-    { deskManagerId, amountUsdc, newDailyUsed, resetAt, txHash }
-  ) => {
-    const now = Date.now();
-    const patch: Record<string, unknown> = {
-      dailyWithdrawUsedUsdc: newDailyUsed,
-      dailyWithdrawResetAt: resetAt,
-      updatedAt: now,
-    };
-    // Optional: could store lastWithdrawTxHash or append to a log, but mcpRequests already captures it.
-    await ctx.db.patch(deskManagerId, patch);
-    return { ok: true as const };
-  },
-});

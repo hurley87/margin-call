@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { useQuery, useMutation } from "convex/react";
+import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import {
@@ -12,14 +12,7 @@ import {
   relativeTime,
 } from "@/lib/utils";
 import { AgentDeskBadge } from "./agent-desk-badge";
-import {
-  Check,
-  Clipboard,
-  RefreshCw,
-  ShieldCheck,
-  Terminal,
-  X,
-} from "lucide-react";
+import { Clipboard, RefreshCw, ShieldCheck, Terminal, X } from "lucide-react";
 
 type MyDesk = {
   keyId: Id<"mcpApiKeys">;
@@ -29,13 +22,6 @@ type MyDesk = {
   cdpAccountName?: string;
   createdAt: number;
   lastUsedAt?: number;
-  withdraw: {
-    ceremonyCompleted: boolean;
-    allowlistCount: number;
-    pendingProposal?: string;
-    dailyCap?: number;
-    dailyUsed?: number;
-  };
 };
 
 type McpRequestRow = {
@@ -62,33 +48,11 @@ export function McpOperatorDialog({
 
   const [selectedDeskId, setSelectedDeskId] =
     useState<Id<"deskManagers"> | null>(null);
-  const [confirmAddress, setConfirmAddress] = useState("");
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [confirmError, setConfirmError] = useState<string | null>(null);
-  const [requests, setRequests] = useState<McpRequestRow[]>([]);
-  const [loadingRequests, setLoadingRequests] = useState(false);
 
   // Rotation / revocation UI state.
   const [keyOp, setKeyOp] = useState<"rotating" | "revoking" | null>(null);
   const [keyOpError, setKeyOpError] = useState<string | null>(null);
   const [rotatedKey, setRotatedKey] = useState<string | null>(null);
-
-  const confirmCeremony = useMutation(api.mcpApiKeys.confirmMyWithdrawCeremony);
-  const listRequests = useQuery; // we call manually via refetch pattern, but use the query fn? For simplicity use direct in effect no, use lazy via button
-
-  // Manual fetch for requests (avoids too many queries)
-  const fetchRequests = async (deskId: Id<"deskManagers">) => {
-    setLoadingRequests(true);
-    try {
-      // Convex http client not directly, but since we are in app we can use the generated but for demo use a trick:
-      // Actually in practice the query hook is for reactive; for one-shot we can use the internal but better expose.
-      // For this impl we call the public query via a small wrapper - to keep simple, re-use the hook by selecting.
-      // Instead: store selected and use a second useQuery keyed by selected.
-      // For the component we do reactive below.
-    } finally {
-      setLoadingRequests(false);
-    }
-  };
 
   // Reactive requests for the selected desk (clean, uses the secured query)
   const recentRequests = (useQuery(
@@ -97,28 +61,6 @@ export function McpOperatorDialog({
   ) ?? []) as McpRequestRow[];
 
   const selectedDesk = myDesks.find((d) => d.deskManagerId === selectedDeskId);
-
-  const handleConfirm = async () => {
-    if (!selectedDeskId || !confirmAddress.trim()) return;
-    setIsConfirming(true);
-    setConfirmError(null);
-    try {
-      const res = await confirmCeremony({
-        deskManagerId: selectedDeskId,
-        address: confirmAddress.trim(),
-      });
-      if (res?.ok) {
-        setConfirmAddress("");
-        // success toast would go here; for now the list will refresh via reactivity
-      } else {
-        setConfirmError("Confirmation failed");
-      }
-    } catch (e: any) {
-      setConfirmError(e?.message ?? "Failed to confirm ceremony");
-    } finally {
-      setIsConfirming(false);
-    }
-  };
 
   const copy = (text: string) => {
     navigator.clipboard?.writeText(text).catch(() => {});
@@ -201,9 +143,6 @@ export function McpOperatorDialog({
             <div className="font-mono text-sm font-semibold tracking-[0.08em] text-[var(--t-amber)]">
               MCP OPERATOR CONSOLE
             </div>
-            <div className="rounded bg-[var(--t-amber)]/10 px-1.5 py-px text-[10px] text-[var(--t-amber)]">
-              PHASE 6
-            </div>
           </div>
           <button
             onClick={() => onOpenChange(false)}
@@ -217,10 +156,9 @@ export function McpOperatorDialog({
         <div className="p-5 space-y-6 text-sm">
           {/* Intro */}
           <div className="text-[var(--t-text)]/70">
-            Manage your AI agent desks (MCP/ Claude Code controlled). View audit
-            logs, confirm the one-time withdrawal address ceremony (human
-            binding), and inspect cash-out readiness. All writes are idempotent
-            and fully audited in{" "}
+            Manage your AI agent desks (MCP / Claude Code controlled). Rotate or
+            revoke keys, and inspect the recent audit trail. All writes are
+            idempotent and fully audited in{" "}
             <code className="font-mono text-[10px]">mcpRequests</code>.
           </div>
 
@@ -241,15 +179,10 @@ export function McpOperatorDialog({
             <div className="grid gap-2 sm:grid-cols-2">
               {myDesks.map((d) => {
                 const isSel = d.deskManagerId === selectedDeskId;
-                const ready =
-                  d.withdraw.ceremonyCompleted && d.withdraw.allowlistCount > 0;
                 return (
                   <button
                     key={d.deskManagerId}
-                    onClick={() => {
-                      setSelectedDeskId(d.deskManagerId);
-                      setConfirmAddress(d.withdraw.pendingProposal ?? "");
-                    }}
+                    onClick={() => setSelectedDeskId(d.deskManagerId)}
                     className={cn(
                       "text-left rounded border p-3 transition",
                       isSel
@@ -268,40 +201,18 @@ export function McpOperatorDialog({
                         ? formatShortAddress(d.walletAddress)
                         : "no wallet"}
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
-                      <span
-                        className={cn(
-                          "rounded px-1.5 py-px",
-                          d.withdraw.ceremonyCompleted
-                            ? "bg-[var(--t-green)]/15 text-[var(--t-green)]"
-                            : "bg-[var(--t-amber)]/15 text-[var(--t-amber)]"
-                        )}
-                      >
-                        {d.withdraw.ceremonyCompleted
-                          ? "CEREMONY DONE"
-                          : "CEREMONY NEEDED"}
-                      </span>
-                      <span className="rounded bg-white/5 px-1.5 py-px">
-                        {d.withdraw.allowlistCount} allowlisted
-                      </span>
-                      {d.withdraw.pendingProposal && (
-                        <span className="rounded bg-[var(--t-red)]/15 px-1.5 py-px text-[var(--t-red)]">
-                          PENDING CONFIRM
-                        </span>
-                      )}
-                      {ready && (
-                        <span className="rounded bg-[var(--t-green)]/15 px-1.5 py-px text-[var(--t-green)]">
-                          WITHDRAW READY
-                        </span>
-                      )}
-                    </div>
+                    {d.lastUsedAt && (
+                      <div className="mt-2 font-mono text-[10px] text-[var(--t-text)]/50">
+                        last used {relativeTime(d.lastUsedAt)}
+                      </div>
+                    )}
                   </button>
                 );
               })}
             </div>
           </div>
 
-          {/* Selected Desk Detail + Ceremony */}
+          {/* Selected Desk Detail */}
           {selectedDesk && (
             <div className="rounded border border-[var(--t-border)]/40 bg-black/30 p-4">
               <div className="mb-3 flex items-center justify-between text-xs uppercase tracking-widest text-[var(--t-text)]/60">
@@ -314,102 +225,8 @@ export function McpOperatorDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 text-sm">
-                <div>
-                  <div className="text-[10px] text-[var(--t-text)]/50">
-                    WITHDRAW STATUS
-                  </div>
-                  <div className="mt-1 font-semibold">
-                    {selectedDesk.withdraw.ceremonyCompleted ? (
-                      <span className="text-[var(--t-green)]">
-                        Ceremony complete — withdrawals enabled
-                      </span>
-                    ) : (
-                      <span className="text-[var(--t-amber)]">
-                        Ceremony required before any cash-out
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-2 text-xs">
-                    Allowlist: <b>{selectedDesk.withdraw.allowlistCount}</b>{" "}
-                    address(es)
-                    <br />
-                    Daily cap:{" "}
-                    <b>
-                      {(selectedDesk.withdraw.dailyCap ?? 1000).toFixed(0)}
-                    </b>{" "}
-                    USDC (used today ~
-                    {(selectedDesk.withdraw.dailyUsed ?? 0).toFixed(2)})
-                  </div>
-                </div>
-
-                <div>
-                  <div className="text-[10px] text-[var(--t-text)]/50 mb-1">
-                    CEREMONY ACTION
-                  </div>
-                  {!selectedDesk.withdraw.ceremonyCompleted ? (
-                    <>
-                      <div className="text-xs text-[var(--t-text)]/70 mb-2">
-                        Enter (or paste from Claude) the exact address the agent
-                        proposed. Confirming binds{" "}
-                        <span className="font-mono">you</span> as the human
-                        operator for this agent desk and activates{" "}
-                        <code>withdraw_to_address</code>.
-                      </div>
-                      <div className="flex gap-2">
-                        <input
-                          value={confirmAddress}
-                          onChange={(e) => setConfirmAddress(e.target.value)}
-                          placeholder="0x..."
-                          className="flex-1 rounded border border-[var(--t-border)]/50 bg-black/40 px-2 py-1.5 font-mono text-xs placeholder:text-[var(--t-text)]/40 focus:outline-none focus:border-[var(--t-amber)]"
-                        />
-                        <button
-                          onClick={handleConfirm}
-                          disabled={isConfirming || !confirmAddress.trim()}
-                          className="flex items-center gap-1.5 rounded bg-[var(--t-green)]/90 px-3 py-1 text-xs font-semibold text-black disabled:opacity-50"
-                        >
-                          {isConfirming ? (
-                            <RefreshCw className="h-3 w-3 animate-spin" />
-                          ) : (
-                            <Check className="h-3 w-3" />
-                          )}
-                          CONFIRM
-                        </button>
-                      </div>
-                      {confirmError && (
-                        <div className="mt-1 text-xs text-[var(--t-red)]">
-                          {confirmError}
-                        </div>
-                      )}
-                      {selectedDesk.withdraw.pendingProposal && (
-                        <div className="mt-1 text-[10px] text-[var(--t-amber)]">
-                          Claude proposed:{" "}
-                          <code>{selectedDesk.withdraw.pendingProposal}</code>
-                          <button
-                            onClick={() =>
-                              setConfirmAddress(
-                                selectedDesk.withdraw.pendingProposal!
-                              )
-                            }
-                            className="ml-1 underline"
-                          >
-                            use
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="flex items-center gap-2 rounded bg-[var(--t-green)]/10 p-2 text-xs text-[var(--t-green)]">
-                      <ShieldCheck className="h-4 w-4" /> Human binding
-                      complete. Agent may now register additional addresses and
-                      withdraw.
-                    </div>
-                  )}
-                </div>
-              </div>
-
               {/* Key actions: rotate / revoke */}
-              <div className="mt-5 rounded border border-[var(--t-border)]/40 bg-black/20 p-3">
+              <div className="rounded border border-[var(--t-border)]/40 bg-black/20 p-3">
                 <div className="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest text-[var(--t-text)]/60">
                   <ShieldCheck className="h-3.5 w-3.5" /> KEY ACTIONS
                 </div>
@@ -556,7 +373,7 @@ export function McpOperatorDialog({
 
           {!selectedDesk && myDesks.length > 0 && (
             <div className="text-xs text-[var(--t-text)]/50">
-              Select a desk above to manage ceremony or inspect its audit trail.
+              Select a desk above to manage its keys or inspect its audit trail.
             </div>
           )}
         </div>
