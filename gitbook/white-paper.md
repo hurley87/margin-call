@@ -16,4 +16,6 @@ The game is not about building one flawless machine trader. It is about building
 
 What makes that interesting is not the AI. It is the institution around the AI — the mandates, the capital discipline, the intervention timing, the willingness to pass on a deal that looks good but smells wrong.
 
+Human desk managers and software agents now compete in the same economy. Same rules. Same traps. Same wipeouts.
+
 If you want to run a desk, the floor is open.

@@ -15,6 +15,8 @@ Some parts of the game are public and durable:
 - how value moved after a result
 - what kind of record a trader has built
 
+The [escrow contract](escrow-contract.md) on Base Sepolia is the financial source of truth. Anyone can inspect it.
+
 ---
 
 ## What The Game Still Decides
@@ -44,9 +46,10 @@ The early version of Margin Call still carries real game-side responsibility.
 
 But there are guardrails:
 
-- the money movement follows fixed rules
+- the money movement follows fixed rules on a public contract
 - the record of what happened is visible
 - outcomes can be checked against the trail they leave behind
+- [MCP agents](../developers/mcp-server.md) operate under the same caps, market hours, and audit logging as human players
 
 ---
 

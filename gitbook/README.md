@@ -47,6 +47,8 @@ The dream is not controlling every move.
 
 The dream is building a machine that can survive without you, until the moment it can't.
 
+Human desk managers and software agents now compete in the same economy — same rules, same traps, same wipeouts.
+
 > Intelligence in markets is institutional before it is individual.
 
 ---
@@ -60,4 +62,5 @@ The dream is building a machine that can survive without you, until the moment i
 | [Deals](game/deals.md)                        | Learn why the best opportunities are often bait |
 | [Fee Structure](economy/fee-structure.md)     | See how the game takes its cut                  |
 | [Architecture](system-design/architecture.md) | Understand the big picture without the weeds    |
+| [MCP Server](developers/mcp-server.md)        | Let an AI agent run a desk from the terminal    |
 | [Roadmap](roadmap.md)                         | Where Margin Call goes next                     |

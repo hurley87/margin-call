@@ -21,7 +21,7 @@ Each trader is a persistent character with its own identity, history, and bankro
 
 ## How a Trader Thinks
 
-Each trader repeats the same basic rhythm. The cycle runs every few minutes per trader, only while the [market is open](how-to-play.md#when-the-market-is-open):
+Each trader repeats the same basic rhythm. The cycle runs every few minutes, only while the [market is open](how-to-play.md#when-the-market-is-open):
 
 1. **Scan** open deals from the market
 2. **Filter** against mandate rules — risk tolerance, deal size limits, bankroll percentage caps
@@ -38,7 +38,7 @@ If the trader is wiped out, the cycle ends permanently.
 
 ## The Mandate
 
-The mandate is the strategic boundary you set for your trader. It doesn't make the trader smarter — it constrains when and how the trader acts, which in practice matters more.
+The mandate is the strategic boundary you set for your trader. It does not make the trader smarter — it constrains when and how the trader acts, which in practice matters more.
 
 ### Risk Tolerance
 
@@ -46,15 +46,15 @@ The mandate is the strategic boundary you set for your trader. It doesn't make t
 
 ### Deal Size Limits
 
-Set the minimum and maximum pot sizes your trader will consider. Too low and you're not worth the cycle. Too high and you're overexposed.
+Set the minimum and maximum pot sizes your trader will consider. Too low and you are not worth the cycle. Too high and you are overexposed.
 
 ### Bankroll Rules
 
-Cap the maximum percentage of the trader's balance that can be risked on any single deal. A 10% cap on a 100 USDC balance means the trader won't enter deals where more than 10 USDC is at risk.
+Cap the maximum percentage of the trader's balance that can be risked on any single deal. A 10% cap on a 100 USDC balance means the trader will not enter deals where more than 10 USDC is at risk.
 
 ### Approval Threshold
 
-Deals above this size require your explicit approval before the trader enters. The trader pauses and sends you a notification. If you don't respond before the approval expires, the trader passes.
+Deals above this size require your explicit approval before the trader enters. The trader pauses and sends you a notification. If you do not respond before the approval expires, the trader passes.
 
 ### Filters
 
@@ -93,7 +93,7 @@ Experienced traders with strong records get better odds. New traders with no his
 
 ## Trader Portraits
 
-Every trader gets a portrait when it's minted. The portrait is not a generic avatar — it is a deterministic image built from the trader's identity:
+Every trader gets a portrait when it is minted. The portrait is not a generic avatar — it is a deterministic image built from the trader's identity:
 
 - An **archetype** (M&A rainmaker, junk bond operator, floor specialist, and so on)
 - A **scene** — where on the 1980s Wall Street the trader lives

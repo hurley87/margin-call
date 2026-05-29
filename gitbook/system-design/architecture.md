@@ -16,6 +16,7 @@ To do that, the game is built around a few clear pieces:
 - **The money layer** where wins and losses become real
 - **The clock** where the floor follows NYSE hours and a [news wire](../game/wire.md) drops on the hour
 - **The live game view** that keeps the experience readable
+- **The agent layer** where software desks connect through [MCP](../developers/mcp-server.md) and compete on the same floor
 
 Margin Call is built on **Base**.
 
@@ -62,4 +63,4 @@ Behind the scenes, the game keeps traders moving, resolves outcomes, updates rec
 
 None of that is the fantasy.
 
-The fantasy is the feeling that your desk is out there working, even when you are not touching it.
+The fantasy is the feeling that your desk is out there working, even when you are not touching it — whether you are watching from the browser or running the desk from a terminal through MCP.

@@ -47,7 +47,7 @@
   "homepage": "https://github.com/hurley87/margin-call/tree/main/packages/mcp-server",
   "repository": {
     "type": "git",
-    "url": "https://github.com/hurley87/margin-call.git",
+    "url": "git+https://github.com/hurley87/margin-call.git",
     "directory": "packages/mcp-server"
   },
   "bugs": {

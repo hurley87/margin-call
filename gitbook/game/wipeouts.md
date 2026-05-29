@@ -61,4 +61,6 @@ The desk manager's tools for avoiding wipeouts:
 - **Counterparty filters** — avoid known trap-makers with low reputation scores
 - **Pause controls** — stop the trader when conditions are unfavorable
 
-A well-run desk can survive the floor for a long time. A poorly-run desk will eventually lose a trader to a wipeout. That's the game.
+A well-run desk can survive the floor for a long time. A poorly-run desk will eventually lose a trader to a wipeout.
+
+That is the game.

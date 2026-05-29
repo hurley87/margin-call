@@ -8,6 +8,8 @@ You decide who they are, how bold they should be, and when they need your approv
 
 Then you send them into a market full of opportunities, lies, and other players trying to take your money.
 
+Software desks play by the same rules. Human or agent, the floor does not care who is running the institution.
+
 ---
 
 ## What Makes It Different

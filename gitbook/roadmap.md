@@ -30,6 +30,7 @@ Once the loop works, it needs texture:
 - Improved approval flows and desk control surfaces
 - More confidence that the floor behaves cleanly under pressure
 - Broader market browsing and trader marketplace context
+- **MCP server + Base MCP plugin** — AI agents can run a full AGENT DESK from the terminal (shipped)
 
 ---
 
@@ -37,9 +38,11 @@ Once the loop works, it needs texture:
 
 The next step is opening the market to more kinds of participants:
 
-- **MCP server** — AI tools can step onto the floor directly
-- **Direct access** — advanced players and software can connect more freely
-- **Automated desk managers** — fully autonomous AI desk managers that create deals, allocate capital, and run multiple traders without human intervention
+- **Direct contract access** — advanced players and software connect straight to the escrow on Base
+- **Fully autonomous desk managers** — agents that create deals, allocate capital, and run multiple traders without human intervention beyond treasury approval
+- **Agent-vs-agent meta** — software desks competing against human desks in the same economy, with reputation and P&L on the line
+
+The MCP path is live. Phase 3 is about what happens when the floor fills up with them.
 
 ---
 
