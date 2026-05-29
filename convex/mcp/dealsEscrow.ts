@@ -3,8 +3,8 @@
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import type { Doc } from "../_generated/dataModel";
-import { mcpDeskCdpAccountName, parseAmountUsdc } from "./traders";
+import type { Doc, Id } from "../_generated/dataModel";
+import { parseAmountUsdc } from "./traders";
 import type { McpDealWriteResult } from "./deals";
 import { assertTradingHours } from "../lib/tradingHours";
 import { assertPerActionCap } from "./limits";
@@ -13,118 +13,36 @@ import {
   simulateEscrowCreateDeal,
   simulateEscrowCloseDeal,
 } from "./simulate";
+import {
+  ESCROW_ADDRESS,
+  USDC_SEPOLIA_ADDRESS,
+  USDC_DECIMALS,
+  MCP_CHAIN,
+  DEAL_STATUS_CLOSED,
+  LARGE_APPROVE_ALLOWANCE,
+  erc20Abi,
+  escrowAbi,
+  serializeCall,
+  type PreparedCall,
+} from "./escrowConstants";
+import {
+  requireDeskWallet,
+  verifyTxSucceeded,
+  getBaseSepoliaPublicClient,
+} from "./deskByo";
+import { shapePrepareResult } from "./intents";
 
-const USDC_DECIMALS = 1_000_000;
+type PrepareActionResult = Record<string, unknown>;
 
-/**
- * Large allowance used when topping up the desk's USDC approval for the escrow
- * at deal-creation time. See `tradersEscrow.ts` for the same rationale: making
- * approve a one-time setup cost means subsequent create_deal calls only need
- * the single createDeal tx.
- */
-const LARGE_APPROVE_ALLOWANCE = BigInt(10_000_000) * BigInt(USDC_DECIMALS); // 10M USDC
-
-const ESCROW_ADDRESS = "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
-const USDC_SEPOLIA_ADDRESS =
-  "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
-
-const erc20Abi = [
-  {
-    type: "function",
-    name: "approve",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "amount", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "allowance",
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
-    ],
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-  },
-] as const;
-
-const escrowAbi = [
-  {
-    type: "function",
-    name: "createDeal",
-    inputs: [
-      { name: "prompt", type: "string" },
-      { name: "potAmount", type: "uint256" },
-      { name: "entryCost", type: "uint256" },
-    ],
-    outputs: [{ name: "dealId", type: "uint256" }],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "closeDeal",
-    inputs: [{ name: "dealId", type: "uint256" }],
-    outputs: [],
-    stateMutability: "nonpayable",
-  },
-  {
-    type: "function",
-    name: "getDeal",
-    inputs: [{ name: "dealId", type: "uint256" }],
-    outputs: [
-      {
-        name: "",
-        type: "tuple",
-        components: [
-          { name: "creator", type: "address" },
-          { name: "prompt", type: "string" },
-          { name: "potAmount", type: "uint256" },
-          { name: "entryCost", type: "uint256" },
-          { name: "fee", type: "uint256" },
-          { name: "status", type: "uint8" },
-          { name: "pendingEntries", type: "uint256" },
-        ],
-      },
-    ],
-    stateMutability: "view",
-  },
-  {
-    type: "event",
-    name: "DealCreated",
-    inputs: [
-      { name: "dealId", type: "uint256", indexed: true },
-      { name: "creator", type: "address", indexed: true },
-      { name: "prompt", type: "string", indexed: false },
-      { name: "pot", type: "uint256", indexed: false },
-      { name: "entryCost", type: "uint256", indexed: false },
-    ],
-  },
-] as const;
-
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value || value.trim() === "") {
-    throw new Error(`Missing required Convex env var: ${name}`);
-  }
-  return value;
-}
-
-/**
- * MCP `create_deal`: approve USDC if needed, call escrow `createDeal` from the
- * MCP desk CDP wallet, decode the `DealCreated` event to extract the on-chain
- * deal id, then record the open deal in Convex.
- */
-export const createForMcp = internalAction({
+export const createPrepareForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
     prompt: v.string(),
     potUsdc: v.number(),
     entryCostUsdc: v.number(),
+    idempotencyKey: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<McpDealWriteResult> => {
+  handler: async (ctx, args): Promise<PrepareActionResult> => {
     assertTradingHours();
 
     if (typeof args.prompt !== "string" || args.prompt.trim() === "") {
@@ -144,51 +62,24 @@ export const createForMcp = internalAction({
       throw new Error("entryCostUsdc must be <= potUsdc");
     }
 
+    const now = Date.now();
     const dm: Doc<"deskManagers"> | null = await ctx.runQuery(
       internal.deskManagers.getByIdInternal,
       { id: args.deskManagerId }
     );
-    if (!dm?.subject || !dm.walletAddress) {
-      throw new Error("Desk not found or wallet not provisioned");
-    }
+    if (!dm?.subject) throw new Error("Desk not found");
+    const deskAddress = requireDeskWallet(dm);
     if ((dm.walletBalanceUsdc ?? 0) < args.potUsdc) {
       throw new Error(
-        "Insufficient desk wallet balance — sync_wallet after funding the desk"
+        "Insufficient desk wallet balance — sync_wallet after funding your Base Account"
       );
     }
 
-    const cdpApiKeyId = requireEnv("CDP_API_KEY_ID");
-    const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
-    const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
+    const { encodeFunctionData } = await import("viem");
+    const publicClient = await getBaseSepoliaPublicClient();
 
-    const { CdpClient } = await import("@coinbase/cdp-sdk");
-    const { encodeFunctionData, createPublicClient, http, decodeEventLog } =
-      await import("viem");
-    const { baseSepolia } = await import("viem/chains");
+    const calls: PreparedCall[] = [];
 
-    const cdp = new CdpClient({
-      apiKeyId: cdpApiKeyId,
-      apiKeySecret: cdpApiKeySecret,
-      walletSecret: cdpWalletSecret,
-    });
-
-    const accountName = mcpDeskCdpAccountName(dm.subject);
-    const deskAccount = await cdp.evm.getOrCreateAccount({ name: accountName });
-    const deskAddress = deskAccount.address as `0x${string}`;
-
-    if (deskAddress.toLowerCase() !== dm.walletAddress.toLowerCase()) {
-      throw new Error("Desk CDP wallet address mismatch — contact support");
-    }
-
-    const publicClient = createPublicClient({
-      chain: baseSepolia,
-      transport: http(),
-    });
-
-    // ── Allowance top-up (rare thanks to LARGE_APPROVE_ALLOWANCE) ─────────────
-    // Same rationale as fund_trader: a large one-time approve makes any later
-    // create_deal cheap (single createDeal tx). Idempotency on retries is
-    // enforced one level up by mcpWriteRoute.
     const currentAllowance = (await publicClient.readContract({
       address: USDC_SEPOLIA_ADDRESS,
       abi: erc20Abi,
@@ -196,7 +87,8 @@ export const createForMcp = internalAction({
       args: [deskAddress, ESCROW_ADDRESS],
     })) as bigint;
 
-    if (currentAllowance < potAtomic) {
+    const needsApprove = currentAllowance < potAtomic;
+    if (needsApprove) {
       await simulateUsdcApprove(
         publicClient,
         USDC_SEPOLIA_ADDRESS,
@@ -204,58 +96,123 @@ export const createForMcp = internalAction({
         ESCROW_ADDRESS,
         LARGE_APPROVE_ALLOWANCE
       );
-      const approveData = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: "approve",
-        args: [ESCROW_ADDRESS, LARGE_APPROVE_ALLOWANCE],
-      });
-      const { transactionHash: approveHash } =
-        await deskAccount.sendTransaction({
-          transaction: {
-            to: USDC_SEPOLIA_ADDRESS,
-            value: BigInt(0),
-            data: approveData,
-          },
-          network: "base-sepolia",
-        });
-      await publicClient.waitForTransactionReceipt({
-        hash: approveHash as `0x${string}`,
-      });
-    }
-
-    // ── escrow.createDeal ────────────────────────────────────────────────────
-    await simulateEscrowCreateDeal(
-      publicClient,
-      ESCROW_ADDRESS,
-      deskAddress,
-      args.prompt,
-      potAtomic,
-      entryCostAtomic
-    );
-
-    const createData = encodeFunctionData({
-      abi: escrowAbi,
-      functionName: "createDeal",
-      args: [args.prompt, potAtomic, entryCostAtomic],
-    });
-    const { transactionHash: createHash } = await deskAccount.sendTransaction({
-      transaction: {
-        to: ESCROW_ADDRESS,
+      calls.push({
+        to: USDC_SEPOLIA_ADDRESS,
         value: BigInt(0),
-        data: createData,
-      },
-      network: "base-sepolia",
-    });
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: createHash as `0x${string}`,
-      confirmations: 2,
-    });
-    if (receipt.status === "reverted") {
-      throw new Error("escrow.createDeal reverted");
+        data: encodeFunctionData({
+          abi: erc20Abi,
+          functionName: "approve",
+          args: [ESCROW_ADDRESS, LARGE_APPROVE_ALLOWANCE],
+        }),
+      });
     }
 
-    let onChainDealId: number | undefined;
+    // createDeal performs usdc.safeTransferFrom(deskAddress, escrow, pot), which
+    // requires allowance >= pot. When we batch a fresh approve above, that
+    // approve has NOT executed on-chain yet, so simulating createDeal against
+    // current state would always revert with "insufficient allowance". The Base
+    // MCP send_calls batch runs approve→createDeal atomically and confirm_intent
+    // verifies the tx succeeded, so only pre-simulate when allowance already
+    // exists.
+    if (!needsApprove) {
+      await simulateEscrowCreateDeal(
+        publicClient,
+        ESCROW_ADDRESS,
+        deskAddress,
+        args.prompt,
+        potAtomic,
+        entryCostAtomic
+      );
+    }
+
+    calls.push({
+      to: ESCROW_ADDRESS,
+      value: BigInt(0),
+      data: encodeFunctionData({
+        abi: escrowAbi,
+        functionName: "createDeal",
+        args: [args.prompt, potAtomic, entryCostAtomic],
+      }),
+    });
+
+    const intent = await ctx.runMutation(internal.mcp.intents.create, {
+      deskManagerId: args.deskManagerId,
+      intentType: "create_deal",
+      chain: MCP_CHAIN,
+      calls: calls.map(serializeCall),
+      payload: {
+        prompt: args.prompt,
+        potUsdc: args.potUsdc,
+        entryCostUsdc: args.entryCostUsdc,
+        walletAddress: deskAddress,
+      },
+      idempotencyKey: args.idempotencyKey,
+      now,
+    });
+
+    return shapePrepareResult(
+      intent,
+      `Prepared create_deal: ${args.potUsdc.toFixed(2)} USDC pot, ${args.entryCostUsdc.toFixed(2)} USDC entry (${calls.length} call(s)).`
+    );
+  },
+});
+
+export const createConfirmForMcp = internalAction({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    intentId: v.id("mcpIntents"),
+    txHash: v.string(),
+  },
+  handler: async (ctx, args): Promise<McpDealWriteResult> => {
+    // No trading-hours gate here: the on-chain tx has already executed by
+    // confirm time, so refusing to record it would orphan a real deal.
+    const now = Date.now();
+
+    const loaded = await ctx.runQuery(internal.mcp.intents.getForConfirm, {
+      intentId: args.intentId,
+      deskManagerId: args.deskManagerId,
+      now,
+    });
+
+    if (loaded.alreadyConfirmed && loaded.intent.confirmResult) {
+      return loaded.intent.confirmResult as McpDealWriteResult;
+    }
+
+    const intent = loaded.intent;
+    if (intent.intentType !== "create_deal") {
+      throw new Error("Intent type mismatch");
+    }
+
+    const payload = intent.payload as {
+      prompt: string;
+      potUsdc: number;
+      entryCostUsdc: number;
+      walletAddress: string;
+    };
+
+    const { receipt } = await verifyTxSucceeded(args.txHash);
+
+    const { decodeEventLog } = await import("viem");
+
+    // Bind the tx to this intent: only accept a DealCreated event emitted by
+    // our escrow contract, and require the on-chain creator to be the desk
+    // wallet so a desk cannot confirm with an unrelated/forged tx. The event
+    // also carries prompt/pot/entryCost so we record what the chain actually
+    // escrowed without a follow-up getDeal read.
+    const expectedCreator = payload.walletAddress.toLowerCase();
+    let dealEvent:
+      | {
+          dealId: bigint;
+          creator: string;
+          prompt: string;
+          pot: bigint;
+          entryCost: bigint;
+        }
+      | undefined;
     for (const log of receipt.logs) {
+      if (log.address.toLowerCase() !== ESCROW_ADDRESS.toLowerCase()) {
+        continue;
+      }
       try {
         const decoded = decodeEventLog({
           abi: escrowAbi,
@@ -263,47 +220,58 @@ export const createForMcp = internalAction({
           topics: log.topics,
         });
         if (decoded.eventName === "DealCreated") {
-          onChainDealId = Number((decoded.args as { dealId: bigint }).dealId);
+          dealEvent = decoded.args as typeof dealEvent;
           break;
         }
       } catch {
         // not our event
       }
     }
-    if (onChainDealId === undefined) {
+    if (!dealEvent) {
       throw new Error(
-        "createDeal succeeded but DealCreated event was not found in tx logs"
+        "createDeal succeeded but no DealCreated event from the escrow contract was found — txHash does not match this intent"
       );
     }
+    if (dealEvent.creator.toLowerCase() !== expectedCreator) {
+      throw new Error(
+        "DealCreated creator does not match the desk wallet for this intent"
+      );
+    }
+
+    const onChainDealId = Number(dealEvent.dealId);
 
     const recorded: McpDealWriteResult = await ctx.runMutation(
       internal.mcp.deals.recordOnChainCreationForMcp,
       {
         deskManagerId: args.deskManagerId,
         onChainDealId,
-        onChainTxHash: createHash,
-        prompt: args.prompt,
-        potUsdc: args.potUsdc,
-        entryCostUsdc: args.entryCostUsdc,
+        onChainTxHash: args.txHash,
+        prompt: dealEvent.prompt,
+        potUsdc: Number(dealEvent.pot) / USDC_DECIMALS,
+        entryCostUsdc: Number(dealEvent.entryCost) / USDC_DECIMALS,
       }
     );
+
+    await ctx.runMutation(internal.mcp.intents.markConfirmed, {
+      intentId: args.intentId,
+      txHash: args.txHash,
+      confirmResult: recorded,
+      now,
+    });
 
     return recorded;
   },
 });
 
-/**
- * MCP `close_deal`: verify the deal is owned by this MCP desk and currently
- * open with zero pending entries on-chain, call escrow `closeDeal`, then mark
- * the Convex `deals` row as closed.
- */
-export const closeForMcp = internalAction({
+export const closePrepareForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
     dealId: v.id("deals"),
+    idempotencyKey: v.optional(v.string()),
   },
-  handler: async (ctx, args): Promise<McpDealWriteResult> => {
+  handler: async (ctx, args): Promise<PrepareActionResult> => {
     assertTradingHours();
+    const now = Date.now();
 
     const loaded = await ctx.runQuery(
       internal.mcp.deals.loadOwnedDealForClose,
@@ -314,37 +282,17 @@ export const closeForMcp = internalAction({
     );
 
     if (!loaded.walletAddress) {
-      throw new Error("Desk wallet not provisioned");
+      throw new Error("Desk wallet not bound — call set_desk_wallet first");
     }
-
-    const cdpApiKeyId = requireEnv("CDP_API_KEY_ID");
-    const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
-    const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
-
-    const { CdpClient } = await import("@coinbase/cdp-sdk");
-    const { encodeFunctionData, createPublicClient, http } =
-      await import("viem");
-    const { baseSepolia } = await import("viem/chains");
-
-    const cdp = new CdpClient({
-      apiKeyId: cdpApiKeyId,
-      apiKeySecret: cdpApiKeySecret,
-      walletSecret: cdpWalletSecret,
+    const deskAddress = requireDeskWallet({
+      walletAddress: loaded.walletAddress,
     });
 
-    const accountName = mcpDeskCdpAccountName(loaded.subject);
-    const deskAccount = await cdp.evm.getOrCreateAccount({ name: accountName });
-    const deskAddress = deskAccount.address as `0x${string}`;
-    if (deskAddress.toLowerCase() !== loaded.walletAddress.toLowerCase()) {
-      throw new Error("Desk CDP wallet address mismatch — contact support");
-    }
+    const { encodeFunctionData } = await import("viem");
+    const publicClient = await getBaseSepoliaPublicClient();
 
-    const publicClient = createPublicClient({
-      chain: baseSepolia,
-      transport: http(),
-    });
-
-    // Pre-flight: confirm the escrow agrees there are no pending entries.
+    // Chain `pendingEntries` can lag the Convex view, so check it on-chain
+    // before queueing the intent.
     const onChainDeal = await publicClient.readContract({
       address: ESCROW_ADDRESS,
       abi: escrowAbi,
@@ -366,38 +314,110 @@ export const closeForMcp = internalAction({
       BigInt(loaded.onChainDealId)
     );
 
-    const closeData = encodeFunctionData({
-      abi: escrowAbi,
-      functionName: "closeDeal",
-      args: [BigInt(loaded.onChainDealId)],
-    });
-    const { transactionHash } = await deskAccount.sendTransaction({
-      transaction: {
+    const closeCalls: PreparedCall[] = [
+      {
         to: ESCROW_ADDRESS,
         value: BigInt(0),
-        data: closeData,
+        data: encodeFunctionData({
+          abi: escrowAbi,
+          functionName: "closeDeal",
+          args: [BigInt(loaded.onChainDealId)] as const,
+        }),
       },
-      network: "base-sepolia",
+    ];
+
+    const intent = await ctx.runMutation(internal.mcp.intents.create, {
+      deskManagerId: args.deskManagerId,
+      intentType: "close_deal",
+      chain: MCP_CHAIN,
+      calls: closeCalls.map(serializeCall),
+      payload: {
+        dealId: args.dealId,
+        onChainDealId: loaded.onChainDealId,
+        walletAddress: loaded.walletAddress,
+      },
+      idempotencyKey: args.idempotencyKey,
+      now,
     });
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: transactionHash as `0x${string}`,
-      confirmations: 2,
+
+    return shapePrepareResult(
+      intent,
+      `Prepared close for on-chain deal #${loaded.onChainDealId}.`
+    );
+  },
+});
+
+export const closeConfirmForMcp = internalAction({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    intentId: v.id("mcpIntents"),
+    txHash: v.string(),
+  },
+  handler: async (ctx, args): Promise<McpDealWriteResult> => {
+    // No trading-hours gate: the on-chain close has already executed, so this
+    // is pure state reconciliation that must not be time-gated.
+    const now = Date.now();
+
+    const loaded = await ctx.runQuery(internal.mcp.intents.getForConfirm, {
+      intentId: args.intentId,
+      deskManagerId: args.deskManagerId,
+      now,
     });
-    if (receipt.status === "reverted") {
-      throw new Error("escrow.closeDeal reverted");
+
+    if (loaded.alreadyConfirmed && loaded.intent.confirmResult) {
+      return loaded.intent.confirmResult as McpDealWriteResult;
+    }
+
+    const intent = loaded.intent;
+    if (intent.intentType !== "close_deal") {
+      throw new Error("Intent type mismatch");
+    }
+
+    const payload = intent.payload as {
+      dealId: Id<"deals">;
+      onChainDealId: number;
+      walletAddress: string;
+    };
+
+    // Verify the tx mined without reverting, then bind it to this intent by
+    // re-reading the escrow's deal status. verifyTxSucceeded alone only proves
+    // *some* tx succeeded; a desk could otherwise confirm with any unrelated
+    // successful txHash and mark the deal closed in Convex while it stays open
+    // on-chain (pot not returned, entries can still settle). Asserting the
+    // on-chain deal is Closed mirrors the create path's event-binding guarantee.
+    const { publicClient } = await verifyTxSucceeded(args.txHash);
+    const onChainDeal = await publicClient.readContract({
+      address: ESCROW_ADDRESS,
+      abi: escrowAbi,
+      functionName: "getDeal",
+      args: [BigInt(payload.onChainDealId)],
+    });
+    if (onChainDeal.status !== DEAL_STATUS_CLOSED) {
+      throw new Error(
+        `On-chain deal #${payload.onChainDealId} is not closed (status ${onChainDeal.status}) — txHash does not match this close intent`
+      );
     }
 
     await ctx.runMutation(internal.mcp.deals.markDealClosedForMcp, {
       deskManagerId: args.deskManagerId,
-      dealId: args.dealId,
+      dealId: payload.dealId,
     });
 
-    return {
-      dealId: String(args.dealId),
-      onChainDealId: loaded.onChainDealId,
-      txHash: transactionHash,
-      walletAddress: loaded.walletAddress,
-      summary: `Closed deal #${loaded.onChainDealId}. Remaining pot returned to desk wallet — call sync_wallet to refresh balance.`,
+    const result: McpDealWriteResult = {
+      dealId: String(payload.dealId),
+      onChainDealId: payload.onChainDealId,
+      txHash: args.txHash,
+      walletAddress: payload.walletAddress,
+      summary: `Closed deal #${payload.onChainDealId}. Remaining pot returned to your Base Account — call sync_wallet.`,
     };
+
+    await ctx.runMutation(internal.mcp.intents.markConfirmed, {
+      intentId: args.intentId,
+      txHash: args.txHash,
+      confirmResult: result,
+      now,
+    });
+
+    return result;
   },
 });
