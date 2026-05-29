@@ -11,8 +11,16 @@ import {
   formatShortAddress,
   relativeTime,
 } from "@/lib/utils";
+import { authFetch } from "@/lib/api";
 import { AgentDeskBadge } from "./agent-desk-badge";
-import { Clipboard, RefreshCw, ShieldCheck, Terminal, X } from "lucide-react";
+import {
+  Clipboard,
+  Plus,
+  RefreshCw,
+  ShieldCheck,
+  Terminal,
+  X,
+} from "lucide-react";
 
 type MyDesk = {
   keyId: Id<"mcpApiKeys">;
@@ -35,6 +43,44 @@ type McpRequestRow = {
   createdAt: number;
 };
 
+function OneTimeKeyReveal({
+  keyValue,
+  onCopy,
+  footer,
+}: {
+  keyValue: string;
+  onCopy: (text: string) => void;
+  footer: React.ReactNode;
+}) {
+  return (
+    <div className="rounded border border-[var(--t-green)]/50 bg-[var(--t-green)]/5 p-3">
+      <div className="mb-1 text-[10px] uppercase tracking-widest text-[var(--t-green)]">
+        NEW KEY — SHOWN ONCE
+      </div>
+      <div className="flex items-center gap-2">
+        <code className="flex-1 break-all rounded bg-black/40 p-2 font-mono text-[11px] text-[var(--t-text)]">
+          {keyValue}
+        </code>
+        <button
+          onClick={() => onCopy(keyValue)}
+          className="inline-flex items-center gap-1 rounded bg-[var(--t-green)]/90 px-2 py-1 text-[10px] font-semibold text-black"
+        >
+          <Clipboard className="h-3 w-3" /> COPY
+        </button>
+      </div>
+      <div className="mt-2 text-[10px] text-[var(--t-text)]/60">{footer}</div>
+    </div>
+  );
+}
+
+const ISSUED_KEY_FOOTER = (
+  <>
+    Copy this key into <code className="font-mono">MARGIN_CALL_MCP_KEY</code> in
+    your MCP client config. Then connect Base MCP and tell your assistant to run{" "}
+    <code className="font-mono">set_desk_wallet</code> with your wallet address.
+  </>
+);
+
 export function McpOperatorDialog({
   open,
   onOpenChange,
@@ -49,12 +95,14 @@ export function McpOperatorDialog({
   const [selectedDeskId, setSelectedDeskId] =
     useState<Id<"deskManagers"> | null>(null);
 
-  // Rotation / revocation UI state.
   const [keyOp, setKeyOp] = useState<"rotating" | "revoking" | null>(null);
   const [keyOpError, setKeyOpError] = useState<string | null>(null);
   const [rotatedKey, setRotatedKey] = useState<string | null>(null);
 
-  // Reactive requests for the selected desk (clean, uses the secured query)
+  const [issuing, setIssuing] = useState(false);
+  const [issueError, setIssueError] = useState<string | null>(null);
+  const [issuedKey, setIssuedKey] = useState<string | null>(null);
+
   const recentRequests = (useQuery(
     api.mcpApiKeys.listRecentMcpRequestsForMyDesk,
     selectedDeskId ? { deskManagerId: selectedDeskId, limit: 30 } : "skip"
@@ -66,7 +114,6 @@ export function McpOperatorDialog({
     navigator.clipboard?.writeText(text).catch(() => {});
   };
 
-  // Reset any previously-displayed new key when the user switches desks.
   React.useEffect(() => {
     setRotatedKey(null);
     setKeyOpError(null);
@@ -120,6 +167,27 @@ export function McpOperatorDialog({
       () => setSelectedDeskId(null)
     );
 
+  const handleIssue = async () => {
+    setIssuing(true);
+    setIssueError(null);
+    setIssuedKey(null);
+    try {
+      const res = await authFetch("/api/mcp/keys", { method: "POST" });
+      const data = (await res.json()) as Record<string, unknown>;
+      if (!res.ok) {
+        throw new Error(
+          (data.error as string) ?? `Failed to issue key (${res.status})`
+        );
+      }
+      if (!data.key) throw new Error("No key returned");
+      setIssuedKey(data.key as string);
+    } catch (e: unknown) {
+      setIssueError(e instanceof Error ? e.message : "Failed to issue key");
+    } finally {
+      setIssuing(false);
+    }
+  };
+
   if (!open) return null;
 
   return (
@@ -164,15 +232,59 @@ export function McpOperatorDialog({
 
           {/* My Desks */}
           <div>
-            <div className="mb-2 flex items-center gap-2 text-xs uppercase tracking-widest text-[var(--t-text)]/60">
-              <ShieldCheck className="h-3.5 w-3.5" /> MY ISSUED AGENT DESKS
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-xs uppercase tracking-widest text-[var(--t-text)]/60">
+                <ShieldCheck className="h-3.5 w-3.5" /> MY ISSUED AGENT DESKS
+              </div>
+              {myDesks.length > 0 && (
+                <button
+                  onClick={handleIssue}
+                  disabled={issuing}
+                  className="inline-flex items-center gap-1 rounded border border-[var(--t-amber)]/50 bg-[var(--t-amber)]/10 px-2 py-0.5 text-[10px] font-semibold text-[var(--t-amber)] hover:bg-[var(--t-amber)]/20 disabled:opacity-50"
+                >
+                  {issuing ? (
+                    <RefreshCw className="h-3 w-3 animate-spin" />
+                  ) : (
+                    <Plus className="h-3 w-3" />
+                  )}
+                  NEW DESK KEY
+                </button>
+              )}
             </div>
 
             {myDesks.length === 0 && (
-              <div className="rounded border border-[var(--t-border)]/40 bg-black/20 p-4 text-[var(--t-text)]/60">
-                No MCP desks issued yet. Use <code>POST /api/mcp/keys</code> (or
-                the script) while logged in to provision one. The resulting key
-                powers a dedicated AGENT DESK with its own CDP wallet.
+              <div className="rounded border border-[var(--t-border)]/40 bg-black/20 p-4 space-y-4">
+                <p className="text-[var(--t-text)]/70">
+                  Connect an AI assistant (Claude Code or Cursor) to trade on
+                  your behalf. Each Agent Desk gets its own wallet and API key.
+                </p>
+                <button
+                  onClick={handleIssue}
+                  disabled={issuing}
+                  className="inline-flex items-center gap-1.5 rounded border border-[var(--t-amber)]/50 bg-[var(--t-amber)]/10 px-4 py-2 text-xs font-semibold text-[var(--t-amber)] hover:bg-[var(--t-amber)]/20 disabled:opacity-50"
+                >
+                  {issuing ? (
+                    <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="h-3.5 w-3.5" />
+                  )}
+                  ISSUE AGENT DESK KEY
+                </button>
+              </div>
+            )}
+
+            {issueError && (
+              <div className="mt-2 text-[10px] text-[var(--t-red)]">
+                {issueError}
+              </div>
+            )}
+            {issuedKey && (
+              <div className="mt-3">
+                <OneTimeKeyReveal
+                  keyValue={issuedKey}
+                  onCopy={copy}
+                  footer={ISSUED_KEY_FOOTER}
+                />
               </div>
             )}
 
@@ -265,26 +377,19 @@ export function McpOperatorDialog({
                   </div>
                 )}
                 {rotatedKey && (
-                  <div className="mt-3 rounded border border-[var(--t-green)]/50 bg-[var(--t-green)]/5 p-3">
-                    <div className="mb-1 text-[10px] uppercase tracking-widest text-[var(--t-green)]">
-                      NEW KEY — SHOWN ONCE
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <code className="flex-1 break-all rounded bg-black/40 p-2 font-mono text-[11px] text-[var(--t-text)]">
-                        {rotatedKey}
-                      </code>
-                      <button
-                        onClick={() => copy(rotatedKey)}
-                        className="inline-flex items-center gap-1 rounded bg-[var(--t-green)]/90 px-2 py-1 text-[10px] font-semibold text-black"
-                      >
-                        <Clipboard className="h-3 w-3" /> COPY
-                      </button>
-                    </div>
-                    <div className="mt-2 text-[10px] text-[var(--t-text)]/60">
-                      Paste this into <code>MARGIN_CALL_MCP_KEY</code> in your
-                      MCP client config (Claude Code / Cursor). The old key has
-                      already been revoked.
-                    </div>
+                  <div className="mt-3">
+                    <OneTimeKeyReveal
+                      keyValue={rotatedKey}
+                      onCopy={copy}
+                      footer={
+                        <>
+                          Paste this into{" "}
+                          <code className="font-mono">MARGIN_CALL_MCP_KEY</code>{" "}
+                          in your MCP client config (Claude Code / Cursor). The
+                          old key has already been revoked.
+                        </>
+                      }
+                    />
                   </div>
                 )}
               </div>
