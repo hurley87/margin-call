@@ -92,7 +92,23 @@ Returns `key` (once) and `deskId`. **No wallet address at issuance** — bind vi
 5. `create_trader` — one-shot server mint (no Base MCP approval)
 6. Treasury ops: `fund_trader` / `create_deal` / `close_deal` / `withdraw_from_trader` → **prepare** → Base MCP `send_calls` (approve) → `confirm_intent` with `intentId` + `txHash`
 
-### Running the margin-call MCP server locally
+### Base MCP plugin (recommended on harness surfaces)
+
+Margin Call also ships as a [Base MCP custom plugin](https://docs.base.org/ai-agents/plugins/custom-plugins): a markdown spec at `packages/mcp-server/base-plugin/margin-call.md` that drives `/api/mcp/*` over HTTP and executes treasury calldata via Base MCP `send_calls`. No separate stdio MCP process.
+
+1. Connect Base MCP (`https://mcp.base.org`) and install the `base-mcp` skill.
+2. Copy `packages/mcp-server/base-plugin/margin-call.md` into your skill's `plugins/` folder, or fetch from a running dev server:
+
+   ```bash
+   curl -s http://localhost:3000/api/mcp/plugin \
+     -o ~/.cursor/skills/base-mcp/plugins/margin-call.md
+   ```
+
+3. Set `MARGIN_CALL_MCP_KEY` (and `MARGIN_CALL_API_URL` if not localhost:3000) in the harness environment.
+
+Requires a harness with a direct HTTP tool (Claude Code, Cursor, Codex). Chat-only surfaces should use the standalone stdio MCP below.
+
+### Running the margin-call MCP server locally (standalone)
 
 ```bash
 MARGIN_CALL_MCP_KEY=mc_live_... \
@@ -100,7 +116,7 @@ MARGIN_CALL_API_URL=http://localhost:3000 \
 npx tsx packages/mcp-server/src/index.ts
 ```
 
-### Adding to Cursor / Claude Code
+### Adding to Cursor / Claude Code (standalone stdio MCP)
 
 ```json
 {

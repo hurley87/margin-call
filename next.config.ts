@@ -2,7 +2,9 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  outputFileTracingIncludes: {
+    "/api/mcp/plugin": ["packages/mcp-server/base-plugin/margin-call.md"],
+  },
 };
 
 export default withSentryConfig(nextConfig, {

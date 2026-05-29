@@ -10,7 +10,35 @@ and sync balances — treasury writes use prepare → Base MCP approval → conf
 The autonomous deal-entry cycle continues to run server-side and picks
 per-deal entries on behalf of MCP-owned traders.
 
-## Install
+## Two ways to connect
+
+| Path                                                  | Best for                                                               | Requires                                                          |
+| ----------------------------------------------------- | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| **Base MCP plugin** (recommended on harness surfaces) | Claude Code, Cursor, Codex — agents with a direct HTTP tool + Base MCP | [Base MCP](https://mcp.base.org) + `base-mcp` skill + plugin spec |
+| **Standalone stdio MCP**                              | Chat-only surfaces, or when you prefer named MCP tools                 | `@margin-call/mcp-server` npm package                             |
+
+Both paths hit the same `/api/mcp/*` backend and use the same prepare → Base MCP `send_calls` → `confirm_intent` treasury flow.
+
+### Base MCP plugin (harness surfaces)
+
+The plugin is a markdown spec ([`base-plugin/margin-call.md`](base-plugin/margin-call.md)) that teaches the agent to call the Margin Call HTTP API directly and execute treasury calldata through Base MCP. No separate MCP server process.
+
+1. Install Base MCP and the `base-mcp` skill (`npx skills add base/skills --skill base-mcp`).
+2. Copy the plugin spec into your skill's `plugins/` directory, or fetch it from a deployed Margin Call API:
+
+   ```sh
+   curl -s https://your-deployment.example.com/api/mcp/plugin \
+     -o ~/.claude/skills/base-mcp/plugins/margin-call.md
+   ```
+
+3. Set `MARGIN_CALL_MCP_KEY` (and optionally `MARGIN_CALL_API_URL`) in your harness environment.
+4. Prompt the agent to run your desk — it loads the plugin on demand.
+
+The Margin Call API host is **not** on Base MCP's `web_request` allowlist; the harness must have a real HTTP tool for authed GET/POST. On Claude.ai / ChatGPT consumer apps, use the standalone stdio MCP below instead.
+
+See [Base custom plugins docs](https://docs.base.org/ai-agents/plugins/custom-plugins).
+
+## Install (standalone stdio MCP)
 
 ```sh
 claude mcp add margin-call -- npx -y @margin-call/mcp-server
