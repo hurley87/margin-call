@@ -91,10 +91,12 @@ export async function seedActiveTrader(
 ) {
   return t.run(async (ctx) => {
     const now = Date.now();
+    const name = opts.name ?? "Alpha Trader";
     return ctx.db.insert("traders", {
       deskManagerId: deskManagerId as never,
       ownerSubject: opts.ownerSubject ?? "did:privy:test-subject-001",
-      name: opts.name ?? "Alpha Trader",
+      name,
+      nameLower: name.trim().toLowerCase(),
       status: opts.status ?? "active",
       walletStatus: opts.walletStatus ?? "ready",
       escrowBalanceUsdc: opts.escrowBalance ?? 1000,

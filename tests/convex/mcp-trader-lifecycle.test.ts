@@ -228,3 +228,49 @@ describe("assertCanActivateTrader", () => {
     ).toThrow(/wiped out/i);
   });
 });
+
+describe("internal mcp.traders.isNameAvailable", () => {
+  it("reports available for valid unused names", async () => {
+    const t = convexTest(schema, modules);
+    const deskId = await seedDeskManager(t);
+    const result = await t.query(internal.mcp.traders.isNameAvailable, {
+      deskManagerId: deskId,
+      name: "FreshHandle",
+    });
+    expect(result).toMatchObject({
+      valid: true,
+      available: true,
+      normalized: "freshhandle",
+      summary: '"FreshHandle" is available',
+    });
+  });
+
+  it("reports taken for existing names (case-insensitive)", async () => {
+    const t = convexTest(schema, modules);
+    const deskId = await seedDeskManager(t);
+    await seedActiveTrader(t, deskId, { name: "Gekko" });
+    const result = await t.query(internal.mcp.traders.isNameAvailable, {
+      deskManagerId: deskId,
+      name: "gekko",
+    });
+    expect(result).toMatchObject({
+      valid: true,
+      available: false,
+      reason: "Trader name already taken",
+    });
+  });
+
+  it("rejects invalid format", async () => {
+    const t = convexTest(schema, modules);
+    const deskId = await seedDeskManager(t);
+    const result = await t.query(internal.mcp.traders.isNameAvailable, {
+      deskManagerId: deskId,
+      name: "bad name!",
+    });
+    expect(result).toMatchObject({
+      valid: false,
+      available: false,
+      reason: "Letters, numbers, and _ only",
+    });
+  });
+});

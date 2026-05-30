@@ -30,6 +30,40 @@ import { normalizeEmail } from "../src/lib/email";
 // behavior tests seed traders directly or call markCreating instead.
 const skipWalletSchedule = () => process.env.MC_SKIP_WALLET_SCHEDULE === "1";
 
+export const TRADER_NAME_TAKEN_MESSAGE = "Trader name already taken";
+
+/**
+ * Global case-insensitive name uniqueness scan. Checks `byName` first to
+ * catch legacy rows missing `nameLower`, then `byNameLower` for new rows.
+ */
+export async function findTraderNameConflict(
+  ctx: QueryCtx,
+  trimmedName: string,
+  normalizedName: string,
+  excludeTraderId?: Id<"traders">
+): Promise<Doc<"traders"> | null> {
+  const exactMatches = await ctx.db
+    .query("traders")
+    .withIndex("byName", (q) => q.eq("name", trimmedName))
+    .take(10);
+  const exactConflict = exactMatches.find(
+    (trader) => trader._id !== excludeTraderId
+  );
+  if (exactConflict) return exactConflict;
+
+  const lowerMatches = await ctx.db
+    .query("traders")
+    .withIndex("byNameLower", (q) => q.eq("nameLower", normalizedName))
+    .take(10);
+  return (
+    lowerMatches.find(
+      (trader) =>
+        trader._id !== excludeTraderId &&
+        trader.name.toLowerCase() === normalizedName
+    ) ?? null
+  );
+}
+
 /** Browser create path: schedule async wallet pipeline when row is pending/error. */
 async function scheduleWalletForTrader(
   ctx: MutationCtx,
@@ -437,34 +471,16 @@ export const createRecord = internalMutation({
       return dupeByOwnerAndName._id;
     }
 
-    // Legacy fallback: rows created before `nameLower` existed still need a guard.
-    const exactNameConflicts = await ctx.db
-      .query("traders")
-      .withIndex("byName", (q) => q.eq("name", trimmedName))
-      .take(10);
-    if (exactNameConflicts.length > 0) {
-      const sameOwnerConflict = exactNameConflicts.find(
-        (trader) => trader.ownerSubject === ownerSubject
-      );
-      if (sameOwnerConflict) {
-        return sameOwnerConflict._id;
-      }
-      throw new Error("Trader name already taken");
-    }
-
-    // Global uniqueness (case-insensitive): prevent duplicate usernames.
-    const conflicts = await ctx.db
-      .query("traders")
-      .withIndex("byNameLower", (q) => q.eq("nameLower", normalizedName))
-      .take(10);
-    const matchingConflict = conflicts.find(
-      (trader) => trader.name.toLowerCase() === normalizedName
+    const conflict = await findTraderNameConflict(
+      ctx,
+      trimmedName,
+      normalizedName
     );
-    if (matchingConflict) {
-      if (matchingConflict.ownerSubject === ownerSubject) {
-        return matchingConflict._id;
+    if (conflict) {
+      if (conflict.ownerSubject === ownerSubject) {
+        return conflict._id;
       }
-      throw new Error("Trader name already taken");
+      throw new Error(TRADER_NAME_TAKEN_MESSAGE);
     }
 
     const now = Date.now();
@@ -886,26 +902,14 @@ export const renameInternalForOps = internalMutation({
       return { ok: true as const, traderId };
     }
 
-    const exactNameConflicts = await ctx.db
-      .query("traders")
-      .withIndex("byName", (q) => q.eq("name", trimmedName))
-      .take(10);
-    const exactConflict = exactNameConflicts.find(
-      (doc) => doc._id !== traderId
+    const conflict = await findTraderNameConflict(
+      ctx,
+      trimmedName,
+      normalizedName,
+      traderId
     );
-    if (exactConflict) {
-      throw new Error("Trader name already taken");
-    }
-
-    const normalizedConflicts = await ctx.db
-      .query("traders")
-      .withIndex("byNameLower", (q) => q.eq("nameLower", normalizedName))
-      .take(10);
-    const normalizedConflict = normalizedConflicts.find(
-      (doc) => doc._id !== traderId && doc.name.toLowerCase() === normalizedName
-    );
-    if (normalizedConflict) {
-      throw new Error("Trader name already taken");
+    if (conflict) {
+      throw new Error(TRADER_NAME_TAKEN_MESSAGE);
     }
 
     await ctx.db.patch(traderId, {

@@ -238,6 +238,7 @@ export type McpReadBody = {
   traderId?: string;
   limit?: number;
   includeClosed?: boolean;
+  name?: string;
 };
 
 export type McpReadRouteSpec<R> = {

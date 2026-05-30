@@ -6,8 +6,14 @@ import {
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
-import { assertTraderOwnedByDesk, buildMandatePatch } from "../traders";
+import {
+  assertTraderOwnedByDesk,
+  buildMandatePatch,
+  findTraderNameConflict,
+  TRADER_NAME_TAKEN_MESSAGE,
+} from "../traders";
 import { resolveReadyProfileImageUrl } from "../lib/profileImage";
+import { validateTraderName } from "../../src/lib/trader-name";
 
 export type McpCreateTraderResult = {
   traderId: string;
@@ -267,6 +273,52 @@ export const list = internalQuery({
     return {
       traders: results,
       count: results.length,
+    };
+  },
+});
+
+export type McpCheckTraderNameResult = {
+  valid: boolean;
+  available: boolean;
+  reason?: string;
+  normalized?: string;
+  summary: string;
+};
+
+export const isNameAvailable = internalQuery({
+  args: {
+    deskManagerId: v.id("deskManagers"),
+    name: v.string(),
+  },
+  handler: async (ctx, { name }): Promise<McpCheckTraderNameResult> => {
+    const validationError = validateTraderName(name);
+    if (validationError) {
+      return {
+        valid: false,
+        available: false,
+        reason: validationError,
+        summary: validationError,
+      };
+    }
+
+    const trimmed = name.trim();
+    const normalized = trimmed.toLowerCase();
+    const conflict = await findTraderNameConflict(ctx, trimmed, normalized);
+    if (conflict) {
+      return {
+        valid: true,
+        available: false,
+        reason: TRADER_NAME_TAKEN_MESSAGE,
+        normalized,
+        summary: `"${trimmed}" is taken`,
+      };
+    }
+
+    return {
+      valid: true,
+      available: true,
+      normalized,
+      summary: `"${trimmed}" is available`,
     };
   },
 });

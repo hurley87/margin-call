@@ -371,6 +371,20 @@ http.route({
 });
 
 http.route({
+  path: "/mcp/traders/check-name",
+  method: "POST",
+  handler: mcpReadRoute({
+    tool: "check_trader_name",
+    buildArgs: (body) => ({
+      deskManagerId: body.deskManagerId as Id<"deskManagers">,
+      name: typeof body.name === "string" ? body.name : "",
+    }),
+    runQuery: (ctx, args) =>
+      ctx.runQuery(internal.mcp.traders.isNameAvailable, args),
+  }),
+});
+
+http.route({
   path: "/mcp/deals/list",
   method: "POST",
   handler: mcpReadRoute({

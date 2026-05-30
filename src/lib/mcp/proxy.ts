@@ -325,6 +325,8 @@ export async function proxyMcpRead(
   if (traderId) body.traderId = traderId;
   const includeClosed = search.get("includeClosed");
   if (includeClosed) body.includeClosed = includeClosed === "true";
+  const name = search.get("name");
+  if (name) body.name = name;
 
   return proxyMcpUpstream(deskManagerId, body, convexAction);
 }

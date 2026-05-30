@@ -65,6 +65,10 @@ Desk overview: wallet address, on-chain USDC balance, trader count, open deals y
 
 Owned traders with status (`active` / `paused` / `wiped_out`), ERC-8004 `tokenId`, escrow balance, mandate, personality, wallet status, CDP address, recent 30d P&L, activity snippet, and portrait URL. Default `limit=20`, max 50.
 
+### `GET /api/mcp/traders/check-name?name=<handle>`
+
+Validate a proposed trader handle before `create_trader`. Returns `valid`, `available`, optional `reason`, `normalized`, and `summary`. Same rules as the web app: letters, digits, underscore, max 15 chars; globally unique case-insensitively. Ask the user for the name, check here, then create only when `available` is true.
+
 ### `GET /api/mcp/deals?limit=<n>&includeClosed=true`
 
 Open market deals (and optionally closed). Each entry includes prompt, headline, pot, entry cost, status, creator type, entry count, and **`eligibleForMe`** (`false` for deals your own desk created — your traders cannot enter those).
@@ -283,6 +287,7 @@ GET /api/mcp/desks → check binding + balance
 (if zero balance) user funds Base Account with USDC on Base Sepolia
 POST /api/mcp/desks/set-wallet { walletAddress }
 GET /api/mcp/desks/sync-wallet
+GET /api/mcp/traders/check-name?name=<handle>  (user picks name; must be available)
 POST /api/mcp/traders/create { name, idempotencyKey }
 POST /api/mcp/traders/{id}/fund { amountUsdc, idempotencyKey } → prepare
 send_calls → user approves → get_request_status → confirm_intent → sync_wallet
@@ -302,10 +307,11 @@ POST /api/mcp/traders/{id}/resume { idempotencyKey }
 **Hire and fund a trader named Gekko with $50**
 
 1. `GET /api/mcp/desks` — confirm wallet bound and balance ≥ 50 USDC; if not, guide user through set-wallet + sync-wallet + funding.
-2. `POST /api/mcp/traders/create` with stable `idempotencyKey`.
-3. `POST /api/mcp/traders/{traderId}/fund` with `amountUsdc: 50`.
-4. Map `calls[]` to `send_calls`, open approval URL, poll status, `confirm_intent`, `sync_wallet`.
-5. `POST /api/mcp/traders/{traderId}/resume`.
+2. Ask the user for the handle; `GET /api/mcp/traders/check-name?name=Gekko` — only proceed when `available` is true.
+3. `POST /api/mcp/traders/create` with stable `idempotencyKey`.
+4. `POST /api/mcp/traders/{traderId}/fund` with `amountUsdc: 50`.
+5. Map `calls[]` to `send_calls`, open approval URL, poll status, `confirm_intent`, `sync_wallet`.
+6. `POST /api/mcp/traders/{traderId}/resume`.
 
 **Create a $100 trap deal**
 

@@ -1,6 +1,6 @@
 {
   "name": "@margin-call/mcp-server",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Margin Call MCP server — lets Claude Code (or any MCP-compatible agent) run an autonomous AGENT DESK on the Wall Street trading game. Per-desk MCP API keys map to dedicated CDP server wallets; tools cover read state, hire/fund/configure traders, create/close deals, approvals loop, allowlisted withdrawals, and wallet sync. All writes are idempotent and fully audited server-side.",
   "type": "module",
   "main": "dist/index.js",

@@ -3,8 +3,9 @@
  * Margin Call MCP Server
  *
  * Tools:
- *   get_desk, list_traders, list_deals, get_activity, get_outcomes,
- *   get_pending_approvals, answer_approval, sync_wallet, create_trader,
+ *   get_desk, list_traders, check_trader_name, list_deals, get_activity,
+ *   get_outcomes, get_pending_approvals, answer_approval, sync_wallet,
+ *   create_trader,
  *   configure_trader, fund_trader, resume_trader, pause_trader,
  *   withdraw_from_trader, create_deal, close_deal, set_desk_wallet,
  *   confirm_intent.
@@ -142,6 +143,21 @@ server.tool(
 );
 
 server.tool(
+  "check_trader_name",
+  "Check whether a trader handle is valid and globally available before create_trader. Same rules as the web app: letters, digits, underscore, max 15 chars after trim; names are unique case-insensitively across all desks. Ask the user for the handle, call this, then create_trader only when available is true.",
+  {
+    name: z
+      .string()
+      .min(1)
+      .describe(
+        "Proposed trader handle to validate (letters, digits, underscore, max 15 chars)"
+      ),
+  },
+  async ({ name }) =>
+    callMcpApi(`/api/mcp/traders/check-name${buildQueryString({ name })}`)
+);
+
+server.tool(
   "list_deals",
   "List open market deals (and optionally closed). Each entry includes prompt, source headline, pot, entry cost, status, creator type, entry count, and crucially `eligibleForMe` (false for deals created by your own desk — your traders are blocked from entering those). Use before any funding or strategy decisions. Optional: limit, includeClosed.",
   {
@@ -262,7 +278,7 @@ server.tool(
 
 server.tool(
   "create_trader",
-  "Hire a new trader (one-shot server call, no Base MCP approval). ERC-8004 NFT mint + trader identity wallet on Base Sepolia (gas sponsored). Prerequisites: set_desk_wallet, fund Base Account, sync_wallet, positive balance. REQUIRED: stable idempotencyKey for retries. Returns traderId, tokenId, walletAddress, txHashes, summary.",
+  "Hire a new trader (one-shot server call, no Base MCP approval). ERC-8004 NFT mint + trader identity wallet on Base Sepolia (gas sponsored). Prerequisites: set_desk_wallet, fund Base Account, sync_wallet, positive balance. Ask the user for the handle; call check_trader_name first and only create once it reports available — do not invent a name. REQUIRED: stable idempotencyKey for retries. Returns traderId, tokenId, walletAddress, txHashes, summary.",
   {
     name: z
       .string()
@@ -487,7 +503,7 @@ async function main() {
   await server.connect(transport);
   // Log to stderr only (stdio transport uses stdout for protocol)
   console.error(
-    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,set_desk_wallet,sync_wallet,confirm_intent,list_traders,list_deals,get_activity,get_outcomes,get_pending_approvals,answer_approval,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader,create_deal,close_deal  (key last4=${API_KEY.slice(-4)})`
+    `[margin-call-mcp] MCP tools ready. API=${API_URL}  Tools: get_desk,set_desk_wallet,sync_wallet,confirm_intent,list_traders,check_trader_name,list_deals,get_activity,get_outcomes,get_pending_approvals,answer_approval,create_trader,configure_trader,fund_trader,resume_trader,pause_trader,withdraw_from_trader,create_deal,close_deal  (key last4=${API_KEY.slice(-4)})`
   );
 }
 
