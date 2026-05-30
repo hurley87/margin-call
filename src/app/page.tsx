@@ -22,6 +22,7 @@ import {
   Github,
   HelpCircle,
   LogOut,
+  MoreVertical,
   Plus,
   Terminal,
   Twitter,
@@ -48,6 +49,10 @@ import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { McpOperatorDialog } from "@/components/mcp-operator-dialog";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
+import {
+  MobileFooterNav,
+  type MobileTab,
+} from "@/components/mobile-footer-nav";
 import { PublicTraderDialog } from "@/components/public-trader-dialog";
 import { TraderCreationDialog } from "@/components/trader-creation-flow";
 import {
@@ -276,6 +281,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const [selectedPublicTraderId, setSelectedPublicTraderId] = useState<
     string | null
   >(null);
+  const [mobileTab, setMobileTab] = useState<MobileTab>("desk");
 
   const openTraderProfile = useCallback((traderId: string) => {
     setSelectedTraderId(traderId);
@@ -328,7 +334,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const deskWalletFundingKnown = !cashLoading && cashBalance !== undefined;
 
   return (
-    <div className="crt-scanlines flex min-h-svh flex-col bg-[var(--t-bg)] font-mono text-[var(--t-text)] xl:h-svh xl:overflow-hidden">
+    <div className="crt-scanlines flex h-svh flex-col overflow-hidden bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
       <Suspense fallback={null}>
         <DeskDeepLinkHydration
           setSelectedDealId={setSelectedDealId}
@@ -365,66 +371,110 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         approvalsCount={pendingApprovals.length}
       />
 
-      <main className="mx-auto grid w-full flex-1 gap-2 overflow-y-auto px-2 pb-3 xl:min-h-0 xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:overflow-hidden">
-        <NewswirePanel
-          drops={drops}
-          deals={marketDeals}
-          dealsLoading={marketDealsLoading}
-          walletFunded={deskWalletFunded}
-          onOpenDeal={setSelectedDealId}
-        />
+      <main className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden px-2 pb-2 xl:grid xl:min-h-0 xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:pb-3">
+        <div
+          className={cn(
+            "min-h-0 flex-1 flex-col overflow-hidden",
+            mobileTab === "wire" ? "flex" : "hidden",
+            "xl:contents"
+          )}
+        >
+          <NewswirePanel
+            drops={drops}
+            deals={marketDeals}
+            dealsLoading={marketDealsLoading}
+            walletFunded={deskWalletFunded}
+            onOpenDeal={setSelectedDealId}
+          />
+        </div>
 
-        <section className="grid gap-2 xl:min-h-0 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]">
-          <TradingDeskPanel
-            nowMs={nowMs}
-            portfolio={portfolio}
-            portfolioLoading={portfolioLoading}
-            onOpenProfile={openTraderProfile}
-            onManageWallet={openTraderWallet}
-            onHireTrader={() => {
-              if (!deskWalletFunded) return;
-              setHireDialogOpen(true);
-            }}
-            canHireTrader={deskWalletFunded}
-            hireDisabledReason={
-              deskWalletFundingKnown ? "Fund wallet first" : "Checking wallet"
-            }
-            deals={myDeals}
-            dealsLoading={myDealsLoading}
-            onOpenDeal={setSelectedDealId}
-          />
-          <TraderFeedPanel
-            activity={filteredActivity}
-            feedLoading={feedLoading}
-            traderFilter={traderFilter}
-            traderFilterOptions={portfolio?.traders ?? []}
-            onTraderFilter={setTraderFilter}
-            traderNames={traderNames}
-            traderProfiles={traderProfiles}
-            approvalsCount={pendingApprovals.length}
-            approvals={pendingApprovals}
-            reviewCtaEntryIds={reviewCtaEntryIds}
-            approvalIdByEntryId={approvalIdByEntryId}
-            onOpenDeal={setSelectedDealId}
-            onReviewApproval={setApprovalCtx}
-          />
+        <section
+          className={cn(
+            "grid min-h-0 flex-1 gap-2 overflow-hidden",
+            mobileTab === "desk" || mobileTab === "feed" ? "grid" : "hidden",
+            "xl:grid xl:min-h-0 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]"
+          )}
+        >
+          <div
+            className={cn(
+              "min-h-0 flex-1 flex-col overflow-hidden",
+              mobileTab === "desk" ? "flex" : "hidden",
+              "xl:flex xl:min-h-0"
+            )}
+          >
+            <TradingDeskPanel
+              nowMs={nowMs}
+              portfolio={portfolio}
+              portfolioLoading={portfolioLoading}
+              onOpenProfile={openTraderProfile}
+              onManageWallet={openTraderWallet}
+              onHireTrader={() => {
+                if (!deskWalletFunded) return;
+                setHireDialogOpen(true);
+              }}
+              canHireTrader={deskWalletFunded}
+              hireDisabledReason={
+                deskWalletFundingKnown ? "Fund wallet first" : "Checking wallet"
+              }
+              deals={myDeals}
+              dealsLoading={myDealsLoading}
+              onOpenDeal={setSelectedDealId}
+            />
+          </div>
+          <div
+            className={cn(
+              "min-h-0 flex-1 flex-col overflow-hidden",
+              mobileTab === "feed" ? "flex" : "hidden",
+              "xl:flex xl:min-h-0"
+            )}
+          >
+            <TraderFeedPanel
+              activity={filteredActivity}
+              feedLoading={feedLoading}
+              traderFilter={traderFilter}
+              traderFilterOptions={portfolio?.traders ?? []}
+              onTraderFilter={setTraderFilter}
+              traderNames={traderNames}
+              traderProfiles={traderProfiles}
+              approvalsCount={pendingApprovals.length}
+              approvals={pendingApprovals}
+              reviewCtaEntryIds={reviewCtaEntryIds}
+              approvalIdByEntryId={approvalIdByEntryId}
+              onOpenDeal={setSelectedDealId}
+              onReviewApproval={setApprovalCtx}
+            />
+          </div>
         </section>
 
-        <MarketPlayersPanel
-          leaderboard={leaderboard}
-          isLoading={leaderboardLoading}
-          currentWallet={deskWalletAddress}
-          onOpenTrader={(traderId, isCurrent) => {
-            if (isCurrent) {
-              openTraderProfile(traderId);
-              return;
-            }
-            setSelectedPublicTraderId(traderId);
-          }}
-        />
+        <div
+          className={cn(
+            "min-h-0 flex-1 flex-col overflow-hidden",
+            mobileTab === "floor" ? "flex" : "hidden",
+            "xl:contents"
+          )}
+        >
+          <MarketPlayersPanel
+            leaderboard={leaderboard}
+            isLoading={leaderboardLoading}
+            currentWallet={deskWalletAddress}
+            onOpenTrader={(traderId, isCurrent) => {
+              if (isCurrent) {
+                openTraderProfile(traderId);
+                return;
+              }
+              setSelectedPublicTraderId(traderId);
+            }}
+          />
+        </div>
       </main>
 
       <BottomTape pnl={pnl} approvalsCount={pendingApprovals.length} />
+
+      <MobileFooterNav
+        activeTab={mobileTab}
+        onTabChange={setMobileTab}
+        approvalsCount={pendingApprovals.length}
+      />
 
       <DealApprovalDialog
         open={approvalCtx !== null}
@@ -542,7 +592,60 @@ function TopStatusBar({
 
   return (
     <header className="z-40 shrink-0 bg-[#050706]/95 px-2 pt-2 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm">
-      <div className="grid gap-2 xl:grid-cols-[18rem_14rem_minmax(42rem,1fr)_max-content]">
+      <div className="border border-[var(--t-divider)] bg-[#070b09]/90 px-2 py-2 xl:hidden">
+        <div className="flex items-center gap-2">
+          <div className="min-w-0 flex-1">
+            <h1 className="truncate font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-wide text-[var(--t-accent)]">
+              Margin Call
+            </h1>
+            <p className="mt-0.5 font-mono text-[10px] tabular-nums text-[var(--t-green)]">
+              {hms}
+              <span className="mx-1 text-[var(--t-muted)]">·</span>
+              {isOpen ? "Closes in" : "Opens in"}
+            </p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2 text-[10px] uppercase">
+            <div className="text-right">
+              <p className="text-[var(--t-muted)]">Cash</p>
+              <p className="font-bold tabular-nums text-[var(--t-green)]">
+                {cashLoading || cash === undefined ? "..." : formatMoney(cash)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[var(--t-muted)]">Equity</p>
+              <p className="font-bold tabular-nums text-[var(--t-green)]">
+                {portfolioLoading ? "..." : formatMoney(equity)}
+              </p>
+            </div>
+          </div>
+          <button
+            {...copyButtonProps}
+            className={`inline-flex h-8 shrink-0 items-center gap-1 border border-[var(--t-divider)] px-2 text-[10px] font-bold uppercase tracking-wider text-[var(--t-accent)] hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-text)] disabled:cursor-not-allowed disabled:opacity-40`}
+          >
+            {copyIcon}
+            <span className="max-w-[4.5rem] truncate">{shortDeskWallet}</span>
+          </button>
+          {showFundWallet && (
+            <button
+              type="button"
+              onClick={() => setFundDialogOpen(true)}
+              className="grid h-8 w-8 shrink-0 place-items-center border border-[var(--t-amber)] text-[var(--t-amber)] hover:bg-[var(--t-amber)] hover:text-[var(--t-bg)]"
+              title="Fund wallet"
+              aria-label="Fund wallet"
+            >
+              <Wallet className="h-4 w-4" />
+            </button>
+          )}
+          <MobileAppBarMenu
+            sfxEnabled={sfxEnabled}
+            onToggleSfx={onToggleSfx}
+            onOpenMcp={onOpenMcp}
+            onLogout={onLogout}
+          />
+        </div>
+      </div>
+
+      <div className="hidden gap-2 xl:grid xl:grid-cols-[18rem_14rem_minmax(42rem,1fr)_max-content]">
         <div className="terminal-panel px-3 py-2">
           <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black leading-none tracking-wide text-[var(--t-accent)]">
             MARGIN CALL
@@ -806,12 +909,12 @@ export function DeskCommandStrip({
   ] as const;
 
   return (
-    <section className="z-30 shrink-0 bg-[#060907]/95 px-2 py-2">
-      <div className="mx-auto grid max-w-[112rem] gap-2 sm:grid-cols-2 xl:grid-cols-4">
+    <section className="z-30 shrink-0 bg-[#060907]/95 px-2 py-1 xl:py-2">
+      <div className="mx-auto flex max-w-[112rem] gap-2 overflow-x-auto xl:grid xl:grid-cols-4 xl:overflow-visible">
         {steps.map((step, index) => (
           <div
             key={step.label}
-            className="grid min-h-14 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--t-divider)] bg-[#070b09]/90 px-3 py-2"
+            className="grid min-h-12 min-w-[11rem] shrink-0 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--t-divider)] bg-[#070b09]/90 px-3 py-2 xl:min-h-14 xl:min-w-0"
           >
             <span
               className={cn(
@@ -841,6 +944,153 @@ export function DeskCommandStrip({
         ))}
       </div>
     </section>
+  );
+}
+
+function MobileAppBarMenu({
+  sfxEnabled,
+  onToggleSfx,
+  onOpenMcp,
+  onLogout,
+}: {
+  sfxEnabled: boolean;
+  onToggleSfx: () => void;
+  onOpenMcp: () => void;
+  onLogout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function handlePointerDown(event: MouseEvent) {
+      if (!menuRef.current?.contains(event.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown);
+    return () => document.removeEventListener("mousedown", handlePointerDown);
+  }, [open]);
+
+  return (
+    <div ref={menuRef} className="relative shrink-0">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        title="More actions"
+        aria-label="More actions"
+        aria-expanded={open}
+        className="grid h-8 w-8 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+      >
+        <MoreVertical className="h-4 w-4" />
+      </button>
+      {open && (
+        <div className="absolute right-0 top-[calc(100%+0.25rem)] z-50 min-w-[10rem] border border-[var(--t-divider)] bg-[#070b09] py-1 shadow-lg shadow-black/50">
+          <MobileMenuButton
+            onClick={() => {
+              onToggleSfx();
+              setOpen(false);
+            }}
+            label={sfxEnabled ? "Mute alerts" : "Enable alerts"}
+            icon={
+              sfxEnabled ? (
+                <Volume2 className="h-4 w-4" />
+              ) : (
+                <VolumeX className="h-4 w-4" />
+              )
+            }
+          />
+          <MobileMenuButton
+            onClick={() => {
+              onOpenMcp();
+              setOpen(false);
+            }}
+            label="MCP console"
+            icon={<Terminal className="h-4 w-4" />}
+          />
+          <MobileMenuLink
+            href="https://x.com/davidbhurley"
+            label="X"
+            icon={<Twitter className="h-4 w-4" />}
+            onNavigate={() => setOpen(false)}
+          />
+          <MobileMenuLink
+            href="https://github.com/hurley87/margin-call"
+            label="GitHub"
+            icon={<Github className="h-4 w-4" />}
+            onNavigate={() => setOpen(false)}
+          />
+          <MobileMenuLink
+            href="https://margin-call.gitbook.io/product-docs"
+            label="Docs"
+            icon={<HelpCircle className="h-4 w-4" />}
+            onNavigate={() => setOpen(false)}
+          />
+          <MobileMenuButton
+            onClick={() => {
+              onLogout();
+              setOpen(false);
+            }}
+            label="Log out"
+            icon={<LogOut className="h-4 w-4" />}
+            tone="danger"
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MobileMenuButton({
+  onClick,
+  label,
+  icon,
+  tone = "default",
+}: {
+  onClick: () => void;
+  label: string;
+  icon: ReactNode;
+  tone?: "default" | "danger";
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] font-bold uppercase tracking-wider hover:bg-[var(--t-accent-soft)]",
+        tone === "danger"
+          ? "text-[var(--t-red)] hover:text-[var(--t-red)]"
+          : "text-[var(--t-text)] hover:text-[var(--t-accent)]"
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
+
+function MobileMenuLink({
+  href,
+  label,
+  icon,
+  onNavigate,
+}: {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  onNavigate: () => void;
+}) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={onNavigate}
+      className="flex w-full items-center gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-wider text-[var(--t-text)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-accent)]"
+    >
+      {icon}
+      {label}
+    </a>
   );
 }
 
@@ -975,7 +1225,7 @@ function NewswirePanel({
   }, [activeMarketDeals]);
 
   return (
-    <aside className="terminal-panel flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0">
+    <aside className="terminal-panel flex min-h-0 flex-1 flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="The Wire"
         meta={
@@ -1612,7 +1862,7 @@ function TradingDeskPanel({
   );
 
   return (
-    <section className="terminal-panel flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0">
+    <section className="terminal-panel flex min-h-0 flex-1 flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="Your Trading Desk"
         meta={deskPanelMeta}
@@ -2021,7 +2271,7 @@ function TraderFeedPanel({
   }
 
   return (
-    <section className="terminal-panel flex min-h-[26rem] flex-col overflow-hidden xl:min-h-0">
+    <section className="terminal-panel flex min-h-0 flex-1 flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="Trader Feed"
         meta={feedMeta}
@@ -2138,7 +2388,7 @@ function MarketPlayersPanel({
   const current = currentWallet?.toLowerCase();
 
   return (
-    <aside className="terminal-panel flex min-h-[24rem] flex-col overflow-hidden xl:min-h-0">
+    <aside className="terminal-panel flex min-h-0 flex-1 flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="Trading Floor"
         meta={leaderboard ? `${leaderboard.length}` : "WAIT"}
@@ -2232,7 +2482,7 @@ function BottomTape({
   approvalsCount: number;
 }) {
   return (
-    <footer className="z-30 shrink-0 border-t border-[var(--t-bronze)] bg-[#050706]/95 px-3 py-2 text-[11px] uppercase tracking-wider text-[var(--t-muted)]">
+    <footer className="z-30 hidden shrink-0 border-t border-[var(--t-bronze)] bg-[#050706]/95 px-3 py-2 text-[11px] uppercase tracking-wider text-[var(--t-muted)] xl:block">
       <div className="mx-auto flex max-w-[112rem] items-center gap-6 overflow-x-auto whitespace-nowrap">
         <span>
           System Status:{" "}

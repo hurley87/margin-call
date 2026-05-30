@@ -166,7 +166,7 @@ export function LiveGameToasts({
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed inset-x-3 bottom-14 z-[70] flex flex-col-reverse gap-2 sm:bottom-auto sm:left-auto sm:right-4 sm:top-20 sm:w-[24rem] sm:flex-col">
+    <div className="pointer-events-none fixed inset-x-3 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-[70] flex flex-col-reverse gap-2 sm:bottom-auto sm:left-auto sm:right-4 sm:top-20 sm:w-[24rem] sm:flex-col">
       {toasts.map((toast) => (
         <LiveGameToastCard
           key={toast.id}
