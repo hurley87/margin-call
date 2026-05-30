@@ -280,6 +280,7 @@ export const list = internalQuery({
 export type McpCheckTraderNameResult = {
   valid: boolean;
   available: boolean;
+  alreadyOwned?: boolean;
   reason?: string;
   normalized?: string;
   summary: string;
@@ -290,7 +291,10 @@ export const isNameAvailable = internalQuery({
     deskManagerId: v.id("deskManagers"),
     name: v.string(),
   },
-  handler: async (ctx, { name }): Promise<McpCheckTraderNameResult> => {
+  handler: async (
+    ctx,
+    { deskManagerId, name }
+  ): Promise<McpCheckTraderNameResult> => {
     const validationError = validateTraderName(name);
     if (validationError) {
       return {
@@ -305,6 +309,19 @@ export const isNameAvailable = internalQuery({
     const normalized = trimmed.toLowerCase();
     const conflict = await findTraderNameConflict(ctx, trimmed, normalized);
     if (conflict) {
+      // Same-owner conflict: create_trader would return the existing row
+      // idempotently, so report available with an alreadyOwned hint so the
+      // agent doesn't abort.
+      const desk = await ctx.db.get(deskManagerId);
+      if (desk && conflict.ownerSubject === desk.subject) {
+        return {
+          valid: true,
+          available: true,
+          alreadyOwned: true,
+          normalized,
+          summary: `"${trimmed}" is already on your desk — create_trader will return the existing trader`,
+        };
+      }
       return {
         valid: true,
         available: false,

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { makeT, seedDeskManager, seedActiveTrader } from "./setup";
+import { TRADER_NAME_TAKEN_MESSAGE } from "../../convex/traders";
 
 function asDeskManager(t: ReturnType<typeof makeT>) {
   return t.withIdentity({
@@ -76,7 +77,7 @@ describe("trader wallet provisioning recovery", () => {
         name: "lIlLy",
         mandate: {},
       })
-    ).rejects.toThrow("Trader name already taken");
+    ).rejects.toThrow(TRADER_NAME_TAKEN_MESSAGE);
   });
 
   it("retryWalletProvisioning clears walletError and sets status to pending", async () => {

@@ -67,7 +67,7 @@ Owned traders with status (`active` / `paused` / `wiped_out`), ERC-8004 `tokenId
 
 ### `GET /api/mcp/traders/check-name?name=<handle>`
 
-Validate a proposed trader handle before `create_trader`. Returns `valid`, `available`, optional `reason`, `normalized`, and `summary`. Same rules as the web app: letters, digits, underscore, max 15 chars; globally unique case-insensitively. Ask the user for the name, check here, then create only when `available` is true.
+Validate a proposed trader handle before `create_trader`. Returns `valid`, `available`, optional `alreadyOwned`, `reason`, `normalized`, and `summary`. Same rules as the web app: letters, digits, underscore, max 15 chars; globally unique case-insensitively. Ask the user for the name, check here, then create only when `available` is true. `alreadyOwned: true` means your desk already owns this handle — calling `create_trader` is safe and will idempotently return the existing trader.
 
 ### `GET /api/mcp/deals?limit=<n>&includeClosed=true`
 

@@ -8,6 +8,7 @@ import { internal } from "../../convex/_generated/api";
 import {
   buildMandatePatch,
   assertCanActivateTrader,
+  TRADER_NAME_TAKEN_MESSAGE,
 } from "../../convex/traders";
 import { parseAmountUsdc } from "../../convex/mcp/traders";
 import { seedDeskManager, seedActiveTrader, useRealMarketHours } from "./setup";
@@ -245,19 +246,45 @@ describe("internal mcp.traders.isNameAvailable", () => {
     });
   });
 
-  it("reports taken for existing names (case-insensitive)", async () => {
+  it("reports taken when another desk owns the name (case-insensitive)", async () => {
     const t = convexTest(schema, modules);
-    const deskId = await seedDeskManager(t);
-    await seedActiveTrader(t, deskId, { name: "Gekko" });
+    const myDeskId = await seedDeskManager(t, {
+      subject: "did:privy:test-subject-001",
+    });
+    const otherDeskId = await seedDeskManager(t, {
+      subject: "did:privy:test-subject-002",
+      walletAddress: "0xother",
+    });
+    await seedActiveTrader(t, otherDeskId, {
+      name: "Gekko",
+      ownerSubject: "did:privy:test-subject-002",
+    });
     const result = await t.query(internal.mcp.traders.isNameAvailable, {
-      deskManagerId: deskId,
+      deskManagerId: myDeskId,
       name: "gekko",
     });
     expect(result).toMatchObject({
       valid: true,
       available: false,
-      reason: "Trader name already taken",
+      reason: TRADER_NAME_TAKEN_MESSAGE,
     });
+  });
+
+  it("reports available+alreadyOwned when the caller's own desk owns the name", async () => {
+    const t = convexTest(schema, modules);
+    const deskId = await seedDeskManager(t);
+    await seedActiveTrader(t, deskId, { name: "Gekko" });
+    const result = await t.query(internal.mcp.traders.isNameAvailable, {
+      deskManagerId: deskId,
+      name: "Gekko",
+    });
+    expect(result).toMatchObject({
+      valid: true,
+      available: true,
+      alreadyOwned: true,
+      normalized: "gekko",
+    });
+    expect(result.summary).toContain("already on your desk");
   });
 
   it("rejects invalid format", async () => {

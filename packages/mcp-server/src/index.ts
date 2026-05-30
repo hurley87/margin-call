@@ -44,7 +44,7 @@ if (!API_KEY) {
 
 const server = new McpServer({
   name: "margin-call",
-  version: "0.2.0",
+  version: "0.2.1",
   description:
     "Margin Call 1980s Wall Street desk manager for Claude. Connect Base MCP for your desk wallet. Read desk state; set_desk_wallet; hire traders (server-side ERC-8004 mint); fund/create/close via prepare + Base MCP approval + confirm_intent. Autonomous cron picks deals for active funded traders. Per-action USDC caps, simulation, 24h idempotency, rate limits.",
 });
@@ -144,11 +144,14 @@ server.tool(
 
 server.tool(
   "check_trader_name",
-  "Check whether a trader handle is valid and globally available before create_trader. Same rules as the web app: letters, digits, underscore, max 15 chars after trim; names are unique case-insensitively across all desks. Ask the user for the handle, call this, then create_trader only when available is true.",
+  "Check whether a trader handle is valid and globally available before create_trader. Same rules as the web app: letters, digits, underscore, max 15 chars after trim; names are unique case-insensitively across all desks. Returns { valid, available, alreadyOwned?, reason?, normalized?, summary } — alreadyOwned=true means create_trader will idempotently return your existing trader for that handle. Ask the user for the handle, call this, then create_trader when available is true.",
   {
     name: z
       .string()
-      .min(1)
+      .trim()
+      .min(1, "Handle is required")
+      .max(15, "Max 15 characters")
+      .regex(/^[A-Za-z0-9_]+$/, "Letters, numbers, and _ only")
       .describe(
         "Proposed trader handle to validate (letters, digits, underscore, max 15 chars)"
       ),
