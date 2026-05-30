@@ -62,7 +62,7 @@ export function buildWelcomeEmail(args: { walletAddress?: string }) {
     "",
     `OPEN THE TERMINAL: ${APP_URL}`,
     "",
-    "Build your desk. Break theirs.",
+    "Run the meanest desk on the street.",
     "",
     "— Margin Call",
   ].join("\n");
@@ -87,7 +87,7 @@ export function buildWelcomeEmail(args: { walletAddress?: string }) {
       <p style="margin-top:1.25rem;letter-spacing:0.1em;font-weight:bold">STEP 4 — ACTIVATE &amp; WRITE DEALS</p>
       <p>During NYSE hours, send them to the floor. Open <em>The Wire</em>, turn a headline into a deal.</p>
       <p style="margin-top:1.5rem"><a href="${APP_URL}" style="display:inline-block;padding:10px 16px;background:#15803d;color:#fff;text-decoration:none;font-weight:bold;border-radius:2px">OPEN THE TERMINAL</a></p>
-      <p style="margin-top:1rem;font-weight:bold">Build your desk. Break theirs.</p>
+      <p style="margin-top:1rem;font-weight:bold">Run the meanest desk on the street.</p>
       <p style="opacity:0.7">— Margin Call</p>
     </div>
   `;

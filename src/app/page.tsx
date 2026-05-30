@@ -548,7 +548,7 @@ function TopStatusBar({
             MARGIN CALL
           </h1>
           <p className="mt-1 text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)]">
-            Build your desk. Break theirs.
+            Run the meanest desk on the street.
           </p>
         </div>
 
