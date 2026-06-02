@@ -22,6 +22,11 @@ function usdcToRaw(amountUsdc: number): bigint {
   return BigInt(Math.max(0, Math.round(amountUsdc * USDC_DECIMALS)));
 }
 
+type OnChainResolveResult =
+  | { status: "resolved"; txHash: `0x${string}` }
+  | { status: "already_resolved" }
+  | { status: "queue_not_head" };
+
 async function resolveOnChainEntry({
   onChainDealId,
   tokenId,
@@ -34,7 +39,7 @@ async function resolveOnChainEntry({
   entryCostUsdc: number;
   traderPnlUsdc: number;
   rakeUsdc: number;
-}): Promise<`0x${string}` | null> {
+}): Promise<OnChainResolveResult> {
   const operatorKey = process.env.OPERATOR_PRIVATE_KEY;
   if (!operatorKey) {
     throw new Error("OPERATOR_PRIVATE_KEY env var is not set");
@@ -95,27 +100,40 @@ async function resolveOnChainEntry({
     functionName: "getDeal",
     args: [BigInt(onChainDealId)],
   });
-  if (onChainDeal.pendingEntries === BigInt(0)) return null;
+  if (onChainDeal.pendingEntries === BigInt(0)) {
+    return { status: "already_resolved" };
+  }
 
   // The escrow contract deducts the entry cost when the trader enters. Its
   // `pnl` argument is the gross payout from the deal pot, not net portfolio PnL.
   const grossPayoutUsdc = Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc);
-  const hash = await walletClient.writeContract({
-    address: ESCROW_ADDRESS,
-    abi,
-    functionName: "resolveEntry",
-    args: [
-      BigInt(onChainDealId),
-      BigInt(tokenId),
-      usdcToRaw(grossPayoutUsdc),
-      usdcToRaw(rakeUsdc),
-    ],
-    chain: baseSepolia,
-    account,
-  });
+  try {
+    const hash = await walletClient.writeContract({
+      address: ESCROW_ADDRESS,
+      abi,
+      functionName: "resolveEntry",
+      args: [
+        BigInt(onChainDealId),
+        BigInt(tokenId),
+        usdcToRaw(grossPayoutUsdc),
+        usdcToRaw(rakeUsdc),
+      ],
+      chain: baseSepolia,
+      account,
+    });
 
-  const receipt = await publicClient.waitForTransactionReceipt({ hash });
-  return receipt.transactionHash;
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    return { status: "resolved", txHash: receipt.transactionHash };
+  } catch (err) {
+    // Contract enforces FIFO resolution per deal: another trader entered this
+    // deal first and hasn't been resolved yet. Surface this as a retry signal
+    // so the cycle can release the lease cleanly and try again on the next tick.
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("Trader mismatch")) {
+      return { status: "queue_not_head" };
+    }
+    throw err;
+  }
 }
 
 // ── x402 deal-entry helper ───────────────────────────────────────────────────
@@ -401,6 +419,69 @@ export const cycle = internalAction({
             message: "Cycle resumed at market open",
             eventId: `${traderId}-market_open-${todayDateNY}`,
           });
+        }
+      }
+
+      // ── 3c. On-chain settlement retry (handles FIFO "Trader mismatch") ────
+      // If a prior cycle persisted an outcome but the contract reverted the
+      // resolveEntry call (e.g. another trader was at the head of the FIFO
+      // queue), retry only the on-chain step here. Skips both selectDeal and
+      // the LLM — the outcome is already authoritative off-chain.
+      if (trader.tokenId !== undefined && trader.tokenId !== null) {
+        const pending = await ctx.runQuery(
+          internal.dealOutcomes.findUnresolvedOnChain,
+          { traderId: traderId as string }
+        );
+        if (
+          pending &&
+          pending.deal.onChainDealId !== null &&
+          pending.deal.onChainDealId !== undefined
+        ) {
+          const retry = await resolveOnChainEntry({
+            onChainDealId: pending.deal.onChainDealId,
+            tokenId: trader.tokenId,
+            entryCostUsdc: pending.deal.entryCostUsdc,
+            traderPnlUsdc: pending.outcome.traderPnlUsdc ?? 0,
+            rakeUsdc: pending.outcome.rakeUsdc ?? 0,
+          });
+
+          if (retry.status === "queue_not_head") {
+            await ctx.runMutation(internal.agentActivityLog.append, {
+              traderId,
+              activityType: "resolve_pending",
+              message:
+                "On-chain settlement waiting for prior trader at head of FIFO queue — will retry next cycle",
+              dealId: pending.outcome.dealId as never,
+              correlationId,
+            });
+            await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+              traderId,
+              generation,
+              lastCycleAt: Date.now(),
+            });
+            return;
+          }
+
+          if (retry.status === "resolved") {
+            await ctx.runMutation(internal.dealOutcomes.markOnChainResolved, {
+              outcomeId: pending.outcome._id,
+              onChainTxHash: retry.txHash,
+            });
+            await ctx.runMutation(internal.agentActivityLog.append, {
+              traderId,
+              activityType: "resolve",
+              message: `On-chain entry resolved on retry (tx=${retry.txHash})`,
+              dealId: pending.outcome.dealId as never,
+              metadata: {
+                outcome_id: pending.outcome._id,
+                resolve_tx_hash: retry.txHash,
+              },
+              correlationId,
+            });
+          }
+          // `already_resolved` falls through — the queue was empty, nothing
+          // to do on-chain. Don't stamp a tx hash we don't have; treat the
+          // outcome as settled and let the cycle continue.
         }
       }
 
@@ -800,25 +881,12 @@ export const cycle = internalAction({
         pendingOutcome = resolved;
       }
 
-      // ── 9. Resolve on-chain pending entry before closing out local state ───
-      let resolveTxHash: `0x${string}` | null | undefined;
-      if (
-        bestDeal.on_chain_deal_id !== undefined &&
-        bestDeal.on_chain_deal_id !== null &&
-        traderTokenId !== undefined
-      ) {
-        resolveTxHash = await resolveOnChainEntry({
-          onChainDealId: bestDeal.on_chain_deal_id,
-          tokenId: traderTokenId,
-          entryCostUsdc: bestDeal.entry_cost_usdc,
-          traderPnlUsdc,
-          rakeUsdc,
-        });
-      }
-
+      // ── 9. Persist outcome BEFORE on-chain resolve ─────────────────────────
+      // Apply order matters: we record the off-chain outcome first so that if
+      // the contract reverts the resolveEntry call (e.g. FIFO "Trader
+      // mismatch"), the next cycle's `findUnresolvedOnChain` query picks it
+      // up and retries only the on-chain step — without re-running the LLM.
       if (pendingOutcome) {
-        // Persist after on-chain settlement succeeds. If the contract rejects
-        // the resolution, leave no local outcome behind so a later cycle can retry.
         outcomeId = (await ctx.runMutation(internal.dealOutcomes.apply, {
           dealId: dealId as never,
           traderId: traderId as string,
@@ -833,17 +901,63 @@ export const cycle = internalAction({
         })) as string;
       }
 
-      if (resolveTxHash !== undefined && outcomeId !== null) {
+      // ── 10. Resolve on-chain pending entry ─────────────────────────────────
+      let resolveResult: OnChainResolveResult | null = null;
+      if (
+        bestDeal.on_chain_deal_id !== undefined &&
+        bestDeal.on_chain_deal_id !== null &&
+        traderTokenId !== undefined
+      ) {
+        resolveResult = await resolveOnChainEntry({
+          onChainDealId: bestDeal.on_chain_deal_id,
+          tokenId: traderTokenId,
+          entryCostUsdc: bestDeal.entry_cost_usdc,
+          traderPnlUsdc,
+          rakeUsdc,
+        });
+      }
+
+      if (resolveResult?.status === "queue_not_head" && outcomeId !== null) {
+        // Another trader is ahead in the FIFO queue. The outcome is already
+        // persisted; release the lease cleanly and let the next cycle retry
+        // via the early on-chain settlement retry path (3c).
+        await ctx.runMutation(internal.agentActivityLog.append, {
+          traderId,
+          activityType: "resolve_pending",
+          message:
+            "On-chain settlement waiting for prior trader at head of FIFO queue — will retry next cycle",
+          dealId: dealId as never,
+          metadata: { outcome_id: outcomeId },
+          correlationId,
+        });
+        await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+          traderId,
+          generation,
+          lastCycleAt: Date.now(),
+        });
+        return;
+      }
+
+      if (resolveResult?.status === "resolved" && outcomeId !== null) {
+        await ctx.runMutation(internal.dealOutcomes.markOnChainResolved, {
+          outcomeId: outcomeId as never,
+          onChainTxHash: resolveResult.txHash,
+        });
+      }
+
+      if (resolveResult !== null && outcomeId !== null) {
+        const txHash =
+          resolveResult.status === "resolved" ? resolveResult.txHash : null;
         await ctx.runMutation(internal.agentActivityLog.append, {
           traderId,
           activityType: "resolve",
-          message: resolveTxHash
-            ? `On-chain entry resolved (tx=${resolveTxHash})`
+          message: txHash
+            ? `On-chain entry resolved (tx=${txHash})`
             : "On-chain entry was already resolved",
           dealId: dealId as never,
           metadata: {
             outcome_id: outcomeId,
-            resolve_tx_hash: resolveTxHash,
+            resolve_tx_hash: txHash,
           },
           correlationId,
         });

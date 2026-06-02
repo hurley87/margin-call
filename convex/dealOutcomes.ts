@@ -181,3 +181,60 @@ export const apply = internalMutation({
     return outcomeId;
   },
 });
+
+/**
+ * Find the oldest outcome for a trader that has no on-chain tx hash yet.
+ * Used by the agent cycle to retry on-chain `resolveEntry` calls that
+ * previously reverted (e.g. FIFO "Trader mismatch") without re-running the
+ * LLM. Returns `null` when the trader has no pending on-chain settlement.
+ *
+ * 24h scope mirrors `findPendingRecoveryEntry` — older orphans are an
+ * ops/manual problem and shouldn't keep the cycle waking overnight.
+ */
+export const findUnresolvedOnChain = internalQuery({
+  args: { traderId: v.string() },
+  handler: async (ctx, { traderId }) => {
+    const since = Date.now() - 24 * 60 * 60_000;
+    const recent = await ctx.db
+      .query("dealOutcomes")
+      .withIndex("byTrader", (q) => q.eq("traderId", traderId))
+      .order("asc")
+      .collect();
+    for (const outcome of recent) {
+      if (outcome.createdAt < since) continue;
+      if (outcome.onChainTxHash) continue;
+      // Only retry outcomes for deals that have an on-chain counterpart.
+      const deal = await ctx.db.get(outcome.dealId);
+      if (
+        !deal ||
+        deal.onChainDealId === null ||
+        deal.onChainDealId === undefined
+      ) {
+        continue;
+      }
+      return { outcome, deal };
+    }
+    return null;
+  },
+});
+
+/**
+ * Stamp the on-chain settlement tx hash on an existing outcome.
+ * Idempotent: a no-op if onChainTxHash is already set.
+ *
+ * Used by the agent cycle after `resolveEntry` succeeds — we persist the
+ * outcome record before attempting the on-chain call so that a contract
+ * revert (e.g. FIFO "Trader mismatch") doesn't force a re-LLM on retry.
+ */
+export const markOnChainResolved = internalMutation({
+  args: {
+    outcomeId: v.id("dealOutcomes"),
+    onChainTxHash: v.string(),
+  },
+  handler: async (ctx, { outcomeId, onChainTxHash }) => {
+    const outcome = await ctx.db.get(outcomeId);
+    if (!outcome) return;
+    if (outcome.onChainTxHash) return;
+    await ctx.db.patch(outcomeId, { onChainTxHash });
+  },
+});
