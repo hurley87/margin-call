@@ -217,7 +217,10 @@ export function FeedLine({
         {entry.message}
       </span>
       {canOpenDeal && actionState === "hidden" && (
-        <span className="justify-self-end border border-[var(--t-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-accent)] transition-colors group-hover:border-[var(--t-accent)] group-hover:bg-[var(--t-accent-soft)] group-focus:border-[var(--t-accent)] group-focus:bg-[var(--t-accent-soft)]">
+        <span
+          aria-hidden="true"
+          className="justify-self-end border border-[var(--t-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-accent)] opacity-0 transition group-hover:border-[var(--t-accent)] group-hover:bg-[var(--t-accent-soft)] group-hover:opacity-100 group-focus:border-[var(--t-accent)] group-focus:bg-[var(--t-accent-soft)] group-focus:opacity-100 group-focus-within:opacity-100"
+        >
           Deal
         </span>
       )}
