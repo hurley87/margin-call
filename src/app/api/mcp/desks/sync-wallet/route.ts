@@ -1,9 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createConvexAdminClient } from "@/lib/convex/server-client";
-import { makePublicClient } from "@/lib/contracts/client";
-import { USDC_SEPOLIA_ADDRESS } from "@/lib/contracts/escrow";
-import { usdcFromRaw } from "@/lib/contracts/balance";
-import { erc20Abi } from "viem";
 import { validateMcpKey } from "@/lib/mcp/proxy";
 import { internal } from "../../../../../../convex/_generated/api";
 import type { Id } from "../../../../../../convex/_generated/dataModel";
@@ -13,13 +9,8 @@ const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
 
 /**
  * GET /api/mcp/desks/sync-wallet
- * Uses shared validateMcpKey (thin wrapper around it), performs the on-chain
- * USDC read here (viem constraint: httpActions cannot run under "use node"),
- * then proxies the read result to the dedicated Convex POST /mcp/desks/sync-wallet
- * httpAction. The Convex action does the internal syncWalletBalance call +
- * mcpRequests audit log (SERVICE_TOKEN), following the exact pattern of the
- * other 6 MCP tools. Success/error envelope + caller behavior (MCP server etc.)
- * preserved 100%. The read is the only piece that could not move to Convex.
+ * Validates MCP key, ensures desk wallet is bound, then proxies to Convex
+ * `syncWalletFromChainForMcp` which reads USDC balanceOf on-chain authoritatively.
  */
 export async function GET(request: NextRequest) {
   const authResult = await validateMcpKey(request);
@@ -36,7 +27,6 @@ export async function GET(request: NextRequest) {
 
   const convex = createConvexAdminClient();
 
-  // Fetch the desk (to check wallet + for subject in the mut path, same as before)
   const dm = (await convex.query(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     internal.deskManagers.getByIdInternal as any,
@@ -57,22 +47,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const walletAddress = dm.walletAddress;
-
-  // Read live on-chain balance (public RPC, same helpers as browser/Privy paths).
-  // Must stay in Next.js route: Convex httpActions do not support the Node
-  // runtime required for reliable viem usage alongside httpAction.
-  const publicClient = makePublicClient();
-  const raw = await publicClient.readContract({
-    address: USDC_SEPOLIA_ADDRESS,
-    abi: erc20Abi,
-    functionName: "balanceOf",
-    args: [walletAddress as `0x${string}`],
-  });
-  const balanceUsdc = usdcFromRaw(raw);
-
-  // Proxy the result of the read to Convex httpAction (does mut + log only).
-  // Same .convex.site rewrite + fetch pattern as proxyMcpRead.
   const httpActionBase = CONVEX_URL.replace(/\/$/, "").replace(
     /\.convex\.cloud$/,
     ".convex.site"
@@ -90,8 +64,6 @@ export async function GET(request: NextRequest) {
       },
       body: JSON.stringify({
         deskManagerId: String(deskManagerId),
-        walletAddress,
-        balanceUsdc,
       }),
     });
   } catch (e: unknown) {

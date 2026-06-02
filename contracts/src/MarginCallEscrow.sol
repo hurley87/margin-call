@@ -30,14 +30,15 @@ contract MarginCallEscrow {
     IIdentityRegistry public immutable identityRegistry;
 
     address public owner;
+    address public pendingOwner;
     mapping(address => bool) public authorizedOperators;
     uint256 public platformFees;
     uint256 public dealCount;
 
     mapping(uint256 => Deal) public deals;
     mapping(uint256 => uint256) public balances;
-    /// @dev Per-deal queue of trader IDs that entered; resolveEntry must credit the head.
-    mapping(uint256 => uint256[]) private _pendingTraderIds;
+    /// @dev Per-(dealId, traderId) pending entry flag; resolveEntry clears it.
+    mapping(uint256 => mapping(uint256 => bool)) private _pendingEntry;
     /// @dev Authorized depositor per trader — decoupled from NFT ownership.
     mapping(uint256 => address) public depositors;
 
@@ -48,8 +49,10 @@ contract MarginCallEscrow {
     event DealEntered(uint256 indexed dealId, uint256 indexed traderId);
     event EntryResolved(uint256 indexed dealId, uint256 indexed traderId, int256 pnl, uint256 rake);
     event FeesWithdrawn(address indexed to, uint256 amount);
-    event OperatorUpdated(address indexed newOperator);
+    event OperatorUpdated(address indexed operator, bool authorized);
     event DepositorSet(uint256 indexed traderId, address indexed depositor);
+    event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
+    event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not owner");
@@ -69,6 +72,7 @@ contract MarginCallEscrow {
         identityRegistry = IIdentityRegistry(_identityRegistry);
         owner = msg.sender;
         authorizedOperators[_operator] = true;
+        emit OperatorUpdated(_operator, true);
     }
 
     function createDeal(string calldata prompt, uint256 potAmount, uint256 entryCost)
@@ -118,6 +122,11 @@ contract MarginCallEscrow {
 
     function setDepositor(uint256 traderId, address depositor) external onlyOperator {
         require(depositor != address(0), "Zero depositor");
+        address current = depositors[traderId];
+        require(
+            current == address(0) || balances[traderId] == 0,
+            "Depositor locked while balance > 0"
+        );
         depositors[traderId] = depositor;
         emit DepositorSet(traderId, depositor);
     }
@@ -148,11 +157,12 @@ contract MarginCallEscrow {
         Deal storage deal = deals[dealId];
         require(deal.status == DealStatus.Open, "Deal not open");
         require(balances[traderId] >= deal.entryCost, "Insufficient trader balance");
+        require(!_pendingEntry[dealId][traderId], "Already entered");
 
         balances[traderId] -= deal.entryCost;
         deal.potAmount += deal.entryCost;
         deal.pendingEntries++;
-        _pendingTraderIds[dealId].push(traderId);
+        _pendingEntry[dealId][traderId] = true;
 
         emit DealEntered(dealId, traderId);
     }
@@ -161,8 +171,7 @@ contract MarginCallEscrow {
         require(dealId < dealCount, "Deal does not exist");
         Deal storage deal = deals[dealId];
         require(deal.pendingEntries > 0, "No pending entries");
-        uint256[] storage queue = _pendingTraderIds[dealId];
-        require(queue.length > 0 && queue[0] == traderId, "Trader mismatch");
+        require(_pendingEntry[dealId][traderId], "No pending entry");
 
         if (pnl > 0) {
             uint256 winnings = uint256(pnl);
@@ -175,11 +184,7 @@ contract MarginCallEscrow {
         }
         // pnl <= 0: loss already taken at entry, no additional movement
 
-        // Remove head of queue (swap with last, pop)
-        if (queue.length > 1) {
-            queue[0] = queue[queue.length - 1];
-        }
-        queue.pop();
+        _pendingEntry[dealId][traderId] = false;
         deal.pendingEntries--;
 
         emit EntryResolved(dealId, traderId, pnl, rake);
@@ -194,15 +199,29 @@ contract MarginCallEscrow {
         emit FeesWithdrawn(owner, amount);
     }
 
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "Zero owner");
+        pendingOwner = newOwner;
+        emit OwnershipTransferStarted(owner, newOwner);
+    }
+
+    function acceptOwnership() external {
+        require(msg.sender == pendingOwner, "Not pending owner");
+        address previousOwner = owner;
+        owner = pendingOwner;
+        pendingOwner = address(0);
+        emit OwnershipTransferred(previousOwner, owner);
+    }
+
     function addOperator(address op) external onlyOwner {
         require(op != address(0), "Zero operator");
         authorizedOperators[op] = true;
-        emit OperatorUpdated(op);
+        emit OperatorUpdated(op, true);
     }
 
     function removeOperator(address op) external onlyOwner {
         authorizedOperators[op] = false;
-        emit OperatorUpdated(op);
+        emit OperatorUpdated(op, false);
     }
 
     function getDeal(uint256 dealId) external view returns (Deal memory) {
@@ -211,5 +230,9 @@ contract MarginCallEscrow {
 
     function getBalance(uint256 traderId) external view returns (uint256) {
         return balances[traderId];
+    }
+
+    function hasPendingEntry(uint256 dealId, uint256 traderId) external view returns (bool) {
+        return _pendingEntry[dealId][traderId];
     }
 }

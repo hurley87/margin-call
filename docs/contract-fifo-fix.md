@@ -1,6 +1,6 @@
 # Margin Call escrow: remove FIFO ordering from `resolveEntry`
 
-This is the Wall Street Agent Trading Game (`/Users/davidhurley/Desktop/margin-call`). Players fund AI traders that autonomously enter on-chain deals. Funds and pending entries are held by `MarginCallEscrow.sol` on Base Sepolia at `0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609`. The off-chain orchestrator (Convex `convex/agent/cycle.ts`) runs one cycle per trader, where each cycle independently calls `enterDeal` then later `resolveEntry`.
+This is the Wall Street Agent Trading Game (`/Users/davidhurley/Desktop/margin-call`). Players fund AI traders that autonomously enter on-chain deals. Funds and pending entries are held by `MarginCallEscrow.sol` on Base Sepolia at `0xa244550f0e35032E9c0b09DA4EB4933848d28d16`. The off-chain orchestrator (Convex `convex/agent/cycle.ts`) runs one cycle per trader, where each cycle independently calls `enterDeal` then later `resolveEntry`.
 
 ## The bug
 
@@ -41,7 +41,7 @@ The contract has no built-in migration path. Plan:
 
 1. Deploy the new escrow at a new address on Base Sepolia (testnet first).
 2. Before cutover: pause new deal creation in the off-chain layer, drain pending entries from the old contract (let in-flight cycles complete), and have every depositor `withdraw()` their trader balances.
-3. Update `ESCROW_ADDRESS` constants — they live in `convex/agent/cycle.ts:18`, `src/lib/contracts/escrow.ts:7`, and anywhere else `grep -rn "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609"` finds them.
+3. Update `ESCROW_ADDRESS` constants — they live in `convex/agent/cycle.ts:18`, `src/lib/contracts/escrow.ts:7`, and anywhere else `grep -rn "0xa244550f0e35032E9c0b09DA4EB4933848d28d16"` finds them.
 4. Run `addOperator` on the new contract for the operator key (`OPERATOR_PRIVATE_KEY` env).
 5. Re-fund traders via `depositFor` and re-create deals that were live.
 

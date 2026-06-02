@@ -38,7 +38,7 @@ export const scheduler = internalAction({
 
     const staleTraders: Array<Doc<"traders">> = await ctx.runQuery(
       internal.agent.internal.listStaleTradersForCycle,
-      { limit: MAX_CYCLES_PER_SCHEDULER_TICK }
+      { limit: MAX_CYCLES_PER_SCHEDULER_TICK, now: Date.now() }
     );
 
     if (staleTraders.length === 0) {

@@ -113,7 +113,7 @@ export const forDesk = query({
         } else if (pnl > 0) {
           s.wins++;
           totalWins++;
-        } else {
+        } else if (pnl < 0) {
           s.losses++;
           totalLosses++;
         }

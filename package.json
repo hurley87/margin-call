@@ -11,7 +11,8 @@
     "test:convex": "vitest run tests/convex",
     "seed:wire": "convex run seasons:importSeason",
     "prepare": "husky",
-    "mcp:issue-key": "tsx scripts/issue-mcp-key.ts"
+    "mcp:issue-key": "tsx scripts/issue-mcp-key.ts",
+    "deploy:escrow": "tsx scripts/deploy-escrow.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",

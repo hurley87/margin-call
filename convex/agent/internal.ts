@@ -56,9 +56,8 @@ export const loadTraderForCycle = internalQuery({
  * Called by the scheduler action — no auth context required.
  */
 export const listStaleTradersForCycle = internalQuery({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, { limit }) => {
-    const now = Date.now();
+  args: { limit: v.optional(v.number()), now: v.number() },
+  handler: async (ctx, { limit, now }) => {
     const boundedLimit =
       limit === undefined ? undefined : clampLimit(limit, 25);
 
@@ -69,7 +68,7 @@ export const listStaleTradersForCycle = internalQuery({
       .withIndex("byStatusAndWalletStatus", (q) =>
         q.eq("status", "active").eq("walletStatus", "ready")
       )
-      .collect();
+      .take(500);
 
     const eligible = [];
     for (const t of readyActive) {

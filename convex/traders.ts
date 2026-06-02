@@ -788,15 +788,18 @@ export const applyOutcomeBalance = internalMutation({
   args: {
     traderId: v.id("traders"),
     pnlUsdc: v.number(),
-    /** Outcome document id — idempotency key; persisted as lastOutcomeId. */
+    /** Outcome document id — idempotency key via dealOutcomes.balanceAppliedAt. */
     outcomeId: v.id("dealOutcomes"),
   },
   handler: async (ctx, { traderId, pnlUsdc, outcomeId }) => {
     const trader = await ctx.db.get(traderId);
     if (!trader) return null;
 
-    // Idempotency: if this outcome was already applied, no-op
-    if (trader.lastOutcomeId === outcomeId) {
+    const outcome = await ctx.db.get(outcomeId);
+    if (!outcome) return null;
+
+    // Idempotency: per-outcome, not global lastOutcomeId
+    if (outcome.balanceAppliedAt !== undefined) {
       return {
         escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,
         wipedOut: trader.status === "wiped_out",
@@ -824,41 +827,50 @@ export const applyOutcomeBalance = internalMutation({
     }
 
     await ctx.db.patch(traderId, patch);
+    await ctx.db.patch(outcomeId, { balanceAppliedAt: Date.now() });
 
     if (firstWipeout) {
-      const existingNotification = await ctx.db
-        .query("emailNotifications")
-        .withIndex("byTraderAndType", (q) =>
-          q.eq("traderId", traderId).eq("type", "trader_wipeout")
-        )
-        .unique();
-
-      if (!existingNotification) {
-        const deskManager = await ctx.db.get(trader.deskManagerId);
-        const toEmail = normalizeEmail(deskManager?.email);
-        const now = Date.now();
-        const notificationId = await ctx.db.insert("emailNotifications", {
-          type: "trader_wipeout",
-          traderId,
-          deskManagerId: trader.deskManagerId,
-          toEmail,
-          status: toEmail ? "pending" : "skipped",
-          reason: toEmail ? undefined : "missing_email",
-          createdAt: now,
-          updatedAt: now,
-        });
-
-        if (toEmail) {
-          await ctx.scheduler.runAfter(0, internal.emails.sendWipeoutEmail, {
-            notificationId,
-          });
-        }
-      }
+      await queueWipeoutEmailIfNeeded(ctx, traderId, trader.deskManagerId);
     }
 
     return { escrowBalanceUsdc: newBalance, wipedOut };
   },
 });
+
+async function queueWipeoutEmailIfNeeded(
+  ctx: MutationCtx,
+  traderId: Id<"traders">,
+  deskManagerId: Id<"deskManagers">
+) {
+  const existingNotification = await ctx.db
+    .query("emailNotifications")
+    .withIndex("byTraderAndType", (q) =>
+      q.eq("traderId", traderId).eq("type", "trader_wipeout")
+    )
+    .unique();
+
+  if (!existingNotification) {
+    const deskManager = await ctx.db.get(deskManagerId);
+    const toEmail = normalizeEmail(deskManager?.email);
+    const now = Date.now();
+    const notificationId = await ctx.db.insert("emailNotifications", {
+      type: "trader_wipeout",
+      traderId,
+      deskManagerId,
+      toEmail,
+      status: toEmail ? "pending" : "skipped",
+      reason: toEmail ? undefined : "missing_email",
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    if (toEmail) {
+      await ctx.scheduler.runAfter(0, internal.emails.sendWipeoutEmail, {
+        notificationId,
+      });
+    }
+  }
+}
 
 /** Internal: overwrite escrowBalanceUsdc from a fresh on-chain read. */
 export const syncEscrowBalance = internalMutation({
@@ -866,13 +878,33 @@ export const syncEscrowBalance = internalMutation({
   handler: async (ctx, { traderId, balanceUsdc }) => {
     const trader = await ctx.db.get(traderId);
     if (!trader) return;
-    if ((trader.escrowBalanceUsdc ?? 0) === balanceUsdc) {
+
+    const wipedOut = balanceUsdc <= 0;
+    const firstWipeout = wipedOut && trader.status !== "wiped_out";
+    const nextStatus = wipedOut ? ("wiped_out" as const) : trader.status;
+
+    if (
+      (trader.escrowBalanceUsdc ?? 0) === balanceUsdc &&
+      trader.status === nextStatus
+    ) {
       return;
     }
-    await ctx.db.patch(traderId, {
+
+    const patch: Partial<
+      Pick<Doc<"traders">, "escrowBalanceUsdc" | "updatedAt" | "status">
+    > = {
       escrowBalanceUsdc: balanceUsdc,
       updatedAt: Date.now(),
-    });
+    };
+    if (wipedOut) {
+      patch.status = "wiped_out";
+    }
+
+    await ctx.db.patch(traderId, patch);
+
+    if (firstWipeout) {
+      await queueWipeoutEmailIfNeeded(ctx, traderId, trader.deskManagerId);
+    }
   },
 });
 

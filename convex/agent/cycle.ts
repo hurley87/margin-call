@@ -1,8 +1,9 @@
 "use node";
 
-import { internalAction } from "../_generated/server";
+import { internalAction, type ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
+import type { Id } from "../_generated/dataModel";
 import { CYCLE_LEASE_TTL_MS, DEFAULT_CYCLE_INTERVAL_MS } from "./internal";
 import { APPROVAL_EXPIRY_MS } from "./_constants";
 import { selectDeal } from "./dealSelection";
@@ -14,18 +15,62 @@ import {
   getTradingHoursState,
   isTradingHours,
 } from "../lib/tradingHours";
-
-const ESCROW_ADDRESS = "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
+import { ESCROW_ADDRESS } from "../mcp/escrowConstants";
 const USDC_DECIMALS = 1_000_000;
 
 function usdcToRaw(amountUsdc: number): bigint {
   return BigInt(Math.max(0, Math.round(amountUsdc * USDC_DECIMALS)));
 }
 
-type OnChainResolveResult =
-  | { status: "resolved"; txHash: `0x${string}` }
-  | { status: "already_resolved" }
-  | { status: "queue_not_head" };
+import {
+  classifyResolveEntryRevert,
+  reconciledTxHash,
+  type OnChainResolveResult,
+} from "./onChainSettlement";
+
+async function finalizeOnChainOutcome(
+  ctx: ActionCtx,
+  {
+    traderId,
+    outcomeId,
+    traderPnlUsdc,
+    onChainTxHash,
+    dealId,
+    correlationId,
+    logMessage,
+  }: {
+    traderId: Id<"traders">;
+    outcomeId: Id<"dealOutcomes">;
+    traderPnlUsdc: number;
+    onChainTxHash: string;
+    dealId?: Id<"deals">;
+    correlationId?: string;
+    logMessage?: string;
+  }
+) {
+  await ctx.runMutation(internal.dealOutcomes.markOnChainResolved, {
+    outcomeId,
+    onChainTxHash,
+  });
+  await ctx.runMutation(internal.traders.applyOutcomeBalance, {
+    traderId,
+    pnlUsdc: traderPnlUsdc,
+    outcomeId,
+  });
+  if (dealId && correlationId) {
+    await ctx.runMutation(internal.agentActivityLog.append, {
+      traderId,
+      activityType: "resolve",
+      message: logMessage ?? `On-chain outcome reconciled (${onChainTxHash})`,
+      dealId,
+      metadata: {
+        outcome_id: outcomeId,
+        resolve_tx_hash: onChainTxHash,
+      },
+      correlationId,
+    });
+  }
+}
 
 async function resolveOnChainEntry({
   onChainDealId,
@@ -73,6 +118,16 @@ async function resolveOnChainEntry({
     },
     {
       type: "function",
+      name: "hasPendingEntry",
+      inputs: [
+        { name: "dealId", type: "uint256" },
+        { name: "traderId", type: "uint256" },
+      ],
+      outputs: [{ name: "", type: "bool" }],
+      stateMutability: "view",
+    },
+    {
+      type: "function",
       name: "resolveEntry",
       inputs: [
         { name: "dealId", type: "uint256" },
@@ -101,11 +156,24 @@ async function resolveOnChainEntry({
     args: [BigInt(onChainDealId)],
   });
   if (onChainDeal.pendingEntries === BigInt(0)) {
-    return { status: "already_resolved" };
+    return { status: "already_resolved", reason: "deal_settled" };
   }
 
-  // The escrow contract deducts the entry cost when the trader enters. Its
-  // `pnl` argument is the gross payout from the deal pot, not net portfolio PnL.
+  // New escrow: per-trader pending flag. Old deployments omit this view — skip.
+  try {
+    const hasPending = await publicClient.readContract({
+      address: ESCROW_ADDRESS,
+      abi,
+      functionName: "hasPendingEntry",
+      args: [BigInt(onChainDealId), BigInt(tokenId)],
+    });
+    if (!hasPending) {
+      return { status: "already_resolved", reason: "no_trader_entry" };
+    }
+  } catch {
+    // Pre-hasPendingEntry contract — resolveEntry attempt + revert classification.
+  }
+
   const grossPayoutUsdc = Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc);
   try {
     const hash = await walletClient.writeContract({
@@ -125,12 +193,10 @@ async function resolveOnChainEntry({
     const receipt = await publicClient.waitForTransactionReceipt({ hash });
     return { status: "resolved", txHash: receipt.transactionHash };
   } catch (err) {
-    // Contract enforces FIFO resolution per deal: another trader entered this
-    // deal first and hasn't been resolved yet. Surface this as a retry signal
-    // so the cycle can release the lease cleanly and try again on the next tick.
     const message = err instanceof Error ? err.message : String(err);
-    if (message.includes("Trader mismatch")) {
-      return { status: "queue_not_head" };
+    const classified = classifyResolveEntryRevert(message);
+    if (classified) {
+      return classified;
     }
     throw err;
   }
@@ -430,7 +496,7 @@ export const cycle = internalAction({
       if (trader.tokenId !== undefined && trader.tokenId !== null) {
         const pending = await ctx.runQuery(
           internal.dealOutcomes.findUnresolvedOnChain,
-          { traderId: traderId as string }
+          { traderId: traderId as string, now }
         );
         if (
           pending &&
@@ -463,25 +529,38 @@ export const cycle = internalAction({
           }
 
           if (retry.status === "resolved") {
-            await ctx.runMutation(internal.dealOutcomes.markOnChainResolved, {
-              outcomeId: pending.outcome._id,
-              onChainTxHash: retry.txHash,
-            });
-            await ctx.runMutation(internal.agentActivityLog.append, {
+            await finalizeOnChainOutcome(ctx, {
               traderId,
-              activityType: "resolve",
-              message: `On-chain entry resolved on retry (tx=${retry.txHash})`,
+              outcomeId: pending.outcome._id,
+              traderPnlUsdc: pending.outcome.traderPnlUsdc ?? 0,
+              onChainTxHash: retry.txHash,
               dealId: pending.outcome.dealId as never,
-              metadata: {
-                outcome_id: pending.outcome._id,
-                resolve_tx_hash: retry.txHash,
-              },
               correlationId,
+              logMessage: `On-chain entry resolved on retry (tx=${retry.txHash})`,
+            });
+          } else if (retry.status === "already_resolved") {
+            await finalizeOnChainOutcome(ctx, {
+              traderId,
+              outcomeId: pending.outcome._id,
+              traderPnlUsdc: pending.outcome.traderPnlUsdc ?? 0,
+              onChainTxHash: reconciledTxHash(retry.reason),
+              dealId: pending.outcome.dealId as never,
+              correlationId,
+              logMessage: `On-chain entry reconciled (${retry.reason}) — no further chain action`,
             });
           }
-          // `already_resolved` falls through — the queue was empty, nothing
-          // to do on-chain. Don't stamp a tx hash we don't have; treat the
-          // outcome as settled and let the cycle continue.
+        }
+
+        const unapplied = await ctx.runQuery(
+          internal.dealOutcomes.findUnappliedBalanceOutcome,
+          { traderId: traderId as string, now }
+        );
+        if (unapplied) {
+          await ctx.runMutation(internal.traders.applyOutcomeBalance, {
+            traderId,
+            pnlUsdc: unapplied.traderPnlUsdc ?? 0,
+            outcomeId: unapplied._id,
+          });
         }
       }
 
@@ -639,6 +718,7 @@ export const cycle = internalAction({
 
       // ── 5. Approval gate (open-market only — recovery skips this) ──────────
       const threshold = mandate.approval_threshold_usdc;
+      let approvalToConsume: Id<"dealApprovals"> | undefined;
       if (
         marketOpen &&
         threshold !== undefined &&
@@ -648,6 +728,7 @@ export const cycle = internalAction({
           ctx.runQuery(internal.dealApprovals.findPendingByTraderAndDeal, {
             traderId,
             dealId: dealId as never,
+            now,
           }),
           ctx.runQuery(internal.dealApprovals.findApprovedByTraderAndDeal, {
             traderId,
@@ -656,13 +737,12 @@ export const cycle = internalAction({
         ]);
 
         if (approvedApproval) {
-          await ctx.runMutation(internal.dealApprovals.consume, {
-            approvalId: approvedApproval._id,
-          });
+          approvalToConsume = approvedApproval._id;
+          // Defer consume until after verified entry (R4).
           await ctx.runMutation(internal.agentActivityLog.append, {
             traderId,
             activityType: "approved",
-            message: "Consumed desk manager approval and entering deal",
+            message: "Desk manager approval on file — entering deal",
             dealId: dealId as never,
             metadata: { approval_id: approvedApproval._id },
             correlationId,
@@ -731,6 +811,7 @@ export const cycle = internalAction({
       const traderTokenId = trader.tokenId;
       let entryPaymentId: string | undefined;
       let marketClosedAtEntry = false;
+      let entryVerified = !marketOpen;
 
       if (marketOpen) {
         await ctx.runMutation(internal.agentActivityLog.append, {
@@ -756,6 +837,7 @@ export const cycle = internalAction({
               appUrl
             );
             entryPaymentId = entryResult.entry.payment_id;
+            entryVerified = true;
 
             if (entryResult.entry.already_entered) {
               await ctx.runMutation(internal.agentActivityLog.append, {
@@ -784,6 +866,7 @@ export const cycle = internalAction({
               .httpStatus;
 
             if (httpStatus === 409) {
+              entryVerified = true;
               // Legacy duplicate response: still run Convex outcome reconciliation
               await ctx.runMutation(internal.agentActivityLog.append, {
                 traderId,
@@ -831,6 +914,12 @@ export const cycle = internalAction({
           lastCycleAt: Date.now(),
         });
         return;
+      }
+
+      if (entryVerified && approvalToConsume) {
+        await ctx.runMutation(internal.dealApprovals.consume, {
+          approvalId: approvalToConsume,
+        });
       }
 
       // ── 8. Outcome resolution ──────────────────────────────────────────────
@@ -943,17 +1032,32 @@ export const cycle = internalAction({
           outcomeId: outcomeId as never,
           onChainTxHash: resolveResult.txHash,
         });
+      } else if (
+        resolveResult?.status === "already_resolved" &&
+        outcomeId !== null
+      ) {
+        await ctx.runMutation(internal.dealOutcomes.markOnChainResolved, {
+          outcomeId: outcomeId as never,
+          onChainTxHash: reconciledTxHash(resolveResult.reason),
+        });
       }
 
       if (resolveResult !== null && outcomeId !== null) {
         const txHash =
-          resolveResult.status === "resolved" ? resolveResult.txHash : null;
+          resolveResult.status === "resolved"
+            ? resolveResult.txHash
+            : resolveResult.status === "already_resolved"
+              ? reconciledTxHash(resolveResult.reason)
+              : null;
         await ctx.runMutation(internal.agentActivityLog.append, {
           traderId,
           activityType: "resolve",
-          message: txHash
-            ? `On-chain entry resolved (tx=${txHash})`
-            : "On-chain entry was already resolved",
+          message:
+            resolveResult.status === "resolved"
+              ? `On-chain entry resolved (tx=${resolveResult.txHash})`
+              : resolveResult.status === "already_resolved"
+                ? `On-chain entry reconciled (${resolveResult.reason})`
+                : "On-chain entry was already resolved",
           dealId: dealId as never,
           metadata: {
             outcome_id: outcomeId,

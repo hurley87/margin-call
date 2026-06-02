@@ -369,6 +369,66 @@ export const findVerifiedEntryByTraderAndDeal = internalQuery({
 });
 
 /**
+ * Internal: claim an entry slot before on-chain enterDeal.
+ * Idempotent on (traderId, dealId). Returns existing row if already claimed.
+ */
+export const beginEntryRecording = internalMutation({
+  args: {
+    dealId: v.id("deals"),
+    traderId: v.string(),
+    entryCostUsdc: v.number(),
+    onChainDealId: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    assertTradingHoursWithCloseGrace();
+
+    const existing = await ctx.db
+      .query("dealEntries")
+      .withIndex("byTraderAndDeal", (q) =>
+        q.eq("traderId", args.traderId).eq("dealId", args.dealId)
+      )
+      .unique();
+    if (existing) {
+      return {
+        entryId: existing._id,
+        paymentId: existing.paymentId,
+        alreadyClaimed: true,
+      };
+    }
+
+    const dealDoc = await ctx.db.get(args.dealId);
+    if (!dealDoc) throw new Error("Deal not found");
+    if (dealDoc.status !== "open") throw new Error("Deal is not open");
+
+    const traderDoc = await ctx.db.get(args.traderId as Id<"traders">);
+    if (!traderDoc) throw new Error("Trader not found");
+    if (traderDoc.status !== "active") {
+      throw new Error("Trader is not active");
+    }
+    if (
+      isOwnDeskCreatedDeal(
+        { creatorDeskManagerId: dealDoc.creatorDeskManagerId },
+        String(traderDoc.deskManagerId)
+      )
+    ) {
+      throw new Error("Trader cannot enter deals created by its own desk.");
+    }
+
+    const paymentId = `pending:${args.traderId}:${args.dealId}`;
+    const entryId = await ctx.db.insert("dealEntries", {
+      paymentId,
+      dealId: args.dealId,
+      traderId: args.traderId,
+      entryCostUsdc: args.entryCostUsdc,
+      onChainDealId: args.onChainDealId,
+      createdAt: Date.now(),
+    });
+
+    return { entryId, paymentId, alreadyClaimed: false };
+  },
+});
+
+/**
  * Internal: record a verified x402 deal entry.
  *
  * This is the **single writer path** for marking a deal entry as paid/verified.
@@ -405,6 +465,36 @@ export const recordVerifiedEntry = internalMutation({
     // caller that bypasses /api/deal/enter.
     assertTradingHoursWithCloseGrace();
 
+    // One verified entry per (traderId, dealId) — prevents double on-chain entry on retry.
+    const existingByPair = await ctx.db
+      .query("dealEntries")
+      .withIndex("byTraderAndDeal", (q) =>
+        q.eq("traderId", args.traderId).eq("dealId", args.dealId)
+      )
+      .unique();
+
+    if (existingByPair) {
+      if (
+        existingByPair.paymentId.startsWith("pending:") &&
+        existingByPair.paymentId !== args.paymentId
+      ) {
+        await ctx.db.patch(existingByPair._id, {
+          paymentId: args.paymentId,
+          enterTxHash: args.enterTxHash,
+          resolveTxHash: args.resolveTxHash,
+          onChainDealId: args.onChainDealId,
+        });
+        const dealDoc = await ctx.db.get(args.dealId);
+        if (dealDoc && !existingByPair.enterTxHash) {
+          await ctx.db.patch(args.dealId, {
+            entryCount: (dealDoc.entryCount ?? 0) + 1,
+            updatedAt: Date.now(),
+          });
+        }
+      }
+      return existingByPair._id;
+    }
+
     // CAS guard: one verified entry per paymentId
     const existing = await ctx.db
       .query("dealEntries")
@@ -416,9 +506,18 @@ export const recordVerifiedEntry = internalMutation({
     if (!dealDoc) {
       throw new Error("Deal not found");
     }
+    if (dealDoc.status !== "open") {
+      throw new Error("Deal is not open");
+    }
     const traderDoc = await ctx.db.get(args.traderId as Id<"traders">);
     if (!traderDoc) {
       throw new Error("Trader not found");
+    }
+    if (traderDoc.status !== "active") {
+      throw new Error("Trader is not active");
+    }
+    if (args.entryCostUsdc !== dealDoc.entryCostUsdc) {
+      throw new Error("Entry cost mismatch");
     }
     if (
       isOwnDeskCreatedDeal(

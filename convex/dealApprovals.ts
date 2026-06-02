@@ -185,9 +185,12 @@ export const loadInternal = internalQuery({
 
 /** Internal: find an existing approval for (traderId, dealId) in pending state (not expired). */
 export const findPendingByTraderAndDeal = internalQuery({
-  args: { traderId: v.id("traders"), dealId: v.id("deals") },
-  handler: async (ctx, { traderId, dealId }) => {
-    const now = Date.now();
+  args: {
+    traderId: v.id("traders"),
+    dealId: v.id("deals"),
+    now: v.number(),
+  },
+  handler: async (ctx, { traderId, dealId, now }) => {
     const results = await ctx.db
       .query("dealApprovals")
       .withIndex("byTrader", (q) => q.eq("traderId", traderId))

@@ -192,14 +192,14 @@ export const apply = internalMutation({
  * ops/manual problem and shouldn't keep the cycle waking overnight.
  */
 export const findUnresolvedOnChain = internalQuery({
-  args: { traderId: v.string() },
-  handler: async (ctx, { traderId }) => {
-    const since = Date.now() - 24 * 60 * 60_000;
+  args: { traderId: v.string(), now: v.number() },
+  handler: async (ctx, { traderId, now }) => {
+    const since = now - 24 * 60 * 60_000;
     const recent = await ctx.db
       .query("dealOutcomes")
       .withIndex("byTrader", (q) => q.eq("traderId", traderId))
       .order("asc")
-      .collect();
+      .take(100);
     for (const outcome of recent) {
       if (outcome.createdAt < since) continue;
       if (outcome.onChainTxHash) continue;
@@ -219,12 +219,36 @@ export const findUnresolvedOnChain = internalQuery({
 });
 
 /**
+ * Find the oldest outcome whose PnL has not been applied to the trader balance.
+ * Used when on-chain settlement was delayed (e.g. FIFO mismatch before fix).
+ */
+export const findUnappliedBalanceOutcome = internalQuery({
+  args: { traderId: v.string(), now: v.number() },
+  handler: async (ctx, { traderId, now }) => {
+    const since = now - 24 * 60 * 60_000;
+    const recent = await ctx.db
+      .query("dealOutcomes")
+      .withIndex("byTrader", (q) => q.eq("traderId", traderId))
+      .order("asc")
+      .take(100);
+    for (const outcome of recent) {
+      if (outcome.createdAt < since) continue;
+      if (outcome.balanceAppliedAt !== undefined) continue;
+      return outcome;
+    }
+    return null;
+  },
+});
+
+/**
  * Stamp the on-chain settlement tx hash on an existing outcome.
  * Idempotent: a no-op if onChainTxHash is already set.
  *
  * Used by the agent cycle after `resolveEntry` succeeds — we persist the
  * outcome record before attempting the on-chain call so that a contract
  * revert (e.g. FIFO "Trader mismatch") doesn't force a re-LLM on retry.
+ * Sentinel values (`reconciled:*`) are written when the chain has no pending
+ * entry for this trader but Convex still needs to stop retrying.
  */
 export const markOnChainResolved = internalMutation({
   args: {

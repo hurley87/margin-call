@@ -27,6 +27,8 @@ import {
   requireDeskWallet,
   verifyTxSucceeded,
   getBaseSepoliaPublicClient,
+  verifyEscrowDepositInReceipt,
+  verifyEscrowWithdrawalInReceipt,
 } from "./deskByo";
 import { shapePrepareResult } from "./intents";
 
@@ -276,7 +278,12 @@ export const fundConfirmForMcp = internalAction({
       tokenId: number;
     };
 
-    const { publicClient } = await verifyTxSucceeded(args.txHash);
+    const amountAtomic = parseAmountUsdc(payload.amountUsdc);
+    const { receipt, publicClient } = await verifyTxSucceeded(args.txHash);
+    await verifyEscrowDepositInReceipt(receipt, {
+      tokenId: payload.tokenId,
+      amountAtomic,
+    });
     const escrowBalanceUsdc = await syncTraderEscrowFromChain(
       ctx,
       publicClient,
@@ -417,7 +424,12 @@ export const withdrawConfirmForMcp = internalAction({
       tokenId: number;
     };
 
-    const { publicClient } = await verifyTxSucceeded(args.txHash);
+    const amountAtomic = parseAmountUsdc(payload.amountUsdc);
+    const { receipt, publicClient } = await verifyTxSucceeded(args.txHash);
+    await verifyEscrowWithdrawalInReceipt(receipt, {
+      tokenId: payload.tokenId,
+      amountAtomic,
+    });
     const escrowBalanceUsdc = await syncTraderEscrowFromChain(
       ctx,
       publicClient,

@@ -1,7 +1,8 @@
 /** Shared escrow + USDC addresses for MCP BYO desk treasury (Base Sepolia). */
 
-export const ESCROW_ADDRESS =
-  "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
+export const ESCROW_ADDRESS = (process.env.ESCROW_ADDRESS ??
+  process.env.NEXT_PUBLIC_ESCROW_ADDRESS ??
+  "0xa244550f0e35032E9c0b09DA4EB4933848d28d16") as `0x${string}`;
 export const USDC_SEPOLIA_ADDRESS =
   "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
 export const USDC_DECIMALS = 1_000_000;
@@ -35,6 +36,13 @@ export const erc20Abi = [
       { name: "owner", type: "address" },
       { name: "spender", type: "address" },
     ],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "balanceOf",
+    inputs: [{ name: "account", type: "address" }],
     outputs: [{ name: "", type: "uint256" }],
     stateMutability: "view",
   },
@@ -105,6 +113,16 @@ export const escrowAbi = [
   },
   {
     type: "function",
+    name: "hasPendingEntry",
+    inputs: [
+      { name: "dealId", type: "uint256" },
+      { name: "traderId", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "getDeal",
     inputs: [{ name: "dealId", type: "uint256" }],
     outputs: [
@@ -133,6 +151,22 @@ export const escrowAbi = [
       { name: "prompt", type: "string", indexed: false },
       { name: "pot", type: "uint256", indexed: false },
       { name: "entryCost", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Deposit",
+    inputs: [
+      { name: "traderId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Withdrawal",
+    inputs: [
+      { name: "traderId", type: "uint256", indexed: true },
+      { name: "amount", type: "uint256", indexed: false },
     ],
   },
 ] as const;

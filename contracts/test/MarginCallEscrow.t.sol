@@ -389,10 +389,57 @@ contract MarginCallEscrowTest is Test {
         vm.prank(operatorAddr);
         escrow.enterDeal(dealId, TRADER_A);
 
-        // Resolve for TRADER_B instead of TRADER_A
+        // Resolve for TRADER_B who has no pending entry
         vm.prank(operatorAddr);
-        vm.expectRevert("Trader mismatch");
+        vm.expectRevert("No pending entry");
         escrow.resolveEntry(dealId, TRADER_B, int256(50e6), 0);
+    }
+
+    function test_resolveEntry_outOfOrder() public {
+        vm.prank(alice);
+        uint256 dealId = escrow.createDeal("Out of order", 2000e6, 100e6);
+
+        vm.prank(alice);
+        escrow.depositFor(TRADER_A, 200e6);
+        vm.prank(bob);
+        escrow.depositFor(TRADER_B, 200e6);
+
+        vm.prank(operatorAddr);
+        escrow.enterDeal(dealId, TRADER_A);
+        vm.prank(operatorAddr);
+        escrow.enterDeal(dealId, TRADER_B);
+
+        // Resolve B first (would fail under FIFO)
+        vm.prank(operatorAddr);
+        escrow.resolveEntry(dealId, TRADER_B, int256(100e6), 10e6);
+        assertEq(escrow.getBalance(TRADER_B), 100e6 + 90e6);
+
+        vm.prank(operatorAddr);
+        escrow.resolveEntry(dealId, TRADER_A, -int256(50e6), 0);
+        assertEq(escrow.getBalance(TRADER_A), 100e6);
+    }
+
+    function test_enterDeal_revertsIfAlreadyEntered() public {
+        vm.prank(alice);
+        uint256 dealId = escrow.createDeal("Dup", 1000e6, 100e6);
+
+        vm.prank(alice);
+        escrow.depositFor(TRADER_A, 300e6);
+        vm.prank(operatorAddr);
+        escrow.enterDeal(dealId, TRADER_A);
+
+        vm.prank(operatorAddr);
+        vm.expectRevert("Already entered");
+        escrow.enterDeal(dealId, TRADER_A);
+    }
+
+    function test_setDepositor_revertsWhenBalanceNonZero() public {
+        vm.prank(alice);
+        escrow.depositFor(TRADER_A, 100e6);
+
+        vm.prank(operatorAddr);
+        vm.expectRevert("Depositor locked while balance > 0");
+        escrow.setDepositor(TRADER_A, eve);
     }
 
     function test_resolveEntry_revertsIfRakeExceedsWinnings() public {
@@ -430,7 +477,7 @@ contract MarginCallEscrowTest is Test {
         escrow.closeDeal(999);
     }
 
-    function test_multipleEntriesResolveInFifoOrder() public {
+    function test_multipleEntriesResolveInAnyOrder() public {
         vm.prank(alice);
         uint256 dealId = escrow.createDeal("FIFO", 2000e6, 100e6);
 

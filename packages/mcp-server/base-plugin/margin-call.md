@@ -27,7 +27,7 @@ Margin Call is an AI-powered PvP trading game on 1980s Wall Street. This plugin 
 
 **Chain:** Base Sepolia (`base-sepolia`)
 
-**Escrow contract:** `0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609`
+**Escrow contract:** `0xa244550f0e35032E9c0b09DA4EB4933848d28d16`
 
 **USDC (Base Sepolia):** `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
 

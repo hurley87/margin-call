@@ -4,8 +4,9 @@ import { baseSepolia } from "viem/chains";
 export const DEAL_STATUS_OPEN = 0;
 export const DEAL_STATUS_CLOSED = 1;
 
-export const ESCROW_ADDRESS =
-  "0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609" as const;
+export const ESCROW_ADDRESS = (process.env.NEXT_PUBLIC_ESCROW_ADDRESS ??
+  process.env.ESCROW_ADDRESS ??
+  "0xa244550f0e35032E9c0b09DA4EB4933848d28d16") as `0x${string}`;
 
 export const IDENTITY_REGISTRY_ADDRESS =
   "0x8004A818BFB912233c491871b3d84c89A494BD9e" as const;
@@ -204,6 +205,16 @@ export const escrowAbi = [
     type: "event",
     name: "DealClosed",
     inputs: [{ name: "dealId", type: "uint256", indexed: true }],
+  },
+  {
+    type: "function",
+    name: "hasPendingEntry",
+    inputs: [
+      { name: "dealId", type: "uint256" },
+      { name: "traderId", type: "uint256" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
   },
   {
     type: "function",

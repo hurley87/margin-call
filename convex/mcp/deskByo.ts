@@ -2,6 +2,13 @@
 
 import type { Doc } from "../_generated/dataModel";
 import { normalizeAddress } from "./desks";
+import {
+  ESCROW_ADDRESS,
+  escrowAbi,
+  USDC_DECIMALS,
+  USDC_SEPOLIA_ADDRESS,
+  erc20Abi,
+} from "./escrowConstants";
 
 export function requireDeskWallet(
   dm: Pick<Doc<"deskManagers">, "walletAddress">
@@ -42,4 +49,80 @@ export async function verifyTxSucceeded(txHash: string): Promise<{
     throw new Error("Transaction reverted on-chain");
   }
   return { receipt, publicClient };
+}
+
+function decodeEscrowEvent(
+  log: import("viem").Log,
+  decodeEventLog: typeof import("viem").decodeEventLog
+) {
+  if (log.address.toLowerCase() !== ESCROW_ADDRESS.toLowerCase()) {
+    return null;
+  }
+  try {
+    return decodeEventLog({
+      abi: escrowAbi,
+      data: log.data,
+      topics: log.topics,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/** Require a Deposit event matching fund_trader intent payload. */
+export async function verifyEscrowDepositInReceipt(
+  receipt: import("viem").TransactionReceipt,
+  expected: { tokenId: number; amountAtomic: bigint }
+): Promise<void> {
+  const { decodeEventLog } = await import("viem");
+  for (const log of receipt.logs) {
+    const decoded = decodeEscrowEvent(log, decodeEventLog);
+    if (!decoded || decoded.eventName !== "Deposit") continue;
+    const args = decoded.args as { traderId: bigint; amount: bigint };
+    if (
+      args.traderId === BigInt(expected.tokenId) &&
+      args.amount === expected.amountAtomic
+    ) {
+      return;
+    }
+  }
+  throw new Error(
+    "Transaction succeeded but no matching Deposit event from the escrow contract was found — txHash does not match this fund intent"
+  );
+}
+
+/** Require a Withdrawal event matching withdraw_from_trader intent payload. */
+export async function verifyEscrowWithdrawalInReceipt(
+  receipt: import("viem").TransactionReceipt,
+  expected: { tokenId: number; amountAtomic: bigint }
+): Promise<void> {
+  const { decodeEventLog } = await import("viem");
+  for (const log of receipt.logs) {
+    const decoded = decodeEscrowEvent(log, decodeEventLog);
+    if (!decoded || decoded.eventName !== "Withdrawal") continue;
+    const args = decoded.args as { traderId: bigint; amount: bigint };
+    if (
+      args.traderId === BigInt(expected.tokenId) &&
+      args.amount === expected.amountAtomic
+    ) {
+      return;
+    }
+  }
+  throw new Error(
+    "Transaction succeeded but no matching Withdrawal event from the escrow contract was found — txHash does not match this withdraw intent"
+  );
+}
+
+/** Authoritative on-chain USDC balance for a desk wallet (Base Sepolia). */
+export async function readDeskUsdcBalance(
+  walletAddress: string
+): Promise<number> {
+  const publicClient = await getBaseSepoliaPublicClient();
+  const raw = await publicClient.readContract({
+    address: USDC_SEPOLIA_ADDRESS,
+    abi: erc20Abi,
+    functionName: "balanceOf",
+    args: [normalizeAddress(walletAddress) as `0x${string}`],
+  });
+  return Number(raw) / USDC_DECIMALS;
 }

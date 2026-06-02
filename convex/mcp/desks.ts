@@ -127,6 +127,14 @@ export const setWalletForMcp = internalMutation({
     if (!desk) throw new Error("Desk not found");
 
     const norm = normalizeAddress(walletAddress);
+    if (
+      desk.walletAddress &&
+      desk.walletAddress.toLowerCase() !== norm.toLowerCase()
+    ) {
+      throw new Error(
+        "Desk wallet is already bound — contact support to change treasury address"
+      );
+    }
     const now = Date.now();
     await ctx.db.patch(deskManagerId, {
       walletAddress: norm,

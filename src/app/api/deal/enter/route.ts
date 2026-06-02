@@ -143,7 +143,7 @@ async function handleAgentCycleDealEnter(
     dealId: deal_id as Id<"deals">,
   })) as { paymentId: string } | null;
 
-  if (existingEntry) {
+  if (existingEntry && !existingEntry.paymentId.startsWith("pending:")) {
     return NextResponse.json({
       agent_cycle: true,
       entry: {
@@ -229,13 +229,65 @@ async function handleAgentCycleDealEnter(
   let enterTxHash: string | null = null;
 
   if (onChainDealId !== null && tokenId !== null) {
-    const enterReceipt = await sendOperatorContractCall({
-      address: ESCROW_ADDRESS,
-      abi: escrowAbi,
-      functionName: "enterDeal",
-      args: [onChainDealId, tokenId],
-    });
-    enterTxHash = enterReceipt.transactionHash;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const beginFn = internal.deals.beginEntryRecording as any;
+      const claim = (await convex.mutation(beginFn, {
+        dealId: deal_id as Id<"deals">,
+        traderId: trader_id,
+        entryCostUsdc: deal.entryCostUsdc,
+        onChainDealId: Number(onChainDealId),
+      })) as {
+        alreadyClaimed: boolean;
+        paymentId: string;
+      };
+
+      if (claim.alreadyClaimed && !claim.paymentId.startsWith("pending:")) {
+        return NextResponse.json({
+          agent_cycle: true,
+          entry: {
+            payment_id: claim.paymentId,
+            already_entered: true,
+          },
+          summary: {
+            enter_tx_hash: null,
+            resolve_tx_hash: null,
+          },
+        });
+      }
+
+      if (!claim.alreadyClaimed || claim.paymentId.startsWith("pending:")) {
+        const enterReceipt = await sendOperatorContractCall({
+          address: ESCROW_ADDRESS,
+          abi: escrowAbi,
+          functionName: "enterDeal",
+          args: [onChainDealId, tokenId],
+        });
+        enterTxHash = enterReceipt.transactionHash;
+      }
+    } catch (enterErr) {
+      const message =
+        enterErr instanceof Error ? enterErr.message : String(enterErr);
+      if (message.includes("Already entered")) {
+        const existingAfterChain = (await convex.query(findEntryFn, {
+          traderId: trader_id,
+          dealId: deal_id as Id<"deals">,
+        })) as { paymentId: string } | null;
+        if (existingAfterChain) {
+          return NextResponse.json({
+            agent_cycle: true,
+            entry: {
+              payment_id: existingAfterChain.paymentId.startsWith("pending:")
+                ? `noop:${trader_id}:${deal_id}`
+                : existingAfterChain.paymentId,
+              already_entered: true,
+            },
+            summary: { enter_tx_hash: null, resolve_tx_hash: null },
+          });
+        }
+      }
+      throw enterErr;
+    }
   }
 
   const paymentId = enterTxHash ?? `noop:${trader_id}:${deal_id}`;

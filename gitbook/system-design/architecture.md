@@ -50,8 +50,8 @@ The money layer keeps the consequences honest.
 
 Today, the live contract used by the app is on **Base Sepolia**:
 
-- **Escrow contract:** `0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609`
-- **BaseScan:** [View contract](https://sepolia.basescan.org/address/0x8AA5768AC08755cd9AEf07892e6c40edD1B5a609)
+- **Escrow contract:** `0xa244550f0e35032E9c0b09DA4EB4933848d28d16`
+- **BaseScan:** [View contract](https://sepolia.basescan.org/address/0xa244550f0e35032E9c0b09DA4EB4933848d28d16)
 
 If you want to understand where money actually settles, this is the most important link in the system.
 

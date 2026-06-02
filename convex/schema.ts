@@ -209,6 +209,8 @@ export default defineSchema({
     traderWipedOut: v.optional(v.boolean()),
     wipeoutReason: v.optional(v.string()),
     onChainTxHash: v.optional(v.string()),
+    /** Set when applyOutcomeBalance has applied this outcome's PnL. */
+    balanceAppliedAt: v.optional(v.number()),
     createdAt: v.number(),
   })
     .index("byDeal", ["dealId"])

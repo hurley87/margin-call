@@ -264,7 +264,7 @@ http.route({
   }),
 });
 
-// sync_wallet: on-chain read stays in Next.js (httpAction + "use node" unsupported).
+// sync_wallet: on-chain read in syncWalletFromChainForMcp ("use node" action).
 http.route({
   path: "/mcp/desks/sync-wallet",
   method: "POST",
@@ -274,36 +274,22 @@ http.route({
 
     const body = await parseJsonBody<{
       deskManagerId?: string;
-      walletAddress?: string;
-      balanceUsdc?: number;
     }>(req);
     if (!body?.deskManagerId) return badRequest("deskManagerId required");
-    if (body.walletAddress === undefined || body.balanceUsdc === undefined) {
-      return badRequest(
-        "walletAddress and balanceUsdc required for sync_wallet"
-      );
-    }
 
     const deskManagerId = body.deskManagerId as Id<"deskManagers">;
-    const walletAddress = body.walletAddress;
-    const balanceUsdc = Number(body.balanceUsdc);
     const startedAt = Date.now();
     let errMsg: string | undefined;
+    let balanceUsdc: number | undefined;
+    let walletAddress: string | undefined;
 
     try {
-      const dm = await ctx.runQuery(internal.deskManagers.getByIdInternal, {
-        id: deskManagerId,
-      });
-      if (!dm?.subject) {
-        errMsg = "Desk not found for sync_wallet";
-      } else {
-        await ctx.runMutation(internal.deskManagers.syncWalletBalance, {
-          subject: dm.subject,
-          walletAddress,
-          balanceUsdc,
-          email: undefined,
-        });
-      }
+      const result = await ctx.runAction(
+        internal.mcp.deskWalletSync.syncWalletFromChainForMcp,
+        { deskManagerId }
+      );
+      balanceUsdc = result.balanceUsdc;
+      walletAddress = result.walletAddress;
     } catch (e: unknown) {
       errMsg = e instanceof Error ? e.message : String(e);
     }

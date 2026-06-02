@@ -44,7 +44,7 @@ describe("Cycle lease: stale trader eligibility", () => {
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,
-      {}
+      { now: Date.now() }
     );
     expect(stale.length).toBe(1);
   });
@@ -57,7 +57,7 @@ describe("Cycle lease: stale trader eligibility", () => {
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,
-      {}
+      { now: Date.now() }
     );
     expect(stale.length).toBe(1);
   });
@@ -70,7 +70,7 @@ describe("Cycle lease: stale trader eligibility", () => {
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,
-      {}
+      { now: Date.now() }
     );
     expect(stale.length).toBe(0);
   });
@@ -84,7 +84,7 @@ describe("Cycle lease: stale trader eligibility", () => {
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,
-      {}
+      { now: Date.now() }
     );
     expect(stale.length).toBe(0);
   });
@@ -97,7 +97,7 @@ describe("Cycle lease: stale trader eligibility", () => {
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,
-      {}
+      { now: Date.now() }
     );
     expect(stale.length).toBe(1);
   });
@@ -110,7 +110,7 @@ describe("Cycle lease: stale trader eligibility", () => {
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,
-      {}
+      { now: Date.now() }
     );
     expect(stale.length).toBe(0);
   });
@@ -137,7 +137,7 @@ describe("Cycle lease: stale trader eligibility", () => {
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,
-      {}
+      { now: Date.now() }
     );
     expect(stale.length).toBe(0);
   });
@@ -149,7 +149,7 @@ describe("Cycle lease: stale trader eligibility", () => {
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,
-      {}
+      { now: Date.now() }
     );
     expect(stale.length).toBe(0);
   });
@@ -464,6 +464,51 @@ describe("applyOutcomeBalance idempotency", () => {
       ctx.db.get(traderId as never)
     );
     expect(afterSecond?.escrowBalanceUsdc).toBe(1200); // unchanged
+  });
+
+  it("older outcomeId does not re-apply PnL after a newer outcome was applied", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId, { escrowBalance: 1000 });
+    const dealA = await seedDeal(t, { prompt: "Deal A" });
+    const dealB = await seedDeal(t, { prompt: "Deal B" });
+
+    const outcomeA = await t.mutation(internal.dealOutcomes.apply, {
+      dealId: dealA as never,
+      traderId: traderId as string,
+      traderPnlUsdc: 100,
+    });
+    const outcomeB = await t.mutation(internal.dealOutcomes.apply, {
+      dealId: dealB as never,
+      traderId: traderId as string,
+      traderPnlUsdc: 50,
+    });
+
+    await t.mutation(internal.traders.applyOutcomeBalance, {
+      traderId: traderId as never,
+      pnlUsdc: 100,
+      outcomeId: outcomeA as never,
+    });
+    await t.mutation(internal.traders.applyOutcomeBalance, {
+      traderId: traderId as never,
+      pnlUsdc: 50,
+      outcomeId: outcomeB as never,
+    });
+
+    const afterBoth = await t.run(async (ctx) => ctx.db.get(traderId as never));
+    expect(afterBoth?.escrowBalanceUsdc).toBe(1150);
+
+    // Replay older outcome A — must not double-apply
+    await t.mutation(internal.traders.applyOutcomeBalance, {
+      traderId: traderId as never,
+      pnlUsdc: 100,
+      outcomeId: outcomeA as never,
+    });
+
+    const afterReplay = await t.run(async (ctx) =>
+      ctx.db.get(traderId as never)
+    );
+    expect(afterReplay?.escrowBalanceUsdc).toBe(1150);
   });
 
   it("wipeout sets trader status to wiped_out", async () => {
