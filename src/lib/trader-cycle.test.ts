@@ -115,10 +115,21 @@ describe("getTraderCycleDisplayState", () => {
 
 describe("getTraderCycleUi", () => {
   const now = 1_000_000;
+  const defaultMinutes = Math.floor(DEFAULT_CYCLE_INTERVAL_MS / 60_000);
+  const speedMinutes = Math.floor(SPEED_TOKEN_CYCLE_INTERVAL_MS / 60_000);
 
-  it("matches composing display state + label", () => {
+  it("includes the cadence in countdown labels", () => {
     const doc = baseTrader({ lastCycleAt: now - 60_000 });
-    expect(getTraderCycleUi(doc, now).text).toMatch(/\[NEXT IN /);
+    expect(getTraderCycleUi(doc, now).text).toMatch(
+      new RegExp(`\\[NEXT IN \\d{2}:\\d{2} / ${defaultMinutes}M\\]`)
+    );
+  });
+
+  it("includes the cadence in ready_no_prior_cycle labels", () => {
+    const doc = baseTrader({ lastCycleAt: undefined });
+    expect(getTraderCycleUi(doc, now).text).toBe(
+      `[READY · ${defaultMinutes}M CYCLE]`
+    );
   });
 
   it("maps desk portfolio snake_case summaries", () => {
@@ -127,8 +138,29 @@ describe("getTraderCycleUi", () => {
       wallet_status: "ready",
       last_cycle_at: now - DEFAULT_CYCLE_INTERVAL_MS - 1,
     });
-    expect(getTraderCycleUi(doc, now).text).toBe("[READY ON NEXT TICK]");
+    expect(getTraderCycleUi(doc, now).text).toBe(
+      `[READY ON NEXT TICK · ${defaultMinutes}M]`
+    );
   });
+
+  it.skipIf(SPEED_TOKEN_CYCLE_INTERVAL_MS === DEFAULT_CYCLE_INTERVAL_MS)(
+    "uses the speed-token cadence when eligible (only meaningful once cadences diverge)",
+    () => {
+      const doc = {
+        ...baseTrader({ lastCycleAt: now - 30_000 }),
+        speedTokenEligible: true,
+      };
+      const speedLabel = getTraderCycleUi(doc, now).text;
+      const defaultLabel = getTraderCycleUi(
+        baseTrader({ lastCycleAt: now - 30_000 }),
+        now
+      ).text;
+      expect(speedLabel).toMatch(
+        new RegExp(`\\[NEXT IN \\d{2}:\\d{2} / ${speedMinutes}M\\]`)
+      );
+      expect(speedLabel).not.toBe(defaultLabel);
+    }
+  );
 });
 
 describe("resolveTraderCycleIntervalMs", () => {

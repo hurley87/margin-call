@@ -87,8 +87,19 @@ export function formatRemainingMs(remainingMs: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
+export function formatCycleIntervalShort(intervalMs: number): string {
+  if (intervalMs < 60_000) {
+    const seconds = Math.max(1, Math.round(intervalMs / 1000));
+    return `${seconds}S`;
+  }
+  return `${Math.round(intervalMs / 60_000)}M`;
+}
+
 const CYCLE_UI_STATIC: Record<
-  Exclude<TraderCycleDisplayState["kind"], "countdown">,
+  Exclude<
+    TraderCycleDisplayState["kind"],
+    "countdown" | "ready_no_prior_cycle" | "ready_next_tick"
+  >,
   { text: string; className: string }
 > = {
   wiped: { text: "[WIPED]", className: "text-[var(--t-red)]" },
@@ -103,31 +114,44 @@ const CYCLE_UI_STATIC: Record<
   },
   wallet_error: { text: "[WALLET ERROR]", className: "text-[var(--t-red)]" },
   running: { text: "[RUNNING]", className: "text-[var(--t-amber)]" },
-  ready_no_prior_cycle: { text: "[READY]", className: "text-[var(--t-green)]" },
-  ready_next_tick: {
-    text: "[READY ON NEXT TICK]",
-    className: "text-[var(--t-green)]",
-  },
 };
 
-export function getTraderCycleUiLabel(state: TraderCycleDisplayState): {
+export function getTraderCycleUiLabel(
+  state: TraderCycleDisplayState,
+  intervalMs: number
+): {
   text: string;
   className: string;
 } {
-  if (state.kind === "countdown") {
-    return {
-      text: `[NEXT IN ${formatRemainingMs(state.remainingMs)}]`,
-      className: "text-[var(--t-muted)]",
-    };
+  switch (state.kind) {
+    case "countdown":
+      return {
+        text: `[NEXT IN ${formatRemainingMs(state.remainingMs)} / ${formatCycleIntervalShort(intervalMs)}]`,
+        className: "text-[var(--t-muted)]",
+      };
+    case "ready_no_prior_cycle":
+      return {
+        text: `[READY · ${formatCycleIntervalShort(intervalMs)} CYCLE]`,
+        className: "text-[var(--t-green)]",
+      };
+    case "ready_next_tick":
+      return {
+        text: `[READY ON NEXT TICK · ${formatCycleIntervalShort(intervalMs)}]`,
+        className: "text-[var(--t-green)]",
+      };
+    default:
+      return CYCLE_UI_STATIC[state.kind];
   }
-  return CYCLE_UI_STATIC[state.kind];
 }
 
 export function getTraderCycleUi(
   trader: TraderCycleDoc,
   nowMs: number
 ): { text: string; className: string } {
-  return getTraderCycleUiLabel(getTraderCycleDisplayState(trader, nowMs));
+  return getTraderCycleUiLabel(
+    getTraderCycleDisplayState(trader, nowMs),
+    resolveTraderCycleIntervalMs(trader)
+  );
 }
 
 /** Portfolio / desk roster row (`usePortfolio` snake_case). */

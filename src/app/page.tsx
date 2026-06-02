@@ -1172,6 +1172,7 @@ function NewswirePanel({
     null
   );
   const [helpOpen, setHelpOpen] = useState(false);
+  const [openDealsListOpen, setOpenDealsListOpen] = useState(false);
 
   const activeMarketDeals = useMemo(() => {
     return (deals ?? []).filter(isActiveMarketDeal);
@@ -1224,14 +1225,22 @@ function NewswirePanel({
     );
   }, [activeMarketDeals]);
 
+  const isMetaLoading = items === undefined || dealsLoading;
+  const metaLabel = isMetaLoading
+    ? "WAIT"
+    : marketStats.count === 1
+      ? "1 OPEN DEAL"
+      : `${marketStats.count} OPEN DEALS`;
+  const canShowOpenDealsList = !isMetaLoading && marketStats.count > 0;
+
   return (
     <aside className="terminal-panel flex min-h-0 flex-1 flex-col overflow-hidden xl:min-h-0">
       <PanelHeader
         title="The Wire"
-        meta={
-          items === undefined || dealsLoading
-            ? "WAIT"
-            : `${marketStats.count} OPEN`
+        meta={metaLabel}
+        metaAriaLabel={canShowOpenDealsList ? "Show open deals" : undefined}
+        onMetaClick={
+          canShowOpenDealsList ? () => setOpenDealsListOpen(true) : undefined
         }
         action={
           <button
@@ -1281,6 +1290,45 @@ function NewswirePanel({
           <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
           <Dialog.Popup className={dialogPopupClass("lg")}>
             <HowDealsWorkBrief onClose={() => setHelpOpen(false)} />
+          </Dialog.Popup>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      <Dialog.Root open={openDealsListOpen} onOpenChange={setOpenDealsListOpen}>
+        <Dialog.Portal>
+          <Dialog.Backdrop className={DIALOG_BACKDROP_CLASS} />
+          <Dialog.Popup className={dialogPopupClass("lg")}>
+            <div className="flex items-center justify-between border-b border-[var(--t-divider)] bg-[#0b100d] px-4 py-3">
+              <Dialog.Title className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
+                {isMetaLoading ? "Open Deals" : metaLabel}
+              </Dialog.Title>
+              <Dialog.Close
+                aria-label="Close"
+                className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-red)] hover:text-[var(--t-red)]"
+              >
+                <X className="h-3.5 w-3.5" />
+              </Dialog.Close>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto px-4 py-4">
+              {activeMarketDeals.length === 0 ? (
+                <p className="text-center text-xs uppercase tracking-wider text-[var(--t-muted)]">
+                  No open deals
+                </p>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {activeMarketDeals.map((deal) => (
+                    <NewswireDealCard
+                      key={deal.id}
+                      deal={deal}
+                      onOpenDeal={(id) => {
+                        setOpenDealsListOpen(false);
+                        onOpenDeal(id);
+                      }}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
           </Dialog.Popup>
         </Dialog.Portal>
       </Dialog.Root>
@@ -2520,10 +2568,14 @@ function BottomTape({
 function PanelHeader({
   title,
   meta,
+  metaAriaLabel,
+  onMetaClick,
   action,
 }: {
   title: string;
   meta?: string;
+  metaAriaLabel?: string;
+  onMetaClick?: () => void;
   action?: ReactNode;
 }) {
   return (
@@ -2532,11 +2584,22 @@ function PanelHeader({
         {title}
       </h2>
       <div className="flex shrink-0 items-center gap-2">
-        {meta && (
-          <span className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-            {meta}
-          </span>
-        )}
+        {meta &&
+          (onMetaClick ? (
+            <button
+              type="button"
+              onClick={onMetaClick}
+              title={metaAriaLabel ?? meta}
+              aria-label={metaAriaLabel ?? meta}
+              className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
+            >
+              {meta}
+            </button>
+          ) : (
+            <span className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              {meta}
+            </span>
+          ))}
         {action}
       </div>
     </div>

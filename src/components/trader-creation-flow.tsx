@@ -21,6 +21,9 @@ import { WalletProvisioningError } from "@/components/wallet-provisioning-error"
 import type { Mandate } from "@/lib/agent/evaluator";
 import type { Id } from "../../convex/_generated/dataModel";
 import { TRADER_NAME_MAX, validateTraderName } from "@/lib/trader-name";
+import { DEFAULT_CYCLE_INTERVAL_MS } from "@/lib/constants";
+
+const DEFAULT_CYCLE_MINUTES = Math.round(DEFAULT_CYCLE_INTERVAL_MS / 60_000);
 
 type Option<T> = { label: string; sub: string; value: T };
 
@@ -687,8 +690,11 @@ function FundAndActivateStep({
           disabled={!canActivate}
           className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
         />
+        <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+          {`Cycles every ${DEFAULT_CYCLE_MINUTES} min once active`}
+        </p>
         {!canActivate && (
-          <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+          <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
             {!walletReady
               ? "Waiting for wallet setup to complete..."
               : "Fund escrow above to enable activation"}
