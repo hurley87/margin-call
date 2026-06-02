@@ -6,6 +6,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { authFetch } from "@/lib/api";
+import { realTxHashOrNull } from "@/lib/contracts/tx-hash";
 
 export interface Deal {
   id: string;
@@ -63,7 +64,7 @@ function mapConvexDeal(deal: Doc<"deals">): Deal {
     status: deal.status,
     created_at: new Date(deal.createdAt).toISOString(),
     updated_at: new Date(deal.updatedAt).toISOString(),
-    on_chain_tx_hash: deal.onChainTxHash,
+    on_chain_tx_hash: realTxHashOrNull(deal.onChainTxHash),
     creator_address: deal.creatorAddress,
     source_headline: deal.sourceHeadline,
   };
@@ -95,7 +96,7 @@ function mapConvexOutcome(o: DealOutcomeDoc): DealOutcome {
       (o.assetsGained as { name: string; value_usdc: number }[]) ?? [],
     assets_lost: (o.assetsLost as string[]) ?? [],
     created_at: new Date(o.createdAt).toISOString(),
-    on_chain_tx_hash: o.onChainTxHash,
+    on_chain_tx_hash: realTxHashOrNull(o.onChainTxHash),
   };
 }
 

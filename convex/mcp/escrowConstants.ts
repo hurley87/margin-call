@@ -1,8 +1,15 @@
 /** Shared escrow + USDC addresses for MCP BYO desk treasury (Base Sepolia). */
 
-export const ESCROW_ADDRESS = (process.env.ESCROW_ADDRESS ??
-  process.env.NEXT_PUBLIC_ESCROW_ADDRESS ??
-  "0xa244550f0e35032E9c0b09DA4EB4933848d28d16") as `0x${string}`;
+const RESOLVED_ESCROW_ADDRESS =
+  process.env.ESCROW_ADDRESS ?? process.env.NEXT_PUBLIC_ESCROW_ADDRESS;
+
+if (!RESOLVED_ESCROW_ADDRESS) {
+  throw new Error(
+    "ESCROW_ADDRESS env is not set in Convex. Run `npx convex env set ESCROW_ADDRESS <address>` (matching the deployed MarginCallEscrow)."
+  );
+}
+
+export const ESCROW_ADDRESS = RESOLVED_ESCROW_ADDRESS as `0x${string}`;
 export const USDC_SEPOLIA_ADDRESS =
   "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
 export const USDC_DECIMALS = 1_000_000;

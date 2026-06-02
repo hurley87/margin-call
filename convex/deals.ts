@@ -478,14 +478,36 @@ export const recordVerifiedEntry = internalMutation({
         existingByPair.paymentId.startsWith("pending:") &&
         existingByPair.paymentId !== args.paymentId
       ) {
+        // Same invariants as the fresh-insert path: deal still open, trader
+        // still active, entry cost matches, not own-desk. State can change
+        // between beginEntryRecording and the upgrade call.
+        const dealDoc = await ctx.db.get(args.dealId);
+        if (!dealDoc) throw new Error("Deal not found");
+        if (dealDoc.status !== "open") throw new Error("Deal is not open");
+        const traderDoc = await ctx.db.get(args.traderId as Id<"traders">);
+        if (!traderDoc) throw new Error("Trader not found");
+        if (traderDoc.status !== "active") {
+          throw new Error("Trader is not active");
+        }
+        if (args.entryCostUsdc !== dealDoc.entryCostUsdc) {
+          throw new Error("Entry cost mismatch");
+        }
+        if (
+          isOwnDeskCreatedDeal(
+            { creatorDeskManagerId: dealDoc.creatorDeskManagerId },
+            String(traderDoc.deskManagerId)
+          )
+        ) {
+          throw new Error("Trader cannot enter deals created by its own desk.");
+        }
+
         await ctx.db.patch(existingByPair._id, {
           paymentId: args.paymentId,
           enterTxHash: args.enterTxHash,
           resolveTxHash: args.resolveTxHash,
           onChainDealId: args.onChainDealId,
         });
-        const dealDoc = await ctx.db.get(args.dealId);
-        if (dealDoc && !existingByPair.enterTxHash) {
+        if (!existingByPair.enterTxHash) {
           await ctx.db.patch(args.dealId, {
             entryCount: (dealDoc.entryCount ?? 0) + 1,
             updatedAt: Date.now(),

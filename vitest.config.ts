@@ -8,6 +8,8 @@ export default defineConfig({
     // that internal action with incomplete transaction context (runQuery throws).
     env: {
       MC_SKIP_WALLET_SCHEDULE: "1",
+      ESCROW_ADDRESS: "0xa244550f0e35032E9c0b09DA4EB4933848d28d16",
+      NEXT_PUBLIC_ESCROW_ADDRESS: "0xa244550f0e35032E9c0b09DA4EB4933848d28d16",
     },
     include: [
       "src/**/*.test.ts",

@@ -872,39 +872,25 @@ async function queueWipeoutEmailIfNeeded(
   }
 }
 
-/** Internal: overwrite escrowBalanceUsdc from a fresh on-chain read. */
+/**
+ * Internal: overwrite escrowBalanceUsdc from a fresh on-chain read.
+ *
+ * Does NOT transition trader status. Chain balance can legitimately reach 0
+ * via withdraw or mid-deal (between enterDeal debit and resolveEntry credit);
+ * wipeout is only set from a verified loss outcome in `applyOutcomeBalance`.
+ */
 export const syncEscrowBalance = internalMutation({
   args: { traderId: v.id("traders"), balanceUsdc: v.number() },
   handler: async (ctx, { traderId, balanceUsdc }) => {
     const trader = await ctx.db.get(traderId);
     if (!trader) return;
-
-    const wipedOut = balanceUsdc <= 0;
-    const firstWipeout = wipedOut && trader.status !== "wiped_out";
-    const nextStatus = wipedOut ? ("wiped_out" as const) : trader.status;
-
-    if (
-      (trader.escrowBalanceUsdc ?? 0) === balanceUsdc &&
-      trader.status === nextStatus
-    ) {
+    if ((trader.escrowBalanceUsdc ?? 0) === balanceUsdc) {
       return;
     }
-
-    const patch: Partial<
-      Pick<Doc<"traders">, "escrowBalanceUsdc" | "updatedAt" | "status">
-    > = {
+    await ctx.db.patch(traderId, {
       escrowBalanceUsdc: balanceUsdc,
       updatedAt: Date.now(),
-    };
-    if (wipedOut) {
-      patch.status = "wiped_out";
-    }
-
-    await ctx.db.patch(traderId, patch);
-
-    if (firstWipeout) {
-      await queueWipeoutEmailIfNeeded(ctx, traderId, trader.deskManagerId);
-    }
+    });
   },
 });
 

@@ -5,6 +5,7 @@ import { useMutation, useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { Doc } from "../../convex/_generated/dataModel";
+import { realTxHashOrNull } from "@/lib/contracts/tx-hash";
 
 /** Trader inventory row (Convex `assets` table, UI shape). */
 export interface Asset {
@@ -141,7 +142,7 @@ export function useTraderOutcomes(traderId: string): {
     trader_wiped_out: outcome.traderWipedOut ?? false,
     wipeout_reason: outcome.wipeoutReason ?? null,
     created_at: new Date(outcome.createdAt).toISOString(),
-    on_chain_tx_hash: outcome.onChainTxHash,
+    on_chain_tx_hash: realTxHashOrNull(outcome.onChainTxHash),
   }));
 
   return { data, isLoading: false, isError: false };

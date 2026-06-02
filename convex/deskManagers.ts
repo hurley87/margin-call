@@ -201,6 +201,13 @@ export const createForMcp = internalMutation({
     if (existing) {
       const patch: Record<string, unknown> = { updatedAt: now };
       if (walletAddress && existing.walletAddress !== walletAddress) {
+        // One-way bind: same invariant as setWalletForMcp. Once a desk has a
+        // wallet on file, every other code path must refuse to rotate it.
+        if (existing.walletAddress) {
+          throw new Error(
+            "Desk wallet is already bound — contact support to change treasury address"
+          );
+        }
         patch.walletAddress = walletAddress;
       }
       if (cdpAccountName && existing.cdpAccountName !== cdpAccountName) {

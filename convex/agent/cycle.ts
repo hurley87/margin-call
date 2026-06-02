@@ -72,6 +72,51 @@ async function finalizeOnChainOutcome(
   }
 }
 
+/**
+ * Void an outcome that the chain has already settled in some other path.
+ * Records the sentinel hash and stamps balanceAppliedAt so retries stop, but
+ * does NOT mutate the trader balance — the next chain sync is the source of
+ * truth for what actually happened on-chain.
+ */
+async function voidOnChainOutcome(
+  ctx: ActionCtx,
+  {
+    traderId,
+    outcomeId,
+    onChainTxHash,
+    dealId,
+    correlationId,
+    logMessage,
+  }: {
+    traderId: Id<"traders">;
+    outcomeId: Id<"dealOutcomes">;
+    onChainTxHash: string;
+    dealId?: Id<"deals">;
+    correlationId?: string;
+    logMessage?: string;
+  }
+) {
+  await ctx.runMutation(internal.dealOutcomes.voidOnChainOutcome, {
+    outcomeId,
+    onChainTxHash,
+  });
+  if (dealId && correlationId) {
+    await ctx.runMutation(internal.agentActivityLog.append, {
+      traderId,
+      activityType: "resolve",
+      message:
+        logMessage ??
+        `On-chain outcome voided (${onChainTxHash}) — no PnL applied`,
+      dealId,
+      metadata: {
+        outcome_id: outcomeId,
+        resolve_tx_hash: onChainTxHash,
+      },
+      correlationId,
+    });
+  }
+}
+
 async function resolveOnChainEntry({
   onChainDealId,
   tokenId,
@@ -159,19 +204,14 @@ async function resolveOnChainEntry({
     return { status: "already_resolved", reason: "deal_settled" };
   }
 
-  // New escrow: per-trader pending flag. Old deployments omit this view — skip.
-  try {
-    const hasPending = await publicClient.readContract({
-      address: ESCROW_ADDRESS,
-      abi,
-      functionName: "hasPendingEntry",
-      args: [BigInt(onChainDealId), BigInt(tokenId)],
-    });
-    if (!hasPending) {
-      return { status: "already_resolved", reason: "no_trader_entry" };
-    }
-  } catch {
-    // Pre-hasPendingEntry contract — resolveEntry attempt + revert classification.
+  const hasPending = await publicClient.readContract({
+    address: ESCROW_ADDRESS,
+    abi,
+    functionName: "hasPendingEntry",
+    args: [BigInt(onChainDealId), BigInt(tokenId)],
+  });
+  if (!hasPending) {
+    return { status: "already_resolved", reason: "no_trader_entry" };
   }
 
   const grossPayoutUsdc = Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc);
@@ -539,14 +579,17 @@ export const cycle = internalAction({
               logMessage: `On-chain entry resolved on retry (tx=${retry.txHash})`,
             });
           } else if (retry.status === "already_resolved") {
-            await finalizeOnChainOutcome(ctx, {
+            // Chain already settled (deal closed or no pending entry for this
+            // trader). We can't trust the LLM-computed PnL because we don't
+            // know whether the chain actually credited this trader — void the
+            // outcome and let the next chain sync set the authoritative balance.
+            await voidOnChainOutcome(ctx, {
               traderId,
               outcomeId: pending.outcome._id,
-              traderPnlUsdc: pending.outcome.traderPnlUsdc ?? 0,
               onChainTxHash: reconciledTxHash(retry.reason),
               dealId: pending.outcome.dealId as never,
               correlationId,
-              logMessage: `On-chain entry reconciled (${retry.reason}) — no further chain action`,
+              logMessage: `On-chain entry reconciled (${retry.reason}) — no PnL applied; chain sync is source of truth`,
             });
           }
         }
@@ -561,6 +604,21 @@ export const cycle = internalAction({
             pnlUsdc: unapplied.traderPnlUsdc ?? 0,
             outcomeId: unapplied._id,
           });
+        }
+
+        // Re-load trader: 3c may have flipped status to wiped_out via a real
+        // loss outcome. Don't proceed to deal selection on a stale in-memory copy.
+        const traderAfter3c = await ctx.runQuery(
+          internal.agent.internal.loadTraderForCycle,
+          { traderId }
+        );
+        if (!traderAfter3c || traderAfter3c.status !== "active") {
+          await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+            traderId,
+            generation,
+            lastCycleAt: Date.now(),
+          });
+          return;
         }
       }
 
@@ -1036,7 +1094,9 @@ export const cycle = internalAction({
         resolveResult?.status === "already_resolved" &&
         outcomeId !== null
       ) {
-        await ctx.runMutation(internal.dealOutcomes.markOnChainResolved, {
+        // Void: stop retries AND skip applyOutcomeBalance below. The LLM PnL
+        // cannot be trusted because we don't know how the chain settled it.
+        await ctx.runMutation(internal.dealOutcomes.voidOnChainOutcome, {
           outcomeId: outcomeId as never,
           onChainTxHash: reconciledTxHash(resolveResult.reason),
         });

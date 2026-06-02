@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 
 // ── Public queries ─────────────────────────────────────────────────────────
 
@@ -195,15 +196,18 @@ export const findUnresolvedOnChain = internalQuery({
   args: { traderId: v.string(), now: v.number() },
   handler: async (ctx, { traderId, now }) => {
     const since = now - 24 * 60 * 60_000;
+    // Newest-first so the 24h window is anchored at the head — once we cross
+    // the boundary we can stop, no risk of being capped by oldest-100.
     const recent = await ctx.db
       .query("dealOutcomes")
       .withIndex("byTrader", (q) => q.eq("traderId", traderId))
-      .order("asc")
+      .order("desc")
       .take(100);
+    let oldestOutcome: Doc<"dealOutcomes"> | null = null;
+    let oldestDeal: Doc<"deals"> | null = null;
     for (const outcome of recent) {
-      if (outcome.createdAt < since) continue;
+      if (outcome.createdAt < since) break;
       if (outcome.onChainTxHash) continue;
-      // Only retry outcomes for deals that have an on-chain counterpart.
       const deal = await ctx.db.get(outcome.dealId);
       if (
         !deal ||
@@ -212,15 +216,23 @@ export const findUnresolvedOnChain = internalQuery({
       ) {
         continue;
       }
-      return { outcome, deal };
+      // Keep iterating to find the oldest (within the 24h window) — same
+      // semantics as the prior ascending scan but with a bounded take.
+      oldestOutcome = outcome;
+      oldestDeal = deal;
     }
-    return null;
+    if (!oldestOutcome || !oldestDeal) return null;
+    return { outcome: oldestOutcome, deal: oldestDeal };
   },
 });
 
 /**
- * Find the oldest outcome whose PnL has not been applied to the trader balance.
- * Used when on-chain settlement was delayed (e.g. FIFO mismatch before fix).
+ * Find the oldest outcome whose PnL has not been applied to the trader balance
+ * AND whose on-chain settlement is known to have landed (real onChainTxHash).
+ *
+ * The on-chain gate prevents us from applying off-chain PnL before the contract
+ * has actually moved funds — earlier the cycle could otherwise double-debit a
+ * trader whose `resolveEntry` was still pending on the head of the FIFO queue.
  */
 export const findUnappliedBalanceOutcome = internalQuery({
   args: { traderId: v.string(), now: v.number() },
@@ -229,14 +241,16 @@ export const findUnappliedBalanceOutcome = internalQuery({
     const recent = await ctx.db
       .query("dealOutcomes")
       .withIndex("byTrader", (q) => q.eq("traderId", traderId))
-      .order("asc")
+      .order("desc")
       .take(100);
+    let oldestUnapplied: Doc<"dealOutcomes"> | null = null;
     for (const outcome of recent) {
-      if (outcome.createdAt < since) continue;
+      if (outcome.createdAt < since) break;
       if (outcome.balanceAppliedAt !== undefined) continue;
-      return outcome;
+      if (!outcome.onChainTxHash) continue;
+      oldestUnapplied = outcome;
     }
-    return null;
+    return oldestUnapplied;
   },
 });
 
@@ -260,5 +274,37 @@ export const markOnChainResolved = internalMutation({
     if (!outcome) return;
     if (outcome.onChainTxHash) return;
     await ctx.db.patch(outcomeId, { onChainTxHash });
+  },
+});
+
+/**
+ * Void an outcome that cannot or should not be applied to the trader balance.
+ * Stamps both `onChainTxHash` (sentinel) and `balanceAppliedAt` so that the
+ * recovery queries stop returning it and no PnL is ever applied. Use when the
+ * chain reports `already_resolved` for either reason — we don't know whether
+ * the chain credited/debited the trader, so we let the next on-chain balance
+ * sync reconcile rather than trusting the LLM-computed PnL.
+ */
+export const voidOnChainOutcome = internalMutation({
+  args: {
+    outcomeId: v.id("dealOutcomes"),
+    onChainTxHash: v.string(),
+  },
+  handler: async (ctx, { outcomeId, onChainTxHash }) => {
+    const outcome = await ctx.db.get(outcomeId);
+    if (!outcome) return;
+    const patch: {
+      onChainTxHash?: string;
+      balanceAppliedAt?: number;
+    } = {};
+    if (!outcome.onChainTxHash) {
+      patch.onChainTxHash = onChainTxHash;
+    }
+    if (outcome.balanceAppliedAt === undefined) {
+      patch.balanceAppliedAt = Date.now();
+    }
+    if (Object.keys(patch).length > 0) {
+      await ctx.db.patch(outcomeId, patch);
+    }
   },
 });

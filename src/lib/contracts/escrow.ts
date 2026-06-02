@@ -4,9 +4,16 @@ import { baseSepolia } from "viem/chains";
 export const DEAL_STATUS_OPEN = 0;
 export const DEAL_STATUS_CLOSED = 1;
 
-export const ESCROW_ADDRESS = (process.env.NEXT_PUBLIC_ESCROW_ADDRESS ??
-  process.env.ESCROW_ADDRESS ??
-  "0xa244550f0e35032E9c0b09DA4EB4933848d28d16") as `0x${string}`;
+const RESOLVED_ESCROW_ADDRESS =
+  process.env.NEXT_PUBLIC_ESCROW_ADDRESS ?? process.env.ESCROW_ADDRESS;
+
+if (!RESOLVED_ESCROW_ADDRESS) {
+  throw new Error(
+    "NEXT_PUBLIC_ESCROW_ADDRESS env is not set. Add it to .env.local (and Vercel for production) matching the deployed MarginCallEscrow."
+  );
+}
+
+export const ESCROW_ADDRESS = RESOLVED_ESCROW_ADDRESS as `0x${string}`;
 
 export const IDENTITY_REGISTRY_ADDRESS =
   "0x8004A818BFB912233c491871b3d84c89A494BD9e" as const;

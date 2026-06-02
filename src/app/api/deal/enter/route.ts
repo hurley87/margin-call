@@ -274,12 +274,37 @@ async function handleAgentCycleDealEnter(
           dealId: deal_id as Id<"deals">,
         })) as { paymentId: string } | null;
         if (existingAfterChain) {
+          // If the row is still pending (chain entry exists from a prior
+          // partial-success but Convex never upgraded), promote it now so
+          // future cycles don't re-enter this branch and burn operator gas.
+          let exposedPaymentId = existingAfterChain.paymentId;
+          if (existingAfterChain.paymentId.startsWith("pending:")) {
+            const promotedPaymentId = `noop:${trader_id}:${deal_id}`;
+            try {
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              const recordFn = internal.deals.recordVerifiedEntry as any;
+              await convex.mutation(recordFn, {
+                paymentId: promotedPaymentId,
+                dealId: deal_id as Id<"deals">,
+                traderId: trader_id,
+                entryCostUsdc: deal.entryCostUsdc,
+                enterTxHash: undefined,
+                resolveTxHash: undefined,
+                onChainDealId:
+                  onChainDealId !== null ? Number(onChainDealId) : undefined,
+              });
+              exposedPaymentId = promotedPaymentId;
+            } catch (promoteErr) {
+              console.error(
+                "[deal/enter] failed to promote pending row after 'Already entered':",
+                promoteErr
+              );
+            }
+          }
           return NextResponse.json({
             agent_cycle: true,
             entry: {
-              payment_id: existingAfterChain.paymentId.startsWith("pending:")
-                ? `noop:${trader_id}:${deal_id}`
-                : existingAfterChain.paymentId,
+              payment_id: exposedPaymentId,
               already_entered: true,
             },
             summary: { enter_tx_hash: null, resolve_tx_hash: null },

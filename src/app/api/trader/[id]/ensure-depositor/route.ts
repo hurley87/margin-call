@@ -90,7 +90,21 @@ export async function POST(
     return NextResponse.json({ ok: true, alreadySet: true });
   }
 
-  await setDepositorOnChain(trader.tokenId, depositorAddress);
+  try {
+    await setDepositorOnChain(trader.tokenId, depositorAddress);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (message.includes("Depositor locked while balance > 0")) {
+      return NextResponse.json(
+        {
+          error:
+            "Trader has on-chain balance with a different depositor on file. Withdraw the existing balance to that depositor before re-pointing depositor.",
+        },
+        { status: 409 }
+      );
+    }
+    throw err;
+  }
 
   return NextResponse.json({ ok: true });
 }
