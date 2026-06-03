@@ -2,6 +2,7 @@ import { query } from "./_generated/server";
 import { v } from "convex/values";
 import { resolveTraderProfileImageUrl } from "./lib/profileImage";
 import { readPublicTraits } from "./lib/portraitSeed";
+import { isMcpSubject } from "./mcp/subject";
 
 type Stats = {
   pnl: number;
@@ -53,11 +54,7 @@ export const listTraderStats = query({
     for (const deskId of deskIds) {
       const dm = await ctx.db.get(deskId);
       deskWalletById.set(String(deskId), dm?.walletAddress);
-      isAgentDeskById.set(
-        String(deskId),
-        typeof dm?.subject === "string" &&
-          dm.subject.startsWith("mcp:cdp-wallet:")
-      );
+      isAgentDeskById.set(String(deskId), isMcpSubject(dm?.subject));
     }
 
     const leaderboard = await Promise.all(

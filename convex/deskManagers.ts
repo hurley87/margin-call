@@ -180,9 +180,10 @@ export const syncWalletBalance = internalMutation({
 
 /**
  * Internal (MCP Phase 2+): create or ensure a deskManager row for a dedicated
- * MCP-controlled desk. The subject MUST be of the form `mcp:cdp-wallet:<id>`.
- * walletAddress is optional at issuance; the agent binds a Base Account via
- * set_desk_wallet. Idempotent.
+ * MCP-controlled desk. Subject forms: `mcp:cdp-wallet:<id>` (legacy Privy gate)
+ * or `mcp:base:<address>` (SIWE self-serve with auto-bound Base Account).
+ * walletAddress is optional for cdp-wallet desks; SIWE issuance passes it up front.
+ * Idempotent.
  */
 export const createForMcp = internalMutation({
   args: {

@@ -13,15 +13,21 @@ description: "Skill plugin reference for running an autonomous AGENT DESK in the
 >
 > 1. Confirm Base MCP tools are available (Detection).
 > 2. Present the Base Account disclaimer (Onboarding).
-> 3. Call `get_wallets` when you need the user's Base Account address (required for `set_desk_wallet` and treasury writes).
+> 3. Call `get_wallets` to read the user's Base Account address.
 >
-> Then complete the Margin Call desk handshake:
+> Then issue your MCP desk key (no Privy, no web UI):
 >
-> 1. `GET /api/mcp/desks` — confirm desk state and whether a wallet is bound.
-> 2. If no wallet is bound: `POST /api/mcp/desks/set-wallet` with the Base Account address from `get_wallets`.
-> 3. `GET /api/mcp/desks/sync-wallet` — refresh on-chain USDC balance after funding the Base Account.
+> 1. `POST /api/mcp/keys/challenge` with `{ "address": "<Base Account from get_wallets>" }` — receive a SIWE message.
+> 2. Base MCP `sign` (personal_sign / EIP-191) — user approves in Base Account.
+> 3. `POST /api/mcp/keys` with `{ "message": "...", "signature": "0x..." }` — receive `mc_live_*` (shown once). The Base Account is pre-bound as desk treasury.
+> 4. Set `MARGIN_CALL_MCP_KEY` to the returned key for all subsequent `/api/mcp/*` calls.
 >
-> Every Margin Call API call requires `Authorization: Bearer mc_live_...` (one key = one AGENT DESK). Obtain a key from the Margin Call web app or `POST /api/mcp/keys` while authenticated via Privy.
+> After key issuance:
+>
+> 1. Fund the Base Account with USDC on Base Sepolia (if balance is zero).
+> 2. `GET /api/mcp/desks/sync-wallet` — refresh on-chain USDC balance.
+>
+> Every Margin Call API call requires `Authorization: Bearer mc_live_...` (one key = one AGENT DESK).
 
 Margin Call is an AI-powered PvP trading game on 1980s Wall Street. This plugin drives the Margin Call MCP HTTP API: read desk/trader/deal state, hire and configure traders, and execute treasury actions (fund escrow, create/close deals, withdraw) through Base MCP's `send_calls`. The autonomous deal-entry cycle runs server-side for active funded traders.
 
@@ -283,9 +289,10 @@ Approve or reject a pending high-stakes deal approval. `approve` schedules an im
 
 ```
 get_wallets → Base Account address
-GET /api/mcp/desks → check binding + balance
+POST /api/mcp/keys/challenge { address } → SIWE message
+Base MCP sign (personal_sign) → user approves → signature
+POST /api/mcp/keys { message, signature } → mc_live_* key (wallet pre-bound)
 (if zero balance) user funds Base Account with USDC on Base Sepolia
-POST /api/mcp/desks/set-wallet { walletAddress }
 GET /api/mcp/desks/sync-wallet
 GET /api/mcp/traders/check-name?name=<handle>  (user picks name; must be available)
 POST /api/mcp/traders/create { name, idempotencyKey }
@@ -306,7 +313,7 @@ POST /api/mcp/traders/{id}/resume { idempotencyKey }
 
 **Hire and fund a trader named Gekko with $50**
 
-1. `GET /api/mcp/desks` — confirm wallet bound and balance ≥ 50 USDC; if not, guide user through set-wallet + sync-wallet + funding.
+1. Ensure MCP key is issued (SIWE flow) and `GET /api/mcp/desks` shows wallet bound and balance ≥ 50 USDC; if not, guide user through key issuance + sync-wallet + funding.
 2. Ask the user for the handle; `GET /api/mcp/traders/check-name?name=Gekko` — only proceed when `available` is true.
 3. `POST /api/mcp/traders/create` with stable `idempotencyKey`.
 4. `POST /api/mcp/traders/{traderId}/fund` with `amountUsdc: 50`.

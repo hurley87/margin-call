@@ -24,7 +24,6 @@ import {
   LogOut,
   MoreVertical,
   Plus,
-  Terminal,
   Twitter,
   User,
   Volume2,
@@ -46,7 +45,6 @@ import {
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
-import { McpOperatorDialog } from "@/components/mcp-operator-dialog";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
 import {
@@ -272,7 +270,6 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
     dealId: string | null;
   } | null>(null);
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
-  const [mcpOperatorOpen, setMcpOperatorOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
   const [selectedWalletTraderId, setSelectedWalletTraderId] = useState<
@@ -355,11 +352,6 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         sfxEnabled={sfx.enabled}
         onToggleSfx={sfx.toggleEnabled}
         onLogout={logout}
-        onOpenMcp={() => setMcpOperatorOpen(true)}
-      />
-      <McpOperatorDialog
-        open={mcpOperatorOpen}
-        onOpenChange={setMcpOperatorOpen}
       />
       <DeskCommandStrip
         cash={cashBalance}
@@ -520,7 +512,6 @@ function TopStatusBar({
   sfxEnabled,
   onToggleSfx,
   onLogout,
-  onOpenMcp,
 }: {
   deskWalletAddress: string;
   nowMs: number;
@@ -531,7 +522,6 @@ function TopStatusBar({
   sfxEnabled: boolean;
   onToggleSfx: () => void;
   onLogout: () => void;
-  onOpenMcp: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [fundDialogOpen, setFundDialogOpen] = useState(false);
@@ -639,7 +629,6 @@ function TopStatusBar({
           <MobileAppBarMenu
             sfxEnabled={sfxEnabled}
             onToggleSfx={onToggleSfx}
-            onOpenMcp={onOpenMcp}
             onLogout={onLogout}
           />
         </div>
@@ -740,15 +729,6 @@ function TopStatusBar({
           >
             <HelpCircle className="h-4 w-4" />
           </IconLink>
-          <button
-            type="button"
-            onClick={onOpenMcp}
-            title="MCP Operator Console (agent desks, ceremony, audit)"
-            aria-label="Open MCP operator panel"
-            className="grid h-9 w-9 place-items-center border border-[var(--t-amber)]/40 text-[var(--t-amber)] hover:border-[var(--t-green)] hover:text-[var(--t-green)]"
-          >
-            <Terminal className="h-4 w-4" />
-          </button>
           <button
             type="button"
             onClick={onLogout}
@@ -950,12 +930,10 @@ export function DeskCommandStrip({
 function MobileAppBarMenu({
   sfxEnabled,
   onToggleSfx,
-  onOpenMcp,
   onLogout,
 }: {
   sfxEnabled: boolean;
   onToggleSfx: () => void;
-  onOpenMcp: () => void;
   onLogout: () => void;
 }) {
   const [open, setOpen] = useState(false);
@@ -999,14 +977,6 @@ function MobileAppBarMenu({
                 <VolumeX className="h-4 w-4" />
               )
             }
-          />
-          <MobileMenuButton
-            onClick={() => {
-              onOpenMcp();
-              setOpen(false);
-            }}
-            label="MCP console"
-            icon={<Terminal className="h-4 w-4" />}
           />
           <MobileMenuLink
             href="https://x.com/davidbhurley"

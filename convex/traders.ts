@@ -22,6 +22,7 @@ import {
 } from "./lib/portraitSeed";
 import { TRADER_NAME_REGEX } from "../src/lib/trader-name";
 import { normalizeEmail } from "../src/lib/email";
+import { isMcpSubject } from "./mcp/subject";
 
 // Vitest sets MC_SKIP_WALLET_SCHEDULE so any caller that would otherwise
 // enqueue wallet.createForTrader skips the scheduler. convex-test runs
@@ -218,9 +219,7 @@ export const getPublicProfile = query({
 
     const basics = await publicTraderBasics(ctx, trader);
     const dm = await ctx.db.get(trader.deskManagerId);
-    const isAgentDesk =
-      typeof dm?.subject === "string" &&
-      dm.subject.startsWith("mcp:cdp-wallet:");
+    const isAgentDesk = isMcpSubject(dm?.subject);
     return {
       ...basics,
       escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,

@@ -1,10 +1,11 @@
 import { internalMutation, type MutationCtx } from "../_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
+import { isMcpSubject } from "./subject";
 
 /**
- * One-shot operator cleanup: delete every MCP desk (subject prefix
- * `mcp:cdp-wallet:`) and cascade through every table that references it.
+ * One-shot operator cleanup: delete every MCP desk (subject prefix `mcp:`)
+ * and cascade through every table that references it.
  *
  * Intentionally does NOT touch on-chain state — USDC sitting at legacy EOA
  * addresses or in the escrow contract remains there. After this runs, the
@@ -21,9 +22,7 @@ export const wipeMcpDesks = internalMutation({
   args: { confirm: v.optional(v.boolean()) },
   handler: async (ctx, { confirm }) => {
     const desks = await ctx.db.query("deskManagers").collect();
-    const mcpDesks = desks.filter((d) =>
-      d.subject.startsWith("mcp:cdp-wallet:")
-    );
+    const mcpDesks = desks.filter((d) => isMcpSubject(d.subject));
 
     const counts = {
       deskManagers: 0,

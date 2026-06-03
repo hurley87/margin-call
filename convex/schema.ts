@@ -409,22 +409,21 @@ export default defineSchema({
     .index("byExpiresAt", ["expiresAt"]),
 
   /**
-   * Per-desk MCP API keys (Phase 1+). Keys are issued via Privy-authenticated
-   * web flow (or operator tooling) and stored only as HMAC hashes. One key
-   * maps to exactly one deskManager. Raw keys are never persisted.
+   * Per-desk MCP API keys. Issued via the SIWE-gated Next.js route, stored
+   * only as HMAC hashes. One desk holds at most one non-revoked key at a
+   * time — re-issuance revokes prior keys (latest-SIWE-wins).
    */
   mcpApiKeys: defineTable({
     keyHash: v.string(),
     deskManagerId: v.id("deskManagers"),
-    /** Privy DID of the human who issued this MCP key (used for ceremony gating + operator views). */
+    /** Legacy field from the Privy-gated path (now unused on new rows). */
     issuedByPrivySubject: v.optional(v.string()),
     createdAt: v.number(),
     lastUsedAt: v.optional(v.number()),
     revokedAt: v.optional(v.number()),
   })
     .index("byKeyHash", ["keyHash"])
-    .index("byDeskManager", ["deskManagerId"])
-    .index("byIssuedBy", ["issuedByPrivySubject"]),
+    .index("byDeskManager", ["deskManagerId"]),
 
   /**
    * Audit log for all MCP tool invocations (reads + writes). Written from the

@@ -10,6 +10,7 @@ import { v } from "convex/values";
 import { isOwnDeskCreatedDeal } from "./lib/dealEntryEligibility";
 import { clampLimit } from "./lib/limits";
 import { assertTradingHoursWithCloseGrace } from "./lib/tradingHours";
+import { isMcpSubject } from "./mcp/subject";
 
 /** Lightweight enrichment for public deal reads: join creator desk subject to expose is_agent_desk flag (no DB write, mirrors leaderboard pattern). */
 async function enrichWithCreatorAgentStatus(
@@ -30,9 +31,7 @@ async function enrichWithCreatorAgentStatus(
   await Promise.all(
     deskIds.map(async (id) => {
       const dm = await ctx.db.get(id as Id<"deskManagers">);
-      const isAgent =
-        typeof dm?.subject === "string" &&
-        dm.subject.startsWith("mcp:cdp-wallet:");
+      const isAgent = isMcpSubject(dm?.subject);
       isAgentMap.set(id, isAgent);
     })
   );

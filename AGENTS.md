@@ -75,22 +75,24 @@ Add to `.cursor/mcp.json` or global MCP config:
 
 Authorize once in Base Account when prompted.
 
-### Issuing a per-desk key
+### Issuing a per-desk key (SIWE via Base MCP)
 
-```bash
-PRIVY_JWT="paste_real_privy_jwt_from_browser" pnpm mcp:issue-key
-```
+With Base MCP connected, the agent self-issues a key by signing a SIWE challenge:
 
-Returns `key` (once) and `deskId`. **No wallet address at issuance** — bind via `set_desk_wallet`.
+1. `get_wallets` — read your Base Account address
+2. `POST /api/mcp/keys/challenge` `{ "address": "0x..." }` — receive a SIWE message
+3. Base MCP `sign` (personal_sign / EIP-191) — user approves in Base Account
+4. `POST /api/mcp/keys` `{ "message": "...", "signature": "0x..." }` — receive `mc_live_*` key (once)
+
+The signing Base Account is auto-bound as the desk treasury (`mcp:base:<address>`). No `set_desk_wallet` step on this path. To rotate or recover a lost key, repeat the SIWE handshake — the new key supersedes any prior key for that desk.
 
 ### Agent desk onboarding sequence
 
-1. `get_desk` — check binding + balance
+1. Issue MCP key (SIWE flow above) — wallet is pre-bound
 2. Base MCP — fund your Base Account with USDC on Base Sepolia
-3. `set_desk_wallet` — register that address
-4. `sync_wallet` — refresh Convex balance
-5. `create_trader` — one-shot server mint (no Base MCP approval)
-6. Treasury ops: `fund_trader` / `create_deal` / `close_deal` / `withdraw_from_trader` → **prepare** → Base MCP `send_calls` (approve) → `confirm_intent` with `intentId` + `txHash`
+3. `sync_wallet` — refresh Convex balance
+4. `create_trader` — one-shot server mint (no Base MCP approval)
+5. Treasury ops: `fund_trader` / `create_deal` / `close_deal` / `withdraw_from_trader` → **prepare** → Base MCP `send_calls` (approve) → `confirm_intent` with `intentId` + `txHash`
 
 ### Base MCP plugin (recommended on harness surfaces)
 

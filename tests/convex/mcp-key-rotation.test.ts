@@ -3,169 +3,113 @@ import { internal } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { makeT, seedDeskManager } from "./setup";
 
-const ISSUER = "did:privy:issuer-001";
-const OUTSIDER = "did:privy:outsider-001";
-const OLD_HASH = "hash-old-key-aaaa";
-const NEW_HASH = "hash-new-key-bbbb";
+const FIRST_HASH = "hash-key-first-aaaa";
+const SECOND_HASH = "hash-key-second-bbbb";
+const THIRD_HASH = "hash-key-third-cccc";
 
-async function seedKey(
-  t: ReturnType<typeof makeT>,
-  deskManagerId: Id<"deskManagers">,
-  keyHash: string,
-  issuedBy: string
-) {
-  return t.run(async (ctx) => {
-    return ctx.db.insert("mcpApiKeys", {
-      keyHash,
-      deskManagerId,
-      issuedByPrivySubject: issuedBy,
-      createdAt: Date.now(),
-    });
-  });
-}
-
-describe("MCP key rotation + revocation", () => {
-  it("revoke marks the key revokedAt and lookup returns null for it", async () => {
+describe("MCP key issuance — latest SIWE wins", () => {
+  it("first create on a fresh desk inserts a single active key", async () => {
     const t = makeT();
-    const deskId = await seedDeskManager(t, { subject: "mcp:cdp-wallet:zz" });
-    const keyId = await seedKey(
-      t,
-      deskId as Id<"deskManagers">,
-      OLD_HASH,
-      ISSUER
-    );
+    const deskId = (await seedDeskManager(t, {
+      subject: "mcp:base:0xaaa",
+    })) as Id<"deskManagers">;
 
-    const before = await t.query(internal.mcpApiKeys.lookupDeskByKeyHash, {
-      keyHash: OLD_HASH,
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: FIRST_HASH,
+      deskManagerId: deskId,
     });
-    expect(before?.deskManagerId).toBe(deskId);
 
-    const res = await t.mutation(internal.mcpApiKeys.revoke, {
-      keyId,
-      revokedByPrivySubject: ISSUER,
+    const lookup = await t.query(internal.mcpApiKeys.lookupDeskByKeyHash, {
+      keyHash: FIRST_HASH,
     });
-    expect(res.ok).toBe(true);
-    expect(res.alreadyRevoked).toBe(false);
-
-    const after = await t.query(internal.mcpApiKeys.lookupDeskByKeyHash, {
-      keyHash: OLD_HASH,
-    });
-    expect(after).toBeNull();
+    expect(lookup?.deskManagerId).toBe(deskId);
   });
 
-  it("revoke is idempotent — second call reports alreadyRevoked", async () => {
+  it("re-issuance revokes any prior non-revoked keys for the same desk", async () => {
     const t = makeT();
-    const deskId = await seedDeskManager(t);
-    const keyId = await seedKey(
-      t,
-      deskId as Id<"deskManagers">,
-      OLD_HASH,
-      ISSUER
-    );
+    const deskId = (await seedDeskManager(t, {
+      subject: "mcp:base:0xbbb",
+    })) as Id<"deskManagers">;
 
-    const first = await t.mutation(internal.mcpApiKeys.revoke, {
-      keyId,
-      revokedByPrivySubject: ISSUER,
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: FIRST_HASH,
+      deskManagerId: deskId,
     });
-    expect(first.alreadyRevoked).toBe(false);
-
-    const second = await t.mutation(internal.mcpApiKeys.revoke, {
-      keyId,
-      revokedByPrivySubject: ISSUER,
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: SECOND_HASH,
+      deskManagerId: deskId,
     });
-    expect(second.alreadyRevoked).toBe(true);
-    expect(second.revokedAt).toBe(first.revokedAt);
-  });
 
-  it("revoke from a non-issuer subject is rejected", async () => {
-    const t = makeT();
-    const deskId = await seedDeskManager(t);
-    const keyId = await seedKey(
-      t,
-      deskId as Id<"deskManagers">,
-      OLD_HASH,
-      ISSUER
-    );
-
-    await expect(
-      t.mutation(internal.mcpApiKeys.revoke, {
-        keyId,
-        revokedByPrivySubject: OUTSIDER,
-      })
-    ).rejects.toThrow(/Not authorized/);
-  });
-
-  it("rotate atomically revokes old key and binds new key to the same desk", async () => {
-    const t = makeT();
-    const deskId = await seedDeskManager(t);
-    const oldKeyId = await seedKey(
-      t,
-      deskId as Id<"deskManagers">,
-      OLD_HASH,
-      ISSUER
-    );
-
-    const res = await t.mutation(internal.mcpApiKeys.rotate, {
-      keyId: oldKeyId,
-      newKeyHash: NEW_HASH,
-      rotatedByPrivySubject: ISSUER,
-    });
-    expect(res.ok).toBe(true);
-    expect(res.deskManagerId).toBe(deskId);
-
-    // Old hash → null (revoked).
     const oldLookup = await t.query(internal.mcpApiKeys.lookupDeskByKeyHash, {
-      keyHash: OLD_HASH,
+      keyHash: FIRST_HASH,
     });
     expect(oldLookup).toBeNull();
 
-    // New hash → same desk.
     const newLookup = await t.query(internal.mcpApiKeys.lookupDeskByKeyHash, {
-      keyHash: NEW_HASH,
+      keyHash: SECOND_HASH,
     });
     expect(newLookup?.deskManagerId).toBe(deskId);
   });
 
-  it("rotate from a non-issuer subject is rejected", async () => {
+  it("repeated re-issuance leaves exactly one active key", async () => {
     const t = makeT();
-    const deskId = await seedDeskManager(t);
-    const keyId = await seedKey(
-      t,
-      deskId as Id<"deskManagers">,
-      OLD_HASH,
-      ISSUER
-    );
+    const deskId = (await seedDeskManager(t, {
+      subject: "mcp:base:0xccc",
+    })) as Id<"deskManagers">;
 
-    await expect(
-      t.mutation(internal.mcpApiKeys.rotate, {
-        keyId,
-        newKeyHash: NEW_HASH,
-        rotatedByPrivySubject: OUTSIDER,
-      })
-    ).rejects.toThrow(/Not authorized/);
-  });
-
-  it("rotate against an already-revoked key is rejected", async () => {
-    const t = makeT();
-    const deskId = await seedDeskManager(t);
-    const keyId = await seedKey(
-      t,
-      deskId as Id<"deskManagers">,
-      OLD_HASH,
-      ISSUER
-    );
-
-    await t.mutation(internal.mcpApiKeys.revoke, {
-      keyId,
-      revokedByPrivySubject: ISSUER,
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: FIRST_HASH,
+      deskManagerId: deskId,
+    });
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: SECOND_HASH,
+      deskManagerId: deskId,
+    });
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: THIRD_HASH,
+      deskManagerId: deskId,
     });
 
-    await expect(
-      t.mutation(internal.mcpApiKeys.rotate, {
-        keyId,
-        newKeyHash: NEW_HASH,
-        rotatedByPrivySubject: ISSUER,
-      })
-    ).rejects.toThrow(/already-revoked/);
+    const active = await t.run(async (ctx) => {
+      const rows = await ctx.db
+        .query("mcpApiKeys")
+        .withIndex("byDeskManager", (q) => q.eq("deskManagerId", deskId))
+        .filter((q) => q.eq(q.field("revokedAt"), undefined))
+        .collect();
+      return rows;
+    });
+
+    expect(active).toHaveLength(1);
+    expect(active[0].keyHash).toBe(THIRD_HASH);
+  });
+
+  it("does not touch keys bound to other desks", async () => {
+    const t = makeT();
+    const deskA = (await seedDeskManager(t, {
+      subject: "mcp:base:0xddd",
+    })) as Id<"deskManagers">;
+    const deskB = (await seedDeskManager(t, {
+      subject: "mcp:base:0xeee",
+    })) as Id<"deskManagers">;
+
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: FIRST_HASH,
+      deskManagerId: deskA,
+    });
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: SECOND_HASH,
+      deskManagerId: deskB,
+    });
+
+    // Re-issue on deskA should NOT revoke deskB's key.
+    await t.mutation(internal.mcpApiKeys.create, {
+      keyHash: THIRD_HASH,
+      deskManagerId: deskA,
+    });
+
+    const deskBLookup = await t.query(internal.mcpApiKeys.lookupDeskByKeyHash, {
+      keyHash: SECOND_HASH,
+    });
+    expect(deskBLookup?.deskManagerId).toBe(deskB);
   });
 });
