@@ -148,7 +148,7 @@ export function McpOperatorDialog({
       "rotating",
       "Rotate this MCP key?\n\nThe old key stops working IMMEDIATELY. Update your MCP client (Claude Code / Cursor) with the new key before continuing.\n\nThe new key is shown ONCE and never again.",
       () =>
-        fetch(`/api/mcp/keys/${keyId}/rotate`, {
+        authFetch(`/api/mcp/keys/${keyId}/rotate`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
         }),
@@ -162,7 +162,7 @@ export function McpOperatorDialog({
     runKeyOp(
       "revoking",
       "Revoke this MCP key?\n\nThe key stops working IMMEDIATELY. This is permanent — to keep using this desk you must rotate (or issue a fresh key).",
-      () => fetch(`/api/mcp/keys/${keyId}`, { method: "DELETE" }),
+      () => authFetch(`/api/mcp/keys/${keyId}`, { method: "DELETE" }),
       // Reactive listIssuedBy will drop this row from `myDesks` automatically.
       () => setSelectedDeskId(null)
     );
