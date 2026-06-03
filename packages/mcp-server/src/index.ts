@@ -37,7 +37,7 @@ const API_KEY =
 if (!API_KEY) {
   console.error(
     "FATAL: MARGIN_CALL_MCP_KEY (or MCP_API_KEY) environment variable is required.\n" +
-      "Obtain one by calling POST /api/mcp/keys while authenticated via the web UI (Privy)."
+      "Obtain one via SIWE: POST /api/mcp/keys/challenge, sign with Base MCP, then POST /api/mcp/keys { message, signature }. See packages/mcp-server/base-plugin/margin-call.md."
   );
   process.exit(1);
 }

@@ -51,6 +51,7 @@ import type * as mcp_limits from "../mcp/limits.js";
 import type * as mcp_outcomes from "../mcp/outcomes.js";
 import type * as mcp_requests from "../mcp/requests.js";
 import type * as mcp_simulate from "../mcp/simulate.js";
+import type * as mcp_subject from "../mcp/subject.js";
 import type * as mcp_traders from "../mcp/traders.js";
 import type * as mcp_tradersEscrow from "../mcp/tradersEscrow.js";
 import type * as mcp_wipeMcpDesks from "../mcp/wipeMcpDesks.js";
@@ -130,6 +131,7 @@ declare const fullApi: ApiFromModules<{
   "mcp/outcomes": typeof mcp_outcomes;
   "mcp/requests": typeof mcp_requests;
   "mcp/simulate": typeof mcp_simulate;
+  "mcp/subject": typeof mcp_subject;
   "mcp/traders": typeof mcp_traders;
   "mcp/tradersEscrow": typeof mcp_tradersEscrow;
   "mcp/wipeMcpDesks": typeof mcp_wipeMcpDesks;

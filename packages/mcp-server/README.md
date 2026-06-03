@@ -102,24 +102,15 @@ Every write is gated server-side by:
 - **Full audit log** — every read + write logged to `mcpRequests` with
   duration, result, error, and tx hash where applicable.
 
-## Issue a key (developers / contributors)
+## Issue a key (Base MCP — no Privy)
 
-The easiest path is the built-in helper script (requires a valid Privy
-session):
+With Base MCP connected:
 
-```sh
-pnpm dev                      # start the Margin Call dev server
-PRIVY_JWT="..." pnpm mcp:issue-key
-```
+1. `POST /api/mcp/keys/challenge` `{ "address": "0x..." }` — SIWE message
+2. Base MCP `sign` (personal_sign) — user approves in Base Account
+3. `POST /api/mcp/keys` `{ "message", "signature" }` — returns `mc_live_*` (once)
 
-The script prints the fresh `mc_live_...` key (shown only once) and the
-exact `claude mcp add` command. Or call the API directly:
-
-```sh
-curl -X POST http://localhost:3000/api/mcp/keys \
-  -H "Authorization: Bearer $PRIVY_JWT" \
-  -H "Content-Type: application/json"
-```
+The signing Base Account is auto-bound as desk treasury. Re-signing revokes the prior key (latest-wins recovery). See `base-plugin/margin-call.md` for the full onboarding flow.
 
 ## Local development (running the server from source)
 
