@@ -1,17 +1,25 @@
 import "server-only";
 
-import { getAddress } from "viem";
+import { createPublicClient, getAddress, http } from "viem";
+import { base } from "viem/chains";
 import {
   createSiweMessage,
   generateSiweNonce,
   parseSiweMessage,
   verifySiweMessage,
 } from "viem/siwe";
-import { makePublicClient } from "@/lib/contracts/client";
-import { CONTRACTS_CHAIN_ID } from "@/lib/contracts/escrow";
 import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
 
 const nonceStore = createConvexNonceStore();
+
+// SIWE handshake verifies a Coinbase Smart Wallet (Base Account) signature.
+// Coinbase signs the replay-safe hash with the Base mainnet domain separator
+// regardless of which chain the desk operates on, so verification must happen
+// against the mainnet deployment — not the escrow chain (Base Sepolia).
+const SIWE_CHAIN_ID = base.id;
+function siwePublicClient() {
+  return createPublicClient({ chain: base, transport: http() });
+}
 
 export const MCP_BASE_SUBJECT_PREFIX = "mcp:base:" as const;
 export const MCP_ISSUE_STATEMENT =
@@ -49,7 +57,7 @@ export function buildDeskSiweMessage(params: {
 
   return createSiweMessage({
     address: getAddress(params.address),
-    chainId: CONTRACTS_CHAIN_ID,
+    chainId: SIWE_CHAIN_ID,
     domain: siweDomain(),
     nonce: params.nonce,
     uri: siweUri(),
@@ -113,7 +121,7 @@ export async function verifyDeskSiwe(params: {
       return { valid: false, error: "Missing address in SIWE message" };
     }
 
-    if (parsed.chainId !== CONTRACTS_CHAIN_ID) {
+    if (parsed.chainId !== SIWE_CHAIN_ID) {
       return { valid: false, error: "Chain ID mismatch" };
     }
 
@@ -139,7 +147,7 @@ export async function verifyDeskSiwe(params: {
     }
 
     const address = getAddress(parsed.address);
-    const client = makePublicClient();
+    const client = siwePublicClient();
 
     const verified = await verifySiweMessage(client, {
       address,
