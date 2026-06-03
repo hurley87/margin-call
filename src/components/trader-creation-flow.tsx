@@ -531,7 +531,7 @@ function FundAndActivateStep({
     setSyncError(undefined);
 
     try {
-      const res = await fetch(
+      const res = await authFetch(
         `/api/trader/${convexTraderId}/ensure-depositor`,
         { method: "POST" }
       );

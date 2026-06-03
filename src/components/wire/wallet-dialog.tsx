@@ -101,7 +101,7 @@ export function WalletDialog({
     // Skip pre-flight if escrow already has funds — depositor is confirmed set.
     if (!escrowUsdc) {
       try {
-        const res = await fetch(
+        const res = await authFetch(
           `/api/trader/${convexTraderId}/ensure-depositor`,
           { method: "POST" }
         );
