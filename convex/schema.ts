@@ -175,9 +175,7 @@ export default defineSchema({
     // Idempotency key — x402 settlement id / payment id / request id.
     paymentId: v.string(),
     dealId: v.id("deals"),
-    // traderId is a string to accommodate both Convex-native traders and
-    // legacy Supabase trader ids during the migration window.
-    traderId: v.string(),
+    traderId: v.id("traders"),
     entryCostUsdc: v.number(),
     // x402 settlement metadata
     enterTxHash: v.optional(v.string()),
@@ -198,8 +196,7 @@ export default defineSchema({
 
   dealOutcomes: defineTable({
     dealId: v.id("deals"),
-    // trader_id can reference either deskManagers or traders
-    traderId: v.string(),
+    traderId: v.id("traders"),
     narrative: v.optional(v.any()),
     traderPnlUsdc: v.optional(v.number()),
     potChangeUsdc: v.optional(v.number()),

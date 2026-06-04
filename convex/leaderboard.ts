@@ -26,7 +26,7 @@ export const listTraderStats = query({
 
     const statsMap = new Map<string, Stats>();
     for (const o of outcomes) {
-      const key = String(o.traderId);
+      const key = o.traderId;
       const prev = statsMap.get(key) ?? {
         pnl: 0,
         wins: 0,
@@ -44,7 +44,7 @@ export const listTraderStats = query({
 
     const assetMap = new Map<string, number>();
     for (const a of assets) {
-      const tid = String(a.traderId);
+      const tid = a.traderId;
       assetMap.set(tid, (assetMap.get(tid) ?? 0) + (a.valueUsdc ?? 0));
     }
 
@@ -59,7 +59,7 @@ export const listTraderStats = query({
 
     const leaderboard = await Promise.all(
       traders.map(async (t) => {
-        const tid = String(t._id);
+        const tid = t._id;
         const s = statsMap.get(tid) ?? {
           pnl: 0,
           wins: 0,

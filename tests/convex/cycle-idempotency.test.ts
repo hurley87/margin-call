@@ -332,7 +332,7 @@ describe("Deal outcome idempotency", () => {
 
     const id1 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 100,
       narrative: "Won big",
     });
@@ -340,7 +340,7 @@ describe("Deal outcome idempotency", () => {
     // Duplicate call — should return same id
     const id2 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 200, // different value — should be ignored
       narrative: "Won again",
     });
@@ -350,9 +350,8 @@ describe("Deal outcome idempotency", () => {
     // Verify only one row exists
     const count = await t.run(async (ctx) => {
       const all = await ctx.db.query("dealOutcomes").collect();
-      return all.filter(
-        (o) => o.traderId === (traderId as string) && o.dealId === dealId
-      ).length;
+      return all.filter((o) => o.traderId === traderId && o.dealId === dealId)
+        .length;
     });
     expect(count).toBe(1);
   });
@@ -366,13 +365,13 @@ describe("Deal outcome idempotency", () => {
 
     const id1 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: trader1 as string,
+      traderId: trader1,
       traderPnlUsdc: 100,
     });
 
     const id2 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: trader2 as string,
+      traderId: trader2,
       traderPnlUsdc: -50,
     });
 
@@ -387,13 +386,13 @@ describe("Deal outcome idempotency", () => {
 
     const id1 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: -10,
       traderWipedOut: true,
     });
     const id2 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: -10,
       traderWipedOut: true,
     });
@@ -416,7 +415,7 @@ describe("Deal outcome idempotency", () => {
 
     await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 9,
       rakeUsdc: 1,
     });
@@ -437,7 +436,7 @@ describe("applyOutcomeBalance idempotency", () => {
     // Insert a real outcome row
     const outcomeId = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 200,
     });
 
@@ -475,12 +474,12 @@ describe("applyOutcomeBalance idempotency", () => {
 
     const outcomeA = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealA as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 100,
     });
     const outcomeB = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealB as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 50,
     });
 
@@ -519,7 +518,7 @@ describe("applyOutcomeBalance idempotency", () => {
 
     const outcomeId = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: -100,
       traderWipedOut: true,
     });
@@ -543,7 +542,7 @@ describe("applyOutcomeBalance idempotency", () => {
 
     const outcomeId = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: -1,
       traderWipedOut: true,
     });
@@ -653,14 +652,14 @@ describe("Verified deal entry lookup (agent cycle idempotency)", () => {
     await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "test-payment-xyz",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
 
     const found = await t.query(
       internal.deals.findVerifiedEntryByTraderAndDeal,
       {
-        traderId: traderId as string,
+        traderId,
         dealId: dealId as never,
       }
     );
@@ -678,13 +677,13 @@ describe("Verified deal entry lookup (agent cycle idempotency)", () => {
     const id1 = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "same-key",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
     const id2 = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "same-key",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 99,
     });
     expect(id1).toBe(id2);

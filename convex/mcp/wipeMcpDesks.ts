@@ -93,11 +93,9 @@ async function cascadeDeleteDesk(
     .collect();
 
   for (const trader of traders) {
-    const tIdStr = String(trader._id);
-
     const entries = await ctx.db
       .query("dealEntries")
-      .withIndex("byTraderAndCreatedAt", (q) => q.eq("traderId", tIdStr))
+      .withIndex("byTraderAndCreatedAt", (q) => q.eq("traderId", trader._id))
       .collect();
     for (const e of entries) {
       await ctx.db.delete(e._id);
@@ -106,7 +104,7 @@ async function cascadeDeleteDesk(
 
     const outcomes = await ctx.db
       .query("dealOutcomes")
-      .withIndex("byTrader", (q) => q.eq("traderId", tIdStr))
+      .withIndex("byTrader", (q) => q.eq("traderId", trader._id))
       .collect();
     for (const o of outcomes) {
       await ctx.db.delete(o._id);

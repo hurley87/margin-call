@@ -30,7 +30,7 @@ async function seedWipeout(t: ReturnType<typeof convexTest<typeof schema>>) {
   const dealId = await seedDeal(t);
   const outcomeId = await t.mutation(internal.dealOutcomes.apply, {
     dealId: dealId as never,
-    traderId: traderId as string,
+    traderId,
     traderPnlUsdc: -100,
     traderWipedOut: true,
   });
@@ -152,7 +152,7 @@ describe("wipeout email notifications", () => {
     const secondDealId = await seedDeal(t);
     const secondOutcomeId = await t.mutation(internal.dealOutcomes.apply, {
       dealId: secondDealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: -50,
       traderWipedOut: true,
     });

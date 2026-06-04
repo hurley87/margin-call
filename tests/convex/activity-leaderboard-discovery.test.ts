@@ -295,12 +295,12 @@ describe("Leaderboard consistency", () => {
     // Apply outcomes (idempotent CAS on dealId+traderId)
     const oc1 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: deal1 as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 100,
     });
     const oc2 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: deal2 as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: -30,
     });
 
@@ -324,7 +324,7 @@ describe("Leaderboard consistency", () => {
     // Also verify the raw outcome count is correct (no duplication)
     const outcomeCount = await t.run(async (ctx) => {
       const all = await ctx.db.query("dealOutcomes").collect();
-      return all.filter((o) => o.traderId === (traderId as string)).length;
+      return all.filter((o) => o.traderId === traderId).length;
     });
     expect(outcomeCount).toBe(2); // exactly 2, not 4
   });
@@ -376,7 +376,7 @@ describe("Leaderboard consistency", () => {
     // Create outcome
     const outcomeId = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 200,
     });
 
@@ -397,7 +397,7 @@ describe("Leaderboard consistency", () => {
     // Also try re-applying the same outcome (CAS on dealId+traderId)
     const oc2 = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 999, // different value — should be ignored
     });
     expect(oc2).toBe(outcomeId); // same id returned, no duplicate row
@@ -735,7 +735,7 @@ describe("Failed external calls: valid partial state", () => {
     // Simulate: outcome was written but balance update never ran (e.g. action crashed)
     await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 100,
     });
 

@@ -124,7 +124,7 @@ export const listRecentGlobal = query({
     const traderNames: Record<string, string> = {};
     const traderProfiles: Record<string, TraderProfileSummary> = {};
     for (const e of entries) {
-      const tid = String(e.traderId);
+      const tid = e.traderId;
       if (traderProfiles[tid]) continue;
       const trader = await ctx.db.get(e.traderId);
       if (trader) {

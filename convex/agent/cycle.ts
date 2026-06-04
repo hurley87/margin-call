@@ -536,7 +536,7 @@ export const cycle = internalAction({
       if (trader.tokenId !== undefined && trader.tokenId !== null) {
         const pending = await ctx.runQuery(
           internal.dealOutcomes.findUnresolvedOnChain,
-          { traderId: traderId as string, now }
+          { traderId, now }
         );
         if (
           pending &&
@@ -596,7 +596,7 @@ export const cycle = internalAction({
 
         const unapplied = await ctx.runQuery(
           internal.dealOutcomes.findUnappliedBalanceOutcome,
-          { traderId: traderId as string, now }
+          { traderId, now }
         );
         if (unapplied) {
           await ctx.runMutation(internal.traders.applyOutcomeBalance, {
@@ -671,7 +671,7 @@ export const cycle = internalAction({
 
       if (marketOpen) {
         const selection = await selectDeal(ctx, {
-          traderId: traderId as string,
+          traderId,
           traderName: trader.name,
           deskManagerId: trader.deskManagerId as string,
           escrowBalanceUsdc,
@@ -889,7 +889,7 @@ export const cycle = internalAction({
         if (traderTokenId !== undefined) {
           try {
             const entryResult = await callDealEnter(
-              traderId as string,
+              traderId,
               traderTokenId,
               bestDeal.id,
               appUrl
@@ -984,7 +984,7 @@ export const cycle = internalAction({
       // Check idempotency: if outcome already exists for (traderId, dealId), skip LLM
       const existingOutcome = await ctx.runQuery(
         internal.dealOutcomes.findByTraderAndDeal,
-        { traderId: traderId as string, dealId: dealId as never }
+        { traderId, dealId: dealId as never }
       );
 
       let outcomeId: string | null = null;
@@ -1011,7 +1011,7 @@ export const cycle = internalAction({
         // Resolve a fresh outcome via LLM
         const resolved = await resolveOutcome(ctx, {
           deal: bestDeal,
-          traderId: traderId as string,
+          traderId,
           traderName: trader.name,
           escrowBalanceUsdc,
           entryCostUsdc: bestDeal.entry_cost_usdc,
@@ -1036,7 +1036,7 @@ export const cycle = internalAction({
       if (pendingOutcome) {
         outcomeId = (await ctx.runMutation(internal.dealOutcomes.apply, {
           dealId: dealId as never,
-          traderId: traderId as string,
+          traderId,
           narrative: pendingOutcome.narrative,
           traderPnlUsdc: pendingOutcome.traderPnlUsdc,
           potChangeUsdc: pendingOutcome.potChangeUsdc,

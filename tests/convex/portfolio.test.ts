@@ -46,14 +46,14 @@ describe("portfolio.forDesk", () => {
       });
       await ctx.db.insert("dealOutcomes", {
         dealId: dealId as Id<"deals">,
-        traderId: String(traderId),
+        traderId,
         traderPnlUsdc: 10,
         traderWipedOut: false,
         createdAt: tEarly,
       });
       await ctx.db.insert("dealOutcomes", {
         dealId: dealId as Id<"deals">,
-        traderId: String(traderId),
+        traderId,
         traderPnlUsdc: -5,
         traderWipedOut: false,
         createdAt: tLate,

@@ -58,7 +58,7 @@ export const listByTrader = query({
 
 /** Internal: check if outcome already exists for (traderId, dealId). */
 export const findByTraderAndDeal = internalQuery({
-  args: { traderId: v.string(), dealId: v.id("deals") },
+  args: { traderId: v.id("traders"), dealId: v.id("deals") },
   handler: async (ctx, { traderId, dealId }) =>
     ctx.db
       .query("dealOutcomes")
@@ -73,7 +73,7 @@ export const findByTraderAndDeal = internalQuery({
  * Used to filter out deals the trader has already entered.
  */
 export const listResolvedDealIdsForTrader = internalQuery({
-  args: { traderId: v.string() },
+  args: { traderId: v.id("traders") },
   handler: async (ctx, { traderId }) => {
     const outcomes = await ctx.db
       .query("dealOutcomes")
@@ -87,7 +87,7 @@ export const listResolvedDealIdsForTrader = internalQuery({
  * Internal: list the N most recent outcomes for a trader (for LLM context).
  */
 export const listRecentForTrader = internalQuery({
-  args: { traderId: v.string(), limit: v.number() },
+  args: { traderId: v.id("traders"), limit: v.number() },
   handler: async (ctx, { traderId, limit }) => {
     return ctx.db
       .query("dealOutcomes")
@@ -103,7 +103,7 @@ export const listRecentForTrader = internalQuery({
  */
 export const getDealIdsEnteredBySiblingsSince = internalQuery({
   args: {
-    siblingTraderIds: v.array(v.string()),
+    siblingTraderIds: v.array(v.id("traders")),
     since: v.number(),
   },
   handler: async (ctx, { siblingTraderIds, since }) => {
@@ -131,7 +131,7 @@ export const getDealIdsEnteredBySiblingsSince = internalQuery({
 export const apply = internalMutation({
   args: {
     dealId: v.id("deals"),
-    traderId: v.string(),
+    traderId: v.id("traders"),
     narrative: v.optional(v.any()),
     traderPnlUsdc: v.optional(v.number()),
     potChangeUsdc: v.optional(v.number()),
@@ -193,7 +193,7 @@ export const apply = internalMutation({
  * ops/manual problem and shouldn't keep the cycle waking overnight.
  */
 export const findUnresolvedOnChain = internalQuery({
-  args: { traderId: v.string(), now: v.number() },
+  args: { traderId: v.id("traders"), now: v.number() },
   handler: async (ctx, { traderId, now }) => {
     const since = now - 24 * 60 * 60_000;
     // Newest-first so the 24h window is anchored at the head — once we cross
@@ -235,7 +235,7 @@ export const findUnresolvedOnChain = internalQuery({
  * trader whose `resolveEntry` was still pending on the head of the FIFO queue.
  */
 export const findUnappliedBalanceOutcome = internalQuery({
-  args: { traderId: v.string(), now: v.number() },
+  args: { traderId: v.id("traders"), now: v.number() },
   handler: async (ctx, { traderId, now }) => {
     const since = now - 24 * 60 * 60_000;
     const recent = await ctx.db

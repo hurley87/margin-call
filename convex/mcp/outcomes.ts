@@ -50,7 +50,7 @@ export const get = internalQuery({
       all.map(async (o) => {
         const [deal, trader] = await Promise.all([
           o.dealId ? ctx.db.get(o.dealId) : null,
-          ctx.db.get(o.traderId as Id<"traders">),
+          ctx.db.get(o.traderId),
         ]);
         return {
           outcomeId: o._id,

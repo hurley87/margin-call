@@ -50,7 +50,7 @@ export const inspectDealByOnChainId = internalQuery({
           escrowBalanceUsdc?: number;
         } | null = null;
         try {
-          const t = await ctx.db.get(entry.traderId as never);
+          const t = await ctx.db.get(entry.traderId);
           if (t && "name" in (t as Record<string, unknown>)) {
             const tt = t as unknown as {
               _id: string;

@@ -172,7 +172,7 @@ describe("recordVerifiedEntry: trading-hours enforcement", () => {
     const entryId = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-close-grace-30s",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
     expect(entryId).toBeDefined();
@@ -190,7 +190,7 @@ describe("recordVerifiedEntry: trading-hours enforcement", () => {
       t.mutation(internal.deals.recordVerifiedEntry, {
         paymentId: "pay-close-grace-90s",
         dealId: dealId as never,
-        traderId: traderId as string,
+        traderId,
         entryCostUsdc: 50,
       })
     ).rejects.toThrow(MARKET_CLOSED_MESSAGE);

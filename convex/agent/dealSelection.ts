@@ -18,7 +18,7 @@
 
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
-import type { Doc } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { RunActionCtx } from "./_ctx";
 import { internal } from "../_generated/api";
 import { DESK_DEAL_DEDUP_HOURS } from "./_constants";
@@ -90,7 +90,7 @@ Output structured JSON: ranked_deal_ids (best first), skip_all (if true, enter n
 // ── Context types ─────────────────────────────────────────────────────────────
 
 export interface SelectDealContext {
-  traderId: string;
+  traderId: Id<"traders">;
   traderName: string;
   deskManagerId: string;
   escrowBalanceUsdc: number;
@@ -203,13 +203,13 @@ export async function selectDeal(
   }
 
   // ── 4. Desk dedup ──────────────────────────────────────────────────────────
-  const siblingTraderIds = (await ctx.runQuery(
+  const siblingTraderIds = await ctx.runQuery(
     internal.traders.listSiblingTraderIds,
     {
       deskManagerId: deskManagerId as never,
-      excludeTraderId: traderId as never,
+      excludeTraderId: traderId,
     }
-  )) as string[];
+  );
 
   let dedupedEligible = eligible;
   if (siblingTraderIds.length > 0) {
@@ -255,7 +255,7 @@ export async function selectDeal(
         limit: 5,
       }),
       ctx.runQuery(internal.assets.listForTraderInternal, {
-        traderId: traderId as never,
+        traderId,
       }),
     ]);
 

@@ -25,13 +25,13 @@ describe("beginEntryRecording", () => {
 
     const first = await t.mutation(internal.deals.beginEntryRecording, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
       onChainDealId: 1,
     });
     const second = await t.mutation(internal.deals.beginEntryRecording, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
       onChainDealId: 1,
     });
@@ -105,7 +105,7 @@ describe("on-chain settlement reconciliation", () => {
 
     const outcomeId = await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 10,
     });
     await t.mutation(internal.dealOutcomes.markOnChainResolved, {
@@ -114,7 +114,7 @@ describe("on-chain settlement reconciliation", () => {
     });
 
     const pending = await t.query(internal.dealOutcomes.findUnresolvedOnChain, {
-      traderId: traderId as string,
+      traderId,
       now: Date.now(),
     });
     expect(pending).toBeNull();

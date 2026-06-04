@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { api, internal } from "../../convex/_generated/api";
+import { seedActiveTrader, seedDeskManager } from "./setup";
 import type { GameEventCtx } from "../../convex/wire/epochAssembler";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
@@ -414,6 +415,8 @@ describe("wire/generator: activity ingestion — wipeout captured in eventsInges
   it("includes a dramatic wipeout event in eventsIngested when a dealOutcome exists", async () => {
     const t = convexTest(schema, modules);
     await seedSeasonAndDrops(t);
+    const dmId = await seedDeskManager(t);
+    const traderId = await seedActiveTrader(t, dmId);
 
     // Seed a deal and a wipeout outcome created just now
     await t.run(async (ctx) => {
@@ -429,7 +432,7 @@ describe("wire/generator: activity ingestion — wipeout captured in eventsInges
       });
       await ctx.db.insert("dealOutcomes", {
         dealId,
-        traderId: "trader-stub-123",
+        traderId,
         traderWipedOut: true,
         wipeoutReason: "margin call",
         createdAt: now,

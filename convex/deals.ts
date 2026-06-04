@@ -354,7 +354,7 @@ export const findEntryByPaymentId = internalQuery({
  * Used by agent-cycle `/api/deal/enter` for idempotency without Supabase.
  */
 export const findVerifiedEntryByTraderAndDeal = internalQuery({
-  args: { traderId: v.string(), dealId: v.id("deals") },
+  args: { traderId: v.id("traders"), dealId: v.id("deals") },
   handler: async (ctx, { traderId, dealId }) => {
     const rows = await ctx.db
       .query("dealEntries")
@@ -374,7 +374,7 @@ export const findVerifiedEntryByTraderAndDeal = internalQuery({
 export const beginEntryRecording = internalMutation({
   args: {
     dealId: v.id("deals"),
-    traderId: v.string(),
+    traderId: v.id("traders"),
     entryCostUsdc: v.number(),
     onChainDealId: v.optional(v.number()),
   },
@@ -399,7 +399,7 @@ export const beginEntryRecording = internalMutation({
     if (!dealDoc) throw new Error("Deal not found");
     if (dealDoc.status !== "open") throw new Error("Deal is not open");
 
-    const traderDoc = await ctx.db.get(args.traderId as Id<"traders">);
+    const traderDoc = await ctx.db.get(args.traderId);
     if (!traderDoc) throw new Error("Trader not found");
     if (traderDoc.status !== "active") {
       throw new Error("Trader is not active");
@@ -446,8 +446,7 @@ export const recordVerifiedEntry = internalMutation({
     // Idempotency key — x402 settlement id, payment id, or request id.
     paymentId: v.string(),
     dealId: v.id("deals"),
-    // String to support both Convex trader ids and legacy Supabase ids.
-    traderId: v.string(),
+    traderId: v.id("traders"),
     entryCostUsdc: v.number(),
     // Settlement / on-chain metadata (all optional)
     enterTxHash: v.optional(v.string()),
@@ -483,7 +482,7 @@ export const recordVerifiedEntry = internalMutation({
         const dealDoc = await ctx.db.get(args.dealId);
         if (!dealDoc) throw new Error("Deal not found");
         if (dealDoc.status !== "open") throw new Error("Deal is not open");
-        const traderDoc = await ctx.db.get(args.traderId as Id<"traders">);
+        const traderDoc = await ctx.db.get(args.traderId);
         if (!traderDoc) throw new Error("Trader not found");
         if (traderDoc.status !== "active") {
           throw new Error("Trader is not active");
@@ -530,7 +529,7 @@ export const recordVerifiedEntry = internalMutation({
     if (dealDoc.status !== "open") {
       throw new Error("Deal is not open");
     }
-    const traderDoc = await ctx.db.get(args.traderId as Id<"traders">);
+    const traderDoc = await ctx.db.get(args.traderId);
     if (!traderDoc) {
       throw new Error("Trader not found");
     }

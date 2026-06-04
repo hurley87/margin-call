@@ -125,7 +125,7 @@ describe("Agent cycle: market closed with recovery work → resolveOutcome path"
       return ctx.db.insert("dealEntries", {
         paymentId: "recovery-payment-xyz",
         dealId: dealId as never,
-        traderId: traderId as string,
+        traderId,
         entryCostUsdc: 25,
         createdAt: now - 60 * 60_000,
       });
@@ -166,7 +166,7 @@ describe("Agent cycle: market closed with recovery work → resolveOutcome path"
 
     // The outcome row should NOT exist — resolveOutcome threw before persisting.
     const outcome = await t.query(internal.dealOutcomes.findByTraderAndDeal, {
-      traderId: traderId as string,
+      traderId,
       dealId: dealId as never,
     });
     expect(outcome).toBeNull();
@@ -183,7 +183,7 @@ describe("Agent cycle: market closed with recovery work → resolveOutcome path"
       ctx.db.insert("dealEntries", {
         paymentId: "stale-payment",
         dealId: dealId as never,
-        traderId: traderId as string,
+        traderId,
         entryCostUsdc: 10,
         createdAt: Date.now() - 25 * 60 * 60_000,
       })
@@ -207,13 +207,13 @@ describe("Agent cycle: market closed with recovery work → resolveOutcome path"
       await ctx.db.insert("dealEntries", {
         paymentId: "resolved-payment",
         dealId: dealId as never,
-        traderId: traderId as string,
+        traderId,
         entryCostUsdc: 10,
         createdAt: now - 60_000,
       });
       await ctx.db.insert("dealOutcomes", {
         dealId: dealId as never,
-        traderId: traderId as string,
+        traderId,
         traderPnlUsdc: 5,
         createdAt: now - 30_000,
       });

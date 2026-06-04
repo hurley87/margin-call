@@ -105,7 +105,7 @@ export const findPendingRecoveryEntry = internalQuery({
     const recent = await ctx.db
       .query("dealEntries")
       .withIndex("byTraderAndCreatedAt", (q) =>
-        q.eq("traderId", traderId as string).gt("createdAt", since)
+        q.eq("traderId", traderId).gt("createdAt", since)
       )
       .order("asc")
       .collect();
@@ -114,7 +114,7 @@ export const findPendingRecoveryEntry = internalQuery({
       const outcome = await ctx.db
         .query("dealOutcomes")
         .withIndex("byTraderAndDeal", (q) =>
-          q.eq("traderId", traderId as string).eq("dealId", entry.dealId)
+          q.eq("traderId", traderId).eq("dealId", entry.dealId)
         )
         .unique();
       if (!outcome) return entry;

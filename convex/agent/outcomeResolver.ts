@@ -14,6 +14,7 @@
 
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
+import type { Id } from "../_generated/dataModel";
 import type { RunActionCtx } from "./_ctx";
 import { internal } from "../_generated/api";
 import { RAKE_PERCENTAGE, MAX_EXTRACTION_PERCENTAGE } from "./_constants";
@@ -26,7 +27,7 @@ Always return valid JSON matching the schema. Keep narrative to 2-3 short senten
 
 export interface OutcomeResolverInput {
   deal: Deal;
-  traderId: string;
+  traderId: Id<"traders">;
   traderName: string;
   escrowBalanceUsdc: number;
   entryCostUsdc: number;
@@ -65,7 +66,7 @@ export async function resolveOutcome(
   // ── Load context (assets + market narrative + system prompt) ───────────────
   const [assets, marketNarrative, systemPromptContent] = await Promise.all([
     ctx.runQuery(internal.assets.listForTraderInternal, {
-      traderId: traderId as never,
+      traderId,
     }),
     ctx.runQuery(internal.marketNarratives.getLatestInternal, {}),
     ctx.runQuery(internal.systemPrompts.getActive, { name: "deal_outcome" }),

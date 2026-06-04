@@ -76,18 +76,15 @@ async function cascadeDeleteTrader(
   trader: Doc<"traders">,
   counts: Counts
 ): Promise<void> {
-  // dealEntries/dealOutcomes store traderId as string; other tables use Id<"traders">.
-  const traderIdStr = String(trader._id);
-
   const [entries, outcomes, approvals, activity, txs, assets, notifs] =
     await Promise.all([
       ctx.db
         .query("dealEntries")
-        .withIndex("byTraderAndCreatedAt", (q) => q.eq("traderId", traderIdStr))
+        .withIndex("byTraderAndCreatedAt", (q) => q.eq("traderId", trader._id))
         .collect(),
       ctx.db
         .query("dealOutcomes")
-        .withIndex("byTrader", (q) => q.eq("traderId", traderIdStr))
+        .withIndex("byTrader", (q) => q.eq("traderId", trader._id))
         .collect(),
       ctx.db
         .query("dealApprovals")

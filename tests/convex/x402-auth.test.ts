@@ -47,7 +47,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
     const entryId = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-001",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
       enterTxHash: "0xabc",
     });
@@ -56,7 +56,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
 
     const entry = await t.run(async (ctx) => ctx.db.get(entryId as never));
     expect(entry?.paymentId).toBe("pay-001");
-    expect(entry?.traderId).toBe(traderId as string);
+    expect(entry?.traderId).toBe(traderId);
     expect(entry?.entryCostUsdc).toBe(50);
   });
 
@@ -69,7 +69,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
     const id1 = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-dup-001",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
 
@@ -77,7 +77,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
     const id2 = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-dup-001",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
 
@@ -105,7 +105,7 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
     await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-count-001",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
 
@@ -122,14 +122,14 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
     await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-count-idem",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
 
     await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-count-idem", // duplicate
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
 
@@ -147,13 +147,13 @@ describe("recordVerifiedEntry idempotency (x402 boundary)", () => {
     await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-a",
       dealId: dealId as never,
-      traderId: trader1 as string,
+      traderId: trader1,
       entryCostUsdc: 50,
     });
     await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-b",
       dealId: dealId as never,
-      traderId: trader2 as string,
+      traderId: trader2,
       entryCostUsdc: 50,
     });
 
@@ -173,7 +173,7 @@ describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
       t.mutation(internal.deals.recordVerifiedEntry, {
         paymentId: "pay-own-desk",
         dealId: dealId as never,
-        traderId: traderId as string,
+        traderId,
         entryCostUsdc: 50,
       })
     ).rejects.toThrow("Trader cannot enter deals created by its own desk.");
@@ -192,7 +192,7 @@ describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
     const entryId = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-rival-desk",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
     expect(entryId).toBeTruthy();
@@ -207,7 +207,7 @@ describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
     const entryId = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "pay-house",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
     expect(entryId).toBeTruthy();
@@ -254,7 +254,7 @@ describe("x402 boundary: public mutation surface regression", () => {
     const entryId = await t.mutation(internal.deals.recordVerifiedEntry, {
       paymentId: "server-path-001",
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       entryCostUsdc: 50,
     });
     expect(entryId).toBeTruthy();
@@ -935,7 +935,7 @@ describe("Auth: cross-owner isolation", () => {
 
     await t.mutation(internal.dealOutcomes.apply, {
       dealId: dealId as never,
-      traderId: traderId as string,
+      traderId,
       traderPnlUsdc: 100,
     });
 

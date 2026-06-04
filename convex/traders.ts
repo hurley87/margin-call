@@ -952,8 +952,6 @@ export const listSiblingTraderIds = internalQuery({
       .query("traders")
       .withIndex("byDeskManager", (q) => q.eq("deskManagerId", deskManagerId))
       .collect();
-    return traders
-      .filter((t) => t._id !== excludeTraderId)
-      .map((t) => t._id as string);
+    return traders.filter((t) => t._id !== excludeTraderId).map((t) => t._id);
   },
 });

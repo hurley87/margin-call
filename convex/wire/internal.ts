@@ -79,7 +79,7 @@ export const listRecentGameEvents = internalQuery({
 
     const dramatic: GameEventCtx[] = [];
     const routine: GameEventCtx[] = [];
-    const dramaticTraderIds = new Set<string>();
+    const dramaticTraderIds = new Set<Id<"traders">>();
 
     for (const o of outcomes) {
       const pnl = o.traderPnlUsdc ?? 0;
@@ -171,9 +171,7 @@ export const listRecentGameEvents = internalQuery({
           )
         : Promise.resolve([] as PromiseSettledResult<null>[]),
       dramaticTraderIds.size > 0
-        ? Promise.allSettled(
-            [...dramaticTraderIds].map((id) => ctx.db.get(id as Id<"traders">))
-          )
+        ? Promise.allSettled([...dramaticTraderIds].map((id) => ctx.db.get(id)))
         : Promise.resolve([] as PromiseSettledResult<null>[]),
     ]);
 
