@@ -34,6 +34,7 @@ import {
 import { useQuery } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../../convex/_generated/api";
+import { ActivityDetailDialog } from "@/components/activity-detail-dialog";
 import { DealApprovalDialog } from "@/components/deal-approval-dialog";
 import { DealDetailDialog } from "@/components/deal-detail";
 import {
@@ -271,6 +272,8 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   } | null>(null);
   const [hireDialogOpen, setHireDialogOpen] = useState(false);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [selectedActivity, setSelectedActivity] =
+    useState<AgentActivity | null>(null);
   const [selectedTraderId, setSelectedTraderId] = useState<string | null>(null);
   const [selectedWalletTraderId, setSelectedWalletTraderId] = useState<
     string | null
@@ -433,6 +436,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
               reviewCtaEntryIds={reviewCtaEntryIds}
               approvalIdByEntryId={approvalIdByEntryId}
               onOpenDeal={setSelectedDealId}
+              onShowDetail={setSelectedActivity}
               onReviewApproval={setApprovalCtx}
             />
           </div>
@@ -482,6 +486,16 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         dealId={selectedDealId}
         open={selectedDealId !== null}
         onOpenChange={(open) => !open && setSelectedDealId(null)}
+      />
+      <ActivityDetailDialog
+        entry={selectedActivity}
+        traderName={
+          selectedActivity
+            ? (traderNames[selectedActivity.trader_id] ?? undefined)
+            : undefined
+        }
+        open={selectedActivity !== null}
+        onOpenChange={(open) => !open && setSelectedActivity(null)}
       />
       <TraderDetailDialog
         traderId={selectedTraderId}
@@ -2266,6 +2280,7 @@ function TraderFeedPanel({
   reviewCtaEntryIds,
   approvalIdByEntryId,
   onOpenDeal,
+  onShowDetail,
   onReviewApproval,
 }: {
   activity: AgentActivity[];
@@ -2280,6 +2295,7 @@ function TraderFeedPanel({
   reviewCtaEntryIds: ReadonlySet<string>;
   approvalIdByEntryId: ReadonlyMap<string, string>;
   onOpenDeal: (dealId: string) => void;
+  onShowDetail: (entry: AgentActivity) => void;
   onReviewApproval: (ctx: { traderId: string; dealId: string | null }) => void;
 }) {
   let feedMeta = "ALL DESKS";
@@ -2356,6 +2372,7 @@ function TraderFeedPanel({
               traderProfile={traderProfiles[entry.trader_id]}
               showTrader={traderFilter === null}
               onOpenDeal={onOpenDeal}
+              onShowDetail={onShowDetail}
               onReviewApproval={onReviewApproval}
               reviewCtaEntryIds={reviewCtaEntryIds}
               approvalIdByEntryId={approvalIdByEntryId}

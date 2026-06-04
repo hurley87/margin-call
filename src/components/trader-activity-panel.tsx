@@ -7,10 +7,11 @@ import {
   buildReviewCtaEntryIds,
   getFeedGridClass,
 } from "@/components/feed-line";
+import { ActivityDetailDialog } from "@/components/activity-detail-dialog";
 import { DealApprovalDialog } from "@/components/deal-approval-dialog";
 import { DealDetailDialog } from "@/components/deal-detail";
 import { EmptyState } from "@/components/empty-state";
-import { useAgentActivity } from "@/hooks/use-agent";
+import { useAgentActivity, type AgentActivity } from "@/hooks/use-agent";
 import { usePendingApprovals } from "@/hooks/use-approvals";
 
 interface TraderActivityPanelProps {
@@ -26,6 +27,7 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
     dealId: string | null;
   } | null>(null);
   const [selectedDealId, setSelectedDealId] = useState<string | null>(null);
+  const [detailEntry, setDetailEntry] = useState<AgentActivity | null>(null);
   const {
     data: activity,
     isLoading,
@@ -110,6 +112,7 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
                 showTrader={false}
                 wrapMessage
                 onOpenDeal={setSelectedDealId}
+                onShowDetail={setDetailEntry}
                 onReviewApproval={(ctx) => setApprovalCtx(ctx)}
                 reviewCtaEntryIds={reviewCtaEntryIds}
                 approvalIdByEntryId={approvalIdByEntryId}
@@ -161,6 +164,13 @@ export function TraderActivityPanel({ traderId }: TraderActivityPanelProps) {
         open={selectedDealId !== null}
         onOpenChange={(open) => {
           if (!open) setSelectedDealId(null);
+        }}
+      />
+      <ActivityDetailDialog
+        entry={detailEntry}
+        open={detailEntry !== null}
+        onOpenChange={(open) => {
+          if (!open) setDetailEntry(null);
         }}
       />
     </section>

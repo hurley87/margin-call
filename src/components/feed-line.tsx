@@ -115,6 +115,7 @@ export function FeedLine({
   showTrader,
   wrapMessage = false,
   onOpenDeal,
+  onShowDetail,
   onReviewApproval,
   /**
    * Activity row ids that may show a CTA — parent builds this so only one row
@@ -130,6 +131,8 @@ export function FeedLine({
   showTrader: boolean;
   wrapMessage?: boolean;
   onOpenDeal?: (dealId: string) => void;
+  /** Open full message + metadata for rows without a linked deal */
+  onShowDetail?: (entry: AgentActivity) => void;
   /** Desk manager CTA: open approval dialog for this log line when applicable */
   onReviewApproval?: (ctx: { traderId: string; dealId: string | null }) => void;
   reviewCtaEntryIds?: ReadonlySet<string>;
@@ -160,36 +163,46 @@ export function FeedLine({
     hasApprovalLookup: approvalIdByEntryId !== undefined,
   });
   const canOpenDeal = Boolean(entry.deal_id && onOpenDeal);
-  const openDeal = () => {
+  const canShowDetail = Boolean(onShowDetail) && !canOpenDeal;
+  const isRowInteractive = canOpenDeal || canShowDetail;
+  const displayTraderName = traderProfile?.name ?? traderName;
+
+  const handleRowActivate = () => {
     if (canOpenDeal && entry.deal_id) {
       onOpenDeal?.(entry.deal_id);
+    } else if (canShowDetail) {
+      onShowDetail?.(entry);
     }
   };
 
+  const subjectSuffix = displayTraderName ? ` for ${displayTraderName}` : "";
+  const rowAriaLabel = canOpenDeal
+    ? `Open deal${subjectSuffix}`
+    : canShowDetail
+      ? `View activity detail${subjectSuffix}`
+      : undefined;
+
   return (
     <div
-      role={canOpenDeal ? "button" : undefined}
-      tabIndex={canOpenDeal ? 0 : undefined}
-      aria-label={
-        canOpenDeal
-          ? `Open deal for ${traderProfile?.name ?? traderName}`
-          : undefined
-      }
+      role={isRowInteractive ? "button" : undefined}
+      tabIndex={isRowInteractive ? 0 : undefined}
+      aria-label={rowAriaLabel}
       onClick={(event) => {
-        if (!canOpenDeal) return;
+        if (!isRowInteractive) return;
         // Let inner buttons (approve/reject/review) handle their own clicks.
         if ((event.target as HTMLElement).closest("button")) return;
-        openDeal();
+        handleRowActivate();
       }}
       onKeyDown={(event) => {
-        if (!canOpenDeal) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openDeal();
-        }
+        if (!isRowInteractive) return;
+        if (event.key !== "Enter" && event.key !== " ") return;
+        // Let inner buttons handle Enter/Space themselves.
+        if ((event.target as HTMLElement).closest("button")) return;
+        event.preventDefault();
+        handleRowActivate();
       }}
       className={`${getFeedGridClass(showTrader)} group border-b border-[var(--t-border)] last:border-b-0 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--t-surface)] ${
-        canOpenDeal
+        isRowInteractive
           ? "cursor-pointer focus:bg-[var(--t-surface)] focus:outline-none"
           : ""
       } ${
@@ -216,12 +229,12 @@ export function FeedLine({
       >
         {entry.message}
       </span>
-      {canOpenDeal && actionState === "hidden" && (
+      {isRowInteractive && actionState === "hidden" && (
         <span
           aria-hidden="true"
           className="justify-self-end border border-[var(--t-border)] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-accent)] opacity-0 transition group-hover:border-[var(--t-accent)] group-hover:bg-[var(--t-accent-soft)] group-hover:opacity-100 group-focus:border-[var(--t-accent)] group-focus:bg-[var(--t-accent-soft)] group-focus:opacity-100 group-focus-within:opacity-100"
         >
-          Deal
+          {canOpenDeal ? "Deal" : "Why"}
         </span>
       )}
       {actionState === "pending" && approvalId && (
