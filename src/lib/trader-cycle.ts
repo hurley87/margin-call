@@ -154,6 +154,51 @@ export function getTraderCycleUi(
   );
 }
 
+const CYCLE_UI_COMPACT_STATIC: Record<
+  Exclude<
+    TraderCycleDisplayState["kind"],
+    "countdown" | "ready_no_prior_cycle" | "ready_next_tick"
+  >,
+  { text: string; className: string }
+> = {
+  wiped: { text: "WIPED", className: "text-[var(--t-red)]" },
+  paused: { text: "PAUSED", className: "text-[var(--t-amber)]" },
+  wallet_pending: {
+    text: "WALLET",
+    className: "text-[var(--t-muted)]",
+  },
+  wallet_creating: {
+    text: "WALLET",
+    className: "text-[var(--t-amber)]",
+  },
+  wallet_error: { text: "ERROR", className: "text-[var(--t-red)]" },
+  running: { text: "RUNNING", className: "text-[var(--t-amber)]" },
+};
+
+/** Short desk-table labels (no brackets; cadence shown in panel header). */
+export function getTraderCycleUiCompact(
+  trader: TraderCycleDoc,
+  nowMs: number
+): { text: string; className: string } {
+  const state = getTraderCycleDisplayState(trader, nowMs);
+
+  switch (state.kind) {
+    case "countdown":
+      return {
+        text: formatRemainingMs(state.remainingMs),
+        className: "text-[var(--t-muted)]",
+      };
+    case "ready_no_prior_cycle":
+    case "ready_next_tick":
+      return {
+        text: "READY",
+        className: "text-[var(--t-green)]",
+      };
+    default:
+      return CYCLE_UI_COMPACT_STATIC[state.kind];
+  }
+}
+
 /** Portfolio / desk roster row (`usePortfolio` snake_case). */
 export function traderCycleDocFromDeskSummary(summary: {
   status: string;

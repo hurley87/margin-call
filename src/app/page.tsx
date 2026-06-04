@@ -87,6 +87,10 @@ import {
   formatShortAddress,
   relativeTime,
 } from "@/lib/utils";
+import {
+  getTraderCycleUiCompact,
+  traderCycleDocFromDeskSummary,
+} from "@/lib/trader-cycle";
 import { EmptyState } from "@/components/empty-state";
 import type { Id } from "../../convex/_generated/dataModel";
 
@@ -1847,7 +1851,7 @@ function tradingDeskPanelMeta(
       ? "WAIT"
       : `${dealCount} DEAL${dealCount === 1 ? "" : "S"}`;
   }
-  return `${traderCount} TRADER${traderCount === 1 ? "" : "S"}`;
+  return `${traderCount} TRADER${traderCount === 1 ? "" : "S"} · 10-MIN CYCLES`;
 }
 
 function TradingDeskPanel({
@@ -2061,7 +2065,7 @@ function DeskTradersView({
         <span className="hidden text-right sm:inline">Equity</span>
         <span className="hidden text-right sm:inline">P&amp;L%</span>
         <span className="hidden text-right sm:inline">W-L-X</span>
-        <span className="hidden text-right sm:inline">Last</span>
+        <span className="hidden text-right sm:inline">Next</span>
         <span />
       </div>
       <div className="mt-1 flex flex-col gap-1">
@@ -2098,6 +2102,11 @@ function DeskTraderRow({
   const pnlText = pnlPct === null ? "—" : formatSignedPercent(pnlPct);
   const pnlClass =
     pnlPct === null ? "text-[var(--t-muted)]" : pnlSignClass(pnlPct);
+  const cycleUi = getTraderCycleUiCompact(
+    traderCycleDocFromDeskSummary(trader),
+    nowMs
+  );
+  const lastRanLabel = relativeTime(trader.last_cycle_at, nowMs);
 
   return (
     <div
@@ -2135,8 +2144,14 @@ function DeskTraderRow({
       <span className="hidden tabular-nums text-right text-[var(--t-text)] sm:inline">
         {trader.wins}-{trader.losses}-{trader.wipeouts}
       </span>
-      <span className="hidden text-right text-[10px] uppercase tracking-wider text-[var(--t-muted)] sm:inline">
-        {relativeTime(trader.last_cycle_at, nowMs)}
+      <span
+        title={`Last ran ${lastRanLabel} · runs every 10 min`}
+        className={cn(
+          "hidden truncate text-right text-[10px] font-bold uppercase tracking-wider tabular-nums sm:inline",
+          cycleUi.className
+        )}
+      >
+        {cycleUi.text}
       </span>
       <div className="flex items-center justify-end gap-1">
         <button

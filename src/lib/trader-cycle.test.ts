@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getTraderCycleDisplayState,
   getTraderCycleUi,
+  getTraderCycleUiCompact,
   resolveTraderCycleIntervalMs,
   traderCycleDocFromDeskSummary,
 } from "@/lib/trader-cycle";
@@ -161,6 +162,37 @@ describe("getTraderCycleUi", () => {
       expect(speedLabel).not.toBe(defaultLabel);
     }
   );
+});
+
+describe("getTraderCycleUiCompact", () => {
+  const now = 1_000_000;
+
+  it("returns mm:ss countdown without brackets", () => {
+    const doc = baseTrader({ lastCycleAt: now - 60_000 });
+    expect(getTraderCycleUiCompact(doc, now).text).toMatch(/^\d{2}:\d{2}$/);
+  });
+
+  it("returns READY when eligible", () => {
+    const doc = baseTrader({
+      lastCycleAt: now - DEFAULT_CYCLE_INTERVAL_MS - 1,
+    });
+    expect(getTraderCycleUiCompact(doc, now).text).toBe("READY");
+    expect(getTraderCycleUiCompact(doc, now).className).toContain("green");
+  });
+
+  it("returns RUNNING when lease is active", () => {
+    const doc = baseTrader({ cycleLeaseUntil: now + 1000 });
+    expect(getTraderCycleUiCompact(doc, now).text).toBe("RUNNING");
+  });
+
+  it("maps desk portfolio snake_case summaries", () => {
+    const doc = traderCycleDocFromDeskSummary({
+      status: "active",
+      wallet_status: "ready",
+      last_cycle_at: now - 120_000,
+    });
+    expect(getTraderCycleUiCompact(doc, now).text).toMatch(/^\d{2}:\d{2}$/);
+  });
 });
 
 describe("resolveTraderCycleIntervalMs", () => {
