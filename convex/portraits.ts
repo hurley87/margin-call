@@ -40,7 +40,7 @@ export const generateForTrader = internalAction({
       const client = new OpenAI({ apiKey });
       const response = await client.images.generate(
         {
-          model: "gpt-image-1-mini",
+          model: "gpt-image-1",
           prompt,
           size: "1024x1024",
           quality: "medium",

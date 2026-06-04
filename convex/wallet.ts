@@ -38,7 +38,7 @@ function requireEnv(name: string): string {
 export const createForTrader = internalAction({
   args: { traderId: v.id("traders") },
   handler: async (ctx, { traderId }) => {
-    const trader = await ctx.runQuery(internal.traders.loadInternal, {
+    let trader = await ctx.runQuery(internal.traders.loadInternal, {
       traderId,
     });
     if (!trader) return;
@@ -51,11 +51,34 @@ export const createForTrader = internalAction({
       return;
     }
 
-    // CAS: mark creating so concurrent runs are idempotent
-    const acquired = await ctx.runMutation(internal.traders.markCreating, {
-      traderId,
-      expectedUpdatedAt: trader.updatedAt,
-    });
+    // CAS: mark creating so concurrent runs are idempotent. markCreating gates
+    // on `updatedAt`, which is also bumped by unrelated pipelines (e.g. portrait
+    // generation runs concurrently after create). A losing CAS there is NOT a
+    // sign another wallet worker grabbed the lease — it just means an unrelated
+    // write landed between our read and the CAS. Re-read and retry so wallet
+    // provisioning isn't silently stranded in "pending" with no error/retry.
+    let acquired = false;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      acquired = await ctx.runMutation(internal.traders.markCreating, {
+        traderId,
+        expectedUpdatedAt: trader.updatedAt,
+      });
+      if (acquired) break;
+
+      const refreshed = await ctx.runQuery(internal.traders.loadInternal, {
+        traderId,
+      });
+      if (!refreshed) return;
+      // Genuinely done, or another worker holds a live lease — defer to it.
+      if (refreshed.walletStatus === "ready") return;
+      if (
+        refreshed.walletStatus === "creating" &&
+        Date.now() - refreshed.updatedAt < CREATING_LEASE_MS
+      ) {
+        return;
+      }
+      trader = refreshed;
+    }
     if (!acquired) return;
 
     try {
