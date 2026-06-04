@@ -44,8 +44,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       convex:
-        specifier: ^1.39.1
-        version: 1.39.1(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+        specifier: ^1.40.0
+        version: 1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
       lucide-react:
         specifier: ^0.577.0
         version: 0.577.0(react@19.2.3)
@@ -102,8 +102,8 @@ importers:
         specifier: ^4.1.5
         version: 4.1.5(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.2)(tsx@4.22.3)(yaml@2.8.2))
       convex-test:
-        specifier: ^0.0.50
-        version: 0.0.50(convex@1.39.1(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))
+        specifier: ^0.0.53
+        version: 0.0.53(convex@1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))
       eslint:
         specifier: ^9
         version: 9.39.3(jiti@2.6.1)
@@ -2541,7 +2541,7 @@ packages:
       {
         integrity: sha512-IHnV6A+zxU7XwmKFinmYjUcwlyK9+xkG3/s9KcQhI9BjQKycrJ1JRO+FbNYPwZiPKW3je/DR0k7w8/gLa5eaxQ==,
       }
-    deprecated: 'The package is now available as "qr": npm install qr'
+    deprecated: 'Switch to "qr" (new package name) for security updates: npm install qr'
 
   "@phosphor-icons/webcomponents@2.1.5":
     resolution:
@@ -3105,6 +3105,7 @@ packages:
         integrity: sha512-6ORQfwtEJYpalCeVO21L4XXGSdbEMfyp2hEv6cP82afKXSwvse6d3sdelgaPWUxHIsFRkWvHDdzh8IyyKHZKxw==,
       }
     engines: { node: ">=16" }
+    deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
   "@scure/base@1.1.9":
     resolution:
@@ -5931,18 +5932,18 @@ packages:
         integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==,
       }
 
-  convex-test@0.0.50:
+  convex-test@0.0.53:
     resolution:
       {
-        integrity: sha512-rMNfrgcKJGToYDqNns2n1AO9KUP1NyC/AF9ldYEuWwTfRbgC9RQiHjlZsZQ/sOjLIVPUyKKIjoI/fNJUzy1urw==,
+        integrity: sha512-bouZQTnTvZi8IHljHL++yClj1vcV+/9ZxEcd8JZz7RDxOfPkRKrkMgkk/xlX4M1EAiwcEJPNiQE7VJFvDM3lCQ==,
       }
     peerDependencies:
       convex: ^1.32.0
 
-  convex@1.39.1:
+  convex@1.40.0:
     resolution:
       {
-        integrity: sha512-W+gVXA7BpRF1xLlS1kGTtKVaqd5yonqbGESKiPtIUXjV744GdDz8IG7RVsSY5KzHbgxuJBHKaJYk+92OIHTskQ==,
+        integrity: sha512-jChWEB45q+9Ibryc7hg0l6hB1xA4zwE2y6ZhkhGP6oJkqYeiURkMagA2ZQZYMy1/T8PZ9ztoVJJtbL/+Ob851Q==,
       }
     engines: { node: ">=18.0.0", npm: ">=7.0.0" }
     hasBin: true
@@ -11428,6 +11429,21 @@ packages:
       utf-8-validate:
         optional: true
 
+  ws@8.20.1:
+    resolution:
+      {
+        integrity: sha512-It4dO0K5v//JtTXuPkfEOaI3uUN87iYPnqo/ZzqCoG3g8uhA66QUMs/SrM0YK7/NAu+r4LMh/9dq2A7k+rHs+w==,
+      }
+    engines: { node: ">=10.0.0" }
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: ">=5.0.2"
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
   wsl-utils@0.3.1:
     resolution:
       {
@@ -16879,15 +16895,15 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  convex-test@0.0.50(convex@1.39.1(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)):
+  convex-test@0.0.53(convex@1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)):
     dependencies:
-      convex: 1.39.1(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+      convex: 1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
 
-  convex@1.39.1(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6):
+  convex@1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6):
     dependencies:
       esbuild: 0.27.0
       prettier: 3.8.1
-      ws: 8.18.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
       react: 19.2.3
     transitivePeerDependencies:
@@ -20594,6 +20610,11 @@ snapshots:
       utf-8-validate: 6.0.6
 
   ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@6.0.6):
+    optionalDependencies:
+      bufferutil: 4.1.0
+      utf-8-validate: 6.0.6
+
+  ws@8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     optionalDependencies:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6
