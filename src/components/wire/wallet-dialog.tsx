@@ -6,7 +6,8 @@ import { parseUnits } from "viem";
 import { useDepositFlow, useWithdrawFlow } from "@/hooks/use-escrow";
 import { WalletProvisioningError } from "@/components/wallet-provisioning-error";
 import { authFetch } from "@/lib/api";
-import { DIALOG_BACKDROP_CLASS } from "@/lib/utils";
+import { DIALOG_BACKDROP_CLASS, formatUsdc } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/animated-number";
 import type { Doc, Id } from "../../../convex/_generated/dataModel";
 
 const ZERO = BigInt(0);
@@ -186,7 +187,11 @@ export function WalletDialog({
               TRADER BALANCE
             </p>
             <p className="mt-1 text-2xl font-semibold text-[var(--t-text)]">
-              ${escrowUsdc !== null ? escrowUsdc.toFixed(2) : "..."}
+              {escrowUsdc !== null ? (
+                <AnimatedNumber value={escrowUsdc} format={formatUsdc} live />
+              ) : (
+                "$..."
+              )}
             </p>
             {showWelcome && (
               <div className="mx-auto mt-3 max-w-xs border border-[var(--t-amber)]/40 bg-[var(--t-amber)]/5 px-3 py-2">

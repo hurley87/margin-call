@@ -2,6 +2,8 @@
 
 import { useMemo } from "react";
 import { useDeals } from "@/hooks/use-deals";
+import { AnimatedNumber } from "@/components/animated-number";
+import { formatUsdc } from "@/lib/utils";
 
 export function WireStatsBar() {
   const { data: deals } = useDeals();
@@ -24,11 +26,18 @@ export function WireStatsBar() {
       <span className="text-[11px] tracking-wider text-[var(--t-muted)]">
         <span className="text-[var(--t-text)]">{stats.count}</span> ACTIVE{" "}
         {stats.count === 1 ? "DEAL" : "DEALS"} ·{" "}
-        <span className="text-[var(--t-green)]">
-          ${stats.totalPot.toFixed(2)}
-        </span>{" "}
+        <AnimatedNumber
+          value={stats.totalPot}
+          format={formatUsdc}
+          className="text-[var(--t-green)]"
+          live
+        />{" "}
         IN POTS ·{" "}
-        <span className="text-[var(--t-text)]">{stats.totalEntries}</span>{" "}
+        <AnimatedNumber
+          value={stats.totalEntries}
+          format={String}
+          className="text-[var(--t-text)]"
+        />{" "}
         ENTRIES
       </span>
     </div>

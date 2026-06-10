@@ -2,6 +2,7 @@ import type { AgentActivity } from "@/hooks/use-agent";
 import { useApproveReject, type PendingApproval } from "@/hooks/use-approvals";
 import type { TraderProfile } from "@/hooks/use-activity-feed";
 import { pendingDealReviewKey } from "@/lib/pending-deal-key";
+import { staggerDelay } from "@/lib/motion-tokens";
 
 export function getFeedGridClass(showTrader: boolean) {
   return showTrader
@@ -124,6 +125,8 @@ export function FeedLine({
   reviewCtaEntryIds,
   /** Matching pending approval ids keyed by activity row id. */
   approvalIdByEntryId,
+  isNew = false,
+  burstIndex = 0,
 }: {
   entry: AgentActivity;
   traderName: string;
@@ -137,6 +140,10 @@ export function FeedLine({
   onReviewApproval?: (ctx: { traderId: string; dealId: string | null }) => void;
   reviewCtaEntryIds?: ReadonlySet<string>;
   approvalIdByEntryId?: ReadonlyMap<string, string>;
+  /** Play the arrival animation (row appeared after initial load). */
+  isNew?: boolean;
+  /** Position within an arrival burst; staggers the animation delay. */
+  burstIndex?: number;
 }) {
   const { mutate } = useApproveReject();
   const display = FEED_DISPLAY[entry.activity_type] ?? {
@@ -209,7 +216,20 @@ export function FeedLine({
         entry.activity_type === "wipeout"
           ? "bg-[#D48787]/5"
           : "bg-[var(--t-bg)]"
+      } ${isNew ? "mc-feed-enter" : ""} ${
+        isNew && isHighEvent ? "mc-feed-enter-high" : ""
       }`}
+      style={
+        isNew
+          ? ({
+              animationDelay: staggerDelay(burstIndex),
+              "--mc-feed-edge":
+                entry.activity_type === "win"
+                  ? "var(--t-green-hot)"
+                  : "var(--t-red-hot)",
+            } as React.CSSProperties)
+          : undefined
+      }
     >
       <span className="truncate tabular-nums text-[var(--t-muted)]">
         {time}

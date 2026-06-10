@@ -115,7 +115,7 @@ export function TraderCreationDialog({
         <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           <Dialog.Title className="sr-only">Hire trader</Dialog.Title>
           <div className="max-h-[88vh] overflow-y-auto">
-            <div className="crt-scanlines bg-[var(--t-bg)]">
+            <div className="bg-[var(--t-bg)]">
               <TraderCreationFlow
                 key={flowKey}
                 onCreated={(traderId) => {

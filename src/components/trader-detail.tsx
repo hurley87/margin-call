@@ -35,7 +35,14 @@ import {
   getTraderCycleUi,
   traderCycleDocFromDetailTrader,
 } from "@/lib/trader-cycle";
-import { DIALOG_BACKDROP_CLASS, cn, dialogPopupClass } from "@/lib/utils";
+import {
+  DIALOG_BACKDROP_CLASS,
+  cn,
+  dialogPopupClass,
+  formatSignedMoney,
+  formatUsdc,
+} from "@/lib/utils";
+import { AnimatedNumber } from "@/components/animated-number";
 
 const TRADER_SECTION_TITLE_CLASS =
   "text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]";
@@ -120,7 +127,13 @@ export function TraderDeskSummaryStrip({
       >
         <DatumCell
           label="Cash at risk"
-          value={balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."}
+          value={
+            balanceUsdc !== null ? (
+              <AnimatedNumber value={balanceUsdc} format={formatUsdc} live />
+            ) : (
+              "..."
+            )
+          }
           className="border-0 border-b border-[var(--t-divider)] sm:border-b-0 sm:border-r"
           valueClassName={unfunded ? "text-[var(--t-amber)]" : undefined}
         />
@@ -220,10 +233,7 @@ export function TraderDetailContent({
 
   return (
     <div
-      className={cn(
-        "crt-scanlines bg-[var(--t-bg)] font-mono",
-        !compact && "min-h-screen"
-      )}
+      className={cn("bg-[var(--t-bg)] font-mono", !compact && "min-h-screen")}
     >
       <div className="sticky top-0 z-20 flex items-start justify-between gap-3 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
         <div className="min-w-0">
@@ -283,7 +293,15 @@ export function TraderDetailContent({
               <DatumCell
                 label="Escrow"
                 value={
-                  balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."
+                  balanceUsdc !== null ? (
+                    <AnimatedNumber
+                      value={balanceUsdc}
+                      format={formatUsdc}
+                      live
+                    />
+                  ) : (
+                    "..."
+                  )
                 }
                 valueClassName={unfunded ? "text-[var(--t-amber)]" : undefined}
               />
@@ -1165,7 +1183,9 @@ function ReputationSection({ traderId }: { traderId: string }) {
       />
       <DatumCell
         label="Total P&L"
-        value={`${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}`}
+        value={
+          <AnimatedNumber value={totalPnl} format={formatSignedMoney} live />
+        }
         valueClassName={
           totalPnl >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]"
         }

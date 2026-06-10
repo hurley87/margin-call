@@ -7,8 +7,25 @@ import {
 } from "convex/react";
 import type { FunctionReturnType } from "convex/server";
 
+import type { OptimisticLocalStore } from "convex/browser";
+
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
+import { useSfx } from "@/hooks/use-sfx";
+
+function removePendingApproval(
+  store: OptimisticLocalStore,
+  approvalId: Id<"dealApprovals">
+) {
+  const pending = store.getQuery(api.dealApprovals.listPending, {});
+  if (pending !== undefined) {
+    store.setQuery(
+      api.dealApprovals.listPending,
+      {},
+      pending.filter((approval) => approval._id !== approvalId)
+    );
+  }
+}
 
 // ── Types (snake_case to match existing component interface) ──────────────
 
@@ -81,10 +98,21 @@ export function usePendingApprovals(): {
 
 /**
  * Approve/reject a deal approval — backed by Convex mutations (idempotent).
+ * Optimistically removes the approval from the pending list so the UI reacts
+ * instantly; Convex rolls the update back automatically on failure.
  */
 export function useApproveReject() {
-  const approve = useConvexMutation(api.dealApprovals.approve);
-  const reject = useConvexMutation(api.dealApprovals.reject);
+  const { playApprovalPing, playLoss } = useSfx();
+  const approve = useConvexMutation(
+    api.dealApprovals.approve
+  ).withOptimisticUpdate((store, { approvalId }) => {
+    removePendingApproval(store, approvalId);
+  });
+  const reject = useConvexMutation(
+    api.dealApprovals.reject
+  ).withOptimisticUpdate((store, { approvalId }) => {
+    removePendingApproval(store, approvalId);
+  });
 
   function mutate(args: {
     approvalId: string;
@@ -93,8 +121,10 @@ export function useApproveReject() {
   }) {
     const id = args.approvalId as Id<"dealApprovals">;
     if (args.action === "approve") {
+      playApprovalPing();
       return approve({ approvalId: id });
     }
+    playLoss();
     return reject({ approvalId: id, reason: args.reason });
   }
 

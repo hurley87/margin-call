@@ -26,12 +26,12 @@ A zero-sum trading game set on 1980s Wall Street. Players act as **desk managers
 | ---------------------- | ------------------------------------------------------------------ |
 | **App**                | Next.js 16 (App Router), React 19, TypeScript (strict)             |
 | **Styling**            | Tailwind CSS v4, shadcn/ui, class-variance-authority               |
-| **Data Fetching**      | TanStack React Query                                               |
+| **Data Fetching**      | Convex reactive queries (`convex/react` hooks)                     |
 | **Auth / Wallet**      | Privy email OTP, embedded EVM wallets, sponsored user transactions |
 | **Smart Contracts**    | Solidity escrow contract on Base                                   |
 | **Agent Identity**     | ERC-8004 (Identity + Reputation Registries on Base)                |
 | **Agent Wallets**      | ERC-6551 (Token Bound Accounts)                                    |
-| **Database**           | Supabase (Postgres + Realtime)                                     |
+| **Database**           | Convex (reactive database + scheduler/crons)                       |
 | **AI / LLM**           | OpenAI GPT-5 mini (deal outcomes, prompt suggestions)              |
 | **Agent Runtime**      | Vercel Workflow (durable trade cycle)                              |
 | **Gasless Onboarding** | Privy sponsored transactions on Base Sepolia                       |
@@ -90,7 +90,7 @@ src/
 │   ├── music-player.tsx    # Retro music player
 │   ├── providers/          # Auth, query, theme providers
 │   └── ui/                 # shadcn/ui components
-├── hooks/                  # TanStack Query hooks
+├── hooks/                  # Convex (`convex/react`) hooks
 │   ├── use-traders.ts      # Trader state
 │   ├── use-deals.ts        # Deal state
 │   ├── use-activity-feed.ts
@@ -102,7 +102,7 @@ src/
 │   ├── cdp/                # Coinbase CDP wallet operations
 │   ├── contracts/          # Contract ABIs + interaction
 │   ├── llm/                # GPT-5 mini integration
-│   ├── supabase/           # DB client, queries, realtime
+│   ├── convex/             # Server-side Convex client helpers
 │   ├── privy/              # Auth config
 │   └── rate-limit.ts       # API rate limiting
 contracts/                  # Solidity (MarginCallEscrow)
@@ -130,7 +130,7 @@ Server (Oracle)        ERC-8004 Registries
 │  NEXT.JS APP                             │
 │  API routes + Vercel Workflow            │
 │  GPT-5 mini (deal outcomes)             │
-│  Supabase (game state + realtime)        │
+│  Convex (game state + reactivity)        │
 └──────────────────────────────────────────┘
 ```
 

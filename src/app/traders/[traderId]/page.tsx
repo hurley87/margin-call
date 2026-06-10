@@ -80,7 +80,7 @@ export function PublicTraderDossier({
   const portraitTone = getPortraitTone(trader.portraitStatus);
 
   return (
-    <main className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
+    <main className="min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
       <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-5 sm:px-6 lg:px-8">
         <header className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[var(--t-divider)] pb-4">
           <div>

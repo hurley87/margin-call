@@ -48,6 +48,8 @@ import { TraderAvatar } from "@/components/trader-avatar";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
+import { MomentLayer } from "@/components/moments/moment-overlay";
+import { SoundControls } from "@/components/sound-controls";
 import {
   MobileFooterNav,
   type MobileTab,
@@ -77,16 +79,26 @@ import {
   type Portfolio,
   type TraderSummary,
 } from "@/hooks/use-portfolio";
+import { useFlipList } from "@/hooks/use-flip-list";
 import { useMarketHours } from "@/hooks/use-market-hours";
+import { useNewItemIds } from "@/hooks/use-new-item-ids";
+import { usePnlStreaks, useRankDeltas } from "@/hooks/use-rank-deltas";
 import { useSecondTick } from "@/hooks/use-second-tick";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import {
   DIALOG_BACKDROP_CLASS,
   dialogPopupClass,
   cn,
+  formatCompactMoney,
+  formatMoney,
   formatShortAddress,
+  formatSignedCompactMoney,
   relativeTime,
 } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/animated-number";
+import { SkeletonRows } from "@/components/ui/skeleton-line";
+import { TickerTape } from "@/components/ticker-tape";
+import { staggerDelay } from "@/lib/motion-tokens";
 import {
   getTraderCycleUiCompact,
   traderCycleDocFromDeskSummary,
@@ -172,7 +184,7 @@ export default function Home() {
 
   if (!authenticated) {
     return (
-      <div className="crt-scanlines flex min-h-screen flex-col justify-center gap-8 bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
+      <div className="flex min-h-screen flex-col justify-center gap-8 bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
         <div className="mx-auto grid w-full max-w-4xl gap-7 md:grid-cols-[minmax(0,1.25fr)_minmax(17rem,0.75fr)] md:items-end">
           <section className="min-w-0">
             <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--t-green)]">
@@ -338,7 +350,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const deskWalletFundingKnown = !cashLoading && cashBalance !== undefined;
 
   return (
-    <div className="crt-scanlines flex h-svh flex-col overflow-hidden bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
+    <div className="flex h-svh flex-col overflow-hidden bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
       <Suspense fallback={null}>
         <DeskDeepLinkHydration
           setSelectedDealId={setSelectedDealId}
@@ -348,6 +360,14 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
       <LiveGameToasts
         onDealSound={sfx.playDealToast}
         onWipeoutSound={sfx.playWipeoutToast}
+        suppressWipeoutTraderIds={ownedTraderIds}
+      />
+      <MomentLayer
+        activity={feedLoading ? undefined : activity}
+        traderNames={traderNames}
+        onWin={sfx.playWin}
+        onLoss={sfx.playLoss}
+        onWipeout={sfx.playWipeoutToast}
       />
       <TopStatusBar
         deskWalletAddress={deskWalletAddress}
@@ -468,7 +488,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         </div>
       </main>
 
-      <BottomTape pnl={pnl} approvalsCount={pendingApprovals.length} />
+      <TickerTape pnl={pnl} approvalsCount={pendingApprovals.length} />
 
       <MobileFooterNav
         activeTab={mobileTab}
@@ -616,13 +636,21 @@ function TopStatusBar({
             <div className="text-right">
               <p className="text-[var(--t-muted)]">Cash</p>
               <p className="font-bold tabular-nums text-[var(--t-green)]">
-                {cashLoading || cash === undefined ? "..." : formatMoney(cash)}
+                {cashLoading || cash === undefined ? (
+                  "..."
+                ) : (
+                  <AnimatedNumber value={cash} format={formatMoney} live />
+                )}
               </p>
             </div>
             <div className="text-right">
               <p className="text-[var(--t-muted)]">Equity</p>
               <p className="font-bold tabular-nums text-[var(--t-green)]">
-                {portfolioLoading ? "..." : formatMoney(equity)}
+                {portfolioLoading ? (
+                  "..."
+                ) : (
+                  <AnimatedNumber value={equity} format={formatMoney} live />
+                )}
               </p>
             </div>
           </div>
@@ -682,13 +710,23 @@ function TopStatusBar({
           <StatusCell
             label="Cash"
             value={
-              cashLoading || cash === undefined ? "..." : formatMoney(cash)
+              cashLoading || cash === undefined ? (
+                "..."
+              ) : (
+                <AnimatedNumber value={cash} format={formatMoney} live />
+              )
             }
             tone="green"
           />
           <StatusCell
             label="Equity"
-            value={portfolioLoading ? "..." : formatMoney(equity)}
+            value={
+              portfolioLoading ? (
+                "..."
+              ) : (
+                <AnimatedNumber value={equity} format={formatMoney} live />
+              )
+            }
             tone="green"
           />
           <div className="flex min-w-0 items-center justify-between gap-2 px-3 py-2">
@@ -718,20 +756,7 @@ function TopStatusBar({
               Fund Wallet
             </button>
           )}
-          <button
-            type="button"
-            onClick={onToggleSfx}
-            title={sfxEnabled ? "Mute live alerts" : "Enable live alerts"}
-            aria-label={sfxEnabled ? "Mute live alerts" : "Enable live alerts"}
-            aria-pressed={sfxEnabled}
-            className="grid h-9 w-9 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)] hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-text)]"
-          >
-            {sfxEnabled ? (
-              <Volume2 className="h-4 w-4" />
-            ) : (
-              <VolumeX className="h-4 w-4" />
-            )}
-          </button>
+          <SoundControls />
           <IconLink href="https://x.com/davidbhurley" label="X">
             <Twitter className="h-4 w-4" />
           </IconLink>
@@ -881,7 +906,12 @@ export function DeskCommandStrip({
   const steps = [
     {
       label: "Fund desk",
-      value: cashLoading || cash === undefined ? "Checking" : formatMoney(cash),
+      value:
+        cashLoading || cash === undefined ? (
+          "Checking"
+        ) : (
+          <AnimatedNumber value={cash} format={formatMoney} />
+        ),
       tone: walletFunded ? "green" : "amber",
       status: walletFunded ? "Ready" : "Required",
     },
@@ -1088,7 +1118,7 @@ function StatusCell({
   tone = "text",
 }: {
   label: string;
-  value: string;
+  value: ReactNode;
   tone?: "text" | "green" | "amber" | "red";
 }) {
   return (
@@ -1497,13 +1527,13 @@ function NewswireMarketTape({
       <div className="min-w-0 border-r border-[var(--t-divider)] px-1">
         <p className="truncate text-[var(--t-muted)]">Pots</p>
         <p className="mt-1 tabular-nums text-[var(--t-green)]">
-          {formatCompactMoney(stats.pot)}
+          <AnimatedNumber value={stats.pot} format={formatCompactMoney} live />
         </p>
       </div>
       <div className="min-w-0 px-1">
         <p className="truncate text-[var(--t-muted)]">Entries</p>
         <p className="mt-1 tabular-nums text-[var(--t-text)]">
-          {stats.entries}
+          <AnimatedNumber value={stats.entries} format={String} />
         </p>
       </div>
     </div>
@@ -1523,6 +1553,15 @@ function NewswireList({
   onCreate: (item: NewswireCreateDialog) => void;
   onOpenDeal: (dealId: string) => void;
 }) {
+  const newWireIds = useNewItemIds(
+    items,
+    (item) => `${item.time}-${item.headline}`
+  );
+  const { playWireTick } = useSfx();
+  useEffect(() => {
+    if (newWireIds.size > 0) playWireTick();
+  }, [newWireIds, playWireTick]);
+
   if (items === undefined) {
     return <LoadingLine label="TUNING PRIVATE WIRE" />;
   }
@@ -1559,6 +1598,8 @@ function NewswireList({
       {items.map((item, index) => (
         <NewswireItem
           key={`${item.time}-${item.headline}`}
+          isNew={newWireIds.has(`${item.time}-${item.headline}`)}
+          burstIndex={newWireIds.get(`${item.time}-${item.headline}`) ?? 0}
           time={item.time}
           headline={item.headline}
           body={item.body}
@@ -1590,6 +1631,8 @@ function NewswireItem({
   category,
   dealSeed,
   isFirst,
+  isNew = false,
+  burstIndex = 0,
   deals,
   dealsLoading,
   walletFunded,
@@ -1602,6 +1645,8 @@ function NewswireItem({
   category?: string;
   dealSeed?: NewswireDealSeed;
   isFirst?: boolean;
+  isNew?: boolean;
+  burstIndex?: number;
   deals: Deal[];
   dealsLoading: boolean;
   walletFunded: boolean;
@@ -1622,8 +1667,10 @@ function NewswireItem({
         "group relative -mx-2 border-b border-[var(--t-divider)]/45 pb-3 pl-3 pr-2 text-xs leading-relaxed transition-colors last:border-b-0 last:pb-0",
         hasDeals
           ? "bg-[var(--t-accent-soft)]/20"
-          : "hover:bg-[var(--t-accent-soft)]/25"
+          : "hover:bg-[var(--t-accent-soft)]/25",
+        isNew && "mc-feed-enter"
       )}
+      style={isNew ? { animationDelay: staggerDelay(burstIndex) } : undefined}
     >
       <span
         aria-hidden
@@ -1770,9 +1817,11 @@ function NewswireDealCard({
           <dt className="sr-only">Pot</dt>
           <dd className="truncate">
             Pot{" "}
-            <span className="tabular-nums text-[var(--t-green)]">
-              {formatCompactMoney(deal.pot_usdc)}
-            </span>
+            <AnimatedNumber
+              value={deal.pot_usdc}
+              format={formatCompactMoney}
+              className="text-[var(--t-green)]"
+            />
           </dd>
         </div>
         <div className="min-w-0">
@@ -1788,9 +1837,11 @@ function NewswireDealCard({
           <dt className="sr-only">Entries</dt>
           <dd className="truncate">
             Hits{" "}
-            <span className="tabular-nums text-[var(--t-amber)]">
-              {deal.entry_count}
-            </span>
+            <AnimatedNumber
+              value={deal.entry_count}
+              format={String}
+              className="text-[var(--t-amber)]"
+            />
           </dd>
         </div>
       </dl>
@@ -1998,8 +2049,9 @@ function TradingDeskMain({
   }
   if (portfolioLoading) {
     return (
-      <div className="px-4 py-8">
+      <div className="px-4 py-6">
         <LoadingLine label="LOADING DESK ROSTER" />
+        <SkeletonRows rows={4} className="mt-4" />
       </div>
     );
   }
@@ -2134,12 +2186,20 @@ function DeskTraderRow({
         {trader.status}
       </span>
       <span className="hidden tabular-nums text-right text-[var(--t-text)] sm:inline">
-        {formatCompactMoney(trader.total_value_usdc)}
+        <AnimatedNumber
+          value={trader.total_value_usdc}
+          format={formatCompactMoney}
+          live
+        />
       </span>
       <span
         className={cn("hidden tabular-nums text-right sm:inline", pnlClass)}
       >
-        {pnlText}
+        {pnlPct === null ? (
+          pnlText
+        ) : (
+          <AnimatedNumber value={pnlPct} format={formatSignedPercent} />
+        )}
       </span>
       <span className="hidden tabular-nums text-right text-[var(--t-text)] sm:inline">
         {trader.wins}-{trader.losses}-{trader.wipeouts}
@@ -2313,6 +2373,15 @@ function TraderFeedPanel({
   onShowDetail: (entry: AgentActivity) => void;
   onReviewApproval: (ctx: { traderId: string; dealId: string | null }) => void;
 }) {
+  const newActivityIds = useNewItemIds(
+    feedLoading ? undefined : activity,
+    (entry) => entry.id
+  );
+  const { playWireTick } = useSfx();
+  useEffect(() => {
+    if (newActivityIds.size > 0) playWireTick();
+  }, [newActivityIds, playWireTick]);
+
   let feedMeta = "ALL DESKS";
   if (traderFilter) {
     const name = traderNames[traderFilter];
@@ -2369,8 +2438,9 @@ function TraderFeedPanel({
       </div>
 
       {feedLoading ? (
-        <div className="px-4 py-8">
+        <div className="px-4 py-6">
           <LoadingLine label="READING TRADER TAPE" />
+          <SkeletonRows rows={6} className="mt-4" />
         </div>
       ) : activity.length === 0 ? (
         <EmptyState
@@ -2391,6 +2461,8 @@ function TraderFeedPanel({
               onReviewApproval={onReviewApproval}
               reviewCtaEntryIds={reviewCtaEntryIds}
               approvalIdByEntryId={approvalIdByEntryId}
+              isNew={newActivityIds.has(entry.id)}
+              burstIndex={newActivityIds.get(entry.id) ?? 0}
             />
           ))}
         </div>
@@ -2436,6 +2508,22 @@ function MarketPlayersPanel({
   onOpenTrader: (id: string, isCurrent: boolean) => void;
 }) {
   const current = currentWallet?.toLowerCase();
+  const orderedIds = useMemo(
+    () => (leaderboard ?? []).map((trader) => trader.id),
+    [leaderboard]
+  );
+  const { registerRow } = useFlipList(orderedIds);
+  const { deltas, bump } = useRankDeltas(orderedIds);
+  const streaks = usePnlStreaks(
+    useMemo(
+      () =>
+        leaderboard?.map((trader) => ({
+          id: trader.id,
+          pnl: trader.total_pnl,
+        })),
+      [leaderboard]
+    )
+  );
 
   return (
     <aside className="terminal-panel flex min-h-0 flex-1 flex-col overflow-hidden xl:min-h-0">
@@ -2453,8 +2541,9 @@ function MarketPlayersPanel({
       </div>
 
       {isLoading || leaderboard === undefined ? (
-        <div className="px-4 py-8">
+        <div className="px-4 py-6">
           <LoadingLine label="POLLING EXCHANGE FLOOR" />
+          <SkeletonRows rows={8} className="mt-4" />
         </div>
       ) : leaderboard.length === 0 ? (
         <EmptyState
@@ -2467,14 +2556,17 @@ function MarketPlayersPanel({
             const isCurrent = current
               ? trader.owner_address.toLowerCase() === current
               : false;
+            const rankDelta = deltas.get(trader.id);
+            const streak = streaks.get(trader.id) ?? 0;
 
             return (
               <button
                 key={trader.id}
+                ref={registerRow(trader.id)}
                 type="button"
                 onClick={() => onOpenTrader(trader.id, isCurrent)}
                 className={cn(
-                  "grid w-full grid-cols-[1.5rem_minmax(0,1fr)_6rem_4.25rem_4rem] gap-x-2 items-center border-b border-[var(--t-divider)] px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--t-accent)]/10 focus:bg-[var(--t-accent)]/10 focus:outline-none",
+                  "grid w-full grid-cols-[1.5rem_minmax(0,1fr)_6rem_4.25rem_4rem] gap-x-2 items-center border-b border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-left text-xs transition-colors hover:bg-[var(--t-accent)]/10 focus:bg-[var(--t-accent)]/10 focus:outline-none",
                   isCurrent
                     ? "bg-[var(--t-green)]/10 text-[var(--t-green)]"
                     : "text-[var(--t-muted)]"
@@ -2494,6 +2586,33 @@ function MarketPlayersPanel({
                         {trader.name}
                       </p>
                       {trader.is_agent_desk ? <AgentDeskBadge compact /> : null}
+                      {rankDelta !== undefined && (
+                        <span
+                          key={bump}
+                          className={cn(
+                            "mc-rank-delta shrink-0 text-[10px] font-bold tabular-nums",
+                            rankDelta > 0
+                              ? "text-[var(--t-green-hot)]"
+                              : "text-[var(--t-red-hot)]"
+                          )}
+                        >
+                          {rankDelta > 0 ? "↑" : "↓"}
+                          {Math.abs(rankDelta)}
+                        </span>
+                      )}
+                      {Math.abs(streak) >= 3 && (
+                        <span
+                          title={`${Math.abs(streak)} ${streak > 0 ? "gains" : "losses"} in a row this session`}
+                          className={cn(
+                            "shrink-0 border px-1 text-[9px] font-bold tabular-nums",
+                            streak > 0
+                              ? "border-[var(--t-green)]/50 text-[var(--t-green)]"
+                              : "border-[var(--t-red)]/50 text-[var(--t-red)]"
+                          )}
+                        >
+                          {streak > 0 ? "▲" : "▼"}×{Math.abs(streak)}
+                        </span>
+                      )}
                     </div>
                     <p className="truncate text-[10px] uppercase text-[var(--t-muted)]">
                       {trader.status}
@@ -2504,7 +2623,11 @@ function MarketPlayersPanel({
                   {formatOwnerWallet(trader.owner_address, isCurrent)}
                 </span>
                 <span className="text-right tabular-nums">
-                  {formatCompactMoney(trader.total_value)}
+                  <AnimatedNumber
+                    value={trader.total_value}
+                    format={formatCompactMoney}
+                    live
+                  />
                 </span>
                 <span
                   className={cn(
@@ -2512,8 +2635,11 @@ function MarketPlayersPanel({
                     pnlSignClass(trader.total_pnl)
                   )}
                 >
-                  {trader.total_pnl >= 0 ? "+" : ""}
-                  {formatCompactMoney(trader.total_pnl)}
+                  <AnimatedNumber
+                    value={trader.total_pnl}
+                    format={formatSignedCompactMoney}
+                    live
+                  />
                 </span>
               </button>
             );
@@ -2521,49 +2647,6 @@ function MarketPlayersPanel({
         </div>
       )}
     </aside>
-  );
-}
-
-function BottomTape({
-  pnl,
-  approvalsCount,
-}: {
-  pnl: number;
-  approvalsCount: number;
-}) {
-  return (
-    <footer className="z-30 hidden shrink-0 border-t border-[var(--t-bronze)] bg-[#050706]/95 px-3 py-2 text-[11px] uppercase tracking-wider text-[var(--t-muted)] xl:block">
-      <div className="mx-auto flex max-w-[112rem] items-center gap-6 overflow-x-auto whitespace-nowrap">
-        <span>
-          System Status:{" "}
-          <span className="text-[var(--t-green)]">All systems go</span>
-        </span>
-        <span>
-          Desk P&L:{" "}
-          <span className={pnlSignClass(pnl)}>
-            {pnl >= 0 ? "+" : ""}
-            {formatMoney(pnl)}
-          </span>
-        </span>
-        <span>
-          Approvals:{" "}
-          <span
-            className={
-              approvalsCount > 0
-                ? "text-[var(--t-amber)]"
-                : "text-[var(--t-green)]"
-            }
-          >
-            {approvalsCount}
-          </span>
-        </span>
-        <span>Dow 2,503.45 +1.28%</span>
-        <span>S&P 500 336.21 +1.14%</span>
-        <span>10Y Yield 8.42%</span>
-        <span>Oil (WTI) $18.74 -1.24</span>
-        <span>SEC Heat Moderate</span>
-      </div>
-    </footer>
   );
 }
 
@@ -2623,20 +2706,4 @@ function formatOwnerWallet(ownerAddress: string, isCurrent: boolean) {
 
 function pnlSignClass(value: number) {
   return value >= 0 ? "text-[var(--t-green)]" : "text-[var(--t-red)]";
-}
-
-function formatMoney(value: number) {
-  return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: value >= 1000 ? 0 : 2,
-  }).format(value);
-}
-
-function formatCompactMoney(value: number) {
-  const abs = Math.abs(value);
-  const sign = value < 0 ? "-" : "";
-  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
-  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
-  return `${sign}$${abs.toFixed(0)}`;
 }

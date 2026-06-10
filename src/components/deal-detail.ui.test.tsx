@@ -7,7 +7,7 @@ describe("DealMetricGrid", () => {
   it("uses four desktop columns when the deal has no creator fee", () => {
     const html = renderToStaticMarkup(
       <DealMetricGrid
-        displayPotLabel="1,250"
+        displayPotUsdc={1250}
         entryCostUsdc={50}
         entryCount={7}
         wipeoutCount={0}
@@ -25,7 +25,7 @@ describe("DealMetricGrid", () => {
   it("adapts to five columns and red wipeout state when a fee is present", () => {
     const html = renderToStaticMarkup(
       <DealMetricGrid
-        displayPotLabel="2,500"
+        displayPotUsdc={2500}
         entryCostUsdc={100}
         feeUsdc={10}
         entryCount={12}

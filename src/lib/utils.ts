@@ -31,6 +31,30 @@ export function formatUsdc(value: number): string {
   return USDC_FORMATTER.format(value);
 }
 
+export function formatMoney(value: number): string {
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: value >= 1000 ? 0 : 2,
+  }).format(value);
+}
+
+export function formatCompactMoney(value: number): string {
+  const abs = Math.abs(value);
+  const sign = value < 0 ? "-" : "";
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(1)}K`;
+  return `${sign}$${abs.toFixed(0)}`;
+}
+
+export function formatSignedCompactMoney(value: number): string {
+  return `${value >= 0 ? "+" : ""}${formatCompactMoney(value)}`;
+}
+
+export function formatSignedMoney(value: number): string {
+  return `${value >= 0 ? "+" : ""}${formatMoney(value)}`;
+}
+
 const ACTIVITY_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",

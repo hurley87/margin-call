@@ -73,6 +73,8 @@ export function selectNewLiveGameToasts(params: {
   seenActivityIds: ReadonlySet<string>;
   traderNames: Record<string, string>;
   traderProfiles: Record<string, TraderProfile>;
+  /** Trader ids whose wipeouts are covered elsewhere (ceremony overlay). */
+  suppressWipeoutTraderIds?: ReadonlySet<string>;
 }): LiveGameToast[] {
   const dealToasts: LiveGameToast[] = params.deals
     .filter((deal) => !params.seenDealIds.has(deal.id))
@@ -92,7 +94,8 @@ export function selectNewLiveGameToasts(params: {
     .filter(
       (entry) =>
         entry.activityType === "wipeout" &&
-        !params.seenActivityIds.has(entry.id)
+        !params.seenActivityIds.has(entry.id) &&
+        !params.suppressWipeoutTraderIds?.has(entry.traderId)
     )
     .map((entry) => {
       const traderName = params.traderNames[entry.traderId] ?? "Unknown trader";

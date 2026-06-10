@@ -17,7 +17,7 @@ export default function GlobalError({
   return (
     <html>
       <body>
-        <main className="crt-scanlines grid min-h-screen place-items-center bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
+        <main className="grid min-h-screen place-items-center bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
           <section className="w-full max-w-xl border border-[var(--t-red)]/45 bg-[#100807]/95 shadow-2xl shadow-black/60">
             <div className="border-b border-[var(--t-red)]/35 bg-[#1b0b09] px-4 py-3">
               <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--t-red)]">

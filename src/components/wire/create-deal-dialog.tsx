@@ -333,7 +333,7 @@ export function CreateDealDialog({
         <Dialog.Popup className="fixed left-1/2 top-1/2 z-50 max-h-[88vh] w-[94vw] max-w-2xl -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60">
           <Dialog.Title className="sr-only">Create deal</Dialog.Title>
           <div className="max-h-[88vh] overflow-y-auto">
-            <div className="crt-scanlines bg-[var(--t-bg)]">
+            <div className="bg-[var(--t-bg)]">
               <div className="sticky top-0 z-20 flex items-center justify-between gap-3 border-b border-[var(--t-border)] bg-[var(--t-surface)] px-4 py-3">
                 <div className="min-w-0">
                   <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">

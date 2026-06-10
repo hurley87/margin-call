@@ -23,9 +23,12 @@ const DISMISS_MS = 6000;
 export function LiveGameToasts({
   onDealSound,
   onWipeoutSound,
+  suppressWipeoutTraderIds,
 }: {
   onDealSound: () => void;
   onWipeoutSound: () => void;
+  /** Own-desk traders whose wipeouts get the ceremony overlay instead. */
+  suppressWipeoutTraderIds?: ReadonlySet<string>;
 }) {
   const router = useRouter();
   const recentDeals = useQuery(api.deals.listRecentCreatedForToasts, {
@@ -100,6 +103,7 @@ export function LiveGameToasts({
       seenActivityIds: seenActivityIdsRef.current,
       traderNames: globalActivity.traderNames,
       traderProfiles: globalActivity.traderProfiles,
+      suppressWipeoutTraderIds,
     });
 
     if (nextToasts.length === 0) return;
@@ -142,6 +146,7 @@ export function LiveGameToasts({
     onDealSound,
     onWipeoutSound,
     recentDeals,
+    suppressWipeoutTraderIds,
   ]);
 
   useEffect(() => {
@@ -213,10 +218,6 @@ function LiveGameToastCard({
           "absolute inset-x-0 top-0 h-px",
           isWipeout ? "bg-[var(--t-red)]" : "bg-[var(--t-green)]"
         )}
-      />
-      <span
-        aria-hidden
-        className="live-toast-scan absolute inset-0 opacity-45"
       />
       <span
         aria-hidden

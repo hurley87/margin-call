@@ -29,6 +29,7 @@ import { useDeskManager } from "@/hooks/use-desk";
 import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import { AnimatedNumber } from "@/components/animated-number";
 import {
   DIALOG_BACKDROP_CLASS,
   cn,
@@ -70,14 +71,18 @@ function DealMetricCell({
   );
 }
 
+function formatPotMoney(value: number): string {
+  return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
 export function DealMetricGrid({
-  displayPotLabel,
+  displayPotUsdc,
   entryCostUsdc,
   feeUsdc,
   entryCount,
   wipeoutCount,
 }: {
-  displayPotLabel: string;
+  displayPotUsdc: number;
   entryCostUsdc: number;
   feeUsdc?: number;
   entryCount: number;
@@ -94,7 +99,9 @@ export function DealMetricGrid({
     >
       <DealMetricCell
         label="Pot"
-        value={`$${displayPotLabel}`}
+        value={
+          <AnimatedNumber value={displayPotUsdc} format={formatPotMoney} live />
+        }
         className="text-[var(--t-green)]"
       />
       <DealMetricCell
@@ -103,10 +110,13 @@ export function DealMetricGrid({
         className="text-[var(--t-accent)]"
       />
       {hasDealFee && <DealMetricCell label="Fee" value={`$${feeUsdc}`} />}
-      <DealMetricCell label="Entries" value={entryCount} />
+      <DealMetricCell
+        label="Entries"
+        value={<AnimatedNumber value={entryCount} format={String} />}
+      />
       <DealMetricCell
         label="Wipeouts"
-        value={wipeoutCount}
+        value={<AnimatedNumber value={wipeoutCount} format={String} />}
         className={
           wipeoutCount > 0 ? "text-[var(--t-red)]" : "text-[var(--t-text)]"
         }
@@ -140,7 +150,7 @@ function DealErrorState({
 }) {
   return (
     <div
-      className={`crt-scanlines flex flex-col items-center justify-center gap-4 bg-[var(--t-bg)] font-mono ${
+      className={`flex flex-col items-center justify-center gap-4 bg-[var(--t-bg)] font-mono ${
         compact ? "min-h-72" : "min-h-screen"
       }`}
     >
@@ -217,9 +227,6 @@ export function DealDetailContent({
     onChainDeal !== undefined
       ? Number(formatUnits(onChainDeal.potAmount, 6))
       : deal.pot_usdc + legacyPotDelta;
-  const displayPotLabel = displayPotUsdc.toLocaleString(undefined, {
-    maximumFractionDigits: 2,
-  });
   const isDealOwner =
     deal.creator_id !== undefined &&
     deskManager?.id === deal.creator_id &&
@@ -311,7 +318,7 @@ export function DealDetailContent({
           )}
 
           <DealMetricGrid
-            displayPotLabel={displayPotLabel}
+            displayPotUsdc={displayPotUsdc}
             entryCostUsdc={deal.entry_cost_usdc}
             feeUsdc={deal.fee_usdc}
             entryCount={deal.entry_count}

@@ -97,6 +97,27 @@
   --t-red: #f0837a;
   --t-amber: #ebc17a;
   --t-blue: #8ba5ff;
+
+  /* Hot phosphor accents — live data only; chrome stays muted gold/cream */
+  --t-green-hot: #92f5b8;
+  --t-red-hot: #ff9d93;
+  --t-amber-hot: #ffd58a;
+
+  /* ── MOTION TOKENS — keep in sync with src/lib/motion-tokens.ts ── */
+  --mc-dur-fast: 120ms;
+  --mc-dur-base: 200ms;
+  --mc-dur-slow: 300ms;
+  --mc-dur-number: 450ms;
+  --mc-dur-flash: 600ms;
+  --mc-dur-suspense: 550ms;
+  --mc-dur-ceremony: 1900ms;
+  --mc-ease-snap: cubic-bezier(0.2, 0.9, 0.3, 1);
+  --mc-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --mc-stagger: 60ms;
+  /* Global glow intensity knob — scales every phosphor glow; 0 disables */
+  --mc-glow: 1;
+  --mc-flash-up: var(--t-green-hot);
+  --mc-flash-down: var(--t-red-hot);
 }
 
 .dark {
@@ -133,25 +154,11 @@
   --sidebar-ring: oklch(0.556 0 0);
 }
 
-/* ── CRT scanlines ── */
+/* ── Live data values ── */
 
-.crt-scanlines::after {
-  content: "";
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    rgba(0, 0, 0, 0.08) 2px,
-    rgba(0, 0, 0, 0.08) 4px
-  );
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0.55;
+.mc-live-value {
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 0 calc(8px * var(--mc-glow)) rgba(146, 245, 184, 0.22);
 }
 
 /* ── Cursor blink ── */
@@ -247,22 +254,6 @@
   }
 }
 
-@keyframes live-toast-flicker {
-  0%,
-  100% {
-    opacity: 0.22;
-  }
-  12% {
-    opacity: 0.7;
-  }
-  18% {
-    opacity: 0.18;
-  }
-  26% {
-    opacity: 0.48;
-  }
-}
-
 @keyframes live-toast-wipeout-shake {
   0%,
   100% {
@@ -292,19 +283,6 @@
     live-toast-wipeout-shake 420ms ease-out 120ms both;
 }
 
-.live-toast-scan {
-  background:
-    repeating-linear-gradient(
-      0deg,
-      rgba(255, 255, 255, 0.1) 0,
-      rgba(255, 255, 255, 0.1) 1px,
-      transparent 1px,
-      transparent 5px
-    ),
-    linear-gradient(90deg, transparent, rgba(214, 166, 96, 0.12), transparent);
-  animation: live-toast-flicker 1.4s steps(2, end) infinite;
-}
-
 .terminal-panel {
   position: relative;
   border: 1px solid var(--t-bronze);
@@ -329,6 +307,253 @@
     linear-gradient(rgba(121, 212, 155, 0.16) 1px, transparent 1px),
     linear-gradient(90deg, rgba(121, 212, 155, 0.12) 1px, transparent 1px);
   background-size: 12px 12px;
+}
+
+/* ── Money in motion ── */
+
+@keyframes mc-num-flash-up {
+  0% {
+    color: var(--mc-flash-up);
+    text-shadow: 0 0 calc(10px * var(--mc-glow)) rgba(146, 245, 184, 0.55);
+  }
+  100% {
+    color: inherit;
+    text-shadow: 0 0 calc(8px * var(--mc-glow)) rgba(146, 245, 184, 0);
+  }
+}
+
+@keyframes mc-num-flash-down {
+  0% {
+    color: var(--mc-flash-down);
+    text-shadow: 0 0 calc(10px * var(--mc-glow)) rgba(255, 157, 147, 0.55);
+  }
+  100% {
+    color: inherit;
+    text-shadow: 0 0 calc(8px * var(--mc-glow)) rgba(255, 157, 147, 0);
+  }
+}
+
+.mc-num-flash[data-dir="up"] {
+  animation: mc-num-flash-up var(--mc-dur-flash) var(--mc-ease-out) both;
+}
+
+.mc-num-flash[data-dir="down"] {
+  animation: mc-num-flash-down var(--mc-dur-flash) var(--mc-ease-out) both;
+}
+
+/* ── Feed arrival ── */
+
+@keyframes mc-feed-enter {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -6px, 0);
+    background-color: var(--t-accent-soft);
+  }
+  55% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+    background-color: transparent;
+  }
+}
+
+.mc-feed-enter {
+  animation: mc-feed-enter var(--mc-dur-slow) var(--mc-ease-out) both;
+}
+
+/* Stronger arrival for win/loss/wipeout rows: hot left edge that fades */
+@keyframes mc-feed-edge {
+  0%,
+  60% {
+    box-shadow: inset 3px 0 0 0 var(--mc-feed-edge, var(--t-amber-hot));
+  }
+  100% {
+    box-shadow: inset 3px 0 0 0 transparent;
+  }
+}
+
+.mc-feed-enter-high {
+  animation:
+    mc-feed-enter var(--mc-dur-slow) var(--mc-ease-out) both,
+    mc-feed-edge calc(var(--mc-dur-flash) * 2) var(--mc-ease-out) both;
+}
+
+/* ── High-stakes moment ceremony ── */
+
+@keyframes mc-moment-backdrop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.mc-moment-backdrop {
+  animation: mc-moment-backdrop var(--mc-dur-base) var(--mc-ease-out) both;
+}
+
+@keyframes mc-moment-card {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.mc-moment-card {
+  animation: mc-moment-card var(--mc-dur-slow) var(--mc-ease-out) both;
+}
+
+/* Full-viewport edge flash on reveal, colored by --mc-moment-color */
+@keyframes mc-moment-edge {
+  0% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  18% {
+    box-shadow: inset 0 0 calc(140px * var(--mc-glow)) var(--mc-moment-color);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+}
+
+.mc-moment-edge {
+  animation: mc-moment-edge calc(var(--mc-dur-flash) * 2) var(--mc-ease-out)
+    both;
+}
+
+@keyframes mc-shake {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  18% {
+    transform: translate3d(-3px, 0, 0);
+  }
+  36% {
+    transform: translate3d(3px, 0, 0);
+  }
+  54% {
+    transform: translate3d(-2px, 0, 0);
+  }
+  72% {
+    transform: translate3d(2px, 0, 0);
+  }
+}
+
+.mc-shake {
+  animation:
+    mc-moment-card var(--mc-dur-slow) var(--mc-ease-out) both,
+    mc-shake 420ms var(--mc-ease-out) both;
+}
+
+/* ── Ticker tape marquee ── */
+
+@keyframes mc-marquee {
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.mc-marquee-track {
+  display: flex;
+  width: max-content;
+  animation: mc-marquee var(--mc-marquee-duration, 48s) linear infinite;
+}
+
+.mc-marquee:hover .mc-marquee-track {
+  animation-play-state: paused;
+}
+
+/* ── Leaderboard rank movement ── */
+
+@keyframes mc-fade-out {
+  0%,
+  70% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.mc-rank-delta {
+  animation: mc-fade-out 4s ease-out forwards;
+}
+
+/* ── Skeleton shimmer ── */
+
+@keyframes mc-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.mc-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(214, 166, 96, 0.06) 25%,
+    rgba(214, 166, 96, 0.14) 50%,
+    rgba(214, 166, 96, 0.06) 75%
+  );
+  background-size: 200% 100%;
+  animation: mc-shimmer 1.6s ease-in-out infinite;
+}
+
+/* ── Reduced motion ── */
+
+@media (prefers-reduced-motion: reduce) {
+  .mc-feed-enter,
+  .mc-feed-enter-high,
+  .mc-shimmer,
+  .live-pulse,
+  .desk-float,
+  .group:hover .wire-cta-bounce,
+  .group:focus-visible .wire-cta-bounce,
+  .group:focus-within .wire-cta-bounce {
+    animation: none;
+  }
+
+  .live-toast-enter,
+  .live-toast-wipeout {
+    animation: none;
+    opacity: 1;
+  }
+
+  .mc-marquee-track {
+    animation: none;
+  }
+
+  .mc-moment-backdrop,
+  .mc-moment-card,
+  .mc-moment-edge,
+  .mc-shake {
+    animation: none;
+    opacity: 1;
+  }
+
+  /* Held edge color instead of a flash pulse */
+  .mc-moment-edge {
+    box-shadow: inset 0 0 60px var(--mc-moment-color);
+  }
+
+  /* Flash degrades to a brief held color, no glow pulse */
+  .mc-num-flash[data-dir="up"],
+  .mc-num-flash[data-dir="down"] {
+    animation-duration: 1200ms;
+    animation-timing-function: step-end;
+    text-shadow: none;
+  }
 }
 
 @layer base {
@@ -360,10 +585,22 @@
     background: var(--t-bg);
   }
   a,
-  button,
   input,
   textarea {
     @apply transition-colors;
+  }
+  button {
+    transition-property: color, background-color, border-color, transform;
+    transition-duration: var(--mc-dur-fast);
+    transition-timing-function: var(--mc-ease-snap);
+  }
+  button:not(:disabled):active {
+    transform: scale(0.97);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    button:not(:disabled):active {
+      transform: none;
+    }
   }
   ::-webkit-scrollbar {
     width: 10px;

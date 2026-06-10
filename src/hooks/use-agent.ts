@@ -149,7 +149,30 @@ export function useTraderOutcomes(traderId: string): {
 }
 
 function useTraderStatusMutation(status: "active" | "paused") {
-  const setStatus = useMutation(api.traders.setStatus);
+  // Optimistic: pause/resume reflects immediately in the detail dialog and
+  // desk roster; Convex rolls back automatically if the mutation fails.
+  const setStatus = useMutation(api.traders.setStatus).withOptimisticUpdate(
+    (store, { traderId, status: nextStatus }) => {
+      const trader = store.getQuery(api.traders.getById, { traderId });
+      if (trader) {
+        store.setQuery(
+          api.traders.getById,
+          { traderId },
+          { ...trader, status: nextStatus }
+        );
+      }
+      const roster = store.getQuery(api.traders.listByDesk, {});
+      if (roster !== undefined) {
+        store.setQuery(
+          api.traders.listByDesk,
+          {},
+          roster.map((row) =>
+            row._id === traderId ? { ...row, status: nextStatus } : row
+          )
+        );
+      }
+    }
+  );
   const [isPending, setPending] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 

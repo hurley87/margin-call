@@ -20,7 +20,7 @@ export default function WireAdminClient() {
 
   if (ctx === undefined) {
     return (
-      <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
+      <div className="min-h-screen bg-[var(--t-bg)] font-mono">
         <Nav />
         <div className="flex items-center justify-center pt-24">
           <p className="text-sm text-[var(--t-muted)]">
@@ -33,7 +33,7 @@ export default function WireAdminClient() {
 
   if (!ctx.isOperator) {
     return (
-      <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
+      <div className="min-h-screen bg-[var(--t-bg)] font-mono">
         <Nav />
         <div className="flex items-center justify-center pt-24">
           <div className="border border-[var(--t-red)] px-8 py-6 text-center">
@@ -94,7 +94,7 @@ export default function WireAdminClient() {
   }
 
   return (
-    <div className="crt-scanlines min-h-screen bg-[var(--t-bg)] font-mono">
+    <div className="min-h-screen bg-[var(--t-bg)] font-mono">
       <Nav />
 
       <div className="mx-auto w-full max-w-4xl px-4">

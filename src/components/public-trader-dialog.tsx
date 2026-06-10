@@ -94,7 +94,7 @@ function PublicTraderContent({
   const escrowTone = getEscrowTone(trader.escrowBalanceUsdc);
 
   return (
-    <div className="crt-scanlines bg-[var(--t-bg)]">
+    <div className="bg-[var(--t-bg)]">
       <header className="sticky top-0 z-20 border-b border-[var(--t-divider)] bg-[var(--t-surface)]/95 backdrop-blur supports-[backdrop-filter]:bg-[var(--t-surface)]/80">
         <div className="flex items-start justify-between gap-4 px-5 py-4">
           <div className="min-w-0">
