@@ -74,7 +74,7 @@ export const getOperatorContext = query({
       title: arc.title,
       summary: arc.summary,
       tensionScore: arc.tensionScore,
-      phase: arc.phase,
+      arcStage: arc.arcStage,
       lastTouchedAt: arc.lastTouchedAt,
       entities: arc.entityRefs
         .map((id) => entityMap.get(id as string))

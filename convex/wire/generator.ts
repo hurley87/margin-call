@@ -3,77 +3,104 @@
 import { internalAction } from "../_generated/server";
 import type { ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
-import { internal } from "../_generated/api";
+import { api, internal } from "../_generated/api";
 import {
   isMarketOpen,
+  isClosingBell,
   currentEpochSlot,
   dayPosture,
   isOpeningBell,
 } from "./tradingHours";
-import { assembleUserMessage } from "./epochAssembler";
+import { getTodayDateNY } from "../lib/tradingHours";
+import {
+  assembleUserMessage,
+  type AssemblerArcCtx,
+  type FirmStateCtx,
+  type GameEventCtx,
+} from "./epochAssembler";
 import { normalizeGeneratedEpoch } from "./epochNormalizer";
 import { validateEpoch } from "./epochValidator";
-import type { GeneratedNarrativeEpoch, Phase } from "./_schemas";
-import type { Id, Doc } from "../_generated/dataModel";
+import { computeWorldStateAdvance } from "./worldState";
+import type { ArcStage } from "./stages";
+import type { GeneratedNarrativeEpoch } from "./_schemas";
+import type { Doc } from "../_generated/dataModel";
 
-const FALLBACK_NARRATIVE_GENERATION_SYSTEM = `You are the Wire narrative engine for a 1980s Wall Street trading game.
-You produce hourly Wire Drop dispatches that serialize an ongoing financial thriller.
+const FALLBACK_NARRATIVE_GENERATION_SYSTEM = `You are the in-house columnist for a 1980s Wall Street wire service. You are jaded, gossipy, and darkly funny. You have seen every fraud twice and respect none of the participants.
 
-OUTPUT FORMAT: Return valid JSON matching the narrative_epoch schema.
-- dispatches: exactly 1 item; it must have role "main"
-- every dispatch carries a unique kebab-case dispatchKey (e.g. "panatl-margin-call")
-- dispatch categories must be one of: wire, floor_talk, sec_watch, boardroom, ticker, positioning. Use wire as the default channel.
-- role and category are separate fields. Do not emit role "deal_seed" dispatches.
-- dispatch headlines: max 100 characters; present tense; terse
-- dispatch bodies: max 180 characters; 1-3 sentences
-- dealSeed: always null. Do not emit Deal Seed dispatches.
-- arcUpdates: optional, max 3 arcs; tensionDelta between -3 and +3. phase is optional and must be one of: rumor, crack, panic, rupture, fallout, countermove, resolution. Emit phase only when the arc shifts.
-- entityMentions: list all entity slugs you referenced in dispatches
-- confirmedFacts: optional array, max 8 strings, each <= 160 chars. Use accepted facts from this drop that future drops must not contradict.
-- openQuestions: optional array, max 6 strings, each <= 160 chars. Use unresolved concrete questions this drop leaves open.
-- materialChange: optional on dispatches, null when absent. Shape: { kind, entitySlug, magnitude? }. kind must be one of asset_loss, personnel_exit, regulatory_action, counterparty_break, filing, position_unwind. entitySlug must be a known roster entity. magnitude may include unitsUsdc and/or label.
-- When the PRIMARY arc tension is >= 9, the role=main dispatch carrying that arc MUST set materialChange. Do not satisfy this with vague escalation language alone — the structured materialChange is what counts.
+YOUR JOB: write ONE short dispatch as prose. You do not decide outcomes, numbers, tension, or who wins — that is all handed to you. You make it funny and human.
 
-TONE: Paranoid, predatory, terse. 1980s Wall Street financial thriller. Every dispatch implies danger. Funny, never goofy.
+VOICE RULES:
+- Every post must contain a human detail or a joke. Never output only numbers and jargon.
+- Explain stakes through consequence, not terminology. Not "margin calls intensify" — instead "lenders would like their money back, immediately, in cash."
+- Punch at greed and incompetence. The reader should feel smarter than everyone in the story.
+- Comprehensible and funny to someone with zero finance knowledge.
+- All numbers come from the provided data. Do NOT invent figures, totals, dates, or events.
 
-STYLE RULES:
-- Headlines: ~100 chars max. Terse. Present tense.
-- Bodies: ~180 chars max. One to three sentences.
-- No emoji. No ellipses for drama.
-- Sentences end in facts, not adjectives. "Down $340M." Not "in bad shape."
-- Every dispatch must imply a player action: exploit, create, avoid, or watch.
+BANNED PHRASES (and anything like them): "watch for fallout", "market responds with heightened anxiety", "concerns mount", "pressure intensifies", and any sentence that could appear in a compliance memo.
 
-FORBIDDEN LANGUAGE: Never use DeFi, rug, wagmi, wen moon, L2, gas fees, leveraged buyout synergies, exciting opportunity, paradigm shift, stakeholders, going forward, algorithm, machine learning, AI.
+CALIBRATION:
+BAD: "Forced liquidations deepen as PanAtlantic reveals an additional $300M asset loss. Market responds with heightened anxiety."
+GOOD: "PanAtlantic misplaced another $300M today, bringing the total to $1.4B, a figure its CFO described as 'temporary' from the back of a taxi. The firm's remaining assets now consist of office furniture and optimism."
+GOOD (real game event): "Desk 0x4f2…a9 entered 'Guaranteed Distressed Debt Opportunity' yesterday. The debt was real. The opportunity was for the other guy. Balance: zero. Deals with 'guaranteed' in the title have a perfect record — for their creators."
 
-NARRATIVE CONTINUITY: Reference previous drops. Advance active arcs. Apply tension updates that reflect what happened in the dispatches.`;
+OUTPUT: strict JSON matching the schema — dropTitle, exactly one dispatch (role "main", unique kebab-case dispatchKey, category from wire/floor_talk/sec_watch/boardroom/ticker/positioning), entityMentions, confirmedFacts, openQuestions. Headline ≤ 12 words. Body 2–4 sentences. No prose outside the JSON.`;
+
+type StoredArc = Doc<"narrativeArcs">;
+
+function arcStageOf(arc: StoredArc): ArcStage {
+  return (arc.arcStage as ArcStage | undefined) ?? "rumor";
+}
+
+/** Is this real event dramatic enough to fire a flash bulletin? */
+function leadIsFlash(
+  leadKind: string,
+  topType: string | undefined,
+  topScore: number
+): boolean {
+  if (leadKind !== "real_event" || !topType) return false;
+  // Per spec: flash only on a wipeout or a top-decile win/loss. A trap or a
+  // leaderboard change leads the post but is not a flash bulletin.
+  if (topType === "wipeout") return true;
+  if ((topType === "big_win" || topType === "big_loss") && topScore >= 70) {
+    return true;
+  }
+  return false;
+}
 
 async function runGenerator(
   ctx: ActionCtx,
-  opts: { slot: number; sinceMs: number; testLlmStub?: GeneratedNarrativeEpoch }
+  opts: {
+    slot: number;
+    sinceMs: number;
+    nowMs: number;
+    testLlmStub?: GeneratedNarrativeEpoch;
+  }
 ): Promise<
   | { skipped: "outside-market-hours" | "duplicate-slot" }
   | { skipped: "validation-failed"; error: string }
   | { inserted: boolean; dropId: string; epoch?: number }
 > {
-  const now = Date.now();
+  const now = opts.nowMs;
   const { slot, sinceMs } = opts;
 
-  // Load all context in parallel
-  const [seasonData, recentDrops, recentGameEvents] = (await Promise.all([
-    ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
-    ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
-    ctx.runQuery(internal.wire.internal.listRecentGameEvents, {
-      since: sinceMs,
-    }),
-  ])) as [
-    {
-      season: Doc<"narrativeSeasons">;
-      entities: Doc<"narrativeEntities">[];
-      arcs: Doc<"narrativeArcs">[];
-    } | null,
-    Doc<"marketNarratives">[],
-    import("./epochAssembler").GameEventCtx[],
-  ];
+  const [seasonData, recentDrops, recentGameEvents, leaderboard] =
+    (await Promise.all([
+      ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
+      ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
+      ctx.runQuery(internal.wire.internal.listRecentGameEvents, {
+        since: sinceMs,
+      }),
+      ctx.runQuery(api.leaderboard.listTraderStats, { limit: 1 }),
+    ])) as [
+      {
+        season: Doc<"narrativeSeasons">;
+        entities: Doc<"narrativeEntities">[];
+        arcs: Doc<"narrativeArcs">[];
+      } | null,
+      Doc<"marketNarratives">[],
+      GameEventCtx[],
+      Array<{ id: string; name: string }>,
+    ];
 
   if (!seasonData) {
     console.warn("[wire/generator] no active season found — skipping");
@@ -81,36 +108,135 @@ async function runGenerator(
   }
 
   const { season, entities, arcs } = seasonData;
-
-  const sortedArcs = [...arcs].sort((a, b) => b.tensionScore - a.tensionScore);
-  const topTitles = recentDrops
-    .slice(0, 2)
-    .map((d) => d.topArcTitle)
-    .filter(Boolean);
-  const repeatedTopTitle =
-    topTitles.length === 2 && topTitles[0] === topTitles[1]
-      ? topTitles[0]
-      : null;
-  const matchingActiveArcs = repeatedTopTitle
-    ? sortedArcs.filter((a) => a.title === repeatedTopTitle)
-    : [];
-  const suppressedSlug =
-    matchingActiveArcs.length === 1 ? matchingActiveArcs[0].slug : null;
-  const assemblerArcs = suppressedSlug
-    ? sortedArcs.filter((a) => a.slug !== suppressedSlug)
-    : sortedArcs;
-  const postSuppressionPrimaryArc = assemblerArcs[0] ?? null;
-
-  // Current world state from latest drop
   const lastDrop = recentDrops[0];
-  const worldState = lastDrop?.worldState as
-    | { mood?: string; sec_heat?: number }
-    | null
-    | undefined;
+  const lastWorld = (lastDrop?.worldState ?? {}) as {
+    topTraderId?: string;
+  };
 
+  // Leaderboard #1 change → synthetic event (prior leader stashed on last drop).
+  const events: GameEventCtx[] = [...recentGameEvents];
+  const currentTop = leaderboard[0] ?? null;
+  if (
+    currentTop &&
+    lastWorld.topTraderId &&
+    currentTop.id !== lastWorld.topTraderId
+  ) {
+    events.push({
+      type: "new_number_one",
+      dramatic: true,
+      summary: `${currentTop.name} is the new #1 desk on the leaderboard`,
+      traderName: currentTop.name,
+      traderId: currentTop.id,
+    });
+  }
+
+  const dayKey = getTodayDateNY(now);
   const posture = dayPosture(now);
-  const lastDropSlot = lastDrop?.epochSlot ?? null;
-  const openingBell = isOpeningBell(slot, lastDropSlot);
+  const openingBell = isOpeningBell(slot, lastDrop?.epochSlot ?? null);
+  const closingBell = isClosingBell(now);
+
+  // ── Code computes the entire world-state advance ──────────────────────────
+  const firmsInput = entities
+    .filter((e) => e.kind === "firm")
+    .map((e) => ({
+      slug: e.slug,
+      displayName: e.displayName,
+      status: e.status,
+      runningLossUsdc: e.runningLossUsdc ?? 0,
+      notableFacts: e.notableFacts ?? [],
+      oneOffEventsFired: e.oneOffEventsFired ?? [],
+      lastLossDayKey: e.lastLossDayKey ?? null,
+    }));
+
+  const arcsInput = arcs.map((a) => ({
+    slug: a.slug,
+    title: a.title,
+    summary: a.summary,
+    tensionScore: a.tensionScore,
+    arcStage: arcStageOf(a),
+    beatsPublishedByStage: a.beatsPublishedByStage ?? {},
+    climaxFired: a.climaxFired ?? false,
+    lastBeatDayKey: a.lastBeatDayKey ?? null,
+    templateKey: a.templateKey ?? null,
+    primaryFirmSlug: a.primaryFirmSlug ?? null,
+  }));
+
+  const advance = computeWorldStateAdvance({
+    arcs: arcsInput,
+    firms: firmsInput,
+    events,
+    dayKey,
+    dayPosture: posture,
+    slot,
+  });
+
+  const arcBySlug = new Map(arcs.map((a) => [a.slug, a]));
+  const firmDeltaBySlug = new Map(advance.firmDeltas.map((d) => [d.slug, d]));
+  const firmBySlug = new Map(firmsInput.map((f) => [f.slug, f]));
+
+  // Assembler arc context (stage/tension are code-set).
+  const assemblerArcs: AssemblerArcCtx[] = advance.arcAdvances
+    .flatMap((adv): AssemblerArcCtx[] => {
+      const arc = arcBySlug.get(adv.slug);
+      if (!arc) return [];
+      const firmSlug = arc.primaryFirmSlug ?? undefined;
+      const delta = firmSlug ? firmDeltaBySlug.get(firmSlug) : undefined;
+      const firm = firmSlug ? firmBySlug.get(firmSlug) : undefined;
+      const firmLoss: number | null =
+        delta?.newRunningLossUsdc ?? firm?.runningLossUsdc ?? null;
+      return [
+        {
+          slug: adv.slug,
+          title: arc.title,
+          summary: arc.summary,
+          tensionScore: adv.newTensionScore,
+          arcStage: adv.toStage,
+          isPrimary: adv.slug === advance.primaryArcSlug,
+          beatThisRun: adv.beatPublishedThisRun,
+          firmLossUsdc: firmLoss,
+          firmDisplayName: firm?.displayName ?? null,
+        },
+      ];
+    })
+    .sort((a, b) => b.tensionScore - a.tensionScore);
+
+  // Firm state context (running totals are code-set).
+  const firmStates: FirmStateCtx[] = [];
+  for (const arc of assemblerArcs) {
+    const stored = arcBySlug.get(arc.slug);
+    const firmSlug = stored?.primaryFirmSlug ?? undefined;
+    if (!firmSlug) continue;
+    const firm = firmBySlug.get(firmSlug);
+    if (!firm) continue;
+    const delta = firmDeltaBySlug.get(firmSlug);
+    firmStates.push({
+      displayName: firm.displayName,
+      status: delta?.newStatus ?? firm.status ?? "healthy",
+      runningLossUsdc: delta?.newRunningLossUsdc ?? firm.runningLossUsdc,
+      newLossDeltaUsdc: delta?.lossDeltaUsdc ?? null,
+      latestFact:
+        delta?.appendNotableFacts[delta.appendNotableFacts.length - 1] ??
+        firm.notableFacts[firm.notableFacts.length - 1] ??
+        null,
+    });
+  }
+
+  // Lead context for the prompt.
+  const lead = advance.lead;
+  const topRanked = lead.ranked[0] ?? null;
+  const leadEvent = lead.leadEvent;
+  const leadLine = leadEvent
+    ? [leadEvent.traderName, leadEvent.traderAddressTrunc]
+        .filter(Boolean)
+        .join(" / ") +
+      (leadEvent.traderName || leadEvent.traderAddressTrunc ? ": " : "") +
+      leadEvent.summary
+    : null;
+  const leadFigureUsdc = leadEvent?.magnitudeUsdc
+    ? Math.abs(leadEvent.magnitudeUsdc)
+    : null;
+
+  const primaryAssemblerArc = assemblerArcs.find((a) => a.isPrimary) ?? null;
 
   const userMessage = assembleUserMessage({
     season: {
@@ -121,13 +247,8 @@ async function runGenerator(
       forbiddenLanguage: season.forbiddenLanguage,
     },
     dayPosture: posture,
-    arcs: assemblerArcs.map((a) => ({
-      slug: a.slug,
-      title: a.title,
-      summary: a.summary,
-      tensionScore: a.tensionScore,
-      phase: a.phase ?? null,
-    })),
+    arcs: assemblerArcs,
+    firmStates,
     entities: entities.map((e) => ({
       slug: e.slug,
       displayName: e.displayName,
@@ -144,14 +265,23 @@ async function runGenerator(
       confirmedFacts: d.confirmedFacts ?? null,
       openQuestions: d.openQuestions ?? null,
     })),
-    recentGameEvents,
-    worldState: worldState ?? null,
+    recentGameEvents: events,
+    lead: {
+      leadKind: lead.leadKind,
+      leadLine,
+      leadFigureUsdc,
+      realStatOneLiner: lead.realStatOneLiner,
+      patterns: lead.patterns,
+    },
+    floorTalkClaims: advance.floorTalkClaims,
+    mood: advance.mood,
+    secHeat: advance.secHeat,
     isOpeningBell: openingBell,
+    isClosingBell: closingBell,
   });
 
-  // ── LLM call (or test stub) ──────────────────────────────────────────────────
+  // ── LLM call (prose only) or test stub ────────────────────────────────────
   let parsed: GeneratedNarrativeEpoch;
-
   if (opts.testLlmStub) {
     parsed = opts.testLlmStub;
   } else {
@@ -169,7 +299,10 @@ async function runGenerator(
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await client.chat.completions.parse(
       {
-        model: "gpt-4o-mini",
+        model: "gpt-5-mini",
+        // Reasoning models add latency; keep effort low for a terse one-shot
+        // dispatch and give the request room beyond the old 30s ceiling.
+        reasoning_effort: "low",
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userMessage },
@@ -179,7 +312,7 @@ async function runGenerator(
           "narrative_epoch"
         ),
       },
-      { timeout: 30_000 }
+      { timeout: 90_000 }
     );
 
     const msg = completion.choices[0]?.message;
@@ -192,69 +325,85 @@ async function runGenerator(
     parsed = msg.parsed as GeneratedNarrativeEpoch;
   }
 
-  // ── Validate ──────────────────────────────────────────────────────────────────
+  // ── Validate + normalize ──────────────────────────────────────────────────
   const arcSlugs = new Set(arcs.map((a) => a.slug));
   const entitySlugs = new Set(entities.map((e) => e.slug));
-
   const normalized = normalizeGeneratedEpoch(parsed);
-  if (normalized.repairedCategoryAliases > 0) {
-    console.warn(
-      `[wire/generator] normalized ${normalized.repairedCategoryAliases} legacy dispatch category alias(es)`
-    );
-  }
-
   const validation = validateEpoch(normalized.epoch, {
     arcSlugs,
     entitySlugs,
     forbiddenLanguage: season.forbiddenLanguage,
-    topArcSlug: postSuppressionPrimaryArc?.slug ?? null,
-    topArcTension: postSuppressionPrimaryArc?.tensionScore ?? 0,
   });
-
   if (!validation.ok) {
     console.error(`[wire/generator] validation failed: ${validation.error}`);
     return { skipped: "validation-failed", error: validation.error };
   }
-
   const validated = validation.data;
 
-  // ── Map slugs → IDs ───────────────────────────────────────────────────────────
-  const arcSlugToId = new Map(arcs.map((a) => [a.slug, a._id]));
+  // ── Attach code-owned structured fields to the stored dispatch ────────────
+  const primaryFirmSlug = primaryAssemblerArc
+    ? (arcBySlug.get(primaryAssemblerArc.slug)?.primaryFirmSlug ?? null)
+    : null;
+  const primaryFirmDelta = primaryFirmSlug
+    ? firmDeltaBySlug.get(primaryFirmSlug)
+    : undefined;
+
+  const storedDispatches = validated.dispatches.map((d, i) => {
+    if (
+      i === 0 &&
+      lead.leadKind === "fiction" &&
+      primaryFirmSlug &&
+      primaryFirmDelta &&
+      primaryFirmDelta.newRunningLossUsdc > 0
+    ) {
+      return {
+        ...d,
+        materialChange: {
+          kind: "asset_loss" as const,
+          entitySlug: primaryFirmSlug,
+          magnitude: { unitsUsdc: primaryFirmDelta.newRunningLossUsdc },
+        },
+      };
+    }
+    return { ...d, materialChange: null };
+  });
+
+  const isFlash = leadIsFlash(
+    lead.leadKind,
+    topRanked?.event.type,
+    topRanked?.score ?? 0
+  );
+
+  const signal =
+    lead.patterns.length > 0
+      ? `trap-pattern:${lead.patterns[0].phrase}`
+      : leadEvent?.type === "wipeout"
+        ? "wipeout-flash"
+        : null;
+
+  // Display top-arc = highest-tension arc after advancing (assemblerArcs is
+  // sorted desc), which naturally skips an arc that just retired to tension 0.
+  const displayArc = assemblerArcs[0] ?? primaryAssemblerArc;
+  const topArcTitle = displayArc?.title ?? "Unknown";
+  const topArcTension = displayArc?.tensionScore ?? 0;
+  const topArcStage = displayArc?.arcStage;
+
+  const worldState = {
+    mood: advance.mood,
+    sec_heat: advance.secHeat,
+    topTraderId: currentTop?.id ?? lastWorld.topTraderId ?? null,
+    floorTalkTruth: advance.floorTalkClaims.map((c) => ({
+      text: c.text,
+      isTrue: c.isTrue,
+    })),
+  };
 
   const arcRefSlugs = new Set<string>();
-  for (const d of validated.dispatches) {
+  for (const d of validated.dispatches)
     if (d.arcSlug) arcRefSlugs.add(d.arcSlug);
-  }
   const arcRefs = [...arcRefSlugs]
-    .map((slug) => arcSlugToId.get(slug))
-    .filter((id): id is Id<"narrativeArcs"> => id !== undefined);
-
-  const arcUpdatesMapped: {
-    arcId: Id<"narrativeArcs">;
-    tensionDelta: number;
-    phase?: Phase;
-  }[] = [];
-  for (const { arcSlug, tensionDelta, phase } of validated.arcUpdates ?? []) {
-    const arcId = arcSlugToId.get(arcSlug);
-    if (!arcId) continue;
-    arcUpdatesMapped.push(
-      phase ? { arcId, tensionDelta, phase } : { arcId, tensionDelta }
-    );
-  }
-
-  let topArcTitle = "Unknown";
-  let topArcTension = 0;
-  if (postSuppressionPrimaryArc) {
-    const primaryDelta =
-      validated.arcUpdates?.find(
-        (update) => update.arcSlug === postSuppressionPrimaryArc.slug
-      )?.tensionDelta ?? 0;
-    topArcTitle = postSuppressionPrimaryArc.title;
-    topArcTension = Math.min(
-      10,
-      Math.max(0, postSuppressionPrimaryArc.tensionScore + primaryDelta)
-    );
-  }
+    .map((slug) => arcBySlug.get(slug)?._id)
+    .filter((id): id is Doc<"narrativeArcs">["_id"] => id !== undefined);
 
   const rawNarrative = validated.dispatches.map((d) => d.headline).join(" | ");
 
@@ -266,14 +415,33 @@ async function runGenerator(
       dropTitle: validated.dropTitle,
       topArcTitle,
       topArcTension,
-      dispatches: validated.dispatches,
-      worldState: validated.worldState,
+      topArcStage,
+      dispatches: storedDispatches,
+      worldState,
       confirmedFacts: validated.confirmedFacts,
       openQuestions: validated.openQuestions,
+      subjects: lead.subjects,
+      isFlash,
+      signal,
       arcRefs,
-      arcUpdates: arcUpdatesMapped,
-      eventsIngested:
-        recentGameEvents.length > 0 ? recentGameEvents : undefined,
+      arcAdvances: advance.arcAdvances.map((a) => ({
+        arcSlug: a.slug,
+        toStage: a.toStage,
+        newTensionScore: a.newTensionScore,
+        climaxFiringNow: a.climaxFiringNow,
+        retiring: a.retiring,
+        newBeatsPublishedByStage: a.newBeatsPublishedByStage,
+        newLastBeatDayKey: a.newLastBeatDayKey,
+      })),
+      firmDeltas: advance.firmDeltas.map((d) => ({
+        firmSlug: d.slug,
+        newRunningLossUsdc: d.newRunningLossUsdc,
+        newStatus: d.newStatus,
+        appendNotableFacts: d.appendNotableFacts,
+        lastLossDayKey: d.lastLossDayKey,
+      })),
+      spawnRequests: advance.spawnRequests,
+      eventsIngested: events.length > 0 ? events : undefined,
       rawNarrative,
     }
   );
@@ -297,11 +465,8 @@ export const generateNextEpoch = internalAction({
     }
 
     const slot = currentEpochSlot(now);
-    // Events since the start of the previous epoch slot (avoids re-ingesting
-    // events already included in the last drop)
     const sinceMs = (slot - 1) * 3_600_000;
 
-    // Fast pre-check to avoid paying LLM cost on known duplicates
     const existing = await ctx.runQuery(internal.wire.internal.findBySlot, {
       epochSlot: slot,
     });
@@ -310,14 +475,12 @@ export const generateNextEpoch = internalAction({
       return { skipped: "duplicate-slot" as const };
     }
 
-    return runGenerator(ctx, { slot, sinceMs });
+    return runGenerator(ctx, { slot, sinceMs, nowMs: now });
   },
 });
 
 /**
  * Dev helper: force-generate regardless of market hours.
- * With ignoreSlot: true, uses Date.now() + monotonic counter so back-to-back
- * dev runs within the same millisecond still produce distinct slots.
  * Triggered via: npx convex run wire/generator:devForceEpoch '{}'
  */
 let devForceSlotCounter = 0;
@@ -331,7 +494,6 @@ export const devForceEpoch = internalAction({
     const slot = ignoreSlot
       ? now + devForceSlotCounter++
       : currentEpochSlot(now);
-    // When ignoreSlot=true, slot is ~Date.now() (ms). (slot-1)*3_600_000 overflows.
     const sinceMs = ignoreSlot ? now - 3_600_000 : (slot - 1) * 3_600_000;
 
     if (!ignoreSlot) {
@@ -349,6 +511,7 @@ export const devForceEpoch = internalAction({
     return runGenerator(ctx, {
       slot,
       sinceMs,
+      nowMs: now,
       testLlmStub: _testLlmStub as GeneratedNarrativeEpoch | undefined,
     });
   },

@@ -1,19 +1,13 @@
 /** Pure assembler — no Convex imports, fully unit-testable. */
 
+import type { ArcStage } from "./stages";
+
 export interface SeasonCtx {
   title: string;
   tone: string;
   weeklyShape: Record<string, string>;
   styleRules: unknown;
   forbiddenLanguage: string[];
-}
-
-export interface ArcCtx {
-  slug: string;
-  title: string;
-  summary: string;
-  tensionScore: number;
-  phase?: string | null;
 }
 
 export interface EntityCtx {
@@ -37,21 +31,75 @@ export interface GameEventCtx {
   summary: string;
   traderName?: string;
   deskName?: string;
+  /** Signed dollar magnitude of the event (loss negative, win positive). */
+  magnitudeUsdc?: number;
+  /** The deal prompt text, when the event is tied to a deal. */
+  dealPrompt?: string;
+  /** Truncated wallet address for public display, e.g. "0x4f2…a9". */
+  traderAddressTrunc?: string;
+  /** Raw entity ids for deep-linking / subjects (never shown verbatim). */
+  traderId?: string;
+  dealId?: string;
+}
+
+/** Arc as presented to the LLM — stage + tension are CODE-decided. */
+export interface AssemblerArcCtx {
+  slug: string;
+  title: string;
+  summary: string;
+  tensionScore: number;
+  arcStage: ArcStage;
+  isPrimary: boolean;
+  beatThisRun: boolean;
+  /** Exact firm-loss figure (USDC) to cite when this arc carries a beat. */
+  firmLossUsdc?: number | null;
+  firmDisplayName?: string | null;
+}
+
+/** Code-computed firm state. The LLM never invents these numbers. */
+export interface FirmStateCtx {
+  displayName: string;
+  status: string;
+  runningLossUsdc: number;
+  newLossDeltaUsdc?: number | null;
+  latestFact?: string | null;
+}
+
+export interface LeadCtx {
+  leadKind: "real_event" | "fiction";
+  /** When real_event: the headline-worthy line, with names/addresses. */
+  leadLine?: string | null;
+  /** Exact figure to use in prose (no rounding, no invention). */
+  leadFigureUsdc?: number | null;
+  /** When fiction: weave this real stat in as a one-liner. */
+  realStatOneLiner?: string | null;
+  patterns: Array<{ phrase: string; count: number; traderLabels: string[] }>;
+}
+
+export interface FloorTalkCtx {
+  text: string;
+  isTrue: boolean;
 }
 
 export interface AssemblerInput {
   season: SeasonCtx;
   dayPosture: string;
-  /** Pre-sorted by tensionScore desc by the caller. */
-  arcs: ArcCtx[];
+  /** Pre-sorted by tension desc; first is primary. */
+  arcs: AssemblerArcCtx[];
+  firmStates: FirmStateCtx[];
   entities: EntityCtx[];
   /** Newest-first, up to 10 drops. */
   recentDrops: RecentDropCtx[];
   recentGameEvents: GameEventCtx[];
-  /** worldState from the most recent drop, or null. */
-  worldState: { mood?: string; sec_heat?: number } | null;
+  lead: LeadCtx;
+  floorTalkClaims: FloorTalkCtx[];
+  /** Code-computed mood + SEC heat for this drop. */
+  mood: string;
+  secHeat: number;
   /** True when this is the first drop of the trading day. */
   isOpeningBell: boolean;
+  /** True when this is the last drop before the close (daily wrap). */
+  isClosingBell: boolean;
 }
 
 function dedupeStrings(values: string[], cap: number): string[] {
@@ -82,16 +130,28 @@ function pushBulletSection(
   }
 }
 
+function fmtUsd(n: number): string {
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(0)}M`;
+  if (abs >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+  return `$${n.toFixed(0)}`;
+}
+
 export function assembleUserMessage(input: AssemblerInput): string {
   const {
     season,
     dayPosture,
     arcs,
+    firmStates,
     entities,
     recentDrops,
     recentGameEvents,
-    worldState,
+    lead,
+    floorTalkClaims,
+    mood,
+    secHeat,
     isOpeningBell,
+    isClosingBell,
   } = input;
 
   const lines: string[] = [];
@@ -107,45 +167,95 @@ export function assembleUserMessage(input: AssemblerInput): string {
     : String(season.styleRules);
   lines.push(`\nSTYLE RULES:\n  - ${styleRules}`);
   lines.push(
-    `\nFORBIDDEN LANGUAGE (never use): ${season.forbiddenLanguage.join(", ")}`
-  );
-  lines.push(
-    "\nPHASES: rumor -> crack -> panic -> rupture -> fallout -> countermove -> resolution. Emit a phase on arcUpdates only when the arc shifts."
+    `\nFORBIDDEN LANGUAGE (never use, case-insensitive): ${season.forbiddenLanguage.join(", ")}`
   );
 
-  lines.push(`\nCURRENT WORLD STATE:`);
-  if (worldState) {
-    lines.push(`  mood: ${worldState.mood ?? "unknown"}`);
-    lines.push(`  sec_heat: ${worldState.sec_heat ?? 5}/10`);
-  } else {
-    lines.push("  (no prior state — establish the opening conditions)");
-  }
+  // World state is CODE-AUTHORED. The LLM must not change these.
+  lines.push(`\nCURRENT WORLD STATE (code-set — do not alter):`);
+  lines.push(`  mood: ${mood}`);
+  lines.push(`  sec_heat: ${secHeat}/10`);
 
-  if (isOpeningBell) {
+  // ── LEAD INSTRUCTION — the single most important section ──────────────────
+  lines.push(`\nLEAD INSTRUCTION (build the role=main dispatch around THIS):`);
+  if (lead.leadKind === "real_event") {
+    lines.push(`  REAL EVENT LEADS. Report this as the headline:`);
+    lines.push(`    ${lead.leadLine ?? "(see recent market events)"}`);
+    if (lead.leadFigureUsdc != null) {
+      lines.push(
+        `    Use this EXACT figure, do not round or invent: ${fmtUsd(lead.leadFigureUsdc)} (${lead.leadFigureUsdc} USDC).`
+      );
+    }
     lines.push(
-      `\nOPENING BELL: This is the first Wire Drop of the trading day. Structure it as a morning briefing:\n  - Lead with what happened overnight or since yesterday's close\n  - State who is positioned how heading into today\n  - Name the one central flashpoint the floor will be watching\n  - Tone: electric anticipation. The bell just rang. Not a recap — a call to arms.`
+      `    Name the desk by its display name or truncated address. A fictional arc may appear only as a one-line aside.`
     );
+  } else {
+    lines.push(
+      `  FICTIONAL BEAT LEADS (no real event cleared the drama threshold).`
+    );
+    const primary = arcs.find((a) => a.isPrimary);
+    if (primary) {
+      lines.push(
+        `    Lead with the primary arc "${primary.title}" at stage ${primary.arcStage} (tension ${primary.tensionScore}/10).`
+      );
+      if (primary.firmLossUsdc != null && primary.firmLossUsdc > 0) {
+        lines.push(
+          `    ${primary.firmDisplayName ?? "The firm"}'s running loss is now ${fmtUsd(primary.firmLossUsdc)} (${primary.firmLossUsdc} USDC) — USE THIS EXACT FIGURE.`
+        );
+      }
+    }
+    if (lead.realStatOneLiner) {
+      lines.push(`    Weave in this real one-liner: ${lead.realStatOneLiner}`);
+    }
+  }
+  if (lead.patterns.length > 0) {
+    lines.push(`  TRAP PATTERNS DETECTED (report as a darkly funny pattern):`);
+    for (const p of lead.patterns) {
+      lines.push(
+        `    - ${p.count} desks lost chasing "${p.phrase}" deals: ${p.traderLabels.join(", ")}`
+      );
+    }
   }
 
-  lines.push(`\nACTIVE STORYLINE ARCS (highest tension first):`);
+  // ── ARC STATE — stages + tension are code-owned ───────────────────────────
+  lines.push(`\nARC STATE (stage + tension are code-set; write to them):`);
   if (arcs.length === 0) {
     lines.push("  (no active arcs)");
   } else {
-    arcs.forEach((arc, i) => {
-      const primary = i === 0 ? " [PRIMARY]" : "";
-      const phase = arc.phase ? ` — phase: ${arc.phase}` : "";
+    arcs.forEach((arc) => {
+      const primary = arc.isPrimary ? " [PRIMARY]" : "";
+      const beat = arc.beatThisRun ? " (advance this beat)" : " (simmering)";
       lines.push(
-        `  ${i + 1}.${primary} ${arc.title} (tension ${arc.tensionScore}/10, slug: ${arc.slug})${phase}`
+        `  -${primary} ${arc.title} — stage ${arc.arcStage}, tension ${arc.tensionScore}/10${beat} [slug: ${arc.slug}]`
       );
       lines.push(`     ${arc.summary}`);
     });
   }
 
-  const primaryArc = arcs[0] ?? null;
-  if (primaryArc && primaryArc.tensionScore >= 9) {
+  // ── FIRM STATE — running totals are code-owned ────────────────────────────
+  if (firmStates.length > 0) {
+    lines.push(`\nFIRM STATE (running totals are code-set — cite exactly):`);
+    for (const f of firmStates) {
+      const delta =
+        f.newLossDeltaUsdc && f.newLossDeltaUsdc > 0
+          ? ` (today +${fmtUsd(f.newLossDeltaUsdc)})`
+          : "";
+      lines.push(
+        `  - ${f.displayName}: ${f.status}, running loss ${fmtUsd(f.runningLossUsdc)}${delta}`
+      );
+      if (f.latestFact) lines.push(`     fact: ${f.latestFact}`);
+    }
+  }
+
+  // ── FLOOR TALK — unreliable gossip, truth tagged for coherence ────────────
+  if (floorTalkClaims.length > 0) {
     lines.push(
-      `\nMATERIAL EVENT REQUIRED: The PRIMARY arc "${primaryArc.title}" (slug: ${primaryArc.slug}) is at tension ${primaryArc.tensionScore}/10. The role=main dispatch carrying this arc MUST set materialChange: { kind, entitySlug, magnitude? }. kind must be one of asset_loss, personnel_exit, regulatory_action, counterparty_break, filing, position_unwind. entitySlug must come from the roster. Vague escalation language alone does not satisfy this.`
+      `\nFLOOR TALK CLAIMS (gossip — only ~60% true; you may use as a floor_talk aside, attributed as rumor):`
     );
+    for (const c of floorTalkClaims) {
+      lines.push(
+        `  - [${c.isTrue ? "TRUE" : "FABRICATED — frame as unverified rumor, never as fact"}] ${c.text}`
+      );
+    }
   }
 
   lines.push(`\nENTITY ROSTER (only reference entities on this list):`);
@@ -199,48 +309,39 @@ export function assembleUserMessage(input: AssemblerInput): string {
       dispatches.slice(0, 3).forEach((d) => {
         lines.push(`    • ${d.headline ?? ""}`);
       });
-      if (drop.worldState) {
-        const ws = drop.worldState as { mood?: string; sec_heat?: number };
-        lines.push(
-          `    world: ${ws.mood ?? "unknown"}, SEC heat ${ws.sec_heat ?? "?"}/10`
-        );
-      }
     });
   }
 
+  // ── Real market events (raw, for color beyond the chosen lead) ────────────
   const dramaticEvents = recentGameEvents.filter((e) => e.dramatic);
-  const routineEvents = recentGameEvents.filter((e) => !e.dramatic);
-
   lines.push(
-    `\nRECENT MARKET EVENTS — DRAMATIC (name traders/desks directly when relevant):`
+    `\nRECENT MARKET EVENTS — DRAMATIC (real; name desks when relevant):`
   );
   if (dramaticEvents.length === 0) {
     lines.push("  (none)");
   } else {
     dramaticEvents.forEach((e) => {
-      const actor = [e.traderName, e.deskName].filter(Boolean).join(" @ ");
+      const actor = [e.traderName, e.traderAddressTrunc, e.deskName]
+        .filter(Boolean)
+        .join(" / ");
       const actorTag = actor ? ` [${actor}]` : "";
       lines.push(`  [${e.type}]${actorTag} ${e.summary}`);
     });
   }
 
-  lines.push(
-    `\nRECENT MARKET EVENTS — ROUTINE (influence mood, SEC heat, arc tension in aggregate; do not name every player):`
-  );
-  if (routineEvents.length === 0) {
-    lines.push("  (none)");
-  } else {
-    routineEvents.forEach((e) => {
-      lines.push(`  [${e.type}] ${e.summary}`);
-    });
+  if (isOpeningBell) {
+    lines.push(
+      `\nMORNING BRIEFING: First drop of the trading day. Lead with what happened overnight or since yesterday's close, who is positioned how, and the one flashpoint the floor is watching. Electric, gossipy anticipation — not a dry recap.`
+    );
+  }
+  if (isClosingBell) {
+    lines.push(
+      `\nDAILY WRAP: Last drop before the close. Write a satirical end-of-day column with superlatives — biggest winner, dumbest trade, quote of the day (a quote may be fictional and attributed to a roster character). This is the shareable artifact. Make it land.`
+    );
   }
 
   lines.push(
-    '\nWIRE FORMAT OVERRIDE: Generate exactly one dispatch for this hour. It must have role "main". Set dealSeed to null and do not emit role "deal_seed" dispatches.'
-  );
-
-  lines.push(
-    `\nGenerate the next Wire Drop JSON for this hour. Advance the primary arc. Keep it terse and 1980s Wall Street. Every dispatch MUST have a unique dispatchKey (short, kebab-case, e.g. "panatl-margin-call").`
+    `\nOUTPUT: Exactly one dispatch, role "main". Pick the category that fits (wire is the default; use ticker for a flash one-liner, floor_talk for gossip, sec_watch for regulators). Every dispatch needs a unique kebab-case dispatchKey. Headline ≤ 12 words. Body 2–4 sentences. Every post must contain a human detail or a joke. All numbers must come from the figures above — never invent a dollar amount, total, or event. entityMentions: list ONLY fictional roster slugs from the ENTITY ROSTER above — real desks/traders/addresses belong in the prose, never in entityMentions.`
   );
 
   return lines.join("\n");

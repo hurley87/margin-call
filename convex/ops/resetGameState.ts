@@ -2,6 +2,7 @@ import { internalMutation } from "../_generated/server";
 import { v } from "convex/values";
 import type { MutationCtx } from "../_generated/server";
 import type { TableNames } from "../_generated/dataModel";
+import { deleteAllRows } from "./_batchDelete";
 
 /**
  * Operator wipe: delete all player/game state for a fresh start on a new escrow.
@@ -77,23 +78,6 @@ export const resetGameState = internalMutation({
     return { dryRun: false, deleted };
   },
 });
-
-async function deleteAllRows(
-  ctx: MutationCtx,
-  table: TableNames,
-  batchSize = 500
-): Promise<number> {
-  let deleted = 0;
-  while (true) {
-    const rows = await ctx.db.query(table).take(batchSize);
-    if (rows.length === 0) break;
-    for (const row of rows) {
-      await ctx.db.delete(row._id);
-      deleted++;
-    }
-  }
-  return deleted;
-}
 
 async function deleteAllTraders(ctx: MutationCtx): Promise<number> {
   let deleted = 0;

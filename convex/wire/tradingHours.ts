@@ -11,12 +11,23 @@
 
 import { isTradingHours } from "../lib/tradingHours";
 
+const HOUR_MS = 60 * 60 * 1000;
+
 export function isMarketOpen(nowMs: number): boolean {
   return isTradingHours(nowMs);
 }
 
 export function currentEpochSlot(nowMs: number): number {
-  return Math.floor(nowMs / (60 * 60 * 1000));
+  return Math.floor(nowMs / HOUR_MS);
+}
+
+/**
+ * Returns true when the current drop is the last one before the close — i.e.
+ * the market is open now but will be closed one hour from now. This is the
+ * slot that carries the satirical daily wrap.
+ */
+export function isClosingBell(nowMs: number): boolean {
+  return isMarketOpen(nowMs) && !isMarketOpen(nowMs + HOUR_MS);
 }
 
 /**
