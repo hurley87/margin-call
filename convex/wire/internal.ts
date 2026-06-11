@@ -1,6 +1,6 @@
 import { internalQuery } from "../_generated/server";
 import { v } from "convex/values";
-import type { Id } from "../_generated/dataModel";
+import type { Doc, Id } from "../_generated/dataModel";
 import type { GameEventCtx } from "./epochAssembler";
 
 const DRAMATIC_WIN_LOSS_THRESHOLD = 500;
@@ -50,11 +50,18 @@ export const listRecentDrops = internalQuery({
   },
 });
 
+/** Truncate a wallet address for public display, e.g. "0x4f2…a9". */
+function truncAddr(addr: string | undefined): string | undefined {
+  if (!addr || addr.length < 8) return addr;
+  return `${addr.slice(0, 5)}…${addr.slice(-2)}`;
+}
+
 /**
  * Recent game events since a given timestamp.
- * Returns dramatic events (wipeouts, big wins/losses, large entries, crowded
- * trades, high-pot deals) with optional trader/desk name enrichment, plus
- * routine events (normal deal creations and entries) in aggregate.
+ * Returns dramatic events (wipeouts, trap resolutions, big wins/losses, large
+ * entries, crowded trades, high-pot deals) enriched with magnitudes, deal
+ * prompts, trader names and truncated addresses, plus routine events in
+ * aggregate. The drama ranker (dramaRanker.ts) decides what leads.
  */
 export const listRecentGameEvents = internalQuery({
   args: { since: v.number() },
@@ -77,18 +84,59 @@ export const listRecentGameEvents = internalQuery({
         .take(30),
     ]);
 
+    // Batch-fetch the deals + traders referenced by outcomes (for prompt text,
+    // creator-desk comparison, and address enrichment).
+    const outcomeDealIds = [
+      ...new Set(outcomes.map((o) => o.dealId as string)),
+    ];
+    const outcomeTraderIds = [
+      ...new Set(outcomes.map((o) => o.traderId as string)),
+    ];
+    const [outcomeDealsRes, outcomeTradersRes] = await Promise.all([
+      Promise.allSettled(
+        outcomeDealIds.map((id) => ctx.db.get(id as Id<"deals">))
+      ),
+      Promise.allSettled(
+        outcomeTraderIds.map((id) => ctx.db.get(id as Id<"traders">))
+      ),
+    ]);
+    const dealById = new Map<string, Doc<"deals">>();
+    outcomeDealsRes.forEach((r, i) => {
+      if (r.status === "fulfilled" && r.value)
+        dealById.set(outcomeDealIds[i], r.value);
+    });
+    const traderById = new Map<string, Doc<"traders">>();
+    outcomeTradersRes.forEach((r, i) => {
+      if (r.status === "fulfilled" && r.value)
+        traderById.set(outcomeTraderIds[i], r.value);
+    });
+
     const dramatic: GameEventCtx[] = [];
     const routine: GameEventCtx[] = [];
     const dramaticTraderIds = new Set<Id<"traders">>();
 
     for (const o of outcomes) {
       const pnl = o.traderPnlUsdc ?? 0;
+      const deal = dealById.get(o.dealId as string);
+      const trader = traderById.get(o.traderId as string);
+      const dealPrompt = deal?.prompt;
+      // A loss on another desk's deal is the PvP trap landing.
+      const crossDesk =
+        deal && trader && deal.creatorDeskManagerId !== trader.deskManagerId;
+      const enrich = {
+        traderName: o.traderId as string,
+        dealPrompt,
+        traderId: o.traderId as string,
+        dealId: o.dealId as string,
+        magnitudeUsdc: pnl,
+      };
+
       if (o.traderWipedOut) {
         dramatic.push({
           type: "wipeout",
           dramatic: true,
           summary: `Trader wiped out${o.wipeoutReason ? ` — ${o.wipeoutReason}` : ""}`,
-          traderName: o.traderId,
+          ...enrich,
         });
         dramaticTraderIds.add(o.traderId);
       } else if (pnl >= DRAMATIC_WIN_LOSS_THRESHOLD) {
@@ -96,22 +144,27 @@ export const listRecentGameEvents = internalQuery({
           type: "big_win",
           dramatic: true,
           summary: `Trader won $${pnl.toFixed(0)} on a deal`,
-          traderName: o.traderId,
+          ...enrich,
         });
         dramaticTraderIds.add(o.traderId);
-      } else if (pnl <= -DRAMATIC_WIN_LOSS_THRESHOLD) {
-        dramatic.push({
-          type: "big_loss",
-          dramatic: true,
-          summary: `Trader lost $${Math.abs(pnl).toFixed(0)} on a deal`,
-          traderName: o.traderId,
-        });
-        dramaticTraderIds.add(o.traderId);
+      } else if (pnl < 0) {
+        const isDramatic = pnl <= -DRAMATIC_WIN_LOSS_THRESHOLD;
+        const event: GameEventCtx = {
+          type: crossDesk ? "trap_resolved" : "big_loss",
+          dramatic: isDramatic,
+          summary: crossDesk
+            ? `Trader lost $${Math.abs(pnl).toFixed(0)} on someone else's deal`
+            : `Trader lost $${Math.abs(pnl).toFixed(0)} on a deal`,
+          ...enrich,
+        };
+        (isDramatic ? dramatic : routine).push(event);
+        if (isDramatic) dramaticTraderIds.add(o.traderId);
       } else if (pnl !== 0) {
         routine.push({
           type: "deal_entry",
           dramatic: false,
-          summary: `Deal resolved: ${pnl >= 0 ? "+" : ""}$${pnl.toFixed(0)} PnL`,
+          summary: `Deal resolved: +$${pnl.toFixed(0)} PnL`,
+          ...enrich,
         });
       }
     }
@@ -122,12 +175,18 @@ export const listRecentGameEvents = internalQuery({
           type: "high_pot_deal",
           dramatic: true,
           summary: `High-stakes deal opened: "${d.prompt.slice(0, 60)}" ($${d.potUsdc} pot)`,
+          dealId: d._id as string,
+          dealPrompt: d.prompt,
+          magnitudeUsdc: d.potUsdc,
         });
       } else {
         routine.push({
           type: "deal_created",
           dramatic: false,
           summary: `Deal opened: "${d.prompt.slice(0, 50)}" ($${d.potUsdc} pot)`,
+          dealId: d._id as string,
+          dealPrompt: d.prompt,
+          magnitudeUsdc: d.potUsdc,
         });
       }
     }
@@ -154,7 +213,10 @@ export const listRecentGameEvents = internalQuery({
         type: "large_entry",
         dramatic: true,
         summary: `Trader entered a deal for $${e.entryCostUsdc.toFixed(0)}`,
-        traderName: e.traderId,
+        traderName: e.traderId as string,
+        traderId: e.traderId as string,
+        dealId: e.dealId as string,
+        magnitudeUsdc: e.entryCostUsdc,
       });
     }
 
@@ -194,41 +256,63 @@ export const listRecentGameEvents = internalQuery({
       });
     }
 
-    const traderIds = [...dramaticTraderIds];
-    const traderNameMap = new Map<
+    // Merge trader docs from the outcomes batch with the dramatic-entry batch.
+    const traderInfo = new Map<
       string,
       { traderName: string; deskManagerId?: Id<"deskManagers"> }
     >();
+    for (const [id, t] of traderById) {
+      traderInfo.set(id, {
+        traderName: t.name,
+        deskManagerId: t.deskManagerId,
+      });
+    }
+    const dramaticTraderIdList = [...dramaticTraderIds];
     for (const [i, result] of traderResults.entries()) {
       if (result.status === "fulfilled" && result.value) {
-        traderNameMap.set(traderIds[i], {
+        traderInfo.set(dramaticTraderIdList[i] as string, {
           traderName: result.value.name,
           deskManagerId: result.value.deskManagerId,
         });
       }
     }
 
-    const deskManagerIds = [...traderNameMap.values()]
-      .map((t) => t.deskManagerId)
-      .filter((id): id is Id<"deskManagers"> => id !== undefined);
-
+    const deskManagerIds = [
+      ...new Set(
+        [...traderInfo.values()]
+          .map((t) => t.deskManagerId)
+          .filter((id): id is Id<"deskManagers"> => id !== undefined)
+          .map((id) => id as string)
+      ),
+    ];
     const deskResults = await Promise.allSettled(
-      deskManagerIds.map((id) => ctx.db.get(id))
+      deskManagerIds.map((id) => ctx.db.get(id as Id<"deskManagers">))
     );
-    const deskNameMap = new Map<string, string>();
+    const deskInfo = new Map<
+      string,
+      { displayName?: string; walletAddress?: string }
+    >();
     for (const [i, result] of deskResults.entries()) {
-      if (result.status === "fulfilled" && result.value?.displayName) {
-        deskNameMap.set(deskManagerIds[i] as string, result.value.displayName);
+      if (result.status === "fulfilled" && result.value) {
+        deskInfo.set(deskManagerIds[i], {
+          displayName: result.value.displayName,
+          walletAddress: result.value.walletAddress,
+        });
       }
     }
 
-    for (const event of dramatic) {
-      if (event.traderName && traderNameMap.has(event.traderName)) {
-        const resolved = traderNameMap.get(event.traderName)!;
+    // Resolve trader ids → names + desk display + truncated address across all
+    // events (dramatic and routine) so the pattern detector and prompt see
+    // real identities.
+    for (const event of [...dramatic, ...routine]) {
+      if (event.traderName && traderInfo.has(event.traderName)) {
+        const resolved = traderInfo.get(event.traderName)!;
         event.traderName = resolved.traderName;
         if (resolved.deskManagerId) {
-          const deskName = deskNameMap.get(resolved.deskManagerId as string);
-          if (deskName) event.deskName = deskName;
+          const desk = deskInfo.get(resolved.deskManagerId as string);
+          if (desk?.displayName) event.deskName = desk.displayName;
+          const trunc = truncAddr(desk?.walletAddress);
+          if (trunc) event.traderAddressTrunc = trunc;
         }
       }
     }

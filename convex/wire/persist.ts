@@ -1,24 +1,41 @@
 import { internalMutation } from "../_generated/server";
 import { v } from "convex/values";
+import type { Id } from "../_generated/dataModel";
+import { STAGE_TARGET_TENSION } from "./stages";
 
-const phaseValidator = v.union(
+const arcStageValidator = v.union(
   v.literal("rumor"),
-  v.literal("crack"),
-  v.literal("panic"),
-  v.literal("rupture"),
-  v.literal("fallout"),
-  v.literal("countermove"),
-  v.literal("resolution")
+  v.literal("denial"),
+  v.literal("confirmation"),
+  v.literal("escalation"),
+  v.literal("climax"),
+  v.literal("aftermath"),
+  v.literal("retired")
 );
 
+const firmStatusValidator = v.union(
+  v.literal("healthy"),
+  v.literal("stressed"),
+  v.literal("collapsing"),
+  v.literal("dead")
+);
+
+const subjectValidator = v.object({
+  type: v.union(v.literal("trader"), v.literal("deal"), v.literal("manager")),
+  id: v.string(),
+});
+
 /**
- * Idempotent epoch writer.
+ * Idempotent epoch writer. All numbers, stages, and statuses are computed by
+ * code (worldState.ts) and handed in here — this mutation only persists them:
  *
- * Re-checks byEpochSlot inside the transaction; if a row already exists for
- * this slot, returns { inserted: false } without touching any data.
- * Otherwise writes the marketNarratives row, applies arc tension updates,
- * inserts a wireDealSeeds row when a Deal Seed was emitted, and returns
- * { inserted: true, dropId, epoch }.
+ *   - inserts the marketNarratives drop (with code-attached subjects/flash/etc.)
+ *   - patches each firm entity's running loss + status + notable facts
+ *   - patches each arc's stage / tension / beats / climaxFired (retires when done)
+ *   - inserts freshly spawned firm + character entities and their new arc
+ *
+ * Re-checks byEpochSlot inside the transaction; returns { inserted: false } if
+ * the slot was already written.
  */
 export const persistGeneratedEpoch = internalMutation({
   args: {
@@ -27,56 +44,63 @@ export const persistGeneratedEpoch = internalMutation({
     dropTitle: v.string(),
     topArcTitle: v.string(),
     topArcTension: v.number(),
+    topArcStage: v.optional(arcStageValidator),
     dispatches: v.array(v.any()),
     worldState: v.any(),
     confirmedFacts: v.optional(v.array(v.string())),
     openQuestions: v.optional(v.array(v.string())),
+    subjects: v.optional(v.array(subjectValidator)),
+    isFlash: v.optional(v.boolean()),
+    signal: v.optional(v.union(v.string(), v.null())),
     arcRefs: v.array(v.id("narrativeArcs")),
-    arcUpdates: v.array(
+    arcAdvances: v.array(
       v.object({
-        arcId: v.id("narrativeArcs"),
-        tensionDelta: v.number(),
-        phase: v.optional(phaseValidator),
+        arcSlug: v.string(),
+        toStage: arcStageValidator,
+        newTensionScore: v.number(),
+        climaxFiringNow: v.boolean(),
+        retiring: v.boolean(),
+        newBeatsPublishedByStage: v.record(v.string(), v.number()),
+        newLastBeatDayKey: v.union(v.string(), v.null()),
       })
     ),
+    firmDeltas: v.array(
+      v.object({
+        firmSlug: v.string(),
+        newRunningLossUsdc: v.number(),
+        newStatus: firmStatusValidator,
+        appendNotableFacts: v.array(v.string()),
+        lastLossDayKey: v.string(),
+      })
+    ),
+    spawnRequests: v.array(v.any()),
     eventsIngested: v.optional(v.any()),
     rawNarrative: v.string(),
-    /**
-     * Optional Deal Seed payload. Generator pre-resolves arcSlug → arcId and the
-     * source dispatch index; this mutation just inserts the row.
-     */
-    dealSeed: v.optional(
-      v.object({
-        arcId: v.id("narrativeArcs"),
-        dispatchIndex: v.number(),
-        dispatchKey: v.string(),
-        dispatchHeadline: v.string(),
-        prompt: v.string(),
-        suggestedPotUsdc: v.number(),
-        suggestedEntryCostUsdc: v.number(),
-      })
-    ),
   },
-  handler: async (
-    ctx,
-    {
+  handler: async (ctx, args) => {
+    const {
       seasonId,
       epochSlot,
       dropTitle,
       topArcTitle,
       topArcTension,
+      topArcStage,
       dispatches,
       worldState,
       confirmedFacts,
       openQuestions,
+      subjects,
+      isFlash,
+      signal,
       arcRefs,
-      arcUpdates,
+      arcAdvances,
+      firmDeltas,
+      spawnRequests,
       eventsIngested,
       rawNarrative,
-      dealSeed,
-    }
-  ) => {
-    // Idempotency: bail if this slot was already written
+    } = args;
+
+    // Idempotency: bail if this slot was already written.
     const existing = await ctx.db
       .query("marketNarratives")
       .withIndex("byEpochSlot", (q) => q.eq("epochSlot", epochSlot))
@@ -87,7 +111,6 @@ export const persistGeneratedEpoch = internalMutation({
 
     const now = Date.now();
 
-    // Monotonic epoch number
     const lastDrop = await ctx.db
       .query("marketNarratives")
       .withIndex("byEpoch")
@@ -107,39 +130,127 @@ export const persistGeneratedEpoch = internalMutation({
       worldState,
       confirmedFacts,
       openQuestions,
+      subjects,
+      arcStage: topArcStage,
+      isFlash,
+      signal: signal ?? undefined,
       eventsIngested: eventsIngested ?? null,
       rawNarrative,
       createdAt: now,
     });
 
-    // Apply arc tension updates (clamped 0–10)
-    for (const { arcId, tensionDelta, phase } of arcUpdates) {
-      const arc = await ctx.db.get(arcId);
+    // ── Firm running-loss + status + facts (code-decided) ───────────────────
+    for (const delta of firmDeltas) {
+      const firm = await ctx.db
+        .query("narrativeEntities")
+        .withIndex("bySeasonAndSlug", (q) =>
+          q.eq("seasonId", seasonId).eq("slug", delta.firmSlug)
+        )
+        .unique();
+      if (!firm) continue;
+      const notableFacts = [
+        ...(firm.notableFacts ?? []),
+        ...delta.appendNotableFacts,
+      ];
+      await ctx.db.patch(firm._id, {
+        runningLossUsdc: delta.newRunningLossUsdc,
+        status: delta.newStatus,
+        notableFacts,
+        lastLossDayKey: delta.lastLossDayKey,
+      });
+    }
+
+    // ── Arc stage / tension / beats (code-decided) ──────────────────────────
+    for (const adv of arcAdvances) {
+      const arc = await ctx.db
+        .query("narrativeArcs")
+        .withIndex("bySeasonAndSlug", (q) =>
+          q.eq("seasonId", seasonId).eq("slug", adv.arcSlug)
+        )
+        .unique();
       if (!arc) continue;
-      const newTension = Math.min(
-        10,
-        Math.max(0, arc.tensionScore + tensionDelta)
-      );
-      await ctx.db.patch(arcId, {
-        tensionScore: newTension,
-        ...(phase ? { phase } : {}),
+      await ctx.db.patch(arc._id, {
+        arcStage: adv.toStage,
+        tensionScore: adv.newTensionScore,
+        beatsPublishedByStage: adv.newBeatsPublishedByStage,
+        ...(adv.climaxFiringNow ? { climaxFired: true } : {}),
+        ...(adv.newLastBeatDayKey
+          ? { lastBeatDayKey: adv.newLastBeatDayKey }
+          : {}),
+        ...(adv.retiring ? { status: "resolved" as const } : {}),
         lastTouchedAt: now,
         updatedAt: now,
       });
     }
 
-    if (dealSeed) {
-      await ctx.db.insert("wireDealSeeds", {
-        epochId: dropId,
+    // ── Spawn fresh arcs + their entities ───────────────────────────────────
+    for (const spec of spawnRequests as Array<{
+      templateKey: string;
+      slug: string;
+      title: string;
+      summary: string;
+      firm: {
+        slug: string;
+        displayName: string;
+        aliases: string[];
+        bio: string;
+        traits: string[];
+      };
+      character: {
+        slug: string;
+        displayName: string;
+        aliases: string[];
+        bio: string;
+        traits: string[];
+        kind: "trader" | "regulator" | "politician";
+      };
+    }>) {
+      const entityRefs: Id<"narrativeEntities">[] = [];
+
+      const firmId = await ctx.db.insert("narrativeEntities", {
         seasonId,
-        arcId: dealSeed.arcId,
-        dispatchIndex: dealSeed.dispatchIndex,
-        dispatchKey: dealSeed.dispatchKey,
-        dispatchHeadline: dealSeed.dispatchHeadline,
-        prompt: dealSeed.prompt,
-        suggestedPotUsdc: dealSeed.suggestedPotUsdc,
-        suggestedEntryCostUsdc: dealSeed.suggestedEntryCostUsdc,
+        slug: spec.firm.slug,
+        kind: "firm" as const,
+        displayName: spec.firm.displayName,
+        aliases: spec.firm.aliases,
+        bio: spec.firm.bio,
+        traits: spec.firm.traits,
+        status: "healthy" as const,
+        runningLossUsdc: 0,
+        notableFacts: [],
+        oneOffEventsFired: [],
         createdAt: now,
+      });
+      entityRefs.push(firmId);
+
+      const charId = await ctx.db.insert("narrativeEntities", {
+        seasonId,
+        slug: spec.character.slug,
+        kind: spec.character.kind,
+        displayName: spec.character.displayName,
+        aliases: spec.character.aliases,
+        bio: spec.character.bio,
+        traits: spec.character.traits,
+        createdAt: now,
+      });
+      entityRefs.push(charId);
+
+      await ctx.db.insert("narrativeArcs", {
+        seasonId,
+        slug: spec.slug,
+        title: spec.title,
+        summary: spec.summary,
+        status: "active" as const,
+        tensionScore: STAGE_TARGET_TENSION.rumor,
+        arcStage: "rumor" as const,
+        beatsPublishedByStage: {},
+        climaxFired: false,
+        templateKey: spec.templateKey,
+        primaryFirmSlug: spec.firm.slug,
+        entityRefs,
+        lastTouchedAt: now,
+        createdAt: now,
+        updatedAt: now,
       });
     }
 

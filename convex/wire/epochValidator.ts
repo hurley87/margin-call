@@ -2,16 +2,30 @@ import { NarrativeEpochSchema, type NarrativeEpoch } from "./_schemas";
 
 export type ValidatedEpoch = NarrativeEpoch;
 
+/**
+ * Phrases the satirical wire must never print — lazy AP-wire filler and
+ * compliance-memo cadence. Enforced as case-insensitive substrings (so
+ * multi-word phrases are caught regardless of surrounding text).
+ */
+export const BANNED_PHRASES = [
+  "watch for fallout",
+  "market responds with heightened anxiety",
+  "heightened anxiety",
+  "concerns mount",
+  "pressure intensifies",
+  "pressure mounts",
+  "in a developing story",
+  "remains to be seen",
+  "only time will tell",
+  "sending shockwaves",
+];
+
 export function validateEpoch(
   raw: unknown,
   ctx: {
     arcSlugs: Set<string>;
     entitySlugs: Set<string>;
     forbiddenLanguage: string[];
-    /** Post-suppression primary arc slug shown to the LLM. */
-    topArcSlug?: string | null;
-    /** Post-suppression primary arc tension shown to the LLM. */
-    topArcTension?: number;
   }
 ): { ok: true; data: ValidatedEpoch } | { ok: false; error: string } {
   const result = NarrativeEpochSchema.safeParse(raw);
@@ -21,7 +35,7 @@ export function validateEpoch(
 
   const data = result.data;
 
-  // Require at least one "main" dispatch
+  // Require at least one "main" dispatch.
   if (!data.dispatches.some((d) => d.role === "main")) {
     return { ok: false, error: "At least one dispatch must have role 'main'" };
   }
@@ -30,15 +44,12 @@ export function validateEpoch(
   const seenKeys = new Set<string>();
   for (const d of data.dispatches) {
     if (seenKeys.has(d.dispatchKey)) {
-      return {
-        ok: false,
-        error: `Duplicate dispatchKey: "${d.dispatchKey}"`,
-      };
+      return { ok: false, error: `Duplicate dispatchKey: "${d.dispatchKey}"` };
     }
     seenKeys.add(d.dispatchKey);
   }
 
-  // arcSlug references in dispatches must be on-roster
+  // arcSlug references must be on-roster.
   for (const dispatch of data.dispatches) {
     if (dispatch.arcSlug && !ctx.arcSlugs.has(dispatch.arcSlug)) {
       return {
@@ -48,85 +59,15 @@ export function validateEpoch(
     }
   }
 
-  // arcSlug references in arcUpdates must be on-roster
-  for (const update of data.arcUpdates ?? []) {
-    if (!ctx.arcSlugs.has(update.arcSlug)) {
-      return {
-        ok: false,
-        error: `Unknown arcSlug in arcUpdates: "${update.arcSlug}"`,
-      };
-    }
-  }
-
-  // entityMentions must be on-roster
-  for (const slug of data.entityMentions ?? []) {
-    if (!ctx.entitySlugs.has(slug)) {
-      return {
-        ok: false,
-        error: `Unknown entity slug in entityMentions: "${slug}"`,
-      };
-    }
-  }
-
-  if (
-    data.dispatches.some(
-      (dispatch) =>
-        dispatch.role === "deal_seed" || dispatch.category === "deal_seed"
-    )
-  ) {
-    return {
-      ok: false,
-      error: 'wire drops no longer generate "deal_seed" dispatches',
-    };
-  }
-
-  if (data.dealSeed !== null) {
-    return {
-      ok: false,
-      error: "wire drops no longer generate dealSeed blocks",
-    };
-  }
-
-  // materialChange references must point at a known roster entity.
-  for (const dispatch of data.dispatches) {
-    const materialChange = dispatch.materialChange;
-    if (materialChange && !ctx.entitySlugs.has(materialChange.entitySlug)) {
-      return {
-        ok: false,
-        error: `Unknown entitySlug in materialChange: "${materialChange.entitySlug}"`,
-      };
-    }
-  }
-
-  const topArcSlug = ctx.topArcSlug ?? null;
-  const topArcTension = ctx.topArcTension ?? 0;
-  if (topArcSlug !== null && topArcTension >= 9) {
-    const primaryDispatches = data.dispatches.filter(
-      (d) => d.role === "main" && d.arcSlug === topArcSlug
+  // entityMentions is a soft continuity hint (roster slugs only). Real desks
+  // and traders legitimately appear in prose but are NOT roster entities, so
+  // filter unknown mentions out rather than failing an otherwise-good drop.
+  if (data.entityMentions) {
+    data.entityMentions = data.entityMentions.filter((slug) =>
+      ctx.entitySlugs.has(slug)
     );
-    if (primaryDispatches.length === 0) {
-      return {
-        ok: false,
-        error:
-          "max-tension primary arc must be carried by a role=main dispatch",
-      };
-    }
-    if (primaryDispatches.length > 1) {
-      return {
-        ok: false,
-        error:
-          "max-tension primary arc must be carried by exactly one role=main dispatch",
-      };
-    }
-    if (!primaryDispatches[0].materialChange) {
-      return {
-        ok: false,
-        error: `max-tension primary arc "${topArcSlug}" requires materialChange on its role=main dispatch`,
-      };
-    }
   }
 
-  // Forbidden language check (case-insensitive substring)
   const fullText = [
     data.dropTitle,
     ...data.dispatches.map((d) => `${d.headline} ${d.body}`),
@@ -134,6 +75,7 @@ export function validateEpoch(
     .join(" ")
     .toLowerCase();
 
+  // Forbidden vocabulary (word-boundary, e.g. crypto/AI terms).
   for (const word of ctx.forbiddenLanguage) {
     const pattern = new RegExp(
       `\\b${word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
@@ -141,6 +83,13 @@ export function validateEpoch(
     );
     if (pattern.test(fullText)) {
       return { ok: false, error: `Forbidden language: "${word}"` };
+    }
+  }
+
+  // Banned filler phrases (substring — catches the AP-wire cadence we killed).
+  for (const phrase of BANNED_PHRASES) {
+    if (fullText.includes(phrase)) {
+      return { ok: false, error: `Banned phrase: "${phrase}"` };
     }
   }
 

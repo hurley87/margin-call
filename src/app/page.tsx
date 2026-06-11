@@ -404,6 +404,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
             dealsLoading={marketDealsLoading}
             walletFunded={deskWalletFunded}
             onOpenDeal={setSelectedDealId}
+            onOpenTrader={openTraderProfile}
           />
         </div>
 
@@ -1161,10 +1162,13 @@ function NewswirePanel({
   dealsLoading,
   walletFunded,
   onOpenDeal,
+  onOpenTrader,
 }: {
   drops:
     | Array<{
         createdAt: string;
+        isFlash?: boolean;
+        subjects?: Array<{ type: "trader" | "deal" | "manager"; id: string }>;
         dispatches: Array<{
           headline: string;
           body: string;
@@ -1185,6 +1189,7 @@ function NewswirePanel({
   dealsLoading: boolean;
   walletFunded: boolean;
   onOpenDeal: (dealId: string) => void;
+  onOpenTrader: (traderId: string) => void;
 }) {
   const [dealDialog, setDealDialog] = useState<NewswireCreateDialog | null>(
     null
@@ -1223,6 +1228,8 @@ function NewswirePanel({
           category: dispatch.category,
           body: dispatch.body,
           dealSeed: dispatch.dealSeed,
+          isFlash: drop.isFlash ?? false,
+          subjects: drop.subjects ?? [],
           deals:
             activeDealsByHeadline.get(
               normalizeHeadlineKey(dispatch.headline)
@@ -1280,6 +1287,7 @@ function NewswirePanel({
           walletFunded={walletFunded}
           onCreate={setDealDialog}
           onOpenDeal={onOpenDeal}
+          onOpenTrader={onOpenTrader}
         />
       </div>
 
@@ -1491,6 +1499,8 @@ type NewswireCreateDialog = {
   startWithSuggestions?: boolean;
 };
 
+type WireSubject = { type: "trader" | "deal" | "manager"; id: string };
+
 type NewswirePostItem = {
   time: string;
   headline: string;
@@ -1498,6 +1508,8 @@ type NewswirePostItem = {
   impact: string;
   category?: string;
   dealSeed?: NewswireDealSeed;
+  isFlash?: boolean;
+  subjects?: WireSubject[];
   deals: Deal[];
 };
 
@@ -1546,12 +1558,14 @@ function NewswireList({
   walletFunded,
   onCreate,
   onOpenDeal,
+  onOpenTrader,
 }: {
   items: NewswirePostItem[] | undefined;
   dealsLoading: boolean;
   walletFunded: boolean;
   onCreate: (item: NewswireCreateDialog) => void;
   onOpenDeal: (dealId: string) => void;
+  onOpenTrader: (traderId: string) => void;
 }) {
   const newWireIds = useNewItemIds(
     items,
@@ -1605,11 +1619,14 @@ function NewswireList({
           body={item.body}
           category={item.category}
           dealSeed={item.dealSeed}
+          isFlash={item.isFlash}
+          subjects={item.subjects}
           isFirst={index === 0}
           deals={item.deals}
           dealsLoading={dealsLoading}
           walletFunded={walletFunded}
           onOpenDeal={onOpenDeal}
+          onOpenTrader={onOpenTrader}
           onCreate={() =>
             onCreate({
               headline: item.headline,
@@ -1630,6 +1647,8 @@ function NewswireItem({
   body,
   category,
   dealSeed,
+  isFlash = false,
+  subjects = [],
   isFirst,
   isNew = false,
   burstIndex = 0,
@@ -1637,6 +1656,7 @@ function NewswireItem({
   dealsLoading,
   walletFunded,
   onOpenDeal,
+  onOpenTrader,
   onCreate,
 }: {
   time: string;
@@ -1644,6 +1664,8 @@ function NewswireItem({
   body: string;
   category?: string;
   dealSeed?: NewswireDealSeed;
+  isFlash?: boolean;
+  subjects?: WireSubject[];
   isFirst?: boolean;
   isNew?: boolean;
   burstIndex?: number;
@@ -1651,6 +1673,7 @@ function NewswireItem({
   dealsLoading: boolean;
   walletFunded: boolean;
   onOpenDeal: (dealId: string) => void;
+  onOpenTrader?: (traderId: string) => void;
   onCreate: () => void;
 }) {
   const rail =
@@ -1687,6 +1710,11 @@ function NewswireItem({
             className="live-pulse inline-block h-1.5 w-1.5 rounded-full bg-[var(--t-green)]"
           />
         )}
+        {isFlash && (
+          <span className="inline-flex items-center gap-0.5 border border-[var(--t-red)]/60 px-1 font-medium text-[var(--t-red)]">
+            ⚡ Flash
+          </span>
+        )}
         <time className="tabular-nums text-[var(--t-muted)]">{time}</time>
         <span className="text-[var(--t-divider)]">/</span>
         <span
@@ -1702,6 +1730,36 @@ function NewswireItem({
         {headline}
       </h3>
       <p className="mt-1 text-[var(--t-green)]/90">{body}</p>
+
+      {subjects.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-[10px] uppercase tracking-wider">
+          <span className="text-[var(--t-muted)]">Re:</span>
+          {subjects.map((s) => {
+            if (s.type === "trader" || s.type === "manager") {
+              return (
+                <button
+                  key={`${s.type}-${s.id}`}
+                  type="button"
+                  onClick={() => onOpenTrader?.(s.id)}
+                  className="border border-[var(--t-divider)] px-1 text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+                >
+                  {s.type === "manager" ? "desk" : "trader"} ↗
+                </button>
+              );
+            }
+            return (
+              <button
+                key={`deal-${s.id}`}
+                type="button"
+                onClick={() => onOpenDeal(s.id)}
+                className="border border-[var(--t-divider)] px-1 text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)]"
+              >
+                deal ↗
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {dealsLoading && (
         <div className="mt-2 border border-[var(--t-divider)] bg-[#070b09] px-2 py-2">

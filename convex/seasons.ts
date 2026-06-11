@@ -65,6 +65,14 @@ export const importSeason = mutation({
         )
         .unique();
 
+      const firmState = {
+        status: entity.status,
+        runningLossUsdc:
+          entity.runningLossUsdc ?? (entity.kind === "firm" ? 0 : undefined),
+        notableFacts:
+          entity.notableFacts ?? (entity.kind === "firm" ? [] : undefined),
+        oneOffEventsFired: entity.kind === "firm" ? [] : undefined,
+      };
       if (existing) {
         await ctx.db.patch(existing._id, {
           displayName: entity.displayName,
@@ -72,6 +80,7 @@ export const importSeason = mutation({
           aliases: entity.aliases,
           bio: entity.bio,
           traits: entity.traits,
+          ...firmState,
         });
         entitySlugToId[entity.slug] = existing._id;
       } else {
@@ -83,6 +92,7 @@ export const importSeason = mutation({
           aliases: entity.aliases,
           bio: entity.bio,
           traits: entity.traits,
+          ...firmState,
           createdAt: now,
         });
         entitySlugToId[entity.slug] = id;
@@ -105,6 +115,13 @@ export const importSeason = mutation({
         )
         .unique();
 
+      const arcState = {
+        arcStage: arc.arcStage,
+        climaxFired: arc.climaxFired,
+        beatsPublishedByStage: arc.beatsPublishedByStage,
+        templateKey: arc.templateKey,
+        primaryFirmSlug: arc.primaryFirmSlug,
+      };
       if (existing) {
         await ctx.db.patch(existing._id, {
           title: arc.title,
@@ -112,6 +129,7 @@ export const importSeason = mutation({
           tensionScore: arc.tensionScore,
           entityRefs,
           status: arc.status,
+          ...arcState,
           updatedAt: now,
         });
         arcSlugToId[arc.slug] = existing._id;
@@ -124,6 +142,7 @@ export const importSeason = mutation({
           status: arc.status,
           tensionScore: arc.tensionScore,
           entityRefs,
+          ...arcState,
           lastTouchedAt: now,
           createdAt: now,
           updatedAt: now,

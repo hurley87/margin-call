@@ -57,6 +57,7 @@ import type * as mcp_tradersEscrow from "../mcp/tradersEscrow.js";
 import type * as mcp_wipeMcpDesks from "../mcp/wipeMcpDesks.js";
 import type * as mcpApiKeys from "../mcpApiKeys.js";
 import type * as me from "../me.js";
+import type * as ops_clearNarrativeWorld from "../ops/clearNarrativeWorld.js";
 import type * as ops_resetGameState from "../ops/resetGameState.js";
 import type * as ops_wipeSmokeTraders from "../ops/wipeSmokeTraders.js";
 import type * as portfolio from "../portfolio.js";
@@ -70,6 +71,8 @@ import type * as traders from "../traders.js";
 import type * as wallet from "../wallet.js";
 import type * as wire__operatorUtils from "../wire/_operatorUtils.js";
 import type * as wire__schemas from "../wire/_schemas.js";
+import type * as wire_arcTemplates from "../wire/arcTemplates.js";
+import type * as wire_dramaRanker from "../wire/dramaRanker.js";
 import type * as wire_epochAssembler from "../wire/epochAssembler.js";
 import type * as wire_epochNormalizer from "../wire/epochNormalizer.js";
 import type * as wire_epochValidator from "../wire/epochValidator.js";
@@ -79,7 +82,9 @@ import type * as wire_operatorActions from "../wire/operatorActions.js";
 import type * as wire_operatorMutations from "../wire/operatorMutations.js";
 import type * as wire_operatorQueries from "../wire/operatorQueries.js";
 import type * as wire_persist from "../wire/persist.js";
+import type * as wire_stages from "../wire/stages.js";
 import type * as wire_tradingHours from "../wire/tradingHours.js";
+import type * as wire_worldState from "../wire/worldState.js";
 
 import type {
   ApiFromModules,
@@ -137,6 +142,7 @@ declare const fullApi: ApiFromModules<{
   "mcp/wipeMcpDesks": typeof mcp_wipeMcpDesks;
   mcpApiKeys: typeof mcpApiKeys;
   me: typeof me;
+  "ops/clearNarrativeWorld": typeof ops_clearNarrativeWorld;
   "ops/resetGameState": typeof ops_resetGameState;
   "ops/wipeSmokeTraders": typeof ops_wipeSmokeTraders;
   portfolio: typeof portfolio;
@@ -150,6 +156,8 @@ declare const fullApi: ApiFromModules<{
   wallet: typeof wallet;
   "wire/_operatorUtils": typeof wire__operatorUtils;
   "wire/_schemas": typeof wire__schemas;
+  "wire/arcTemplates": typeof wire_arcTemplates;
+  "wire/dramaRanker": typeof wire_dramaRanker;
   "wire/epochAssembler": typeof wire_epochAssembler;
   "wire/epochNormalizer": typeof wire_epochNormalizer;
   "wire/epochValidator": typeof wire_epochValidator;
@@ -159,7 +167,9 @@ declare const fullApi: ApiFromModules<{
   "wire/operatorMutations": typeof wire_operatorMutations;
   "wire/operatorQueries": typeof wire_operatorQueries;
   "wire/persist": typeof wire_persist;
+  "wire/stages": typeof wire_stages;
   "wire/tradingHours": typeof wire_tradingHours;
+  "wire/worldState": typeof wire_worldState;
 }>;
 
 /**

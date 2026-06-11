@@ -1,14 +1,24 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-const phaseValidator = v.union(
+// Code-owned arc lifecycle stages. The wire engine advances arcs through this
+// pipeline deterministically; the LLM never picks stages or tension.
+const arcStageValidator = v.union(
   v.literal("rumor"),
-  v.literal("crack"),
-  v.literal("panic"),
-  v.literal("rupture"),
-  v.literal("fallout"),
-  v.literal("countermove"),
-  v.literal("resolution")
+  v.literal("denial"),
+  v.literal("confirmation"),
+  v.literal("escalation"),
+  v.literal("climax"),
+  v.literal("aftermath"),
+  v.literal("retired")
+);
+
+// Health status of a fictional firm, derived purely from its arc stage.
+const firmStatusValidator = v.union(
+  v.literal("healthy"),
+  v.literal("stressed"),
+  v.literal("collapsing"),
+  v.literal("dead")
 );
 
 export default defineSchema({
@@ -315,6 +325,13 @@ export default defineSchema({
     aliases: v.array(v.string()),
     bio: v.string(),
     traits: v.array(v.string()),
+    // Code-authoritative firm state (firms only; null/0 for non-firm entities).
+    // The LLM never invents these numbers — code computes and persists them.
+    status: v.optional(firmStatusValidator),
+    runningLossUsdc: v.optional(v.number()),
+    notableFacts: v.optional(v.array(v.string())),
+    oneOffEventsFired: v.optional(v.array(v.string())),
+    lastLossDayKey: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("bySeason", ["seasonId"])
@@ -331,7 +348,18 @@ export default defineSchema({
       v.literal("abandoned")
     ),
     tensionScore: v.number(),
-    phase: v.optional(phaseValidator),
+    // Code-owned lifecycle stage (replaces the former LLM-driven `phase`).
+    arcStage: v.optional(arcStageValidator),
+    // Beats published per stage, e.g. { rumor: 2, denial: 1 }. Gates stage advance.
+    beatsPublishedByStage: v.optional(v.record(v.string(), v.number())),
+    // Climax fires exactly once per arc.
+    climaxFired: v.optional(v.boolean()),
+    // ET YYYY-MM-DD of the most recent published beat (enforces ≤1 beat/stage/day).
+    lastBeatDayKey: v.optional(v.string()),
+    // Spawn template that produced this arc (null for hand-seeded arcs).
+    templateKey: v.optional(v.string()),
+    // Entity slug whose running loss total this arc tracks.
+    primaryFirmSlug: v.optional(v.string()),
     entityRefs: v.array(v.id("narrativeEntities")),
     lastTouchedAt: v.number(),
     createdAt: v.number(),
@@ -382,6 +410,25 @@ export default defineSchema({
     topArcTension: v.optional(v.number()),
     confirmedFacts: v.optional(v.array(v.string())),
     openQuestions: v.optional(v.array(v.string())),
+    // Real game entities this drop reports on, so the UI can deep-link.
+    subjects: v.optional(
+      v.array(
+        v.object({
+          type: v.union(
+            v.literal("trader"),
+            v.literal("deal"),
+            v.literal("manager")
+          ),
+          id: v.string(),
+        })
+      )
+    ),
+    // Stage of the fictional beat this drop carried (null for pure game-news).
+    arcStage: v.optional(arcStageValidator),
+    // True when this drop leads with a flash bulletin (wipeout / top-decile move).
+    isFlash: v.optional(v.boolean()),
+    // Soft hint the drop encodes, recorded for tuning (never shown to players).
+    signal: v.optional(v.string()),
     createdAt: v.number(),
   })
     .index("byEpoch", ["epoch"])

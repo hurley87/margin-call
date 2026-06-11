@@ -209,9 +209,9 @@ export default function WireAdminClient() {
                         </div>
                         <div className="shrink-0 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {arc.phase && (
+                            {arc.arcStage && (
                               <span className="border border-[var(--t-border)] px-1 py-0.5 text-[9px] uppercase tracking-wider text-[var(--t-muted)]">
-                                {arc.phase}
+                                {arc.arcStage}
                               </span>
                             )}
                             <span
