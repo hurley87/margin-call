@@ -17,12 +17,24 @@ import { zodResponseFormat } from "openai/helpers/zod";
 import type { Id } from "../_generated/dataModel";
 import type { RunActionCtx } from "./_ctx";
 import { internal } from "../_generated/api";
-import { RAKE_PERCENTAGE, MAX_EXTRACTION_PERCENTAGE } from "./_constants";
+import {
+  RAKE_PERCENTAGE,
+  MAX_EXTRACTION_PERCENTAGE,
+  BASE_WIN_PROBABILITY,
+  WIN_PROB_MARKET_SWING,
+  MIN_WIN_PROBABILITY,
+  MAX_WIN_PROBABILITY,
+  WIN_MAGNITUDE_MIN_FRACTION,
+  WIN_MAGNITUDE_MAX_FRACTION,
+  LOSS_MAGNITUDE_MIN_FRACTION,
+  LOSS_MAGNITUDE_MAX_FRACTION,
+} from "./_constants";
 import { DealOutcomeSchema, type DealOutcomePayload } from "./_schemas";
 import type { Deal } from "./_types";
 
-const FALLBACK_DEAL_OUTCOME_SYSTEM = `You are the outcome engine for a 1980s Wall Street trading game.
-When a trader enters a deal, you resolve the outcome with vivid, terse prose and structured data.
+const FALLBACK_DEAL_OUTCOME_SYSTEM = `You are the narrator for a 1980s Wall Street trading game.
+The win/loss outcome has already been decided by the house — you only dramatize it with vivid, terse prose and structured data.
+Make wins feel earned and losses feel brutal, but never contradict the decided outcome.
 Always return valid JSON matching the schema. Keep narrative to 2-3 short sentences.`;
 
 export interface OutcomeResolverInput {
@@ -50,11 +62,35 @@ export interface ResolvedOutcome {
   assetsLost: string[];
 }
 
+const lerp = (min: number, max: number, t: number) => min + (max - min) * t;
+
+/**
+ * Compute the win probability for a deal from market signals. Starts at the
+ * baseline and shifts by up to ±WIN_PROB_MARKET_SWING based on mood and SEC
+ * heat, then clamps to [MIN_WIN_PROBABILITY, MAX_WIN_PROBABILITY].
+ */
+function computeWinProbability(worldMood: string, secHeat: number): number {
+  let shift = 0;
+  const mood = worldMood.toLowerCase();
+  if (/eupho|bull|greed|boom|frenzy|rally/.test(mood)) {
+    shift += WIN_PROB_MARKET_SWING;
+  } else if (/pani|bear|crash|fear|gloom|doom|collapse/.test(mood)) {
+    shift -= WIN_PROB_MARKET_SWING;
+  }
+  // SEC heat 0..10 → up to a full negative swing at max heat.
+  const heat = Math.max(0, Math.min(10, secHeat));
+  shift -= (heat / 10) * WIN_PROB_MARKET_SWING;
+
+  const p = BASE_WIN_PROBABILITY + shift;
+  return Math.max(MIN_WIN_PROBABILITY, Math.min(MAX_WIN_PROBABILITY, p));
+}
+
 /**
  * Resolve a deal outcome by calling the LLM.
  *
- * If the LLM fails, throws — the caller should release the cycle lease
- * and log the error so the next cycle retries.
+ * The win/loss decision AND magnitude are made mechanically in code — the LLM
+ * only narrates the pre-decided result. If the LLM fails, throws — the caller
+ * should release the cycle lease and log the error so the next cycle retries.
  */
 export async function resolveOutcome(
   ctx: RunActionCtx,
@@ -81,7 +117,6 @@ export async function resolveOutcome(
 
   // Max win value: MAX_EXTRACTION_PERCENTAGE % of pot
   const maxValuePerWin = deal.pot_usdc * (MAX_EXTRACTION_PERCENTAGE / 100);
-  const randomSeed = Math.random();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const narrative = marketNarrative as Record<string, any> | null;
@@ -90,37 +125,58 @@ export async function resolveOutcome(
   const activeStorylines: string[] =
     narrative?.worldState?.active_storylines ?? [];
 
+  // ── Decide the outcome mechanically (NOT via the LLM) ──────────────────────
+  // The LLM cannot reliably sample from a "random seed", so win/loss and its
+  // magnitude are rolled here with a real, market-modulated probability. The
+  // LLM is handed the result and only narrates it.
+  const winProbability = computeWinProbability(worldMood, secHeat);
+  const isWin = Math.random() < winProbability;
+  const decidedBalanceChange = isWin
+    ? maxValuePerWin *
+      lerp(
+        WIN_MAGNITUDE_MIN_FRACTION,
+        WIN_MAGNITUDE_MAX_FRACTION,
+        Math.random()
+      )
+    : -entryCostUsdc *
+      lerp(
+        LOSS_MAGNITUDE_MIN_FRACTION,
+        LOSS_MAGNITUDE_MAX_FRACTION,
+        Math.random()
+      );
+  const outcomeLabel = isWin
+    ? `WIN of $${decidedBalanceChange.toFixed(2)} USDC`
+    : `LOSS of $${Math.abs(decidedBalanceChange).toFixed(2)} USDC`;
+
   const systemPrompt = systemPromptContent ?? FALLBACK_DEAL_OUTCOME_SYSTEM;
 
   const messages = [
     { role: "system" as const, content: systemPrompt },
     {
       role: "user" as const,
-      content: `Resolve this deal for the trader and return the outcome as structured JSON.
+      content: `Narrate the outcome of this deal and return it as structured JSON.
+
+The outcome has ALREADY been decided by the house. Your job is to dramatize it,
+not to change it.
 
 DEAL: ${deal.prompt}
 
 TRADER: ${traderName}
 INVENTORY: ${inventoryDescription}
 PORTFOLIO BALANCE: $${escrowBalanceUsdc} USDC
-MAX LOSS: $${entryCostUsdc.toFixed(2)} USDC (normal deals cannot lose more than the entry cost)
-MAX WIN VALUE: $${maxValuePerWin.toFixed(2)} USDC (cannot exceed this)
-RANDOM SEED: ${randomSeed.toFixed(2)} (use this to introduce randomness — lower values favor losses, higher values favor gains)
 
-MARKET CONDITIONS:
+DECIDED OUTCOME: ${outcomeLabel}
+- The narrative MUST match this outcome: a WIN must read as a clear win, a LOSS must read as a clear loss. Never contradict the decided result.
+
+MARKET CONDITIONS (color for the narrative only — do NOT change the outcome):
 - Market mood: ${worldMood}
 - SEC heat level: ${secHeat}/10
 - Active storylines: ${activeStorylines.length > 0 ? activeStorylines.join(", ") : "none"}
 
-The market conditions should subtly influence outcomes. High SEC heat + insider trading = skew negative.
-Euphoric mood + bull play = can skew positive. Use these as soft signals, not hard rules.
-
 Rules:
-- balance_change_usdc must be between -${entryCostUsdc.toFixed(2)} and +${maxValuePerWin.toFixed(2)}
-- For normal deals, max downside is the entry cost, not the full portfolio balance
-- trader_wiped_out is advisory only; final wipeout is derived mechanically after validated PnL is applied
+- trader_wiped_out is advisory only; final wipeout is derived mechanically after PnL is applied
 - The narrative should be 2-3 short sentences only — vivid 1980s Wall Street tone, no rambling
-- Each assets_gained[].name must be exactly 2-3 words (no parentheses, no subtitles); thematic items (tips, contacts, documents)
+- Each assets_gained[].name must be exactly 2-3 words (no parentheses, no subtitles); thematic items (tips, contacts, documents). On a LOSS, assets_gained should normally be empty.
 - assets_lost entries must copy inventory names exactly as listed in INVENTORY (required for matching)`,
     },
   ];
@@ -147,8 +203,9 @@ Rules:
   const raw = msg.parsed as DealOutcomePayload;
 
   // ── Validate + clamp PnL ────────────────────────────────────────────────────
-  // balance_change_usdc from LLM: clamp to [-entry cost, +maxValuePerWin]
-  let balanceChange = raw.balance_change_usdc;
+  // PnL is the code-decided value, NOT the LLM's — the LLM only narrates.
+  // Clamp to [-entry cost, +maxValuePerWin] as a safety net.
+  let balanceChange = decidedBalanceChange;
   balanceChange = Math.min(balanceChange, maxValuePerWin);
   balanceChange = Math.max(balanceChange, -entryCostUsdc);
 

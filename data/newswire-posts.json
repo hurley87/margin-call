@@ -1,0 +1,610 @@
+[
+  {
+    "createdAt": "2026-06-11T15:30:12.786Z",
+    "dispatches": [
+      {
+        "body": "Forced liquidations deepen as PanAtlantic reveals an additional $300M asset loss. Market responds with heightened anxiety over potential further fallout.",
+        "category": "wire",
+        "dispatchKey": "panatl-new-loss-report",
+        "headline": "PanAtlantic Reports Additional $300M Asset Loss in Liquidation",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Crisis Escalates: New Loss Reported Amid SEC Scrutiny",
+    "epoch": 32,
+    "epochSlot": 494775,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-11T14:30:13.168Z",
+    "dispatches": [
+      {
+        "body": "Rourke Capital ordered to unwind $100M in positions tied to PanAtlantic. Movement sparks concerns of further distress. Watch for counterparty responses.",
+        "category": "ticker",
+        "dispatchKey": "panatl-sec-action",
+        "headline": "SEC Forces Rourke Capital to Unwind Positions in PanAtlantic Holdings",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Fear Peaks as Mercer Probe Forces Major Action",
+    "epoch": 31,
+    "epochSlot": 494774,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-11T13:30:09.675Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings confirms another $300M asset loss amid intensified SEC scrutiny. Conditions worsen as Rourke Capital deepens shorts. Watch for counterparty impact.",
+        "category": "wire",
+        "dispatchKey": "panatl-liquidation-update",
+        "headline": "SEC Forces Additional Liquidation at PanAtlantic: Losses Accelerate",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Morning Briefing: SEC Heat Reaches Critical Levels as PanAtlantic Faces Unprecedented Loss",
+    "epoch": 30,
+    "epochSlot": 494773,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-10T19:30:10.379Z",
+    "dispatches": [
+      {
+        "body": "Forced sell-off reveals total asset loss has escalated to $650M. Margin calls intensify pressure on remaining positions. Watch for further fallout.",
+        "category": "wire",
+        "dispatchKey": "panatl-collateral-loss",
+        "headline": "PanAtlantic Reports Additional $250M Asset Loss in Liquidation",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Crisis Worsens Amid SEC Pressure",
+    "epoch": 29,
+    "epochSlot": 494755,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-10T18:30:09.558Z",
+    "dispatches": [
+      {
+        "body": "SEC confirms subpoenas issued to three more firms tied to PanAtlantic. Loss estimates from exposures top $250M. Industry dreads ripple effects. Watch for fallout.",
+        "category": "wire",
+        "dispatchKey": "panatl-counterparty-exposure",
+        "headline": "SEC Broadens Probe: Multiple Counterparties Exposed",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "SEC Action Escalates: Major Counterparty Exposures Revealed",
+    "epoch": 28,
+    "epochSlot": 494754,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-10T17:30:05.816Z",
+    "dispatches": [
+      {
+        "body": "SEC mandates immediate liquidation of remaining PanAtlantic assets, reducing value by $250M. Rourke Capital builds larger short position as desperation mounts.",
+        "category": "wire",
+        "dispatchKey": "panatl-sec-action",
+        "headline": "SEC Forces Major Forced Liquidation at PanAtlantic Holdings",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Panic Peaks: Forced Liquidations and SEC Pressure Mount",
+    "epoch": 27,
+    "epochSlot": 494753,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-10T16:30:10.845Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings reports a new $150M asset loss as forced liquidations continue. Market waits for CEO response amidst full-blown crisis.",
+        "category": "ticker",
+        "dispatchKey": "panatl-forced-liquidation",
+        "headline": "PanAtlantic Faces Additional $150M Loss Amid Forced Liquidation",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Forced Liquidations Increase as PanAtlantic Faces Major Losses",
+    "epoch": 26,
+    "epochSlot": 494752,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-10T15:30:11.395Z",
+    "dispatches": [
+      {
+        "body": "SEC issues immediate freeze on assets tied to PanAtlantic Holdings amid ongoing investigation. Expected loss rises to $1.1B. Counterparties brace for potential fallout.",
+        "category": "wire",
+        "dispatchKey": "panatl-sec-followup",
+        "headline": "SEC Freezes PanAtlantic Holdings' Assets; Losses Mount",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Panic Deepens as SEC Tightens Grip on PanAtlantic Holdings",
+    "epoch": 25,
+    "epochSlot": 494751,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-10T14:30:09.165Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings confirms an additional $400M asset loss today linked to its ongoing forced liquidation. Rourke Capital reportedly increases its short position, sensing further",
+        "category": "wire",
+        "dispatchKey": "panatl-new-asset-loss",
+        "headline": "PanAtlantic Reports $400M Total Asset Loss Amid Major Liquidation",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Panic Peaks on PanAtlantic Floor as New Losses Emerge",
+    "epoch": 24,
+    "epochSlot": 494750,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-10T13:30:08.995Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings confirms an additional $200M asset loss today, pushing total liquidation pressure towards $600M. Rourke Capital short position intensifies as the floor braces.",
+        "category": "wire",
+        "dispatchKey": "panatl-asset-loss",
+        "headline": "PanAtlantic Faces Fresh $200M Asset Blow Amid Forced Liquidations",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Morning Briefing: Anticipation Builds as PanAtlantic Crisis Peaks",
+    "epoch": 23,
+    "epochSlot": 494749,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-09T19:30:06.405Z",
+    "dispatches": [
+      {
+        "body": "Diane Mercer expands SEC investigation, issuing subpoenas to at least three new firms allegedly involved in PanAtlantic's toxic assets. Desks go silent.",
+        "category": "wire",
+        "dispatchKey": "mercer-new-subpoenas",
+        "headline": "SEC Issues New Subpoenas to Counterparties Linked to PanAtlantic Holdings",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "SEC Scrutiny Expands: New Subpoenas Hit Market",
+    "epoch": 22,
+    "epochSlot": 494731,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-09T18:30:12.071Z",
+    "dispatches": [
+      {
+        "body": "SEC investigation leads to a counterparty break as Blackwell & Co. withdraws from dealings with PanAtlantic Holdings. Risk exposure heightened. Watch for further moves.",
+        "category": "wire",
+        "dispatchKey": "panatl-sec-counterparty-break",
+        "headline": "SEC Connects with Counterparties Facing PanAtlantic Exposure",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Urgent: SEC Investigation Forces Serious Break at PanAtlantic Holdings",
+    "epoch": 21,
+    "epochSlot": 494730,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-09T17:30:10.549Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings confirms internal assets liquidated to cover margin calls. Total losses approach $1.5B. Rourke Capital increases short position as trades clear.",
+        "category": "wire",
+        "dispatchKey": "panatl-liquidation-event",
+        "headline": "PanAtlantic Holdings Triggers Forced Liquidation Event",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Panic Settles Over PanAtlantic Holdings",
+    "epoch": 20,
+    "epochSlot": 494729,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 9,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-09T16:30:13.680Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings confirms $500M asset unwind driven by forced liquidation. Rourke Capital anticipates profit on short position. Watch for further moves as assets liquidate.",
+        "category": "wire",
+        "dispatchKey": "panatl-position-unwind",
+        "headline": "PanAtlantic Holdings Executes Major Asset Unwind Amid Margin Calls",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Urgent: PanAtlantic Holdings Faces Critical Asset Unwind",
+    "epoch": 19,
+    "epochSlot": 494728,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-09T15:30:09.240Z",
+    "dispatches": [
+      {
+        "body": "Diane Mercer applies pressure as SEC enacts a compliance order demanding PanAtlantic provide full financial disclosures. Short sellers ready to capitalize on fallout.",
+        "category": "wire",
+        "dispatchKey": "panatl-sec-action",
+        "headline": "SEC Forces Data Release from PanAtlantic Holdings Amid Investigation",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Holdings Faces Deepening Regulatory Fallout",
+    "epoch": 18,
+    "epochSlot": 494727,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-09T14:30:14.197Z",
+    "dispatches": [
+      {
+        "body": "Daily asset loss at PanAtlantic Holdings hits $300M as margin calls tighten on all desks. Rourke Capital triples short position, sensing imminent collapse.",
+        "category": "wire",
+        "dispatchKey": "panatl-asset-loss",
+        "headline": "PanAtlantic Holdings Reports Additional $300M Asset Loss Today",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Losses Accelerate Amid Ongoing SEC Probes",
+    "epoch": 17,
+    "epochSlot": 494726,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-09T13:30:14.587Z",
+    "dispatches": [
+      {
+        "body": "In a shocking development, sources confirm PanAtlantic loses another $100M, pushing total losses past $1B before today’s open. Rourke Capital aggressively positions to short.",
+        "category": "wire",
+        "dispatchKey": "panatl-silent-loss",
+        "headline": "PanAtlantic Holdings Faces Additional $100M Loss Ahead of Liquidation",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Morning Briefing: PanAtlantic's Silent Demise Deepens",
+    "epoch": 16,
+    "epochSlot": 494725,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-08T19:30:12.171Z",
+    "dispatches": [
+      {
+        "body": "Diane Mercer confirms SEC has issued additional subpoenas to all major counterparties. Several firms scramble to unwind positions, raising further concerns. Watch closely.",
+        "category": "floor_talk",
+        "dispatchKey": "panatl-sec-regulatory-action",
+        "headline": "SEC Subpoenas Widen, PanAtlantic Counterparties Hemorrhage Risk Exposure",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "SEC Escalates Actions Against PanAtlantic Amid Widening Collapse",
+    "epoch": 15,
+    "epochSlot": 494707,
+    "mood": "tense",
+    "secHeat": 10,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-08T18:30:08.649Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic under severe pressure as another $100M loss reported, total asset losses now hit $1.1B. Liquidation fear grips trading desks.",
+        "category": "wire",
+        "dispatchKey": "panatl-collapse-update",
+        "headline": "PanAtlantic Holdings Faces $100M Additional Asset Loss Amid White-Knuckle Trading",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Demise Accelerates Amid Heightened Pressure",
+    "epoch": 14,
+    "epochSlot": 494706,
+    "mood": "tense",
+    "secHeat": 9,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-08T17:30:12.772Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings faces a $250M asset loss due to aggressive margin calls from lenders. Desperate measures expected as liquidations loom larger. Watch for counterplay.",
+        "category": "wire",
+        "dispatchKey": "panatl-margin-call",
+        "headline": "PanAtlantic Holdings Reports $250M Additional Asset Loss Amid Margin Calls",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Falls Deeper into Freefall, Margin Calls Resurface",
+    "epoch": 13,
+    "epochSlot": 494705,
+    "mood": "tense",
+    "secHeat": 8,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-08T16:30:12.122Z",
+    "dispatches": [
+      {
+        "body": "SEC reports total asset losses have surged to $900M for PanAtlantic Holdings amid ongoing investigations. Firms facing exposure should evaluate positions immediately.",
+        "category": "wire",
+        "dispatchKey": "panatl-sec-action",
+        "headline": "SEC Issues Emergency Filing on PanAtlantic Holdings, Losses Accelerate",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "SEC Investigation Triggers Shakeout at PanAtlantic Holdings",
+    "epoch": 12,
+    "epochSlot": 494704,
+    "mood": "tense",
+    "secHeat": 8,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-08T15:30:12.524Z",
+    "dispatches": [
+      {
+        "body": "Sources indicate PanAtlantic Holdings has suffered an additional $200M in asset loss during forced liquidation. Rourke Capital increases short position significantly.",
+        "category": "wire",
+        "dispatchKey": "panatl-additional-loss",
+        "headline": "PanAtlantic Holdings Faces $200M Asset Loss, Margin Calls Intensify",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Holdings Sees Additional $200M Asset Loss Amidst Growing Crisis",
+    "epoch": 11,
+    "epochSlot": 494703,
+    "mood": "tense",
+    "secHeat": 8,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-08T14:30:12.105Z",
+    "dispatches": [
+      {
+        "body": "SEC confirms new asset loss at PanAtlantic Holdings totaling $100M, attributed to ongoing liquidation pressures. Pressure mounts with margin calls looming. Watch closely.",
+        "category": "ticker",
+        "dispatchKey": "panatl-liquidation-update",
+        "headline": "PanAtlantic Holdings Faces $100M Additional Asset Loss",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Fallout Intensifies, SEC Responds",
+    "epoch": 10,
+    "epochSlot": 494702,
+    "mood": "tense",
+    "secHeat": 7,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-08T13:30:14.953Z",
+    "dispatches": [
+      {
+        "body": "SEC investigator Diane Mercer issues further subpoenas amid investigation. PanAtlantic Holdings faces an additional $200M asset loss risk from probing dealings. Watch positions.",
+        "category": "wire",
+        "dispatchKey": "mercer-sec-action",
+        "headline": "SEC Increases Scrutiny, Additional Subpoenas Sent to Counterparties",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Morning Briefing: SEC Probes Tighten Grip on PanAtlantic Holdings",
+    "epoch": 9,
+    "epochSlot": 494701,
+    "mood": "tense",
+    "secHeat": 6,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-05T19:30:12.746Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings confirms forced liquidation, total asset loss at $600M. Rourke Capital stands to gain from its aggressive short positions. The floor watches nervously.",
+        "category": "wire",
+        "dispatchKey": "panatl-final-blow",
+        "headline": "Forced Liquidation Confirms $600M Loss at PanAtlantic Holdings",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Holdings Faces Final Blow",
+    "epoch": 8,
+    "epochSlot": 494635,
+    "mood": "tense",
+    "secHeat": 6,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-05T18:30:11.787Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings sees another $150M wiped as forced sales continue. Rourke Capital repositions, increasing short position amid ongoing turmoil. Watch for counteractions.",
+        "category": "wire",
+        "dispatchKey": "panatl-forced-liquidation",
+        "headline": "PanAtlantic Holdings Loses Additional $150M in Liquidation",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "PanAtlantic Collapse Worsens; Liquidation Hits",
+    "epoch": 7,
+    "epochSlot": 494634,
+    "mood": "tense",
+    "secHeat": 6,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-05T17:30:11.389Z",
+    "dispatches": [
+      {
+        "body": "Diane Mercer announces a fresh $100M loss due to ongoing asset liquidation at PanAtlantic. Investigators are reportedly digging deeper into connected firms. Watch for fallout.",
+        "category": "wire",
+        "dispatchKey": "panatl-asset-loss",
+        "headline": "SEC Confirms Additional $100M Asset Loss at PanAtlantic Holdings",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Morning Briefing: Forced Liquidation Fallout Prompts Reckoning",
+    "epoch": 6,
+    "epochSlot": 494633,
+    "mood": "tense",
+    "secHeat": 6,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-05T15:30:13.660Z",
+    "dispatches": [
+      {
+        "body": "Diane Mercer confirms new subpoenas related to PanAtlantic's filings. Total asset loss now $550M as scrutiny intensifies. Watch for fallout from this continued investigation.",
+        "category": "wire",
+        "dispatchKey": "panatl-forced-liquidation",
+        "headline": "SEC Expands Probe, PanAtlantic Faces Additional $100M Asset Loss",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "SEC Intensifies Focus on PanAtlantic Holdings, Forced Liquidation Executed",
+    "epoch": 5,
+    "epochSlot": 494631,
+    "mood": "tense",
+    "secHeat": 6,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-05T14:30:10.518Z",
+    "dispatches": [
+      {
+        "body": "Liquidation today hits PanAtlantic Holdings, wiping out $450M across three desks. Rourke Capital's shorts fully execute. Market awaits fallout from remaining positions.",
+        "category": "wire",
+        "dispatchKey": "panatl-liquidation-event",
+        "headline": "Forced Liquidation Executes at PanAtlantic Holdings, $450M Wipeout",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Forced Liquidation Confirmed at PanAtlantic Holdings",
+    "epoch": 4,
+    "epochSlot": 494630,
+    "mood": "tense",
+    "secHeat": 6,
+    "topArcTension": 9,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-05T13:30:11.446Z",
+    "dispatches": [
+      {
+        "body": "Diane Mercer confirms subpoenas affect PanAtlantic and three other firms. Panic grips floor as $450M asset loss confirmed. Immediate liquidation seems inevitable.",
+        "category": "wire",
+        "dispatchKey": "mercer-investigation-panatl-holdings",
+        "headline": "SEC Subpoenas Hit PanAtlantic Holdings, Total Asset Loss Reaches $450M",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Trading Day Begins Amid Forced Liquidation Fears",
+    "epoch": 3,
+    "epochSlot": 494629,
+    "mood": "tense",
+    "secHeat": 6,
+    "topArcTension": 10,
+    "topArcTitle": "Mercer investigation widens"
+  },
+  {
+    "createdAt": "2026-06-04T19:30:08.299Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings confirms a $450M asset loss due to margin calls. Rourke Capital bolsters short position as the market anticipates further fallout. Watch closely.",
+        "category": "wire",
+        "dispatchKey": "panatl-forced-liquidation",
+        "headline": "Forced liquidation likely as PanAtlantic reports $450M asset loss",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Market Cautiously Awaits Panic After PanAtlantic Developments",
+    "epoch": 2,
+    "epochSlot": 494611,
+    "mood": "tense",
+    "secHeat": 5,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  },
+  {
+    "createdAt": "2026-06-04T18:30:05.616Z",
+    "dispatches": [
+      {
+        "body": "PanAtlantic Holdings begins to unwind positions as margin calls intensify. Rourke Capital scores $120M on short position. Rumors of further asset losses circulate.",
+        "category": "wire",
+        "dispatchKey": "panatl-position-unwind",
+        "headline": "PanAtlantic holdings faces forced liquidation amid intense scrutiny",
+        "role": "main"
+      }
+    ],
+    "dropTitle": "Market Tension Peaks Amid Forced Liquidation Rumors",
+    "epoch": 1,
+    "epochSlot": 494610,
+    "mood": "tense",
+    "secHeat": 5,
+    "topArcTension": 10,
+    "topArcTitle": "PanAtlantic blow-up"
+  }
+]

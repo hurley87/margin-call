@@ -32,7 +32,6 @@ const AssetGainedSchema = z.object({
 
 export const DealOutcomeSchema = z.object({
   narrative: z.string(),
-  balance_change_usdc: z.number(),
   assets_gained: z.array(AssetGainedSchema),
   assets_lost: z.array(z.string()),
   trader_wiped_out: z.boolean(),
