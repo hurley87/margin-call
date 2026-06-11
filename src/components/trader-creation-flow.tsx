@@ -503,6 +503,7 @@ function FundAndActivateStep({
   const [amount, setAmount] = useState("");
   const [ensureError, setEnsureError] = useState<string | undefined>();
   const [syncError, setSyncError] = useState<string | undefined>();
+  const [isPreparing, setIsPreparing] = useState(false);
   const {
     deposit,
     reset: resetDeposit,
@@ -529,36 +530,41 @@ function FundAndActivateStep({
     if (parsed === BigInt(0)) return;
     setEnsureError(undefined);
     setSyncError(undefined);
+    setIsPreparing(true);
 
     try {
-      const res = await authFetch(
-        `/api/trader/${convexTraderId}/ensure-depositor`,
-        { method: "POST" }
-      );
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        setEnsureError((body as { error?: string }).error ?? "Setup failed");
+      try {
+        const res = await authFetch(
+          `/api/trader/${convexTraderId}/ensure-depositor`,
+          { method: "POST" }
+        );
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          setEnsureError((body as { error?: string }).error ?? "Setup failed");
+          return;
+        }
+      } catch {
+        setEnsureError("Network error during depositor setup");
         return;
       }
-    } catch {
-      setEnsureError("Network error during depositor setup");
-      return;
-    }
 
-    try {
-      await deposit(BigInt(tokenId), parsed);
-      const syncRes = await authFetch(
-        `/api/trader/${convexTraderId}/sync-balance`,
-        { method: "POST" }
-      );
-      if (!syncRes.ok) {
-        setSyncError("Balance sync failed — check escrow then activate");
-      } else {
-        setAmount("");
-        refetchBalance();
+      try {
+        await deposit(BigInt(tokenId), parsed);
+        const syncRes = await authFetch(
+          `/api/trader/${convexTraderId}/sync-balance`,
+          { method: "POST" }
+        );
+        if (!syncRes.ok) {
+          setSyncError("Balance sync failed — check escrow then activate");
+        } else {
+          setAmount("");
+          refetchBalance();
+        }
+      } catch {
+        // depositError surfaced via hook state
       }
-    } catch {
-      // depositError surfaced via hook state
+    } finally {
+      setIsPreparing(false);
     }
   }
 
@@ -568,15 +574,19 @@ function FundAndActivateStep({
   }
 
   const depositDisplayError = ensureError ?? syncError ?? depositError;
-  const canDeposit = !!tokenId && !!amount && !isDepositBusy;
+  const busy = isPreparing || isDepositBusy;
+  const canDeposit = !!tokenId && !!amount && !busy;
   const canActivate = walletReady && funded && !resume.isPending;
 
-  const depositButtonLabel = {
-    idle: "Fund escrow",
-    approving: "Approving USDC...",
-    depositing: "Depositing...",
-    done: "Fund escrow",
-  }[depositStep];
+  const depositButtonLabel =
+    isPreparing && depositStep === "idle"
+      ? "Preparing..."
+      : {
+          idle: "Fund escrow",
+          approving: "Approving USDC...",
+          depositing: "Depositing...",
+          done: "Fund escrow",
+        }[depositStep];
 
   return (
     <div className="grid gap-4 p-4">
@@ -631,7 +641,7 @@ function FundAndActivateStep({
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00 USDC"
-              disabled={isDepositBusy || !tokenId}
+              disabled={busy || !tokenId}
               className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
             />
           </label>
