@@ -57,7 +57,7 @@ const BaseDispatchSchema = z.object({
   /** Stable per-drop identifier. */
   dispatchKey: z.string().min(1).max(64),
   headline: z.string().max(100),
-  body: z.string().max(180),
+  body: z.string().max(400),
   role: z.enum(["main", "supporting"]),
   arcSlug: z.string().nullable(),
   referenceEpoch: z.number().nullable(),

@@ -28,7 +28,7 @@ Re-running is safe — the importer is idempotent.
 ## Style Rules
 
 - Dispatch headlines: ~100 characters max. Terse. Present tense.
-- Dispatch bodies: ~180 characters max. One to three sentences.
+- Dispatch bodies: ~400 characters max. Two to four sentences.
 - No emoji. No ellipses for drama. No modern crypto vocabulary.
 - Every dispatch must imply a player action: exploit, create, avoid, or watch.
 - Sentences end in facts, not adjectives. "Down $340M." Not "in bad shape."
