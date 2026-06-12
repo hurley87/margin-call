@@ -57,6 +57,7 @@ import type * as mcp_tradersEscrow from "../mcp/tradersEscrow.js";
 import type * as mcp_wipeMcpDesks from "../mcp/wipeMcpDesks.js";
 import type * as mcpApiKeys from "../mcpApiKeys.js";
 import type * as me from "../me.js";
+import type * as ops__batchDelete from "../ops/_batchDelete.js";
 import type * as ops_clearNarrativeWorld from "../ops/clearNarrativeWorld.js";
 import type * as ops_resetGameState from "../ops/resetGameState.js";
 import type * as ops_wipeSmokeTraders from "../ops/wipeSmokeTraders.js";
@@ -142,6 +143,7 @@ declare const fullApi: ApiFromModules<{
   "mcp/wipeMcpDesks": typeof mcp_wipeMcpDesks;
   mcpApiKeys: typeof mcpApiKeys;
   me: typeof me;
+  "ops/_batchDelete": typeof ops__batchDelete;
   "ops/clearNarrativeWorld": typeof ops_clearNarrativeWorld;
   "ops/resetGameState": typeof ops_resetGameState;
   "ops/wipeSmokeTraders": typeof ops_wipeSmokeTraders;

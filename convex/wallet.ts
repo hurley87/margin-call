@@ -81,6 +81,23 @@ export const createForTrader = internalAction({
     }
     if (!acquired) return;
 
+    // Cosmetic checkpoint reporting for the onboarding checklist UI.
+    // Must never abort provisioning.
+    const reportStep = async (
+      step: "id_minted" | "seat_registered",
+      stepTokenId?: number
+    ) => {
+      try {
+        await ctx.runMutation(internal.traders.setWalletStep, {
+          traderId,
+          step,
+          tokenId: stepTokenId,
+        });
+      } catch (err) {
+        console.warn(`setWalletStep(${step}) failed (non-fatal)`, err);
+      }
+    };
+
     try {
       // Validate env vars with clear errors instead of opaque SDK failures.
       const cdpApiKeyId = requireEnv("CDP_API_KEY_ID");
@@ -199,6 +216,7 @@ export const createForTrader = internalAction({
       if (tokenId === undefined) {
         throw new Error("Failed to extract tokenId from mint transaction");
       }
+      await reportStep("id_minted", tokenId);
 
       // Step 3: Create canonical accounts
       const owner = await cdp.evm.getOrCreateAccount({
@@ -208,6 +226,7 @@ export const createForTrader = internalAction({
         name: `trader-sa-${tokenId}`,
         owner,
       });
+      await reportStep("seat_registered");
 
       // Step 4: Transfer NFT from mint SA → canonical SA
       const transferData = encodeFunctionData({

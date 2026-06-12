@@ -21,6 +21,8 @@ type TraderReadModel = Pick<
   | "escrowBalanceUsdc"
   | "walletStatus"
   | "walletError"
+  | "walletStep"
+  | "walletStepTokenId"
   | "lastCycleAt"
   | "cycleLeaseUntil"
   | "createdAt"
@@ -48,6 +50,8 @@ export interface Trader {
   escrow_balance_usdc: number;
   wallet_status: Doc<"traders">["walletStatus"];
   wallet_error: string | null;
+  wallet_step: Doc<"traders">["walletStep"] | null;
+  wallet_step_token_id: number | null;
   /** Epoch ms for agent cycle countdown UI */
   last_cycle_at_ms: number | null;
   cycle_lease_until_ms: number | null;
@@ -74,6 +78,8 @@ function mapTrader(doc: TraderReadModel, ownerAddress: string): Trader {
     escrow_balance_usdc: doc.escrowBalanceUsdc ?? 0,
     wallet_status: doc.walletStatus,
     wallet_error: doc.walletError ?? null,
+    wallet_step: doc.walletStep ?? null,
+    wallet_step_token_id: doc.walletStepTokenId ?? null,
     last_cycle_at_ms: doc.lastCycleAt ?? null,
     cycle_lease_until_ms: doc.cycleLeaseUntil ?? null,
     last_cycle_at: doc.lastCycleAt

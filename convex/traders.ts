@@ -20,6 +20,7 @@ import {
   PORTRAIT_METADATA_VERSION,
   readPublicTraits,
 } from "./lib/portraitSeed";
+import { walletStepValidator } from "./schema";
 import { TRADER_NAME_REGEX } from "../src/lib/trader-name";
 import { normalizeEmail } from "../src/lib/email";
 import { isMcpSubject } from "./mcp/subject";
@@ -98,6 +99,8 @@ async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
     cycleGeneration: trader.cycleGeneration,
     walletStatus: trader.walletStatus,
     walletError: trader.walletError,
+    walletStep: trader.walletStep,
+    walletStepTokenId: trader.walletStepTokenId,
     cdpWalletAddress: trader.cdpWalletAddress,
     cdpOwnerAddress: trader.cdpOwnerAddress,
     cdpAccountName: trader.cdpAccountName,
@@ -575,6 +578,8 @@ export const retryWalletProvisioning = mutation({
     await ctx.db.patch(traderId, {
       walletStatus: "pending",
       walletError: undefined,
+      walletStep: undefined,
+      walletStepTokenId: undefined,
       updatedAt: Date.now(),
     });
 
@@ -647,9 +652,34 @@ export const markCreating = internalMutation({
 
     await ctx.db.patch(traderId, {
       walletStatus: "creating",
+      walletStep: "paperwork",
+      walletStepTokenId: undefined,
       updatedAt: Math.max(Date.now(), trader.updatedAt + 1),
     });
     return true;
+  },
+});
+
+/**
+ * Internal: record a wallet-provisioning checkpoint (cosmetic; drives the
+ * onboarding checklist). No-op unless a provisioning run is in flight, so a
+ * stale worker can't scribble over a ready/error trader. Bumping updatedAt
+ * also refreshes the createForTrader re-entry lease while progress is live.
+ */
+export const setWalletStep = internalMutation({
+  args: {
+    traderId: v.id("traders"),
+    step: walletStepValidator,
+    tokenId: v.optional(v.number()),
+  },
+  handler: async (ctx, { traderId, step, tokenId }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader || trader.walletStatus !== "creating") return;
+    await ctx.db.patch(traderId, {
+      walletStep: step,
+      ...(tokenId !== undefined ? { walletStepTokenId: tokenId } : {}),
+      updatedAt: Date.now(),
+    });
   },
 });
 
