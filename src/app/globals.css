@@ -510,9 +510,87 @@
   animation: mc-shimmer 1.6s ease-in-out infinite;
 }
 
+/* ── Back-office onboarding (hire flow) ── */
+
+@keyframes mc-crt-reveal {
+  0% {
+    clip-path: inset(0 0 100% 0);
+    filter: brightness(2.1) saturate(0.4);
+  }
+  60% {
+    clip-path: inset(0 0 0 0);
+    filter: brightness(1.5);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+    filter: brightness(1);
+  }
+}
+
+.mc-crt-reveal {
+  animation: mc-crt-reveal 700ms var(--mc-ease-out) both;
+}
+
+@keyframes mc-stamp-in {
+  0% {
+    opacity: 0;
+    transform: scale(1.5) rotate(-8deg);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(0.95) rotate(-3deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) rotate(-3deg);
+  }
+}
+
+.mc-stamp-in {
+  animation: mc-stamp-in 450ms var(--mc-ease-snap) both;
+}
+
+@keyframes mc-onboard-flash {
+  0% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+  20% {
+    box-shadow: inset 0 0 calc(48px * var(--mc-glow)) rgba(121, 212, 155, 0.35);
+  }
+  100% {
+    box-shadow: inset 0 0 0 0 transparent;
+  }
+}
+
+.mc-onboard-flash {
+  animation: mc-onboard-flash calc(var(--mc-dur-flash) * 2) var(--mc-ease-out)
+    both;
+}
+
+@keyframes mc-flavor-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.mc-flavor-fade {
+  animation: mc-flavor-fade var(--mc-dur-slow) var(--mc-ease-out) both;
+}
+
 /* ── Reduced motion ── */
 
 @media (prefers-reduced-motion: reduce) {
+  .mc-crt-reveal,
+  .mc-stamp-in,
+  .mc-onboard-flash,
+  .mc-flavor-fade {
+    animation: none;
+    opacity: 1;
+  }
+
   .mc-feed-enter,
   .mc-feed-enter-high,
   .mc-shimmer,

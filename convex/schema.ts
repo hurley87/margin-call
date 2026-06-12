@@ -21,6 +21,14 @@ const firmStatusValidator = v.union(
   v.literal("dead")
 );
 
+// Last completed wallet-provisioning checkpoint, in pipeline order. Drives the
+// onboarding checklist UI; walletStatus === "ready" is the implicit final step.
+export const walletStepValidator = v.union(
+  v.literal("paperwork"), // lease acquired, mint in flight
+  v.literal("id_minted"), // identity NFT mint confirmed, tokenId extracted
+  v.literal("seat_registered") // canonical CDP accounts created, transfer in flight
+);
+
 export default defineSchema({
   deskManagers: defineTable({
     // Identity subject. Either a Privy DID ("did:privy:xxx") for browser desks
@@ -124,6 +132,10 @@ export default defineSchema({
       v.literal("error")
     ),
     walletError: v.optional(v.string()),
+    /** Last completed provisioning checkpoint (cosmetic; onboarding checklist UI). */
+    walletStep: v.optional(walletStepValidator),
+    /** tokenId surfaced mid-provisioning for the checklist; canonical `tokenId` is only set at applyWalletReady. */
+    walletStepTokenId: v.optional(v.number()),
     // wallet metadata (set when walletStatus === "ready")
     cdpWalletAddress: v.optional(v.string()),
     cdpOwnerAddress: v.optional(v.string()),

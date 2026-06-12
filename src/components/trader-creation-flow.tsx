@@ -18,6 +18,7 @@ import { DatumCell } from "@/components/datum-cell";
 import { MarketClosedButton } from "@/components/market-closed-button";
 import { useMarketHours } from "@/hooks/use-market-hours";
 import { WalletProvisioningError } from "@/components/wallet-provisioning-error";
+import { WalletOnboardingChecklist } from "@/components/wallet-onboarding-checklist";
 import type { Mandate } from "@/lib/agent/evaluator";
 import type { Id } from "../../convex/_generated/dataModel";
 import { TRADER_NAME_MAX, validateTraderName } from "@/lib/trader-name";
@@ -600,14 +601,22 @@ function FundAndActivateStep({
           </span>
         </div>
 
-        <div className="mb-4 grid grid-cols-2 gap-3">
-          <DatumCell
-            label="Wallet"
-            value={walletReady ? "Ready" : "Setting up..."}
-            valueClassName={
-              walletReady ? "text-[var(--t-green)]" : "text-[var(--t-amber)]"
-            }
-          />
+        <div className="mb-4 grid gap-3">
+          {walletErrored ? (
+            <WalletProvisioningError
+              traderId={convexTraderId as Id<"traders">}
+              walletError={walletErrorMsg}
+            />
+          ) : (
+            <WalletOnboardingChecklist
+              walletStatus={trader?.wallet_status ?? "pending"}
+              walletStep={trader?.wallet_step ?? null}
+              tokenId={trader?.wallet_step_token_id ?? (tokenId || null)}
+              traderName={traderName}
+              imageStatus={trader?.image_status ?? null}
+              profileImageUrl={trader?.profile_image_url ?? ""}
+            />
+          )}
           <DatumCell
             label="Escrow"
             value={balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."}
@@ -616,18 +625,6 @@ function FundAndActivateStep({
             }
           />
         </div>
-        {walletErrored && (
-          <WalletProvisioningError
-            traderId={convexTraderId as Id<"traders">}
-            walletError={walletErrorMsg}
-            className="mb-4"
-          />
-        )}
-        {!walletReady && !walletErrored && (
-          <p className="mb-4 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
-            Wallet provisioning can take a minute on first hire.
-          </p>
-        )}
 
         <form onSubmit={handleDeposit} className="flex flex-col gap-3">
           <label className="block">
