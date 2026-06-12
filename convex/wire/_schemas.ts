@@ -53,11 +53,14 @@ export const SubjectSchema = z.object({
   id: z.string().min(1),
 });
 
+/** OpenAI structured-output maxLength for dispatch body prose. */
+export const DISPATCH_BODY_MAX_LENGTH = 600;
+
 const BaseDispatchSchema = z.object({
   /** Stable per-drop identifier. */
   dispatchKey: z.string().min(1).max(64),
   headline: z.string().max(100),
-  body: z.string().max(400),
+  body: z.string().max(DISPATCH_BODY_MAX_LENGTH),
   role: z.enum(["main", "supporting"]),
   arcSlug: z.string().nullable(),
   referenceEpoch: z.number().nullable(),

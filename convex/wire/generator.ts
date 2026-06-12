@@ -43,7 +43,7 @@ BAD: "Forced liquidations deepen as PanAtlantic reveals an additional $300M asse
 GOOD: "PanAtlantic misplaced another $300M today, bringing the total to $1.4B, a figure its CFO described as 'temporary' from the back of a taxi. The firm's remaining assets now consist of office furniture and optimism."
 GOOD (real game event): "Desk 0x4f2…a9 entered 'Guaranteed Distressed Debt Opportunity' yesterday. The debt was real. The opportunity was for the other guy. Balance: zero. Deals with 'guaranteed' in the title have a perfect record — for their creators."
 
-OUTPUT: strict JSON matching the schema — dropTitle, exactly one dispatch (role "main", unique kebab-case dispatchKey, category from wire/floor_talk/sec_watch/boardroom/ticker/positioning), entityMentions, confirmedFacts, openQuestions. Headline ≤ 12 words. Body 2–4 sentences. No prose outside the JSON.`;
+OUTPUT: strict JSON matching the schema — dropTitle, exactly one dispatch (role "main", unique kebab-case dispatchKey, category from wire/floor_talk/sec_watch/boardroom/ticker/positioning), entityMentions, confirmedFacts, openQuestions. Headline ≤ 12 words. Body 2–3 complete sentences (every sentence must end with . ! or ?). No prose outside the JSON.`;
 
 type StoredArc = Doc<"narrativeArcs">;
 
