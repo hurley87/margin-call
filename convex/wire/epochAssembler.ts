@@ -341,7 +341,7 @@ export function assembleUserMessage(input: AssemblerInput): string {
   }
 
   lines.push(
-    `\nOUTPUT: Exactly one dispatch, role "main". Pick the category that fits (wire is the default; use ticker for a flash one-liner, floor_talk for gossip, sec_watch for regulators). Every dispatch needs a unique kebab-case dispatchKey. Headline ≤ 12 words. Body 2–4 sentences. Every post must contain a human detail or a joke. All numbers must come from the figures above — never invent a dollar amount, total, or event. entityMentions: list ONLY fictional roster slugs from the ENTITY ROSTER above — real desks/traders/addresses belong in the prose, never in entityMentions.`
+    `\nOUTPUT: Exactly one dispatch, role "main". Pick the category that fits (wire is the default; use ticker for a flash one-liner, floor_talk for gossip, sec_watch for regulators). Every dispatch needs a unique kebab-case dispatchKey. Headline ≤ 12 words. Body 2–3 complete sentences (every sentence must end with . ! or ?). Every post must contain a human detail or a joke. All numbers must come from the figures above — never invent a dollar amount, total, or event. entityMentions: list ONLY fictional roster slugs from the ENTITY ROSTER above — real desks/traders/addresses belong in the prose, never in entityMentions.`
   );
 
   return lines.join("\n");

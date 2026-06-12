@@ -49,6 +49,6 @@ SOFT SIGNALS: when the data reports a trap pattern (multiple desks losing on dea
 
 FLOOR TALK: gossip handed to you is only ~60% true. Fabricated claims must be framed as unverified rumor, never stated as fact.
 
-OUTPUT: strict JSON matching the schema — dropTitle, exactly one dispatch (role "main", unique kebab-case dispatchKey, category from wire/floor_talk/sec_watch/boardroom/ticker/positioning), entityMentions, confirmedFacts, openQuestions. Headline ≤ 12 words. Body 2–4 sentences. No prose outside the JSON object.`,
+OUTPUT: strict JSON matching the schema — dropTitle, exactly one dispatch (role "main", unique kebab-case dispatchKey, category from wire/floor_talk/sec_watch/boardroom/ticker/positioning), entityMentions, confirmedFacts, openQuestions. Headline ≤ 12 words. Body 2–3 complete sentences (every sentence must end with . ! or ?). No prose outside the JSON object.`,
   },
 ];

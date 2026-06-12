@@ -186,7 +186,7 @@ Convex boundary rule: `wire.generateNextEpoch` is an internal action because it 
 - One **supporting dispatch** that adds pressure, rumor, SEC heat, boardroom tension, ticker movement, or player/agent reaction.
 - Optional one **Deal Seed dispatch** when the story naturally creates a playable opportunity.
 - Continuity every drop: at least one dispatch must reference an active arc, recurring entity, prior player event, or prior dispatch.
-- Hard copy caps: dispatch headlines should be about 100 characters max; dispatch bodies should be about 400 characters max (2–4 sentences).
+- Hard copy caps: dispatch headlines should be about 100 characters max; dispatch bodies should be about 600 characters max (2–3 complete sentences).
 
 Deal Seeds are optional per drop but mandatory over time: at least one Deal Seed must appear every 2 market-hour Wire Drops. The generator receives recent seed cadence as input, and validation rejects a second consecutive drop without a Deal Seed.
 
