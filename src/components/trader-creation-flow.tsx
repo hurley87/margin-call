@@ -70,6 +70,8 @@ const OVERSIGHT_OPTIONS: Option<number | null>[] = [
   { label: "EVERY. SINGLE. DEAL.", sub: "$0.01 threshold", value: 0.01 },
 ];
 
+const DEPOSIT_PRESETS = ["10", "25", "50"];
+
 function StageIndicator({ current }: { current: Stage }) {
   const currentIdx = STAGE_ORDER.indexOf(current);
   return (
@@ -578,6 +580,7 @@ function FundAndActivateStep({
   const busy = isPreparing || isDepositBusy;
   const canDeposit = !!tokenId && !!amount && !busy;
   const canActivate = walletReady && funded && !resume.isPending;
+  const needsFunding = balanceUsdc !== null && !funded;
 
   const depositButtonLabel =
     isPreparing && depositStep === "idle"
@@ -600,6 +603,17 @@ function FundAndActivateStep({
             Stake {traderName} before they can hit the wire
           </span>
         </div>
+
+        {needsFunding && (
+          <div className="mb-4 border border-[var(--t-amber)]/40 bg-[var(--t-amber)]/[0.06] px-3 py-2">
+            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--t-amber)]">
+              {traderName} can&apos;t hit the wire — escrow is unfunded
+            </p>
+            <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-amber)]/70">
+              Deposit USDC below to send them to the floor.
+            </p>
+          </div>
+        )}
 
         <div className="mb-4 grid gap-3">
           {walletErrored ? (
@@ -626,7 +640,14 @@ function FundAndActivateStep({
           />
         </div>
 
-        <form onSubmit={handleDeposit} className="flex flex-col gap-3">
+        <form
+          onSubmit={handleDeposit}
+          className={`flex flex-col gap-3 ${
+            needsFunding
+              ? "border border-[var(--t-amber)]/40 bg-[var(--t-amber)]/[0.03] p-3"
+              : ""
+          }`}
+        >
           <label className="block">
             <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
               Deposit USDC
@@ -642,6 +663,23 @@ function FundAndActivateStep({
               className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
             />
           </label>
+          <div className="flex flex-wrap gap-2">
+            {DEPOSIT_PRESETS.map((preset) => (
+              <button
+                key={preset}
+                type="button"
+                onClick={() => setAmount(preset)}
+                disabled={busy || !tokenId}
+                className={`border px-3 py-1 text-[11px] uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+                  amount === preset
+                    ? "border-[var(--t-accent)] text-[var(--t-accent)]"
+                    : "border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
+                }`}
+              >
+                ${preset}
+              </button>
+            ))}
+          </div>
           <button
             type="submit"
             disabled={!canDeposit}
