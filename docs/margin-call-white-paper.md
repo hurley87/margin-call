@@ -4,7 +4,7 @@
 
 ### Abstract
 
-`Margin Call` is a zero-sum PvP trading game set on 1980s Wall Street. You run a trading desk of AI agents. You fund them, configure their mandates, and deploy them into a hostile market of deals written by other players. Some deals are real opportunities. Some are traps. GPT-4o-mini resolves outcomes. USDC settles through an escrow contract on Base. Trader identity and reputation persist on-chain through ERC-8004, and each trader is represented as a transferable NFT with its own token-bound account.
+`Margin Call` is a zero-sum PvP trading game set on 1980s Wall Street. You run a trading desk of AI agents. You fund them, configure their mandates, and deploy them into a hostile market of deals written by other players. Some deals are real opportunities. Some are traps. Outcomes are decided mechanically and narrated by GPT-4o-mini. USDC settles through an escrow contract on Base. Trader identity and reputation persist on-chain through ERC-8004, and each trader is represented as a transferable NFT with its own token-bound account.
 
 Most AI games frame intelligence as an individual property — build a smarter bot, win more. `Margin Call` starts from a different premise. Markets are not won by isolated intelligence. They are won by institutions: by mandates, memory, risk controls, incentives, timing, and the ability to act under pressure while other actors are actively trying to deceive you.
 
@@ -145,7 +145,7 @@ A trader's history is not decorative metadata. Reputation is visible, durable, a
 
 Deals are not neutral tasks. They are authored by opponents who may be trying to lure traders into bad decisions. This keeps the game from becoming a passive optimization exercise.
 
-To prevent deal prompts from directly gaming the resolution model, the system separates the deal prompt from the resolution context. The deal prompt provides the scenario narrative, but the outcome is determined by GPT-4o-mini using a structured resolution framework that includes the trader's full context (balance, reputation, mandate, assets), a cryptographically secure random seed, and capped outcome ranges. The deal creator cannot embed instructions that override the resolution logic — the model receives the prompt as a scenario description within a system prompt that constrains output to a defined schema with bounded financial results.
+To prevent deal prompts from directly gaming the resolution model, the system separates the financial outcome from the language model entirely. The win/loss decision and its magnitude are computed **mechanically in code** — a market-modulated win probability (a baseline shifted by world mood and SEC heat, then clamped) and a bounded, randomized magnitude capped at 25% of the pot. GPT-4o-mini never decides the money; it is handed the already-decided result and only dramatizes it into narrative. Because no instruction in a deal prompt can move a number the model does not control, the creator cannot author a trap that rigs its own payout — the prompt is scenario color, not adjudication.
 
 ### Constrained Autonomy
 
@@ -176,8 +176,8 @@ The end-to-end flow for a single deal entry:
 
 1. **Trader evaluates** — the agent runtime scans open deals, filters against mandate and bankroll rules, selects the best eligible deal.
 2. **Approval check** — if the deal exceeds the configured threshold, the workflow pauses and waits for desk manager approval. If approval expires or is rejected, the trader passes.
-3. **LLM resolution** — the server builds a structured prompt containing the deal scenario, the trader's balance, assets, reputation history, and a cryptographically secure random seed. GPT-4o-mini returns a narrative and financial outcome within capped bounds.
-4. **Validation** — the server validates the outcome against game rules (winnings cannot exceed 25% of the deal pot, losses cannot exceed the trader's balance). If the outcome is adjusted, a second LLM call rewrites the narrative to match the corrected result.
+3. **Outcome decision** — the runtime decides win/loss and magnitude mechanically: a market-modulated win probability and a randomized, capped PnL. GPT-4o-mini is then given the decided result and the trader's context (balance, assets, reputation) and returns only the narrative and asset changes to match it.
+4. **Validation** — the PnL is clamped to game rules as a safety net (winnings cannot exceed 25% of the deal pot, losses cannot exceed the trader's balance), and wipeout is derived from the resulting balance. The model cannot override these.
 5. **On-chain settlement** — the server calls `resolveEntry` on the escrow contract, which distributes funds: winnings from pot to trader (minus rake), or losses from trader to pot.
 6. **Reputation update** — the server posts the outcome to the ERC-8004 Reputation Registry (score, tags, outcome link).
 7. **State sync** — the outcome is committed to Convex, the application's reactive backend, which powers fast reads, realtime UI updates, and future prompt construction.
@@ -199,7 +199,7 @@ The application layer is built with Next.js and Convex, plus a CDP-managed opera
 - Next.js provides the interface, API routes, and application shell
 - Convex stores working state and serves it reactively for fast reads, realtime updates, and prompt construction
 - Convex scheduled actions run the agent runtime — a one-minute heartbeat fans out per-trader cycles, and each active trader runs through scan → evaluate → resolve → settle every few minutes
-- GPT-4o-mini resolves deal outcomes in structured form
+- Deal outcomes are decided mechanically; GPT-4o-mini narrates them in structured form, and the market Wire is generated by GPT-5-mini
 - The agent's deal entry is authenticated with a SIWA-signed HTTP call to the application's deal-entry endpoint, which records a verified entry before resolution proceeds
 
 The server does not replace the market. It coordinates the runtime, validates outputs, settles outcomes through the contract, and records the resulting state back into the game.
@@ -224,15 +224,15 @@ Each active trader runs through a repeating cycle:
 2. Filter against mandate and bankroll rules.
 3. Select the best eligible opportunity.
 4. Pause for approval if the deal exceeds the configured threshold.
-5. Build an outcome request containing the deal prompt, the trader's balance, assets, and reputation history.
-6. Resolve the deal through GPT-4o-mini, which returns a narrative and financial outcome.
+5. Decide the outcome mechanically (market-modulated win probability + capped magnitude).
+6. Hand the decided result, deal prompt, balance, assets, and reputation to GPT-4o-mini, which returns the narrative and asset changes.
 7. Settle the result on-chain through the escrow contract.
 8. Update reputation, activity logs, and mirrored state.
 9. Wait for the next cycle window (a few minutes), then repeat — only while the market is open.
 
 ### Assets
 
-Traders can carry assets — items with narrative and monetary value, such as insider tips, industry contacts, or regulatory immunity. Assets are gained and lost through deal outcomes. They are part of the context sent to GPT-4o-mini during resolution, meaning a trader carrying a valuable asset may have better odds in relevant deals. Assets add a layer of inventory management to the game: a trader with the right assets for a particular deal type has an edge, while losing a key asset in a bad trade can cascade into further vulnerability.
+Traders can carry assets — items with narrative and monetary value, such as insider tips, industry contacts, or regulatory immunity. Assets are gained and lost through deal outcomes, and they carry real USDC value that contributes to a trader's worth. They are part of the context handed to GPT-4o-mini, so they shape the narrative a trade produces and which items are at stake. (Win probability itself is currently driven by market conditions — world mood and SEC heat — rather than inventory; tying assets to odds is a natural future extension.) Assets add a layer of inventory management to the game: losing a key asset in a bad trade can cascade into further vulnerability.
 
 ### Multiple Traders in the Same Deal
 

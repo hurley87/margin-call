@@ -1,5 +1,7 @@
 # Convex Agent Cost Controls
 
+> **Status: Implemented (shipped).** The scheduler exits early when the NYSE-style market window is closed (see `convex/agent/scheduler.ts` and the `isMarketOpen` gate). The reduction figures below describe the shipped behavior.
+
 ## Expected Reduction
 
 Before this change, the Convex cron woke the agent scheduler every minute and the scheduler queried for stale traders regardless of market state. Active funded traders were eligible roughly every 10 minutes, including nights and weekends unless the downstream cycle stamped itself idle.

@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s Wall Street. Players (desk managers) fund and configure AI trader agents that autonomously enter deals. OpenAI GPT-5 mini determines deal outcomes. Payments flow in USDC on Base via x402 protocol. See `docs/wall-street-agent-game.md` for the full game design spec.
+Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s Wall Street. Players (desk managers) fund and configure AI trader agents that autonomously enter deals. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates the outcome; the Wire narrative engine uses `gpt-5-mini`. Money flows in USDC on Base: deal entry is an operator-signed `enterDeal` call on the `MarginCallEscrow` contract, and desk treasury actions go through a non-custodial Base MCP prepare/confirm flow. See `docs/wall-street-agent-game.md` for the full game design spec.
 
 ## Commands
 
@@ -21,27 +21,28 @@ Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s W
 - **Package Manager:** pnpm (workspace enabled)
 - **Path alias:** `@/*` maps to `./src/*`
 
-## Architecture (Planned)
+## Architecture
 
-The project is in early stages (scaffolded Next.js app). The target architecture from the design doc:
+The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the sole source of truth for game state; the `MarginCallEscrow` contract on Base is the source of truth for money.
 
-- **`src/app/`** — Next.js App Router pages + API routes (all backend logic in `app/api/`)
-- **`src/lib/`** — Shared libraries: Supabase client/queries, Privy auth, OpenAI GPT-5 mini LLM integration, x402 payment middleware, agent runtime logic, CDP wallet operations
-- **`src/components/`** — React components organized by domain (dashboard, trader, deal, shared)
-- **`src/hooks/`** — React hooks for game state (traders, deals, activity, approvals)
+- **`src/app/`** — Next.js App Router pages + the HTTP boundary under `src/app/api/`. Actual routes: `/api/deal/enter` (operator-signed on-chain entry, SIWA-authed), `/api/mcp/*` (MCP reads + treasury prepare/confirm), `/api/siwa/*`, `/api/mcp/keys*`, `/api/mcp/plugin`. Game CRUD lives in Convex functions, not REST.
+- **`convex/`** — Backend source of truth: schema, queries/mutations/actions, agent runtime (`convex/agent/`), Wire engine (`convex/wire/`), MCP server-side handlers (`convex/mcp/`), crons (`convex/crons.ts`), CDP wallet ops (`convex/wallet.ts`).
+- **`src/lib/`** — Shared client/server libraries: Privy auth, OpenAI client, contract ABIs, operator signing helpers.
+- **`src/components/`** — React components organized by domain (dashboard, trader, deal, wire, shared).
+- **`src/hooks/`** — Convex (`convex/react`) hooks for game state (traders, deals, activity, approvals).
 
-### Key integrations to be built:
+### Key integrations:
 
-- **Auth/Wallet:** Privy (wallet connect, embedded wallets)
-- **Database:** Supabase (Postgres + Realtime subscriptions)
-- **Payments:** x402 protocol (USDC on Base via Coinbase facilitator)
-- **Agent Wallets:** Coinbase CDP AgentKit (TEE-managed keys)
-- **AI:** OpenAI GPT-5 mini (deal outcome generation + correction flow, structured outputs)
-- **Agent Runtime:** Vercel Cron → `POST /api/agent/scheduler` fans out signed `POST /api/agent/cycle` per stale active trader; deal pick uses GPT-5 mini (mandate filter → desk dedup → LLM rank) with ratio fallback. Traders cannot enter deals created by their own desk (enforced in selection and `recordVerifiedEntry`).
+- **Auth/Wallet:** Privy (email OTP, embedded EVM wallets, sponsored transactions) on Base Sepolia.
+- **Database:** Convex (reactive database + scheduler/crons). Supabase is fully removed.
+- **Payments:** Operator-signed `enterDeal` on the `MarginCallEscrow` contract (`OPERATOR_PRIVATE_KEY`) for deal entry; non-custodial Base MCP **prepare → `send_calls` → `confirm_intent`** for desk treasury (fund/withdraw/create_deal/close_deal). No x402.
+- **Agent Wallets:** Coinbase CDP smart accounts (`@coinbase/cdp-sdk`), minted server-side per trader as ERC-8004 NFTs.
+- **AI:** Deal selection and outcome narration use `gpt-4o-mini`; the Wire narrative engine uses `gpt-5-mini`. Outcome odds are computed mechanically (market mood + SEC heat); the LLM only narrates the pre-decided result.
+- **Agent Runtime:** Convex crons (`convex/crons.ts`) — `agent-scheduler` fires every 1 min → `internal.agent.scheduler.scheduler` queries stale active traders and fans out `internal.agent.cycle.cycle` per trader via `ctx.scheduler.runAfter(0, ...)`. Per-trader interval spacing, max 5 cycles/tick, lease-based concurrency. Deal pick (`gpt-4o-mini`): mandate filter → desk dedup → LLM rank, with ratio fallback. Traders cannot enter deals created by their own desk (enforced in selection and `recordVerifiedEntry`). All cycles gated to NYSE hours (Mon–Fri 09:30–16:00 ET).
 
-### Core game loop (Vercel Workflow):
+### Core game loop (Convex cron heartbeat):
 
-Scan deals → evaluate against mandate → check approval threshold → enter deal (x402) → resolve via GPT-5 mini → apply outcome → sleep 30s → loop
+Scan deals → evaluate against mandate → check approval threshold → enter deal via escrow `enterDeal` → resolve (mechanical odds + `gpt-4o-mini` narration) → apply outcome → trader becomes eligible again on its own interval (driven by the 1-min cron, not an in-process sleep)
 
 ## Conventions
 

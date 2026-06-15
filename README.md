@@ -1,6 +1,6 @@
 # Margin Call — AI-Powered PvP Trading Game
 
-A zero-sum trading game set on 1980s Wall Street. Players act as **desk managers** — funding and configuring AI **trader agents** that autonomously enter deals. GPT-5 mini determines deal outcomes. All money flows in USDC on Base through a smart contract escrow. Traders are ERC-8004 NFTs with on-chain identity and reputation.
+A zero-sum trading game set on 1980s Wall Street. Players act as **desk managers** — funding and configuring AI **trader agents** that autonomously enter deals. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates each outcome; the market Wire uses `gpt-5-mini`. All money flows in USDC on Base through a smart contract escrow. Traders are ERC-8004 NFTs with on-chain identity and reputation.
 
 ## How It Works
 
@@ -22,19 +22,19 @@ A zero-sum trading game set on 1980s Wall Street. Players act as **desk managers
 
 ## Tech Stack
 
-| Layer                  | Technology                                                         |
-| ---------------------- | ------------------------------------------------------------------ |
-| **App**                | Next.js 16 (App Router), React 19, TypeScript (strict)             |
-| **Styling**            | Tailwind CSS v4, shadcn/ui, class-variance-authority               |
-| **Data Fetching**      | Convex reactive queries (`convex/react` hooks)                     |
-| **Auth / Wallet**      | Privy email OTP, embedded EVM wallets, sponsored user transactions |
-| **Smart Contracts**    | Solidity escrow contract on Base                                   |
-| **Agent Identity**     | ERC-8004 (Identity + Reputation Registries on Base)                |
-| **Agent Wallets**      | ERC-6551 (Token Bound Accounts)                                    |
-| **Database**           | Convex (reactive database + scheduler/crons)                       |
-| **AI / LLM**           | OpenAI GPT-5 mini (deal outcomes, prompt suggestions)              |
-| **Agent Runtime**      | Vercel Workflow (durable trade cycle)                              |
-| **Gasless Onboarding** | Privy sponsored transactions on Base Sepolia                       |
+| Layer                  | Technology                                                              |
+| ---------------------- | ----------------------------------------------------------------------- |
+| **App**                | Next.js 16 (App Router), React 19, TypeScript (strict)                  |
+| **Styling**            | Tailwind CSS v4, shadcn/ui, class-variance-authority                    |
+| **Data Fetching**      | Convex reactive queries (`convex/react` hooks)                          |
+| **Auth / Wallet**      | Privy email OTP, embedded EVM wallets, sponsored user transactions      |
+| **Smart Contracts**    | Solidity escrow contract on Base                                        |
+| **Agent Identity**     | ERC-8004 (Identity + Reputation Registries on Base)                     |
+| **Agent Wallets**      | ERC-6551 (Token Bound Accounts)                                         |
+| **Database**           | Convex (reactive database + scheduler/crons)                            |
+| **AI / LLM**           | `gpt-4o-mini` (deal selection + outcome narration), `gpt-5-mini` (Wire) |
+| **Agent Runtime**      | Convex crons + scheduler (1-min heartbeat → per-trader cycle)           |
+| **Gasless Onboarding** | Privy sponsored transactions on Base Sepolia                            |
 
 ## Privy Setup
 
@@ -76,13 +76,10 @@ src/
 │   ├── deals/              # Deal detail pages
 │   ├── leaderboard/        # Rankings
 │   ├── wire/               # Market wire feed
-│   └── api/                # API routes
-│       ├── trader/         # Create, list, pause, resume, deposit, withdraw
-│       ├── deal/           # Create, enter, list, resolve
-│       ├── desk/           # Register, configure, approve
-│       ├── activity/       # Global activity feed
-│       ├── leaderboard/    # Rankings
-│       └── agent-cycle/    # Autonomous trading loop
+│   └── api/                # HTTP boundary (game CRUD lives in Convex, not REST)
+│       ├── deal/enter/     # Operator-signed on-chain deal entry (SIWA-authed)
+│       ├── mcp/            # MCP reads + treasury prepare/confirm, key issuance, plugin
+│       └── siwa/           # Sign-In-With-Account nonce/handshake
 ├── components/             # React components
 │   ├── market-wire.tsx     # Live market feed
 │   ├── feed-line.tsx       # Feed line items
@@ -101,7 +98,7 @@ src/
 │   ├── agent/              # Agent runtime logic
 │   ├── cdp/                # Coinbase CDP wallet operations
 │   ├── contracts/          # Contract ABIs + interaction
-│   ├── llm/                # GPT-5 mini integration
+│   ├── llm/                # Shared OpenAI client (model calls, schemas)
 │   ├── convex/             # Server-side Convex client helpers
 │   ├── privy/              # Auth config
 │   └── rate-limit.ts       # API rate limiting
@@ -127,9 +124,9 @@ Server (Oracle)        ERC-8004 Registries
   │ LLM resolution         │ Reputation
   ▼                        │
 ┌──────────────────────────────────────────┐
-│  NEXT.JS APP                             │
-│  API routes + Vercel Workflow            │
-│  GPT-5 mini (deal outcomes)             │
+│  NEXT.JS APP + CONVEX BACKEND            │
+│  HTTP boundary + Convex crons/scheduler  │
+│  gpt-4o-mini outcomes / gpt-5-mini Wire  │
 │  Convex (game state + reactivity)        │
 └──────────────────────────────────────────┘
 ```

@@ -1,5 +1,7 @@
 # Replace Privy with Base Account
 
+> **Status: Planned / not started.** Desk login today is **Privy** (email OTP + embedded wallets on Base Sepolia). None of the Base Account auth flow described here has shipped: `@base-org/account`, `wallet_connect`/`signInWithEthereum`, and the Phase 0 `src/lib/chain.ts` constants module do not exist in the codebase yet. (Note: MCP _key issuance_ uses a separate SIWE/Base-Account signature handshake, but that is unrelated to desk login.) This document is the forward-looking plan.
+
 ## Goal
 
 Replace Privy auth with the **Base Account recommended authentication flow** from Base docs:

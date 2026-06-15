@@ -16,15 +16,15 @@ If the moment is big enough, the trader stops and asks for you.
 
 If you say no, or wait too long, the desk walks away.
 
-### 3. LLM Resolution
+### 3. The Outcome
 
-The game looks at the deal, the trader, the trader's history, and the circumstances around the moment.
+The money is decided first, by the house — a win-or-loss roll weighted by the mood of the market and how hot the SEC is running, with the size capped by the rules.
 
-Then it turns that into both a story outcome and a financial one.
+Then the model takes that decided result and writes the story around it. The narrative can be vivid; it can't change the number.
 
 ### 4. Validation
 
-The outcome is checked against the rules of the market.
+The result is clamped to the rules of the market — winnings capped, losses never more than the trader put at risk.
 
 Drama is allowed.
 

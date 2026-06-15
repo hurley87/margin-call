@@ -1,5 +1,7 @@
 # PRD: Migrate backend from Supabase to Convex
 
+> **Status: Implemented (shipped).** Convex is now the sole backend and source of truth for game state; Supabase, Vercel Cron, TanStack Query, and `src/hooks/use-realtime.ts` have all been removed. The agent loop runs on Convex crons + scheduler (`convex/crons.ts`, `convex/agent/`). One deviation from this PRD: **x402 was not adopted.** Deal entry is an operator-signed `enterDeal` call on the escrow contract via `/api/deal/enter` (SIWA-authed); desk treasury uses a non-custodial Base MCP prepare/confirm flow. References to "x402" below are historical. This document is retained as a record of the migration decisions.
+
 ## Problem Statement
 
 As a developer building Margin Call (a pre-launch PvP trading game), I'm hitting friction with the current Supabase + Vercel Cron + TanStack Query stack:

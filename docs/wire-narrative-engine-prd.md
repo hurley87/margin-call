@@ -1,8 +1,10 @@
 # Wire Narrative Engine — PRD
 
-**Status:** Draft
+**Status:** Implemented (shipped)
 **Owner:** David
 **Last updated:** 2026-05-06
+
+> The Wire engine ships in `convex/wire/` — `generator.ts` (using `gpt-5-mini`) generates hourly Wire Drops via the `wire-epoch-generator` cron (hourly at :30 UTC), gated to NYSE hours. Narrative state lives in the `marketNarratives`, `narrativeSeasons`, `narrativeArcs`, and `narrativeEntities` tables.
 
 ---
 

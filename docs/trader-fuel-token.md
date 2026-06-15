@@ -1,6 +1,6 @@
 # Trader Fuel Token
 
-> Future feature exploration for adding a single ERC-20 token that players earn from successful deals, stake for lower fees, and burn to revive wiped-out traders.
+> **Status: Future exploration (not started).** No fuel token is deployed or wired into the game today. This is a forward-looking exploration of adding a single ERC-20 token that players earn from successful deals, stake for lower fees, and burn to revive wiped-out traders.
 
 ## Summary
 

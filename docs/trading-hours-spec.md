@@ -1,8 +1,10 @@
 # Trading-Hours Enforcement Spec
 
-Status: draft
+Status: Implemented (shipped)
 Owner: davidhurley@lazertechnologies.com
 Last updated: 2026-05-14
+
+> The shared utility shipped at `convex/lib/tradingHours.ts`, with wire-specific helpers in `convex/wire/tradingHours.ts`. NYSE-hours gating (Mon–Fri 09:30–16:00 ET) is enforced on deal creation, agent cycles, trader activation, and wire generation.
 
 ## 1. Goal
 

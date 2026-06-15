@@ -1,5 +1,7 @@
 # PRD: Margin Call as a Farcaster Mini App
 
+> **Status: Planned / not started.** No Farcaster Mini App integration exists in the codebase yet — there is no Mini App SDK usage, no surface-detection/boot branching, and no signed manifest at a `.well-known` path. This document is the forward-looking plan.
+
 ## Problem Statement
 
 Margin Call is a web-based PvP trading game. Today, the only way to play is to visit the website in a browser, sign in with an email one-time password, get a Privy embedded wallet provisioned, and fund it with test USDC from a faucet. That funnel is high-friction for the audience most likely to enjoy an onchain trading game — people already inside Farcaster clients (Farcaster, the Base App, etc.), who have a wallet and social identity in-app and expect to launch apps with a single tap from their feed.
