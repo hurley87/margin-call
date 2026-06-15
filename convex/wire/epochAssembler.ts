@@ -130,11 +130,16 @@ function pushBulletSection(
   }
 }
 
-function fmtUsd(n: number): string {
+export function fmtUsd(n: number): string {
   const abs = Math.abs(n);
-  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(0)}M`;
-  if (abs >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
-  return `$${n.toFixed(0)}`;
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1) return `$${Math.round(n).toLocaleString("en-US")}`;
+  return `$${n.toFixed(2)}`; // sub-dollar → "$0.47", never "$0"
+}
+
+/** Exact USDC figure for the LLM — cents precision, no trailing-zero noise. */
+function exactUsdc(n: number): number {
+  return Number(n.toFixed(2));
 }
 
 export function assembleUserMessage(input: AssemblerInput): string {
@@ -182,7 +187,7 @@ export function assembleUserMessage(input: AssemblerInput): string {
     lines.push(`    ${lead.leadLine ?? "(see recent market events)"}`);
     if (lead.leadFigureUsdc != null) {
       lines.push(
-        `    Use this EXACT figure, do not round or invent: ${fmtUsd(lead.leadFigureUsdc)} (${lead.leadFigureUsdc} USDC).`
+        `    Use this EXACT figure, do not round or invent: ${fmtUsd(lead.leadFigureUsdc)} (${exactUsdc(lead.leadFigureUsdc)} USDC).`
       );
     }
     lines.push(
@@ -199,7 +204,7 @@ export function assembleUserMessage(input: AssemblerInput): string {
       );
       if (primary.firmLossUsdc != null && primary.firmLossUsdc > 0) {
         lines.push(
-          `    ${primary.firmDisplayName ?? "The firm"}'s running loss is now ${fmtUsd(primary.firmLossUsdc)} (${primary.firmLossUsdc} USDC) — USE THIS EXACT FIGURE.`
+          `    ${primary.firmDisplayName ?? "The firm"}'s running loss is now ${fmtUsd(primary.firmLossUsdc)} (${exactUsdc(primary.firmLossUsdc)} USDC) — USE THIS EXACT FIGURE.`
         );
       }
     }

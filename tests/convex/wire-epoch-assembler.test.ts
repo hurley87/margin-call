@@ -88,6 +88,23 @@ describe("assembleUserMessage", () => {
     expect(msg).toContain("(612 USDC)");
   });
 
+  it("rounds a sub-dollar lead figure to cents (no raw float, no $0)", () => {
+    const msg = assembleUserMessage(
+      makeInput({
+        lead: {
+          leadKind: "real_event",
+          leadLine: "evie / 0xB58…c1: Trader lost $0.47 on someone else's deal",
+          leadFigureUsdc: 0.46952987819924236,
+          realStatOneLiner: null,
+          patterns: [],
+        },
+      })
+    );
+    expect(msg).toContain("$0.47 (0.47 USDC)");
+    expect(msg).not.toContain("0.46952987819924236");
+    expect(msg).not.toContain("$0 ");
+  });
+
   it("labels fabricated floor talk so it is framed as rumor", () => {
     const msg = assembleUserMessage(
       makeInput({

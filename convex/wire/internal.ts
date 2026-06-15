@@ -1,7 +1,7 @@
 import { internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
-import type { GameEventCtx } from "./epochAssembler";
+import { fmtUsd, type GameEventCtx } from "./epochAssembler";
 
 const DRAMATIC_WIN_LOSS_THRESHOLD = 500;
 const DRAMATIC_ENTRY_THRESHOLD = 250;
@@ -143,7 +143,7 @@ export const listRecentGameEvents = internalQuery({
         dramatic.push({
           type: "big_win",
           dramatic: true,
-          summary: `Trader won $${pnl.toFixed(0)} on a deal`,
+          summary: `Trader won ${fmtUsd(pnl)} on a deal`,
           ...enrich,
         });
         dramaticTraderIds.add(o.traderId);
@@ -153,8 +153,8 @@ export const listRecentGameEvents = internalQuery({
           type: crossDesk ? "trap_resolved" : "big_loss",
           dramatic: isDramatic,
           summary: crossDesk
-            ? `Trader lost $${Math.abs(pnl).toFixed(0)} on someone else's deal`
-            : `Trader lost $${Math.abs(pnl).toFixed(0)} on a deal`,
+            ? `Trader lost ${fmtUsd(Math.abs(pnl))} on someone else's deal`
+            : `Trader lost ${fmtUsd(Math.abs(pnl))} on a deal`,
           ...enrich,
         };
         (isDramatic ? dramatic : routine).push(event);
@@ -163,7 +163,7 @@ export const listRecentGameEvents = internalQuery({
         routine.push({
           type: "deal_entry",
           dramatic: false,
-          summary: `Deal resolved: +$${pnl.toFixed(0)} PnL`,
+          summary: `Deal resolved: +${fmtUsd(pnl)} PnL`,
           ...enrich,
         });
       }
@@ -174,7 +174,7 @@ export const listRecentGameEvents = internalQuery({
         dramatic.push({
           type: "high_pot_deal",
           dramatic: true,
-          summary: `High-stakes deal opened: "${d.prompt.slice(0, 60)}" ($${d.potUsdc} pot)`,
+          summary: `High-stakes deal opened: "${d.prompt.slice(0, 60)}" (${fmtUsd(d.potUsdc)} pot)`,
           dealId: d._id as string,
           dealPrompt: d.prompt,
           magnitudeUsdc: d.potUsdc,
@@ -183,7 +183,7 @@ export const listRecentGameEvents = internalQuery({
         routine.push({
           type: "deal_created",
           dramatic: false,
-          summary: `Deal opened: "${d.prompt.slice(0, 50)}" ($${d.potUsdc} pot)`,
+          summary: `Deal opened: "${d.prompt.slice(0, 50)}" (${fmtUsd(d.potUsdc)} pot)`,
           dealId: d._id as string,
           dealPrompt: d.prompt,
           magnitudeUsdc: d.potUsdc,
@@ -212,7 +212,7 @@ export const listRecentGameEvents = internalQuery({
       dramatic.push({
         type: "large_entry",
         dramatic: true,
-        summary: `Trader entered a deal for $${e.entryCostUsdc.toFixed(0)}`,
+        summary: `Trader entered a deal for ${fmtUsd(e.entryCostUsdc)}`,
         traderName: e.traderId as string,
         traderId: e.traderId as string,
         dealId: e.dealId as string,
