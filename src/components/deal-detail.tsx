@@ -227,6 +227,11 @@ export function DealDetailContent({
     onChainDeal !== undefined
       ? Number(formatUnits(onChainDeal.potAmount, 6))
       : deal.pot_usdc + legacyPotDelta;
+  const potDeltaUsdc = outcomes.reduce(
+    (sum, outcome) => sum + outcome.pot_change_usdc,
+    0
+  );
+  const startingPotUsdc = displayPotUsdc - potDeltaUsdc;
   const isDealOwner =
     deal.creator_id !== undefined &&
     deskManager?.id === deal.creator_id &&
@@ -324,6 +329,28 @@ export function DealDetailContent({
             entryCount={deal.entry_count}
             wipeoutCount={wipeoutCount}
           />
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-[var(--t-border)] bg-[var(--t-surface)]/60 px-3 py-2">
+            <span className="text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
+              Started {formatPotMoney(startingPotUsdc)} → Now{" "}
+              {formatPotMoney(displayPotUsdc)}
+            </span>
+            <span
+              className={`text-[10px] font-bold uppercase tracking-wider ${
+                potDeltaUsdc > 0
+                  ? "text-[var(--t-green)]"
+                  : potDeltaUsdc < 0
+                    ? "text-[var(--t-red)]"
+                    : "text-[var(--t-muted)]"
+              }`}
+            >
+              {potDeltaUsdc > 0
+                ? `▲ Up ${formatPotMoney(potDeltaUsdc)}`
+                : potDeltaUsdc < 0
+                  ? `▼ Down ${formatPotMoney(Math.abs(potDeltaUsdc))}`
+                  : "Even"}
+            </span>
+          </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
             {deal.on_chain_tx_hash && (
