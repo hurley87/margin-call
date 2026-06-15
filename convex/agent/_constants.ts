@@ -23,11 +23,21 @@ export const WIN_PROB_MARKET_SWING = 0.15;
 /** Hard bounds on the modified win probability. */
 export const MIN_WIN_PROBABILITY = 0.15;
 export const MAX_WIN_PROBABILITY = 0.85;
-/** On a win, trader gains a random fraction of maxValuePerWin. */
+/**
+ * Win/loss magnitudes are both sized off the trader's ENTRY COST (stake), so a
+ * deal is a fair-ish bet on the stake rather than an uncapped raid on the pot.
+ * Average loss > average win is the deliberate house edge: it grows the deal's
+ * pot (the creator's incentive to host deals) and keeps a baseline trader
+ * slightly net-negative (no auto-earn). With a 10% rake on wins, break-even sits
+ * at a win probability of ~0.59 — traders only profit by playing favorable
+ * markets. Retune freely; LOSS_MAGNITUDE_MAX_FRACTION must stay ≤ 1.0 (a trader
+ * can't lose more than they staked).
+ */
+/** On a win, trader gains a random fraction of their entry cost. Avg ≈ 0.65×. */
 export const WIN_MAGNITUDE_MIN_FRACTION = 0.3;
 export const WIN_MAGNITUDE_MAX_FRACTION = 1.0;
-/** On a loss, trader loses a random fraction of the entry cost. */
-export const LOSS_MAGNITUDE_MIN_FRACTION = 0.4;
+/** On a loss, trader loses a random fraction of their entry cost. Avg ≈ 0.85×. */
+export const LOSS_MAGNITUDE_MIN_FRACTION = 0.7;
 export const LOSS_MAGNITUDE_MAX_FRACTION = 1.0;
 
 /** Approval expiry: 24 hours from request time. */

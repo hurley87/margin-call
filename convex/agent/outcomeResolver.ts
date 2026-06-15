@@ -129,10 +129,15 @@ export async function resolveOutcome(
   // The LLM cannot reliably sample from a "random seed", so win/loss and its
   // magnitude are rolled here with a real, market-modulated probability. The
   // LLM is handed the result and only narrates it.
+  //
+  // Both win and loss are sized off the trader's entry cost (stake). Because
+  // average loss > average win (see _constants.ts), the deal carries a house
+  // edge: the pot trends up (the creator's incentive) and a baseline trader is
+  // slightly net-negative. maxValuePerWin remains only as a safety clamp below.
   const winProbability = computeWinProbability(worldMood, secHeat);
   const isWin = Math.random() < winProbability;
   const decidedBalanceChange = isWin
-    ? maxValuePerWin *
+    ? entryCostUsdc *
       lerp(
         WIN_MAGNITUDE_MIN_FRACTION,
         WIN_MAGNITUDE_MAX_FRACTION,
