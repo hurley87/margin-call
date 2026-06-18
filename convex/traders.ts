@@ -991,6 +991,27 @@ export const renameInternalForOps = internalMutation({
 });
 
 /**
+ * Internal (ops): wholesale-replace a trader's mandate with a clean object.
+ * Unlike updateMandateForMcp this does NOT merge — use it to scrub a mandate
+ * that was corrupted by the historical string-spread bug (stray "0","1",… keys).
+ */
+export const setMandateInternalForOps = internalMutation({
+  args: {
+    traderId: v.id("traders"),
+    mandate: v.any(),
+  },
+  handler: async (ctx, { traderId, mandate }) => {
+    const trader = await ctx.db.get(traderId);
+    if (!trader) throw new Error("Trader not found");
+    await ctx.db.patch(traderId, {
+      mandate: normalizeMandate(mandate),
+      updatedAt: Date.now(),
+    });
+    return { ok: true as const, traderId };
+  },
+});
+
+/**
  * Internal: list traders on the same desk (same deskManagerId) excluding
  * the given traderId. Used for desk dedup in deal selection.
  */
