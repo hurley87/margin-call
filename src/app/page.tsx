@@ -46,6 +46,7 @@ import {
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
 import { MomentLayer } from "@/components/moments/moment-overlay";
@@ -228,8 +229,9 @@ export default function Home() {
           >
             {">"} Enter by email<span className="cursor-blink">█</span>
           </button>
+          <ConnectMcpDialog />
           <p className="text-[11px] uppercase tracking-widest text-[var(--t-muted)]">
-            Email OTP access. Embedded Base wallet assigned after sign-in.
+            Email OTP access, or connect your AI agent via MCP.
           </p>
         </div>
       </div>
