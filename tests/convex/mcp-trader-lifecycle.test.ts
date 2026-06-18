@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { internal } from "../../convex/_generated/api";
+import type { Doc } from "../../convex/_generated/dataModel";
 import {
   buildMandatePatch,
   assertCanActivateTrader,
@@ -211,6 +212,27 @@ describe("buildMandatePatch", () => {
       bankroll_pct: 20,
       keywords: ["old"],
     });
+  });
+
+  it("parses a stringified incoming mandate instead of rejecting it", () => {
+    const trader = { mandate: {} } as Doc<"traders">;
+    const patch = buildMandatePatch(
+      trader,
+      JSON.stringify({ bankroll_pct: 15, keywords: [] }),
+      undefined
+    );
+    expect(patch.mandate).toEqual({ bankroll_pct: 15, keywords: [] });
+  });
+
+  it("does not explode a string-stored existing mandate into char-indexed keys", () => {
+    // Regression: existing mandate persisted as a JSON string used to be spread
+    // character-by-character ("0","1",...) by the merge, silently dropping fields.
+    const trader = {
+      mandate: JSON.stringify({ bankroll_pct: 10, keywords: ["old"] }),
+    } as unknown as Doc<"traders">;
+    const patch = buildMandatePatch(trader, { keywords: [] }, undefined);
+    expect(patch.mandate).toEqual({ bankroll_pct: 10, keywords: [] });
+    expect(patch.mandate).not.toHaveProperty("0");
   });
 });
 

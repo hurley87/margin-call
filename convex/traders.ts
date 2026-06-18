@@ -251,6 +251,30 @@ export type MandatePatch = Partial<
 >;
 
 /**
+ * Coerce a mandate value into a plain object. MCP clients can serialize the
+ * `v.any()` mandate arg as a JSON string; without this it gets stored verbatim
+ * and later exploded into character-indexed keys by the object spread in
+ * `buildMandatePatch`. Returns {} for empty/missing input; throws on garbage.
+ */
+export function normalizeMandate(mandate: unknown): Record<string, unknown> {
+  if (mandate === null || mandate === undefined) return {};
+  let value = mandate;
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (trimmed === "") return {};
+    try {
+      value = JSON.parse(trimmed);
+    } catch {
+      throw new Error("mandate string is not valid JSON");
+    }
+  }
+  if (typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("mandate must be an object");
+  }
+  return value as Record<string, unknown>;
+}
+
+/**
  * Validates mandate fields and builds a patch for mandate/personality updates.
  * Shared by browser `updateMandate` and MCP `updateMandateForMcp`.
  */
@@ -259,15 +283,13 @@ export function buildMandatePatch(
   mandate: unknown,
   personality: string | null | undefined
 ): MandatePatch {
-  if (!mandate || typeof mandate !== "object" || Array.isArray(mandate)) {
-    throw new Error("mandate must be an object");
-  }
+  const normalizedMandate = normalizeMandate(mandate);
 
   const cleaned: Record<string, unknown> = {};
 
   for (const key of MANDATE_NUMERIC_KEYS) {
-    if (!(key in mandate)) continue;
-    const val = (mandate as Record<string, unknown>)[key];
+    if (!(key in normalizedMandate)) continue;
+    const val = normalizedMandate[key];
     if (val === null || val === undefined) continue;
     const num = Number(val);
     if (Number.isNaN(num) || num < 0) {
@@ -279,8 +301,8 @@ export function buildMandatePatch(
     cleaned[key] = num;
   }
 
-  if ("keywords" in mandate) {
-    const val = (mandate as Record<string, unknown>).keywords;
+  if ("keywords" in normalizedMandate) {
+    const val = normalizedMandate.keywords;
     if (
       !Array.isArray(val) ||
       !val.every((entry) => typeof entry === "string")
@@ -290,16 +312,15 @@ export function buildMandatePatch(
     cleaned.keywords = val;
   }
 
-  if ("llm_deal_selection" in mandate) {
-    const val = (mandate as Record<string, unknown>).llm_deal_selection;
+  if ("llm_deal_selection" in normalizedMandate) {
+    const val = normalizedMandate.llm_deal_selection;
     if (typeof val !== "boolean") {
       throw new Error("llm_deal_selection must be a boolean");
     }
     cleaned.llm_deal_selection = val;
   }
 
-  const existingMandate =
-    (trader.mandate as Record<string, unknown> | undefined) ?? {};
+  const existingMandate = normalizeMandate(trader.mandate);
 
   const patch: MandatePatch = {
     mandate: { ...existingMandate, ...cleaned },
@@ -486,10 +507,11 @@ export const createRecord = internalMutation({
     }
 
     const now = Date.now();
+    const normalizedMandate = normalizeMandate(args.mandate);
     const portraitSeed = buildPortraitSeed({
       ownerSubject,
       name: trimmedName,
-      mandate: args.mandate ?? {},
+      mandate: normalizedMandate,
       personality: args.personality,
     });
     const traderId = await ctx.db.insert("traders", {
@@ -498,7 +520,7 @@ export const createRecord = internalMutation({
       name: trimmedName,
       nameLower: normalizedName,
       status: "paused",
-      mandate: args.mandate ?? {},
+      mandate: normalizedMandate,
       personality: args.personality,
       ...portraitSeed,
       walletStatus: "pending",
