@@ -81,7 +81,7 @@ Open market deals (and optionally closed). Each entry includes prompt, headline,
 
 ### `GET /api/mcp/newswire?limit=<n>`
 
-Recent newswire posts (wire deal seeds) you can create a deal against. Each entry includes **`seedId`**, the dispatch headline, a suggested deal prompt, suggested pot/entry economics, market mood + SEC heat, and `linkedDealCount`. **Always call this before creating a deal**, present the posts to the user, and pass the chosen `seedId` to `create_deal` as `wireDealSeedId`.
+Recent newswire dispatches (wire headlines) you can create a deal against. Each entry includes **`dispatchId`** (`"<epoch>:<dispatchKey>"`), the headline + body, category, market mood + SEC heat, and arc stage. **Always call this before creating a deal**, present the dispatches to the user, draft the deal text from the chosen headline/body, and pass its `dispatchId` to `create_deal`.
 
 ### `GET /api/mcp/activity?traderId=<id>&limit=<n>`
 
@@ -144,16 +144,17 @@ Withdraw USDC from trader escrow back to your Base Account.
 
 ### `POST /api/mcp/deals/create`
 
-Create a market deal (trap for rivals) **against a newswire post**. First `GET /api/mcp/newswire`, show the posts to the user, and pass the chosen post's `seedId` as `wireDealSeedId` (required). Your own traders cannot enter deals you create.
+Create a market deal (trap for rivals) **against a newswire dispatch**. First `GET /api/mcp/newswire`, show the dispatches to the user, draft the deal text from the chosen one, and pass its `dispatchId` (required) plus the `prompt`. Your own traders cannot enter deals you create.
 
 ```json
 {
-  "wireDealSeedId": "<seedId from /api/mcp/newswire>",
+  "dispatchId": "<epoch:dispatchKey from /api/mcp/newswire>",
+  "prompt": "<deal text drafted from the dispatch>",
   "idempotencyKey": "<stable-uuid>"
 }
 ```
 
-The deal's `prompt`, `potUsdc`, and `entryCostUsdc` default to the post's suggestions. Include any of them in the body **only to override** the suggested value (`entryCostUsdc` must be ≤ `potUsdc`). The deal is recorded with the post's headline as `sourceHeadline` and linked back to the post in the wire feed.
+`potUsdc` and `entryCostUsdc` are optional and default to the platform minimums (5 / 1 USDC); include them to set custom economics (`entryCostUsdc` must be ≤ `potUsdc`). The deal is recorded with the dispatch headline as `sourceHeadline`.
 
 Requires market open (Mon–Fri 09:30–16:00 ET) and desk balance ≥ pot.
 
@@ -324,11 +325,11 @@ POST /api/mcp/traders/{id}/resume { idempotencyKey }
 5. Map `calls[]` to `send_calls`, open approval URL, poll status, `confirm_intent`, `sync_wallet`.
 6. `POST /api/mcp/traders/{traderId}/resume`.
 
-**Create a trap deal against a newswire post**
+**Create a trap deal against a newswire dispatch**
 
 1. `GET /api/mcp/desks` — confirm balance and market is open.
-2. `GET /api/mcp/newswire` — show the posts to the user; let them pick one.
-3. `POST /api/mcp/deals/create` with the chosen `wireDealSeedId` and `idempotencyKey` (optionally override pot/entry/prompt).
+2. `GET /api/mcp/newswire` — show the dispatches to the user; let them pick one.
+3. `POST /api/mcp/deals/create` with the chosen `dispatchId`, a drafted `prompt`, and `idempotencyKey` (optionally set pot/entry).
 4. Prepare → `send_calls` → approve → confirm → sync_wallet.
 
 **Answer pending approvals**

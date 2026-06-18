@@ -34,13 +34,20 @@ import { shapePrepareResult } from "./intents";
 
 type PrepareActionResult = Record<string, unknown>;
 
+// Platform minimums used when the desk doesn't specify deal economics
+// (mirrors MIN_POT_AMOUNT / MIN_ENTRY_COST in the web app).
+const DEFAULT_POT_USDC = 5;
+const DEFAULT_ENTRY_COST_USDC = 1;
+
 export const createPrepareForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
-    // A deal is always created against a newswire post (wire deal seed).
-    wireDealSeedId: v.id("wireDealSeeds"),
-    // Optional overrides; default to the post's suggested values.
-    prompt: v.optional(v.string()),
+    // A deal is always created against a real newswire dispatch.
+    // dispatchId is "<epoch>:<dispatchKey>" (from list_newswire).
+    dispatchId: v.string(),
+    // The desk-drafted deal text.
+    prompt: v.string(),
+    // Optional economics; default to the platform minimums.
     potUsdc: v.optional(v.number()),
     entryCostUsdc: v.optional(v.number()),
     idempotencyKey: v.optional(v.string()),
@@ -48,21 +55,26 @@ export const createPrepareForMcp = internalAction({
   handler: async (ctx, args): Promise<PrepareActionResult> => {
     assertTradingHours();
 
-    // Load the newswire post and derive deal fields (override → suggestion).
-    const seed = await ctx.runQuery(internal.mcp.newswire.getSeed, {
-      seedId: args.wireDealSeedId,
-    });
-    const prompt =
-      typeof args.prompt === "string" && args.prompt.trim() !== ""
-        ? args.prompt.trim()
-        : seed.prompt;
-    const potUsdc = args.potUsdc ?? seed.suggestedPotUsdc;
-    const entryCostUsdc = args.entryCostUsdc ?? seed.suggestedEntryCostUsdc;
-    const sourceHeadline = seed.dispatchHeadline;
-
-    if (typeof prompt !== "string" || prompt.trim() === "") {
+    const prompt = args.prompt.trim();
+    if (prompt === "") {
       throw new Error("prompt is required");
     }
+
+    // Resolve the chosen dispatch and use its headline as the deal's source.
+    const sep = args.dispatchId.indexOf(":");
+    const epoch = Number(args.dispatchId.slice(0, sep));
+    const dispatchKey = args.dispatchId.slice(sep + 1);
+    if (sep < 0 || !Number.isFinite(epoch) || dispatchKey === "") {
+      throw new Error('Invalid dispatchId — expected "<epoch>:<dispatchKey>"');
+    }
+    const dispatch = await ctx.runQuery(internal.mcp.newswire.getDispatch, {
+      epoch,
+      dispatchKey,
+    });
+    const sourceHeadline = dispatch.headline;
+
+    const potUsdc = args.potUsdc ?? DEFAULT_POT_USDC;
+    const entryCostUsdc = args.entryCostUsdc ?? DEFAULT_ENTRY_COST_USDC;
 
     await assertPerActionCap(ctx, args.deskManagerId, "create_deal", potUsdc);
 
@@ -155,7 +167,6 @@ export const createPrepareForMcp = internalAction({
         potUsdc,
         entryCostUsdc,
         walletAddress: deskAddress,
-        wireDealSeedId: args.wireDealSeedId,
         sourceHeadline,
       },
       idempotencyKey: args.idempotencyKey,
@@ -200,7 +211,6 @@ export const createConfirmForMcp = internalAction({
       potUsdc: number;
       entryCostUsdc: number;
       walletAddress: string;
-      wireDealSeedId?: Id<"wireDealSeeds">;
       sourceHeadline?: string;
     };
 
@@ -264,7 +274,6 @@ export const createConfirmForMcp = internalAction({
         potUsdc: Number(dealEvent.pot) / USDC_DECIMALS,
         entryCostUsdc: Number(dealEvent.entryCost) / USDC_DECIMALS,
         sourceHeadline: payload.sourceHeadline,
-        wireDealSeedId: payload.wireDealSeedId,
       }
     );
 

@@ -179,25 +179,23 @@ function parseWithdrawTraderBody(body: Record<string, unknown>) {
 function parseCreateDealBody(body: Record<string, unknown>) {
   const base = parseMcpWriteBase(body);
   if ("ok" in base) return base;
-  // A deal must be created against a newswire post (wire deal seed).
-  if (
-    typeof body.wireDealSeedId !== "string" ||
-    body.wireDealSeedId.trim() === ""
-  ) {
+  // A deal must be created against a real newswire dispatch.
+  if (typeof body.dispatchId !== "string" || !/^\d+:.+/.test(body.dispatchId)) {
     return {
       ok: false as const,
       message:
-        "wireDealSeedId required — call list_newswire and pass the chosen seedId",
+        'dispatchId required ("<epoch>:<dispatchKey>") — call list_newswire and pass the chosen dispatchId',
     };
   }
-  // prompt/pot/entry are optional overrides; default to the post's suggestions.
-  // Validate format only when present.
-  if (
-    body.prompt !== undefined &&
-    (typeof body.prompt !== "string" || body.prompt.trim() === "")
-  ) {
-    return { ok: false as const, message: "prompt override must be non-empty" };
+  // The desk drafts the deal text against the dispatch.
+  if (typeof body.prompt !== "string" || body.prompt.trim() === "") {
+    return {
+      ok: false as const,
+      message: "prompt required (the deal text drafted from the dispatch)",
+    };
   }
+  // pot/entry are optional; default to the platform minimums. Validate only
+  // when present.
   const hasPot = body.potUsdc !== undefined;
   const hasEntry = body.entryCostUsdc !== undefined;
   const pot = Number(body.potUsdc);
@@ -412,7 +410,7 @@ http.route({
       limit: body.limit,
     }),
     runQuery: (ctx, args) =>
-      ctx.runQuery(internal.mcp.newswire.listSeeds, args),
+      ctx.runQuery(internal.mcp.newswire.listDispatches, args),
   }),
 });
 
@@ -641,11 +639,8 @@ http.route({
           internal.mcp.dealsEscrow.createPrepareForMcp,
           {
             deskManagerId,
-            wireDealSeedId: requestBody.wireDealSeedId as Id<"wireDealSeeds">,
-            prompt:
-              typeof requestBody.prompt === "string"
-                ? requestBody.prompt
-                : undefined,
+            dispatchId: requestBody.dispatchId as string,
+            prompt: requestBody.prompt as string,
             potUsdc:
               requestBody.potUsdc !== undefined
                 ? Number(requestBody.potUsdc)

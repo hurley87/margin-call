@@ -1,17 +1,24 @@
 import { internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 
+type DispatchItem = {
+  headline: string;
+  body: string;
+  category?: string;
+  role?: string;
+  dispatchKey?: string;
+};
+
 /**
- * Read-only list of recent wire deal seeds for MCP `list_newswire`.
+ * Read-only list of recent newswire dispatches for MCP `list_newswire`.
  *
- * Each seed is a newswire post the desk can spin a deal against: it carries the
- * dispatch headline, a suggested deal prompt, and suggested pot/entry economics.
- * The desk browses these, picks one, and passes its `seedId` to `create_deal`.
- *
- * Mirrors the seed/link aggregation in `marketNarratives.feedDrops` so deals
- * created via MCP land in the same wire feed as web-created ones.
+ * A dispatch is a single wire headline+body the wire publishes (hourly). The
+ * desk browses these, picks one, and creates a deal against it — mirroring the
+ * web "Create deal" flow, which drafts deal text from a dispatch and records its
+ * headline as the deal's `sourceHeadline`. Each item carries a `dispatchId`
+ * (`"<epoch>:<dispatchKey>"`) to pass to `create_deal` as `dispatchId`.
  */
-export const listSeeds = internalQuery({
+export const listDispatches = internalQuery({
   args: {
     deskManagerId: v.id("deskManagers"),
     limit: v.optional(v.number()),
@@ -19,62 +26,81 @@ export const listSeeds = internalQuery({
   handler: async (ctx, { limit = 20 }) => {
     const bounded = Math.min(Math.max(1, limit), 50);
 
-    // Newest-first by creation time (no dedicated index needed).
-    const seeds = await ctx.db
-      .query("wireDealSeeds")
+    // Pull recent drops newest-first, then flatten their dispatches up to the
+    // requested cap (a single drop can carry multiple dispatches).
+    const drops = await ctx.db
+      .query("marketNarratives")
+      .withIndex("byEpoch")
       .order("desc")
       .take(bounded);
 
-    const items = await Promise.all(
-      seeds.map(async (s) => {
-        const links = await ctx.db
-          .query("wireDealSeedLinks")
-          .withIndex("bySeed", (q) => q.eq("seedId", s._id))
-          .take(100);
+    const items: Array<{
+      dispatchId: string;
+      headline: string;
+      body: string;
+      category: string;
+      role: string;
+      epoch: number;
+      epochSlot: number | null;
+      mood: string;
+      secHeat: number;
+      arcStage: string | null;
+      createdAt: number;
+    }> = [];
 
-        const epoch = await ctx.db.get(s.epochId);
-        const ws = (epoch?.worldState ?? {}) as {
-          mood?: string;
-          sec_heat?: number;
-        };
-
-        return {
-          seedId: s._id,
-          dispatchHeadline: s.dispatchHeadline,
-          prompt: s.prompt,
-          suggestedPotUsdc: s.suggestedPotUsdc,
-          suggestedEntryCostUsdc: s.suggestedEntryCostUsdc,
-          epoch: epoch?.epoch ?? null,
-          arcStage: epoch?.arcStage ?? null,
+    for (const drop of drops) {
+      const ws = (drop.worldState ?? {}) as {
+        mood?: string;
+        sec_heat?: number;
+      };
+      const dispatches = (drop.headlines ?? []) as DispatchItem[];
+      for (const d of dispatches) {
+        // Only dispatches with a stable key can be referenced by create_deal.
+        if (!d.dispatchKey) continue;
+        items.push({
+          dispatchId: `${drop.epoch}:${d.dispatchKey}`,
+          headline: d.headline,
+          body: d.body,
+          category: d.category ?? "wire",
+          role: d.role ?? "supporting",
+          epoch: drop.epoch,
+          epochSlot: drop.epochSlot ?? null,
           mood: ws.mood ?? "unknown",
           secHeat: ws.sec_heat ?? 0,
-          linkedDealCount: links.length,
-          createdAt: s.createdAt,
-        };
-      })
-    );
+          arcStage: drop.arcStage ?? null,
+          createdAt: drop.createdAt,
+        });
+        if (items.length >= bounded) break;
+      }
+      if (items.length >= bounded) break;
+    }
 
-    return { seeds: items, count: items.length };
+    return { dispatches: items, count: items.length };
   },
 });
 
 /**
- * Load a single wire deal seed for the MCP `create_deal` prepare step.
- * Returns the suggested prompt/economics and the dispatch headline used as the
- * deal's `sourceHeadline`.
+ * Resolve a single dispatch (by epoch + dispatchKey) for the MCP `create_deal`
+ * prepare step. Returns the dispatch headline used as the deal's
+ * `sourceHeadline`, verifying the chosen post actually exists.
  */
-export const getSeed = internalQuery({
-  args: { seedId: v.id("wireDealSeeds") },
-  handler: async (ctx, { seedId }) => {
-    const seed = await ctx.db.get(seedId);
-    if (!seed)
-      throw new Error("Newswire post not found (invalid wireDealSeedId)");
-    return {
-      seedId: seed._id,
-      prompt: seed.prompt,
-      suggestedPotUsdc: seed.suggestedPotUsdc,
-      suggestedEntryCostUsdc: seed.suggestedEntryCostUsdc,
-      dispatchHeadline: seed.dispatchHeadline,
-    };
+export const getDispatch = internalQuery({
+  args: { epoch: v.number(), dispatchKey: v.string() },
+  handler: async (ctx, { epoch, dispatchKey }) => {
+    const drop = await ctx.db
+      .query("marketNarratives")
+      .withIndex("byEpoch", (q) => q.eq("epoch", epoch))
+      .first();
+    if (!drop) {
+      throw new Error(`Newswire epoch ${epoch} not found (stale dispatchId)`);
+    }
+    const dispatches = (drop.headlines ?? []) as DispatchItem[];
+    const dispatch = dispatches.find((d) => d.dispatchKey === dispatchKey);
+    if (!dispatch) {
+      throw new Error(
+        `Dispatch "${dispatchKey}" not found in epoch ${epoch} (stale dispatchId)`
+      );
+    }
+    return { headline: dispatch.headline, body: dispatch.body };
   },
 });
