@@ -96,7 +96,9 @@ export const listTraderStats = query({
       })
     );
 
-    leaderboard.sort((a, b) => b.total_value - a.total_value);
+    leaderboard.sort(
+      (a, b) => b.total_pnl - a.total_pnl || b.total_value - a.total_value
+    );
     return leaderboard.slice(0, limit);
   },
 });
