@@ -1,4 +1,8 @@
-import { internalMutation, internalQuery } from "../_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  type MutationCtx,
+} from "../_generated/server";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
 
@@ -9,6 +13,31 @@ export type McpDealWriteResult = {
   walletAddress?: string;
   summary: string;
 };
+
+/**
+ * Link a deal back to the newswire post (wire deal seed) it was created
+ * against, mirroring the web flow in `deals.recordOnChainCreation`. Idempotent:
+ * skips if a link for this seed→deal pair already exists.
+ */
+async function linkWireSeed(
+  ctx: MutationCtx,
+  seedId: Id<"wireDealSeeds"> | undefined,
+  dealId: Id<"deals">,
+  deskManagerId: Id<"deskManagers">
+): Promise<void> {
+  if (!seedId) return;
+  const existing = await ctx.db
+    .query("wireDealSeedLinks")
+    .withIndex("byDeal", (q) => q.eq("dealId", dealId))
+    .collect();
+  if (existing.some((l) => l.seedId === seedId)) return;
+  await ctx.db.insert("wireDealSeedLinks", {
+    seedId,
+    dealId,
+    deskManagerId,
+    createdAt: Date.now(),
+  });
+}
 
 /**
  * Read-only list of open (or recent) deals for MCP `list_deals`.
@@ -78,6 +107,8 @@ export const recordOnChainCreationForMcp = internalMutation({
     prompt: v.string(),
     potUsdc: v.number(),
     entryCostUsdc: v.number(),
+    sourceHeadline: v.optional(v.string()),
+    wireDealSeedId: v.optional(v.id("wireDealSeeds")),
   },
   handler: async (ctx, args): Promise<McpDealWriteResult> => {
     const desk = await ctx.db.get(args.deskManagerId);
@@ -90,6 +121,13 @@ export const recordOnChainCreationForMcp = internalMutation({
       )
       .unique();
     if (existing) {
+      // Ensure the wire post → deal link exists even on a retried confirm.
+      await linkWireSeed(
+        ctx,
+        args.wireDealSeedId,
+        existing._id,
+        args.deskManagerId
+      );
       return {
         dealId: String(existing._id),
         onChainDealId: existing.onChainDealId,
@@ -107,6 +145,7 @@ export const recordOnChainCreationForMcp = internalMutation({
       prompt: args.prompt,
       potUsdc: args.potUsdc,
       entryCostUsdc: args.entryCostUsdc,
+      sourceHeadline: args.sourceHeadline,
       status: "open",
       onChainDealId: args.onChainDealId,
       onChainTxHash: args.onChainTxHash,
@@ -114,6 +153,8 @@ export const recordOnChainCreationForMcp = internalMutation({
       createdAt: now,
       updatedAt: now,
     });
+
+    await linkWireSeed(ctx, args.wireDealSeedId, newId, args.deskManagerId);
 
     return {
       dealId: String(newId),

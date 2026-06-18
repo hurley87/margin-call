@@ -183,6 +183,22 @@ server.tool(
 );
 
 server.tool(
+  "list_newswire",
+  "List recent newswire posts you can create a deal against. Each post is a wire 'deal seed' carrying a `seedId`, the dispatch headline, a suggested deal prompt, suggested pot/entry economics, the market mood + SEC heat, and how many deals already reference it (`linkedDealCount`). ALWAYS call this before create_deal: present the posts to the user, let them pick one, and pass its `seedId` as `create_deal`'s `wireDealSeedId`. Optional: limit (default 20, max 50).",
+  {
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .optional()
+      .describe("Maximum newswire posts to return (default 20)"),
+  },
+  async ({ limit }) =>
+    callMcpApi(`/api/mcp/newswire${buildQueryString({ limit })}`)
+);
+
+server.tool(
   "get_activity",
   "Recent chronological activity for the desk (or a single trader). Returns both structured rows and a `lines[]` array of terminal-friendly strings already formatted for easy reading. Use to understand what your traders have been doing. Optional: traderId (scope to one), limit (default 30).",
   {
@@ -453,33 +469,48 @@ server.tool(
 
 server.tool(
   "create_deal",
-  `Prepare creating a market deal (trap for rivals) from your Base Account. ${treasuryPrepareHint} Own-desk traders cannot enter. Market must be open. Balance >= potUsdc. confirm returns dealId + onChainDealId.`,
+  `Prepare creating a market deal (trap for rivals) against a newswire post. First call list_newswire, show the posts to the user, and let them pick one — then pass its \`seedId\` as \`wireDealSeedId\`. The deal's prompt, pot, and entry cost default to the post's suggestions; only set the optional overrides if the user asks. ${treasuryPrepareHint} Own-desk traders cannot enter. Market must be open. Balance >= pot. confirm returns dealId + onChainDealId.`,
   {
-    prompt: z
+    wireDealSeedId: z
       .string()
       .min(1)
       .describe(
-        "Deal prompt (the headline/scenario the LLM uses to resolve outcomes)"
+        "The chosen newswire post's seedId (from list_newswire). Required — every deal is created against a post."
+      ),
+    prompt: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Optional override for the deal prompt. Defaults to the post's suggested prompt."
       ),
     potUsdc: z
       .number()
       .positive()
+      .optional()
       .describe(
-        "Total USDC pot funded from the desk wallet (human units, e.g. 100 for $100)"
+        "Optional override for the total USDC pot (human units). Defaults to the post's suggested pot."
       ),
     entryCostUsdc: z
       .number()
       .positive()
+      .optional()
       .describe(
-        "Cost per trader entry in USDC (human units). Must be <= potUsdc."
+        "Optional override for the per-entry cost in USDC (human units). Must be <= pot. Defaults to the post's suggestion."
       ),
     idempotencyKey: idempotencyKeySchema,
   },
-  async ({ prompt, potUsdc, entryCostUsdc, idempotencyKey }) =>
+  async ({ wireDealSeedId, prompt, potUsdc, entryCostUsdc, idempotencyKey }) =>
     callMcpApi("/api/mcp/deals/create", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ prompt, potUsdc, entryCostUsdc, idempotencyKey }),
+      body: JSON.stringify({
+        wireDealSeedId,
+        prompt,
+        potUsdc,
+        entryCostUsdc,
+        idempotencyKey,
+      }),
     })
 );
 

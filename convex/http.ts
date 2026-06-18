@@ -179,24 +179,42 @@ function parseWithdrawTraderBody(body: Record<string, unknown>) {
 function parseCreateDealBody(body: Record<string, unknown>) {
   const base = parseMcpWriteBase(body);
   if ("ok" in base) return base;
-  if (typeof body.prompt !== "string" || body.prompt.trim() === "") {
-    return { ok: false as const, message: "prompt required" };
+  // A deal must be created against a newswire post (wire deal seed).
+  if (
+    typeof body.wireDealSeedId !== "string" ||
+    body.wireDealSeedId.trim() === ""
+  ) {
+    return {
+      ok: false as const,
+      message:
+        "wireDealSeedId required — call list_newswire and pass the chosen seedId",
+    };
   }
+  // prompt/pot/entry are optional overrides; default to the post's suggestions.
+  // Validate format only when present.
+  if (
+    body.prompt !== undefined &&
+    (typeof body.prompt !== "string" || body.prompt.trim() === "")
+  ) {
+    return { ok: false as const, message: "prompt override must be non-empty" };
+  }
+  const hasPot = body.potUsdc !== undefined;
+  const hasEntry = body.entryCostUsdc !== undefined;
   const pot = Number(body.potUsdc);
-  if (!Number.isFinite(pot) || pot <= 0) {
+  if (hasPot && (!Number.isFinite(pot) || pot <= 0)) {
     return {
       ok: false as const,
       message: "potUsdc must be a positive number",
     };
   }
   const entryCost = Number(body.entryCostUsdc);
-  if (!Number.isFinite(entryCost) || entryCost <= 0) {
+  if (hasEntry && (!Number.isFinite(entryCost) || entryCost <= 0)) {
     return {
       ok: false as const,
       message: "entryCostUsdc must be a positive number",
     };
   }
-  if (entryCost > pot) {
+  if (hasPot && hasEntry && entryCost > pot) {
     return {
       ok: false as const,
       message: "entryCostUsdc must be <= potUsdc",
@@ -381,6 +399,20 @@ http.route({
       includeClosed: body.includeClosed,
     }),
     runQuery: (ctx, args) => ctx.runQuery(internal.mcp.deals.list, args),
+  }),
+});
+
+http.route({
+  path: "/mcp/newswire/list",
+  method: "POST",
+  handler: mcpReadRoute({
+    tool: "list_newswire",
+    buildArgs: (body) => ({
+      deskManagerId: body.deskManagerId as Id<"deskManagers">,
+      limit: body.limit,
+    }),
+    runQuery: (ctx, args) =>
+      ctx.runQuery(internal.mcp.newswire.listSeeds, args),
   }),
 });
 
@@ -609,9 +641,19 @@ http.route({
           internal.mcp.dealsEscrow.createPrepareForMcp,
           {
             deskManagerId,
-            prompt: requestBody.prompt as string,
-            potUsdc: Number(requestBody.potUsdc),
-            entryCostUsdc: Number(requestBody.entryCostUsdc),
+            wireDealSeedId: requestBody.wireDealSeedId as Id<"wireDealSeeds">,
+            prompt:
+              typeof requestBody.prompt === "string"
+                ? requestBody.prompt
+                : undefined,
+            potUsdc:
+              requestBody.potUsdc !== undefined
+                ? Number(requestBody.potUsdc)
+                : undefined,
+            entryCostUsdc:
+              requestBody.entryCostUsdc !== undefined
+                ? Number(requestBody.entryCostUsdc)
+                : undefined,
             idempotencyKey,
           }
         );

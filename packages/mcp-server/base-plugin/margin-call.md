@@ -79,6 +79,10 @@ Validate a proposed trader handle before `create_trader`. Returns `valid`, `avai
 
 Open market deals (and optionally closed). Each entry includes prompt, headline, pot, entry cost, status, creator type, entry count, and **`eligibleForMe`** (`false` for deals your own desk created — your traders cannot enter those).
 
+### `GET /api/mcp/newswire?limit=<n>`
+
+Recent newswire posts (wire deal seeds) you can create a deal against. Each entry includes **`seedId`**, the dispatch headline, a suggested deal prompt, suggested pot/entry economics, market mood + SEC heat, and `linkedDealCount`. **Always call this before creating a deal**, present the posts to the user, and pass the chosen `seedId` to `create_deal` as `wireDealSeedId`.
+
 ### `GET /api/mcp/activity?traderId=<id>&limit=<n>`
 
 Recent chronological activity for the desk or a single trader. Returns structured rows and a `lines[]` array of terminal-friendly strings.
@@ -140,18 +144,18 @@ Withdraw USDC from trader escrow back to your Base Account.
 
 ### `POST /api/mcp/deals/create`
 
-Create a market deal (trap for rivals). Your own traders cannot enter deals you create.
+Create a market deal (trap for rivals) **against a newswire post**. First `GET /api/mcp/newswire`, show the posts to the user, and pass the chosen post's `seedId` as `wireDealSeedId` (required). Your own traders cannot enter deals you create.
 
 ```json
 {
-  "prompt": "Hostile takeover of Acme Corp",
-  "potUsdc": 100,
-  "entryCostUsdc": 10,
+  "wireDealSeedId": "<seedId from /api/mcp/newswire>",
   "idempotencyKey": "<stable-uuid>"
 }
 ```
 
-Requires market open (Mon–Fri 09:30–16:00 ET) and desk balance ≥ `potUsdc`.
+The deal's `prompt`, `potUsdc`, and `entryCostUsdc` default to the post's suggestions. Include any of them in the body **only to override** the suggested value (`entryCostUsdc` must be ≤ `potUsdc`). The deal is recorded with the post's headline as `sourceHeadline` and linked back to the post in the wire feed.
+
+Requires market open (Mon–Fri 09:30–16:00 ET) and desk balance ≥ pot.
 
 ### `POST /api/mcp/deals/close`
 
@@ -320,11 +324,12 @@ POST /api/mcp/traders/{id}/resume { idempotencyKey }
 5. Map `calls[]` to `send_calls`, open approval URL, poll status, `confirm_intent`, `sync_wallet`.
 6. `POST /api/mcp/traders/{traderId}/resume`.
 
-**Create a $100 trap deal**
+**Create a trap deal against a newswire post**
 
-1. `GET /api/mcp/desks` — confirm balance ≥ 100 and market is open.
-2. `POST /api/mcp/deals/create` with prompt, pot, entry cost, and `idempotencyKey`.
-3. Prepare → `send_calls` → approve → confirm → sync_wallet.
+1. `GET /api/mcp/desks` — confirm balance and market is open.
+2. `GET /api/mcp/newswire` — show the posts to the user; let them pick one.
+3. `POST /api/mcp/deals/create` with the chosen `wireDealSeedId` and `idempotencyKey` (optionally override pot/entry/prompt).
+4. Prepare → `send_calls` → approve → confirm → sync_wallet.
 
 **Answer pending approvals**
 

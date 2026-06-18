@@ -44,8 +44,8 @@ importers:
         specifier: ^2.1.1
         version: 2.1.1
       convex:
-        specifier: ^1.40.0
-        version: 1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+        specifier: ^1.41.0
+        version: 1.41.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
       lucide-react:
         specifier: ^0.577.0
         version: 0.577.0(react@19.2.3)
@@ -103,7 +103,7 @@ importers:
         version: 4.1.5(vitest@4.0.18(@opentelemetry/api@1.9.0)(@types/node@20.19.37)(jiti@2.6.1)(lightningcss@1.31.1)(msw@2.12.10(@types/node@20.19.37)(typescript@5.9.3))(terser@5.46.2)(tsx@4.22.3)(yaml@2.8.2))
       convex-test:
         specifier: ^0.0.53
-        version: 0.0.53(convex@1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))
+        version: 0.0.53(convex@1.41.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6))
       eslint:
         specifier: ^9
         version: 9.39.3(jiti@2.6.1)
@@ -5940,10 +5940,10 @@ packages:
     peerDependencies:
       convex: ^1.32.0
 
-  convex@1.40.0:
+  convex@1.41.0:
     resolution:
       {
-        integrity: sha512-jChWEB45q+9Ibryc7hg0l6hB1xA4zwE2y6ZhkhGP6oJkqYeiURkMagA2ZQZYMy1/T8PZ9ztoVJJtbL/+Ob851Q==,
+        integrity: sha512-euxVf6yfpB7/VGKOobkLgjpbJidsUgW+b0ezonEyCUPqlpHFwR4/yIiI1hjjErzraiw91GxrtxpXQClMLNqU+w==,
       }
     engines: { node: ">=18.0.0", npm: ">=7.0.0" }
     hasBin: true
@@ -11414,21 +11414,6 @@ packages:
       utf-8-validate:
         optional: true
 
-  ws@8.20.0:
-    resolution:
-      {
-        integrity: sha512-sAt8BhgNbzCtgGbt2OxmpuryO63ZoDk/sqaB/znQm94T4fCEsy/yV+7CdC1kJhOU9lboAEU7R3kquuycDoibVA==,
-      }
-    engines: { node: ">=10.0.0" }
-    peerDependencies:
-      bufferutil: ^4.0.1
-      utf-8-validate: ">=5.0.2"
-    peerDependenciesMeta:
-      bufferutil:
-        optional: true
-      utf-8-validate:
-        optional: true
-
   ws@8.20.1:
     resolution:
       {
@@ -14647,7 +14632,7 @@ snapshots:
       "@solana/functional": 5.5.1(typescript@5.9.3)
       "@solana/rpc-subscriptions-spec": 5.5.1(typescript@5.9.3)
       "@solana/subscribable": 5.5.1(typescript@5.9.3)
-      ws: 8.20.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
       typescript: 5.9.3
     transitivePeerDependencies:
@@ -16895,11 +16880,11 @@ snapshots:
 
   convert-source-map@2.0.0: {}
 
-  convex-test@0.0.53(convex@1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)):
+  convex-test@0.0.53(convex@1.41.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)):
     dependencies:
-      convex: 1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
+      convex: 1.41.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6)
 
-  convex@1.40.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6):
+  convex@1.41.0(bufferutil@4.1.0)(react@19.2.3)(utf-8-validate@6.0.6):
     dependencies:
       esbuild: 0.27.0
       prettier: 3.8.1
@@ -19445,7 +19430,7 @@ snapshots:
       buffer: 6.0.3
       eventemitter3: 5.0.4
       uuid: 11.1.0
-      ws: 8.20.0(bufferutil@4.1.0)(utf-8-validate@6.0.6)
+      ws: 8.20.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
     optionalDependencies:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6
@@ -20605,11 +20590,6 @@ snapshots:
       utf-8-validate: 6.0.6
 
   ws@8.18.3(bufferutil@4.1.0)(utf-8-validate@6.0.6):
-    optionalDependencies:
-      bufferutil: 4.1.0
-      utf-8-validate: 6.0.6
-
-  ws@8.20.0(bufferutil@4.1.0)(utf-8-validate@6.0.6):
     optionalDependencies:
       bufferutil: 4.1.0
       utf-8-validate: 6.0.6

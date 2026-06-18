@@ -37,27 +37,37 @@ type PrepareActionResult = Record<string, unknown>;
 export const createPrepareForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
-    prompt: v.string(),
-    potUsdc: v.number(),
-    entryCostUsdc: v.number(),
+    // A deal is always created against a newswire post (wire deal seed).
+    wireDealSeedId: v.id("wireDealSeeds"),
+    // Optional overrides; default to the post's suggested values.
+    prompt: v.optional(v.string()),
+    potUsdc: v.optional(v.number()),
+    entryCostUsdc: v.optional(v.number()),
     idempotencyKey: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<PrepareActionResult> => {
     assertTradingHours();
 
-    if (typeof args.prompt !== "string" || args.prompt.trim() === "") {
+    // Load the newswire post and derive deal fields (override → suggestion).
+    const seed = await ctx.runQuery(internal.mcp.newswire.getSeed, {
+      seedId: args.wireDealSeedId,
+    });
+    const prompt =
+      typeof args.prompt === "string" && args.prompt.trim() !== ""
+        ? args.prompt.trim()
+        : seed.prompt;
+    const potUsdc = args.potUsdc ?? seed.suggestedPotUsdc;
+    const entryCostUsdc = args.entryCostUsdc ?? seed.suggestedEntryCostUsdc;
+    const sourceHeadline = seed.dispatchHeadline;
+
+    if (typeof prompt !== "string" || prompt.trim() === "") {
       throw new Error("prompt is required");
     }
 
-    await assertPerActionCap(
-      ctx,
-      args.deskManagerId,
-      "create_deal",
-      args.potUsdc
-    );
+    await assertPerActionCap(ctx, args.deskManagerId, "create_deal", potUsdc);
 
-    const potAtomic = parseAmountUsdc(args.potUsdc);
-    const entryCostAtomic = parseAmountUsdc(args.entryCostUsdc);
+    const potAtomic = parseAmountUsdc(potUsdc);
+    const entryCostAtomic = parseAmountUsdc(entryCostUsdc);
     if (entryCostAtomic > potAtomic) {
       throw new Error("entryCostUsdc must be <= potUsdc");
     }
@@ -69,7 +79,7 @@ export const createPrepareForMcp = internalAction({
     );
     if (!dm?.subject) throw new Error("Desk not found");
     const deskAddress = requireDeskWallet(dm);
-    if ((dm.walletBalanceUsdc ?? 0) < args.potUsdc) {
+    if ((dm.walletBalanceUsdc ?? 0) < potUsdc) {
       throw new Error(
         "Insufficient desk wallet balance — sync_wallet after funding your Base Account"
       );
@@ -119,7 +129,7 @@ export const createPrepareForMcp = internalAction({
         publicClient,
         ESCROW_ADDRESS,
         deskAddress,
-        args.prompt,
+        prompt,
         potAtomic,
         entryCostAtomic
       );
@@ -131,7 +141,7 @@ export const createPrepareForMcp = internalAction({
       data: encodeFunctionData({
         abi: escrowAbi,
         functionName: "createDeal",
-        args: [args.prompt, potAtomic, entryCostAtomic],
+        args: [prompt, potAtomic, entryCostAtomic],
       }),
     });
 
@@ -141,10 +151,12 @@ export const createPrepareForMcp = internalAction({
       chain: MCP_CHAIN,
       calls: calls.map(serializeCall),
       payload: {
-        prompt: args.prompt,
-        potUsdc: args.potUsdc,
-        entryCostUsdc: args.entryCostUsdc,
+        prompt,
+        potUsdc,
+        entryCostUsdc,
         walletAddress: deskAddress,
+        wireDealSeedId: args.wireDealSeedId,
+        sourceHeadline,
       },
       idempotencyKey: args.idempotencyKey,
       now,
@@ -152,7 +164,7 @@ export const createPrepareForMcp = internalAction({
 
     return shapePrepareResult(
       intent,
-      `Prepared create_deal: ${args.potUsdc.toFixed(2)} USDC pot, ${args.entryCostUsdc.toFixed(2)} USDC entry (${calls.length} call(s)).`
+      `Prepared create_deal against "${sourceHeadline}": ${potUsdc.toFixed(2)} USDC pot, ${entryCostUsdc.toFixed(2)} USDC entry (${calls.length} call(s)).`
     );
   },
 });
@@ -188,6 +200,8 @@ export const createConfirmForMcp = internalAction({
       potUsdc: number;
       entryCostUsdc: number;
       walletAddress: string;
+      wireDealSeedId?: Id<"wireDealSeeds">;
+      sourceHeadline?: string;
     };
 
     const { receipt } = await verifyTxSucceeded(args.txHash);
@@ -249,6 +263,8 @@ export const createConfirmForMcp = internalAction({
         prompt: dealEvent.prompt,
         potUsdc: Number(dealEvent.pot) / USDC_DECIMALS,
         entryCostUsdc: Number(dealEvent.entryCost) / USDC_DECIMALS,
+        sourceHeadline: payload.sourceHeadline,
+        wireDealSeedId: payload.wireDealSeedId,
       }
     );
 

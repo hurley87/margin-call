@@ -48,6 +48,7 @@ import type * as mcp_escrowConstants from "../mcp/escrowConstants.js";
 import type * as mcp_httpHelpers from "../mcp/httpHelpers.js";
 import type * as mcp_intents from "../mcp/intents.js";
 import type * as mcp_limits from "../mcp/limits.js";
+import type * as mcp_newswire from "../mcp/newswire.js";
 import type * as mcp_outcomes from "../mcp/outcomes.js";
 import type * as mcp_requests from "../mcp/requests.js";
 import type * as mcp_simulate from "../mcp/simulate.js";
@@ -134,6 +135,7 @@ declare const fullApi: ApiFromModules<{
   "mcp/httpHelpers": typeof mcp_httpHelpers;
   "mcp/intents": typeof mcp_intents;
   "mcp/limits": typeof mcp_limits;
+  "mcp/newswire": typeof mcp_newswire;
   "mcp/outcomes": typeof mcp_outcomes;
   "mcp/requests": typeof mcp_requests;
   "mcp/simulate": typeof mcp_simulate;

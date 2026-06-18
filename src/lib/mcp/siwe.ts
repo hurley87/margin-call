@@ -1,7 +1,7 @@
 import "server-only";
 
 import { createPublicClient, getAddress, http } from "viem";
-import { base } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 import {
   createSiweMessage,
   generateSiweNonce,
@@ -13,12 +13,13 @@ import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
 const nonceStore = createConvexNonceStore();
 
 // SIWE handshake verifies a Coinbase Smart Wallet (Base Account) signature.
-// Coinbase signs the replay-safe hash with the Base mainnet domain separator
-// regardless of which chain the desk operates on, so verification must happen
-// against the mainnet deployment — not the escrow chain (Base Sepolia).
-const SIWE_CHAIN_ID = base.id;
+// The Coinbase Smart Wallet recomputes its replay-safe hash from `block.chainid`
+// at verification time, and the Base MCP signer binds to Base Sepolia — the chain
+// the desk/escrow actually operates on — so verification must run against the
+// Base Sepolia deployment, not Base mainnet.
+const SIWE_CHAIN_ID = baseSepolia.id;
 function siwePublicClient() {
-  return createPublicClient({ chain: base, transport: http() });
+  return createPublicClient({ chain: baseSepolia, transport: http() });
 }
 
 export const MCP_BASE_SUBJECT_PREFIX = "mcp:base:" as const;
