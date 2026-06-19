@@ -47,6 +47,7 @@ import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
+import { IntroSequence } from "@/components/intro-sequence";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
 import { MomentLayer } from "@/components/moments/moment-overlay";
@@ -172,6 +173,14 @@ function DeskDeepLinkHydration({
 export default function Home() {
   const { ready, authenticated, login, logout } = usePrivy();
   const { data: deskManager, isLoading: deskLoading } = useDeskManager();
+  const [introMounted, setIntroMounted] = useState(false);
+  const [introSeen, setIntroSeen] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setIntroSeen(localStorage.getItem("mc-intro-seen") === "true");
+    setIntroMounted(true);
+  }, []);
 
   if (!ready) {
     return (
@@ -184,6 +193,25 @@ export default function Home() {
   }
 
   if (!authenticated) {
+    if (!introMounted) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] font-mono">
+          <p className="text-[var(--t-muted)]">
+            INITIALIZING...<span className="cursor-blink">█</span>
+          </p>
+        </div>
+      );
+    }
+    if (!introSeen) {
+      return (
+        <IntroSequence
+          onComplete={(triggerLogin) => {
+            setIntroSeen(true);
+            if (triggerLogin) login();
+          }}
+        />
+      );
+    }
     return (
       <div className="flex min-h-screen flex-col justify-center gap-8 bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
         <div className="mx-auto grid w-full max-w-4xl gap-7 md:grid-cols-[minmax(0,1.25fr)_minmax(17rem,0.75fr)] md:items-end">
