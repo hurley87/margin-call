@@ -303,6 +303,10 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const nowMs = useSecondTick();
   const { data: portfolio, isLoading: portfolioLoading } = usePortfolio();
   const { data: myDeals, isLoading: myDealsLoading } = useMyDeals();
+  const visibleMyDeals = useMemo(
+    () => (myDeals ?? []).filter((d) => d.status.toLowerCase() !== "closed"),
+    [myDeals]
+  );
   const { data: marketDeals, isLoading: marketDealsLoading } = useDeals();
   const { data: approvals } = usePendingApprovals();
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
@@ -415,7 +419,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         cashLoading={cashLoading}
         traderCount={portfolio?.traders.length ?? 0}
         portfolioLoading={portfolioLoading}
-        dealCount={myDeals?.length ?? 0}
+        dealCount={visibleMyDeals.length}
         dealsLoading={myDealsLoading}
         approvalsCount={pendingApprovals.length}
       />
@@ -466,7 +470,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
               hireDisabledReason={
                 deskWalletFundingKnown ? "Fund wallet first" : "Checking wallet"
               }
-              deals={myDeals}
+              deals={visibleMyDeals}
               dealsLoading={myDealsLoading}
               onOpenDeal={setSelectedDealId}
             />
