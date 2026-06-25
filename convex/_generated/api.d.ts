@@ -75,6 +75,7 @@ import type * as wire__operatorUtils from "../wire/_operatorUtils.js";
 import type * as wire__schemas from "../wire/_schemas.js";
 import type * as wire_arcTemplates from "../wire/arcTemplates.js";
 import type * as wire_dramaRanker from "../wire/dramaRanker.js";
+import type * as wire_dropAngles from "../wire/dropAngles.js";
 import type * as wire_epochAssembler from "../wire/epochAssembler.js";
 import type * as wire_epochNormalizer from "../wire/epochNormalizer.js";
 import type * as wire_epochValidator from "../wire/epochValidator.js";
@@ -162,6 +163,7 @@ declare const fullApi: ApiFromModules<{
   "wire/_schemas": typeof wire__schemas;
   "wire/arcTemplates": typeof wire_arcTemplates;
   "wire/dramaRanker": typeof wire_dramaRanker;
+  "wire/dropAngles": typeof wire_dropAngles;
   "wire/epochAssembler": typeof wire_epochAssembler;
   "wire/epochNormalizer": typeof wire_epochNormalizer;
   "wire/epochValidator": typeof wire_epochValidator;
