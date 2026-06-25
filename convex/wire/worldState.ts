@@ -14,6 +14,7 @@
  */
 
 import type { GameEventCtx } from "./epochAssembler";
+import { pickQuietAngle, type DropAngle } from "./dropAngles";
 import { rankAndSelectLead, type LeadSelection } from "./dramaRanker";
 import {
   spawnArc,
@@ -92,6 +93,8 @@ export interface WorldStateAdvanceInput {
   dayPosture: string;
   /** Epoch slot — seeds spawns so back-to-back runs differ deterministically. */
   slot: number;
+  /** Previous drop's quiet-angle key — avoids repeating the same lens back-to-back. */
+  prevQuietAngleKey?: string | null;
 }
 
 export interface WorldStateAdvance {
@@ -103,6 +106,8 @@ export interface WorldStateAdvance {
   floorTalkClaims: FloorTalkClaim[];
   lead: LeadSelection;
   primaryArcSlug: string | null;
+  /** Narrative angle for quiet fiction slots; null when beat or real event leads. */
+  quietAngle: DropAngle | null;
 }
 
 const TARGET_LIVE_ARCS = 2;
@@ -275,6 +280,20 @@ function computeMood(
   return "watchful";
 }
 
+const FLOOR_TALK_TEMPLATES = [
+  (title: string) => `${title}: someone senior was seen leaving with boxes`,
+  (title: string) =>
+    `${title}: a counterparty stopped answering calls this morning`,
+  (title: string) =>
+    `${title}: the auditors asked for a second conference room`,
+  (title: string) => `${title}: the elevator smelled like burning paperwork`,
+  (title: string) =>
+    `${title}: compliance scheduled a "voluntary" all-hands for Friday`,
+  (title: string) =>
+    `${title}: a junior analyst was seen crying in the stairwell`,
+  (title: string) => `${title}: the firm's PR team went dark on every call`,
+] as const;
+
 function buildFloorTalkClaims(
   arcs: ArcInput[],
   advancesByStage: Map<string, ArcStage>,
@@ -286,15 +305,17 @@ function buildFloorTalkClaims(
   if (!hot) return claims;
   const stage = advancesByStage.get(hot.slug) ?? hot.arcStage;
 
-  const candidates = [
-    `${hot.title}: someone senior was seen leaving with boxes`,
-    `${hot.title}: a counterparty stopped answering calls this morning`,
-    `${hot.title}: the auditors asked for a second conference room`,
-  ];
+  const candidates = FLOOR_TALK_TEMPLATES.map((fn) => fn(hot.title));
   const n = stage === "rumor" ? 2 : 1;
-  for (let i = 0; i < n && i < candidates.length; i++) {
-    const isTrue = seededInt(`gossip:${slot}:${dayKey}:${i}`, 0, 99) < 60;
-    claims.push({ text: candidates[i], isTrue });
+  const startIdx = seededInt(
+    `gossip-start:${slot}:${dayKey}`,
+    0,
+    candidates.length - 1
+  );
+  for (let i = 0; i < n; i++) {
+    const idx = (startIdx + i) % candidates.length;
+    const isTrue = seededInt(`gossip:${slot}:${dayKey}:${idx}`, 0, 99) < 60;
+    claims.push({ text: candidates[idx]!, isTrue });
   }
   return claims;
 }
@@ -302,7 +323,8 @@ function buildFloorTalkClaims(
 export function computeWorldStateAdvance(
   input: WorldStateAdvanceInput
 ): WorldStateAdvance {
-  const { arcs, firms, events, dayKey, dayPosture, slot } = input;
+  const { arcs, firms, events, dayKey, dayPosture, slot, prevQuietAngleKey } =
+    input;
 
   const lead = rankAndSelectLead(events);
 
@@ -389,6 +411,17 @@ export function computeWorldStateAdvance(
     slot
   );
 
+  const primaryAdvance = primary
+    ? arcAdvances.find((a) => a.slug === primary.slug)
+    : undefined;
+  const isQuietSlot =
+    lead.leadKind === "fiction" &&
+    primaryAdvance !== undefined &&
+    !primaryAdvance.beatPublishedThisRun;
+  const quietAngle = isQuietSlot
+    ? pickQuietAngle(`${slot}:${dayKey}`, prevQuietAngleKey ?? null)
+    : null;
+
   return {
     firmDeltas,
     arcAdvances,
@@ -398,5 +431,6 @@ export function computeWorldStateAdvance(
     floorTalkClaims,
     lead,
     primaryArcSlug,
+    quietAngle,
   };
 }

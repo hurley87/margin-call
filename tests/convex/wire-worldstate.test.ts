@@ -178,5 +178,62 @@ describe("worldState: mood + SEC heat", () => {
     expect(advance.mood).toBe("grim");
     expect(advance.secHeat).toBeGreaterThanOrEqual(4);
     expect(advance.secHeat).toBeLessThanOrEqual(10);
+    expect(advance.quietAngle).toBeNull();
+  });
+
+  it("assigns a quiet angle on a second same-day slot with no beat", () => {
+    const initial: WorldState = {
+      arcs: [freshArc("alpha", "alpha-co")],
+      firms: [freshFirm("alpha-co")],
+    };
+    const first = stepWorld(initial, {
+      dayKey: "2026-05-05",
+      dayPosture: "monday",
+      slot: 10,
+    });
+    const second = stepWorld(first.next, {
+      dayKey: "2026-05-05",
+      dayPosture: "monday",
+      slot: 11,
+      prevQuietAngleKey: first.advance.quietAngle?.key ?? null,
+    });
+    const third = stepWorld(second.next, {
+      dayKey: "2026-05-05",
+      dayPosture: "monday",
+      slot: 12,
+      prevQuietAngleKey: second.advance.quietAngle?.key ?? null,
+    });
+    expect(first.advance.arcAdvances[0].beatPublishedThisRun).toBe(true);
+    expect(second.advance.arcAdvances[0].beatPublishedThisRun).toBe(false);
+    expect(second.advance.lead.leadKind).toBe("fiction");
+    expect(second.advance.quietAngle).not.toBeNull();
+    expect(third.advance.quietAngle).not.toBeNull();
+    expect(third.advance.quietAngle?.key).not.toBe(
+      second.advance.quietAngle?.key
+    );
+  });
+
+  it("rotates floor-talk gossip text across slots on a held arc", () => {
+    const initial: WorldState = {
+      arcs: [freshArc("alpha", "alpha-co")],
+      firms: [freshFirm("alpha-co")],
+    };
+    const texts = new Set<string>();
+    let state = initial;
+    let prevAngle: string | null = null;
+    for (let slot = 20; slot < 28; slot++) {
+      const { advance, next } = stepWorld(state, {
+        dayKey: "2026-05-05",
+        dayPosture: "monday",
+        slot,
+        prevQuietAngleKey: prevAngle,
+      });
+      for (const claim of advance.floorTalkClaims) {
+        texts.add(claim.text);
+      }
+      prevAngle = advance.quietAngle?.key ?? null;
+      state = next;
+    }
+    expect(texts.size).toBeGreaterThan(1);
   });
 });

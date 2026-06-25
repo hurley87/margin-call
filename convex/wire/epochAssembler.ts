@@ -1,6 +1,7 @@
 /** Pure assembler — no Convex imports, fully unit-testable. */
 
 import type { ArcStage } from "./stages";
+import type { DropAngle } from "./dropAngles";
 
 export interface SeasonCtx {
   title: string;
@@ -100,6 +101,8 @@ export interface AssemblerInput {
   isOpeningBell: boolean;
   /** True when this is the last drop before the close (daily wrap). */
   isClosingBell: boolean;
+  /** Quiet-slot narrative angle (code-selected); null when beat or real event leads. */
+  quietSlotAngle?: DropAngle | null;
 }
 
 function dedupeStrings(values: string[], cap: number): string[] {
@@ -157,6 +160,7 @@ export function assembleUserMessage(input: AssemblerInput): string {
     secHeat,
     isOpeningBell,
     isClosingBell,
+    quietSlotAngle,
   } = input;
 
   const lines: string[] = [];
@@ -219,6 +223,19 @@ export function assembleUserMessage(input: AssemblerInput): string {
         `    - ${p.count} desks lost chasing "${p.phrase}" deals: ${p.traderLabels.join(", ")}`
       );
     }
+  }
+
+  if (quietSlotAngle) {
+    lines.push(
+      `\nANGLE FOR THIS DROP (no new facts today — advance texture, not facts):`
+    );
+    lines.push(`  ${quietSlotAngle.instruction}`);
+    lines.push(
+      `  Suggested category: ${quietSlotAngle.suggestedCategory} (override only if a real event clearly demands another).`
+    );
+    lines.push(
+      `  Do NOT re-announce recent headlines as breaking news. Same arc stage, same figures — new voice only.`
+    );
   }
 
   // ── ARC STATE — stages + tension are code-owned ───────────────────────────

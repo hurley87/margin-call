@@ -55,6 +55,8 @@ describe("wire: simulated week (acceptance)", () => {
 
     let slot = 5000;
     const HOURS_PER_DAY = 6;
+    let prevQuietAngleKey: string | null = null;
+    let prevQuietAngle: string | null = null;
     for (let day = 0; day < 5; day++) {
       for (let hour = 0; hour < HOURS_PER_DAY; hour++) {
         // Inject a wipeout on day 2, first hour.
@@ -77,7 +79,19 @@ describe("wire: simulated week (acceptance)", () => {
           dayKey: dayKeyForIndex(day),
           dayPosture: postureForDayIndex(day),
           slot: slot++,
+          prevQuietAngleKey,
         });
+
+        if (advance.quietAngle) {
+          if (prevQuietAngle) {
+            expect(advance.quietAngle.key).not.toBe(prevQuietAngle);
+          }
+          prevQuietAngle = advance.quietAngle.key;
+          prevQuietAngleKey = advance.quietAngle.key;
+        } else {
+          prevQuietAngle = null;
+          prevQuietAngleKey = null;
+        }
 
         for (const a of advance.arcAdvances) tensions.push(a.newTensionScore);
         moods.add(advance.mood);

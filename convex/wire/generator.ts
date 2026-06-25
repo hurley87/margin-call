@@ -23,6 +23,13 @@ import { validateEpoch } from "./epochValidator";
 import { computeWorldStateAdvance } from "./worldState";
 import type { ArcStage } from "./stages";
 import type { GeneratedNarrativeEpoch } from "./_schemas";
+import type { ValidatedEpoch } from "./epochValidator";
+import {
+  isNearDuplicateHeadline,
+  pickQuietAngle,
+  recentHeadlinesFromDrops,
+  type DropAngle,
+} from "./dropAngles";
 import type { Doc } from "../_generated/dataModel";
 
 const FALLBACK_NARRATIVE_GENERATION_SYSTEM = `You are the in-house columnist for a 1980s Wall Street wire service. You are jaded, gossipy, and darkly funny. You have seen every fraud twice and respect none of the participants.
@@ -111,7 +118,9 @@ async function runGenerator(
   const lastDrop = recentDrops[0];
   const lastWorld = (lastDrop?.worldState ?? {}) as {
     topTraderId?: string;
+    quietAngleKey?: string | null;
   };
+  const prevQuietAngleKey = lastWorld.quietAngleKey ?? null;
 
   // Leaderboard #1 change → synthetic event (prior leader stashed on last drop).
   const events: GameEventCtx[] = [...recentGameEvents];
@@ -168,6 +177,7 @@ async function runGenerator(
     dayKey,
     dayPosture: posture,
     slot,
+    prevQuietAngleKey,
   });
 
   const arcBySlug = new Map(arcs.map((a) => [a.slug, a]));
@@ -238,52 +248,68 @@ async function runGenerator(
 
   const primaryAssemblerArc = assemblerArcs.find((a) => a.isPrimary) ?? null;
 
-  const userMessage = assembleUserMessage({
-    season: {
-      title: season.title,
-      tone: season.tone,
-      weeklyShape: season.weeklyShape as Record<string, string>,
-      styleRules: season.styleRules,
-      forbiddenLanguage: season.forbiddenLanguage,
-    },
-    dayPosture: posture,
-    arcs: assemblerArcs,
-    firmStates,
-    entities: entities.map((e) => ({
-      slug: e.slug,
-      displayName: e.displayName,
-      traits: e.traits,
-    })),
-    recentDrops: recentDrops.map((d) => ({
-      epochSlot: d.epochSlot,
-      dropTitle: d.dropTitle,
-      worldState: d.worldState as { mood?: string; sec_heat?: number } | null,
-      headlines: d.headlines as Array<{
-        headline?: string;
-        role?: string;
-      }> | null,
-      confirmedFacts: d.confirmedFacts ?? null,
-      openQuestions: d.openQuestions ?? null,
-    })),
-    recentGameEvents: events,
-    lead: {
-      leadKind: lead.leadKind,
-      leadLine,
-      leadFigureUsdc,
-      realStatOneLiner: lead.realStatOneLiner,
-      patterns: lead.patterns,
-    },
-    floorTalkClaims: advance.floorTalkClaims,
-    mood: advance.mood,
-    secHeat: advance.secHeat,
-    isOpeningBell: openingBell,
-    isClosingBell: closingBell,
-  });
+  const buildUserMessage = (quietSlotAngle: DropAngle | null) =>
+    assembleUserMessage({
+      season: {
+        title: season.title,
+        tone: season.tone,
+        weeklyShape: season.weeklyShape as Record<string, string>,
+        styleRules: season.styleRules,
+        forbiddenLanguage: season.forbiddenLanguage,
+      },
+      dayPosture: posture,
+      arcs: assemblerArcs,
+      firmStates,
+      entities: entities.map((e) => ({
+        slug: e.slug,
+        displayName: e.displayName,
+        traits: e.traits,
+      })),
+      recentDrops: recentDrops.map((d) => ({
+        epochSlot: d.epochSlot,
+        dropTitle: d.dropTitle,
+        worldState: d.worldState as { mood?: string; sec_heat?: number } | null,
+        headlines: d.headlines as Array<{
+          headline?: string;
+          role?: string;
+        }> | null,
+        confirmedFacts: d.confirmedFacts ?? null,
+        openQuestions: d.openQuestions ?? null,
+      })),
+      recentGameEvents: events,
+      lead: {
+        leadKind: lead.leadKind,
+        leadLine,
+        leadFigureUsdc,
+        realStatOneLiner: lead.realStatOneLiner,
+        patterns: lead.patterns,
+      },
+      floorTalkClaims: advance.floorTalkClaims,
+      mood: advance.mood,
+      secHeat: advance.secHeat,
+      isOpeningBell: openingBell,
+      isClosingBell: closingBell,
+      quietSlotAngle,
+    });
+
+  const recentHeadlines = recentHeadlinesFromDrops(recentDrops);
+  let quietSlotAngle = advance.quietAngle;
+  let userMessage = buildUserMessage(quietSlotAngle);
 
   // ── LLM call (prose only) or test stub ────────────────────────────────────
-  let parsed: GeneratedNarrativeEpoch;
+  let validated: ValidatedEpoch;
   if (opts.testLlmStub) {
-    parsed = opts.testLlmStub;
+    const normalized = normalizeGeneratedEpoch(opts.testLlmStub);
+    const validation = validateEpoch(normalized.epoch, {
+      arcSlugs: new Set(arcs.map((a) => a.slug)),
+      entitySlugs: new Set(entities.map((e) => e.slug)),
+      forbiddenLanguage: season.forbiddenLanguage,
+    });
+    if (!validation.ok) {
+      console.error(`[wire/generator] validation failed: ${validation.error}`);
+      return { skipped: "validation-failed", error: validation.error };
+    }
+    validated = validation.data;
   } else {
     const OpenAI = (await import("openai")).default;
     const { zodResponseFormat } = await import("openai/helpers/zod");
@@ -297,48 +323,79 @@ async function runGenerator(
       systemPromptContent ?? FALLBACK_NARRATIVE_GENERATION_SYSTEM;
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const completion = await client.chat.completions.parse(
-      {
-        model: "gpt-5-mini",
-        // Reasoning models add latency; keep effort low for a terse one-shot
-        // dispatch and give the request room beyond the old 30s ceiling.
-        reasoning_effort: "low",
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userMessage },
-        ],
-        response_format: zodResponseFormat(
-          GeneratedNarrativeEpochSchema,
-          "narrative_epoch"
-        ),
-      },
-      { timeout: 90_000 }
-    );
+    const arcSlugs = new Set(arcs.map((a) => a.slug));
+    const entitySlugs = new Set(entities.map((e) => e.slug));
 
-    const msg = completion.choices[0]?.message;
-    if (msg?.refusal) {
-      throw new Error(`[wire/generator] LLM refused: ${msg.refusal}`);
-    }
-    if (!msg?.parsed) {
-      throw new Error("[wire/generator] LLM returned no parsed response");
-    }
-    parsed = msg.parsed as GeneratedNarrativeEpoch;
-  }
+    let validationError: string | null = null;
+    const llmResult = await (async (): Promise<ValidatedEpoch | null> => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        const completion = await client.chat.completions.parse(
+          {
+            model: "gpt-5-mini",
+            reasoning_effort: "low",
+            messages: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content: userMessage },
+            ],
+            response_format: zodResponseFormat(
+              GeneratedNarrativeEpochSchema,
+              "narrative_epoch"
+            ),
+          },
+          { timeout: 90_000 }
+        );
 
-  // ── Validate + normalize ──────────────────────────────────────────────────
-  const arcSlugs = new Set(arcs.map((a) => a.slug));
-  const entitySlugs = new Set(entities.map((e) => e.slug));
-  const normalized = normalizeGeneratedEpoch(parsed);
-  const validation = validateEpoch(normalized.epoch, {
-    arcSlugs,
-    entitySlugs,
-    forbiddenLanguage: season.forbiddenLanguage,
-  });
-  if (!validation.ok) {
-    console.error(`[wire/generator] validation failed: ${validation.error}`);
-    return { skipped: "validation-failed", error: validation.error };
+        const msg = completion.choices[0]?.message;
+        if (msg?.refusal) {
+          throw new Error(`[wire/generator] LLM refused: ${msg.refusal}`);
+        }
+        if (!msg?.parsed) {
+          throw new Error("[wire/generator] LLM returned no parsed response");
+        }
+
+        const parsed = msg.parsed as GeneratedNarrativeEpoch;
+        const normalized = normalizeGeneratedEpoch(parsed);
+        const validation = validateEpoch(normalized.epoch, {
+          arcSlugs,
+          entitySlugs,
+          forbiddenLanguage: season.forbiddenLanguage,
+        });
+        if (!validation.ok) {
+          console.error(
+            `[wire/generator] validation failed: ${validation.error}`
+          );
+          validationError = validation.error;
+          return null;
+        }
+
+        const headline = validation.data.dispatches[0]?.headline ?? "";
+        const isDup = isNearDuplicateHeadline(headline, recentHeadlines);
+        if (!isDup || attempt === 1 || !quietSlotAngle) {
+          return validation.data;
+        }
+
+        const dupHeadline = headline;
+        quietSlotAngle = pickQuietAngle(
+          `${slot}:${dayKey}:retry`,
+          quietSlotAngle.key
+        );
+        userMessage =
+          buildUserMessage(quietSlotAngle) +
+          `\n\nRETRY: Your headline "${dupHeadline}" is too similar to a recent post. Take a different angle — same facts, new voice.`;
+        console.warn(
+          `[wire/generator] near-duplicate headline detected, retrying with angle ${quietSlotAngle.key}`
+        );
+      }
+      throw new Error("[wire/generator] exhausted LLM retry attempts");
+    })();
+    if (!llmResult) {
+      return {
+        skipped: "validation-failed",
+        error: validationError ?? "unknown",
+      };
+    }
+    validated = llmResult;
   }
-  const validated = validation.data;
 
   // ── Attach code-owned structured fields to the stored dispatch ────────────
   const primaryFirmSlug = primaryAssemblerArc
@@ -392,6 +449,7 @@ async function runGenerator(
     mood: advance.mood,
     sec_heat: advance.secHeat,
     topTraderId: currentTop?.id ?? lastWorld.topTraderId ?? null,
+    quietAngleKey: quietSlotAngle?.key ?? advance.quietAngle?.key ?? null,
     floorTalkTruth: advance.floorTalkClaims.map((c) => ({
       text: c.text,
       isTrue: c.isTrue,

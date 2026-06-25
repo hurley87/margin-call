@@ -84,6 +84,7 @@ export function stepWorld(
     dayKey: string;
     dayPosture: string;
     slot: number;
+    prevQuietAngleKey?: string | null;
   }
 ): { advance: WorldStateAdvance; next: WorldState } {
   const advance = computeWorldStateAdvance({
@@ -93,6 +94,7 @@ export function stepWorld(
     dayKey: opts.dayKey,
     dayPosture: opts.dayPosture,
     slot: opts.slot,
+    prevQuietAngleKey: opts.prevQuietAngleKey ?? null,
   });
   return { advance, next: applyAdvance(state, advance) };
 }

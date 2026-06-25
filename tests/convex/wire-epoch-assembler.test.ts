@@ -149,4 +149,24 @@ describe("assembleUserMessage", () => {
     expect(msg).toContain("TRAP PATTERNS DETECTED");
     expect(msg).toContain("risk-free");
   });
+
+  it("renders the quiet-slot angle section when set", () => {
+    const msg = assembleUserMessage(
+      makeInput({
+        quietSlotAngle: {
+          key: "junior-analyst",
+          instruction: "Junior analyst gallows humor.",
+          suggestedCategory: "wire",
+        },
+      })
+    );
+    expect(msg).toContain("ANGLE FOR THIS DROP");
+    expect(msg).toContain("Junior analyst gallows humor.");
+    expect(msg).toContain("Suggested category: wire");
+  });
+
+  it("omits the quiet-slot angle section when not set", () => {
+    const msg = assembleUserMessage(makeInput({ quietSlotAngle: null }));
+    expect(msg).not.toContain("ANGLE FOR THIS DROP");
+  });
 });
