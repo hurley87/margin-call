@@ -382,6 +382,11 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const equity = portfolio?.total_value_usdc ?? 0;
   const deskWalletFunded = cashBalance !== undefined && cashBalance > 0;
   const deskWalletFundingKnown = !cashLoading && cashBalance !== undefined;
+  // A desk that has already deployed capital into traders (or has any equity)
+  // has clearly funded its wallet at least once. Funding traders moves USDC out
+  // of the desk wallet, so cash can legitimately read $0 afterward — we must not
+  // trap such desks behind the forced funding gate.
+  const deskHasCapital = (portfolio?.traders.length ?? 0) > 0 || equity > 0;
 
   return (
     <div className="flex h-svh flex-col overflow-hidden bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
@@ -410,6 +415,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         cashLoading={cashLoading}
         equity={equity}
         portfolioLoading={portfolioLoading}
+        deskHasCapital={deskHasCapital}
         sfxEnabled={sfx.enabled}
         onToggleSfx={sfx.toggleEnabled}
         onLogout={logout}
@@ -582,6 +588,7 @@ function TopStatusBar({
   cashLoading,
   equity,
   portfolioLoading,
+  deskHasCapital,
   sfxEnabled,
   onToggleSfx,
   onLogout,
@@ -592,6 +599,7 @@ function TopStatusBar({
   cashLoading: boolean;
   equity: number;
   portfolioLoading: boolean;
+  deskHasCapital: boolean;
   sfxEnabled: boolean;
   onToggleSfx: () => void;
   onLogout: () => void;
@@ -622,8 +630,14 @@ function TopStatusBar({
   const shortDeskWallet = deskWalletAddress
     ? formatShortAddress(deskWalletAddress)
     : "Embedding...";
+  // Wallet has no spendable cash — surface the (dismissable) Fund Wallet button.
   const showFundWallet =
     !cashLoading && cash === 0 && Boolean(deskWalletAddress);
+  // Only HARD-LOCK the funding modal for brand-new desks that have never funded:
+  // no cash AND no capital deployed into traders. Desks that funded traders read
+  // $0 cash but must not be trapped behind a non-dismissable gate.
+  const forceFundWallet =
+    showFundWallet && !portfolioLoading && !deskHasCapital;
 
   async function copyDeskWallet() {
     if (!deskWalletAddress) return;
@@ -819,9 +833,9 @@ function TopStatusBar({
         </div>
       </div>
       <Dialog.Root
-        open={fundDialogOpen || showFundWallet}
+        open={fundDialogOpen || forceFundWallet}
         onOpenChange={(open) => {
-          if (showFundWallet && !open) return;
+          if (forceFundWallet && !open) return;
           setFundDialogOpen(open);
         }}
       >
@@ -835,7 +849,7 @@ function TopStatusBar({
               <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
                 Fund Wallet To Start
               </h2>
-              {!showFundWallet && (
+              {!forceFundWallet && (
                 <Dialog.Close
                   aria-label="Close"
                   className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-red)] hover:text-[var(--t-red)]"
@@ -855,7 +869,7 @@ function TopStatusBar({
                 </span>{" "}
                 as the network.
               </p>
-              {showFundWallet && (
+              {forceFundWallet && (
                 <div className="border border-[var(--t-amber)]/50 bg-[var(--t-amber)]/[0.08] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--t-amber)]">
                   Funding required: this prompt will clear once wallet cash is
                   detected.
