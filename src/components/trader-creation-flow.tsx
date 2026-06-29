@@ -70,6 +70,18 @@ const OVERSIGHT_OPTIONS: Option<number | null>[] = [
   { label: "EVERY. SINGLE. DEAL.", sub: "$0.01 threshold", value: 0.01 },
 ];
 
+const DEFAULT_MANDATE: Mandate = {
+  bankroll_pct: 50,
+  max_entry_cost_usdc: 5,
+};
+
+const DEFAULT_MANDATE_KEYS: MandateKey[] = [
+  "bankroll_pct",
+  "max_entry_cost_usdc",
+  "min_pot_usdc",
+  "approval_threshold_usdc",
+];
+
 const DEPOSIT_PRESETS = ["10", "25", "50"];
 
 function StageIndicator({ current }: { current: Stage }) {
@@ -168,8 +180,11 @@ function TraderCreationFlow({
 
   const [stage, setStage] = useState<Stage>("profile");
   const [name, setName] = useState("");
-  const [mandate, setMandate] = useState<Mandate>({});
-  const [touched, setTouched] = useState<Set<MandateKey>>(new Set());
+  const [mandate, setMandate] = useState<Mandate>({ ...DEFAULT_MANDATE });
+  const [touched, setTouched] = useState<Set<MandateKey>>(
+    new Set(DEFAULT_MANDATE_KEYS)
+  );
+  const [editing, setEditing] = useState<Set<MandateKey>>(new Set());
   const [isCreating, setIsCreating] = useState(false);
   const [createError, setCreateError] = useState<string | undefined>();
   const [createdTraderId, setCreatedTraderId] = useState<string | null>(null);
@@ -200,6 +215,23 @@ function TraderCreationFlow({
       next.add(key);
       return next;
     });
+  }
+
+  function beginEdit(key: MandateKey) {
+    setEditing((prev) => new Set(prev).add(key));
+  }
+
+  function endEdit(key: MandateKey) {
+    setEditing((prev) => {
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
+  }
+
+  function handleSelect(key: MandateKey, value: number | null) {
+    setMandateField(key, value);
+    endEdit(key);
   }
 
   async function submitTrader() {
@@ -254,7 +286,9 @@ function TraderCreationFlow({
           <MandateStage
             mandate={mandate}
             touched={touched}
-            setMandateField={setMandateField}
+            editing={editing}
+            beginEdit={beginEdit}
+            handleSelect={handleSelect}
             allTouched={allMandateTouched}
             isCreating={isCreating}
             createError={createError}
@@ -339,7 +373,9 @@ function ProfileStage({
 function MandateStage({
   mandate,
   touched,
-  setMandateField,
+  editing,
+  beginEdit,
+  handleSelect,
   allTouched,
   isCreating,
   createError,
@@ -348,7 +384,9 @@ function MandateStage({
 }: {
   mandate: Mandate;
   touched: Set<MandateKey>;
-  setMandateField: (key: MandateKey, value: number | null) => void;
+  editing: Set<MandateKey>;
+  beginEdit: (key: MandateKey) => void;
+  handleSelect: (key: MandateKey, value: number | null) => void;
   allTouched: boolean;
   isCreating: boolean;
   createError: string | undefined;
@@ -367,7 +405,9 @@ function MandateStage({
               ? (mandate.bankroll_pct ?? null)
               : undefined
           }
-          onSelect={(v) => setMandateField("bankroll_pct", v)}
+          isEditing={editing.has("bankroll_pct")}
+          onEdit={() => beginEdit("bankroll_pct")}
+          onSelect={(v) => handleSelect("bankroll_pct", v)}
           isFirst
         />
         <MandateSection
@@ -379,7 +419,9 @@ function MandateStage({
               ? (mandate.max_entry_cost_usdc ?? null)
               : undefined
           }
-          onSelect={(v) => setMandateField("max_entry_cost_usdc", v)}
+          isEditing={editing.has("max_entry_cost_usdc")}
+          onEdit={() => beginEdit("max_entry_cost_usdc")}
+          onSelect={(v) => handleSelect("max_entry_cost_usdc", v)}
         />
         <MandateSection
           label="Min pot"
@@ -390,7 +432,9 @@ function MandateStage({
               ? (mandate.min_pot_usdc ?? null)
               : undefined
           }
-          onSelect={(v) => setMandateField("min_pot_usdc", v)}
+          isEditing={editing.has("min_pot_usdc")}
+          onEdit={() => beginEdit("min_pot_usdc")}
+          onSelect={(v) => handleSelect("min_pot_usdc", v)}
         />
         <MandateSection
           label="Oversight"
@@ -401,7 +445,9 @@ function MandateStage({
               ? (mandate.approval_threshold_usdc ?? null)
               : undefined
           }
-          onSelect={(v) => setMandateField("approval_threshold_usdc", v)}
+          isEditing={editing.has("approval_threshold_usdc")}
+          onEdit={() => beginEdit("approval_threshold_usdc")}
+          onSelect={(v) => handleSelect("approval_threshold_usdc", v)}
         />
       </div>
 
@@ -450,6 +496,8 @@ function MandateSection<T extends number | null>({
   subtitle,
   options,
   selectedValue,
+  isEditing,
+  onEdit,
   onSelect,
   isFirst,
 }: {
@@ -457,9 +505,17 @@ function MandateSection<T extends number | null>({
   subtitle: string;
   options: Option<T>[];
   selectedValue: T | undefined;
+  isEditing: boolean;
+  onEdit: () => void;
   onSelect: (value: T) => void;
   isFirst?: boolean;
 }) {
+  const selectedOption =
+    selectedValue === undefined
+      ? undefined
+      : options.find((option) => Object.is(option.value, selectedValue));
+  const showGrid = isEditing || selectedOption === undefined;
+
   return (
     <div
       className={cn(!isFirst && "mt-4 border-t border-[var(--t-divider)] pt-4")}
@@ -472,11 +528,31 @@ function MandateSection<T extends number | null>({
           {subtitle}
         </span>
       </div>
-      <OptionGrid
-        options={options}
-        selectedValue={selectedValue}
-        onSelect={onSelect}
-      />
+      {showGrid ? (
+        <OptionGrid
+          options={options}
+          selectedValue={selectedValue}
+          onSelect={onSelect}
+        />
+      ) : (
+        <div className="flex items-center justify-between gap-3 border border-[var(--t-accent)] bg-[var(--t-accent-soft)] p-3">
+          <div className="min-w-0">
+            <span className="text-[11px] font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
+              {selectedOption.label}
+            </span>
+            <span className="mt-1 block text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)]">
+              {selectedOption.sub}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="shrink-0 text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-accent)]"
+          >
+            Edit
+          </button>
+        </div>
+      )}
     </div>
   );
 }
