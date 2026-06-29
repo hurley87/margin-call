@@ -11,10 +11,11 @@ import {
 } from "@/hooks/use-convex-traders";
 import { useTrader } from "@/hooks/use-traders";
 import { useDepositFlow, useTraderEscrowBalance } from "@/hooks/use-escrow";
-import { useResumeTrader } from "@/hooks/use-agent";
+import { useResumeTrader, useSyncTraderBalance } from "@/hooks/use-agent";
 import { authFetch, syncDeskWalletBalance } from "@/lib/api";
 import { DIALOG_BACKDROP_CLASS, cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
+import { ActivateTradingLabel } from "@/components/activate-trading-label";
 import { MarketClosedButton } from "@/components/market-closed-button";
 import { useMarketHours } from "@/hooks/use-market-hours";
 import { WalletProvisioningError } from "@/components/wallet-provisioning-error";
@@ -578,6 +579,9 @@ function FundAndActivateStep({
     refetch: refetchBalance,
   } = useTraderEscrowBalance(tokenId, { refetchInterval: 5_000 });
   const funded = !unfunded;
+  const convexFunded = (trader?.escrow_balance_usdc ?? 0) > 0;
+  const isSyncingDeposit = funded && !convexFunded && walletReady;
+  useSyncTraderBalance(convexTraderId, isSyncingDeposit);
 
   const [amount, setAmount] = useState("");
   const [ensureError, setEnsureError] = useState<string | undefined>();
@@ -655,7 +659,12 @@ function FundAndActivateStep({
   const depositDisplayError = ensureError ?? syncError ?? depositError;
   const busy = isPreparing || isDepositBusy;
   const canDeposit = !!tokenId && !!amount && !busy;
-  const canActivate = walletReady && funded && !resume.isPending;
+  const canActivate =
+    walletReady &&
+    funded &&
+    convexFunded &&
+    !resume.isPending &&
+    !isSyncingDeposit;
   const needsFunding = balanceUsdc !== null && !funded;
 
   const depositButtonLabel =
@@ -802,10 +811,21 @@ function FundAndActivateStep({
           // When wallet isn't ready or escrow isn't funded, keep the existing
           // disabled state so the helper text below still applies. Only flip to
           // MARKET CLOSED once the trader is actually ready to be activated.
-          isClosed={!marketOpen && walletReady && funded && !resume.isPending}
+          isClosed={
+            !marketOpen &&
+            walletReady &&
+            funded &&
+            convexFunded &&
+            !resume.isPending &&
+            !isSyncingDeposit
+          }
           countdownLabel={marketCountdown}
           enabledChildren={
-            <>{resume.isPending ? "Activating..." : "Activate trading"}</>
+            <ActivateTradingLabel
+              isActivating={resume.isPending}
+              isSyncingDeposit={isSyncingDeposit}
+              idleLabel="Activate trading"
+            />
           }
           onClick={handleActivate}
           disabled={!canActivate}
@@ -814,7 +834,12 @@ function FundAndActivateStep({
         <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
           {`Cycles every ${DEFAULT_CYCLE_MINUTES} min once active`}
         </p>
-        {!canActivate && (
+        {isSyncingDeposit && (
+          <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-amber)]">
+            Confirming your deposit on-chain — this takes a few seconds…
+          </p>
+        )}
+        {!canActivate && !isSyncingDeposit && (
           <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
             {!walletReady
               ? "Waiting for wallet setup to complete..."

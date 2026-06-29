@@ -1,10 +1,11 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMutation, useQuery as useConvexQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { Doc } from "../../convex/_generated/dataModel";
+import { authFetch } from "@/lib/api";
 import { realTxHashOrNull } from "@/lib/contracts/tx-hash";
 
 /** Trader inventory row (Convex `assets` table, UI shape). */
@@ -204,4 +205,31 @@ export function useResumeTrader() {
 
 export function useReviveTrader() {
   return useTraderStatusMutation("active");
+}
+
+/**
+ * Proactively sync on-chain escrow into Convex while the UI detects funded
+ * on-chain but Convex mirror still at zero (post-deposit race window).
+ * Fires once per syncing window; resets when `isSyncingDeposit` goes false.
+ */
+export function useSyncTraderBalance(
+  convexTraderId: string | undefined,
+  isSyncingDeposit: boolean
+) {
+  const syncedThisWindow = useRef(false);
+
+  useEffect(() => {
+    if (!isSyncingDeposit) {
+      syncedThisWindow.current = false;
+      return;
+    }
+    if (!convexTraderId || syncedThisWindow.current) return;
+
+    syncedThisWindow.current = true;
+    void authFetch(`/api/trader/${convexTraderId}/sync-balance`, {
+      method: "POST",
+    }).catch(() => {
+      syncedThisWindow.current = false;
+    });
+  }, [convexTraderId, isSyncingDeposit]);
 }

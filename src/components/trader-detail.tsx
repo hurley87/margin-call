@@ -17,6 +17,7 @@ import {
   usePauseTrader,
   useResumeTrader,
   useReviveTrader,
+  useSyncTraderBalance,
   type DealOutcomeWithNarrative,
 } from "@/hooks/use-agent";
 import { NarrativeRenderer } from "@/components/narrative-renderer";
@@ -43,6 +44,7 @@ import {
   formatUsdc,
 } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/animated-number";
+import { ActivateTradingLabel } from "@/components/activate-trading-label";
 
 const TRADER_SECTION_TITLE_CLASS =
   "text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]";
@@ -320,6 +322,8 @@ export function TraderDetailContent({
             traderId={id}
             status={trader.status}
             unfunded={unfunded}
+            convexEscrowUsdc={trader.escrow_balance_usdc}
+            walletReady={trader.wallet_status === "ready"}
             onOpenWallet={() => setWalletOpen(true)}
           />
           <TraderPendingApprovals traderId={id} />
@@ -527,11 +531,15 @@ function AgentControls({
   traderId,
   status,
   unfunded,
+  convexEscrowUsdc,
+  walletReady,
   onOpenWallet,
 }: {
   traderId: string;
   status: string;
   unfunded: boolean;
+  convexEscrowUsdc: number;
+  walletReady: boolean;
   onOpenWallet: () => void;
 }) {
   const pause = usePauseTrader();
@@ -541,6 +549,12 @@ function AgentControls({
     pause.error?.message ?? resume.error?.message ?? null;
   const { isOpen: marketOpen, countdownLabel: marketCountdown } =
     useMarketHours();
+
+  const convexFunded = convexEscrowUsdc > 0;
+  const isSyncingDeposit = !unfunded && !convexFunded && walletReady;
+  useSyncTraderBalance(traderId, isSyncingDeposit);
+  const canActivate =
+    !unfunded && convexFunded && walletReady && !resume.isPending;
 
   if (status === "wiped_out") {
     return (
@@ -588,16 +602,30 @@ function AgentControls({
           <MarketClosedButton
             // Only surface the market-closed state once wallet is ready / funded;
             // unfunded keeps the existing disabled "ACTIVATE TRADING" label.
-            isClosed={!marketOpen && !unfunded && !resume.isPending}
+            isClosed={
+              !marketOpen &&
+              !unfunded &&
+              convexFunded &&
+              walletReady &&
+              !resume.isPending &&
+              !isSyncingDeposit
+            }
             countdownLabel={marketCountdown}
             enabledChildren={
-              <>{resume.isPending ? "ACTIVATING..." : "ACTIVATE TRADING"}</>
+              <ActivateTradingLabel
+                isActivating={resume.isPending}
+                isSyncingDeposit={isSyncingDeposit}
+              />
             }
             onClick={() => resume.mutate(traderId)}
-            disabled={resume.isPending || unfunded}
+            disabled={resume.isPending || !canActivate || isSyncingDeposit}
             className="min-h-10 border border-[var(--t-accent)] px-4 py-1.5 text-xs font-medium text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
           />
-          {unfunded ? (
+          {isSyncingDeposit ? (
+            <span className="text-xs text-[var(--t-amber)]">
+              Confirming your deposit on-chain — this takes a few seconds…
+            </span>
+          ) : unfunded ? (
             <button
               onClick={onOpenWallet}
               className="min-h-10 px-2 text-xs text-[var(--t-amber)] transition-colors hover:text-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
