@@ -87,4 +87,21 @@ crons.interval(
   {}
 );
 
+/**
+ * Reconcile stuck *verified* deal entries. A verified entry whose outcome was
+ * voided with a `reconciled:*` sentinel because `resolveOnChainEntry` read a
+ * stale `pendingEntries === 0` never had `resolveEntry` called — the trader's
+ * entry stays pending on-chain, blocking the creator from closing. Neither the
+ * orphan sweep (only `pending:` rows) nor the cycle §3c retry (skips outcomes
+ * with any `onChainTxHash`) recovers it. This sweep re-checks the contract and
+ * settles any genuinely-pending entry break-even. See
+ * convex/agent/reconcileEntries.ts.
+ */
+crons.interval(
+  "reconcile-stuck-verified-entries",
+  { minutes: 10 },
+  internal.agent.reconcileEntries.reconcileStuckVerifiedEntries,
+  {}
+);
+
 export default crons;

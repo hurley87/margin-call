@@ -4,7 +4,8 @@ import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import { resolveOnChainEntry } from "./cycle";
-import type { OrphanEntry } from "../deals";
+import { reconciledTxHash } from "./onChainSettlement";
+import type { OrphanEntry, StuckEntry } from "../deals";
 
 type ReconcileSummary = {
   scanned: number;
@@ -105,5 +106,86 @@ export const reconcileOrphanEntries = internalAction({
     }
 
     return { scanned: orphans.length, refunded, cleared, skipped };
+  },
+});
+
+type StuckSummary = {
+  scanned: number;
+  settled: number;
+  confirmed: number;
+  skipped: number;
+};
+
+/**
+ * Reconcile stuck *verified* deal entries.
+ *
+ * A stuck entry is a fully-verified entry on a still-open deal whose outcome was
+ * voided with a `reconciled:*` sentinel — `resolveOnChainEntry` read a stale
+ * `pendingEntries === 0` and concluded the deal was settled, so it never called
+ * `resolveEntry` and the trader's entry is still pending on-chain (blocking the
+ * creator from closing). This sweep re-checks the contract and, for any entry
+ * that is genuinely still pending, settles it break-even (entry cost refunded,
+ * no pnl/rake — matching the void's "don't trust the LLM PnL" decision) and
+ * stamps the real resolve tx over the sentinel:
+ *
+ *  - `resolved` — was still pending on-chain; settled break-even and stamped.
+ *  - `already_resolved` — the sentinel was correct (no pending entry on-chain);
+ *    re-stamp the sentinel so the audit trail records the confirmation.
+ *  - `queue_not_head` — another trader is ahead in the FIFO queue; leave it for
+ *    the next tick, which retries once the queue advances.
+ *
+ * Idempotent (once a real `0x…` tx is stamped the entry is no longer a
+ * candidate) and safe to run on any cadence.
+ */
+export const reconcileStuckVerifiedEntries = internalAction({
+  args: { staleMinutes: v.optional(v.number()) },
+  handler: async (ctx, { staleMinutes }): Promise<StuckSummary> => {
+    const cutoffMs =
+      Date.now() - (staleMinutes ?? DEFAULT_STALE_MINUTES) * 60_000;
+
+    const candidates: StuckEntry[] = await ctx.runQuery(
+      internal.deals.listStuckVerifiedEntries,
+      { cutoffMs }
+    );
+
+    let settled = 0;
+    let confirmed = 0;
+    let skipped = 0;
+
+    for (const candidate of candidates) {
+      const result = await resolveOnChainEntry({
+        onChainDealId: candidate.onChainDealId,
+        tokenId: candidate.tokenId,
+        entryCostUsdc: candidate.entryCostUsdc,
+        traderPnlUsdc: 0,
+        rakeUsdc: 0,
+      }).catch(() => null); // RPC/send/env error — leave for the next tick.
+
+      if (result === null) {
+        skipped++;
+        continue;
+      }
+
+      if (result.status === "resolved") {
+        await ctx.runMutation(internal.deals.settleStuckOnChainEntry, {
+          entryId: candidate.entryId,
+          outcomeId: candidate.outcomeId,
+          resolveTxHash: result.txHash,
+        });
+        settled++;
+      } else if (result.status === "already_resolved") {
+        await ctx.runMutation(internal.deals.settleStuckOnChainEntry, {
+          entryId: candidate.entryId,
+          outcomeId: candidate.outcomeId,
+          resolveTxHash: reconciledTxHash(result.reason),
+        });
+        confirmed++;
+      } else {
+        // queue_not_head — another trader ahead in FIFO; retry next tick.
+        skipped++;
+      }
+    }
+
+    return { scanned: candidates.length, settled, confirmed, skipped };
   },
 });
