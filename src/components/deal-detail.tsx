@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
 import { usePrivy } from "@privy-io/react-auth";
 import { useMutation } from "convex/react";
-import { formatUnits } from "viem";
+import { formatUnits, type ReadContractReturnType } from "viem";
 import { useReadContract } from "wagmi";
 
 import { api } from "../../convex/_generated/api";
@@ -73,6 +73,41 @@ function DealMetricCell({
 
 function formatPotMoney(value: number): string {
   return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
+}
+
+type OnChainDealData = ReadContractReturnType<typeof escrowAbi, "getDeal">;
+
+type OnChainDealReadState = {
+  onChainDeal: OnChainDealData | undefined;
+  isLoading: boolean;
+  isFetching: boolean;
+  error: Error | null;
+  refetch: () => Promise<{ data: OnChainDealData | undefined }>;
+};
+
+function formatPendingEntriesStatus({
+  pendingEntries,
+  isLoading,
+  isFetching,
+  error,
+}: {
+  pendingEntries: bigint | undefined;
+  isLoading: boolean;
+  isFetching: boolean;
+  error: Error | null;
+}) {
+  if (pendingEntries !== undefined) {
+    return ` (${pendingEntries.toString()} pending ${pendingEntries === BigInt(1) ? "entry" : "entries"})`;
+  }
+  if (error) {
+    return isFetching
+      ? " (retrying pending check...)"
+      : " (pending check failed)";
+  }
+  if (isLoading) {
+    return " (checking pending entries...)";
+  }
+  return " (checking pending entries...)";
 }
 
 export function DealMetricGrid({
@@ -189,7 +224,22 @@ export function DealDetailContent({
   const { data: deskManager } = useDeskManager();
   const convexDeal = data?.deal;
   const onChainDealId = convexDeal?.on_chain_deal_id;
-  const { data: onChainDeal } = useReadContract({
+  const walletAddress = getEmbeddedEvmWalletAddress(user) ?? undefined;
+  const shouldPollOnChainDeal =
+    data?.deal.status === "open" &&
+    data.deal.on_chain_deal_id !== undefined &&
+    data.deal.creator_id !== undefined &&
+    deskManager?.id === data.deal.creator_id &&
+    walletAddress !== undefined &&
+    (data.deal.creator_address === undefined ||
+      data.deal.creator_address.toLowerCase() === walletAddress.toLowerCase());
+  const {
+    data: onChainDeal,
+    isLoading: isLoadingOnChainDeal,
+    isFetching: isFetchingOnChainDeal,
+    error: onChainDealError,
+    refetch: refetchOnChainDeal,
+  } = useReadContract({
     address: ESCROW_ADDRESS,
     abi: escrowAbi,
     functionName: "getDeal",
@@ -197,9 +247,17 @@ export function DealDetailContent({
     chainId: CONTRACTS_CHAIN_ID,
     query: {
       enabled: onChainDealId !== undefined,
+      refetchInterval: shouldPollOnChainDeal ? 5_000 : false,
+      staleTime: 0,
     },
   });
-  const walletAddress = getEmbeddedEvmWalletAddress(user) ?? undefined;
+  const onChainDealReadState: OnChainDealReadState = {
+    onChainDeal,
+    isLoading: isLoadingOnChainDeal,
+    isFetching: isFetchingOnChainDeal,
+    error: onChainDealError,
+    refetch: refetchOnChainDeal,
+  };
 
   if (isLoading) {
     return <DealLoadingState compact={compact} />;
@@ -371,6 +429,7 @@ export function DealDetailContent({
               <DealOwnerStatusFooter
                 status={deal.status}
                 onChainDealId={deal.on_chain_deal_id}
+                onChainDealReadState={onChainDealReadState}
               />
             )}
         </div>
@@ -525,12 +584,19 @@ export function DealDetailDialog({
 function DealOwnerStatusFooter({
   status,
   onChainDealId,
+  onChainDealReadState,
 }: {
   status: string;
   onChainDealId: number;
+  onChainDealReadState: OnChainDealReadState;
 }) {
   if (status === "open") {
-    return <CloseDealButton onChainDealId={onChainDealId} />;
+    return (
+      <CloseDealButton
+        onChainDealId={onChainDealId}
+        onChainDealReadState={onChainDealReadState}
+      />
+    );
   }
   if (status === "closed") {
     return (
@@ -542,31 +608,32 @@ function DealOwnerStatusFooter({
   return null;
 }
 
-function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
+function CloseDealButton({
+  onChainDealId,
+  onChainDealReadState,
+}: {
+  onChainDealId: number;
+  onChainDealReadState: OnChainDealReadState;
+}) {
   const [phase, setPhase] = useState<CloseDealPhase>("idle");
   const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [error, setError] = useState<string | null>(null);
   const writeSponsoredContract = useSponsoredContractWrite();
   const {
-    data: onChainDeal,
+    onChainDeal,
     isLoading: isLoadingOnChainDeal,
+    isFetching: isFetchingOnChainDeal,
     error: onChainDealError,
-  } = useReadContract({
-    address: ESCROW_ADDRESS,
-    abi: escrowAbi,
-    functionName: "getDeal",
-    args: [BigInt(onChainDealId)],
-    chainId: CONTRACTS_CHAIN_ID,
-  });
+    refetch: refetchOnChainDeal,
+  } = onChainDealReadState;
   const setStatusByOnChainId = useMutation(api.deals.setStatusByOnChainId);
   const pendingEntries = onChainDeal?.pendingEntries;
   const isOnChainClosed = onChainDeal?.status === DEAL_STATUS_CLOSED;
   const hasConfirmedClose = txHash !== undefined;
   const isBusy = isCloseDealBusy(phase);
   const isPendingEntriesUnknown =
-    isLoadingOnChainDeal ||
-    onChainDealError !== null ||
-    pendingEntries === undefined;
+    pendingEntries === undefined &&
+    (isLoadingOnChainDeal || onChainDealError !== null);
   const hasPendingEntries =
     pendingEntries !== undefined && pendingEntries > BigInt(0);
 
@@ -591,17 +658,31 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
   }, [isOnChainClosed, phase, syncClosedDeal]);
 
   async function handleClose() {
-    if (isBusy || hasPendingEntries || isPendingEntriesUnknown) return;
+    if (isBusy) return;
 
     if (isOnChainClosed || hasConfirmedClose) {
       await syncClosedDeal();
       return;
     }
 
-    setPhase("wallet");
     setError(null);
 
     try {
+      const { data: freshOnChainDeal } = await refetchOnChainDeal();
+      const freshPendingEntries = freshOnChainDeal?.pendingEntries;
+      if (freshPendingEntries === undefined) {
+        throw new Error(
+          "Could not verify pending entries on-chain — try again in a moment"
+        );
+      }
+      if (freshPendingEntries > BigInt(0)) {
+        throw new Error(
+          `Cannot close deal: ${freshPendingEntries.toString()} pending entr${freshPendingEntries === BigInt(1) ? "y" : "ies"} on-chain`
+        );
+      }
+
+      setPhase("wallet");
+
       const hash = await writeSponsoredContract({
         address: ESCROW_ADDRESS,
         abi: escrowAbi,
@@ -652,9 +733,12 @@ function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
       <div className="flex items-center justify-between">
         <p className="text-[10px] text-[var(--t-muted)]">
           Withdraw remaining pot
-          {pendingEntries !== undefined
-            ? ` (${pendingEntries.toString()} pending ${pendingEntries === BigInt(1) ? "entry" : "entries"})`
-            : " (checking pending entries...)"}
+          {formatPendingEntriesStatus({
+            pendingEntries,
+            isLoading: isLoadingOnChainDeal,
+            isFetching: isFetchingOnChainDeal,
+            error: onChainDealError,
+          })}
         </p>
         <button
           onClick={handleClose}
