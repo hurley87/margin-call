@@ -33,6 +33,7 @@ export const FEED_DISPLAY: Record<string, { label: string; color: string }> = {
   approval_required: { label: "APPROVAL", color: "text-[var(--t-amber)]" },
   approved: { label: "OK", color: "text-[var(--t-green)]" },
   rejected: { label: "DENIED", color: "text-[var(--t-red)]" },
+  reconcile: { label: "RECONCILE", color: "text-[var(--t-amber)]" },
   error: { label: "ERR", color: "text-[var(--t-red)]" },
   cycle_error: { label: "ERR", color: "text-[var(--t-red)]" },
   cycle_end: { label: "DONE", color: "text-[var(--t-muted)]" },

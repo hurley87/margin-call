@@ -71,4 +71,20 @@ crons.interval(
   {}
 );
 
+/**
+ * Reconcile orphaned deal-entry reservations. If a process dies between the
+ * on-chain `enterDeal` and the Convex `recordVerifiedEntry`, the contract keeps
+ * the entry in its `pendingEntries` count (blocking the creator from closing
+ * the deal) while Convex holds only a stale `pending:` row that never gets an
+ * outcome — so the cycle's settlement-retry never fires for it. This sweep
+ * refund-settles any such on-chain pending entry and clears the stale row.
+ * See convex/agent/reconcileEntries.ts.
+ */
+crons.interval(
+  "reconcile-orphan-deal-entries",
+  { minutes: 10 },
+  internal.agent.reconcileEntries.reconcileOrphanEntries,
+  {}
+);
+
 export default crons;

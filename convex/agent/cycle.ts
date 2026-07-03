@@ -117,7 +117,7 @@ async function voidOnChainOutcome(
   }
 }
 
-async function resolveOnChainEntry({
+export async function resolveOnChainEntry({
   onChainDealId,
   tokenId,
   entryCostUsdc,

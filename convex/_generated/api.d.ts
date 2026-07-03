@@ -18,6 +18,7 @@ import type * as agent_dealSelection from "../agent/dealSelection.js";
 import type * as agent_internal from "../agent/internal.js";
 import type * as agent_onChainSettlement from "../agent/onChainSettlement.js";
 import type * as agent_outcomeResolver from "../agent/outcomeResolver.js";
+import type * as agent_reconcileEntries from "../agent/reconcileEntries.js";
 import type * as agent_scheduler from "../agent/scheduler.js";
 import type * as agentActivityLog from "../agentActivityLog.js";
 import type * as assets from "../assets.js";
@@ -106,6 +107,7 @@ declare const fullApi: ApiFromModules<{
   "agent/internal": typeof agent_internal;
   "agent/onChainSettlement": typeof agent_onChainSettlement;
   "agent/outcomeResolver": typeof agent_outcomeResolver;
+  "agent/reconcileEntries": typeof agent_reconcileEntries;
   "agent/scheduler": typeof agent_scheduler;
   agentActivityLog: typeof agentActivityLog;
   assets: typeof assets;

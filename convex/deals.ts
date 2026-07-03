@@ -562,3 +562,106 @@ export const recordVerifiedEntry = internalMutation({
     return id;
   },
 });
+
+// ── Orphaned-entry reconciliation ─────────────────────────────────────────
+//
+// The deal-entry flow is two steps: `beginEntryRecording` writes a
+// `pending:<trader>:<deal>` reservation row, then the on-chain `enterDeal`
+// lands and `recordVerifiedEntry` upgrades the row (real paymentId +
+// enterTxHash + entryCount bump). If the process dies between the on-chain tx
+// and the Convex write, the reservation is orphaned: the contract counts the
+// entry in `pendingEntries` (blocking the creator from closing the deal), but
+// Convex only holds a stale `pending:` row that never gets an outcome — so the
+// cycle's on-chain settlement retry (which requires an existing outcome) never
+// fires for it. `reconcileOrphanEntries` (convex/agent/reconcileEntries.ts)
+// sweeps these and settles/clears them.
+
+export type OrphanEntry = {
+  entryId: Id<"dealEntries">;
+  onChainDealId: number | null;
+  tokenId: number | null;
+  entryCostUsdc: number;
+};
+
+/**
+ * Internal: find stale `pending:` deal entries on still-open deals whose
+ * on-chain state may need reconciling. All reservation rows share the
+ * `pending:` paymentId prefix (verified rows carry real settlement ids), so we
+ * range-scan the `byPaymentId` index directly instead of walking every open
+ * deal. Returns rows older than `cutoffMs` that were never upgraded to a
+ * verified entry (no enterTxHash) and whose deal is still open.
+ */
+export const listStaleOrphanEntries = internalQuery({
+  args: { cutoffMs: v.number() },
+  handler: async (ctx, { cutoffMs }): Promise<OrphanEntry[]> => {
+    // `;` is the character after `:`, so [`pending:`, `pending;`) is exactly
+    // the set of paymentIds beginning with `pending:`.
+    const pendingEntries = await ctx.db
+      .query("dealEntries")
+      .withIndex("byPaymentId", (q) =>
+        q.gte("paymentId", "pending:").lt("paymentId", "pending;")
+      )
+      .collect();
+
+    const orphans: OrphanEntry[] = [];
+    for (const entry of pendingEntries) {
+      if (entry.enterTxHash) continue;
+      if (entry.createdAt >= cutoffMs) continue; // still in-flight
+
+      const deal = await ctx.db.get(entry.dealId);
+      if (!deal || deal.status !== "open") continue;
+
+      const trader = await ctx.db.get(entry.traderId);
+      orphans.push({
+        entryId: entry._id,
+        onChainDealId: entry.onChainDealId ?? deal.onChainDealId ?? null,
+        tokenId: trader?.tokenId ?? null,
+        entryCostUsdc: entry.entryCostUsdc,
+      });
+    }
+    return orphans;
+  },
+});
+
+/**
+ * Internal: clear a reconciled orphan reservation row. Deletes the stale
+ * `pending:` entry (freeing the unique (trader, deal) slot so a legit retry can
+ * re-enter if the deal is still open) and logs a `reconcile` activity row.
+ *
+ * Guard: only deletes rows still in the orphaned state (paymentId `pending:`,
+ * no enterTxHash) so it can never clobber a concurrently-verified entry.
+ */
+export const clearOrphanEntry = internalMutation({
+  args: {
+    entryId: v.id("dealEntries"),
+    resolveTxHash: v.optional(v.string()),
+    note: v.string(),
+  },
+  handler: async (ctx, { entryId, resolveTxHash, note }) => {
+    const entry = await ctx.db.get(entryId);
+    if (!entry) return { cleared: false as const };
+    if (!entry.paymentId.startsWith("pending:") || entry.enterTxHash) {
+      // Row was upgraded to a real verified entry in the meantime — leave it.
+      return { cleared: false as const };
+    }
+
+    await ctx.db.delete(entryId);
+
+    await ctx.db.insert("agentActivityLog", {
+      traderId: entry.traderId,
+      activityType: "reconcile",
+      message: resolveTxHash
+        ? `Orphaned deal entry refunded on-chain and cleared (${note}, tx=${resolveTxHash})`
+        : `Orphaned deal entry cleared (${note})`,
+      dealId: entry.dealId,
+      metadata: {
+        entry_id: entryId,
+        resolve_tx_hash: resolveTxHash ?? null,
+      },
+      dedupeKey: `reconcile:${entryId}`,
+      createdAt: Date.now(),
+    });
+
+    return { cleared: true as const };
+  },
+});
