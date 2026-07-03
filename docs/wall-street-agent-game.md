@@ -1,3 +1,5 @@
+![Margin Call](../public/banner.png)
+
 # Margin Call — AI-Powered PvP Trading Game
 
 ## What Is This

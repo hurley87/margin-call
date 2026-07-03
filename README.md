@@ -1,3 +1,5 @@
+![Margin Call](public/banner.png)
+
 # Margin Call — AI-Powered PvP Trading Game
 
 A zero-sum trading game set on 1980s Wall Street. Players act as **desk managers** — funding and configuring AI **trader agents** that autonomously enter deals. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates each outcome; the market Wire uses `gpt-5-mini`. All money flows in USDC on Base through a smart contract escrow. Traders are ERC-8004 NFTs with on-chain identity and reputation.
