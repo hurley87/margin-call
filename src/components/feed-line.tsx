@@ -4,7 +4,15 @@ import type { TraderProfile } from "@/hooks/use-activity-feed";
 import { pendingDealReviewKey } from "@/lib/pending-deal-key";
 import { staggerDelay } from "@/lib/motion-tokens";
 
-export function getFeedGridClass(showTrader: boolean) {
+/** Outcome events — the "high" activity types shown with emphasis / on the floor. */
+export const OUTCOME_ACTIVITY_TYPES = ["win", "loss", "wipeout"];
+
+export function getFeedGridClass(showTrader: boolean, hideMessage = false) {
+  if (hideMessage) {
+    return showTrader
+      ? "grid grid-cols-[5.5rem_5.5rem_minmax(0,1fr)_8.5rem] items-start gap-2"
+      : "grid grid-cols-[5.5rem_5.5rem_minmax(0,1fr)] items-start gap-2";
+  }
   return showTrader
     ? "grid grid-cols-[5.5rem_5.5rem_7rem_minmax(0,1fr)_8.5rem] items-start gap-2"
     : "grid grid-cols-[5.5rem_5.5rem_minmax(0,1fr)_8.5rem] items-start gap-2";
@@ -114,6 +122,7 @@ export function FeedLine({
   traderName,
   traderProfile,
   showTrader,
+  hideMessage = false,
   wrapMessage = false,
   onOpenDeal,
   onShowDetail,
@@ -132,6 +141,8 @@ export function FeedLine({
   traderName: string;
   traderProfile?: TraderProfile;
   showTrader: boolean;
+  /** Drop the message column entirely (e.g. outcome-only feeds with no message text). */
+  hideMessage?: boolean;
   wrapMessage?: boolean;
   onOpenDeal?: (dealId: string) => void;
   /** Open full message + metadata for rows without a linked deal */
@@ -156,10 +167,7 @@ export function FeedLine({
     second: "2-digit",
   });
 
-  const isHighEvent =
-    entry.activity_type === "win" ||
-    entry.activity_type === "loss" ||
-    entry.activity_type === "wipeout";
+  const isHighEvent = OUTCOME_ACTIVITY_TYPES.includes(entry.activity_type);
 
   const approvalId = approvalIdByEntryId?.get(entry.id) ?? null;
   const showApprovalCta =
@@ -208,7 +216,7 @@ export function FeedLine({
         event.preventDefault();
         handleRowActivate();
       }}
-      className={`${getFeedGridClass(showTrader)} group border-b border-[var(--t-border)] last:border-b-0 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--t-surface)] ${
+      className={`${getFeedGridClass(showTrader, hideMessage)} group border-b border-[var(--t-border)] last:border-b-0 px-3 py-1.5 text-xs transition-colors hover:bg-[var(--t-surface)] ${
         isRowInteractive
           ? "cursor-pointer focus:bg-[var(--t-surface)] focus:outline-none"
           : ""
@@ -242,13 +250,15 @@ export function FeedLine({
           <span className="truncate">{traderProfile?.name ?? traderName}</span>
         </span>
       )}
-      <span
-        className={`min-w-0 ${
-          wrapMessage ? "break-words whitespace-normal" : "truncate"
-        } ${isHighEvent ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
-      >
-        {entry.message}
-      </span>
+      {!hideMessage && (
+        <span
+          className={`min-w-0 ${
+            wrapMessage ? "break-words whitespace-normal" : "truncate"
+          } ${isHighEvent ? "text-[var(--t-text)]" : "text-[var(--t-muted)]"}`}
+        >
+          {entry.message}
+        </span>
+      )}
       {isRowInteractive && actionState === "hidden" && (
         <span
           aria-hidden="true"

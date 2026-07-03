@@ -113,13 +113,39 @@ export const listForDesk = query({
 
 /** Recent activity across all traders — public (leaderboard global feed). Newest-first. */
 export const listRecentGlobal = query({
-  args: { limit: v.optional(v.number()) },
-  handler: async (ctx, { limit = 100 }) => {
-    const entries = await ctx.db
-      .query("agentActivityLog")
-      .withIndex("byCreatedAt")
-      .order("desc")
-      .take(limit);
+  args: {
+    limit: v.optional(v.number()),
+    activityTypes: v.optional(v.array(v.string())),
+  },
+  handler: async (ctx, { limit = 100, activityTypes }) => {
+    let entries;
+    if (activityTypes && activityTypes.length > 0) {
+      // Query each requested type via the byActivityType index (newest-first),
+      // then merge. This keeps the read set to just these types, so high-volume
+      // per-cycle noise (cycle_start/end, evaluate, resolve, ...) never enters
+      // the window and never invalidates this reactive subscription.
+      const perType = await Promise.all(
+        activityTypes.map((activityType) =>
+          ctx.db
+            .query("agentActivityLog")
+            .withIndex("byActivityType", (q) =>
+              q.eq("activityType", activityType)
+            )
+            .order("desc")
+            .take(limit)
+        )
+      );
+      entries = perType
+        .flat()
+        .sort((a, b) => b.createdAt - a.createdAt)
+        .slice(0, limit);
+    } else {
+      entries = await ctx.db
+        .query("agentActivityLog")
+        .withIndex("byCreatedAt")
+        .order("desc")
+        .take(limit);
+    }
 
     const traderNames: Record<string, string> = {};
     const traderProfiles: Record<string, TraderProfileSummary> = {};

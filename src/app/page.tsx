@@ -70,6 +70,10 @@ import {
   type PendingApproval,
 } from "@/hooks/use-approvals";
 import { useDeskManager } from "@/hooks/use-desk";
+import {
+  useGlobalActivity,
+  RELEVANT_FLOOR_ACTIVITY,
+} from "@/hooks/use-global-activity";
 import { useDeals, useMyDeals, type Deal } from "@/hooks/use-deals";
 import {
   useLeaderboard,
@@ -83,7 +87,7 @@ import {
 } from "@/hooks/use-portfolio";
 import { useFlipList } from "@/hooks/use-flip-list";
 import { useMarketHours } from "@/hooks/use-market-hours";
-import { useNewItemIds } from "@/hooks/use-new-item-ids";
+import { useWireTickOnNew } from "@/hooks/use-wire-tick-on-new";
 import { usePnlStreaks, useRankDeltas } from "@/hooks/use-rank-deltas";
 import { useSecondTick } from "@/hooks/use-second-tick";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
@@ -509,9 +513,9 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
 
         <div
           className={cn(
-            "min-h-0 flex-1 flex-col overflow-hidden",
+            "min-h-0 flex-1 flex-col gap-2 overflow-hidden",
             mobileTab === "floor" ? "flex" : "hidden",
-            "xl:contents"
+            "xl:grid xl:min-h-0 xl:grid-rows-[minmax(0,1.6fr)_minmax(0,1fr)]"
           )}
         >
           <MarketPlayersPanel
@@ -526,6 +530,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
               setSelectedPublicTraderId(traderId);
             }}
           />
+          <GlobalActivityPanel onOpenDeal={setSelectedDealId} />
         </div>
       </main>
 
@@ -1615,14 +1620,10 @@ function NewswireList({
   onOpenDeal: (dealId: string) => void;
   onOpenTrader: (traderId: string) => void;
 }) {
-  const newWireIds = useNewItemIds(
+  const newWireIds = useWireTickOnNew(
     items,
     (item) => `${item.time}-${item.headline}`
   );
-  const { playWireTick } = useSfx();
-  useEffect(() => {
-    if (newWireIds.size > 0) playWireTick();
-  }, [newWireIds, playWireTick]);
 
   if (items === undefined) {
     return <LoadingLine label="TUNING PRIVATE WIRE" />;
@@ -2479,16 +2480,12 @@ function TraderFeedPanel({
   onShowDetail: (entry: AgentActivity) => void;
   onReviewApproval: (ctx: { traderId: string; dealId: string | null }) => void;
 }) {
-  const newActivityIds = useNewItemIds(
+  const newActivityIds = useWireTickOnNew(
     feedLoading ? undefined : activity,
     (entry) => entry.id
   );
-  const { playWireTick } = useSfx();
-  useEffect(() => {
-    if (newActivityIds.size > 0) playWireTick();
-  }, [newActivityIds, playWireTick]);
 
-  let feedMeta = "ALL DESKS";
+  let feedMeta = "MY TRADERS";
   if (traderFilter) {
     const name = traderNames[traderFilter];
     if (name) feedMeta = name;
@@ -2599,6 +2596,73 @@ function TraderFeedFilterButton({
     >
       {label}
     </button>
+  );
+}
+
+/**
+ * Global, read-only activity feed for the Trading Floor — every desk's traders,
+ * relevant events only (enter/win/loss/wipeout). Distinct from the desk-scoped
+ * TraderFeedPanel: no approval CTAs (you can't act on other desks' traders).
+ */
+function GlobalActivityPanel({
+  onOpenDeal,
+}: {
+  onOpenDeal: (dealId: string) => void;
+}) {
+  const { data, isLoading } = useGlobalActivity(RELEVANT_FLOOR_ACTIVITY);
+  const activity = data?.activity ?? [];
+  const traderNames = data?.traderNames ?? {};
+  const traderProfiles = data?.traderProfiles ?? {};
+
+  const newActivityIds = useWireTickOnNew(
+    isLoading ? undefined : activity,
+    (entry) => entry.id
+  );
+
+  return (
+    <section className="terminal-panel flex min-h-0 flex-1 flex-col overflow-hidden xl:min-h-0">
+      <PanelHeader
+        title="Floor Activity"
+        meta={activity.length > 0 ? String(activity.length) : undefined}
+      />
+
+      <div
+        className={`${getFeedGridClass(true, true)} border-b border-[var(--t-divider)] bg-[#0b100d] px-3 py-1.5 text-[10px] uppercase tracking-wider text-[var(--t-muted)]`}
+      >
+        <span>Time</span>
+        <span>Type</span>
+        <span>Trader</span>
+        <span aria-hidden />
+      </div>
+
+      {isLoading ? (
+        <div className="px-4 py-6">
+          <LoadingLine label="READING THE FLOOR" />
+          <SkeletonRows rows={6} className="mt-4" />
+        </div>
+      ) : activity.length === 0 ? (
+        <EmptyState
+          title="No floor activity yet"
+          description="When traders across every desk settle wins and losses, it prints here."
+        />
+      ) : (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {activity.map((entry) => (
+            <FeedLine
+              key={entry.id}
+              entry={entry}
+              traderName={traderNames[entry.trader_id] ?? "???"}
+              traderProfile={traderProfiles[entry.trader_id]}
+              showTrader
+              hideMessage
+              onOpenDeal={onOpenDeal}
+              isNew={newActivityIds.has(entry.id)}
+              burstIndex={newActivityIds.get(entry.id) ?? 0}
+            />
+          ))}
+        </div>
+      )}
+    </section>
   );
 }
 

@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { AgentActivity } from "./use-agent";
 import type { TraderProfile } from "./use-activity-feed";
+import { OUTCOME_ACTIVITY_TYPES } from "@/components/feed-line";
 
 export interface GlobalActivityData {
   activity: AgentActivity[];
@@ -12,10 +13,14 @@ export interface GlobalActivityData {
   traderProfiles: Record<string, TraderProfile>;
 }
 
+/** Outcomes only — wins and losses (incl. wipeouts) across every desk. */
+export const RELEVANT_FLOOR_ACTIVITY = OUTCOME_ACTIVITY_TYPES;
+
 /** Global activity feed (leaderboard) — Convex subscription, no TanStack. */
-export function useGlobalActivity() {
+export function useGlobalActivity(activityTypes?: string[]) {
   const result = useQuery(api.agentActivityLog.listRecentGlobal, {
     limit: 100,
+    activityTypes,
   });
 
   const data = useMemo<GlobalActivityData | undefined>(() => {
