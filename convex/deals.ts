@@ -623,6 +623,143 @@ export const listStaleOrphanEntries = internalQuery({
   },
 });
 
+// ── Stuck verified-entry reconciliation ──────────────────────────────────
+//
+// A distinct failure window from the orphan case above. Here the entry is
+// FULLY verified in Convex (real paymentId + enterTxHash, entryCount bumped)
+// and an outcome exists — but the outcome was *voided* with a `reconciled:*`
+// sentinel because `resolveOnChainEntry` read a stale `pendingEntries === 0`
+// and concluded the deal was already settled, so it never called
+// `resolveEntry`. On-chain the trader's entry is still pending, blocking the
+// creator from closing. Neither the orphan sweep (only scans `pending:` rows)
+// nor the cycle §3c retry (`findUnresolvedOnChain` skips outcomes that already
+// carry an `onChainTxHash`, sentinel included) can recover it — so this sweep
+// re-checks the contract and settles any genuinely-pending entry break-even.
+
+export type StuckEntry = {
+  entryId: Id<"dealEntries">;
+  outcomeId: Id<"dealOutcomes">;
+  traderId: Id<"traders">;
+  dealId: Id<"deals">;
+  onChainDealId: number;
+  tokenId: number;
+  entryCostUsdc: number;
+};
+
+/**
+ * Internal: find verified deal entries on still-open deals whose outcome was
+ * voided with a `reconciled:*` sentinel — candidates for on-chain settlement
+ * re-check. We only consider entries older than `cutoffMs` (never race a live
+ * cycle mid-resolution). Entries whose outcome carries a real `0x…` tx are
+ * settled; entries whose outcome has no tx yet are owned by the cycle §3c
+ * FIFO-retry path and left alone.
+ */
+export const listStuckVerifiedEntries = internalQuery({
+  args: { cutoffMs: v.number() },
+  handler: async (ctx, { cutoffMs }): Promise<StuckEntry[]> => {
+    const openDeals = await ctx.db
+      .query("deals")
+      .withIndex("byStatus", (q) => q.eq("status", "open"))
+      .collect();
+
+    const stuck: StuckEntry[] = [];
+    for (const deal of openDeals) {
+      if (deal.onChainDealId === undefined || deal.onChainDealId === null) {
+        continue;
+      }
+      const entries = await ctx.db
+        .query("dealEntries")
+        .withIndex("byDeal", (q) => q.eq("dealId", deal._id))
+        .collect();
+
+      for (const entry of entries) {
+        // Verified entries only — `pending:` reservations are the orphan sweep's
+        // job (see listStaleOrphanEntries).
+        if (!entry.enterTxHash) continue;
+        if (entry.paymentId.startsWith("pending:")) continue;
+        if (entry.createdAt >= cutoffMs) continue; // still in-flight
+
+        const outcome = await ctx.db
+          .query("dealOutcomes")
+          .withIndex("byTraderAndDeal", (q) =>
+            q.eq("traderId", entry.traderId).eq("dealId", deal._id)
+          )
+          .unique();
+        if (!outcome) continue;
+        const tx = outcome.onChainTxHash;
+        // Only voided (`reconciled:*`) outcomes are candidates. A real `0x…` tx
+        // means it settled; an absent tx means the cycle still owns the retry.
+        if (typeof tx !== "string" || !tx.startsWith("reconciled:")) continue;
+
+        const trader = await ctx.db.get(entry.traderId);
+        if (
+          !trader ||
+          trader.tokenId === undefined ||
+          trader.tokenId === null
+        ) {
+          continue;
+        }
+
+        stuck.push({
+          entryId: entry._id,
+          outcomeId: outcome._id,
+          traderId: entry.traderId,
+          dealId: deal._id,
+          onChainDealId: deal.onChainDealId,
+          tokenId: trader.tokenId,
+          entryCostUsdc: entry.entryCostUsdc,
+        });
+      }
+    }
+    return stuck;
+  },
+});
+
+/**
+ * Internal: record that a stuck verified entry was settled on-chain. Replaces
+ * the outcome's `reconciled:*` sentinel with the real resolve tx (never
+ * clobbers a genuine `0x…` settlement) and logs a `reconcile` activity row.
+ * The on-chain resolve is break-even (entry cost refunded, no pnl/rake) — the
+ * outcome was voided, so no off-chain PnL is applied; the chain balance sync
+ * remains the source of truth.
+ */
+export const settleStuckOnChainEntry = internalMutation({
+  args: {
+    entryId: v.id("dealEntries"),
+    outcomeId: v.id("dealOutcomes"),
+    resolveTxHash: v.string(),
+  },
+  handler: async (ctx, { entryId, outcomeId, resolveTxHash }) => {
+    const entry = await ctx.db.get(entryId);
+    if (!entry) return { settled: false as const };
+
+    const outcome = await ctx.db.get(outcomeId);
+    if (outcome) {
+      const tx = outcome.onChainTxHash;
+      if (typeof tx !== "string" || !tx.startsWith("0x")) {
+        await ctx.db.patch(outcomeId, { onChainTxHash: resolveTxHash });
+      }
+    }
+
+    await ctx.db.insert("agentActivityLog", {
+      traderId: entry.traderId,
+      activityType: "reconcile",
+      message: resolveTxHash.startsWith("0x")
+        ? `Stuck on-chain deal entry settled break-even and cleared (tx=${resolveTxHash})`
+        : `Stuck on-chain deal entry confirmed already settled (${resolveTxHash})`,
+      dealId: entry.dealId,
+      metadata: {
+        entry_id: entryId,
+        resolve_tx_hash: resolveTxHash,
+      },
+      dedupeKey: `reconcile-stuck:${entryId}:${resolveTxHash}`,
+      createdAt: Date.now(),
+    });
+
+    return { settled: true as const };
+  },
+});
+
 /**
  * Internal: clear a reconciled orphan reservation row. Deletes the stale
  * `pending:` entry (freeing the unique (trader, deal) slot so a legit retry can

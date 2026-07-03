@@ -194,16 +194,14 @@ export async function resolveOnChainEntry({
   });
   const publicClient = createPublicClient({ chain: baseSepolia, transport });
 
-  const onChainDeal = await publicClient.readContract({
-    address: ESCROW_ADDRESS,
-    abi,
-    functionName: "getDeal",
-    args: [BigInt(onChainDealId)],
-  });
-  if (onChainDeal.pendingEntries === BigInt(0)) {
-    return { status: "already_resolved", reason: "deal_settled" };
-  }
-
+  // Gate on THIS trader's pending status, read first. The global
+  // `pendingEntries` count is unsafe as a short-circuit: a lagging RPC replica
+  // that hasn't yet indexed this trader's own `enterDeal` returns
+  // `pendingEntries === 0`, which previously voided the outcome
+  // (`reconciled:deal-settled`) and permanently stranded a genuinely-pending
+  // entry on-chain — blocking the creator from ever closing the deal. We only
+  // conclude "already resolved" when the contract says this specific trader has
+  // no pending entry; the global count then just distinguishes the two reasons.
   const hasPending = await publicClient.readContract({
     address: ESCROW_ADDRESS,
     abi,
@@ -211,7 +209,19 @@ export async function resolveOnChainEntry({
     args: [BigInt(onChainDealId), BigInt(tokenId)],
   });
   if (!hasPending) {
-    return { status: "already_resolved", reason: "no_trader_entry" };
+    const onChainDeal = await publicClient.readContract({
+      address: ESCROW_ADDRESS,
+      abi,
+      functionName: "getDeal",
+      args: [BigInt(onChainDealId)],
+    });
+    return {
+      status: "already_resolved",
+      reason:
+        onChainDeal.pendingEntries === BigInt(0)
+          ? "deal_settled"
+          : "no_trader_entry",
+    };
   }
 
   const grossPayoutUsdc = Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc);
