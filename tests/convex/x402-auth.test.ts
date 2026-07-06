@@ -533,37 +533,42 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     const trader = await t.run(async (ctx) => ctx.db.get(traderId as never));
     expect(trader?.imageStatus).toBe("pending");
     expect(trader?.imageRetryCount).toBe(0);
-    expect(trader?.metadataVersion).toBe(3);
-    expect(trader?.imagePrompt).toContain("1987 Wall Street trader");
-    expect(trader?.imagePrompt).not.toContain("Portrait");
-    expect(trader?.imagePrompt).not.toContain("equity_salesman");
-    expect(trader?.imagePrompt).toContain("No readable text");
-    expect(trader?.imagePrompt).toContain("No captions");
-    expect(trader?.imagePrompt).toContain("No labels");
-    expect(trader?.imageStyleSeed).toMatch(/^portrait-v3-/);
-    expect(trader?.imageVariant).toEqual(expect.any(String));
+    expect(trader?.metadataVersion).toBe(4);
+    expect(trader?.portraitSeed).toEqual(expect.any(String));
+    expect(trader?.imagePrompt).toContain("TWO-INK SCREENPRINT NOIR");
+    expect(trader?.imagePrompt).toContain("1987 Wall Street satire");
+    expect(trader?.imagePrompt).not.toContain("Portrait"); // trader name never leaks
+    expect(trader?.imagePrompt).toContain("readable text");
+    expect(trader?.imagePrompt).toContain("No modern devices");
+    expect(trader?.imagePrompt).toContain(
+      "The trader's name and internal seed must not appear visually in the image."
+    );
+    expect(trader?.imageStyleSeed).toMatch(/^portrait-v4-/);
+    // imageVariant now holds the overall rarity tier.
+    expect(["Common", "Uncommon", "Rare", "Legendary"]).toContain(
+      trader?.imageVariant
+    );
     expect(trader?.imagePromptSource).toMatchObject({
-      version: 3,
+      version: 4,
+      seed: trader?.portraitSeed,
       traderName: "Portrait",
       mandateSnapshot: mandate,
       personalitySnapshot: "Aggressive merger arbitrage specialist",
-      genderPresentationSource: expect.any(String),
+      demographic: {
+        skin: expect.any(String),
+        gender: expect.any(String),
+        age: expect.any(String),
+      },
       traits: expect.objectContaining({
-        archetype: expect.any(String),
-        scene: expect.any(String),
-        prop: expect.any(String),
-        marketMoment: expect.any(String),
         expression: expect.any(String),
-        lighting: expect.any(String),
-        cameraAngle: expect.any(String),
-        genderPresentation: expect.any(String),
-        apparentAge: expect.any(String),
-        appearanceVariant: expect.any(String),
-        hairstyle: expect.any(String),
-        clothingStyle: expect.any(String),
-        accessory: expect.any(String),
+        fieldInk: expect.any(String),
+        attire: expect.any(String),
+        vice: expect.any(String),
+        fieldFlourish: expect.any(String),
       }),
     });
+    // demographics are seed-only — never surfaced in the public trait projection
+    expect(trader?.imagePromptSource.traits).not.toHaveProperty("gender");
     expect(trader?.walletStatus).toBe("pending");
   });
 
@@ -644,7 +649,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
       name: "Public Metadata Trader",
       status: "active",
       portraitStatus: "pending",
-      archetype: "Wall Street Operator",
+      rarity: "Common",
       riskProfile: "Conservative",
       tokenId: null,
       profileImageUrl: null,
@@ -675,7 +680,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
         mandate: { bankroll_pct: 75 },
         profileImageStorageId: storageId,
         imageStatus: "ready",
-        imageVariant: "junk_bond_operator",
+        imageVariant: "Rare",
         walletStatus: "ready",
         escrowBalanceUsdc: 1000,
         tokenId: 99,
@@ -692,7 +697,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
       traderId,
       name: "Ready Portrait Trader",
       portraitStatus: "ready",
-      archetype: "Junk Bond Operator",
+      rarity: "Rare",
       riskProfile: "Aggressive",
       tokenId: 99,
     });
@@ -737,7 +742,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
       status: "active",
       tokenId: null,
       portraitStatus: "pending",
-      archetype: "Wall Street Operator",
+      rarity: "Common",
       riskProfile: "Balanced",
       escrowBalanceUsdc: 250,
       profileImageUrl: null,
@@ -781,7 +786,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
         personality: "Do not expose this full personality text.",
         profileImageStorageId: storageId,
         imageStatus: "ready",
-        imageVariant: "execution_desk",
+        imageVariant: "Legendary",
         imagePrompt: "Private prompt",
         imagePromptSource: { private: true },
         walletStatus: "ready",
@@ -802,7 +807,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
       traderId,
       name: "Ready Public Trader",
       portraitStatus: "ready",
-      archetype: "Execution Desk",
+      rarity: "Legendary",
       riskProfile: "Aggressive",
       escrowBalanceUsdc: 1200,
       tokenId: 77,

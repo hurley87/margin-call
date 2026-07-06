@@ -148,7 +148,7 @@ export function PublicTraderDossier({
                   Token-bound operator
                 </p>
                 <p className="mt-1 text-sm font-bold uppercase tracking-wide text-[var(--t-text)]">
-                  {trader.archetype} / {trader.riskProfile}
+                  {trader.rarity} / {trader.riskProfile}
                 </p>
               </div>
             </div>
@@ -169,7 +169,7 @@ export function PublicTraderDossier({
                   label="Token ID"
                   value={tokenLabel(trader.tokenId)}
                 />
-                <DatumCell label="Archetype" value={trader.archetype} />
+                <DatumCell label="Rarity" value={trader.rarity} />
                 <DatumCell label="Risk" value={trader.riskProfile} />
               </div>
             </section>
@@ -186,7 +186,10 @@ export function PublicTraderDossier({
                     <DatumCell
                       key={key}
                       label={label}
-                      value={humanizePortraitTraitValue(trader.traits![key])}
+                      value={humanizePortraitTraitValue(
+                        key,
+                        trader.traits![key]
+                      )}
                     />
                   ))}
                 </div>

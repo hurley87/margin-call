@@ -111,6 +111,10 @@ export default defineSchema({
     ),
     imagePrompt: v.optional(v.string()),
     imagePromptSource: v.optional(v.any()),
+    // Random per-trader seed minted once at creation. All portrait traits derive
+    // deterministically from this value (convex/lib/portraitSeed.ts); it is never
+    // regenerated, so a trader's traits are frozen for life.
+    portraitSeed: v.optional(v.string()),
     imageStyleSeed: v.optional(v.string()),
     imageVariant: v.optional(v.string()),
     imageRetryCount: v.optional(v.number()),
