@@ -9,7 +9,7 @@ const BASE_TRADER = {
   status: "active" as const,
   tokenId: 87,
   portraitStatus: "ready" as const,
-  archetype: "Corporate raider",
+  rarity: "Legendary",
   riskProfile: "Aggressive",
   traits: null,
   escrowBalanceUsdc: 125.5,

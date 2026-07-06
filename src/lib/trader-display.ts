@@ -7,7 +7,7 @@ export type PublicTraderProfile = {
   status: "active" | "paused" | "wiped_out";
   tokenId: number | null;
   portraitStatus: "pending" | "generating" | "ready" | "error";
-  archetype: string;
+  rarity: string;
   riskProfile: string;
   traits: PublicPortraitTraits | null;
   escrowBalanceUsdc: number;

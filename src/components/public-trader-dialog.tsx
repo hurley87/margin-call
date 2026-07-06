@@ -28,10 +28,6 @@ import {
   formatUsdc,
 } from "@/lib/utils";
 
-const NON_ARCHETYPE_TRAIT_ROWS = PUBLIC_PORTRAIT_TRAIT_ROWS.filter(
-  ([key]) => key !== "archetype"
-);
-
 export function PublicTraderDialog({
   traderId,
   open,
@@ -120,7 +116,7 @@ function PublicTraderContent({
                 </span>
               </span>
               <span className="text-[var(--t-divider)]">/</span>
-              <span className="text-[var(--t-text)]">{trader.archetype}</span>
+              <span className="text-[var(--t-text)]">{trader.rarity}</span>
               <span className="text-[var(--t-divider)]">/</span>
               <span>
                 <span className="text-[var(--t-text)]">
@@ -185,7 +181,7 @@ function PublicTraderContent({
               valueClassName={cn("text-2xl sm:text-3xl", escrowTone)}
               accent
             />
-            <HeroStat label="Archetype" value={trader.archetype} />
+            <HeroStat label="Rarity" value={trader.rarity} />
             <HeroStat label="Risk profile" value={trader.riskProfile} />
           </div>
 
@@ -197,11 +193,11 @@ function PublicTraderContent({
                 hintTone="text-[var(--t-green)]"
               />
               <dl className="grid gap-px bg-[var(--t-divider)]/40 sm:grid-cols-2">
-                {NON_ARCHETYPE_TRAIT_ROWS.map(([key, label]) => (
+                {PUBLIC_PORTRAIT_TRAIT_ROWS.map(([key, label]) => (
                   <TraitRow
                     key={key}
                     label={label}
-                    value={humanizePortraitTraitValue(trader.traits![key])}
+                    value={humanizePortraitTraitValue(key, trader.traits![key])}
                   />
                 ))}
               </dl>

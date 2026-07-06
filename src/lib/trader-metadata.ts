@@ -1,7 +1,5 @@
-import {
-  humanizePortraitTraitValue,
-  type PublicPortraitTraits,
-} from "./portrait-traits";
+import { type PublicPortraitTraits } from "./portrait-traits";
+import { SURFACED_SLOTS, TRAIT_META } from "../../convex/lib/portraitSeed";
 
 export type { PublicPortraitTraits };
 
@@ -14,7 +12,7 @@ export type PublicTraderMetadataModel = {
   name: string;
   status: string;
   portraitStatus: string;
-  archetype: string;
+  rarity: string;
   riskProfile: string;
   tokenId: number | null;
   profileImageUrl: string | null;
@@ -54,63 +52,38 @@ export function buildTraderNftMetadata(
     image = buildTraderPlaceholderImageUrl(baseUrl);
   }
 
-  const baseAttributes: Array<{ trait_type: string; value: string | number }> =
-    [
-      { trait_type: "Status", value: trader.status },
-      { trait_type: "Portrait Status", value: trader.portraitStatus },
-      { trait_type: "Archetype", value: trader.archetype },
-      { trait_type: "Risk Profile", value: trader.riskProfile },
-    ];
+  // OpenSea-standard attributes: the 5 surfaced trait slots only (each carrying
+  // its designed odds + rarity tier), plus overall Rarity and Token ID. No
+  // demographics (skin/gender/age are seed-only and never surfaced), no gameplay
+  // state. These values + odds are PERMANENT once minted — see
+  // docs/portrait-rarity-v4.md.
+  type TraitAttribute = {
+    trait_type: string;
+    value: string | number;
+    tier?: string;
+    designed_odds?: string;
+  };
 
-  if (trader.tokenId !== null) {
-    baseAttributes.push({ trait_type: "Token ID", value: trader.tokenId });
+  const attributes: TraitAttribute[] = [];
+
+  if (trader.traits) {
+    for (const slot of SURFACED_SLOTS) {
+      const id = trader.traits[slot.key];
+      const meta = TRAIT_META[slot.key][id];
+      attributes.push({
+        trait_type: slot.label,
+        value: meta?.label ?? id,
+        tier: meta?.tier ?? "Common",
+        designed_odds: `${meta?.weight ?? 0}%`,
+      });
+    }
   }
 
-  const traitAttributes: Array<{ trait_type: string; value: string | number }> =
-    trader.traits
-      ? [
-          {
-            trait_type: "Gender Presentation",
-            value: humanizePortraitTraitValue(trader.traits.genderPresentation),
-          },
-          {
-            trait_type: "Apparent Age",
-            value: humanizePortraitTraitValue(trader.traits.apparentAge),
-          },
-          {
-            trait_type: "Appearance",
-            value: humanizePortraitTraitValue(trader.traits.appearanceVariant),
-          },
-          {
-            trait_type: "Hairstyle",
-            value: humanizePortraitTraitValue(trader.traits.hairstyle),
-          },
-          {
-            trait_type: "Clothing",
-            value: humanizePortraitTraitValue(trader.traits.clothingStyle),
-          },
-          {
-            trait_type: "Accessory",
-            value: humanizePortraitTraitValue(trader.traits.accessory),
-          },
-          {
-            trait_type: "Expression",
-            value: humanizePortraitTraitValue(trader.traits.expression),
-          },
-          {
-            trait_type: "Lighting",
-            value: humanizePortraitTraitValue(trader.traits.lighting),
-          },
-          {
-            trait_type: "Camera",
-            value: humanizePortraitTraitValue(trader.traits.cameraAngle),
-          },
-          {
-            trait_type: "Market Moment",
-            value: humanizePortraitTraitValue(trader.traits.marketMoment),
-          },
-        ]
-      : [];
+  attributes.push({ trait_type: "Rarity", value: trader.rarity });
+
+  if (trader.tokenId !== null) {
+    attributes.push({ trait_type: "Token ID", value: trader.tokenId });
+  }
 
   return {
     name: trader.name,
@@ -118,6 +91,6 @@ export function buildTraderNftMetadata(
       "AI trader identity for Margin Call, a PvP trading game set on 1980s Wall Street.",
     image,
     external_url: buildTraderExternalUrl(baseUrl, trader.traderId),
-    attributes: [...baseAttributes, ...traitAttributes],
+    attributes,
   };
 }

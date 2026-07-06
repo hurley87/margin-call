@@ -16,9 +16,12 @@ import {
 import { assertTradingHours } from "./lib/tradingHours";
 import {
   buildPortraitSeed,
+  composePromptFromStored,
   getPortraitPromptVersion,
   PORTRAIT_METADATA_VERSION,
   readPublicTraits,
+  resolveTierFromTraitIds,
+  stableHash,
 } from "./lib/portraitSeed";
 import { walletStepValidator } from "./schema";
 import { TRADER_NAME_REGEX } from "../src/lib/trader-name";
@@ -116,19 +119,36 @@ async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
   };
 }
 
-const ARCHETYPE_LABEL_OVERRIDES: Record<string, string> = {
-  mna_rainmaker: "M&A Rainmaker",
-  old_school_partner: "Old-School Partner",
-};
+/** Read the stored seed-only demographic ({skin,gender,age}) from imagePromptSource. */
+function readStoredDemographic(
+  source: unknown
+): { skin: string; gender: string; age: string } | null {
+  if (
+    typeof source !== "object" ||
+    source === null ||
+    !("demographic" in source)
+  ) {
+    return null;
+  }
+  const d = (source as { demographic: unknown }).demographic;
+  if (typeof d !== "object" || d === null) return null;
+  const { skin, gender, age } = d as Record<string, unknown>;
+  if (
+    typeof skin !== "string" ||
+    typeof gender !== "string" ||
+    typeof age !== "string"
+  ) {
+    return null;
+  }
+  return { skin, gender, age };
+}
 
-function humanizeImageVariant(variant: string | undefined): string {
-  if (!variant) return "Wall Street Operator";
-  if (ARCHETYPE_LABEL_OVERRIDES[variant])
-    return ARCHETYPE_LABEL_OVERRIDES[variant];
-  return variant
-    .split("_")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+/**
+ * v4 stores the overall mint rarity tier in `imageVariant` (v3 stored an
+ * archetype id). Surface it as the trader's headline "Rarity".
+ */
+function humanizeRarity(variant: string | undefined): string {
+  return variant && variant.trim() !== "" ? variant : "Common";
 }
 
 function deriveRiskProfile(mandate: unknown): string {
@@ -154,7 +174,7 @@ async function publicTraderBasics(ctx: QueryCtx, trader: Doc<"traders">) {
     name: trader.name,
     status: trader.status,
     portraitStatus: trader.imageStatus ?? "pending",
-    archetype: humanizeImageVariant(trader.imageVariant),
+    rarity: humanizeRarity(trader.imageVariant),
     riskProfile: deriveRiskProfile(trader.mandate),
     tokenId: trader.tokenId ?? null,
     profileImageUrl: await resolveReadyProfileImageUrl(ctx, trader),
@@ -508,8 +528,11 @@ export const createRecord = internalMutation({
 
     const now = Date.now();
     const normalizedMandate = normalizeMandate(args.mandate);
-    const portraitSeed = buildPortraitSeed({
-      ownerSubject,
+    // Mint the immutable per-trader portrait seed once. All traits derive from
+    // it deterministically and it is never regenerated (determinism inviolable).
+    const seed = crypto.randomUUID();
+    const portraitFields = buildPortraitSeed({
+      seed,
       name: trimmedName,
       mandate: normalizedMandate,
       personality: args.personality,
@@ -522,7 +545,8 @@ export const createRecord = internalMutation({
       status: "paused",
       mandate: normalizedMandate,
       personality: args.personality,
-      ...portraitSeed,
+      portraitSeed: seed,
+      ...portraitFields,
       walletStatus: "pending",
       escrowBalanceUsdc: 0,
       createdAt: now,
@@ -768,21 +792,59 @@ export const markPortraitGenerating = internalMutation({
     }
 
     const promptVersion = getPortraitPromptVersion(trader.imagePromptSource);
-    const shouldReseed =
+    // The portrait seed is minted once and never regenerated. Legacy rows (pre-v4)
+    // lack it — mint one now and persist it so derivation is stable from here on.
+    const seed = trader.portraitSeed ?? crypto.randomUUID();
+    const stale =
       !trader.imagePrompt ||
       !trader.imageStyleSeed ||
       promptVersion < PORTRAIT_METADATA_VERSION;
-    const seedPatch = shouldReseed
-      ? buildPortraitSeed({
-          ownerSubject: trader.ownerSubject,
+
+    // Determinism is inviolable: if this row already has derived traits, a version
+    // bump may only evolve the prompt TEXT — never re-roll trait identity. Recompute
+    // the prompt from the stored trait + demographic ids and keep the traits as-is.
+    // Only re-derive from the seed when traits are absent (legacy / first generation).
+    const storedTraits = readPublicTraits(trader.imagePromptSource);
+    const storedDemographic = readStoredDemographic(trader.imagePromptSource);
+
+    let seedPatch: Record<string, unknown> = {};
+    let reseeded = false;
+    if (stale) {
+      reseeded = true;
+      if (storedTraits && storedDemographic) {
+        const imagePrompt = composePromptFromStored(
+          storedTraits,
+          storedDemographic
+        );
+        const tier = resolveTierFromTraitIds(storedTraits);
+        const prevSource =
+          (trader.imagePromptSource as Record<string, unknown> | undefined) ??
+          {};
+        seedPatch = {
+          imagePrompt,
+          imageStyleSeed: `portrait-v${PORTRAIT_METADATA_VERSION}-${stableHash(seed).toString(36)}`,
+          imageVariant: tier,
+          metadataVersion: PORTRAIT_METADATA_VERSION,
+          imagePromptSource: {
+            ...prevSource,
+            version: PORTRAIT_METADATA_VERSION,
+            seed,
+            tier,
+          },
+        };
+      } else {
+        seedPatch = buildPortraitSeed({
+          seed,
           name: trader.name,
           mandate: trader.mandate ?? {},
           personality: trader.personality,
-        })
-      : {};
-    const nextRetryCount = shouldReseed ? 0 : (trader.imageRetryCount ?? 0) + 1;
+        });
+      }
+    }
+    const nextRetryCount = reseeded ? 0 : (trader.imageRetryCount ?? 0) + 1;
     const patch = {
       ...seedPatch,
+      portraitSeed: seed,
       imageStatus: "generating",
       imageLastAttemptAt: Date.now(),
       imageRetryCount: nextRetryCount,
