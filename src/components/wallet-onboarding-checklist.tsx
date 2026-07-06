@@ -7,6 +7,8 @@ import {
   TraderAvatar,
   type TraderAvatarImageStatus,
 } from "@/components/trader-avatar";
+import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
+import type { PublicPortraitTraits } from "@/lib/portrait-traits";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { useSfx } from "@/hooks/use-sfx";
 import type { Doc } from "../../convex/_generated/dataModel";
@@ -56,6 +58,8 @@ export function WalletOnboardingChecklist({
   traderName,
   imageStatus,
   profileImageUrl,
+  traits,
+  rarity,
 }: {
   walletStatus: WalletStatus;
   walletStep: WalletStep | null;
@@ -63,6 +67,8 @@ export function WalletOnboardingChecklist({
   traderName: string;
   imageStatus: TraderAvatarImageStatus | null;
   profileImageUrl: string;
+  traits: PublicPortraitTraits | null;
+  rarity: string;
 }) {
   const reducedMotion = useReducedMotion();
   const { playStinger } = useSfx();
@@ -194,6 +200,26 @@ export function WalletOnboardingChecklist({
           {FLAVOR_LINES[flavorIdx]}
         </p>
       )}
+
+      {traits && imageStatus === "ready" ? (
+        <div
+          className={cn(
+            "mt-4 border-t border-[var(--t-divider)] pt-3",
+            portraitRevealed && !reducedMotion && "mc-stamp-in"
+          )}
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <h4 className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--t-amber)]">
+              Persona revealed
+            </h4>
+            <RarityBadge
+              rarity={rarity}
+              className="px-1.5 py-0.5 text-[9px] tracking-[0.16em]"
+            />
+          </div>
+          <PersonaTraits traits={traits} className="sm:grid-cols-1" />
+        </div>
+      ) : null}
     </div>
   );
 }

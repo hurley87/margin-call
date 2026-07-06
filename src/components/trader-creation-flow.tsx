@@ -714,6 +714,8 @@ function FundAndActivateStep({
               traderName={traderName}
               imageStatus={trader?.image_status ?? null}
               profileImageUrl={trader?.profile_image_url ?? ""}
+              traits={trader?.traits ?? null}
+              rarity={trader?.rarity ?? "Common"}
             />
           )}
           <DatumCell

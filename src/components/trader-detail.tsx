@@ -6,6 +6,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import { useTrader, type Trader, type TraderStatus } from "@/hooks/use-traders";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { DatumCell } from "@/components/datum-cell";
+import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
 import { formatStatus } from "@/lib/format-status";
 import {
   useSepoliaUsdcBalance,
@@ -309,6 +310,24 @@ export function TraderDetailContent({
               />
             </button>
           </div>
+
+          {trader.traits ? (
+            <div className="mt-4 overflow-hidden border border-[var(--t-divider)] bg-[#070b09]">
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--t-divider)] bg-[var(--t-surface)]/70 px-3 py-2">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--t-amber)]">
+                  Persona traits
+                </h3>
+                <RarityBadge
+                  rarity={trader.rarity}
+                  className="px-1.5 py-0.5 text-[9px] tracking-[0.16em]"
+                />
+              </div>
+              <PersonaTraits
+                traits={trader.traits}
+                className="sm:grid-cols-1"
+              />
+            </div>
+          ) : null}
         </section>
 
         <section className="grid min-w-0 content-start gap-4">

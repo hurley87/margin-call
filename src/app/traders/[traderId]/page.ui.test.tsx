@@ -48,4 +48,26 @@ describe("PublicTraderDossier", () => {
     );
     expect(html).toContain("generating");
   });
+
+  it("surfaces persona traits + a tier-styled rarity when traits are present", () => {
+    const html = renderToStaticMarkup(
+      <PublicTraderDossier
+        trader={{
+          ...BASE_TRADER,
+          rarity: "Legendary",
+          traits: {
+            expression: "cold",
+            fieldInk: "goldleaf", // Legendary
+            attire: "business",
+            vice: "none",
+            fieldFlourish: "plain",
+          },
+        }}
+      />
+    );
+
+    expect(html).toContain("Persona traits");
+    expect(html).toContain("Gold Leaf"); // legendary field ink label
+    expect(html).toContain('data-tier="Legendary"'); // tier styling hook
+  });
 });

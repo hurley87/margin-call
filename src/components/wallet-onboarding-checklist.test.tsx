@@ -7,6 +7,8 @@ const baseProps = {
   traderName: "Gordon Gekko",
   imageStatus: "generating" as const,
   profileImageUrl: "",
+  traits: null,
+  rarity: "Common",
 };
 
 describe("WalletOnboardingChecklist", () => {
@@ -100,5 +102,51 @@ describe("WalletOnboardingChecklist", () => {
       />
     );
     expect(ready).not.toContain("COMPLIANCE NEVER SLEEPS");
+  });
+
+  it("reveals persona traits + rarity once the portrait is ready", () => {
+    const html = renderToStaticMarkup(
+      <WalletOnboardingChecklist
+        {...baseProps}
+        imageStatus="ready"
+        walletStatus="ready"
+        walletStep="seat_registered"
+        tokenId={7}
+        rarity="Legendary"
+        traits={{
+          expression: "cold",
+          fieldInk: "vermilion",
+          attire: "business",
+          vice: "none",
+          fieldFlourish: "confetti",
+        }}
+      />
+    );
+
+    expect(html).toContain("Persona revealed");
+    expect(html).toContain("Confetti Storm"); // legendary flourish label
+    expect(html).toContain("Legendary"); // rarity badge
+    expect(html).toContain('data-tier="Legendary"');
+  });
+
+  it("hides the persona reveal while the portrait is still generating", () => {
+    const html = renderToStaticMarkup(
+      <WalletOnboardingChecklist
+        {...baseProps}
+        imageStatus="generating"
+        walletStatus="creating"
+        walletStep="id_minted"
+        tokenId={7}
+        rarity="Legendary"
+        traits={{
+          expression: "cold",
+          fieldInk: "vermilion",
+          attire: "business",
+          vice: "none",
+          fieldFlourish: "confetti",
+        }}
+      />
+    );
+    expect(html).not.toContain("Persona revealed");
   });
 });
