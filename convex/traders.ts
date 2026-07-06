@@ -114,6 +114,7 @@ async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
     imageStatus: trader.imageStatus,
     profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
     traits: readPublicTraits(trader.imagePromptSource),
+    rarity: humanizeRarity(trader.imageVariant),
     createdAt: trader.createdAt,
     updatedAt: trader.updatedAt,
   };

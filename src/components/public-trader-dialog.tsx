@@ -8,11 +8,8 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
 import { formatStatus } from "@/lib/format-status";
-import {
-  PUBLIC_PORTRAIT_TRAIT_ROWS,
-  humanizePortraitTraitValue,
-} from "@/lib/portrait-traits";
 import {
   getEscrowTone,
   getPortraitTone,
@@ -116,7 +113,10 @@ function PublicTraderContent({
                 </span>
               </span>
               <span className="text-[var(--t-divider)]">/</span>
-              <span className="text-[var(--t-text)]">{trader.rarity}</span>
+              <RarityBadge
+                rarity={trader.rarity}
+                className="px-1.5 py-0 text-[10px] tracking-[0.16em]"
+              />
               <span className="text-[var(--t-divider)]">/</span>
               <span>
                 <span className="text-[var(--t-text)]">
@@ -171,38 +171,36 @@ function PublicTraderContent({
               />
             </dl>
           </div>
+
+          {trader.traits ? (
+            <div className="terminal-panel mt-5 overflow-hidden">
+              <div className="flex items-center justify-between gap-3 border-b border-[var(--t-divider)] bg-[var(--t-surface)]/70 px-3 py-2 sm:px-4">
+                <h3 className="text-[10px] font-bold uppercase tracking-[0.24em] text-[var(--t-amber)]">
+                  Persona traits
+                </h3>
+                <RarityBadge
+                  rarity={trader.rarity}
+                  className="px-1.5 py-0.5 text-[9px] tracking-[0.16em]"
+                />
+              </div>
+              <PersonaTraits
+                traits={trader.traits}
+                className="sm:grid-cols-1"
+              />
+            </div>
+          ) : null}
         </section>
 
         <section className="grid min-w-0 content-start gap-5">
-          <div className="grid gap-3 sm:grid-cols-[1.5fr_1fr_1fr]">
+          <div className="grid gap-3 sm:grid-cols-2">
             <HeroStat
               label="Escrow capital"
               value={formatUsdc(trader.escrowBalanceUsdc)}
               valueClassName={cn("text-2xl sm:text-3xl", escrowTone)}
               accent
             />
-            <HeroStat label="Rarity" value={trader.rarity} />
             <HeroStat label="Risk profile" value={trader.riskProfile} />
           </div>
-
-          {trader.traits ? (
-            <div className="terminal-panel overflow-hidden">
-              <SectionHeader
-                label="Persona traits"
-                hint="Read only"
-                hintTone="text-[var(--t-green)]"
-              />
-              <dl className="grid gap-px bg-[var(--t-divider)]/40 sm:grid-cols-2">
-                {PUBLIC_PORTRAIT_TRAIT_ROWS.map(([key, label]) => (
-                  <TraitRow
-                    key={key}
-                    label={label}
-                    value={humanizePortraitTraitValue(key, trader.traits![key])}
-                  />
-                ))}
-              </dl>
-            </div>
-          ) : null}
 
           <div className="terminal-panel overflow-hidden">
             <SectionHeader
@@ -334,19 +332,6 @@ function SectionHeader({
           {hint}
         </span>
       ) : null}
-    </div>
-  );
-}
-
-function TraitRow({ label, value }: { label: string; value: ReactNode }) {
-  return (
-    <div className="flex min-w-0 items-baseline justify-between gap-3 bg-[#070b09]/85 px-3 py-2 sm:px-4">
-      <dt className="shrink-0 text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]">
-        {label}
-      </dt>
-      <dd className="min-w-0 truncate text-right text-xs font-bold uppercase tracking-[0.12em] text-[var(--t-text)]">
-        {value}
-      </dd>
     </div>
   );
 }

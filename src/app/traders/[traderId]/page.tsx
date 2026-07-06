@@ -5,10 +5,7 @@ import { ConvexHttpClient } from "convex/browser";
 import { api } from "../../../../convex/_generated/api";
 import type { Id } from "../../../../convex/_generated/dataModel";
 import { TRADER_PLACEHOLDER_IMAGE_PATH } from "@/lib/trader-metadata";
-import {
-  PUBLIC_PORTRAIT_TRAIT_ROWS,
-  humanizePortraitTraitValue,
-} from "@/lib/portrait-traits";
+import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
 import { DatumCell } from "@/components/datum-cell";
 import { EmptyState } from "@/components/empty-state";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
@@ -143,15 +140,27 @@ export function PublicTraderDossier({
                   </div>
                 ) : null}
               </div>
-              <div className="border-t border-[var(--t-divider)] bg-[#070b09]/85 px-4 py-3">
+              <div className="flex items-center justify-between gap-3 border-t border-[var(--t-divider)] bg-[#070b09]/85 px-4 py-3">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
                   Token-bound operator
                 </p>
-                <p className="mt-1 text-sm font-bold uppercase tracking-wide text-[var(--t-text)]">
-                  {trader.rarity} / {trader.riskProfile}
-                </p>
+                <RarityBadge rarity={trader.rarity} />
               </div>
             </div>
+
+            {trader.traits ? (
+              <div className="terminal-panel mt-5 overflow-hidden">
+                <div className="border-b border-[var(--t-divider)] bg-[var(--t-surface)]/70 px-4 py-2.5">
+                  <h2 className="text-[11px] font-bold uppercase tracking-[0.24em] text-[var(--t-amber)]">
+                    Persona traits
+                  </h2>
+                </div>
+                <PersonaTraits
+                  traits={trader.traits}
+                  className="sm:grid-cols-1"
+                />
+              </div>
+            ) : null}
           </div>
 
           <div className="grid min-w-0 content-start gap-5">
@@ -169,32 +178,13 @@ export function PublicTraderDossier({
                   label="Token ID"
                   value={tokenLabel(trader.tokenId)}
                 />
-                <DatumCell label="Rarity" value={trader.rarity} />
+                <DatumCell
+                  label="Rarity"
+                  value={<RarityBadge rarity={trader.rarity} />}
+                />
                 <DatumCell label="Risk" value={trader.riskProfile} />
               </div>
             </section>
-
-            {trader.traits ? (
-              <section className="terminal-panel p-4 sm:p-5">
-                <div className="mb-4 border-b border-[var(--t-divider)] pb-3">
-                  <h2 className="font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-wide text-[var(--t-amber)]">
-                    Traits
-                  </h2>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {PUBLIC_PORTRAIT_TRAIT_ROWS.map(([key, label]) => (
-                    <DatumCell
-                      key={key}
-                      label={label}
-                      value={humanizePortraitTraitValue(
-                        key,
-                        trader.traits![key]
-                      )}
-                    />
-                  ))}
-                </div>
-              </section>
-            ) : null}
 
             <section className="terminal-panel min-h-0 p-4 sm:p-5">
               <div className="mb-4 border-b border-[var(--t-divider)] pb-3">

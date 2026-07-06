@@ -4,6 +4,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
+import type { PublicPortraitTraits } from "@/lib/portrait-traits";
 
 type TraderReadModel = Pick<
   Doc<"traders">,
@@ -29,6 +30,8 @@ type TraderReadModel = Pick<
   | "updatedAt"
 > & {
   profileImageUrl: string;
+  traits: PublicPortraitTraits | null;
+  rarity: string;
 };
 
 export type TraderStatus = "active" | "paused" | "wiped_out";
@@ -47,6 +50,8 @@ export interface Trader {
   personality: string | null;
   image_status: TraderReadModel["imageStatus"] | null;
   profile_image_url: string;
+  traits: PublicPortraitTraits | null;
+  rarity: string;
   escrow_balance_usdc: number;
   wallet_status: Doc<"traders">["walletStatus"];
   wallet_error: string | null;
@@ -75,6 +80,8 @@ function mapTrader(doc: TraderReadModel, ownerAddress: string): Trader {
     personality: doc.personality ?? null,
     image_status: doc.imageStatus ?? null,
     profile_image_url: doc.profileImageUrl,
+    traits: doc.traits ?? null,
+    rarity: doc.rarity ?? "Common",
     escrow_balance_usdc: doc.escrowBalanceUsdc ?? 0,
     wallet_status: doc.walletStatus,
     wallet_error: doc.walletError ?? null,
