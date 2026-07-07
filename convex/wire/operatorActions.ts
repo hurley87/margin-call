@@ -17,9 +17,8 @@ type ResetResult = {
   };
   imported: {
     seasonId: string;
-    entitiesUpserted: number;
-    arcsUpserted: number;
-    dropInserted: boolean;
+    companiesSynced: number;
+    companiesRemoved: number;
   };
 };
 

@@ -2,28 +2,64 @@ import { describe, it, expect } from "vitest";
 import {
   rankAndSelectLead,
   detectPatterns,
-  LEAD_THRESHOLD,
 } from "../../convex/wire/dramaRanker";
 import type { GameEventCtx } from "../../convex/wire/epochAssembler";
+import type { TokenSignal } from "../../convex/wire/tokenSignals";
 
 function ev(o: Partial<GameEventCtx> & { type: string }): GameEventCtx {
   return { dramatic: true, summary: o.type, ...o };
 }
 
+function sig(over: Partial<TokenSignal>): TokenSignal {
+  return {
+    slug: "kupo",
+    symbol: "KUPO",
+    companyName: "Kupo",
+    xHandle: "@kupo_gg",
+    isHouseToken: false,
+    ok: true,
+    priceUsd: 1,
+    moveSinceLastPct: null,
+    move24hPct: null,
+    move24hSource: "computed",
+    volume24hUsd: null,
+    volumeVsTrailing: null,
+    volumeAnomaly: false,
+    streakDays: 0,
+    classification: "none",
+    latestSnapshotId: "s1",
+    refSnapshotIds: ["s1"],
+    ...over,
+  };
+}
+
 describe("dramaRanker: lead selection", () => {
-  it("a wipeout leads the post", () => {
-    const sel = rankAndSelectLead([
-      ev({
-        type: "wipeout",
-        traderId: "t1",
-        dealId: "d1",
-        magnitudeUsdc: -5000,
-      }),
-      ev({ type: "deal_created", dramatic: false, magnitudeUsdc: 100 }),
-    ]);
-    expect(sel.leadKind).toBe("real_event");
-    expect(sel.leadEvent?.type).toBe("wipeout");
-    // Subjects carry the real entity refs for deep-linking.
+  it("a token flash leads and is flagged as a flash bulletin", () => {
+    const sel = rankAndSelectLead({
+      signals: [sig({ move24hPct: -22, classification: "flash" })],
+      events: [],
+    });
+    expect(sel.leadKind).toBe("token");
+    expect(sel.tokenLead?.symbol).toBe("KUPO");
+    expect(sel.isFlash).toBe(true);
+  });
+
+  it("a wipeout leads when there is no token story", () => {
+    const sel = rankAndSelectLead({
+      signals: [sig({ classification: "none" })],
+      events: [
+        ev({
+          type: "wipeout",
+          traderId: "t1",
+          dealId: "d1",
+          magnitudeUsdc: -5000,
+        }),
+        ev({ type: "deal_created", dramatic: false, magnitudeUsdc: 100 }),
+      ],
+    });
+    expect(sel.leadKind).toBe("game_event");
+    expect(sel.gameLead?.type).toBe("wipeout");
+    expect(sel.isFlash).toBe(true);
     expect(sel.subjects).toEqual(
       expect.arrayContaining([
         { type: "trader", id: "t1" },
@@ -32,15 +68,13 @@ describe("dramaRanker: lead selection", () => {
     );
   });
 
-  it("falls back to fiction when nothing clears the threshold", () => {
-    const sel = rankAndSelectLead([
-      ev({ type: "deal_created", dramatic: false, magnitudeUsdc: 50 }),
-      ev({ type: "deal_entry", dramatic: false }),
-    ]);
-    expect(sel.leadKind).toBe("fiction");
+  it("falls back to a quiet tape when nothing clears the threshold", () => {
+    const sel = rankAndSelectLead({
+      signals: [sig({ move24hPct: 3, classification: "routine" })],
+      events: [ev({ type: "deal_entry", dramatic: false })],
+    });
+    expect(sel.leadKind).toBe("quiet");
     expect(sel.realStatOneLiner).toBeTruthy();
-    const top = sel.ranked[0];
-    expect(top.score).toBeLessThan(LEAD_THRESHOLD);
   });
 
   it("detects a trap-phrase pattern across multiple traders", () => {
@@ -61,25 +95,5 @@ describe("dramaRanker: lead selection", () => {
     const riskFree = patterns.find((p) => p.phrase === "risk-free");
     expect(riskFree).toBeDefined();
     expect(riskFree!.count).toBe(2);
-  });
-
-  it("a detected pattern can win the lead over a lone loss", () => {
-    const sel = rankAndSelectLead([
-      ev({
-        type: "trap_resolved",
-        traderName: "Gordon",
-        dealPrompt: "guaranteed returns",
-        magnitudeUsdc: -100,
-      }),
-      ev({
-        type: "trap_resolved",
-        traderName: "Bud",
-        dealPrompt: "guaranteed upside",
-        magnitudeUsdc: -100,
-      }),
-    ]);
-    expect(sel.patterns.length).toBeGreaterThanOrEqual(1);
-    expect(sel.leadKind).toBe("real_event");
-    expect(sel.ranked[0].event.type).toBe("loss_pattern");
   });
 });

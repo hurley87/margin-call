@@ -7,50 +7,44 @@ import {
 function makeInput(overrides: Partial<AssemblerInput> = {}): AssemblerInput {
   return {
     season: {
-      title: "The PanAtlantic Collapse",
+      title: "The Listed Companies",
       tone: "Jaded, gossipy, darkly funny.",
       weeklyShape: { monday: "Slow open, everyone hungover" },
       styleRules: ["Headline ≤ 12 words.", "No emoji except a leading ⚡."],
-      forbiddenLanguage: ["DeFi", "wagmi"],
+      forbiddenLanguage: ["token", "wallet"],
     },
     dayPosture: "monday",
-    arcs: [
-      {
-        slug: "pan-atlantic-blowup",
-        title: "PanAtlantic blow-up",
-        summary: "The wake.",
-        tensionScore: 3,
-        arcStage: "aftermath",
-        isPrimary: true,
-        beatThisRun: true,
-        firmLossUsdc: 1_400_000_000,
-        firmDisplayName: "PanAtlantic Holdings",
-      },
-    ],
-    firmStates: [
-      {
-        displayName: "PanAtlantic Holdings",
-        status: "collapsing",
-        runningLossUsdc: 1_400_000_000,
-        newLossDeltaUsdc: 0,
-        latestFact: "PanAtlantic losses peaked at $1.4B",
-      },
-    ],
-    entities: [
-      { slug: "marty-vale", displayName: "Marty Vale", traits: ["loud"] },
-    ],
-    recentDrops: [],
-    recentGameEvents: [],
+    mood: "greedy",
     lead: {
-      leadKind: "fiction",
-      leadLine: null,
-      leadFigureUsdc: null,
-      realStatOneLiner: "4 entries on one deal this hour.",
+      leadKind: "quiet",
+      isFlash: false,
+      realStatOneLiner: "SURPLUS up 4%",
       patterns: [],
     },
+    companyTape: [
+      {
+        symbol: "SURPLUS",
+        companyName: "Surplus Intelligence",
+        xHandle: "@AskSurplus",
+        isHouseToken: false,
+        priceUsd: 1,
+        move24hPct: 38,
+        moveSinceLastPct: 5,
+        streakDays: 0,
+        volumeVsTrailing: null,
+        volumeAnomaly: false,
+        classification: "flash",
+      },
+    ],
+    arcs: [],
+    entities: [
+      { slug: "surplus", displayName: "Surplus Intelligence", traits: [] },
+      { slug: "harness", displayName: "Harness", traits: [] },
+    ],
+    houseTokenName: "Harness",
     floorTalkClaims: [],
-    mood: "hungover",
-    secHeat: 5,
+    sourcedStatements: [],
+    recentDrops: [],
     isOpeningBell: false,
     isClosingBell: false,
     ...overrides,
@@ -58,59 +52,83 @@ function makeInput(overrides: Partial<AssemblerInput> = {}): AssemblerInput {
 }
 
 describe("assembleUserMessage", () => {
-  it("renders the code-set mood and SEC heat", () => {
+  it("renders the code-set mood and no SEC heat", () => {
     const msg = assembleUserMessage(makeInput());
-    expect(msg).toContain("mood: hungover");
-    expect(msg).toContain("sec_heat: 5/10");
+    expect(msg).toContain("CURRENT MOOD (code-set — do not alter): greedy");
+    expect(msg).not.toContain("sec_heat");
   });
 
-  it("instructs a fiction lead with the exact firm figure", () => {
-    const msg = assembleUserMessage(makeInput());
-    expect(msg).toContain("FICTIONAL BEAT LEADS");
-    expect(msg).toContain("USE THIS EXACT FIGURE");
-    expect(msg).toContain("(1400000000 USDC)");
-  });
-
-  it("instructs a real-event lead with the exact figure", () => {
+  it("instructs a token lead with the exact symbol + move", () => {
     const msg = assembleUserMessage(
       makeInput({
         lead: {
-          leadKind: "real_event",
-          leadLine: "Gordon2 / 0x4f2…a9: Trader wiped out",
-          leadFigureUsdc: 612,
-          realStatOneLiner: null,
+          leadKind: "token",
+          isFlash: true,
+          tokenSymbol: "SURPLUS",
+          tokenCompanyName: "Surplus Intelligence",
+          tokenXHandle: "@AskSurplus",
+          tokenMovePct: 38,
+          tokenStreakDays: 0,
+          tokenIsHouse: false,
+          tokenVolumeNote: null,
           patterns: [],
         },
       })
     );
-    expect(msg).toContain("REAL EVENT LEADS");
-    expect(msg).toContain("Gordon2");
-    expect(msg).toContain("(612 USDC)");
+    expect(msg).toContain("FLASH BULLETIN");
+    expect(msg).toContain("Surplus Intelligence (SURPLUS)");
+    expect(msg).toContain("SURPLUS +38%");
+    expect(msg).toContain("NEVER invent a real-sounding reason");
   });
 
-  it("rounds a sub-dollar lead figure to cents (no raw float, no $0)", () => {
+  it("instructs a game-event lead with the exact USDC figure", () => {
     const msg = assembleUserMessage(
       makeInput({
         lead: {
-          leadKind: "real_event",
-          leadLine: "evie / 0xB58…c1: Trader lost $0.47 on someone else's deal",
-          leadFigureUsdc: 0.46952987819924236,
-          realStatOneLiner: null,
+          leadKind: "game_event",
+          isFlash: false,
+          gameLine: "Jim's desk: lost $0.99 on someone else's deal",
+          gameFigureUsdc: 0.99,
           patterns: [],
         },
       })
     );
-    expect(msg).toContain("$0.47 (0.47 USDC)");
-    expect(msg).not.toContain("0.46952987819924236");
-    expect(msg).not.toContain("$0 ");
+    expect(msg).toContain("REAL GAME EVENT LEADS");
+    expect(msg).toContain("Jim's desk");
+    expect(msg).toContain("(0.99 USDC)");
+  });
+
+  it("renders the company tape with exact figures and flags the house company", () => {
+    const msg = assembleUserMessage(
+      makeInput({
+        companyTape: [
+          {
+            symbol: "HARNESS",
+            companyName: "Harness",
+            xHandle: "@tryharness",
+            isHouseToken: true,
+            priceUsd: 1,
+            move24hPct: 0,
+            moveSinceLastPct: 0,
+            streakDays: 0,
+            volumeVsTrailing: null,
+            volumeAnomaly: false,
+            classification: "routine",
+          },
+        ],
+      })
+    );
+    expect(msg).toContain("COMPANY TAPE");
+    expect(msg).toContain("Harness (HARNESS)");
+    expect(msg).toContain("HOUSE COMPANY");
   });
 
   it("labels fabricated floor talk so it is framed as rumor", () => {
     const msg = assembleUserMessage(
       makeInput({
         floorTalkClaims: [
-          { text: "CEO seen with boxes", isTrue: false },
-          { text: "Auditors booked a second room", isTrue: true },
+          { text: "the interns started a betting pool", isTrue: false },
+          { text: "the coffee cart guy has opinions", isTrue: true },
         ],
       })
     );
@@ -118,23 +136,35 @@ describe("assembleUserMessage", () => {
     expect(msg).toContain("TRUE");
   });
 
-  it("adds the daily-wrap instruction on the closing bell", () => {
-    const msg = assembleUserMessage(makeInput({ isClosingBell: true }));
-    expect(msg).toContain("DAILY WRAP");
+  it("warns against inventing statements when none are supplied", () => {
+    const msg = assembleUserMessage(makeInput());
+    expect(msg).toContain("SOURCED STATEMENTS");
+    expect(msg).toContain(
+      "do NOT invent posts, quotes, actions, or intentions"
+    );
   });
 
-  it("adds the morning-briefing instruction on the opening bell", () => {
-    const msg = assembleUserMessage(makeInput({ isOpeningBell: true }));
-    expect(msg).toContain("MORNING BRIEFING");
+  it("adds the daily-wrap + morning-briefing instructions on the bells", () => {
+    expect(assembleUserMessage(makeInput({ isClosingBell: true }))).toContain(
+      "DAILY WRAP"
+    );
+    expect(assembleUserMessage(makeInput({ isOpeningBell: true }))).toContain(
+      "MORNING BRIEFING"
+    );
+  });
+
+  it("always instructs a URL-free tweet variant", () => {
+    const msg = assembleUserMessage(makeInput());
+    expect(msg).toContain("tweetVariant");
+    expect(msg).toContain("NO URLs");
   });
 
   it("renders detected trap patterns", () => {
     const msg = assembleUserMessage(
       makeInput({
         lead: {
-          leadKind: "real_event",
-          leadLine: "pattern",
-          leadFigureUsdc: null,
+          leadKind: "quiet",
+          isFlash: false,
           realStatOneLiner: null,
           patterns: [
             {
@@ -146,27 +176,24 @@ describe("assembleUserMessage", () => {
         },
       })
     );
-    expect(msg).toContain("TRAP PATTERNS DETECTED");
+    expect(msg).toContain("TRAP PATTERNS");
     expect(msg).toContain("risk-free");
   });
 
-  it("renders the quiet-slot angle section when set", () => {
-    const msg = assembleUserMessage(
+  it("renders + omits the quiet-slot angle section", () => {
+    const withAngle = assembleUserMessage(
       makeInput({
         quietSlotAngle: {
           key: "junior-analyst",
-          instruction: "Junior analyst gallows humor.",
+          instruction: "Junior-analyst gallows humor.",
           suggestedCategory: "wire",
         },
       })
     );
-    expect(msg).toContain("ANGLE FOR THIS DROP");
-    expect(msg).toContain("Junior analyst gallows humor.");
-    expect(msg).toContain("Suggested category: wire");
-  });
-
-  it("omits the quiet-slot angle section when not set", () => {
-    const msg = assembleUserMessage(makeInput({ quietSlotAngle: null }));
-    expect(msg).not.toContain("ANGLE FOR THIS DROP");
+    expect(withAngle).toContain("ANGLE FOR THIS DROP");
+    expect(withAngle).toContain("Suggested category: wire");
+    expect(
+      assembleUserMessage(makeInput({ quietSlotAngle: null }))
+    ).not.toContain("ANGLE FOR THIS DROP");
   });
 });

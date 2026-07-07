@@ -43,7 +43,6 @@ export const listDispatches = internalQuery({
       epoch: number;
       epochSlot: number | null;
       mood: string;
-      secHeat: number;
       arcStage: string | null;
       createdAt: number;
     }> = [];
@@ -51,7 +50,6 @@ export const listDispatches = internalQuery({
     for (const drop of drops) {
       const ws = (drop.worldState ?? {}) as {
         mood?: string;
-        sec_heat?: number;
       };
       const dispatches = (drop.headlines ?? []) as DispatchItem[];
       for (const d of dispatches) {
@@ -66,7 +64,6 @@ export const listDispatches = internalQuery({
           epoch: drop.epoch,
           epochSlot: drop.epochSlot ?? null,
           mood: ws.mood ?? "unknown",
-          secHeat: ws.sec_heat ?? 0,
           arcStage: drop.arcStage ?? null,
           createdAt: drop.createdAt,
         });

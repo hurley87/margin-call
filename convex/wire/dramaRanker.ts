@@ -1,16 +1,23 @@
 /**
- * Drama ranking + lead selection — pure, no Convex imports.
+ * Lead selection — pure, no Convex imports.
  *
- * Takes the real game events gathered since the last wire drop and decides
- * whether a real event is dramatic enough to LEAD the post. If yes, the wire
- * reports the game; if no, a fictional arc beat leads and the best real stat
- * becomes a one-liner. Also detects trap-phrase patterns ("risk-free", etc.)
- * across multiple losing traders.
+ * Ranks TOKEN price signals and GAME events as uniform candidates and decides
+ * what leads the drop:
+ *   - a token move over the flash threshold → flash bulletin
+ *   - the strongest token story vs. the strongest game event → whichever scores
+ *     higher leads
+ *   - nothing over threshold → a quiet-tape drop (best real stat woven in)
+ *
+ * The lead always carries a REAL number (a move % + symbol, or a USDC figure)
+ * so every led story is anchored to a stored datum. Also detects trap-phrase
+ * patterns across losing deals as darkly-funny game color.
  */
 
 import type { GameEventCtx } from "./epochAssembler";
+import type { TokenSignal } from "./tokenSignals";
+import { headlineMovePct } from "./arcTemplates";
 
-/** Score floor a real event must clear to lead the post. */
+/** Score floor a candidate must clear to lead the drop. */
 export const LEAD_THRESHOLD = 60;
 
 /** Phrases whose recurrence in losing deals the wire calls out as a pattern. */
@@ -25,10 +32,7 @@ export const TRAP_PHRASES = [
   "easy money",
 ];
 
-export interface RankedEvent {
-  event: GameEventCtx;
-  score: number;
-}
+export type LeadKind = "token" | "game_event" | "quiet";
 
 export interface PatternFinding {
   phrase: string;
@@ -37,18 +41,22 @@ export interface PatternFinding {
 }
 
 export interface LeadSelection {
-  leadKind: "real_event" | "fiction";
-  /** Set when leadKind === "real_event". */
-  leadEvent: GameEventCtx | null;
-  /** A one-liner describing the best real stat, for fiction-lead drops. */
+  leadKind: LeadKind;
+  /** Set when leadKind === "token". */
+  tokenLead: TokenSignal | null;
+  /** Set when leadKind === "game_event". */
+  gameLead: GameEventCtx | null;
+  /** True when the drop is a flash bulletin (big move / wipeout). */
+  isFlash: boolean;
+  /** Best real one-liner to weave into a quiet drop. */
   realStatOneLiner: string | null;
-  ranked: RankedEvent[];
   patterns: PatternFinding[];
-  /** Real entities behind the lead/secondary events, for subjects deep-links. */
   subjects: Array<{ type: "trader" | "deal" | "manager"; id: string }>;
 }
 
-function baseScore(e: GameEventCtx, topDecileAbsUsdc: number): number {
+// ── game-event scoring ───────────────────────────────────────────────────────
+
+function gameScore(e: GameEventCtx, topDecileAbsUsdc: number): number {
   switch (e.type) {
     case "wipeout":
       return 100;
@@ -78,14 +86,9 @@ function traderLabel(e: GameEventCtx): string {
 }
 
 function normalizePrompt(prompt: string): string {
-  // Keep hyphens so multi-word trap phrases like "risk-free" match intact.
   return prompt.toLowerCase().replace(/[^a-z0-9 -]+/g, " ");
 }
 
-/**
- * Detect trap-phrase patterns: ≥2 distinct traders losing on deals whose
- * prompts share a phrase. Emitted as synthetic `loss_pattern` lead candidates.
- */
 export function detectPatterns(events: GameEventCtx[]): PatternFinding[] {
   const byPhrase = new Map<string, Set<string>>();
   for (const e of events) {
@@ -97,41 +100,33 @@ export function detectPatterns(events: GameEventCtx[]): PatternFinding[] {
     const text = normalizePrompt(e.dealPrompt);
     for (const phrase of TRAP_PHRASES) {
       if (text.includes(phrase)) {
-        const label = traderLabel(e);
         const set = byPhrase.get(phrase) ?? new Set<string>();
-        set.add(label);
+        set.add(traderLabel(e));
         byPhrase.set(phrase, set);
       }
     }
   }
-
   const findings: PatternFinding[] = [];
   for (const [phrase, labels] of byPhrase) {
     if (labels.size >= 2) {
-      findings.push({
-        phrase,
-        traderLabels: [...labels],
-        count: labels.size,
-      });
+      findings.push({ phrase, traderLabels: [...labels], count: labels.size });
     }
   }
-  // Most-traders-burned first.
   findings.sort((a, b) => b.count - a.count);
   return findings;
 }
 
-/** Compute the top-decile absolute magnitude threshold from recent events. */
 function topDecileThreshold(events: GameEventCtx[]): number {
   const mags = events
     .map((e) => Math.abs(e.magnitudeUsdc ?? 0))
     .filter((m) => m > 0)
     .sort((a, b) => a - b);
-  if (mags.length === 0) return Infinity; // nothing qualifies as "large"
+  if (mags.length === 0) return Infinity;
   const idx = Math.floor(mags.length * 0.9);
   return mags[Math.min(idx, mags.length - 1)];
 }
 
-function oneLiner(e: GameEventCtx): string {
+function gameOneLiner(e: GameEventCtx): string {
   if (e.traderName || e.traderAddressTrunc) {
     return `${traderLabel(e)}: ${e.summary}`;
   }
@@ -145,55 +140,113 @@ function subjectsFor(e: GameEventCtx): LeadSelection["subjects"] {
   return subs;
 }
 
-export function rankAndSelectLead(events: GameEventCtx[]): LeadSelection {
+// ── token scoring ────────────────────────────────────────────────────────────
+
+/** Score a token signal on the same scale as game events. */
+function tokenScore(signal: TokenSignal): number {
+  if (!signal.ok) return 0;
+  const move = Math.abs(headlineMovePct(signal) ?? 0);
+  if (signal.classification === "flash") return 100 + Math.min(move, 50);
+  if (signal.classification === "story") return 65 + Math.min(move, 30);
+  if (signal.classification === "routine") return 30 + Math.min(move, 20);
+  return 0;
+}
+
+function tokenOneLiner(signal: TokenSignal): string {
+  const move = headlineMovePct(signal);
+  const moveStr =
+    move == null
+      ? "moving on heavy volume"
+      : `${move > 0 ? "up" : "off"} ${Math.abs(Math.round(move))}%`;
+  return `${signal.symbol} ${moveStr}`;
+}
+
+// ── unified selection ────────────────────────────────────────────────────────
+
+export function rankAndSelectLead(input: {
+  signals: TokenSignal[];
+  events: GameEventCtx[];
+}): LeadSelection {
+  const { signals, events } = input;
   const patterns = detectPatterns(events);
 
-  // Fold detected patterns in as synthetic events so they can win the lead.
+  // Fold detected trap patterns in as synthetic game events (can win the lead).
   const patternEvents: GameEventCtx[] = patterns.map((p) => ({
     type: "loss_pattern",
     dramatic: true,
     summary: `${p.count} desks burned chasing "${p.phrase}" deals`,
   }));
-
   const allEvents = [...patternEvents, ...events];
   const topDecile = topDecileThreshold(events);
 
-  const ranked: RankedEvent[] = allEvents
-    .map((event) => ({ event, score: baseScore(event, topDecile) }))
+  const rankedGame = allEvents
+    .map((event) => ({ event, score: gameScore(event, topDecile) }))
     .sort((a, b) => b.score - a.score);
+  const topGame = rankedGame[0] ?? null;
 
-  const top = ranked[0] ?? null;
+  const rankedTokens = signals
+    .filter((s) => s.ok)
+    .map((signal) => ({ signal, score: tokenScore(signal) }))
+    .sort((a, b) => b.score - a.score);
+  const topToken = rankedTokens[0] ?? null;
 
-  if (top && top.score >= LEAD_THRESHOLD) {
-    // Gather subjects from the lead plus any other high-scoring real events.
-    const subjectSeen = new Set<string>();
-    const subjects: LeadSelection["subjects"] = [];
-    for (const { event, score } of ranked) {
-      if (score < LEAD_THRESHOLD) break;
-      for (const s of subjectsFor(event)) {
-        const key = `${s.type}:${s.id}`;
-        if (!subjectSeen.has(key)) {
-          subjectSeen.add(key);
-          subjects.push(s);
-        }
-      }
-    }
+  const gameScoreTop = topGame?.score ?? 0;
+  const tokenScoreTop = topToken?.score ?? 0;
+
+  // Nothing crosses the bar → quiet tape.
+  if (gameScoreTop < LEAD_THRESHOLD && tokenScoreTop < LEAD_THRESHOLD) {
+    // Best available real stat to weave in (token routine move or top game stat).
+    const bestRoutineToken = rankedTokens.find((t) => t.score > 0)?.signal;
+    const realStatOneLiner = bestRoutineToken
+      ? tokenOneLiner(bestRoutineToken)
+      : topGame && topGame.score > 0
+        ? gameOneLiner(topGame.event)
+        : null;
     return {
-      leadKind: "real_event",
-      leadEvent: top.event,
-      realStatOneLiner: null,
-      ranked,
+      leadKind: "quiet",
+      tokenLead: null,
+      gameLead: null,
+      isFlash: false,
+      realStatOneLiner,
       patterns,
-      subjects,
+      subjects: [],
     };
   }
 
+  // Token leads when it scores at least as high as the top game candidate.
+  if (topToken && tokenScoreTop >= gameScoreTop) {
+    return {
+      leadKind: "token",
+      tokenLead: topToken.signal,
+      gameLead: null,
+      isFlash: topToken.signal.classification === "flash",
+      realStatOneLiner: null,
+      patterns,
+      subjects: [],
+    };
+  }
+
+  // Otherwise a game event leads.
+  const gameLead = topGame!.event;
+  const subjectSeen = new Set<string>();
+  const subjects: LeadSelection["subjects"] = [];
+  for (const { event, score } of rankedGame) {
+    if (score < LEAD_THRESHOLD) break;
+    for (const s of subjectsFor(event)) {
+      const key = `${s.type}:${s.id}`;
+      if (!subjectSeen.has(key)) {
+        subjectSeen.add(key);
+        subjects.push(s);
+      }
+    }
+  }
   return {
-    leadKind: "fiction",
-    leadEvent: null,
-    realStatOneLiner: top ? oneLiner(top.event) : null,
-    ranked,
+    leadKind: "game_event",
+    tokenLead: null,
+    gameLead,
+    isFlash: gameLead.type === "wipeout",
+    realStatOneLiner: null,
     patterns,
-    subjects: top ? subjectsFor(top.event) : [],
+    subjects,
   };
 }

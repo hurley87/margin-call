@@ -2,6 +2,7 @@
 
 import type { ArcStage } from "./stages";
 import type { DropAngle } from "./dropAngles";
+import type { ArcSubjectType } from "./arcTemplates";
 
 export interface SeasonCtx {
   title: string;
@@ -20,27 +21,42 @@ export interface EntityCtx {
 export interface RecentDropCtx {
   epochSlot?: number | null;
   dropTitle?: string | null;
-  worldState?: { mood?: string; sec_heat?: number } | null;
+  worldState?: { mood?: string } | null;
   headlines?: Array<{ headline?: string; role?: string }> | null;
   confirmedFacts?: string[] | null;
   openQuestions?: string[] | null;
 }
 
+/**
+ * A real game event (deal / PnL / entry / pot / leaderboard). First-class story
+ * material alongside token moves. `magnitudeUsdc` is signed (loss negative).
+ */
 export interface GameEventCtx {
   type: string;
   dramatic: boolean;
   summary: string;
   traderName?: string;
   deskName?: string;
-  /** Signed dollar magnitude of the event (loss negative, win positive). */
   magnitudeUsdc?: number;
-  /** The deal prompt text, when the event is tied to a deal. */
   dealPrompt?: string;
-  /** Truncated wallet address for public display, e.g. "0x4f2…a9". */
   traderAddressTrunc?: string;
-  /** Raw entity ids for deep-linking / subjects (never shown verbatim). */
   traderId?: string;
   dealId?: string;
+}
+
+/** One company's stored price facts for the tape (all numbers are real). */
+export interface CompanyTapeCtx {
+  symbol: string;
+  companyName: string;
+  xHandle: string;
+  isHouseToken: boolean;
+  priceUsd?: number | null;
+  move24hPct?: number | null;
+  moveSinceLastPct?: number | null;
+  streakDays: number;
+  volumeVsTrailing?: number | null;
+  volumeAnomaly: boolean;
+  classification: string;
 }
 
 /** Arc as presented to the LLM — stage + tension are CODE-decided. */
@@ -51,28 +67,29 @@ export interface AssemblerArcCtx {
   tensionScore: number;
   arcStage: ArcStage;
   isPrimary: boolean;
-  beatThisRun: boolean;
-  /** Exact firm-loss figure (USDC) to cite when this arc carries a beat. */
-  firmLossUsdc?: number | null;
-  firmDisplayName?: string | null;
-}
-
-/** Code-computed firm state. The LLM never invents these numbers. */
-export interface FirmStateCtx {
-  displayName: string;
-  status: string;
-  runningLossUsdc: number;
-  newLossDeltaUsdc?: number | null;
-  latestFact?: string | null;
+  subjectType?: ArcSubjectType | null;
+  subjectSymbol?: string | null;
+  subjectCompanyName?: string | null;
+  movePct?: number | null;
+  streakDays?: number | null;
+  isHouseToken?: boolean;
 }
 
 export interface LeadCtx {
-  leadKind: "real_event" | "fiction";
-  /** When real_event: the headline-worthy line, with names/addresses. */
-  leadLine?: string | null;
-  /** Exact figure to use in prose (no rounding, no invention). */
-  leadFigureUsdc?: number | null;
-  /** When fiction: weave this real stat in as a one-liner. */
+  leadKind: "token" | "game_event" | "quiet";
+  isFlash: boolean;
+  // token lead
+  tokenSymbol?: string | null;
+  tokenCompanyName?: string | null;
+  tokenXHandle?: string | null;
+  tokenMovePct?: number | null;
+  tokenStreakDays?: number | null;
+  tokenIsHouse?: boolean;
+  tokenVolumeNote?: string | null;
+  // game-event lead
+  gameLine?: string | null;
+  gameFigureUsdc?: number | null;
+  // quiet
   realStatOneLiner?: string | null;
   patterns: Array<{ phrase: string; count: number; traderLabels: string[] }>;
 }
@@ -82,26 +99,28 @@ export interface FloorTalkCtx {
   isTrue: boolean;
 }
 
+/** A verified public statement from a real account (rule 6). v1: usually empty. */
+export interface SourcedStatementCtx {
+  company: string;
+  statement: string;
+  sourceRef: string;
+}
+
 export interface AssemblerInput {
   season: SeasonCtx;
   dayPosture: string;
-  /** Pre-sorted by tension desc; first is primary. */
-  arcs: AssemblerArcCtx[];
-  firmStates: FirmStateCtx[];
-  entities: EntityCtx[];
-  /** Newest-first, up to 10 drops. */
-  recentDrops: RecentDropCtx[];
-  recentGameEvents: GameEventCtx[];
-  lead: LeadCtx;
-  floorTalkClaims: FloorTalkCtx[];
-  /** Code-computed mood + SEC heat for this drop. */
   mood: string;
-  secHeat: number;
-  /** True when this is the first drop of the trading day. */
+  lead: LeadCtx;
+  companyTape: CompanyTapeCtx[];
+  arcs: AssemblerArcCtx[];
+  entities: EntityCtx[];
+  /** Display name of the house token company, if the registry has one. */
+  houseTokenName?: string | null;
+  floorTalkClaims: FloorTalkCtx[];
+  sourcedStatements: SourcedStatementCtx[];
+  recentDrops: RecentDropCtx[];
   isOpeningBell: boolean;
-  /** True when this is the last drop before the close (daily wrap). */
   isClosingBell: boolean;
-  /** Quiet-slot narrative angle (code-selected); null when beat or real event leads. */
   quietSlotAngle?: DropAngle | null;
 }
 
@@ -128,36 +147,48 @@ function pushBulletSection(
     lines.push("  (none)");
     return;
   }
-  for (const item of items) {
-    lines.push(`  - ${item}`);
-  }
+  for (const item of items) lines.push(`  - ${item}`);
 }
 
 export function fmtUsd(n: number): string {
   const abs = Math.abs(n);
   if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (abs >= 1) return `$${Math.round(n).toLocaleString("en-US")}`;
-  return `$${n.toFixed(2)}`; // sub-dollar → "$0.47", never "$0"
+  return `$${n.toFixed(2)}`;
 }
 
-/** Exact USDC figure for the LLM — cents precision, no trailing-zero noise. */
 function exactUsdc(n: number): number {
   return Number(n.toFixed(2));
+}
+
+/** Signed percent, no decimals, e.g. +38% / -22% / unch. */
+export function fmtPct(n: number | null | undefined): string {
+  if (n == null) return "n/a";
+  const r = Math.round(n);
+  if (r === 0) return "unch.";
+  return `${r > 0 ? "+" : ""}${r}%`;
+}
+
+function streakPhrase(streakDays: number | null | undefined): string | null {
+  if (streakDays == null) return null;
+  const n = Math.abs(streakDays);
+  if (n < 2) return null;
+  return `${n} straight ${streakDays > 0 ? "up" : "down"} days`;
 }
 
 export function assembleUserMessage(input: AssemblerInput): string {
   const {
     season,
     dayPosture,
-    arcs,
-    firmStates,
-    entities,
-    recentDrops,
-    recentGameEvents,
-    lead,
-    floorTalkClaims,
     mood,
-    secHeat,
+    lead,
+    companyTape,
+    arcs,
+    entities,
+    houseTokenName,
+    floorTalkClaims,
+    sourcedStatements,
+    recentDrops,
     isOpeningBell,
     isClosingBell,
     quietSlotAngle,
@@ -179,45 +210,55 @@ export function assembleUserMessage(input: AssemblerInput): string {
     `\nFORBIDDEN LANGUAGE (never use, case-insensitive): ${season.forbiddenLanguage.join(", ")}`
   );
 
-  // World state is CODE-AUTHORED. The LLM must not change these.
-  lines.push(`\nCURRENT WORLD STATE (code-set — do not alter):`);
-  lines.push(`  mood: ${mood}`);
-  lines.push(`  sec_heat: ${secHeat}/10`);
+  lines.push(`\nCURRENT MOOD (code-set — do not alter): ${mood}`);
 
-  // ── LEAD INSTRUCTION — the single most important section ──────────────────
+  // ── LEAD INSTRUCTION — the single most important section ──
   lines.push(`\nLEAD INSTRUCTION (build the role=main dispatch around THIS):`);
-  if (lead.leadKind === "real_event") {
-    lines.push(`  REAL EVENT LEADS. Report this as the headline:`);
-    lines.push(`    ${lead.leadLine ?? "(see recent market events)"}`);
-    if (lead.leadFigureUsdc != null) {
+  if (lead.leadKind === "token") {
+    const move = fmtPct(lead.tokenMovePct);
+    const streak = streakPhrase(lead.tokenStreakDays);
+    lines.push(
+      `  ${lead.isFlash ? "FLASH BULLETIN" : "COMPANY STORY LEADS"}: Shares of ${lead.tokenCompanyName} (${lead.tokenSymbol}) ${lead.tokenMovePct != null && lead.tokenMovePct < 0 ? "fell" : "rose"} ${move}.`
+    );
+    lines.push(
+      `    Use this EXACT figure and symbol — do not round differently or invent another number: ${lead.tokenSymbol} ${move}.`
+    );
+    if (streak) lines.push(`    Real streak: ${streak}. You may cite it.`);
+    if (lead.tokenVolumeNote) lines.push(`    ${lead.tokenVolumeNote}`);
+    lines.push(
+      `    The move already happened — explain it with absurd, non-plausible floor color (the interns, the payphone, the coffee cart). NEVER invent a real-sounding reason (deals, deployments, listings, investigations, hacks, insiders).`
+    );
+    if (lead.tokenIsHouse) {
       lines.push(
-        `    Use this EXACT figure, do not round or invent: ${fmtUsd(lead.leadFigureUsdc)} (${exactUsdc(lead.leadFigureUsdc)} USDC).`
+        `    THIS IS THE HOUSE COMPANY. Be harder on it, self-deprecating, never promotional. Favorable coverage fails review.`
+      );
+    }
+  } else if (lead.leadKind === "game_event") {
+    lines.push(`  REAL GAME EVENT LEADS. Report this as the headline:`);
+    lines.push(`    ${lead.gameLine ?? "(see recent game events)"}`);
+    if (lead.gameFigureUsdc != null) {
+      lines.push(
+        `    Use this EXACT figure, do not round or invent: ${fmtUsd(lead.gameFigureUsdc)} (${exactUsdc(lead.gameFigureUsdc)} USDC).`
       );
     }
     lines.push(
-      `    Name the desk by its display name or truncated address. A fictional arc may appear only as a one-line aside.`
+      `    Name the desk by its display name or truncated address. Keep it in-world.`
     );
   } else {
     lines.push(
-      `  FICTIONAL BEAT LEADS (no real event cleared the drama threshold).`
+      `  QUIET TAPE (nothing crossed the threshold). Write a competent quiet-day column.`
     );
-    const primary = arcs.find((a) => a.isPrimary);
-    if (primary) {
-      lines.push(
-        `    Lead with the primary arc "${primary.title}" at stage ${primary.arcStage} (tension ${primary.tensionScore}/10).`
-      );
-      if (primary.firmLossUsdc != null && primary.firmLossUsdc > 0) {
-        lines.push(
-          `    ${primary.firmDisplayName ?? "The firm"}'s running loss is now ${fmtUsd(primary.firmLossUsdc)} (${exactUsdc(primary.firmLossUsdc)} USDC) — USE THIS EXACT FIGURE.`
-        );
-      }
-    }
     if (lead.realStatOneLiner) {
-      lines.push(`    Weave in this real one-liner: ${lead.realStatOneLiner}`);
+      lines.push(
+        `    You may weave in this real one-liner: ${lead.realStatOneLiner}`
+      );
     }
+    lines.push(
+      `    Do NOT attach a rumor or story to any company that is not on the COMPANY TAPE below with a real move. These are thin markets; the wire must not appear to move them.`
+    );
   }
   if (lead.patterns.length > 0) {
-    lines.push(`  TRAP PATTERNS DETECTED (report as a darkly funny pattern):`);
+    lines.push(`  TRAP PATTERNS (real; report as a darkly funny pattern):`);
     for (const p of lead.patterns) {
       lines.push(
         `    - ${p.count} desks lost chasing "${p.phrase}" deals: ${p.traderLabels.join(", ")}`
@@ -226,52 +267,58 @@ export function assembleUserMessage(input: AssemblerInput): string {
   }
 
   if (quietSlotAngle) {
-    lines.push(
-      `\nANGLE FOR THIS DROP (no new facts today — advance texture, not facts):`
-    );
+    lines.push(`\nANGLE FOR THIS DROP:`);
     lines.push(`  ${quietSlotAngle.instruction}`);
     lines.push(
       `  Suggested category: ${quietSlotAngle.suggestedCategory} (override only if a real event clearly demands another).`
     );
-    lines.push(
-      `  Do NOT re-announce recent headlines as breaking news. Same arc stage, same figures — new voice only.`
-    );
   }
 
-  // ── ARC STATE — stages + tension are code-owned ───────────────────────────
+  // ── COMPANY TAPE — real stored numbers only ──
+  lines.push(
+    `\nCOMPANY TAPE (real stored figures — cite exactly; anything not listed here has no story today):`
+  );
+  const movers = companyTape.filter((c) => c.classification !== "none");
+  if (movers.length === 0) {
+    lines.push("  (quiet tape — no company crossed a mention threshold)");
+  } else {
+    for (const c of movers) {
+      const streak = streakPhrase(c.streakDays);
+      const vol =
+        c.volumeAnomaly && c.volumeVsTrailing != null
+          ? `, volume ~${Math.round(c.volumeVsTrailing)}× normal`
+          : "";
+      const house = c.isHouseToken
+        ? " [HOUSE COMPANY — harder, never promotional]"
+        : "";
+      lines.push(
+        `  - ${c.companyName} (${c.symbol}): 24h ${fmtPct(c.move24hPct)}, since last ${fmtPct(c.moveSinceLastPct)}${streak ? `, ${streak}` : ""}${vol}${house}`
+      );
+    }
+  }
+
+  // ── ARC STATE — stages + tension are code-owned ──
   lines.push(`\nARC STATE (stage + tension are code-set; write to them):`);
   if (arcs.length === 0) {
     lines.push("  (no active arcs)");
   } else {
-    arcs.forEach((arc) => {
+    for (const arc of arcs) {
       const primary = arc.isPrimary ? " [PRIMARY]" : "";
-      const beat = arc.beatThisRun ? " (advance this beat)" : " (simmering)";
-      lines.push(
-        `  -${primary} ${arc.title} — stage ${arc.arcStage}, tension ${arc.tensionScore}/10${beat} [slug: ${arc.slug}]`
-      );
-      lines.push(`     ${arc.summary}`);
-    });
-  }
-
-  // ── FIRM STATE — running totals are code-owned ────────────────────────────
-  if (firmStates.length > 0) {
-    lines.push(`\nFIRM STATE (running totals are code-set — cite exactly):`);
-    for (const f of firmStates) {
-      const delta =
-        f.newLossDeltaUsdc && f.newLossDeltaUsdc > 0
-          ? ` (today +${fmtUsd(f.newLossDeltaUsdc)})`
+      const subj =
+        arc.subjectType === "company" && arc.subjectSymbol
+          ? ` [${arc.subjectSymbol}${arc.movePct != null ? ` ${fmtPct(arc.movePct)}` : ""}]`
           : "";
       lines.push(
-        `  - ${f.displayName}: ${f.status}, running loss ${fmtUsd(f.runningLossUsdc)}${delta}`
+        `  -${primary} ${arc.title} — stage ${arc.arcStage}, tension ${arc.tensionScore}/10${subj} [slug: ${arc.slug}]`
       );
-      if (f.latestFact) lines.push(`     fact: ${f.latestFact}`);
+      lines.push(`     ${arc.summary}`);
     }
   }
 
-  // ── FLOOR TALK — unreliable gossip, truth tagged for coherence ────────────
+  // ── FLOOR TALK — unreliable gossip, absurd + non-finance only ──
   if (floorTalkClaims.length > 0) {
     lines.push(
-      `\nFLOOR TALK CLAIMS (gossip — only ~60% true; you may use as a floor_talk aside, attributed as rumor):`
+      `\nFLOOR TALK (gossip — only ~60% true; use as a floor_talk aside, attributed as rumor):`
     );
     for (const c of floorTalkClaims) {
       lines.push(
@@ -280,13 +327,36 @@ export function assembleUserMessage(input: AssemblerInput): string {
     }
   }
 
-  lines.push(`\nENTITY ROSTER (only reference entities on this list):`);
+  // ── SOURCED STATEMENTS — real accounts, verified quotes only (rule 6) ──
+  lines.push(
+    `\nSOURCED STATEMENTS (real public statements you may reference; frame in period terms, never invent one):`
+  );
+  if (sourcedStatements.length === 0) {
+    lines.push(
+      "  (none supplied — do NOT invent posts, quotes, actions, or intentions for any real account or person)"
+    );
+  } else {
+    for (const s of sourcedStatements) {
+      lines.push(`  - ${s.company}: "${s.statement}" [source: ${s.sourceRef}]`);
+    }
+  }
+
+  lines.push(
+    `\nCOMPANY ROSTER (only these companies exist; never reference one not on this list):`
+  );
   if (entities.length === 0) {
     lines.push("  (none)");
   } else {
-    entities.forEach((e) => {
-      lines.push(`  - ${e.slug} (${e.displayName}): ${e.traits.join(", ")}`);
-    });
+    for (const e of entities) {
+      lines.push(
+        `  - ${e.slug} (${e.displayName})${e.traits.length ? `: ${e.traits.join(", ")}` : ""}`
+      );
+    }
+  }
+  if (houseTokenName) {
+    lines.push(
+      `  NOTE: ${houseTokenName} is the house company — coverage stance is HARDER and never promotional.`
+    );
   }
 
   const dropsToShow = recentDrops.slice(0, 10);
@@ -317,53 +387,36 @@ export function assembleUserMessage(input: AssemblerInput): string {
     )
   );
 
-  lines.push(`\nRECENT WIRE DROPS (newest first, for narrative continuity):`);
+  lines.push(`\nRECENT WIRE DROPS (newest first, for continuity):`);
   if (dropsToShow.length === 0) {
     lines.push("  (none — this is the first drop)");
   } else {
-    dropsToShow.forEach((drop) => {
+    for (const drop of dropsToShow) {
       const slot = drop.epochSlot != null ? `slot ${drop.epochSlot}` : "seed";
       lines.push(`  [${slot}] ${drop.dropTitle ?? "(untitled)"}`);
       const dispatches = (drop.headlines ?? []) as Array<{
         headline?: string;
-        role?: string;
       }>;
-      dispatches.slice(0, 3).forEach((d) => {
-        lines.push(`    • ${d.headline ?? ""}`);
-      });
-    });
-  }
-
-  // ── Real market events (raw, for color beyond the chosen lead) ────────────
-  const dramaticEvents = recentGameEvents.filter((e) => e.dramatic);
-  lines.push(
-    `\nRECENT MARKET EVENTS — DRAMATIC (real; name desks when relevant):`
-  );
-  if (dramaticEvents.length === 0) {
-    lines.push("  (none)");
-  } else {
-    dramaticEvents.forEach((e) => {
-      const actor = [e.traderName, e.traderAddressTrunc, e.deskName]
-        .filter(Boolean)
-        .join(" / ");
-      const actorTag = actor ? ` [${actor}]` : "";
-      lines.push(`  [${e.type}]${actorTag} ${e.summary}`);
-    });
+      dispatches
+        .slice(0, 3)
+        .forEach((d) => lines.push(`    • ${d.headline ?? ""}`));
+    }
   }
 
   if (isOpeningBell) {
     lines.push(
-      `\nMORNING BRIEFING: First drop of the trading day. Lead with what happened overnight or since yesterday's close, who is positioned how, and the one flashpoint the floor is watching. Electric, gossipy anticipation — not a dry recap.`
+      `\nMORNING BRIEFING: First drop of the trading day. Lead with the biggest overnight move on the COMPANY TAPE (size crossed the tape before the bell), who is positioned how, and the one name the floor is watching. Electric, gossipy — not a dry recap.`
     );
   }
   if (isClosingBell) {
     lines.push(
-      `\nDAILY WRAP: Last drop before the close. Write a satirical end-of-day column with superlatives — biggest winner, dumbest trade, quote of the day (a quote may be fictional and attributed to a roster character). This is the shareable artifact. Make it land.`
+      `\nDAILY WRAP: Last drop before the close. Satirical end-of-day column with superlatives — biggest mover, dullest name, quote of the day (the quote must be your own invented FLOOR voice, never attributed to a real company or person). This is the shareable artifact. Make it land.`
     );
   }
 
   lines.push(
-    `\nOUTPUT: Exactly one dispatch, role "main". Pick the category that fits (wire is the default; use ticker for a flash one-liner, floor_talk for gossip, sec_watch for regulators). Every dispatch needs a unique kebab-case dispatchKey. Headline ≤ 12 words. Body 2–3 complete sentences (every sentence must end with . ! or ?). Every post must contain a human detail or a joke. All numbers must come from the figures above — never invent a dollar amount, total, or event. entityMentions: list ONLY fictional roster slugs from the ENTITY ROSTER above — real desks/traders/addresses belong in the prose, never in entityMentions.`
+    `\nOUTPUT: Exactly one dispatch, role "main". Category: wire (default), ticker (a flash one-liner), floor_talk (gossip), positioning (who's leaning where). Unique kebab-case dispatchKey. Headline ≤ 12 words. Body 2–3 complete sentences (each ending in . ! or ?). Every post needs a human detail or a joke. Every number MUST come from the COMPANY TAPE / LEAD / game figures above — never invent a price, percentage, dollar amount, or event. entityMentions: ONLY company roster slugs that are the actual subject.` +
+      `\nALSO produce tweetVariant: ONE tweet, ≤ 270 characters, same voice. For a company story include the real move (SYMBOL +/-N%) and @-mention the company's handle. Cashtags allowed. NO URLs of any kind. Zero-context read: it must not be mistakable for real news.`
   );
 
   return lines.join("\n");

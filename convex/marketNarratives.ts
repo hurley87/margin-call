@@ -25,7 +25,6 @@ export const feedDrops = query({
         const dispatches = (n.headlines ?? []) as DispatchItem[];
         const ws = (n.worldState ?? {}) as {
           mood?: string;
-          sec_heat?: number;
         };
 
         const seeds = await ctx.db
@@ -68,7 +67,7 @@ export const feedDrops = query({
           isFlash: n.isFlash ?? false,
           subjects: n.subjects ?? [],
           mood: ws.mood ?? "unknown",
-          secHeat: ws.sec_heat ?? 0,
+          tweetVariant: n.tweetVariant ?? null,
           createdAt: new Date(n.createdAt).toISOString(),
           dispatches: dispatches.map((d) => {
             const agg = d.dispatchKey

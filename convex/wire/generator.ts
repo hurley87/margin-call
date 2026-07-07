@@ -15,15 +15,24 @@ import { getTodayDateNY } from "../lib/tradingHours";
 import {
   assembleUserMessage,
   type AssemblerArcCtx,
-  type FirmStateCtx,
+  type CompanyTapeCtx,
   type GameEventCtx,
+  type LeadCtx,
 } from "./epochAssembler";
 import { normalizeGeneratedEpoch } from "./epochNormalizer";
-import { validateEpoch } from "./epochValidator";
-import { computeWorldStateAdvance } from "./worldState";
+import { validateEpoch, type ValidatedEpoch } from "./epochValidator";
+import {
+  computeWorldStateAdvance,
+  type ArcInput,
+  type CompanyCtx,
+} from "./worldState";
 import type { ArcStage } from "./stages";
+import { headlineMovePct } from "./arcTemplates";
+import type { TokenSignal } from "./tokenSignals";
+import { houseToken } from "./tokenRegistry";
+import { sanitizeTweet } from "./tweetVariant";
+import { getTweetPoster } from "./tweetPoster";
 import type { GeneratedNarrativeEpoch } from "./_schemas";
-import type { ValidatedEpoch } from "./epochValidator";
 import {
   isNearDuplicateHeadline,
   pickQuietAngle,
@@ -32,46 +41,30 @@ import {
 } from "./dropAngles";
 import type { Doc } from "../_generated/dataModel";
 
-const FALLBACK_NARRATIVE_GENERATION_SYSTEM = `You are the in-house columnist for a 1980s Wall Street wire service. You are jaded, gossipy, and darkly funny. You have seen every fraud twice and respect none of the participants.
+const FALLBACK_NARRATIVE_GENERATION_SYSTEM = `You are the anonymous columnist for a 1980s stock-wire gossip service. Jaded, gossipy, darkly funny. You cover a handful of listed companies as if it were 1985 — the floor, the tape, the bell, block trades, analysts, "could not be reached for comment."
 
-YOUR JOB: write ONE short dispatch as prose. You do not decide outcomes, numbers, tension, or who wins — that is all handed to you. You make it funny and human.
+RULES (non-negotiable):
+1. NO crypto / finance-tech vocabulary (token, coin, wallet, market cap, onchain, pump, etc.). These are COMPANIES; holdings are shares / common stock.
+2. NO named fictional humans. The only invented voice is the collective desk (the floor, the interns, sources).
+3. Every company story cites a REAL number handed to you. The move is real; your explanation is invented and absurd.
+4. Reactive only: explain moves that already happened; never imply something is about to happen; never attach a story to a company with no real move.
+5. Absurd, not plausible: color lives in the wire's silly world (the interns, the payphone). NEVER invent a realistic company/finance event (deals, launches, listings, investigations, selling), even as a joke.
+6. Real accounts/people: only actual provided statements; never invent quotes, actions, or intentions.
+7. The house company gets harder, self-deprecating, never-promotional coverage.
 
-VOICE RULES:
-- Every post must contain a human detail or a joke. Never output only numbers and jargon.
-- Explain stakes through consequence, not terminology. Not "margin calls intensify" — instead "lenders would like their money back, immediately, in cash."
-- Punch at greed and incompetence. The reader should feel smarter than everyone in the story.
-- Comprehensible and funny to someone with zero finance knowledge.
-- All numbers come from the provided data. Do NOT invent figures, totals, dates, or events.
+Also produce tweetVariant: one tweet ≤270 chars, same voice, real move (SYMBOL +/-N%) + @-mention the company when it's the subject, cashtags ok, NO URLs.
 
-BANNED PHRASES (and anything like them): "watch for fallout", "market responds with heightened anxiety", "concerns mount", "pressure intensifies", and any sentence that could appear in a compliance memo.
-
-CALIBRATION:
-BAD: "Forced liquidations deepen as PanAtlantic reveals an additional $300M asset loss. Market responds with heightened anxiety."
-GOOD: "PanAtlantic misplaced another $300M today, bringing the total to $1.4B, a figure its CFO described as 'temporary' from the back of a taxi. The firm's remaining assets now consist of office furniture and optimism."
-GOOD (real game event): "Desk 0x4f2…a9 entered 'Guaranteed Distressed Debt Opportunity' yesterday. The debt was real. The opportunity was for the other guy. Balance: zero. Deals with 'guaranteed' in the title have a perfect record — for their creators."
-
-OUTPUT: strict JSON matching the schema — dropTitle, exactly one dispatch (role "main", unique kebab-case dispatchKey, category from wire/floor_talk/sec_watch/boardroom/ticker/positioning), entityMentions, confirmedFacts, openQuestions. Headline ≤ 12 words. Body 2–3 complete sentences (every sentence must end with . ! or ?). No prose outside the JSON.`;
+OUTPUT: strict JSON matching the schema. Headline ≤ 12 words. Body 2–3 complete sentences (each ending in . ! or ?). No prose outside the JSON object.`;
 
 type StoredArc = Doc<"narrativeArcs">;
 
 function arcStageOf(arc: StoredArc): ArcStage {
-  return (arc.arcStage as ArcStage | undefined) ?? "rumor";
+  return (arc.arcStage as ArcStage | undefined) ?? "noticed";
 }
 
-/** Is this real event dramatic enough to fire a flash bulletin? */
-function leadIsFlash(
-  leadKind: string,
-  topType: string | undefined,
-  topScore: number
-): boolean {
-  if (leadKind !== "real_event" || !topType) return false;
-  // Per spec: flash only on a wipeout or a top-decile win/loss. A trap or a
-  // leaderboard change leads the post but is not a flash bulletin.
-  if (topType === "wipeout") return true;
-  if ((topType === "big_win" || topType === "big_loss") && topScore >= 70) {
-    return true;
-  }
-  return false;
+function tokenVolumeNote(signal: TokenSignal): string | null {
+  if (!signal.volumeAnomaly || signal.volumeVsTrailing == null) return null;
+  return `Volume ran heavy — roughly ${Math.round(signal.volumeVsTrailing)}× its usual.`;
 }
 
 async function runGenerator(
@@ -90,7 +83,7 @@ async function runGenerator(
   const now = opts.nowMs;
   const { slot, sinceMs } = opts;
 
-  const [seasonData, recentDrops, recentGameEvents, leaderboard] =
+  const [seasonData, recentDrops, recentGameEvents, leaderboard, signals] =
     (await Promise.all([
       ctx.runQuery(internal.wire.internal.loadActiveSeason, {}),
       ctx.runQuery(internal.wire.internal.listRecentDrops, { limit: 10 }),
@@ -98,6 +91,7 @@ async function runGenerator(
         since: sinceMs,
       }),
       ctx.runQuery(api.leaderboard.listTraderStats, { limit: 1 }),
+      ctx.runQuery(internal.wire.tokenSignals.loadTokenSignals, {}),
     ])) as [
       {
         season: Doc<"narrativeSeasons">;
@@ -107,6 +101,7 @@ async function runGenerator(
       Doc<"marketNarratives">[],
       GameEventCtx[],
       Array<{ id: string; name: string }>,
+      TokenSignal[],
     ];
 
   if (!seasonData) {
@@ -122,7 +117,7 @@ async function runGenerator(
   };
   const prevQuietAngleKey = lastWorld.quietAngleKey ?? null;
 
-  // Leaderboard #1 change → synthetic event (prior leader stashed on last drop).
+  // Leaderboard #1 change → synthetic game event.
   const events: GameEventCtx[] = [...recentGameEvents];
   const currentTop = leaderboard[0] ?? null;
   if (
@@ -144,35 +139,38 @@ async function runGenerator(
   const openingBell = isOpeningBell(slot, lastDrop?.epochSlot ?? null);
   const closingBell = isClosingBell(now);
 
-  // ── Code computes the entire world-state advance ──────────────────────────
-  const firmsInput = entities
-    .filter((e) => e.kind === "firm")
-    .map((e) => ({
-      slug: e.slug,
-      displayName: e.displayName,
-      status: e.status,
-      runningLossUsdc: e.runningLossUsdc ?? 0,
-      notableFacts: e.notableFacts ?? [],
-      oneOffEventsFired: e.oneOffEventsFired ?? [],
-      lastLossDayKey: e.lastLossDayKey ?? null,
-    }));
+  // Company roster + lookups.
+  const companyEntities = entities.filter((e) => e.kind === "company");
+  const companies: CompanyCtx[] = companyEntities.map((e) => ({
+    slug: e.slug,
+    displayName: e.displayName,
+    symbol: e.symbol ?? e.slug.toUpperCase(),
+    isHouseToken: e.isHouseToken ?? false,
+  }));
+  const companyBySlug = new Map(companies.map((c) => [c.slug, c]));
+  const signalBySlug = new Map(signals.map((s) => [s.slug, s]));
 
-  const arcsInput = arcs.map((a) => ({
+  // ── Code computes the world-state advance ──
+  const arcsInput: ArcInput[] = arcs.map((a) => ({
     slug: a.slug,
     title: a.title,
     summary: a.summary,
     tensionScore: a.tensionScore,
     arcStage: arcStageOf(a),
-    beatsPublishedByStage: a.beatsPublishedByStage ?? {},
-    climaxFired: a.climaxFired ?? false,
+    peakFired: a.climaxFired ?? false,
     lastBeatDayKey: a.lastBeatDayKey ?? null,
-    templateKey: a.templateKey ?? null,
-    primaryFirmSlug: a.primaryFirmSlug ?? null,
+    subjectSlug: a.primaryFirmSlug ?? null,
+    subjectType: a.primaryFirmSlug
+      ? companyBySlug.has(a.primaryFirmSlug)
+        ? ("company" as const)
+        : ("desk" as const)
+      : null,
   }));
 
   const advance = computeWorldStateAdvance({
     arcs: arcsInput,
-    firms: firmsInput,
+    companies,
+    signals,
     events,
     dayKey,
     dayPosture: posture,
@@ -181,72 +179,105 @@ async function runGenerator(
   });
 
   const arcBySlug = new Map(arcs.map((a) => [a.slug, a]));
-  const firmDeltaBySlug = new Map(advance.firmDeltas.map((d) => [d.slug, d]));
-  const firmBySlug = new Map(firmsInput.map((f) => [f.slug, f]));
 
-  // Assembler arc context (stage/tension are code-set).
-  const assemblerArcs: AssemblerArcCtx[] = advance.arcAdvances
-    .flatMap((adv): AssemblerArcCtx[] => {
-      const arc = arcBySlug.get(adv.slug);
-      if (!arc) return [];
-      const firmSlug = arc.primaryFirmSlug ?? undefined;
-      const delta = firmSlug ? firmDeltaBySlug.get(firmSlug) : undefined;
-      const firm = firmSlug ? firmBySlug.get(firmSlug) : undefined;
-      const firmLoss: number | null =
-        delta?.newRunningLossUsdc ?? firm?.runningLossUsdc ?? null;
-      return [
-        {
-          slug: adv.slug,
-          title: arc.title,
-          summary: arc.summary,
-          tensionScore: adv.newTensionScore,
-          arcStage: adv.toStage,
-          isPrimary: adv.slug === advance.primaryArcSlug,
-          beatThisRun: adv.beatPublishedThisRun,
-          firmLossUsdc: firmLoss,
-          firmDisplayName: firm?.displayName ?? null,
-        },
-      ];
-    })
-    .sort((a, b) => b.tensionScore - a.tensionScore);
-
-  // Firm state context (running totals are code-set).
-  const firmStates: FirmStateCtx[] = [];
-  for (const arc of assemblerArcs) {
-    const stored = arcBySlug.get(arc.slug);
-    const firmSlug = stored?.primaryFirmSlug ?? undefined;
-    if (!firmSlug) continue;
-    const firm = firmBySlug.get(firmSlug);
-    if (!firm) continue;
-    const delta = firmDeltaBySlug.get(firmSlug);
-    firmStates.push({
-      displayName: firm.displayName,
-      status: delta?.newStatus ?? firm.status ?? "healthy",
-      runningLossUsdc: delta?.newRunningLossUsdc ?? firm.runningLossUsdc,
-      newLossDeltaUsdc: delta?.lossDeltaUsdc ?? null,
-      latestFact:
-        delta?.appendNotableFacts[delta.appendNotableFacts.length - 1] ??
-        firm.notableFacts[firm.notableFacts.length - 1] ??
-        null,
+  // ── Assembler ARC STATE: live arcs after advance + spawns ──
+  const liveArcs: AssemblerArcCtx[] = [];
+  for (const adv of advance.arcAdvances) {
+    if (adv.toStage === "retired") continue;
+    const arc = arcBySlug.get(adv.slug);
+    if (!arc) continue;
+    const subjectSlug = arc.primaryFirmSlug ?? null;
+    const company = subjectSlug ? companyBySlug.get(subjectSlug) : undefined;
+    const signal = subjectSlug ? signalBySlug.get(subjectSlug) : undefined;
+    liveArcs.push({
+      slug: adv.slug,
+      title: arc.title,
+      summary: arc.summary,
+      tensionScore: adv.newTensionScore,
+      arcStage: adv.toStage,
+      isPrimary: adv.slug === advance.primaryArcSlug,
+      subjectType: company ? "company" : subjectSlug ? "desk" : null,
+      subjectSymbol: company?.symbol ?? null,
+      subjectCompanyName: company?.displayName ?? null,
+      movePct: signal ? headlineMovePct(signal) : null,
+      streakDays: signal?.streakDays ?? null,
+      isHouseToken: company?.isHouseToken ?? false,
     });
   }
+  for (const spec of advance.spawnRequests) {
+    const company = companyBySlug.get(spec.subjectSlug);
+    const signal = signalBySlug.get(spec.subjectSlug);
+    liveArcs.push({
+      slug: spec.slug,
+      title: spec.title,
+      summary: spec.summary,
+      tensionScore: spec.tensionScore,
+      arcStage: spec.arcStage,
+      isPrimary: spec.slug === advance.primaryArcSlug,
+      subjectType: spec.subjectType,
+      subjectSymbol: company?.symbol ?? null,
+      subjectCompanyName: company?.displayName ?? null,
+      movePct: signal ? headlineMovePct(signal) : null,
+      streakDays: signal?.streakDays ?? null,
+      isHouseToken: company?.isHouseToken ?? false,
+    });
+  }
+  liveArcs.sort((a, b) => b.tensionScore - a.tensionScore);
 
-  // Lead context for the prompt.
+  // ── Company tape ──
+  const companyTape: CompanyTapeCtx[] = signals.map((s) => ({
+    symbol: s.symbol,
+    companyName: s.companyName,
+    xHandle: s.xHandle,
+    isHouseToken: s.isHouseToken,
+    priceUsd: s.priceUsd,
+    move24hPct: s.move24hPct,
+    moveSinceLastPct: s.moveSinceLastPct,
+    streakDays: s.streakDays,
+    volumeVsTrailing: s.volumeVsTrailing,
+    volumeAnomaly: s.volumeAnomaly,
+    classification: s.classification,
+  }));
+
+  // ── Lead context ──
   const lead = advance.lead;
-  const topRanked = lead.ranked[0] ?? null;
-  const leadEvent = lead.leadEvent;
-  const leadLine = leadEvent
-    ? [leadEvent.traderName, leadEvent.traderAddressTrunc]
-        .filter(Boolean)
-        .join(" / ") +
-      (leadEvent.traderName || leadEvent.traderAddressTrunc ? ": " : "") +
-      leadEvent.summary
-    : null;
-  const leadFigureUsdc = leadEvent?.magnitudeUsdc
-    ? Math.abs(leadEvent.magnitudeUsdc)
-    : null;
+  const leadCtx: LeadCtx = {
+    leadKind: lead.leadKind,
+    isFlash: lead.isFlash,
+    patterns: lead.patterns,
+  };
+  let tweetSubjectHandle: string | null = null;
+  let subjectIsHouse = false;
+  if (lead.leadKind === "token" && lead.tokenLead) {
+    const s = lead.tokenLead;
+    leadCtx.tokenSymbol = s.symbol;
+    leadCtx.tokenCompanyName = s.companyName;
+    leadCtx.tokenXHandle = s.xHandle;
+    leadCtx.tokenMovePct = headlineMovePct(s);
+    leadCtx.tokenStreakDays = s.streakDays;
+    leadCtx.tokenIsHouse = s.isHouseToken;
+    leadCtx.tokenVolumeNote = tokenVolumeNote(s);
+    tweetSubjectHandle = s.xHandle;
+    subjectIsHouse = s.isHouseToken;
+  } else if (lead.leadKind === "game_event" && lead.gameLead) {
+    const e = lead.gameLead;
+    const label = e.traderName ?? e.traderAddressTrunc ?? null;
+    leadCtx.gameLine = label ? `${label}: ${e.summary}` : e.summary;
+    leadCtx.gameFigureUsdc =
+      e.magnitudeUsdc != null ? Math.abs(e.magnitudeUsdc) : null;
+  } else {
+    leadCtx.realStatOneLiner = lead.realStatOneLiner ?? null;
+    // A quiet drop whose primary arc is the house company still gets scrutiny.
+    const primaryArc = liveArcs.find((a) => a.isPrimary);
+    if (primaryArc?.subjectType === "company") {
+      tweetSubjectHandle =
+        companyEntities.find((e) => e.symbol === primaryArc.subjectSymbol)
+          ?.xHandle ?? null;
+      subjectIsHouse = primaryArc.isHouseToken ?? false;
+    }
+  }
 
-  const primaryAssemblerArc = assemblerArcs.find((a) => a.isPrimary) ?? null;
+  const house = houseToken();
 
   const buildUserMessage = (quietSlotAngle: DropAngle | null) =>
     assembleUserMessage({
@@ -258,17 +289,24 @@ async function runGenerator(
         forbiddenLanguage: season.forbiddenLanguage,
       },
       dayPosture: posture,
-      arcs: assemblerArcs,
-      firmStates,
-      entities: entities.map((e) => ({
+      mood: advance.mood,
+      lead: leadCtx,
+      companyTape,
+      arcs: liveArcs,
+      entities: companyEntities.map((e) => ({
         slug: e.slug,
         displayName: e.displayName,
         traits: e.traits,
       })),
+      houseTokenName: house?.companyName ?? null,
+      floorTalkClaims: advance.floorTalkClaims,
+      // v1: no automated ingestion; only manually-supplied sourced statements
+      // would appear here (rule 6). Empty until material is provided.
+      sourcedStatements: [],
       recentDrops: recentDrops.map((d) => ({
         epochSlot: d.epochSlot,
         dropTitle: d.dropTitle,
-        worldState: d.worldState as { mood?: string; sec_heat?: number } | null,
+        worldState: d.worldState as { mood?: string } | null,
         headlines: d.headlines as Array<{
           headline?: string;
           role?: string;
@@ -276,40 +314,47 @@ async function runGenerator(
         confirmedFacts: d.confirmedFacts ?? null,
         openQuestions: d.openQuestions ?? null,
       })),
-      recentGameEvents: events,
-      lead: {
-        leadKind: lead.leadKind,
-        leadLine,
-        leadFigureUsdc,
-        realStatOneLiner: lead.realStatOneLiner,
-        patterns: lead.patterns,
-      },
-      floorTalkClaims: advance.floorTalkClaims,
-      mood: advance.mood,
-      secHeat: advance.secHeat,
       isOpeningBell: openingBell,
       isClosingBell: closingBell,
       quietSlotAngle,
     });
 
+  // Allowed percentages for traceability = every real move in the tape.
+  const allowedPercents: number[] = [];
+  for (const s of signals) {
+    for (const p of [s.move24hPct, s.moveSinceLastPct, headlineMovePct(s)]) {
+      if (p != null) allowedPercents.push(Math.abs(Math.round(p)));
+    }
+  }
+
+  const arcSlugs = new Set(liveArcs.map((a) => a.slug));
+  const entitySlugs = new Set(companyEntities.map((e) => e.slug));
+
   const recentHeadlines = recentHeadlinesFromDrops(recentDrops);
   let quietSlotAngle = advance.quietAngle;
   let userMessage = buildUserMessage(quietSlotAngle);
 
-  // ── LLM call (prose only) or test stub ────────────────────────────────────
+  // ── LLM call (prose only) or test stub ──
   let validated: ValidatedEpoch;
+  const validateWarningsRef: { warnings: string[] } = { warnings: [] };
+
   if (opts.testLlmStub) {
     const normalized = normalizeGeneratedEpoch(opts.testLlmStub);
     const validation = validateEpoch(normalized.epoch, {
-      arcSlugs: new Set(arcs.map((a) => a.slug)),
-      entitySlugs: new Set(entities.map((e) => e.slug)),
+      arcSlugs,
+      entitySlugs,
       forbiddenLanguage: season.forbiddenLanguage,
+      allowedPercents,
+      subjectIsHouse,
     });
-    if (!validation.ok) {
-      console.error(`[wire/generator] validation failed: ${validation.error}`);
-      return { skipped: "validation-failed", error: validation.error };
+    if (!validation.ok || !validation.data) {
+      return {
+        skipped: "validation-failed",
+        error: validation.error ?? "unknown",
+      };
     }
     validated = validation.data;
+    validateWarningsRef.warnings = validation.warnings;
   } else {
     const OpenAI = (await import("openai")).default;
     const { zodResponseFormat } = await import("openai/helpers/zod");
@@ -323,8 +368,6 @@ async function runGenerator(
       systemPromptContent ?? FALLBACK_NARRATIVE_GENERATION_SYSTEM;
 
     const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-    const arcSlugs = new Set(arcs.map((a) => a.slug));
-    const entitySlugs = new Set(entities.map((e) => e.slug));
 
     let validationError: string | null = null;
     const llmResult = await (async (): Promise<ValidatedEpoch | null> => {
@@ -359,31 +402,38 @@ async function runGenerator(
           arcSlugs,
           entitySlugs,
           forbiddenLanguage: season.forbiddenLanguage,
+          allowedPercents,
+          subjectIsHouse,
         });
-        if (!validation.ok) {
+        if (!validation.ok || !validation.data) {
           console.error(
             `[wire/generator] validation failed: ${validation.error}`
           );
-          validationError = validation.error;
+          validationError = validation.error ?? "unknown";
           return null;
         }
 
         const headline = validation.data.dispatches[0]?.headline ?? "";
         const isDup = isNearDuplicateHeadline(headline, recentHeadlines);
-        if (!isDup || attempt === 1 || !quietSlotAngle) {
+        if (!isDup || attempt === 1) {
+          validateWarningsRef.warnings = validation.warnings;
           return validation.data;
         }
 
-        const dupHeadline = headline;
-        quietSlotAngle = pickQuietAngle(
-          `${slot}:${dayKey}:retry`,
-          quietSlotAngle.key
-        );
+        // Near-duplicate of a recent drop — retry with a fresh angle. For quiet
+        // slots rotate the coded angle too; for a persistent mover just demand a
+        // new voice on the same real facts.
+        if (quietSlotAngle) {
+          quietSlotAngle = pickQuietAngle(
+            `${slot}:${dayKey}:retry`,
+            quietSlotAngle.key
+          );
+        }
         userMessage =
           buildUserMessage(quietSlotAngle) +
-          `\n\nRETRY: Your headline "${dupHeadline}" is too similar to a recent post. Take a different angle — same facts, new voice.`;
+          `\n\nRETRY: Your headline "${headline}" is too similar to a recent post. Same real facts and figures, completely different angle and wording — do not repeat the prior headline's structure.`;
         console.warn(
-          `[wire/generator] near-duplicate headline detected, retrying with angle ${quietSlotAngle.key}`
+          `[wire/generator] near-duplicate headline, retrying (slot ${slot})`
         );
       }
       throw new Error("[wire/generator] exhausted LLM retry attempts");
@@ -397,63 +447,91 @@ async function runGenerator(
     validated = llmResult;
   }
 
-  // ── Attach code-owned structured fields to the stored dispatch ────────────
-  const primaryFirmSlug = primaryAssemblerArc
-    ? (arcBySlug.get(primaryAssemblerArc.slug)?.primaryFirmSlug ?? null)
-    : null;
-  const primaryFirmDelta = primaryFirmSlug
-    ? firmDeltaBySlug.get(primaryFirmSlug)
-    : undefined;
+  if (validateWarningsRef.warnings.length > 0) {
+    console.warn(
+      `[wire/generator] soft warnings (slot ${slot}): ${validateWarningsRef.warnings.join(", ")}`
+    );
+  }
 
-  const storedDispatches = validated.dispatches.map((d, i) => {
-    if (
-      i === 0 &&
-      lead.leadKind === "fiction" &&
-      primaryFirmSlug &&
-      primaryFirmDelta &&
-      primaryFirmDelta.newRunningLossUsdc > 0
-    ) {
-      return {
-        ...d,
-        materialChange: {
-          kind: "asset_loss" as const,
-          entitySlug: primaryFirmSlug,
-          magnitude: { unitsUsdc: primaryFirmDelta.newRunningLossUsdc },
-        },
-      };
-    }
-    return { ...d, materialChange: null };
+  // ── Tweet: sanitize (strip/reject URLs, ≤280, ensure @handle), then post ──
+  const sanitized = sanitizeTweet(validated.tweetVariant, {
+    subjectHandle: tweetSubjectHandle,
   });
+  let tweetStatus: string;
+  if (!sanitized.ok) {
+    tweetStatus = "skipped";
+    console.warn(
+      `[wire/generator] tweet skipped (slot ${slot}): ${sanitized.issues.join(", ")}`
+    );
+  } else {
+    const poster = getTweetPoster();
+    const result = await poster.post({
+      text: sanitized.text,
+      epoch: slot,
+      subjectHandle: tweetSubjectHandle,
+    });
+    tweetStatus = result.status;
+  }
 
-  const isFlash = leadIsFlash(
-    lead.leadKind,
-    topRanked?.event.type,
-    topRanked?.score ?? 0
-  );
+  // ── Stored dispatch + code-owned fields ──
+  const storedDispatches = validated.dispatches.map((d) => ({
+    ...d,
+    materialChange: null,
+  }));
+
+  const displayArc = liveArcs[0] ?? null;
+  const topArcTitle = displayArc?.title ?? "Quiet tape";
+  const topArcTension = displayArc?.tensionScore ?? 0;
+  const topArcStage = displayArc?.arcStage;
 
   const signal =
     lead.patterns.length > 0
       ? `trap-pattern:${lead.patterns[0].phrase}`
-      : leadEvent?.type === "wipeout"
-        ? "wipeout-flash"
-        : null;
-
-  // Display top-arc = highest-tension arc after advancing (assemblerArcs is
-  // sorted desc), which naturally skips an arc that just retired to tension 0.
-  const displayArc = assemblerArcs[0] ?? primaryAssemblerArc;
-  const topArcTitle = displayArc?.title ?? "Unknown";
-  const topArcTension = displayArc?.tensionScore ?? 0;
-  const topArcStage = displayArc?.arcStage;
+      : lead.leadKind === "token" && lead.isFlash
+        ? "flash-move"
+        : lead.gameLead?.type === "wipeout"
+          ? "wipeout-flash"
+          : null;
 
   const worldState = {
     mood: advance.mood,
-    sec_heat: advance.secHeat,
+    primaryArcSlug: advance.primaryArcSlug,
     topTraderId: currentTop?.id ?? lastWorld.topTraderId ?? null,
     quietAngleKey: quietSlotAngle?.key ?? advance.quietAngle?.key ?? null,
     floorTalkTruth: advance.floorTalkClaims.map((c) => ({
       text: c.text,
       isTrue: c.isTrue,
     })),
+  };
+
+  // ── Source trace: every number/event maps to a stored datum ──
+  const tracedSignals = signals
+    .filter((s) => s.classification !== "none")
+    .map((s) => ({
+      symbol: s.symbol,
+      slug: s.slug,
+      move24hPct: s.move24hPct,
+      moveSinceLastPct: s.moveSinceLastPct,
+      streakDays: s.streakDays,
+      volumeVsTrailing: s.volumeVsTrailing,
+      classification: s.classification,
+      refSnapshotIds: s.refSnapshotIds,
+    }));
+  const sourceTrace = {
+    leadKind: lead.leadKind,
+    isFlash: lead.isFlash,
+    primaryArcSlug: advance.primaryArcSlug,
+    mood: advance.mood,
+    thresholds: {
+      routinePct: allowedPercents.length,
+    },
+    tokenSignals: tracedSignals,
+    gameEventIds: events
+      .map((e) => ({ type: e.type, traderId: e.traderId, dealId: e.dealId }))
+      .filter((e) => e.traderId || e.dealId),
+    tweetSubjectHandle,
+    tweetSanitizeIssues: sanitized.issues,
+    validatorWarnings: validateWarningsRef.warnings,
   };
 
   const arcRefSlugs = new Set<string>();
@@ -479,24 +557,20 @@ async function runGenerator(
       confirmedFacts: validated.confirmedFacts,
       openQuestions: validated.openQuestions,
       subjects: lead.subjects,
-      isFlash,
+      isFlash: lead.isFlash,
       signal,
+      tweetVariant: sanitized.text,
+      tweetStatus,
+      tweetSubjectHandle,
+      sourceTrace,
       arcRefs,
       arcAdvances: advance.arcAdvances.map((a) => ({
         arcSlug: a.slug,
         toStage: a.toStage,
         newTensionScore: a.newTensionScore,
-        climaxFiringNow: a.climaxFiringNow,
+        peakFiringNow: a.peakFiringNow,
         retiring: a.retiring,
-        newBeatsPublishedByStage: a.newBeatsPublishedByStage,
         newLastBeatDayKey: a.newLastBeatDayKey,
-      })),
-      firmDeltas: advance.firmDeltas.map((d) => ({
-        firmSlug: d.slug,
-        newRunningLossUsdc: d.newRunningLossUsdc,
-        newStatus: d.newStatus,
-        appendNotableFacts: d.appendNotableFacts,
-        lastLossDayKey: d.lastLossDayKey,
       })),
       spawnRequests: advance.spawnRequests,
       eventsIngested: events.length > 0 ? events : undefined,

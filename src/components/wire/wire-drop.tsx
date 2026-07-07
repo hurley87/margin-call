@@ -25,7 +25,6 @@ export interface WireDrop {
   topArcTitle: string | null;
   topArcTension: number | null;
   mood: string;
-  secHeat: number;
   createdAt: string;
   dispatches: Array<{
     headline: string;

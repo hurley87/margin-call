@@ -1,43 +1,80 @@
 import { describe, it, expect } from "vitest";
 import {
-  spawnArc,
-  ARC_TEMPLATES,
-  templatePeakLossUsdc,
+  describeCompanyArc,
+  describePlayerArc,
+  fmtPct,
+  headlineMovePct,
 } from "../../convex/wire/arcTemplates";
+import type { TokenSignal } from "../../convex/wire/tokenSignals";
+
+function signal(over: Partial<TokenSignal>): TokenSignal {
+  return {
+    slug: "kupo",
+    symbol: "KUPO",
+    companyName: "Kupo",
+    xHandle: "@kupo_gg",
+    isHouseToken: false,
+    ok: true,
+    priceUsd: 1,
+    moveSinceLastPct: null,
+    move24hPct: null,
+    move24hSource: "computed",
+    volume24hUsd: null,
+    volumeVsTrailing: null,
+    volumeAnomaly: false,
+    streakDays: 0,
+    classification: "story",
+    latestSnapshotId: "s1",
+    refSnapshotIds: ["s1"],
+    ...over,
+  };
+}
 
 describe("arcTemplates", () => {
-  it("spawns a fully-specified arc with distinct firm + character slugs", () => {
-    const spec = spawnArc("100", new Set());
-    expect(spec.slug).toBeTruthy();
-    expect(spec.firm.slug).toBeTruthy();
-    expect(spec.character.slug).toBeTruthy();
-    expect(spec.firm.slug).not.toBe(spec.character.slug);
-    expect(spec.peakLossUsdc).toBeGreaterThan(0);
-    expect(ARC_TEMPLATES.map((t) => t.key)).toContain(spec.templateKey);
+  it("formats signed percentages without decimals", () => {
+    expect(fmtPct(38.4)).toBe("+38%");
+    expect(fmtPct(-22.6)).toBe("-23%");
+    expect(fmtPct(0)).toBe("0%");
   });
 
-  it("is deterministic for the same seed", () => {
-    const a = spawnArc("777", new Set());
-    const b = spawnArc("777", new Set());
-    expect(a.slug).toBe(b.slug);
-    expect(a.firm.displayName).toBe(b.firm.displayName);
+  it("picks the largest-magnitude move as the headline move", () => {
+    expect(
+      headlineMovePct(signal({ move24hPct: 38, moveSinceLastPct: 2 }))
+    ).toBe(38);
+    expect(
+      headlineMovePct(signal({ move24hPct: -5, moveSinceLastPct: -22 }))
+    ).toBe(-22);
+    expect(
+      headlineMovePct(signal({ move24hPct: null, moveSinceLastPct: null }))
+    ).toBeNull();
   });
 
-  it("avoids slugs already taken", () => {
-    const first = spawnArc("55", new Set());
-    const taken = new Set([first.firm.slug, first.character.slug, first.slug]);
-    const second = spawnArc("55", taken);
-    expect(taken.has(second.firm.slug)).toBe(false);
-    expect(taken.has(second.character.slug)).toBe(false);
+  it("builds a factual company arc from real numbers, no invented cause", () => {
+    const { title, summary } = describeCompanyArc(
+      signal({
+        move24hPct: 38,
+        streakDays: 0,
+        symbol: "SURPLUS",
+        companyName: "Surplus Intelligence",
+      })
+    );
+    expect(title).toContain("SURPLUS");
+    expect(title).toContain("+38%");
+    expect(summary).toContain("Surplus Intelligence");
+    // The cause is explicitly unknown — never an invented plausible event.
+    expect(summary.toLowerCase()).toContain("cause is anybody's guess");
   });
 
-  it("offers at least six templates", () => {
-    expect(ARC_TEMPLATES.length).toBeGreaterThanOrEqual(6);
+  it("mentions a real multi-day streak in the arc", () => {
+    const { title } = describeCompanyArc(
+      signal({ move24hPct: -6, streakDays: -3, symbol: "NOOK" })
+    );
+    expect(title).toContain("3 straight down days");
   });
 
-  it("resolves a template peak loss and returns null for unknown keys", () => {
-    expect(templatePeakLossUsdc(ARC_TEMPLATES[0].key)).toBeGreaterThan(0);
-    expect(templatePeakLossUsdc("nope")).toBeNull();
-    expect(templatePeakLossUsdc(null)).toBeNull();
+  it("builds a factual player streak arc", () => {
+    const { title, summary } = describePlayerArc("Jim's desk", "loss", 3);
+    expect(title).toBe("Jim's desk: 3 straight losses");
+    expect(summary).toContain("3 losses in a row");
   });
 });
