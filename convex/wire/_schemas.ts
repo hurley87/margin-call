@@ -76,9 +76,14 @@ const GeneratedDispatchSchema = BaseDispatchSchema.extend({
   category: CategoryInputEnum,
 });
 
+/** Max chars for the raw tweet variant (sanitized down to ≤280 in code). */
+export const TWEET_VARIANT_MAX_LENGTH = 400;
+
 export const NarrativeEpochSchema = z.object({
   dropTitle: z.string(),
   dispatches: z.array(DispatchSchema).length(1),
+  /** Twitter/X marketing variant (one tweet). Sanitized in code: URLs stripped/rejected, ≤280 chars. */
+  tweetVariant: z.string().max(TWEET_VARIANT_MAX_LENGTH),
   entityMentions: z.array(z.string()).nullable(),
   confirmedFacts: z.array(z.string().min(1).max(160)).max(8).optional(),
   openQuestions: z.array(z.string().min(1).max(160)).max(6).optional(),

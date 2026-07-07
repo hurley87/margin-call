@@ -2,29 +2,32 @@ import { describe, it, expect } from "vitest";
 import {
   validateEpoch,
   BANNED_PHRASES,
+  CRYPTO_TERMS,
 } from "../../convex/wire/epochValidator";
 
 const ctx = {
-  arcSlugs: new Set(["pan-atlantic-blowup"]),
-  entitySlugs: new Set(["pan-atlantic-holdings", "marty-vale"]),
-  forbiddenLanguage: ["DeFi", "wagmi"],
+  arcSlugs: new Set(["co-kupo-1"]),
+  entitySlugs: new Set(["kupo", "harness"]),
+  forbiddenLanguage: ["defi"],
 };
 
 function makeEpoch(overrides: Record<string, unknown> = {}) {
   return {
-    dropTitle: "The Wake",
+    dropTitle: "Quiet tape",
     dispatches: [
       {
-        dispatchKey: "panatl-wake",
-        headline: "PanAtlantic is dead; nobody is sad",
-        body: "Lenders would like their money back, in cash, today. The CEO is unavailable.",
+        dispatchKey: "kupo-quiet",
+        headline: "Shares of Kupo drift on a slow session",
+        body: "Kupo common barely moved and the floor barely noticed. The interns went to lunch. Nobody could be reached for comment.",
         role: "main",
         category: "wire",
-        arcSlug: "pan-atlantic-blowup",
+        arcSlug: "co-kupo-1",
         referenceEpoch: null,
       },
     ],
-    entityMentions: ["pan-atlantic-holdings"],
+    tweetVariant:
+      "Kupo did approximately nothing today and the desk approves. $KUPO @kupo_gg",
+    entityMentions: ["kupo"],
     confirmedFacts: [],
     openQuestions: [],
     ...overrides,
@@ -51,40 +54,75 @@ describe("validateEpoch", () => {
         },
       ],
     });
-    const res = validateEpoch(epoch, ctx);
-    expect(res.ok).toBe(false);
+    expect(validateEpoch(epoch, ctx).ok).toBe(false);
   });
 
   it("rejects an unknown arcSlug", () => {
     const epoch = makeEpoch();
     epoch.dispatches[0].arcSlug = "ghost-arc";
-    const res = validateEpoch(epoch, ctx);
-    expect(res.ok).toBe(false);
+    expect(validateEpoch(epoch, ctx).ok).toBe(false);
   });
 
-  it("rejects forbidden language", () => {
-    const epoch = makeEpoch();
-    epoch.dispatches[0].body = "PanAtlantic pivots to DeFi, allegedly.";
+  it("hard-blocks crypto vocabulary even in the tweet variant", () => {
+    const epoch = makeEpoch({
+      tweetVariant: "The token pumped today $KUPO @kupo_gg",
+    });
     const res = validateEpoch(epoch, ctx);
     expect(res.ok).toBe(false);
     if (!res.ok) expect(res.error).toMatch(/Forbidden/);
+  });
+
+  it("blocks every hardcoded crypto term", () => {
+    for (const term of CRYPTO_TERMS) {
+      const epoch = makeEpoch();
+      epoch.dispatches[0].body = `The desk mentioned ${term} once. Bad idea.`;
+      expect(validateEpoch(epoch, ctx).ok).toBe(false);
+    }
+  });
+
+  it("rejects season forbidden language", () => {
+    const epoch = makeEpoch();
+    epoch.dispatches[0].body = "Kupo pivots to defi, allegedly. The end.";
+    expect(validateEpoch(epoch, ctx).ok).toBe(false);
   });
 
   it("rejects every banned filler phrase", () => {
     for (const phrase of BANNED_PHRASES) {
       const epoch = makeEpoch();
       epoch.dispatches[0].body = `The desk is quiet and ${phrase} now.`;
-      const res = validateEpoch(epoch, ctx);
-      expect(res.ok).toBe(false);
+      expect(validateEpoch(epoch, ctx).ok).toBe(false);
     }
   });
 
   it("filters unknown entity mentions instead of failing the drop", () => {
-    const epoch = makeEpoch({
-      entityMentions: ["who-dis", "marty-vale"],
-    });
-    const res = validateEpoch(epoch, ctx);
+    const res = validateEpoch(
+      makeEpoch({ entityMentions: ["who-dis", "kupo"] }),
+      ctx
+    );
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.data.entityMentions).toEqual(["marty-vale"]);
+    if (res.ok && res.data) expect(res.data.entityMentions).toEqual(["kupo"]);
+  });
+
+  it("warns (does not block) on an untraceable percentage", () => {
+    const epoch = makeEpoch();
+    epoch.dispatches[0].body =
+      "Kupo rocketed 99% for no reason at all. Wild day.";
+    const res = validateEpoch(epoch, {
+      ...ctx,
+      allowedPercents: [3, 5],
+    });
+    expect(res.ok).toBe(true);
+    expect(res.warnings).toContain("untraceable-percent:99");
+  });
+
+  it("warns on promotional coverage of the house company", () => {
+    const epoch = makeEpoch();
+    epoch.dispatches[0].body =
+      "Harness is an unstoppable buy and a clear winner. Load up.";
+    const res = validateEpoch(epoch, { ...ctx, subjectIsHouse: true });
+    expect(res.ok).toBe(true);
+    expect(res.warnings.some((w) => w.startsWith("house-promotional"))).toBe(
+      true
+    );
   });
 });

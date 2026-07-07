@@ -26,7 +26,7 @@ describe("pickQuietAngle", () => {
   it("rotates through all angles when prevKey cycles", () => {
     const seen = new Set<string>();
     let prev: string | null = null;
-    for (let slot = 0; slot < DROP_ANGLES.length * 2; slot++) {
+    for (let slot = 0; slot < DROP_ANGLES.length * 20; slot++) {
       const angle = pickQuietAngle(`rotate-${slot}`, prev);
       seen.add(angle.key);
       prev = angle.key;

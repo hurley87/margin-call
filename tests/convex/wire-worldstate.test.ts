@@ -1,239 +1,248 @@
 import { describe, it, expect } from "vitest";
 import { computeWorldStateAdvance } from "../../convex/wire/worldState";
-import {
-  stepWorld,
-  freshArc,
-  freshFirm,
-  dayKeyForIndex,
-  postureForDayIndex,
-  type WorldState,
-} from "./wireSim";
+import { makeSignal, company, stepWorld, type WorldState } from "./wireSim";
 
-/** Drive the world for N simulated days (one beat-eligible step per day). */
-function runDays(initial: WorldState, days: number) {
-  let state = initial;
-  const advances = [];
-  for (let i = 0; i < days; i++) {
-    const { advance, next } = stepWorld(state, {
-      dayKey: dayKeyForIndex(i),
-      dayPosture: postureForDayIndex(i),
-      slot: 1000 + i,
-    });
-    advances.push(advance);
-    state = next;
-  }
-  return { state, advances };
-}
-
-describe("worldState: arc lifecycle", () => {
-  it("advances an arc through every stage to retired, firing climax once", () => {
-    const initial: WorldState = {
-      arcs: [freshArc("alpha", "alpha-co")],
-      firms: [freshFirm("alpha-co")],
-    };
-    const { state, advances } = runDays(initial, 20);
-
-    const stages = advances.flatMap((a) =>
-      a.arcAdvances.filter((x) => x.slug === "alpha").map((x) => x.toStage)
-    );
-    // Reaches climax and retirement.
-    expect(stages).toContain("climax");
-    expect(stages).toContain("aftermath");
-    // Climax fires exactly once for this arc.
-    const climaxFirings = advances.filter((a) =>
-      a.arcAdvances.some((x) => x.slug === "alpha" && x.climaxFiringNow)
-    ).length;
-    expect(climaxFirings).toBe(1);
-    // The original arc ends retired.
-    const alpha = state.arcs.find((a) => a.slug === "alpha");
-    expect(alpha?.arcStage).toBe("retired");
-  });
-
-  it("keeps the firm running-loss total monotonically non-decreasing", () => {
-    const initial: WorldState = {
-      arcs: [freshArc("alpha", "alpha-co")],
-      firms: [freshFirm("alpha-co")],
-    };
-    let state = initial;
-    let prevLoss = 0;
-    for (let i = 0; i < 20; i++) {
-      const { next } = stepWorld(state, {
-        dayKey: dayKeyForIndex(i),
-        dayPosture: postureForDayIndex(i),
-        slot: 2000 + i,
-      });
-      const loss = next.firms.find(
-        (f) => f.slug === "alpha-co"
-      )!.runningLossUsdc;
-      expect(loss).toBeGreaterThanOrEqual(prevLoss);
-      prevLoss = loss;
-      state = next;
-    }
-    // It actually accumulated a real loss by the end.
-    expect(prevLoss).toBeGreaterThan(0);
-  });
-
-  it("publishes at most one beat per arc per day", () => {
-    const initial: WorldState = {
-      arcs: [freshArc("alpha", "alpha-co")],
-      firms: [freshFirm("alpha-co")],
-    };
-    // Same dayKey twice → the second run must not publish a beat.
-    const first = stepWorld(initial, {
-      dayKey: "2026-05-05",
+describe("worldState: streak arc lifecycle", () => {
+  it("spawns a company arc for a story-worthy move", () => {
+    const advance = computeWorldStateAdvance({
+      arcs: [],
+      companies: [company("kupo")],
+      signals: [
+        makeSignal("kupo", { move24hPct: 14, classification: "story" }),
+      ],
+      events: [],
+      dayKey: "2026-07-06",
       dayPosture: "monday",
+      slot: 1,
+    });
+    expect(advance.spawnRequests.length).toBe(1);
+    const spec = advance.spawnRequests[0];
+    expect(spec.subjectType).toBe("company");
+    expect(spec.subjectSlug).toBe("kupo");
+    expect(spec.arcStage).toBe("talked_about");
+  });
+
+  it("does not spawn or lead on companies with no real move (reactive only)", () => {
+    const advance = computeWorldStateAdvance({
+      arcs: [],
+      companies: [company("kupo"), company("nook")],
+      signals: [
+        makeSignal("kupo", { move24hPct: 2, classification: "routine" }),
+        makeSignal("nook", { classification: "none" }),
+      ],
+      events: [],
+      dayKey: "2026-07-06",
+      dayPosture: "wednesday",
+      slot: 2,
+    });
+    expect(advance.spawnRequests.length).toBe(0);
+    expect(advance.lead.leadKind).toBe("quiet");
+  });
+
+  it("escalates to peak on an extreme move and fires peak once", () => {
+    const spawn = computeWorldStateAdvance({
+      arcs: [],
+      companies: [company("surplus")],
+      signals: [
+        makeSignal("surplus", { move24hPct: 40, classification: "flash" }),
+      ],
+      events: [],
+      dayKey: "2026-07-06",
+      dayPosture: "wednesday",
+      slot: 3,
+    });
+    expect(spawn.spawnRequests[0].arcStage).toBe("peak");
+
+    // Once peaked, a still-huge move holds at frenzy — peak never re-fires.
+    const advance2 = computeWorldStateAdvance({
+      arcs: [
+        {
+          slug: "co-surplus-3",
+          title: "t",
+          summary: "s",
+          tensionScore: 10,
+          arcStage: "peak",
+          peakFired: true,
+          subjectType: "company",
+          subjectSlug: "surplus",
+        },
+      ],
+      companies: [company("surplus")],
+      signals: [
+        makeSignal("surplus", { move24hPct: 45, classification: "flash" }),
+      ],
+      events: [],
+      dayKey: "2026-07-07",
+      dayPosture: "thursday",
+      slot: 4,
+    });
+    const adv = advance2.arcAdvances[0];
+    expect(adv.peakFiringNow).toBe(false);
+    expect(adv.toStage).toBe("frenzy");
+  });
+
+  it("cools a company arc to aftermath then retires it when the move fades", () => {
+    let state: WorldState = {
+      arcs: [
+        {
+          slug: "co-kupo-1",
+          title: "t",
+          summary: "s",
+          tensionScore: 8,
+          arcStage: "frenzy",
+          peakFired: false,
+          subjectType: "company",
+          subjectSlug: "kupo",
+        },
+      ],
+    };
+    const quiet = {
+      signals: [makeSignal("kupo", { classification: "none" })],
+      companies: [company("kupo")],
+    };
+
+    const first = stepWorld(state, {
+      ...quiet,
+      dayKey: "2026-07-08",
+      dayPosture: "wednesday",
       slot: 10,
     });
-    const second = stepWorld(first.next, {
-      dayKey: "2026-05-05",
-      dayPosture: "monday",
+    expect(first.advance.arcAdvances[0].toStage).toBe("aftermath");
+    state = first.next;
+
+    const second = stepWorld(state, {
+      ...quiet,
+      dayKey: "2026-07-09",
+      dayPosture: "thursday",
       slot: 11,
     });
-    expect(first.advance.arcAdvances[0].beatPublishedThisRun).toBe(true);
-    expect(second.advance.arcAdvances[0].beatPublishedThisRun).toBe(false);
+    expect(second.advance.arcAdvances[0].toStage).toBe("retired");
+    expect(second.advance.arcAdvances[0].retiring).toBe(true);
   });
 
-  it("spawns a fresh arc when live arcs drop below two", () => {
-    // Single arc → liveAfter (1) < target (2) → spawn immediately.
-    const initial: WorldState = {
-      arcs: [freshArc("alpha", "alpha-co")],
-      firms: [freshFirm("alpha-co")],
-    };
-    const { advance } = stepWorld(initial, {
-      dayKey: "2026-05-05",
-      dayPosture: "monday",
-      slot: 42,
+  it("spawns a player arc from a same-desk losing streak", () => {
+    const advance = computeWorldStateAdvance({
+      arcs: [],
+      companies: [],
+      signals: [],
+      events: [
+        {
+          type: "big_loss",
+          dramatic: true,
+          summary: "lost",
+          traderId: "t1",
+          traderName: "Jim",
+          magnitudeUsdc: -900,
+        },
+        {
+          type: "big_loss",
+          dramatic: true,
+          summary: "lost",
+          traderId: "t1",
+          traderName: "Jim",
+          magnitudeUsdc: -800,
+        },
+        {
+          type: "wipeout",
+          dramatic: true,
+          summary: "gone",
+          traderId: "t1",
+          traderName: "Jim",
+          magnitudeUsdc: -700,
+        },
+      ],
+      dayKey: "2026-07-06",
+      dayPosture: "friday",
+      slot: 5,
     });
-    expect(advance.spawnRequests.length).toBeGreaterThanOrEqual(1);
-    const spawned = advance.spawnRequests[0];
-    expect(spawned.firm.slug).not.toBe("alpha-co");
-    expect(spawned.slug).not.toBe("alpha");
-  });
-
-  it("does not advance two live arcs into the same stage", () => {
-    const initial: WorldState = {
-      arcs: [freshArc("alpha", "alpha-co"), freshArc("beta", "beta-co")],
-      firms: [freshFirm("alpha-co"), freshFirm("beta-co")],
-    };
-    const { state } = runDays(initial, 12);
-    const liveStages = state.arcs
-      .filter((a) => a.arcStage !== "retired")
-      .map((a) => a.arcStage);
-    const uniq = new Set(liveStages);
-    expect(uniq.size).toBe(liveStages.length);
-  });
-
-  it("produces at least three distinct moods across a simulated week", () => {
-    const initial: WorldState = {
-      arcs: [freshArc("alpha", "alpha-co"), freshArc("beta", "beta-co")],
-      firms: [freshFirm("alpha-co"), freshFirm("beta-co")],
-    };
-    const moods = new Set<string>();
-    let state = initial;
-    for (let i = 0; i < 15; i++) {
-      const events =
-        i === 7
-          ? [
-              {
-                type: "wipeout",
-                dramatic: true,
-                summary: "Trader wiped out",
-                traderId: "t1",
-                magnitudeUsdc: -5000,
-              },
-            ]
-          : [];
-      const { advance, next } = stepWorld(state, {
-        events,
-        dayKey: dayKeyForIndex(i),
-        dayPosture: postureForDayIndex(i),
-        slot: 3000 + i,
-      });
-      moods.add(advance.mood);
-      state = next;
-    }
-    expect(moods.size).toBeGreaterThanOrEqual(3);
+    const desk = advance.spawnRequests.find((s) => s.subjectType === "desk");
+    expect(desk).toBeDefined();
+    expect(desk!.subjectSlug).toBe("desk-t1");
   });
 });
 
-describe("worldState: mood + SEC heat", () => {
-  it("a real wipeout lead produces a grim mood and bumps SEC heat", () => {
+describe("worldState: mood + lead", () => {
+  it("a token flash down produces a grim mood and a flash lead", () => {
     const advance = computeWorldStateAdvance({
-      arcs: [freshArc("alpha", "alpha-co")],
-      firms: [freshFirm("alpha-co")],
+      arcs: [],
+      companies: [company("nook")],
+      signals: [
+        makeSignal("nook", { move24hPct: -22, classification: "flash" }),
+      ],
+      events: [],
+      dayKey: "2026-07-06",
+      dayPosture: "wednesday",
+      slot: 6,
+    });
+    expect(advance.lead.leadKind).toBe("token");
+    expect(advance.lead.isFlash).toBe(true);
+    expect(advance.mood).toBe("grim");
+  });
+
+  it("a wipeout produces a grim mood and leads as a game event", () => {
+    const advance = computeWorldStateAdvance({
+      arcs: [],
+      companies: [company("kupo")],
+      signals: [makeSignal("kupo", { classification: "none" })],
       events: [
         {
           type: "wipeout",
           dramatic: true,
-          summary: "Trader wiped out",
+          summary: "gone",
           traderId: "t1",
-          magnitudeUsdc: -9000,
+          magnitudeUsdc: -5000,
         },
       ],
-      dayKey: "2026-05-05",
+      dayKey: "2026-07-06",
       dayPosture: "monday",
-      slot: 1,
+      slot: 7,
     });
-    expect(advance.lead.leadKind).toBe("real_event");
+    expect(advance.lead.leadKind).toBe("game_event");
     expect(advance.mood).toBe("grim");
-    expect(advance.secHeat).toBeGreaterThanOrEqual(4);
-    expect(advance.secHeat).toBeLessThanOrEqual(10);
     expect(advance.quietAngle).toBeNull();
   });
 
-  it("assigns a quiet angle on a second same-day slot with no beat", () => {
-    const initial: WorldState = {
-      arcs: [freshArc("alpha", "alpha-co")],
-      firms: [freshFirm("alpha-co")],
+  it("assigns a quiet angle on a quiet tape and rotates it", () => {
+    const base = {
+      arcs: [],
+      companies: [company("kupo")],
+      signals: [makeSignal("kupo", { classification: "none" })],
+      events: [],
+      dayPosture: "monday",
     };
-    const first = stepWorld(initial, {
-      dayKey: "2026-05-05",
-      dayPosture: "monday",
-      slot: 10,
+    const a = computeWorldStateAdvance({
+      ...base,
+      dayKey: "2026-07-06",
+      slot: 20,
     });
-    const second = stepWorld(first.next, {
-      dayKey: "2026-05-05",
-      dayPosture: "monday",
-      slot: 11,
-      prevQuietAngleKey: first.advance.quietAngle?.key ?? null,
+    const b = computeWorldStateAdvance({
+      ...base,
+      dayKey: "2026-07-06",
+      slot: 21,
+      prevQuietAngleKey: a.quietAngle?.key ?? null,
     });
-    const third = stepWorld(second.next, {
-      dayKey: "2026-05-05",
-      dayPosture: "monday",
-      slot: 12,
-      prevQuietAngleKey: second.advance.quietAngle?.key ?? null,
-    });
-    expect(first.advance.arcAdvances[0].beatPublishedThisRun).toBe(true);
-    expect(second.advance.arcAdvances[0].beatPublishedThisRun).toBe(false);
-    expect(second.advance.lead.leadKind).toBe("fiction");
-    expect(second.advance.quietAngle).not.toBeNull();
-    expect(third.advance.quietAngle).not.toBeNull();
-    expect(third.advance.quietAngle?.key).not.toBe(
-      second.advance.quietAngle?.key
-    );
+    expect(a.quietAngle).not.toBeNull();
+    expect(b.quietAngle).not.toBeNull();
+    expect(b.quietAngle?.key).not.toBe(a.quietAngle?.key);
   });
 
-  it("rotates floor-talk gossip text across slots on a held arc", () => {
-    const initial: WorldState = {
-      arcs: [freshArc("alpha", "alpha-co")],
-      firms: [freshFirm("alpha-co")],
-    };
-    const texts = new Set<string>();
-    let state = initial;
-    let prevAngle: string | null = null;
-    for (let slot = 20; slot < 28; slot++) {
-      const { advance, next } = stepWorld(state, {
-        dayKey: "2026-05-05",
-        dayPosture: "monday",
-        slot,
-        prevQuietAngleKey: prevAngle,
-      });
-      for (const claim of advance.floorTalkClaims) {
-        texts.add(claim.text);
-      }
-      prevAngle = advance.quietAngle?.key ?? null;
-      state = next;
-    }
-    expect(texts.size).toBeGreaterThan(1);
+  it("attaches floor talk to a company that is in play", () => {
+    const advance = computeWorldStateAdvance({
+      arcs: [],
+      companies: [company("surplus", { displayName: "Surplus Intelligence" })],
+      signals: [
+        makeSignal("surplus", {
+          companyName: "Surplus Intelligence",
+          move24hPct: 38,
+          classification: "flash",
+        }),
+      ],
+      events: [],
+      dayKey: "2026-07-06",
+      dayPosture: "wednesday",
+      slot: 8,
+    });
+    expect(advance.floorTalkClaims.length).toBe(1);
+    expect(advance.floorTalkClaims[0].text).toContain("Surplus Intelligence");
   });
 });

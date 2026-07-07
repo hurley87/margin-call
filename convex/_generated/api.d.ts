@@ -34,6 +34,7 @@ import type * as http from "../http.js";
 import type * as leaderboard from "../leaderboard.js";
 import type * as lib_dealEntryEligibility from "../lib/dealEntryEligibility.js";
 import type * as lib_limits from "../lib/limits.js";
+import type * as lib_portraitChecks from "../lib/portraitChecks.js";
 import type * as lib_portraitSeed from "../lib/portraitSeed.js";
 import type * as lib_profileImage from "../lib/profileImage.js";
 import type * as lib_tradingHours from "../lib/tradingHours.js";
@@ -62,6 +63,7 @@ import type * as me from "../me.js";
 import type * as ops__batchDelete from "../ops/_batchDelete.js";
 import type * as ops_clearNarrativeWorld from "../ops/clearNarrativeWorld.js";
 import type * as ops_resetGameState from "../ops/resetGameState.js";
+import type * as ops_resetNarrative from "../ops/resetNarrative.js";
 import type * as ops_wipeSmokeTraders from "../ops/wipeSmokeTraders.js";
 import type * as portfolio from "../portfolio.js";
 import type * as portraits from "../portraits.js";
@@ -86,8 +88,16 @@ import type * as wire_operatorActions from "../wire/operatorActions.js";
 import type * as wire_operatorMutations from "../wire/operatorMutations.js";
 import type * as wire_operatorQueries from "../wire/operatorQueries.js";
 import type * as wire_persist from "../wire/persist.js";
+import type * as wire_priceConfig from "../wire/priceConfig.js";
+import type * as wire_pricePoll from "../wire/pricePoll.js";
+import type * as wire_priceStore from "../wire/priceStore.js";
+import type * as wire_registrySync from "../wire/registrySync.js";
 import type * as wire_stages from "../wire/stages.js";
+import type * as wire_tokenRegistry from "../wire/tokenRegistry.js";
+import type * as wire_tokenSignals from "../wire/tokenSignals.js";
 import type * as wire_tradingHours from "../wire/tradingHours.js";
+import type * as wire_tweetPoster from "../wire/tweetPoster.js";
+import type * as wire_tweetVariant from "../wire/tweetVariant.js";
 import type * as wire_worldState from "../wire/worldState.js";
 
 import type {
@@ -123,6 +133,7 @@ declare const fullApi: ApiFromModules<{
   leaderboard: typeof leaderboard;
   "lib/dealEntryEligibility": typeof lib_dealEntryEligibility;
   "lib/limits": typeof lib_limits;
+  "lib/portraitChecks": typeof lib_portraitChecks;
   "lib/portraitSeed": typeof lib_portraitSeed;
   "lib/profileImage": typeof lib_profileImage;
   "lib/tradingHours": typeof lib_tradingHours;
@@ -151,6 +162,7 @@ declare const fullApi: ApiFromModules<{
   "ops/_batchDelete": typeof ops__batchDelete;
   "ops/clearNarrativeWorld": typeof ops_clearNarrativeWorld;
   "ops/resetGameState": typeof ops_resetGameState;
+  "ops/resetNarrative": typeof ops_resetNarrative;
   "ops/wipeSmokeTraders": typeof ops_wipeSmokeTraders;
   portfolio: typeof portfolio;
   portraits: typeof portraits;
@@ -175,8 +187,16 @@ declare const fullApi: ApiFromModules<{
   "wire/operatorMutations": typeof wire_operatorMutations;
   "wire/operatorQueries": typeof wire_operatorQueries;
   "wire/persist": typeof wire_persist;
+  "wire/priceConfig": typeof wire_priceConfig;
+  "wire/pricePoll": typeof wire_pricePoll;
+  "wire/priceStore": typeof wire_priceStore;
+  "wire/registrySync": typeof wire_registrySync;
   "wire/stages": typeof wire_stages;
+  "wire/tokenRegistry": typeof wire_tokenRegistry;
+  "wire/tokenSignals": typeof wire_tokenSignals;
   "wire/tradingHours": typeof wire_tradingHours;
+  "wire/tweetPoster": typeof wire_tweetPoster;
+  "wire/tweetVariant": typeof wire_tweetVariant;
   "wire/worldState": typeof wire_worldState;
 }>;
 

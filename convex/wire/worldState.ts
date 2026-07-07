@@ -1,40 +1,31 @@
 /**
  * Code-authoritative world-state engine — pure, no Convex imports.
  *
- * Each run this computes EVERY number and state transition the wire needs:
- *   - per-firm running-loss deltas + totals (monotonic, deterministic)
- *   - arc stage advances through the lifecycle pipeline
- *   - mood + SEC heat
- *   - which fresh arcs to spawn when live arcs run low
- *   - floor-talk gossip with code-assigned truth tags
- *   - the lead directive (real event vs. fiction) from the drama ranker
+ * Each run this computes, from REAL signals only:
+ *   - which company / desk arcs to spawn (a move crossed the story threshold)
+ *   - how existing arcs advance or cool (attention lifecycle, reactive)
+ *   - the market mood (aggregate tape + game events)
+ *   - absurd, non-finance floor-talk gossip tied to a company already in play
+ *   - the lead directive (token vs. game event vs. quiet)
  *
- * The LLM receives this output and writes prose only — it never invents
- * figures, tension, stages, or transitions.
+ * The LLM receives this and writes prose only — it never invents a figure, a
+ * stage, a tension level, or an event. Nothing here fabricates a number:
+ * cooled/absent signals simply produce no story.
  */
 
 import type { GameEventCtx } from "./epochAssembler";
 import { pickQuietAngle, type DropAngle } from "./dropAngles";
 import { rankAndSelectLead, type LeadSelection } from "./dramaRanker";
 import {
-  spawnArc,
-  templatePeakLossUsdc,
+  describeCompanyArc,
+  describePlayerArc,
+  headlineMovePct,
   type SpawnedArcSpec,
+  type ArcSubjectType,
 } from "./arcTemplates";
-import {
-  type ArcStage,
-  STAGE_TARGET_TENSION,
-  STAGE_BEAT_QUOTA,
-  LIVE_STAGES,
-  DEFAULT_PEAK_LOSS_USDC,
-  nextStage,
-  firmStatusForStage,
-  targetLossUsdc,
-  seededInt,
-  seededUnit,
-} from "./stages";
-
-export type FirmStatus = "healthy" | "stressed" | "collapsing" | "dead";
+import { type ArcStage, STAGE_TARGET_TENSION, seededInt } from "./stages";
+import { MOVE_THRESHOLDS } from "./priceConfig";
+import type { TokenSignal } from "./tokenSignals";
 
 export interface ArcInput {
   slug: string;
@@ -42,30 +33,17 @@ export interface ArcInput {
   summary: string;
   tensionScore: number;
   arcStage: ArcStage;
-  beatsPublishedByStage: Record<string, number>;
-  climaxFired: boolean;
+  peakFired: boolean;
   lastBeatDayKey?: string | null;
-  templateKey?: string | null;
-  primaryFirmSlug?: string | null;
+  subjectType?: ArcSubjectType | null;
+  subjectSlug?: string | null;
 }
 
-export interface FirmInput {
+export interface CompanyCtx {
   slug: string;
   displayName: string;
-  status?: FirmStatus;
-  runningLossUsdc: number;
-  notableFacts: string[];
-  oneOffEventsFired: string[];
-  lastLossDayKey?: string | null;
-}
-
-export interface FirmDelta {
-  slug: string;
-  lossDeltaUsdc: number;
-  newRunningLossUsdc: number;
-  newStatus: FirmStatus;
-  appendNotableFacts: string[];
-  lastLossDayKey: string;
+  symbol: string;
+  isHouseToken: boolean;
 }
 
 export interface ArcAdvance {
@@ -73,10 +51,9 @@ export interface ArcAdvance {
   fromStage: ArcStage;
   toStage: ArcStage;
   newTensionScore: number;
-  beatPublishedThisRun: boolean;
-  climaxFiringNow: boolean;
+  peakFiringNow: boolean;
   retiring: boolean;
-  newBeatsPublishedByStage: Record<string, number>;
+  ledThisRun: boolean;
   newLastBeatDayKey: string | null;
 }
 
@@ -87,347 +64,343 @@ export interface FloorTalkClaim {
 
 export interface WorldStateAdvanceInput {
   arcs: ArcInput[];
-  firms: FirmInput[];
+  companies: CompanyCtx[];
+  signals: TokenSignal[];
   events: GameEventCtx[];
   dayKey: string;
   dayPosture: string;
-  /** Epoch slot — seeds spawns so back-to-back runs differ deterministically. */
   slot: number;
-  /** Previous drop's quiet-angle key — avoids repeating the same lens back-to-back. */
   prevQuietAngleKey?: string | null;
 }
 
 export interface WorldStateAdvance {
-  firmDeltas: FirmDelta[];
   arcAdvances: ArcAdvance[];
-  mood: string;
-  secHeat: number;
   spawnRequests: SpawnedArcSpec[];
+  mood: string;
   floorTalkClaims: FloorTalkClaim[];
   lead: LeadSelection;
   primaryArcSlug: string | null;
-  /** Narrative angle for quiet fiction slots; null when beat or real event leads. */
   quietAngle: DropAngle | null;
 }
 
-const TARGET_LIVE_ARCS = 2;
+/** Max fresh arcs to spawn per run, to keep the world legible. */
+const MAX_SPAWNS_PER_RUN = 3;
+/** Same-direction dramatic outcomes by one desk that make a player streak. */
+const PLAYER_STREAK_MIN = 3;
 
-function peakForArc(arc: ArcInput): number {
-  return templatePeakLossUsdc(arc.templateKey) ?? DEFAULT_PEAK_LOSS_USDC;
+const PEAK_MULTIPLE = 1.5;
+
+/** Derive a company arc's stage from its live signal. */
+function stageForCompanySignal(
+  signal: TokenSignal,
+  peakFired: boolean
+): ArcStage {
+  const move = Math.abs(headlineMovePct(signal) ?? 0);
+  const streak = Math.abs(signal.streakDays);
+  if (!peakFired && move >= MOVE_THRESHOLDS.flashPct * PEAK_MULTIPLE) {
+    return "peak";
+  }
+  if (move >= MOVE_THRESHOLDS.flashPct || streak >= 5) return "frenzy";
+  if (
+    move >= MOVE_THRESHOLDS.storyPct ||
+    streak >= MOVE_THRESHOLDS.routinePct
+  ) {
+    return "talked_about";
+  }
+  return "noticed";
 }
 
-/**
- * Advance the primary fictional arc by at most one beat, gated to ≤1 beat per
- * day, advancing its stage when the stage quota is met. Never advances an arc
- * into a stage another live arc currently occupies (keeps the two live arcs at
- * different stages). Climax fires exactly once.
- */
-function advancePrimaryArc(
-  primary: ArcInput,
-  occupiedStages: Set<ArcStage>,
-  dayKey: string
-): ArcAdvance {
-  const fromStage = primary.arcStage;
-  const beats = { ...primary.beatsPublishedByStage };
-
-  // Gate: at most one published beat per day.
-  const canBeat = primary.lastBeatDayKey !== dayKey && fromStage !== "retired";
-
-  if (!canBeat) {
-    return {
-      slug: primary.slug,
-      fromStage,
-      toStage: fromStage,
-      newTensionScore: STAGE_TARGET_TENSION[fromStage],
-      beatPublishedThisRun: false,
-      climaxFiringNow: false,
-      retiring: false,
-      newBeatsPublishedByStage: beats,
-      newLastBeatDayKey: primary.lastBeatDayKey ?? null,
-    };
-  }
-
-  beats[fromStage] = (beats[fromStage] ?? 0) + 1;
-
-  let toStage: ArcStage = fromStage;
-  let climaxFiringNow = false;
-  let retiring = false;
-
-  if (beats[fromStage] >= STAGE_BEAT_QUOTA[fromStage]) {
-    let candidate = nextStage(fromStage);
-
-    // Skip climax if it already fired (can never re-enter).
-    if (candidate === "climax" && primary.climaxFired) {
-      candidate = nextStage("climax"); // → aftermath
-    }
-
-    // Don't collide with the other live arc's stage (keep them distinct).
-    // Exception: "retired" is terminal and never collides.
-    if (candidate !== "retired" && occupiedStages.has(candidate)) {
-      candidate = fromStage; // hold this run
-    }
-
-    if (candidate !== fromStage) {
-      toStage = candidate;
-      if (toStage === "climax") climaxFiringNow = true;
-      if (toStage === "retired") retiring = true;
-    }
-  }
-
-  return {
-    slug: primary.slug,
-    fromStage,
-    toStage,
-    newTensionScore: STAGE_TARGET_TENSION[toStage],
-    beatPublishedThisRun: true,
-    climaxFiringNow,
-    retiring,
-    newBeatsPublishedByStage: beats,
-    newLastBeatDayKey: dayKey,
-  };
+function isStoryWorthy(signal: TokenSignal | undefined): boolean {
+  return (
+    !!signal &&
+    signal.ok &&
+    (signal.classification === "story" || signal.classification === "flash")
+  );
 }
 
-/** Step a firm's running loss toward its stage target (monotonic up). */
-function computeFirmDelta(
-  firm: FirmInput,
-  arc: ArcInput,
-  toStage: ArcStage,
-  stageAdvanced: boolean,
-  dayKey: string
-): FirmDelta | null {
-  const peak = peakForArc(arc);
-  const stageTarget = targetLossUsdc(peak, toStage);
-
-  const isNewDay = firm.lastLossDayKey !== dayKey;
-  // Only move the number on a stage advance or a fresh trading day.
-  if (!stageAdvanced && !isNewDay) return null;
-
-  let newTotal = Math.max(firm.runningLossUsdc, stageTarget);
-
-  // Within-stage daily drift (small, deterministic, never past the next band —
-  // and never below the current total, so running losses stay monotonic).
-  if (isNewDay && toStage !== "retired" && toStage !== "climax") {
-    const driftPct = seededInt(`drift:${firm.slug}:${dayKey}`, 3, 9); // 3–9%
-    const drift = Math.round((stageTarget * driftPct) / 100);
-    const cap = Math.max(stageTarget, targetLossUsdc(peak, nextStage(toStage)));
-    const drifted = Math.min(newTotal + drift, cap);
-    newTotal = Math.max(newTotal, drifted);
-  }
-
-  const lossDelta = newTotal - firm.runningLossUsdc;
-  const newStatus = firmStatusForStage(toStage);
-
-  const appendNotableFacts: string[] = [];
-  if (stageAdvanced) {
-    const m = `$${(newTotal / 1_000_000).toFixed(0)}M`;
-    if (toStage === "confirmation") {
-      appendNotableFacts.push(`${firm.displayName} losses confirmed at ${m}`);
-    } else if (toStage === "climax") {
-      appendNotableFacts.push(`${firm.displayName} losses peaked at ${m}`);
-    } else if (toStage === "retired") {
-      appendNotableFacts.push(
-        `${firm.displayName} wound down; final hole ${m}`
-      );
-    }
-  }
-
-  return {
-    slug: firm.slug,
-    lossDeltaUsdc: lossDelta,
-    newRunningLossUsdc: newTotal,
-    newStatus,
-    appendNotableFacts,
-    lastLossDayKey: dayKey,
-  };
-}
-
-function computeSecHeat(
-  arcs: ArcInput[],
-  advancesByStage: Map<string, ArcStage>,
-  lead: LeadSelection
-): number {
-  let heat = 3;
-  for (const arc of arcs) {
-    const stage = advancesByStage.get(arc.slug) ?? arc.arcStage;
-    if (stage === "confirmation") heat += 1;
-    else if (stage === "escalation") heat += 2;
-    else if (stage === "climax") heat += 3;
-  }
-  if (lead.leadEvent?.type === "wipeout") heat += 1;
-  if (lead.patterns.length > 0) heat += 2;
-  return Math.max(0, Math.min(10, heat));
-}
+// ── mood ─────────────────────────────────────────────────────────────────────
 
 function computeMood(
-  maxStage: ArcStage,
-  lead: LeadSelection,
+  signals: TokenSignal[],
   events: GameEventCtx[],
+  lead: LeadSelection,
   dayPosture: string,
   dayKey: string
 ): string {
-  if (lead.leadEvent?.type === "wipeout") return "grim";
-  if (maxStage === "climax") return "panic";
-  if (maxStage === "escalation") return "nervous";
-  if (maxStage === "confirmation") return "tense";
+  if (lead.gameLead?.type === "wipeout") return "grim";
 
-  // Quiet stages (rumor/denial/aftermath): vary honestly with the day.
-  const hasBigWin = events.some((e) => e.type === "big_win");
-  if (hasBigWin) return "greedy";
+  if (lead.leadKind === "token" && lead.tokenLead) {
+    const move = headlineMovePct(lead.tokenLead) ?? 0;
+    if (lead.isFlash) return move < 0 ? "grim" : "electric";
+  }
+
+  const priced = signals.filter((s) => s.ok && s.move24hPct != null);
+  const red = priced.filter((s) => (s.move24hPct ?? 0) < 0).length;
+  const green = priced.length - red;
+  if (priced.length >= 4) {
+    if (red >= priced.length * 0.7) return "nervous";
+    if (green >= priced.length * 0.7) return "greedy";
+  }
+
+  if (events.some((e) => e.type === "big_win")) return "greedy";
   if (dayPosture === "monday" || dayPosture === "tuesday") {
-    return seededUnit(`mood:${dayKey}`) < 0.5 ? "hungover" : "bored";
+    return seededInt(`mood:${dayKey}`, 0, 1) === 0 ? "hungover" : "bored";
   }
   if (events.filter((e) => e.dramatic).length === 0) return "bored";
   return "watchful";
 }
 
+// ── floor talk (absurd, non-finance color only) ──────────────────────────────
+
 const FLOOR_TALK_TEMPLATES = [
-  (title: string) => `${title}: someone senior was seen leaving with boxes`,
-  (title: string) =>
-    `${title}: a counterparty stopped answering calls this morning`,
-  (title: string) =>
-    `${title}: the auditors asked for a second conference room`,
-  (title: string) => `${title}: the elevator smelled like burning paperwork`,
-  (title: string) =>
-    `${title}: compliance scheduled a "voluntary" all-hands for Friday`,
-  (title: string) =>
-    `${title}: a junior analyst was seen crying in the stairwell`,
-  (title: string) => `${title}: the firm's PR team went dark on every call`,
+  (co: string) =>
+    `${co}: the intern who covers it went to lunch and hasn't come back`,
+  (co: string) => `${co}: someone unplugged the ticker to charge a phone`,
+  (co: string) => `${co}: the floor has a betting pool nobody will admit to`,
+  (co: string) => `${co}: the payphone by the elevator has rung all morning`,
+  (co: string) => `${co}: three people claim they "called it," none in writing`,
+  (co: string) => `${co}: the coffee cart guy has a strong opinion today`,
+  (co: string) => `${co}: a stack of it is being used to prop open a window`,
 ] as const;
 
 function buildFloorTalkClaims(
-  arcs: ArcInput[],
-  advancesByStage: Map<string, ArcStage>,
+  companyName: string | null,
   dayKey: string,
   slot: number
 ): FloorTalkClaim[] {
-  const claims: FloorTalkClaim[] = [];
-  const hot = [...arcs].sort((a, b) => b.tensionScore - a.tensionScore)[0];
-  if (!hot) return claims;
-  const stage = advancesByStage.get(hot.slug) ?? hot.arcStage;
-
-  const candidates = FLOOR_TALK_TEMPLATES.map((fn) => fn(hot.title));
-  const n = stage === "rumor" ? 2 : 1;
+  if (!companyName) return [];
   const startIdx = seededInt(
     `gossip-start:${slot}:${dayKey}`,
     0,
-    candidates.length - 1
+    FLOOR_TALK_TEMPLATES.length - 1
   );
-  for (let i = 0; i < n; i++) {
-    const idx = (startIdx + i) % candidates.length;
-    const isTrue = seededInt(`gossip:${slot}:${dayKey}:${idx}`, 0, 99) < 60;
-    claims.push({ text: candidates[idx]!, isTrue });
-  }
-  return claims;
+  const idx = startIdx % FLOOR_TALK_TEMPLATES.length;
+  const isTrue = seededInt(`gossip:${slot}:${dayKey}:${idx}`, 0, 99) < 60;
+  return [{ text: FLOOR_TALK_TEMPLATES[idx]!(companyName), isTrue }];
 }
+
+// ── player streaks ───────────────────────────────────────────────────────────
+
+interface PlayerStreak {
+  deskSlug: string;
+  deskLabel: string;
+  direction: "win" | "loss";
+  count: number;
+}
+
+function detectPlayerStreaks(events: GameEventCtx[]): PlayerStreak[] {
+  const byDesk = new Map<
+    string,
+    { wins: number; losses: number; label: string }
+  >();
+  for (const e of events) {
+    if (!e.traderId) continue;
+    const isWin = e.type === "big_win";
+    const isLoss =
+      e.type === "big_loss" ||
+      e.type === "wipeout" ||
+      e.type === "trap_resolved";
+    if (!isWin && !isLoss) continue;
+    const rec = byDesk.get(e.traderId) ?? {
+      wins: 0,
+      losses: 0,
+      label: e.traderName ?? e.traderAddressTrunc ?? "a desk",
+    };
+    if (isWin) rec.wins++;
+    else rec.losses++;
+    byDesk.set(e.traderId, rec);
+  }
+  const streaks: PlayerStreak[] = [];
+  for (const [traderId, rec] of byDesk) {
+    if (rec.wins >= PLAYER_STREAK_MIN && rec.wins > rec.losses) {
+      streaks.push({
+        deskSlug: `desk-${traderId}`,
+        deskLabel: rec.label,
+        direction: "win",
+        count: rec.wins,
+      });
+    } else if (rec.losses >= PLAYER_STREAK_MIN && rec.losses > rec.wins) {
+      streaks.push({
+        deskSlug: `desk-${traderId}`,
+        deskLabel: rec.label,
+        direction: "loss",
+        count: rec.losses,
+      });
+    }
+  }
+  return streaks;
+}
+
+// ── main ─────────────────────────────────────────────────────────────────────
 
 export function computeWorldStateAdvance(
   input: WorldStateAdvanceInput
 ): WorldStateAdvance {
-  const { arcs, firms, events, dayKey, dayPosture, slot, prevQuietAngleKey } =
-    input;
+  const {
+    arcs,
+    companies,
+    signals,
+    events,
+    dayKey,
+    dayPosture,
+    slot,
+    prevQuietAngleKey,
+  } = input;
 
-  const lead = rankAndSelectLead(events);
+  const lead = rankAndSelectLead({ signals, events });
 
-  const liveArcs = arcs
-    .filter((a) => a.arcStage !== "retired")
-    .sort((a, b) => b.tensionScore - a.tensionScore);
-  const primary = liveArcs[0] ?? null;
-  const primaryArcSlug = primary?.slug ?? null;
-
-  // Stages occupied by OTHER live arcs (for the distinct-stage rule).
-  const occupiedStages = new Set<ArcStage>(
-    liveArcs.filter((a) => a.slug !== primary?.slug).map((a) => a.arcStage)
+  const signalBySlug = new Map(signals.map((s) => [s.slug, s]));
+  const companyBySlug = new Map(companies.map((c) => [c.slug, c]));
+  const activeArcSubjectSlugs = new Set(
+    arcs.map((a) => a.subjectSlug).filter((s): s is string => !!s)
   );
 
+  // ── advance / cool existing arcs ──
   const arcAdvances: ArcAdvance[] = [];
-  if (primary) {
-    arcAdvances.push(advancePrimaryArc(primary, occupiedStages, dayKey));
-  }
-  // Secondary arcs simmer (tension held at their stage target, no beat).
-  for (const arc of liveArcs.slice(1)) {
+  for (const arc of arcs) {
+    const fromStage = arc.arcStage;
+    if (fromStage === "retired") continue;
+
+    let toStage: ArcStage = fromStage;
+    let peakFiringNow = false;
+    let retiring = false;
+
+    if (arc.subjectType === "company" && arc.subjectSlug) {
+      const signal = signalBySlug.get(arc.subjectSlug);
+      if (isStoryWorthy(signal)) {
+        toStage = stageForCompanySignal(signal!, arc.peakFired);
+        if (toStage === "peak" && !arc.peakFired) peakFiringNow = true;
+      } else {
+        // The move cooled — walk toward aftermath, then retire.
+        toStage = fromStage === "aftermath" ? "retired" : "aftermath";
+        retiring = toStage === "retired";
+      }
+    } else {
+      // Desk arcs: cool by default (re-spawn/advance below if still streaking).
+      toStage = fromStage === "aftermath" ? "retired" : "aftermath";
+      retiring = toStage === "retired";
+    }
+
     arcAdvances.push({
       slug: arc.slug,
-      fromStage: arc.arcStage,
-      toStage: arc.arcStage,
-      newTensionScore: STAGE_TARGET_TENSION[arc.arcStage],
-      beatPublishedThisRun: false,
-      climaxFiringNow: false,
-      retiring: false,
-      newBeatsPublishedByStage: { ...arc.beatsPublishedByStage },
+      fromStage,
+      toStage,
+      newTensionScore: STAGE_TARGET_TENSION[toStage],
+      peakFiringNow,
+      retiring,
+      ledThisRun: false,
       newLastBeatDayKey: arc.lastBeatDayKey ?? null,
     });
   }
 
-  const advancesByStage = new Map<string, ArcStage>(
-    arcAdvances.map((a) => [a.slug, a.toStage])
-  );
-
-  // Firm losses, keyed by each arc's primaryFirmSlug.
-  const firmBySlug = new Map(firms.map((f) => [f.slug, f]));
-  const arcBySlug = new Map(arcs.map((a) => [a.slug, a]));
-  const firmDeltas: FirmDelta[] = [];
-  for (const advance of arcAdvances) {
-    const arc = arcBySlug.get(advance.slug);
-    if (!arc?.primaryFirmSlug) continue;
-    const firm = firmBySlug.get(arc.primaryFirmSlug);
-    if (!firm) continue;
-    const stageAdvanced = advance.fromStage !== advance.toStage;
-    const delta = computeFirmDelta(
-      firm,
-      arc,
-      advance.toStage,
-      stageAdvanced,
-      dayKey
-    );
-    if (delta) firmDeltas.push(delta);
-  }
-
-  // Spawn fresh arcs when live count (after this run's retirements) drops below
-  // the target. Gentle: at most one spawn per run.
-  const retiringCount = arcAdvances.filter((a) => a.retiring).length;
-  const liveAfter = liveArcs.length - retiringCount;
+  // ── spawn fresh company arcs for story-worthy signals with no active arc ──
   const spawnRequests: SpawnedArcSpec[] = [];
-  if (liveAfter < TARGET_LIVE_ARCS) {
-    const taken = new Set<string>();
-    for (const a of arcs) {
-      taken.add(a.slug);
-      if (a.primaryFirmSlug) taken.add(a.primaryFirmSlug);
-    }
-    for (const f of firms) taken.add(f.slug);
-    spawnRequests.push(spawnArc(`${slot}`, taken));
+  const storyCandidates = signals
+    .filter((s) => isStoryWorthy(s) && !activeArcSubjectSlugs.has(s.slug))
+    .sort(
+      (a, b) =>
+        Math.abs(headlineMovePct(b) ?? 0) - Math.abs(headlineMovePct(a) ?? 0)
+    );
+  for (const signal of storyCandidates.slice(0, MAX_SPAWNS_PER_RUN)) {
+    const stage = stageForCompanySignal(signal, false);
+    const { title, summary } = describeCompanyArc(signal);
+    spawnRequests.push({
+      slug: `co-${signal.slug}-${slot}`,
+      title,
+      summary,
+      subjectType: "company",
+      subjectSlug: signal.slug,
+      entitySlug: signal.slug,
+      arcStage: stage,
+      tensionScore: STAGE_TARGET_TENSION[stage],
+    });
   }
 
-  const maxStage =
-    LIVE_STAGES.filter((s) => arcAdvances.some((a) => a.toStage === s)).slice(
-      -1
-    )[0] ?? "rumor";
+  // ── player streak arcs (spawn or re-advance) ──
+  const playerStreaks = detectPlayerStreaks(events);
+  for (const streak of playerStreaks) {
+    const existing = arcs.find(
+      (a) => a.subjectSlug === streak.deskSlug && a.arcStage !== "retired"
+    );
+    const stage: ArcStage = streak.count >= 5 ? "frenzy" : "talked_about";
+    if (existing) {
+      // Re-heat the cooling advance we may have queued above.
+      const adv = arcAdvances.find((a) => a.slug === existing.slug);
+      if (adv) {
+        adv.toStage = stage;
+        adv.newTensionScore = STAGE_TARGET_TENSION[stage];
+        adv.retiring = false;
+      }
+    } else if (spawnRequests.length < MAX_SPAWNS_PER_RUN + 1) {
+      const { title, summary } = describePlayerArc(
+        streak.deskLabel,
+        streak.direction,
+        streak.count
+      );
+      spawnRequests.push({
+        slug: `${streak.deskSlug}-${slot}`,
+        title,
+        summary,
+        subjectType: "desk",
+        subjectSlug: streak.deskSlug,
+        entitySlug: null,
+        arcStage: stage,
+        tensionScore: STAGE_TARGET_TENSION[stage],
+      });
+    }
+  }
 
-  const secHeat = computeSecHeat(arcs, advancesByStage, lead);
-  const mood = computeMood(maxStage, lead, events, dayPosture, dayKey);
-  const floorTalkClaims = buildFloorTalkClaims(
-    arcs,
-    advancesByStage,
-    dayKey,
-    slot
-  );
+  // ── primary arc + lead bookkeeping ──
+  let primaryArcSlug: string | null = null;
+  if (lead.leadKind === "token" && lead.tokenLead) {
+    const leadSlug = lead.tokenLead.slug;
+    // Prefer an existing active arc for the lead company, else its fresh spawn.
+    const existing = arcs.find(
+      (a) => a.subjectSlug === leadSlug && a.arcStage !== "retired"
+    );
+    const spawned = spawnRequests.find((s) => s.subjectSlug === leadSlug);
+    primaryArcSlug = existing?.slug ?? spawned?.slug ?? null;
+  }
+  if (!primaryArcSlug) {
+    // Highest-tension arc after advancing (fall back to any spawn).
+    const ranked = [...arcAdvances]
+      .filter((a) => !a.retiring)
+      .sort((a, b) => b.newTensionScore - a.newTensionScore);
+    primaryArcSlug = ranked[0]?.slug ?? spawnRequests[0]?.slug ?? null;
+  }
+  if (primaryArcSlug) {
+    const adv = arcAdvances.find((a) => a.slug === primaryArcSlug);
+    if (adv) {
+      adv.ledThisRun = true;
+      adv.newLastBeatDayKey = dayKey;
+    }
+  }
 
-  const primaryAdvance = primary
-    ? arcAdvances.find((a) => a.slug === primary.slug)
-    : undefined;
-  const isQuietSlot =
-    lead.leadKind === "fiction" &&
-    primaryAdvance !== undefined &&
-    !primaryAdvance.beatPublishedThisRun;
-  const quietAngle = isQuietSlot
-    ? pickQuietAngle(`${slot}:${dayKey}`, prevQuietAngleKey ?? null)
-    : null;
+  // ── mood, floor talk, quiet angle ──
+  const mood = computeMood(signals, events, lead, dayPosture, dayKey);
+
+  // Company for floor talk: the lead company, else the primary arc's company.
+  let floorCompanyName: string | null = null;
+  if (lead.leadKind === "token" && lead.tokenLead) {
+    floorCompanyName = lead.tokenLead.companyName;
+  } else if (primaryArcSlug) {
+    const spawned = spawnRequests.find((s) => s.slug === primaryArcSlug);
+    const arc = arcs.find((a) => a.slug === primaryArcSlug);
+    const subjSlug = spawned?.subjectSlug ?? arc?.subjectSlug ?? null;
+    if (subjSlug)
+      floorCompanyName = companyBySlug.get(subjSlug)?.displayName ?? null;
+  }
+  const floorTalkClaims = buildFloorTalkClaims(floorCompanyName, dayKey, slot);
+
+  const quietAngle =
+    lead.leadKind === "quiet"
+      ? pickQuietAngle(`${slot}:${dayKey}`, prevQuietAngleKey ?? null)
+      : null;
 
   return {
-    firmDeltas,
     arcAdvances,
-    mood,
-    secHeat,
     spawnRequests,
+    mood,
     floorTalkClaims,
     lead,
     primaryArcSlug,

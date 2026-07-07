@@ -17,28 +17,22 @@ export interface DropAngle {
 
 export const DROP_ANGLES: readonly DropAngle[] = [
   {
-    key: "counterparty-nerves",
+    key: "quiet-tape",
     instruction:
-      "Write from a nervous counterparty's POV — someone who stopped returning calls but hasn't walked away yet. Same facts, new texture. Do NOT invent figures, events, or new losses.",
+      "A quiet-tape column — nothing crossed the wire today, and you say so with style. Light on numbers, heavy on the boredom of a flat session. Do NOT invent figures, events, or moves.",
     suggestedCategory: "wire",
   },
   {
     key: "junior-analyst",
     instruction:
-      "Junior analyst gallows humor on the trading floor — darkly funny, self-aware, still citing only the provided figures. Do NOT invent numbers or new developments.",
+      "Junior-analyst gallows humor on the floor — darkly funny, self-aware, citing only the provided figures. Do NOT invent numbers or developments.",
     suggestedCategory: "wire",
   },
   {
-    key: "rival-schadenfreude",
+    key: "floor-schadenfreude",
     instruction:
-      "Rival desk schadenfreude — a competitor desk enjoying someone else's pain, attributed as floor gossip. Do NOT invent facts beyond what is provided.",
+      "Floor schadenfreude — the desk enjoying a slow day at someone's expense, attributed as gossip. Do NOT invent facts beyond what is provided.",
     suggestedCategory: "floor_talk",
-  },
-  {
-    key: "sec-skepticism",
-    instruction:
-      "SEC water-cooler skepticism — regulators circling but not acting yet, dry and bureaucratic. Do NOT invent investigations, fines, or new figures.",
-    suggestedCategory: "sec_watch",
   },
   {
     key: "ticker-recap",
@@ -49,20 +43,20 @@ export const DROP_ANGLES: readonly DropAngle[] = [
   {
     key: "mundane-human",
     instruction:
-      "Mundane human detail — elevator small talk, coffee run, someone pretending not to check their phone. The crisis is background noise. No new facts.",
+      "Mundane human detail — elevator small talk, coffee run, someone pretending not to check the tape. The market is background noise. No new facts.",
     suggestedCategory: "wire",
   },
   {
     key: "echo-confirmed",
     instruction:
-      "Echo an earlier confirmed fact from a new angle — reframe something already established as rumor turning to accepted truth (or vice versa). Do NOT claim anything new happened.",
+      "Echo an earlier confirmed fact from a new angle — reframe something already on the tape. Do NOT claim anything new happened.",
     suggestedCategory: "wire",
   },
   {
-    key: "boardroom-whisper",
+    key: "positioning-whisper",
     instruction:
-      "Boardroom whisper — what the partners are saying behind closed doors, cynical and insider-y. Same stakes, different room. No invented figures.",
-    suggestedCategory: "boardroom",
+      "Positioning whisper — who on the floor is quietly leaning which way, cynical and insider-y, but strictly no invented figures or events.",
+    suggestedCategory: "positioning",
   },
 ] as const;
 

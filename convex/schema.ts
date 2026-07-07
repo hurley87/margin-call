@@ -1,19 +1,21 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-// Code-owned arc lifecycle stages. The wire engine advances arcs through this
-// pipeline deterministically; the LLM never picks stages or tension.
+// Code-owned arc lifecycle stages — an ATTENTION lifecycle. A company (or desk)
+// on a sustained move rises through these as the floor pays more attention, then
+// falls to aftermath/retired when the move cools. Stages are derived from real
+// price/streak signals; the LLM never picks a stage or tension. (Kept in sync
+// with convex/wire/stages.ts ARC_STAGES.)
 const arcStageValidator = v.union(
-  v.literal("rumor"),
-  v.literal("denial"),
-  v.literal("confirmation"),
-  v.literal("escalation"),
-  v.literal("climax"),
+  v.literal("noticed"),
+  v.literal("talked_about"),
+  v.literal("frenzy"),
+  v.literal("peak"),
   v.literal("aftermath"),
   v.literal("retired")
 );
 
-// Health status of a fictional firm, derived purely from its arc stage.
+// Coverage status of a company, derived from its arc stage / recent tape.
 const firmStatusValidator = v.union(
   v.literal("healthy"),
   v.literal("stressed"),
@@ -332,6 +334,9 @@ export default defineSchema({
     seasonId: v.id("narrativeSeasons"),
     slug: v.string(),
     kind: v.union(
+      // Real registry companies (tokens.json) — the wire's coverage universe.
+      v.literal("company"),
+      // Legacy fictional kinds (retired; kept for schema compatibility).
       v.literal("firm"),
       v.literal("trader"),
       v.literal("regulator"),
@@ -341,8 +346,12 @@ export default defineSchema({
     aliases: v.array(v.string()),
     bio: v.string(),
     traits: v.array(v.string()),
-    // Code-authoritative firm state (firms only; null/0 for non-firm entities).
-    // The LLM never invents these numbers — code computes and persists them.
+    // Company registry fields (kind === "company"). Synced from tokens.json.
+    symbol: v.optional(v.string()),
+    xHandle: v.optional(v.string()),
+    address: v.optional(v.string()),
+    isHouseToken: v.optional(v.boolean()),
+    // Persistent narrative continuity (code-owned; the LLM never invents these).
     status: v.optional(firmStatusValidator),
     runningLossUsdc: v.optional(v.number()),
     notableFacts: v.optional(v.array(v.string())),
@@ -441,15 +450,53 @@ export default defineSchema({
     ),
     // Stage of the fictional beat this drop carried (null for pure game-news).
     arcStage: v.optional(arcStageValidator),
-    // True when this drop leads with a flash bulletin (wipeout / top-decile move).
+    // True when this drop leads with a flash bulletin (big move / wipeout).
     isFlash: v.optional(v.boolean()),
     // Soft hint the drop encodes, recorded for tuning (never shown to players).
     signal: v.optional(v.string()),
+    // Twitter/X marketing variant of this drop (one tweet, no URLs).
+    tweetVariant: v.optional(v.string()),
+    // Posting status: "dry_run" | "posted" | "skipped" | "failed".
+    tweetStatus: v.optional(v.string()),
+    // Registry @handle the tweet mentions (the covered company's account).
+    tweetSubjectHandle: v.optional(v.string()),
+    // Post → source trace: every number/event in this drop maps to a stored
+    // snapshot or game event. Makes "every number traces" mechanically
+    // checkable (see verification). Shape: { lead, tokenSignals[], gameEventIds[],
+    // thresholds, snapshotIds[] }.
+    sourceTrace: v.optional(v.any()),
     createdAt: v.number(),
   })
     .index("byEpoch", ["epoch"])
     .index("byCreatedAt", ["createdAt"])
     .index("byEpochSlot", ["epochSlot"]),
+
+  /**
+   * Per-token price snapshots polled from CoinGecko (onchain endpoints), keyed
+   * by Base contract address. Append-only time series: the wire computes moves
+   * over windows and multi-day streaks from these, and every number it prints
+   * traces back to a row here. A failed poll writes `ok: false` with the error
+   * and NO fabricated figures — the wire degrades rather than invents.
+   */
+  tokenSnapshots: defineTable({
+    address: v.string(), // lowercased Base contract address (registry key)
+    symbol: v.string(),
+    priceUsd: v.optional(v.number()),
+    volume24hUsd: v.optional(v.number()),
+    marketCapUsd: v.optional(v.number()),
+    fdvUsd: v.optional(v.number()),
+    // API-reported 24h change; stored as a fallback when no 24h-ago snapshot
+    // exists yet. Computed-from-snapshots moves are always preferred.
+    priceChange24hPct: v.optional(v.number()),
+    source: v.string(), // "coingecko-onchain" | "coingecko-coins" | "none"
+    ok: v.boolean(),
+    error: v.optional(v.string()),
+    // NY calendar date (YYYY-MM-DD) for daily-close grouping + streak math.
+    dayKey: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("byAddressAndCreatedAt", ["address", "createdAt"])
+    .index("byCreatedAt", ["createdAt"]),
 
   systemPrompts: defineTable({
     name: v.string(),

@@ -32,6 +32,20 @@ crons.interval(
 );
 
 /**
+ * Token price poller — fires every hour at :20 UTC, 10 minutes before the wire
+ * generator, so a fresh snapshot exists when the wire runs. Deliberately NOT
+ * gated to market hours: these companies trade around the clock, so overnight
+ * and weekend moves are captured here and reported at the next open. See
+ * convex/wire/pricePoll.ts.
+ */
+crons.hourly(
+  "token-price-poll",
+  { minuteUTC: 20 },
+  internal.wire.pricePoll.pollPrices,
+  {}
+);
+
+/**
  * Wire Drop generator — fires every hour at :30 UTC.
  * In EDT (UTC-4) this lands at 9:30 ET for the 13:00 UTC hour — exactly at
  * market open. In EST (UTC-5) the 13:30 UTC fire is 8:30 ET (before open,
