@@ -15,20 +15,39 @@
 
 import { internalAction } from "../_generated/server";
 import { v } from "convex/values";
-import { LiveTweetPoster, verifyCredentials } from "./tweetPoster";
+import {
+  LiveTweetPoster,
+  verifyCredentials,
+  verifyConsumerPair,
+} from "./tweetPoster";
 
 export const verifyTwitter = internalAction({
   args: {},
   handler: async () => {
-    const res = await verifyCredentials();
-    if (res.ok) {
+    const consumer = await verifyConsumerPair();
+    const full = await verifyCredentials();
+    console.log(
+      `[wire/tweetOps] consumer key/secret valid: ${consumer.ok ? "YES" : `NO (status ${consumer.status ?? "?"})`}`
+    );
+    if (full.ok) {
       console.log(
-        `[wire/tweetOps] credentials OK — posting as @${res.username}`
+        `[wire/tweetOps] full credentials OK — posting as @${full.username}`
       );
     } else {
-      console.error(`[wire/tweetOps] credential check failed: ${res.error}`);
+      console.error(
+        `[wire/tweetOps] access-token check failed: status=${full.status ?? "?"} ${full.error ?? ""} ${full.body ?? ""}`
+      );
     }
-    return res;
+    return {
+      consumerPairValid: consumer.ok,
+      accessTokenValid: full.ok,
+      username: full.username,
+      diagnosis: consumer.ok
+        ? full.ok
+          ? "all four valid"
+          : "consumer key/secret OK — the ACCESS TOKEN/SECRET are wrong or from a different app"
+        : "the CONSUMER KEY/SECRET are wrong or mismatched",
+    };
   },
 });
 

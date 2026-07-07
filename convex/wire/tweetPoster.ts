@@ -169,6 +169,45 @@ export class LiveTweetPoster implements TweetPoster {
   }
 }
 
+/**
+ * Validate the CONSUMER key/secret alone (no access token) by requesting an
+ * app-only bearer token (OAuth2 client_credentials). 200 => the consumer pair
+ * is a valid matched pair; 401/403 => the consumer key/secret are wrong or
+ * mismatched. Isolates a code-89 failure to consumer-pair vs. access-token.
+ */
+export async function verifyConsumerPair(): Promise<{
+  ok: boolean;
+  status?: number;
+  body?: string;
+  error?: string;
+}> {
+  const key = process.env.TWITTER_CONSUMER_KEY;
+  const secret = process.env.TWITTER_CONSUMER_SECRET;
+  if (!key || !secret) {
+    return { ok: false, error: "consumer key/secret not set" };
+  }
+  const basic = Buffer.from(`${rfc3986(key)}:${rfc3986(secret)}`).toString(
+    "base64"
+  );
+  try {
+    const res = await fetch("https://api.twitter.com/oauth2/token", {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${basic}`,
+        "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
+      },
+      body: "grant_type=client_credentials",
+    });
+    const text = await res.text().catch(() => "");
+    return { ok: res.ok, status: res.status, body: text.slice(0, 200) };
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
 export function getTweetPoster(): TweetPoster {
   return process.env.MC_WIRE_TWEETS_LIVE === "1"
     ? new LiveTweetPoster()
@@ -176,34 +215,33 @@ export function getTweetPoster(): TweetPoster {
 }
 
 /**
- * Read-only credential check: OAuth1-signed GET /2/users/me. Confirms the four
- * user-context tokens are valid and returns the posting account — WITHOUT
- * posting anything. Used by wire/tweetOps:verifyTwitter.
+ * Read-only OAuth 1.0a credential check via v1.1 account/verify_credentials —
+ * an OAuth-1.0a-supported endpoint (unlike /2/users/me, which is OAuth-2-only).
+ * Surfaces raw status + body so the specific error code is visible:
+ *   code 32 "Could not authenticate you" = signature / consumer-key mismatch
+ *   code 89 "Invalid or expired token"   = access token bad / from another app
+ *   403 / 453                            = auth OK but no v1.1 access tier
+ * Never posts anything.
  */
 export async function verifyCredentials(): Promise<{
   ok: boolean;
+  status?: number;
   username?: string;
+  body?: string;
   error?: string;
 }> {
   const creds = readCreds();
   if ("error" in creds) return { ok: false, error: creds.error };
-  const url = "https://api.twitter.com/2/users/me";
+  const url = "https://api.twitter.com/1.1/account/verify_credentials.json";
   try {
     const auth = oauthHeader("GET", url, creds);
     const res = await fetch(url, { headers: { Authorization: auth } });
-    const body = (await res.json().catch(() => ({}))) as {
-      data?: { username?: string };
-      detail?: string;
-      title?: string;
-    };
+    const text = await res.text().catch(() => "");
     if (!res.ok) {
-      return {
-        ok: false,
-        error:
-          `HTTP ${res.status} ${body.title ?? ""} ${body.detail ?? ""}`.trim(),
-      };
+      return { ok: false, status: res.status, body: text.slice(0, 400) };
     }
-    return { ok: true, username: body.data?.username };
+    const parsed = JSON.parse(text) as { screen_name?: string };
+    return { ok: true, status: res.status, username: parsed.screen_name };
   } catch (err) {
     return {
       ok: false,
