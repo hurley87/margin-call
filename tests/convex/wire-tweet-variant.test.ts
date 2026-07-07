@@ -52,6 +52,23 @@ describe("sanitizeTweet", () => {
     expect(res.text.match(/@AskSurplus/g)?.length).toBe(1);
   });
 
+  it("injects the subject cashtag when the model omitted it", () => {
+    const res = sanitizeTweet("Basemate ripped 46% and the interns cheered", {
+      subjectHandle: "@basemateagent",
+      subjectSymbol: "BASEMATE",
+    });
+    expect(res.text).toContain("$BASEMATE");
+    expect(res.text).toContain("@basemateagent");
+    expect(res.issues).toContain("added_cashtag");
+  });
+
+  it("does not duplicate a cashtag the model already wrote", () => {
+    const res = sanitizeTweet("$BASEMATE ripped 46%", {
+      subjectSymbol: "BASEMATE",
+    });
+    expect(res.text.match(/\$BASEMATE/gi)?.length).toBe(1);
+  });
+
   it("preserves cashtags", () => {
     const res = sanitizeTweet("Quiet day for $KUPO and $NOOK", {});
     expect(res.text).toContain("$KUPO");

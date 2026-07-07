@@ -456,6 +456,8 @@ async function runGenerator(
   // ── Tweet: sanitize (strip/reject URLs, ≤280, ensure @handle), then post ──
   const sanitized = sanitizeTweet(validated.tweetVariant, {
     subjectHandle: tweetSubjectHandle,
+    subjectSymbol:
+      lead.leadKind === "token" ? (lead.tokenLead?.symbol ?? null) : null,
   });
   let tweetStatus: string;
   if (!sanitized.ok) {

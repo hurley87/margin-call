@@ -34,7 +34,7 @@ function hasHandle(text: string, handle: string): boolean {
  */
 export function sanitizeTweet(
   raw: string,
-  opts: { subjectHandle?: string | null } = {}
+  opts: { subjectHandle?: string | null; subjectSymbol?: string | null } = {}
 ): SanitizeResult {
   const issues: string[] = [];
   let text = (raw ?? "").replace(/\s+/g, " ").trim();
@@ -63,6 +63,16 @@ export function sanitizeTweet(
     .trim();
   if (stripped !== text) issues.push("stripped_mention");
   text = stripped;
+
+  // Ensure the subject company's $CASHTAG is present (ticker discoverability).
+  const symbol = opts.subjectSymbol?.trim().toUpperCase();
+  if (symbol && !new RegExp(`\\$${symbol}\\b`, "i").test(text)) {
+    const candidate = `${text} $${symbol}`.trim();
+    if (candidate.length <= TWEET_MAX_CHARS) {
+      text = candidate;
+      issues.push("added_cashtag");
+    }
+  }
 
   // Ensure the subject company's handle is present (distribution mechanic).
   const handle = opts.subjectHandle?.trim();
