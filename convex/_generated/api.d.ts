@@ -96,6 +96,7 @@ import type * as wire_stages from "../wire/stages.js";
 import type * as wire_tokenRegistry from "../wire/tokenRegistry.js";
 import type * as wire_tokenSignals from "../wire/tokenSignals.js";
 import type * as wire_tradingHours from "../wire/tradingHours.js";
+import type * as wire_tweetOps from "../wire/tweetOps.js";
 import type * as wire_tweetPoster from "../wire/tweetPoster.js";
 import type * as wire_tweetVariant from "../wire/tweetVariant.js";
 import type * as wire_worldState from "../wire/worldState.js";
@@ -195,6 +196,7 @@ declare const fullApi: ApiFromModules<{
   "wire/tokenRegistry": typeof wire_tokenRegistry;
   "wire/tokenSignals": typeof wire_tokenSignals;
   "wire/tradingHours": typeof wire_tradingHours;
+  "wire/tweetOps": typeof wire_tweetOps;
   "wire/tweetPoster": typeof wire_tweetPoster;
   "wire/tweetVariant": typeof wire_tweetVariant;
   "wire/worldState": typeof wire_worldState;
