@@ -166,8 +166,14 @@ function tokenOneLiner(signal: TokenSignal): string {
 export function rankAndSelectLead(input: {
   signals: TokenSignal[];
   events: GameEventCtx[];
+  /**
+   * Slug of the token that led the immediately-previous drop, if any. That
+   * token is barred from leading again this drop so a hot name can't run the
+   * wire two slots in a row; it can still surface as a woven-in quiet stat.
+   */
+  prevLeadTokenSlug?: string | null;
 }): LeadSelection {
-  const { signals, events } = input;
+  const { signals, events, prevLeadTokenSlug } = input;
   const patterns = detectPatterns(events);
 
   // Fold detected trap patterns in as synthetic game events (can win the lead).
@@ -188,7 +194,13 @@ export function rankAndSelectLead(input: {
     .filter((s) => s.ok)
     .map((signal) => ({ signal, score: tokenScore(signal) }))
     .sort((a, b) => b.score - a.score);
-  const topToken = rankedTokens[0] ?? null;
+  // Anti-repeat: exclude the previous drop's lead token from lead contention so
+  // the same ticker never leads two slots running. Falls through to the next
+  // token, a game event, or a quiet tape — whichever ranks next.
+  const leadTokens = prevLeadTokenSlug
+    ? rankedTokens.filter((t) => t.signal.slug !== prevLeadTokenSlug)
+    : rankedTokens;
+  const topToken = leadTokens[0] ?? null;
 
   const gameScoreTop = topGame?.score ?? 0;
   const tokenScoreTop = topToken?.score ?? 0;
@@ -196,7 +208,12 @@ export function rankAndSelectLead(input: {
   // Nothing crosses the bar → quiet tape.
   if (gameScoreTop < LEAD_THRESHOLD && tokenScoreTop < LEAD_THRESHOLD) {
     // Best available real stat to weave in (token routine move or top game stat).
-    const bestRoutineToken = rankedTokens.find((t) => t.score > 0)?.signal;
+    // Prefer a token other than the previous lead; fall back to it only if it is
+    // the sole priced mover.
+    const bestRoutineToken = (
+      leadTokens.find((t) => t.score > 0) ??
+      rankedTokens.find((t) => t.score > 0)
+    )?.signal;
     const realStatOneLiner = bestRoutineToken
       ? tokenOneLiner(bestRoutineToken)
       : topGame && topGame.score > 0

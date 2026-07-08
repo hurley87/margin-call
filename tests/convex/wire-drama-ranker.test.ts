@@ -77,6 +77,52 @@ describe("dramaRanker: lead selection", () => {
     expect(sel.realStatOneLiner).toBeTruthy();
   });
 
+  it("bars the previous drop's lead token from leading twice in a row", () => {
+    const lfi = sig({
+      slug: "lienfi",
+      symbol: "LFI",
+      move24hPct: 43,
+      classification: "flash",
+    });
+    const kupo = sig({
+      slug: "kupo",
+      symbol: "KUPO",
+      move24hPct: 12,
+      classification: "story",
+    });
+
+    // Without a prior lead, the biggest mover (LFI flash) leads.
+    const first = rankAndSelectLead({ signals: [lfi, kupo], events: [] });
+    expect(first.tokenLead?.symbol).toBe("LFI");
+
+    // Next drop: LFI is barred, so the next-best token (KUPO) leads instead.
+    const second = rankAndSelectLead({
+      signals: [lfi, kupo],
+      events: [],
+      prevLeadTokenSlug: "lienfi",
+    });
+    expect(second.leadKind).toBe("token");
+    expect(second.tokenLead?.symbol).toBe("KUPO");
+  });
+
+  it("falls to a quiet tape when the only mover led the previous drop", () => {
+    const lfi = sig({
+      slug: "lienfi",
+      symbol: "LFI",
+      move24hPct: 43,
+      classification: "flash",
+    });
+    const sel = rankAndSelectLead({
+      signals: [lfi],
+      events: [],
+      prevLeadTokenSlug: "lienfi",
+    });
+    expect(sel.leadKind).toBe("quiet");
+    // The repeat may still be woven in as the quiet stat, but it does not lead.
+    expect(sel.tokenLead).toBeNull();
+    expect(sel.realStatOneLiner).toContain("LFI");
+  });
+
   it("detects a trap-phrase pattern across multiple traders", () => {
     const patterns = detectPatterns([
       ev({
