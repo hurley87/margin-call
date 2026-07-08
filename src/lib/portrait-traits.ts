@@ -18,3 +18,65 @@ export function humanizePortraitTraitValue(
 ): string {
   return TRAIT_META[slotKey]?.[id]?.label ?? id;
 }
+
+/** Rarity tier for a stored trait id within its slot. */
+export function portraitTraitTier(
+  slotKey: keyof PublicPortraitTraits,
+  id: string
+): string {
+  return TRAIT_META[slotKey]?.[id]?.tier ?? "Common";
+}
+
+export type FunTrait = {
+  key: keyof PublicPortraitTraits;
+  label: string;
+  tier: string;
+};
+
+const TIER_RANK: Record<string, number> = {
+  Legendary: 3,
+  Rare: 2,
+  Uncommon: 1,
+  Common: 0,
+};
+
+/** Default/boring trait values that carry no character — skipped when picking. */
+const BORING_TRAIT_IDS = new Set(["none", "plain"]);
+
+/**
+ * Pick the most characterful traits for a trader, rarest first. Skips the
+ * boring defaults ("none" vice, "plain" field) and falls back to the priority
+ * order (vice → attire → expression → …) for same-tier ties. Used to show fun
+ * flavor on roster tiles.
+ */
+export function pickFunTraits(
+  traits: PublicPortraitTraits,
+  max = 2
+): FunTrait[] {
+  // Priority order favors the slots that read as personality.
+  const order: Array<keyof PublicPortraitTraits> = [
+    "vice",
+    "attire",
+    "expression",
+    "fieldInk",
+    "fieldFlourish",
+  ];
+
+  return (
+    order
+      .map((key) => {
+        const id = traits[key];
+        return {
+          key,
+          id,
+          label: humanizePortraitTraitValue(key, id),
+          tier: portraitTraitTier(key, id),
+        };
+      })
+      .filter((t) => !BORING_TRAIT_IDS.has(t.id))
+      // Stable sort by tier desc keeps the priority order for equal tiers.
+      .sort((a, b) => (TIER_RANK[b.tier] ?? 0) - (TIER_RANK[a.tier] ?? 0))
+      .slice(0, max)
+      .map(({ key, label, tier }) => ({ key, label, tier }))
+  );
+}

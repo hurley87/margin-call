@@ -45,6 +45,11 @@ import {
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
+import {
+  pickFunTraits,
+  type FunTrait,
+  type PublicPortraitTraits,
+} from "@/lib/portrait-traits";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
 import { IntroSequence } from "@/components/intro-sequence";
@@ -216,58 +221,7 @@ export default function Home() {
         />
       );
     }
-    return (
-      <div className="flex min-h-screen flex-col justify-center gap-8 bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
-        <div className="mx-auto grid w-full max-w-4xl gap-7 md:grid-cols-[minmax(0,1.25fr)_minmax(17rem,0.75fr)] md:items-end">
-          <section className="min-w-0">
-            <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--t-green)]">
-              DESK_OS 1987 // PRIVATE WIRE
-            </p>
-            <h1 className="font-[family-name:var(--font-plex-sans)] text-4xl font-black uppercase leading-none tracking-wide text-[var(--t-accent)] sm:text-5xl">
-              MARGIN CALL
-            </h1>
-            <p className="mt-3 max-w-[42rem] text-sm leading-6 text-[var(--t-green)]/90 sm:text-base">
-              Run a hostile Wall Street desk. Fund your wallet, hire an AI
-              trader, then write deals that lure rival agents into bad rooms.
-            </p>
-          </section>
-
-          <section className="terminal-panel px-4 py-4">
-            <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.16em] text-[var(--t-amber)]">
-              First run
-            </h2>
-            <ol className="mt-4 grid gap-3 text-xs uppercase tracking-[0.14em] text-[var(--t-muted)]">
-              {[
-                "Enter by email",
-                "Fund desk wallet",
-                "Hire first trader",
-                "Create first deal",
-              ].map((step, index) => (
-                <li key={step} className="flex items-center gap-3">
-                  <span className="grid h-7 w-7 shrink-0 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)]">
-                    {String(index + 1).padStart(2, "0")}
-                  </span>
-                  <span>{step}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-        </div>
-
-        <div className="mx-auto flex w-full max-w-4xl flex-col items-start gap-3 sm:flex-row sm:items-center">
-          <button
-            onClick={login}
-            className="min-h-11 border border-[var(--t-border)] bg-[var(--t-panel-strong)] px-6 py-3 font-mono text-sm font-black uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)] focus:border-[var(--t-accent)] focus:outline-none"
-          >
-            {">"} Enter by email<span className="cursor-blink">█</span>
-          </button>
-          <ConnectMcpDialog />
-          <p className="text-[11px] uppercase tracking-widest text-[var(--t-muted)]">
-            Email OTP access, or connect your AI agent via MCP.
-          </p>
-        </div>
-      </div>
-    );
+    return <LandingScreen onLogin={login} />;
   }
 
   if (deskLoading) {
@@ -299,6 +253,192 @@ export default function Home() {
       <Dashboard deskWalletAddress={deskManager.wallet_address} />
       {process.env.NODE_ENV === "development" && <ConvexIdentityDebug />}
     </>
+  );
+}
+
+/** Traders pinned to the front of the landing roster, in order. */
+const FEATURED_TRADER_NAMES = ["HurlingAlpha", "Wolf"];
+
+/** Fallback roster shown before any real portraits have finished generating. */
+const SAMPLE_TRADER_NAMES = [
+  "Vic Sterling",
+  "Dana Cross",
+  "Rex Malloy",
+  "Sable Quinn",
+];
+
+type RosterTile = {
+  key: string;
+  name: string;
+  src: string | null;
+  imageStatus: "pending" | "generating" | "ready" | "error";
+  traits: FunTrait[];
+};
+
+/** Tier → chip color, mirroring the persona-traits palette. */
+const TRAIT_CHIP_TONE: Record<string, string> = {
+  Common: "border-[var(--t-divider)] text-[var(--t-muted)]",
+  Uncommon: "border-[var(--t-green)]/50 text-[var(--t-green)]",
+  Rare: "border-[var(--t-blue)]/60 text-[var(--t-blue)]",
+  Legendary: "border-[var(--t-amber)]/60 text-[var(--t-amber-hot)]",
+};
+
+/**
+ * Unauthenticated landing screen. Renders the hero, the "first run" checklist,
+ * and a live roster of real trader portraits (pulled from the public leaderboard)
+ * next to a "mint your own" slot so it's clear the player creates their own 1-of-1
+ * AI trader. HurlingAlpha and Wolf are pinned to the front, and each tile surfaces
+ * a couple of fun persona traits.
+ */
+function LandingScreen({ onLogin }: { onLogin: () => void }) {
+  const { data: leaderboard } = useLeaderboard();
+
+  const galleryTiles = useMemo<RosterTile[]>(() => {
+    const ready = (leaderboard ?? []).filter(
+      (t) => t.imageStatus === "ready" && Boolean(t.profileImageUrl)
+    );
+
+    if (ready.length === 0) {
+      return SAMPLE_TRADER_NAMES.map((name) => ({
+        key: name,
+        name,
+        src: null,
+        imageStatus: "pending" as const,
+        traits: [],
+      }));
+    }
+
+    // Pin the featured traders first, then fill with the rest of the roster.
+    const featured = FEATURED_TRADER_NAMES.map((name) =>
+      ready.find((t) => t.name.toLowerCase() === name.toLowerCase())
+    ).filter((t): t is (typeof ready)[number] => Boolean(t));
+    const featuredIds = new Set(featured.map((t) => t.id));
+    const rest = ready.filter((t) => !featuredIds.has(t.id));
+
+    return [...featured, ...rest].slice(0, 4).map((t) => ({
+      key: t.id,
+      name: t.name,
+      src: t.profileImageUrl,
+      imageStatus: t.imageStatus ?? "ready",
+      traits: t.traits ? pickFunTraits(t.traits as PublicPortraitTraits) : [],
+    }));
+  }, [leaderboard]);
+
+  return (
+    <div className="flex min-h-screen flex-col justify-center gap-8 bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
+      <div className="mx-auto grid w-full max-w-4xl gap-7 md:grid-cols-[minmax(0,1.25fr)_minmax(17rem,0.75fr)] md:items-end">
+        <section className="min-w-0">
+          <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--t-green)]">
+            DESK_OS 1987 // PRIVATE WIRE
+          </p>
+          <h1 className="font-[family-name:var(--font-plex-sans)] text-4xl font-black uppercase leading-none tracking-wide text-[var(--t-accent)] sm:text-5xl">
+            MARGIN CALL
+          </h1>
+          <p className="mt-3 max-w-[42rem] text-sm leading-6 text-[var(--t-green)]/90 sm:text-base">
+            Run a hostile Wall Street desk. Fund your wallet, mint a 1-of-1 AI
+            trader, then write deals that lure rival agents into bad rooms.
+          </p>
+        </section>
+
+        <section className="terminal-panel px-4 py-4">
+          <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.16em] text-[var(--t-amber)]">
+            First run
+          </h2>
+          <ol className="mt-4 grid gap-3 text-xs uppercase tracking-[0.14em] text-[var(--t-muted)]">
+            {[
+              "Enter by email",
+              "Fund desk wallet",
+              "Mint your AI trader",
+              "Create first deal",
+            ].map((step, index) => (
+              <li key={step} className="flex items-center gap-3">
+                <span className="grid h-7 w-7 shrink-0 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)]">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
+                <span>{step}</span>
+              </li>
+            ))}
+          </ol>
+        </section>
+      </div>
+
+      <section className="mx-auto w-full max-w-4xl">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--t-green)]">
+            THE FLOOR // LIVE ROSTER
+          </p>
+          <p className="text-[10px] uppercase tracking-widest text-[var(--t-muted)]">
+            Every trader is a 1-of-1, minted onchain from your desk
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
+          {galleryTiles.map((tile) => (
+            <figure
+              key={tile.key}
+              className="terminal-panel flex flex-col overflow-hidden"
+            >
+              <div className="relative aspect-square">
+                <TraderAvatar
+                  name={tile.name}
+                  src={tile.src}
+                  imageStatus={tile.imageStatus}
+                  size="lg"
+                />
+              </div>
+              <figcaption className="flex flex-col gap-1.5 border-t border-[var(--t-divider)] px-2 py-2">
+                <span className="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
+                  {tile.name}
+                </span>
+                {tile.traits.length > 0 && (
+                  <span className="flex flex-wrap gap-1">
+                    {tile.traits.map((trait) => (
+                      <span
+                        key={trait.key}
+                        className={cn(
+                          "truncate border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]",
+                          TRAIT_CHIP_TONE[trait.tier] ?? TRAIT_CHIP_TONE.Common
+                        )}
+                      >
+                        {trait.label}
+                      </span>
+                    ))}
+                  </span>
+                )}
+              </figcaption>
+            </figure>
+          ))}
+
+          <button
+            type="button"
+            onClick={onLogin}
+            className="group flex flex-col overflow-hidden border border-dashed border-[var(--t-accent)]/50 bg-[var(--t-accent-soft)] text-left transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none"
+          >
+            <div className="relative flex aspect-square items-center justify-center">
+              <span className="font-[family-name:var(--font-plex-sans)] text-4xl font-black text-[var(--t-accent)]/70 transition-colors group-hover:text-[var(--t-accent)]">
+                +
+              </span>
+              <div className="pointer-events-none absolute inset-0 crt-line-grid opacity-30" />
+            </div>
+            <span className="truncate border-t border-dashed border-[var(--t-accent)]/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
+              Mint your trader
+            </span>
+          </button>
+        </div>
+      </section>
+
+      <div className="mx-auto flex w-full max-w-4xl flex-col items-start gap-3 sm:flex-row sm:items-center">
+        <button
+          onClick={onLogin}
+          className="min-h-11 border border-[var(--t-border)] bg-[var(--t-panel-strong)] px-6 py-3 font-mono text-sm font-black uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)] focus:border-[var(--t-accent)] focus:outline-none"
+        >
+          {">"} Enter by email<span className="cursor-blink">█</span>
+        </button>
+        <ConnectMcpDialog />
+        <p className="text-[11px] uppercase tracking-widest text-[var(--t-muted)]">
+          Email OTP access, or connect your AI agent via MCP.
+        </p>
+      </div>
+    </div>
   );
 }
 
