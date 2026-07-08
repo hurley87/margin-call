@@ -69,6 +69,26 @@ describe("sanitizeTweet", () => {
     expect(res.text.match(/\$BASEMATE/gi)?.length).toBe(1);
   });
 
+  it("strips hashtags", () => {
+    const res = sanitizeTweet("KUPO ripped 44% #KUPO #wallstreet", {
+      subjectSymbol: "KUPO",
+    });
+    expect(res.text).not.toContain("#");
+    expect(res.issues).toContain("stripped_hashtag");
+    expect(res.text).toContain("$KUPO");
+  });
+
+  it("keeps the handle where the model wove it in, not appended at the end", () => {
+    const res = sanitizeTweet(
+      "@AskSurplus interns cheered $SURPLUS's 38% pop into the payphone",
+      { subjectHandle: "@AskSurplus", subjectSymbol: "SURPLUS" }
+    );
+    expect(res.text.startsWith("@AskSurplus")).toBe(true);
+    expect(res.text.endsWith("@AskSurplus")).toBe(false);
+    expect(res.text.match(/@AskSurplus/g)?.length).toBe(1);
+    expect(res.issues).not.toContain("added_cashtag");
+  });
+
   it("preserves cashtags", () => {
     const res = sanitizeTweet("Quiet day for $KUPO and $NOOK", {});
     expect(res.text).toContain("$KUPO");

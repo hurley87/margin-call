@@ -52,7 +52,7 @@ RULES (non-negotiable):
 6. Real accounts/people: only actual provided statements; never invent quotes, actions, or intentions.
 7. The house company gets harder, self-deprecating, never-promotional coverage.
 
-Also produce tweetVariant: one tweet ≤270 chars, same voice, real move (SYMBOL +/-N%) + @-mention the company when it's the subject, cashtags ok, NO URLs.
+Also produce tweetVariant: one tweet ≤270 chars, same voice, real move ($SYMBOL +/-N%). Weave the company's $CASHTAG and @handle INTO the sentence (cashtag for the name, @handle as subject/object) — never tacked on at the end. NO hashtags (#). NO URLs.
 
 OUTPUT: strict JSON matching the schema. Headline ≤ 12 words. Body 2–3 complete sentences (each ending in . ! or ?). No prose outside the JSON object.`;
 

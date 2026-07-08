@@ -3,9 +3,11 @@
  * rules in CODE (not just the prompt):
  *   - NO URLs (link posts are billed higher and deprioritized) — stripped, and
  *     if a bare domain survives the tweet is rejected rather than mangled.
+ *   - NO hashtags (house style; discoverability rides on the $CASHTAG).
  *   - ≤ 280 characters.
- *   - the covered company's @handle is present when it is the story's subject
- *     (the distribution mechanic).
+ *   - the covered company's @handle and $CASHTAG are present when it is the
+ *     story's subject (the distribution mechanic). The model is asked to weave
+ *     them into the sentence; if it doesn't, they are appended as a fallback.
  * Cashtags ($SYMBOL) are allowed and preserved.
  */
 
@@ -54,17 +56,33 @@ export function sanitizeTweet(
     return { text, ok: false, issues };
   }
 
-  // Strip EVERY model-written @-mention — the model must not invent or tag any
-  // account. The only allowed @-mention is the covered company's registry
-  // handle, appended below. (Cashtags use $ and are preserved.)
+  // Strip hashtags — house style never uses them (discoverability rides on the
+  // $CASHTAG, not #tags).
+  const dehashed = text
+    .replace(/#\w+/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (dehashed !== text) issues.push("stripped_hashtag");
+  text = dehashed;
+
+  // The covered company's registry handle is the ONLY allowed @-mention, and the
+  // model is asked to weave it into the sentence. Preserve it wherever it lands;
+  // strip every other @-mention (invented / tagged accounts). Cashtags use $ and
+  // are preserved.
+  const handle = opts.subjectHandle?.trim();
+  const handleLc =
+    handle && handle.startsWith("@") ? handle.toLowerCase() : null;
   const stripped = text
-    .replace(/@\w{1,15}/g, "")
+    .replace(/@\w{1,15}/g, (m) =>
+      handleLc && m.toLowerCase() === handleLc ? m : ""
+    )
     .replace(/\s{2,}/g, " ")
     .trim();
   if (stripped !== text) issues.push("stripped_mention");
   text = stripped;
 
   // Ensure the subject company's $CASHTAG is present (ticker discoverability).
+  // The model is asked to weave it in; append only as a fallback.
   const symbol = opts.subjectSymbol?.trim().toUpperCase();
   if (symbol && !new RegExp(`\\$${symbol}\\b`, "i").test(text)) {
     const candidate = `${text} $${symbol}`.trim();
@@ -75,8 +93,8 @@ export function sanitizeTweet(
   }
 
   // Ensure the subject company's handle is present (distribution mechanic).
-  const handle = opts.subjectHandle?.trim();
-  if (handle && handle.startsWith("@") && !hasHandle(text, handle)) {
+  // If the model already wove it in above, this is a no-op; else append.
+  if (handleLc && handle && !hasHandle(text, handle)) {
     const candidate = `${text} ${handle}`.trim();
     if (candidate.length <= TWEET_MAX_CHARS) {
       text = candidate;

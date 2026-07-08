@@ -54,7 +54,7 @@ GOOD (game event): "Jim's desk booked a $0.99 loss on somebody else's deal, the 
 BAD (invents a plausible event — FAILS rule 5): "Nookplot fell 22% after reports of a delayed product launch and insider selling."
 BAD (crypto vocab — FAILS rule 1): "The token pumped on high onchain volume."
 
-TWEET VARIANT: one tweet, ≤ 270 characters, same voice. For a company story, include the real move (SYMBOL +/-N%) and @-mention the company's handle when it is the subject. Cashtags allowed. NEVER include a URL. Assume zero context — rule 5 applies hardest here.
+TWEET VARIANT: one tweet, ≤ 270 characters, same voice. For a company story, weave the company's $CASHTAG and @handle INTO the sentence — the cashtag standing in for the company's name and the @handle as the subject or object of the action, so both read as part of the story, NOT tacked on at the end. Cite the real move ($SYMBOL +/-N%). NEVER use hashtags (#). NEVER include a URL. Assume zero context — rule 5 applies hardest here. Example: "@lienfiapp interns celebrated $LFI's 44% pop straight into the payphone" — NOT "... into the payphone. $LFI @lienfiapp".
 
 OUTPUT: strict JSON matching the schema — dropTitle, exactly one dispatch (role "main", unique kebab-case dispatchKey, category from wire/floor_talk/ticker/positioning), tweetVariant, entityMentions, confirmedFacts, openQuestions. Headline ≤ 12 words. Body 2–3 complete sentences (every sentence must end with . ! or ?). No prose outside the JSON object.`,
   },
