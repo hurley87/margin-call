@@ -214,9 +214,11 @@ export default function Home() {
     if (!introSeen) {
       return (
         <IntroSequence
-          onComplete={(triggerLogin) => {
+          onComplete={() => {
+            // Land on the roster after the intro instead of popping the email
+            // modal immediately — let the user see the traders first, then
+            // choose "Enter by email" when they're ready.
             setIntroSeen(true);
-            if (triggerLogin) login();
           }}
         />
       );
