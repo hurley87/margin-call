@@ -1281,7 +1281,6 @@ function NewswirePanel({
           category: dispatch.category,
           body: dispatch.body,
           dealSeed: dispatch.dealSeed,
-          isFlash: drop.isFlash ?? false,
           subjects: drop.subjects ?? [],
           deals:
             activeDealsByHeadline.get(
@@ -1561,7 +1560,6 @@ type NewswirePostItem = {
   impact: string;
   category?: string;
   dealSeed?: NewswireDealSeed;
-  isFlash?: boolean;
   subjects?: WireSubject[];
   deals: Deal[];
 };
@@ -1668,7 +1666,6 @@ function NewswireList({
           body={item.body}
           category={item.category}
           dealSeed={item.dealSeed}
-          isFlash={item.isFlash}
           subjects={item.subjects}
           isFirst={index === 0}
           deals={item.deals}
@@ -1696,7 +1693,6 @@ function NewswireItem({
   body,
   category,
   dealSeed,
-  isFlash = false,
   subjects = [],
   isFirst,
   isNew = false,
@@ -1713,7 +1709,6 @@ function NewswireItem({
   body: string;
   category?: string;
   dealSeed?: NewswireDealSeed;
-  isFlash?: boolean;
   subjects?: WireSubject[];
   isFirst?: boolean;
   isNew?: boolean;
@@ -1758,11 +1753,6 @@ function NewswireItem({
             aria-label="latest"
             className="live-pulse inline-block h-1.5 w-1.5 rounded-full bg-[var(--t-green)]"
           />
-        )}
-        {isFlash && (
-          <span className="inline-flex items-center gap-0.5 border border-[var(--t-red)]/60 px-1 font-medium text-[var(--t-red)]">
-            ⚡ Flash
-          </span>
         )}
         <time className="tabular-nums text-[var(--t-muted)]">{time}</time>
         <span className="text-[var(--t-divider)]">/</span>
