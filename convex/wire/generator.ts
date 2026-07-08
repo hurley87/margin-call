@@ -114,8 +114,10 @@ async function runGenerator(
   const lastWorld = (lastDrop?.worldState ?? {}) as {
     topTraderId?: string;
     quietAngleKey?: string | null;
+    leadTokenSlug?: string | null;
   };
   const prevQuietAngleKey = lastWorld.quietAngleKey ?? null;
+  const prevLeadTokenSlug = lastWorld.leadTokenSlug ?? null;
 
   // Leaderboard #1 change → synthetic game event.
   const events: GameEventCtx[] = [...recentGameEvents];
@@ -176,6 +178,7 @@ async function runGenerator(
     dayPosture: posture,
     slot,
     prevQuietAngleKey,
+    prevLeadTokenSlug,
   });
 
   const arcBySlug = new Map(arcs.map((a) => [a.slug, a]));
@@ -500,6 +503,9 @@ async function runGenerator(
     primaryArcSlug: advance.primaryArcSlug,
     topTraderId: currentTop?.id ?? lastWorld.topTraderId ?? null,
     quietAngleKey: quietSlotAngle?.key ?? advance.quietAngle?.key ?? null,
+    // The token that led this drop; the next drop bars it from leading again.
+    leadTokenSlug:
+      lead.leadKind === "token" ? (lead.tokenLead?.slug ?? null) : null,
     floorTalkTruth: advance.floorTalkClaims.map((c) => ({
       text: c.text,
       isTrue: c.isTrue,

@@ -71,6 +71,8 @@ export interface WorldStateAdvanceInput {
   dayPosture: string;
   slot: number;
   prevQuietAngleKey?: string | null;
+  /** Token slug that led the previous drop; barred from leading again. */
+  prevLeadTokenSlug?: string | null;
 }
 
 export interface WorldStateAdvance {
@@ -245,9 +247,10 @@ export function computeWorldStateAdvance(
     dayPosture,
     slot,
     prevQuietAngleKey,
+    prevLeadTokenSlug,
   } = input;
 
-  const lead = rankAndSelectLead({ signals, events });
+  const lead = rankAndSelectLead({ signals, events, prevLeadTokenSlug });
 
   const signalBySlug = new Map(signals.map((s) => [s.slug, s]));
   const companyBySlug = new Map(companies.map((c) => [c.slug, c]));
