@@ -70,7 +70,7 @@ export function Nav({ containerClassName }: NavProps) {
         </div>
         <div className="flex items-center gap-3">
           <ExternalNavLink
-            href="https://x.com/davidbhurley"
+            href="https://x.com/playmargincall"
             aria-label="Open David Hurley on X"
           >
             <Twitter className="size-4" aria-hidden="true" />

@@ -811,7 +811,7 @@ function TopStatusBar({
             </button>
           )}
           <SoundControls />
-          <IconLink href="https://x.com/davidbhurley" label="X">
+          <IconLink href="https://x.com/playmargincall" label="X">
             <Twitter className="h-4 w-4" />
           </IconLink>
           <IconLink
@@ -1081,7 +1081,7 @@ function MobileAppBarMenu({
             }
           />
           <MobileMenuLink
-            href="https://x.com/davidbhurley"
+            href="https://x.com/playmargincall"
             label="X"
             icon={<Twitter className="h-4 w-4" />}
             onNavigate={() => setOpen(false)}
