@@ -19,8 +19,11 @@ import { MarketClosedButton } from "@/components/market-closed-button";
 import type { Id } from "../../../convex/_generated/dataModel";
 
 const STEP_LABELS: Record<string, string> = {
+  checking: "CHECKING WALLET & ALLOWANCE...",
   approving: "APPROVING USDC SPEND...",
+  confirmingApproval: "CONFIRMING APPROVAL ON-CHAIN...",
   creating: "CREATING DEAL ON-CHAIN...",
+  confirmingCreate: "CONFIRMING DEAL ON-CHAIN...",
   syncing: "SYNCING DEAL TO DATABASE...",
   done: "DEAL CREATED SUCCESSFULLY",
 };
@@ -39,11 +42,23 @@ const STAGE_LABELS: Record<DialogState, string> = {
   creating: "Send",
 };
 
-function createDealProgressWidth(step: string): "33%" | "66%" | "90%" | "100%" {
-  if (step === "approving") return "33%";
-  if (step === "creating") return "66%";
-  if (step === "syncing") return "90%";
-  return "100%";
+function createDealProgressWidth(step: string): string {
+  switch (step) {
+    case "checking":
+      return "12%";
+    case "approving":
+      return "28%";
+    case "confirmingApproval":
+      return "48%";
+    case "creating":
+      return "66%";
+    case "confirmingCreate":
+      return "86%";
+    case "syncing":
+      return "95%";
+    default:
+      return "100%";
+  }
 }
 
 function StageIndicator({
