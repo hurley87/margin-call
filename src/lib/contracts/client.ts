@@ -8,6 +8,9 @@ function buildPublicClient() {
   return createPublicClient({
     chain: CONTRACTS_CHAIN,
     transport: http(baseSepoliaRpcUrl),
+    // Base blocks land in ~2s; poll faster than viem's 4s default so receipt
+    // waits between the approve and createDeal txs resolve promptly.
+    pollingInterval: 1_000,
   });
 }
 
