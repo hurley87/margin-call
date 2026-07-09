@@ -408,7 +408,7 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     const authed = t.withIdentity(mockIdentity);
 
     await expect(
-      authed.mutation(api.deals.recordOnChainCreation, {
+      authed.action(api.deals.recordOnChainCreation, {
         onChainDealId: 9901,
         onChainTxHash: "0xunfunded",
         prompt: "Buy IBM",
@@ -418,32 +418,29 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     ).rejects.toThrow("Fund your wallet before creating a deal");
   });
 
-  it("recordOnChainCreation succeeds for funded desks and preserves idempotency", async () => {
+  it("recordOnChainCreation preserves idempotency via verified insert", async () => {
     const t = makeT();
     const dmId = await seedDeskManager(t, {
       subject: mockIdentity.subject,
       walletBalance: 1000,
     });
-    const authed = t.withIdentity(mockIdentity);
 
-    const dealId = await authed.mutation(api.deals.recordOnChainCreation, {
-      onChainDealId: 9902,
-      onChainTxHash: "0xfunded",
-      prompt: "Buy IBM",
-      potUsdc: 500,
-      entryCostUsdc: 50,
-    });
-
-    await t.run(async (ctx) => {
-      await ctx.db.patch(dmId as never, {
-        walletBalanceUsdc: 0,
-        updatedAt: Date.now(),
-      });
-    });
-
-    const replayedDealId = await authed.mutation(
-      api.deals.recordOnChainCreation,
+    const dealId = await t.mutation(
+      internal.deals.recordOnChainCreationVerified,
       {
+        deskManagerId: dmId,
+        onChainDealId: 9902,
+        onChainTxHash: "0xfunded",
+        prompt: "Buy IBM",
+        potUsdc: 500,
+        entryCostUsdc: 50,
+      }
+    );
+
+    const replayedDealId = await t.mutation(
+      internal.deals.recordOnChainCreationVerified,
+      {
+        deskManagerId: dmId,
         onChainDealId: 9902,
         onChainTxHash: "0xfunded",
         prompt: "Buy IBM",

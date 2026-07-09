@@ -1,5 +1,6 @@
-import { internalQuery, mutation } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { v } from "convex/values";
 import { wireSeason } from "./seeds/wireSeason01";
 import { upsertRegistryCompanies } from "./wire/registrySync";
 
@@ -10,8 +11,13 @@ import { upsertRegistryCompanies } from "./wire/registrySync";
  * weekly shape) and syncs the company roster from tokens.json. No fictional
  * entities or arcs — arcs spawn from real price/player streaks at run time.
  */
-export const importSeason = mutation({
+export const importSeason = internalMutation({
   args: {},
+  returns: v.object({
+    seasonId: v.id("narrativeSeasons"),
+    companiesSynced: v.number(),
+    companiesRemoved: v.number(),
+  }),
   handler: async (ctx) => {
     const now = Date.now();
 

@@ -6,7 +6,7 @@ import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import { parseAmountUsdc, type McpTraderWriteResult } from "./traders";
 import { assertTraderOwnedByDesk } from "../traders";
-import { assertPerActionCap } from "./limits";
+import { assertPerActionCap, usdcApproveAllowance } from "./limits";
 import {
   simulateUsdcApprove,
   simulateEscrowDepositFor,
@@ -17,7 +17,6 @@ import {
   USDC_SEPOLIA_ADDRESS,
   USDC_DECIMALS,
   MCP_CHAIN,
-  LARGE_APPROVE_ALLOWANCE,
   erc20Abi,
   escrowAbi,
   serializeCall,
@@ -181,12 +180,13 @@ export const fundPrepareForMcp = internalAction({
 
     const needsApprove = currentAllowance < amountAtomic;
     if (needsApprove) {
+      const approveAmount = usdcApproveAllowance(amountAtomic);
       await simulateUsdcApprove(
         publicClient,
         USDC_SEPOLIA_ADDRESS,
         deskAddress,
         ESCROW_ADDRESS,
-        LARGE_APPROVE_ALLOWANCE
+        approveAmount
       );
       calls.push({
         to: USDC_SEPOLIA_ADDRESS,
@@ -194,7 +194,7 @@ export const fundPrepareForMcp = internalAction({
         data: encodeFunctionData({
           abi: erc20Abi,
           functionName: "approve",
-          args: [ESCROW_ADDRESS, LARGE_APPROVE_ALLOWANCE],
+          args: [ESCROW_ADDRESS, approveAmount],
         }),
       });
     }

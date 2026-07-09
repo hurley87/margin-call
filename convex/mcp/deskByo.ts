@@ -69,6 +69,50 @@ function decodeEscrowEvent(
   }
 }
 
+export type DecodedDealCreated = {
+  dealId: bigint;
+  creator: string;
+  prompt: string;
+  pot: bigint;
+  entryCost: bigint;
+};
+
+/**
+ * Extract the DealCreated event emitted by the escrow contract from a receipt.
+ * Binds the tx to a desk by requiring the on-chain creator to match
+ * `expected.creator`, and (when given) that the event's dealId matches
+ * `expected.onChainDealId`. The event carries prompt/pot/entryCost so callers
+ * record what the chain actually escrowed without a follow-up read.
+ */
+export async function verifyDealCreatedInReceipt(
+  receipt: import("viem").TransactionReceipt,
+  expected: { creator: string; onChainDealId?: number }
+): Promise<DecodedDealCreated> {
+  const { decodeEventLog } = await import("viem");
+  let dealEvent: DecodedDealCreated | undefined;
+  for (const log of receipt.logs) {
+    const decoded = decodeEscrowEvent(log, decodeEventLog);
+    if (!decoded || decoded.eventName !== "DealCreated") continue;
+    dealEvent = decoded.args as DecodedDealCreated;
+    break;
+  }
+  if (!dealEvent) {
+    throw new Error(
+      "Transaction succeeded but no DealCreated event from the escrow contract was found — txHash does not match this deal"
+    );
+  }
+  if (
+    expected.onChainDealId !== undefined &&
+    Number(dealEvent.dealId) !== expected.onChainDealId
+  ) {
+    throw new Error("onChainDealId does not match the DealCreated event");
+  }
+  if (dealEvent.creator.toLowerCase() !== expected.creator.toLowerCase()) {
+    throw new Error("Deal creator does not match the expected desk wallet");
+  }
+  return dealEvent;
+}
+
 /** Require a Deposit event matching fund_trader intent payload. */
 export async function verifyEscrowDepositInReceipt(
   receipt: import("viem").TransactionReceipt,

@@ -15,13 +15,15 @@ type Stats = {
 /** Public leaderboard: all traders, sorted by total equity. No auth. */
 export const listTraderStats = query({
   args: { limit: v.optional(v.number()) },
+  returns: v.array(v.any()),
   handler: async (ctx, { limit = 50 }) => {
-    const traders = await ctx.db.query("traders").collect();
+    const cappedLimit = Math.min(Math.max(limit, 1), 100);
+    const traders = await ctx.db.query("traders").take(500);
     if (traders.length === 0) return [];
 
     const [outcomes, assets] = await Promise.all([
-      ctx.db.query("dealOutcomes").collect(),
-      ctx.db.query("assets").collect(),
+      ctx.db.query("dealOutcomes").take(5000),
+      ctx.db.query("assets").take(2000),
     ]);
 
     const statsMap = new Map<string, Stats>();
@@ -99,6 +101,6 @@ export const listTraderStats = query({
     leaderboard.sort(
       (a, b) => b.total_pnl - a.total_pnl || b.total_value - a.total_value
     );
-    return leaderboard.slice(0, limit);
+    return leaderboard.slice(0, cappedLimit);
   },
 });

@@ -64,6 +64,9 @@ export const traderLimit = createLimit("rl:trader", 30, "1 m");
  */
 export const mcpIpLimit = createLimit("rl:mcp-ip", 60, "1 m");
 
+/** /api/siwa/nonce — 20 requests per minute per IP */
+export const siwaNonceLimit = createLimit("rl:siwa-nonce", 20, "1 m");
+
 // ---------------------------------------------------------------------------
 // Helper: apply rate limit and return 429 if exceeded
 // ---------------------------------------------------------------------------

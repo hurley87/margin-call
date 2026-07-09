@@ -1,4 +1,5 @@
 import {
+  action,
   internalMutation,
   internalQuery,
   mutation,
@@ -7,6 +8,7 @@ import {
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
+import { internal } from "./_generated/api";
 import { isOwnDeskCreatedDeal } from "./lib/dealEntryEligibility";
 import { clampLimit } from "./lib/limits";
 import { assertTradingHoursWithCloseGrace } from "./lib/tradingHours";
@@ -125,40 +127,23 @@ export const listMine = query({
   },
 });
 
-// ── Public mutations (auth-checked) ────────────────────────────────────────
+// ── Public deal recording (Privy browser path) ─────────────────────────────
 
-/**
- * Public: record a user-created on-chain deal in Convex.
- * Idempotent on `onChainDealId` — repeat calls return the existing deal id.
- */
-export const recordOnChainCreation = mutation({
+/** Internal: idempotent insert after on-chain DealCreated verification. */
+export const recordOnChainCreationVerified = internalMutation({
   args: {
+    deskManagerId: v.id("deskManagers"),
     onChainDealId: v.number(),
     onChainTxHash: v.string(),
     prompt: v.string(),
     potUsdc: v.number(),
     entryCostUsdc: v.number(),
     sourceHeadline: v.optional(v.string()),
-    /**
-     * Optional Wire Deal Seed this deal was created from. When provided, a
-     * wireDealSeedLinks row is inserted in the same mutation. Multiple deals
-     * may link to the same seed — seeds are never marked taken.
-     */
     wireDealSeedId: v.optional(v.id("wireDealSeeds")),
   },
-  handler: async (ctx, args) => {
-    // Trading-hours guard with +60s close grace (see trading-hours spec §5.1).
-    // Rejects hard pre-open; on-chain settlements that surface just past
-    // 16:00 ET within the grace window are still accepted.
-    assertTradingHoursWithCloseGrace();
-
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthenticated");
-
-    const dm = await ctx.db
-      .query("deskManagers")
-      .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
-      .unique();
+  returns: v.id("deals"),
+  handler: async (ctx, args): Promise<Id<"deals">> => {
+    const dm = await ctx.db.get(args.deskManagerId);
     if (!dm) throw new Error("Desk manager not found");
 
     const existing = await ctx.db
@@ -169,13 +154,9 @@ export const recordOnChainCreation = mutation({
       .unique();
     if (existing) return existing._id;
 
-    if ((dm.walletBalanceUsdc ?? 0) <= 0) {
-      throw new Error("Fund your wallet before creating a deal");
-    }
-
     const now = Date.now();
     const dealId = await ctx.db.insert("deals", {
-      creatorDeskManagerId: dm._id,
+      creatorDeskManagerId: args.deskManagerId,
       creatorAddress: dm.walletAddress,
       creatorType: "desk_manager",
       prompt: args.prompt,
@@ -194,7 +175,7 @@ export const recordOnChainCreation = mutation({
       await ctx.db.insert("wireDealSeedLinks", {
         seedId: args.wireDealSeedId,
         dealId,
-        deskManagerId: dm._id,
+        deskManagerId: args.deskManagerId,
         createdAt: now,
       });
     }
@@ -202,6 +183,81 @@ export const recordOnChainCreation = mutation({
     return dealId;
   },
 });
+
+export const findByOnChainDealIdInternal = internalQuery({
+  args: { onChainDealId: v.number() },
+  returns: v.union(v.id("deals"), v.null()),
+  handler: async (ctx, { onChainDealId }) => {
+    const deal = await ctx.db
+      .query("deals")
+      .withIndex("byOnChainDealId", (q) => q.eq("onChainDealId", onChainDealId))
+      .unique();
+    return deal?._id ?? null;
+  },
+});
+
+/**
+ * Public: record a user-created on-chain deal in Convex after verifying the
+ * createDeal tx on-chain. Idempotent on `onChainDealId`.
+ */
+export const recordOnChainCreation = action({
+  args: {
+    onChainDealId: v.number(),
+    onChainTxHash: v.string(),
+    prompt: v.string(),
+    potUsdc: v.number(),
+    entryCostUsdc: v.number(),
+    sourceHeadline: v.optional(v.string()),
+    wireDealSeedId: v.optional(v.id("wireDealSeeds")),
+  },
+  returns: v.id("deals"),
+  handler: async (ctx, args): Promise<Id<"deals">> => {
+    assertTradingHoursWithCloseGrace();
+
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthenticated");
+
+    const dm = await ctx.runQuery(internal.deskManagers.getBySubject, {
+      subject: identity.subject,
+    });
+    if (!dm) throw new Error("Desk manager not found");
+    if (!dm.walletAddress) {
+      throw new Error("Desk wallet not on file");
+    }
+
+    const existingId = await ctx.runQuery(
+      internal.deals.findByOnChainDealIdInternal,
+      { onChainDealId: args.onChainDealId }
+    );
+    if (existingId) return existingId;
+
+    if ((dm.walletBalanceUsdc ?? 0) <= 0) {
+      throw new Error("Fund your wallet before creating a deal");
+    }
+
+    const verified = await ctx.runAction(
+      internal.mcp.dealCreatedVerify.verifyDealCreatedFromTx,
+      {
+        txHash: args.onChainTxHash,
+        onChainDealId: args.onChainDealId,
+        expectedCreator: dm.walletAddress,
+      }
+    );
+
+    return await ctx.runMutation(internal.deals.recordOnChainCreationVerified, {
+      deskManagerId: dm._id,
+      onChainDealId: args.onChainDealId,
+      onChainTxHash: args.onChainTxHash,
+      prompt: verified.prompt,
+      potUsdc: verified.potUsdc,
+      entryCostUsdc: verified.entryCostUsdc,
+      sourceHeadline: args.sourceHeadline,
+      wireDealSeedId: args.wireDealSeedId,
+    });
+  },
+});
+
+// ── Public mutations (auth-checked) ────────────────────────────────────────
 
 /** Public: set status of a user-created deal by its on-chain id. */
 export const setStatusByOnChainId = mutation({

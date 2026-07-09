@@ -321,7 +321,8 @@ function LandingScreen({ onLogin }: { onLogin: () => void }) {
       key: t.id,
       name: t.name,
       src: t.profileImageUrl,
-      imageStatus: t.imageStatus ?? "ready",
+      // `ready` array is pre-filtered to imageStatus === "ready".
+      imageStatus: "ready" as const,
       traits: t.traits ? pickFunTraits(t.traits as PublicPortraitTraits) : [],
     }));
   }, [leaderboard]);

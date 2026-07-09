@@ -76,11 +76,12 @@ describe("recordOnChainCreation: trading-hours enforcement", () => {
     vi.setSystemTime(new Date(TUE_10AM_ET));
 
     const t = convexTest(schema, modules);
-    await seedDeskManager(t);
+    const dmId = await seedDeskManager(t);
 
-    const dealId = await asDeskManager(t).mutation(
-      api.deals.recordOnChainCreation,
+    const dealId = await t.mutation(
+      internal.deals.recordOnChainCreationVerified,
       {
+        deskManagerId: dmId,
         onChainDealId: 1001,
         onChainTxHash: "0xabc",
         prompt: "Buy IBM",
@@ -99,7 +100,7 @@ describe("recordOnChainCreation: trading-hours enforcement", () => {
     await seedDeskManager(t);
 
     await expect(
-      asDeskManager(t).mutation(api.deals.recordOnChainCreation, {
+      asDeskManager(t).action(api.deals.recordOnChainCreation, {
         onChainDealId: 1002,
         onChainTxHash: "0xdef",
         prompt: "Buy IBM",
@@ -113,11 +114,12 @@ describe("recordOnChainCreation: trading-hours enforcement", () => {
     vi.setSystemTime(new Date(TUE_CLOSE_PLUS_30S));
 
     const t = convexTest(schema, modules);
-    await seedDeskManager(t);
+    const dmId = await seedDeskManager(t);
 
-    const dealId = await asDeskManager(t).mutation(
-      api.deals.recordOnChainCreation,
+    const dealId = await t.mutation(
+      internal.deals.recordOnChainCreationVerified,
       {
+        deskManagerId: dmId,
         onChainDealId: 1003,
         onChainTxHash: "0xghi",
         prompt: "Buy IBM",
@@ -135,7 +137,7 @@ describe("recordOnChainCreation: trading-hours enforcement", () => {
     await seedDeskManager(t);
 
     await expect(
-      asDeskManager(t).mutation(api.deals.recordOnChainCreation, {
+      asDeskManager(t).action(api.deals.recordOnChainCreation, {
         onChainDealId: 1004,
         onChainTxHash: "0xjkl",
         prompt: "Buy IBM",

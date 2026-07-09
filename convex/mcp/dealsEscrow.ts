@@ -7,7 +7,7 @@ import type { Doc, Id } from "../_generated/dataModel";
 import { parseAmountUsdc } from "./traders";
 import type { McpDealWriteResult } from "./deals";
 import { assertTradingHours } from "../lib/tradingHours";
-import { assertPerActionCap } from "./limits";
+import { assertPerActionCap, usdcApproveAllowance } from "./limits";
 import {
   simulateUsdcApprove,
   simulateEscrowCreateDeal,
@@ -19,7 +19,6 @@ import {
   USDC_DECIMALS,
   MCP_CHAIN,
   DEAL_STATUS_CLOSED,
-  LARGE_APPROVE_ALLOWANCE,
   erc20Abi,
   escrowAbi,
   serializeCall,
@@ -28,6 +27,7 @@ import {
 import {
   requireDeskWallet,
   verifyTxSucceeded,
+  verifyDealCreatedInReceipt,
   getBaseSepoliaPublicClient,
 } from "./deskByo";
 import { shapePrepareResult } from "./intents";
@@ -111,12 +111,13 @@ export const createPrepareForMcp = internalAction({
 
     const needsApprove = currentAllowance < potAtomic;
     if (needsApprove) {
+      const approveAmount = usdcApproveAllowance(potAtomic);
       await simulateUsdcApprove(
         publicClient,
         USDC_SEPOLIA_ADDRESS,
         deskAddress,
         ESCROW_ADDRESS,
-        LARGE_APPROVE_ALLOWANCE
+        approveAmount
       );
       calls.push({
         to: USDC_SEPOLIA_ADDRESS,
@@ -124,7 +125,7 @@ export const createPrepareForMcp = internalAction({
         data: encodeFunctionData({
           abi: erc20Abi,
           functionName: "approve",
-          args: [ESCROW_ADDRESS, LARGE_APPROVE_ALLOWANCE],
+          args: [ESCROW_ADDRESS, approveAmount],
         }),
       });
     }
@@ -216,51 +217,13 @@ export const createConfirmForMcp = internalAction({
 
     const { receipt } = await verifyTxSucceeded(args.txHash);
 
-    const { decodeEventLog } = await import("viem");
-
-    // Bind the tx to this intent: only accept a DealCreated event emitted by
-    // our escrow contract, and require the on-chain creator to be the desk
-    // wallet so a desk cannot confirm with an unrelated/forged tx. The event
-    // also carries prompt/pot/entryCost so we record what the chain actually
-    // escrowed without a follow-up getDeal read.
-    const expectedCreator = payload.walletAddress.toLowerCase();
-    let dealEvent:
-      | {
-          dealId: bigint;
-          creator: string;
-          prompt: string;
-          pot: bigint;
-          entryCost: bigint;
-        }
-      | undefined;
-    for (const log of receipt.logs) {
-      if (log.address.toLowerCase() !== ESCROW_ADDRESS.toLowerCase()) {
-        continue;
-      }
-      try {
-        const decoded = decodeEventLog({
-          abi: escrowAbi,
-          data: log.data,
-          topics: log.topics,
-        });
-        if (decoded.eventName === "DealCreated") {
-          dealEvent = decoded.args as typeof dealEvent;
-          break;
-        }
-      } catch {
-        // not our event
-      }
-    }
-    if (!dealEvent) {
-      throw new Error(
-        "createDeal succeeded but no DealCreated event from the escrow contract was found — txHash does not match this intent"
-      );
-    }
-    if (dealEvent.creator.toLowerCase() !== expectedCreator) {
-      throw new Error(
-        "DealCreated creator does not match the desk wallet for this intent"
-      );
-    }
+    // Bind the tx to this intent: require a DealCreated event from our escrow
+    // whose creator is the desk wallet, so a desk cannot confirm with an
+    // unrelated/forged tx. The event carries prompt/pot/entryCost so we record
+    // what the chain actually escrowed without a follow-up getDeal read.
+    const dealEvent = await verifyDealCreatedInReceipt(receipt, {
+      creator: payload.walletAddress,
+    });
 
     const onChainDealId = Number(dealEvent.dealId);
 

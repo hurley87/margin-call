@@ -1,11 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createNonce } from "@/lib/siwa/verify";
+import {
+  checkRateLimit,
+  getClientIdentifier,
+  siwaNonceLimit,
+} from "@/lib/rate-limit";
 
 /**
  * POST /api/siwa/nonce
  * Issues a SIWA nonce for agent authentication challenges.
  */
 export async function POST(request: NextRequest) {
+  const limited = await checkRateLimit(
+    siwaNonceLimit,
+    getClientIdentifier(request)
+  );
+  if (limited) return limited;
+
   try {
     const body = await request.json();
     const { agent_id, address } = body as {

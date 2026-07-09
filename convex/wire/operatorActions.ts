@@ -1,7 +1,7 @@
 "use node";
 
 import { action } from "../_generated/server";
-import { internal, api } from "../_generated/api";
+import { internal } from "../_generated/api";
 import { assertOperatorSubject } from "./_operatorUtils";
 
 type GenerateResult =
@@ -52,7 +52,7 @@ export const resetNarrativeState = action({
     )) as ResetResult["cleared"];
 
     const imported = (await ctx.runMutation(
-      api.seasons.importSeason,
+      internal.seasons.importSeason,
       {}
     )) as ResetResult["imported"];
 

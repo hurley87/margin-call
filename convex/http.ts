@@ -13,6 +13,7 @@ import {
   parseJsonBody,
   THIRTY_DAYS_MS,
 } from "./mcp/httpHelpers";
+import { authorizeMcpRequest } from "./mcp/deskBinding";
 
 /**
  * Convex HTTP router for server-to-server endpoints. Routes under /mcp/* are
@@ -285,13 +286,17 @@ http.route({
   path: "/mcp/desks/sync-wallet",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
-    const authErr = authorizeMcpServiceRequest(req);
-    if (authErr) return authErr;
-
     const body = await parseJsonBody<{
       deskManagerId?: string;
     }>(req);
     if (!body?.deskManagerId) return badRequest("deskManagerId required");
+
+    const authErr = await authorizeMcpRequest(
+      req,
+      body.deskManagerId,
+      authorizeMcpServiceRequest
+    );
+    if (authErr) return authErr;
 
     const deskManagerId = body.deskManagerId as Id<"deskManagers">;
     const startedAt = Date.now();
@@ -463,14 +468,18 @@ http.route({
   path: "/mcp/desks/set-wallet",
   method: "POST",
   handler: httpAction(async (ctx, req) => {
-    const authErr = authorizeMcpServiceRequest(req);
-    if (authErr) return authErr;
-
     const body = await parseJsonBody<Record<string, unknown>>(req);
     if (!body) return badRequest("Invalid JSON body");
 
     const parsed = parseSetDeskWalletBody(body);
     if (!parsed.ok) return badRequest(parsed.message);
+
+    const authErr = await authorizeMcpRequest(
+      req,
+      String(parsed.parsed.deskManagerId),
+      authorizeMcpServiceRequest
+    );
+    if (authErr) return authErr;
 
     const startedAt = Date.now();
     let result: Record<string, unknown> | undefined;

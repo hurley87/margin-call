@@ -1,6 +1,7 @@
 import { httpAction, type ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import { authorizeMcpRequest } from "./deskBinding";
 
 export type McpIntentId = Id<"mcpIntents">;
 
@@ -24,7 +25,7 @@ export function badRequest(msg: string) {
 }
 
 /** Length-independent constant-time string compare (no Node crypto in runtime). */
-function constantTimeEquals(a: string, b: string): boolean {
+export function constantTimeEquals(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
   let mismatch = 0;
   for (let i = 0; i < a.length; i++) {
@@ -101,9 +102,6 @@ export type McpWriteRouteSpec = {
 
 export function mcpWriteRoute(spec: McpWriteRouteSpec) {
   return httpAction(async (ctx, req) => {
-    const authErr = authorizeMcpServiceRequest(req);
-    if (authErr) return authErr;
-
     const raw = await parseJsonBody<Record<string, unknown>>(req);
     if (!raw) return badRequest("Invalid JSON body");
 
@@ -111,6 +109,13 @@ export function mcpWriteRoute(spec: McpWriteRouteSpec) {
     if (!parsedBody.ok) return badRequest(parsedBody.message);
 
     const { deskManagerId, idempotencyKey, requestBody } = parsedBody.parsed;
+
+    const authErr = await authorizeMcpRequest(
+      req,
+      String(deskManagerId),
+      authorizeMcpServiceRequest
+    );
+    if (authErr) return authErr;
     const startedAt = Date.now();
     const minCreatedAt = startedAt - IDEMPOTENCY_TTL_MS;
 
@@ -200,9 +205,6 @@ export type McpConfirmRouteSpec = {
 /** Confirm treasury intents after Base MCP execution (no idempotency key). */
 export function mcpConfirmRoute(spec: McpConfirmRouteSpec) {
   return httpAction(async (ctx, req) => {
-    const authErr = authorizeMcpServiceRequest(req);
-    if (authErr) return authErr;
-
     const raw = await parseJsonBody<Record<string, unknown>>(req);
     if (!raw) return badRequest("Invalid JSON body");
 
@@ -210,6 +212,13 @@ export function mcpConfirmRoute(spec: McpConfirmRouteSpec) {
     if (!parsedBody.ok) return badRequest(parsedBody.message);
 
     const { deskManagerId, intentId, txHash } = parsedBody.parsed;
+
+    const authErr = await authorizeMcpRequest(
+      req,
+      String(deskManagerId),
+      authorizeMcpServiceRequest
+    );
+    if (authErr) return authErr;
     const startedAt = Date.now();
 
     const outcome = await spec.execute(ctx, parsedBody.parsed);
@@ -249,13 +258,17 @@ export type McpReadRouteSpec<R> = {
 
 export function mcpReadRoute<R>(spec: McpReadRouteSpec<R>) {
   return httpAction(async (ctx, req) => {
-    const authErr = authorizeMcpServiceRequest(req);
-    if (authErr) return authErr;
-
     const body = await parseJsonBody<McpReadBody>(req);
     if (!body?.deskManagerId) return badRequest("deskManagerId required");
 
     const deskManagerId = body.deskManagerId as Id<"deskManagers">;
+
+    const authErr = await authorizeMcpRequest(
+      req,
+      String(deskManagerId),
+      authorizeMcpServiceRequest
+    );
+    if (authErr) return authErr;
     const startedAt = Date.now();
     const args = spec.buildArgs(body, startedAt);
 

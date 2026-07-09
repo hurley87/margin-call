@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createConvexAdminClient } from "@/lib/convex/server-client";
-import { validateMcpKey } from "@/lib/mcp/proxy";
+import { applyMcpRateLimits, validateMcpKey } from "@/lib/mcp/proxy";
+import {
+  MCP_DESK_BINDING_HEADER,
+  signMcpDeskBinding,
+} from "@/lib/mcp/desk-binding";
 import { internal } from "../../../../../../convex/_generated/api";
 import type { Id } from "../../../../../../convex/_generated/dataModel";
 
@@ -13,10 +17,9 @@ const CONVEX_URL = process.env.NEXT_PUBLIC_CONVEX_URL;
  * `syncWalletFromChainForMcp` which reads USDC balanceOf on-chain authoritatively.
  */
 export async function GET(request: NextRequest) {
-  const authResult = await validateMcpKey(request);
-  if (authResult instanceof NextResponse) return authResult;
-
-  const { deskManagerId } = authResult;
+  const rateLimitResult = await applyMcpRateLimits(request);
+  if (rateLimitResult instanceof NextResponse) return rateLimitResult;
+  const { deskManagerId } = rateLimitResult;
 
   if (!SERVICE_TOKEN || !CONVEX_URL) {
     return NextResponse.json(
@@ -61,6 +64,7 @@ export async function GET(request: NextRequest) {
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${SERVICE_TOKEN}`,
+        [MCP_DESK_BINDING_HEADER]: signMcpDeskBinding(String(deskManagerId)),
       },
       body: JSON.stringify({
         deskManagerId: String(deskManagerId),

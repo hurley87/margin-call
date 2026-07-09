@@ -12,16 +12,26 @@ import type { Doc } from "../_generated/dataModel";
  * wipeout email notifications) are removed. On-chain state is untouched.
  *
  * Run via:
- *   npx convex run ops/wipeSmokeTraders:wipeSmokeTraders '{}'                 # dry-run
- *   npx convex run ops/wipeSmokeTraders:wipeSmokeTraders '{"confirm":true}'   # execute
- *   npx convex run ops/wipeSmokeTraders:wipeSmokeTraders '{"prefix":"Test","confirm":true}'
+ *   npx convex run ops/wipeSmokeTraders:wipeSmokeTraders '{}'
+ *   npx convex run ops/wipeSmokeTraders:wipeSmokeTraders '{"confirm":true,"secret":"<GAME_RESET_ADMIN_SECRET>"}'
  */
 export const wipeSmokeTraders = internalMutation({
   args: {
     prefix: v.optional(v.string()),
     confirm: v.optional(v.boolean()),
+    secret: v.optional(v.string()),
   },
-  handler: async (ctx, { prefix, confirm }) => {
+  handler: async (ctx, { prefix, confirm, secret }) => {
+    const expected = process.env.GAME_RESET_ADMIN_SECRET;
+    if (!expected) {
+      throw new Error(
+        "GAME_RESET_ADMIN_SECRET is not configured in Convex env"
+      );
+    }
+    if (secret !== expected) {
+      throw new Error("Invalid reset secret");
+    }
+
     const namePrefix = prefix ?? "Smoke";
     const allTraders = await ctx.db.query("traders").collect();
     const matches = allTraders.filter((t) => t.name.startsWith(namePrefix));

@@ -10,7 +10,7 @@ const modules = import.meta.glob("../../convex/**/*.ts");
 describe("seasons.importSeason", () => {
   it("seeds the season and syncs one company entity per registry token", async () => {
     const t = convexTest(schema, modules);
-    const result = await t.mutation(api.seasons.importSeason, {});
+    const result = await t.mutation(internal.seasons.importSeason, {});
 
     expect(result.seasonId).toBeTruthy();
     expect(result.companiesSynced).toBe(TOKEN_REGISTRY.length);
@@ -24,8 +24,8 @@ describe("seasons.importSeason", () => {
 
   it("is idempotent — a second run creates no duplicate entities", async () => {
     const t = convexTest(schema, modules);
-    const first = await t.mutation(api.seasons.importSeason, {});
-    const second = await t.mutation(api.seasons.importSeason, {});
+    const first = await t.mutation(internal.seasons.importSeason, {});
+    const second = await t.mutation(internal.seasons.importSeason, {});
 
     expect(second.seasonId).toEqual(first.seasonId);
     expect(second.companiesRemoved).toBe(0);

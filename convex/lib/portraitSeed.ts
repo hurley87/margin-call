@@ -14,7 +14,7 @@ export const PORTRAIT_METADATA_VERSION = 4;
 
 export type PortraitTier = "Common" | "Uncommon" | "Rare" | "Legendary";
 
-const TIER_RANK: Record<PortraitTier, number> = {
+export const TIER_RANK: Record<PortraitTier, number> = {
   Common: 0,
   Uncommon: 1,
   Rare: 2,
