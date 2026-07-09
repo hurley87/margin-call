@@ -18,10 +18,6 @@ export const MCP_CHAIN = "base-sepolia" as const;
 /** MarginCallEscrow deal status: 0 = Open, 1 = Closed. */
 export const DEAL_STATUS_CLOSED = 1;
 
-/** Large allowance for rare one-time approve before fund/create_deal. */
-export const LARGE_APPROVE_ALLOWANCE =
-  BigInt(10_000_000) * BigInt(USDC_DECIMALS);
-
 export const PREPARE_INSTRUCTIONS =
   "Execute via Base MCP send_calls with chain and calls, approve in Base Account, then call confirm_intent with intentId and txHash.";
 

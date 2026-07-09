@@ -1,4 +1,4 @@
-import { internalQuery, mutation, query } from "./_generated/server";
+import { internalQuery, internalMutation, query } from "./_generated/server";
 import type { QueryCtx } from "./_generated/server";
 import { v } from "convex/values";
 import { systemPromptSeeds } from "./seeds/systemPrompts";
@@ -31,8 +31,12 @@ export const getActiveByName = query({
 });
 
 /** Idempotent seed for the systemPrompts table. Run via: npx convex run systemPrompts:seed */
-export const seed = mutation({
+export const seed = internalMutation({
   args: {},
+  returns: v.object({
+    inserted: v.number(),
+    updated: v.number(),
+  }),
   handler: async (ctx) => {
     const now = Date.now();
     let inserted = 0;

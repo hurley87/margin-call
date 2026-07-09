@@ -1,6 +1,8 @@
 import {
   type PublicPortraitTraits,
+  type PortraitTier,
   SURFACED_SLOTS,
+  TIER_RANK,
   TRAIT_META,
 } from "../../convex/lib/portraitSeed";
 
@@ -23,21 +25,15 @@ export function humanizePortraitTraitValue(
 export function portraitTraitTier(
   slotKey: keyof PublicPortraitTraits,
   id: string
-): string {
+): PortraitTier {
   return TRAIT_META[slotKey]?.[id]?.tier ?? "Common";
 }
 
 export type FunTrait = {
   key: keyof PublicPortraitTraits;
+  id: string;
   label: string;
-  tier: string;
-};
-
-const TIER_RANK: Record<string, number> = {
-  Legendary: 3,
-  Rare: 2,
-  Uncommon: 1,
-  Common: 0,
+  tier: PortraitTier;
 };
 
 /** Default/boring trait values that carry no character — skipped when picking. */
@@ -75,8 +71,7 @@ export function pickFunTraits(
       })
       .filter((t) => !BORING_TRAIT_IDS.has(t.id))
       // Stable sort by tier desc keeps the priority order for equal tiers.
-      .sort((a, b) => (TIER_RANK[b.tier] ?? 0) - (TIER_RANK[a.tier] ?? 0))
+      .sort((a, b) => TIER_RANK[b.tier] - TIER_RANK[a.tier])
       .slice(0, max)
-      .map(({ key, label, tier }) => ({ key, label, tier }))
   );
 }

@@ -2,7 +2,7 @@
 import { describe, it, expect } from "vitest";
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
-import { api } from "../../convex/_generated/api";
+import { api, internal } from "../../convex/_generated/api";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
@@ -11,7 +11,7 @@ const modules = import.meta.glob("../../convex/**/*.ts");
 describe("marketNarratives.feedDrops", () => {
   it("returns drops without dealSeed and with the tweet variant", async () => {
     const t = convexTest(schema, modules);
-    await t.mutation(api.seasons.importSeason, {});
+    await t.mutation(internal.seasons.importSeason, {});
 
     const seasonId = await t.run(async (ctx) => {
       const s = await ctx.db.query("narrativeSeasons").first();

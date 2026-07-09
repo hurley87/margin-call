@@ -42,23 +42,17 @@ const STAGE_LABELS: Record<DialogState, string> = {
   creating: "Send",
 };
 
+const STEP_PROGRESS_WIDTH: Record<string, string> = {
+  checking: "12%",
+  approving: "28%",
+  confirmingApproval: "48%",
+  creating: "66%",
+  confirmingCreate: "86%",
+  syncing: "95%",
+};
+
 function createDealProgressWidth(step: string): string {
-  switch (step) {
-    case "checking":
-      return "12%";
-    case "approving":
-      return "28%";
-    case "confirmingApproval":
-      return "48%";
-    case "creating":
-      return "66%";
-    case "confirmingCreate":
-      return "86%";
-    case "syncing":
-      return "95%";
-    default:
-      return "100%";
-  }
+  return STEP_PROGRESS_WIDTH[step] ?? "100%";
 }
 
 function StageIndicator({

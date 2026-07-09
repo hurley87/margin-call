@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { erc20Abi, parseUnits, decodeEventLog, maxUint256 } from "viem";
-import { useMutation } from "convex/react";
+import { useMutation, useAction } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -46,7 +46,7 @@ export function useCreateDeal() {
   const { user } = usePrivy();
   const walletAddress = getEmbeddedEvmWalletAddress(user) ?? undefined;
 
-  const recordOnChainCreation = useMutation(api.deals.recordOnChainCreation);
+  const recordOnChainCreation = useAction(api.deals.recordOnChainCreation);
 
   const createDeal = useCallback(
     async (

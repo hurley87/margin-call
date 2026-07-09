@@ -10,6 +10,10 @@ import {
   getClientIdentifier,
   mcpIpLimit,
 } from "@/lib/rate-limit";
+import {
+  MCP_DESK_BINDING_HEADER,
+  signMcpDeskBinding,
+} from "@/lib/mcp/desk-binding";
 
 const API_KEY_SECRET = process.env.MCP_API_KEY_SECRET;
 const SERVICE_TOKEN = process.env.MCP_SERVICE_TOKEN;
@@ -100,6 +104,7 @@ async function proxyMcpUpstream(
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${SERVICE_TOKEN}`,
+        [MCP_DESK_BINDING_HEADER]: signMcpDeskBinding(String(deskManagerId)),
       },
       body: JSON.stringify(body),
     });
@@ -164,7 +169,7 @@ export interface ProxyMcpWriteOptions {
  * Apply IP + per-desk rate limits for an MCP request. Returns a 429
  * NextResponse when limited, or `{ deskManagerId }` on success.
  */
-async function applyMcpRateLimits(
+export async function applyMcpRateLimits(
   request: NextRequest
 ): Promise<{ deskManagerId: Id<"deskManagers"> } | NextResponse> {
   // Pre-auth IP rate limit: protects against malformed-key floods.

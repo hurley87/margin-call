@@ -1,6 +1,7 @@
 import type { ActionCtx } from "../_generated/server";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
+import { USDC_DECIMALS } from "./escrowConstants";
 
 /**
  * Default per-action USDC ceiling when a desk has not set `perActionCapUsdc`.
@@ -8,6 +9,14 @@ import type { Id } from "../_generated/dataModel";
  * ceiling that protects against a single runaway prompt from Claude.
  */
 export const DEFAULT_PER_ACTION_CAP_USDC = 500;
+
+/** Scoped ERC20 approve amount: required + 10 USDC headroom, capped at 500 USDC. */
+export function usdcApproveAllowance(requiredAtomic: bigint): bigint {
+  const headroom = BigInt(10) * BigInt(USDC_DECIMALS);
+  const cap = BigInt(DEFAULT_PER_ACTION_CAP_USDC) * BigInt(USDC_DECIMALS);
+  const target = requiredAtomic + headroom;
+  return target > cap ? cap : target;
+}
 
 /**
  * Resolve the per-action USDC cap for a tool on a given desk. Honors the

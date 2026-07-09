@@ -4,12 +4,41 @@ import type { Doc } from "./_generated/dataModel";
 
 // ── Public queries ─────────────────────────────────────────────────────────
 
-/** Get all outcomes for a deal — auth-checked. */
+/** Get all outcomes for a deal — creator desk or participating trader owner only. */
 export const listByDeal = query({
   args: { dealId: v.id("deals") },
+  returns: v.array(v.any()),
   handler: async (ctx, { dealId }) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
+
+    const deal = await ctx.db.get(dealId);
+    if (!deal) return [];
+
+    const dm = await ctx.db
+      .query("deskManagers")
+      .withIndex("bySubject", (q) => q.eq("subject", identity.subject))
+      .unique();
+
+    let allowed = dm != null && deal.creatorDeskManagerId === dm._id;
+
+    if (!allowed) {
+      const myTraders = await ctx.db
+        .query("traders")
+        .withIndex("byOwner", (q) => q.eq("ownerSubject", identity.subject))
+        .collect();
+      if (myTraders.length > 0) {
+        const myTraderIds = new Set(myTraders.map((t) => String(t._id)));
+        const entries = await ctx.db
+          .query("dealEntries")
+          .withIndex("byDeal", (q) => q.eq("dealId", dealId))
+          .collect();
+        allowed = entries.some((e) => myTraderIds.has(String(e.traderId)));
+      }
+    }
+
+    if (!allowed) return [];
+
     const outcomes = await ctx.db
       .query("dealOutcomes")
       .withIndex("byDeal", (q) => q.eq("dealId", dealId))
