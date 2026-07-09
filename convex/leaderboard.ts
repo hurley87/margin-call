@@ -1,8 +1,36 @@
+import type { Doc } from "./_generated/dataModel";
+import type { QueryCtx } from "./_generated/server";
 import { query } from "./_generated/server";
 import { v } from "convex/values";
-import { resolveTraderProfileImageUrl } from "./lib/profileImage";
+import {
+  resolveReadyProfileImageUrl,
+  resolveTraderProfileImageUrl,
+} from "./lib/profileImage";
 import { readPublicTraits } from "./lib/portraitSeed";
 import { isMcpSubject } from "./mcp/subject";
+
+const FEATURED_TRADER_NAMES = ["HurlingAlpha", "Wolf"] as const;
+const LANDING_ROSTER_DEFAULT_LIMIT = 4;
+const LANDING_ROSTER_MAX_LIMIT = 12;
+const LANDING_ROSTER_CANDIDATE_LIMIT = 48;
+
+const publicTraitsValidator = v.union(
+  v.object({
+    expression: v.string(),
+    fieldInk: v.string(),
+    attire: v.string(),
+    vice: v.string(),
+    fieldFlourish: v.string(),
+  }),
+  v.null()
+);
+
+const landingRosterTraderValidator = v.object({
+  id: v.id("traders"),
+  name: v.string(),
+  profileImageUrl: v.string(),
+  traits: publicTraitsValidator,
+});
 
 type Stats = {
   pnl: number;
@@ -11,6 +39,86 @@ type Stats = {
   wipeouts: number;
   deals: number;
 };
+
+async function findFeaturedTrader(
+  ctx: QueryCtx,
+  name: (typeof FEATURED_TRADER_NAMES)[number]
+): Promise<Doc<"traders"> | null> {
+  const normalizedName = name.toLowerCase();
+  const normalizedMatch = await ctx.db
+    .query("traders")
+    .withIndex("byNameLower", (q) => q.eq("nameLower", normalizedName))
+    .first();
+  if (normalizedMatch) return normalizedMatch;
+
+  // Legacy traders may predate `nameLower`; preserve the existing named pins.
+  return await ctx.db
+    .query("traders")
+    .withIndex("byName", (q) => q.eq("name", name))
+    .first();
+}
+
+/**
+ * Public landing roster: featured portrait-ready traders followed by the
+ * newest ready portraits. This intentionally excludes gameplay aggregates.
+ */
+export const listLandingRoster = query({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(landingRosterTraderValidator),
+  handler: async (ctx, { limit = LANDING_ROSTER_DEFAULT_LIMIT }) => {
+    const normalizedLimit = Number.isFinite(limit)
+      ? Math.trunc(limit)
+      : LANDING_ROSTER_DEFAULT_LIMIT;
+    const cappedLimit = Math.min(
+      Math.max(normalizedLimit, 1),
+      LANDING_ROSTER_MAX_LIMIT
+    );
+    const [featuredTraders, recentReadyTraders] = await Promise.all([
+      Promise.all(
+        FEATURED_TRADER_NAMES.map((name) => findFeaturedTrader(ctx, name))
+      ),
+      ctx.db
+        .query("traders")
+        .withIndex("byImageStatusAndCreatedAt", (q) =>
+          q.eq("imageStatus", "ready")
+        )
+        .order("desc")
+        .take(LANDING_ROSTER_CANDIDATE_LIMIT),
+    ]);
+
+    const orderedCandidates = [
+      ...featuredTraders.filter(
+        (trader): trader is Doc<"traders"> => trader !== null
+      ),
+      ...recentReadyTraders,
+    ];
+    const seenTraderIds = new Set<string>();
+    const roster: Array<{
+      id: Doc<"traders">["_id"];
+      name: string;
+      profileImageUrl: string;
+      traits: ReturnType<typeof readPublicTraits>;
+    }> = [];
+
+    for (const trader of orderedCandidates) {
+      if (roster.length >= cappedLimit) break;
+      if (seenTraderIds.has(trader._id)) continue;
+      seenTraderIds.add(trader._id);
+
+      const profileImageUrl = await resolveReadyProfileImageUrl(ctx, trader);
+      if (!profileImageUrl) continue;
+
+      roster.push({
+        id: trader._id,
+        name: trader.name,
+        profileImageUrl,
+        traits: readPublicTraits(trader.imagePromptSource),
+      });
+    }
+
+    return roster;
+  },
+});
 
 /** Public leaderboard: all traders, sorted by total equity. No auth. */
 export const listTraderStats = query({

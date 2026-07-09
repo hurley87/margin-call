@@ -161,6 +161,7 @@ export default defineSchema({
     .index("byName", ["name"])
     .index("byOwnerAndName", ["ownerSubject", "name"])
     .index("byNameLower", ["nameLower"])
+    .index("byImageStatusAndCreatedAt", ["imageStatus", "createdAt"])
     .index("byCreatedAt", ["createdAt"]),
 
   deals: defineTable({

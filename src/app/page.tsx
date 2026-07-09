@@ -45,11 +45,7 @@ import {
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
-import {
-  pickFunTraits,
-  type FunTrait,
-  type PublicPortraitTraits,
-} from "@/lib/portrait-traits";
+import { pickFunTraits, type FunTrait } from "@/lib/portrait-traits";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
 import { IntroSequence } from "@/components/intro-sequence";
@@ -84,6 +80,7 @@ import {
   useLeaderboard,
   type LeaderboardTrader,
 } from "@/hooks/use-leaderboard";
+import { useLandingRoster } from "@/hooks/use-landing-roster";
 import { useSfx } from "@/hooks/use-sfx";
 import {
   usePortfolio,
@@ -258,9 +255,6 @@ export default function Home() {
   );
 }
 
-/** Traders pinned to the front of the landing roster, in order. */
-const FEATURED_TRADER_NAMES = ["HurlingAlpha", "Wolf"];
-
 /** Fallback roster shown before any real portraits have finished generating. */
 const SAMPLE_TRADER_NAMES = [
   "Vic Sterling",
@@ -287,20 +281,15 @@ const TRAIT_CHIP_TONE: Record<string, string> = {
 
 /**
  * Unauthenticated landing screen. Renders the hero, the "first run" checklist,
- * and a live roster of real trader portraits (pulled from the public leaderboard)
+ * and a live roster of real trader portraits (from a lightweight public query)
  * next to a "mint your own" slot so it's clear the player creates their own 1-of-1
- * AI trader. HurlingAlpha and Wolf are pinned to the front, and each tile surfaces
- * a couple of fun persona traits.
+ * AI trader. Each tile surfaces a couple of fun persona traits.
  */
 function LandingScreen({ onLogin }: { onLogin: () => void }) {
-  const { data: leaderboard } = useLeaderboard();
+  const { data: landingRoster } = useLandingRoster();
 
   const galleryTiles = useMemo<RosterTile[]>(() => {
-    const ready = (leaderboard ?? []).filter(
-      (t) => t.imageStatus === "ready" && Boolean(t.profileImageUrl)
-    );
-
-    if (ready.length === 0) {
+    if (!landingRoster || landingRoster.length === 0) {
       return SAMPLE_TRADER_NAMES.map((name) => ({
         key: name,
         name,
@@ -310,22 +299,14 @@ function LandingScreen({ onLogin }: { onLogin: () => void }) {
       }));
     }
 
-    // Pin the featured traders first, then fill with the rest of the roster.
-    const featured = FEATURED_TRADER_NAMES.map((name) =>
-      ready.find((t) => t.name.toLowerCase() === name.toLowerCase())
-    ).filter((t): t is (typeof ready)[number] => Boolean(t));
-    const featuredIds = new Set(featured.map((t) => t.id));
-    const rest = ready.filter((t) => !featuredIds.has(t.id));
-
-    return [...featured, ...rest].slice(0, 4).map((t) => ({
+    return landingRoster.map((t) => ({
       key: t.id,
       name: t.name,
       src: t.profileImageUrl,
-      // `ready` array is pre-filtered to imageStatus === "ready".
       imageStatus: "ready" as const,
-      traits: t.traits ? pickFunTraits(t.traits as PublicPortraitTraits) : [],
+      traits: t.traits ? pickFunTraits(t.traits) : [],
     }));
-  }, [leaderboard]);
+  }, [landingRoster]);
 
   return (
     <div className="flex min-h-screen flex-col justify-center gap-8 bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">

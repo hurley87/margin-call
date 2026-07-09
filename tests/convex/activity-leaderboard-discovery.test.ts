@@ -421,6 +421,109 @@ describe("Leaderboard consistency", () => {
   });
 });
 
+describe("Landing roster", () => {
+  it("pins ready featured traders and fills remaining slots with recent portraits", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const names = [
+      "Recent Trader",
+      "Wolf",
+      "Older Trader",
+      "HurlingAlpha",
+    ] as const;
+    const traderIds = await Promise.all(
+      names.map((name) => seedActiveTrader(t, dmId, { name }))
+    );
+
+    await t.run(async (ctx) => {
+      for (const [index, traderId] of traderIds.entries()) {
+        const storageId = await ctx.storage.store(
+          new Blob([names[index]], { type: "image/png" })
+        );
+        await ctx.db.patch(traderId as never, {
+          imageStatus: "ready",
+          profileImageStorageId: storageId,
+          imagePromptSource: {
+            traits: {
+              expression: "cold",
+              fieldInk: "vermilion",
+              attire: "business",
+              vice: "none",
+              fieldFlourish: "plain",
+            },
+          },
+          createdAt: 1_000 + index,
+        });
+      }
+    });
+
+    const roster = await t.query(api.leaderboard.listLandingRoster, {
+      limit: 4,
+    });
+
+    expect(roster.map((trader) => trader.name)).toEqual([
+      "HurlingAlpha",
+      "Wolf",
+      "Older Trader",
+      "Recent Trader",
+    ]);
+    expect(roster[0]).toEqual({
+      id: traderIds[3],
+      name: "HurlingAlpha",
+      profileImageUrl: expect.stringContaining(
+        "https://some-deployment.convex.cloud/api/storage/"
+      ),
+      traits: {
+        expression: "cold",
+        fieldInk: "vermilion",
+        attire: "business",
+        vice: "none",
+        fieldFlourish: "plain",
+      },
+    });
+  });
+
+  it("returns only ready stored portraits and enforces the public limit cap", async () => {
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const traderIds = await Promise.all(
+      Array.from({ length: 14 }, (_, index) =>
+        seedActiveTrader(t, dmId, { name: `Roster Trader ${index}` })
+      )
+    );
+
+    await t.run(async (ctx) => {
+      for (const [index, traderId] of traderIds.entries()) {
+        await ctx.db.patch(traderId as never, {
+          imageStatus: index === 13 ? "pending" : "ready",
+          profileImageStorageId:
+            index === 12
+              ? undefined
+              : await ctx.storage.store(
+                  new Blob([String(index)], { type: "image/png" })
+                ),
+          createdAt: 2_000 + index,
+        });
+      }
+    });
+
+    const roster = await t.query(api.leaderboard.listLandingRoster, {
+      limit: 999,
+    });
+
+    expect(roster).toHaveLength(12);
+    expect(roster.every((trader) => trader.profileImageUrl.length > 0)).toBe(
+      true
+    );
+    expect(roster.map((trader) => trader.name)).not.toContain(
+      "Roster Trader 13"
+    );
+    expect(roster.map((trader) => trader.name)).not.toContain(
+      "Roster Trader 12"
+    );
+  });
+});
+
 // ── Deal discovery (pure mandate filter) ─────────────────────────────────────
 
 describe("Deal discovery: mandate filter (pure module)", () => {
