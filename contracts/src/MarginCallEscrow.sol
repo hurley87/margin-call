@@ -123,7 +123,10 @@ contract MarginCallEscrow {
     function setDepositor(uint256 traderId, address depositor) external onlyOperator {
         require(depositor != address(0), "Zero depositor");
         address current = depositors[traderId];
-        require(current == address(0) || balances[traderId] == 0, "Depositor locked while balance > 0");
+        require(
+            current == address(0) || balances[traderId] == 0,
+            "Depositor locked while balance > 0"
+        );
         depositors[traderId] = depositor;
         emit DepositorSet(traderId, depositor);
     }
