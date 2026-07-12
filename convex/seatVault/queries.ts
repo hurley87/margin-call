@@ -2,10 +2,13 @@ import { query } from "../_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "../_generated/dataModel";
 import { capacityForTier, type SeatTierName } from "./policy";
+import { resolvePublicTraderTier } from "./publicDisplay";
 import {
+  seatTierValidator,
   seatVaultDeploymentPublicValidator,
   seatVaultEventPublicValidator,
   seatVaultSyncCursorPublicValidator,
+  seatVaultSyncStatusValidator,
   traderSeatStatePublicValidator,
 } from "./validators";
 import { normalizeAddress } from "./config";
@@ -127,16 +130,8 @@ export const getPublicTraderTier = query({
   returns: v.union(
     v.object({
       traderId: v.id("traders"),
-      effectiveTier: v.union(
-        v.literal("Gallery"),
-        v.literal("Seat"),
-        v.literal("CornerOffice")
-      ),
-      syncStatus: v.union(
-        v.literal("ok"),
-        v.literal("syncing"),
-        v.literal("error")
-      ),
+      effectiveTier: seatTierValidator,
+      syncStatus: seatVaultSyncStatusValidator,
     }),
     v.null()
   ),
@@ -144,25 +139,11 @@ export const getPublicTraderTier = query({
     const trader = await ctx.db.get(args.traderId);
     if (!trader) return null;
 
-    const active = await ctx.db
-      .query("traderSeatState")
-      .withIndex("byTrader", (q) => q.eq("traderId", args.traderId))
-      .collect();
-
-    const activeRow = active.find((r) => r.isActiveVault);
-    if (!activeRow) {
-      return {
-        traderId: args.traderId,
-        effectiveTier: "Gallery" as const,
-        syncStatus: "syncing" as const,
-      };
-    }
-
+    const publicTier = await resolvePublicTraderTier(ctx, args.traderId);
     return {
       traderId: args.traderId,
-      effectiveTier:
-        activeRow.syncStatus === "ok" ? activeRow.effectiveTier : "Gallery",
-      syncStatus: activeRow.syncStatus,
+      effectiveTier: publicTier.effectiveTier,
+      syncStatus: publicTier.syncStatus,
     };
   },
 });

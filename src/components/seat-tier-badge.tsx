@@ -7,14 +7,24 @@ import type { SeatTierName } from "@/lib/contracts/seatVault";
 import { SEAT_TIER_FLOOR_LABEL } from "@/lib/seat-tier-display";
 import { cn } from "@/lib/utils";
 
-const TIER_TONE: Record<SeatTierName, string> = {
-  Gallery:
-    "border-[var(--t-divider)] text-[var(--t-muted)] bg-[var(--t-surface)]/40",
-  Seat: "border-[var(--t-amber)]/50 text-[var(--t-amber)] bg-[var(--t-amber)]/10",
+/**
+ * Two-ink screenprint credentials for floor access.
+ * Gallery / loading / stale-sync → render nothing (never grant a credential).
+ */
+const CREDENTIAL_TONE: Record<"Seat" | "CornerOffice", string> = {
+  Seat: "border-[var(--t-amber)]/55 text-[var(--t-amber)] bg-[var(--t-amber)]/10",
   CornerOffice:
-    "border-[var(--t-green)]/50 text-[var(--t-green)] bg-[var(--t-green)]/10",
+    "border-[var(--t-green)]/55 text-[var(--t-green)] bg-[var(--t-green)]/10",
 };
 
+function isCredentialTier(tier: SeatTierName): tier is "Seat" | "CornerOffice" {
+  return tier === "Seat" || tier === "CornerOffice";
+}
+
+/**
+ * Presentational floor credential. Gallery renders nothing.
+ * Sync lag on a credential tier surfaces a muted note without private amounts.
+ */
 export function SeatTierBadgeView({
   tier,
   syncStatus,
@@ -26,37 +36,37 @@ export function SeatTierBadgeView({
   className?: string;
   compact?: boolean;
 }) {
+  // Loading / stale / missing / Gallery never display a credential.
+  if (!isCredentialTier(tier)) return null;
+  if (syncStatus === "syncing" || syncStatus === "error") return null;
+
   const label = SEAT_TIER_FLOOR_LABEL[tier];
-  const syncNote =
-    syncStatus === "syncing"
-      ? "syncing"
-      : syncStatus === "error"
-        ? "book lag"
-        : null;
+  const ariaLabel =
+    tier === "CornerOffice"
+      ? "Floor credential: Corner Office"
+      : "Floor credential: Seat";
 
   return (
     <span
+      role="status"
+      aria-label={ariaLabel}
       className={cn(
-        "inline-flex items-center gap-1.5 rounded border font-mono font-semibold uppercase",
+        "inline-flex shrink-0 items-center gap-1 rounded border font-mono font-semibold uppercase",
         compact
           ? "px-1.5 py-px text-[9px] tracking-[0.14em]"
           : "px-2 py-0.5 text-[10px] tracking-[0.18em]",
-        TIER_TONE[tier],
+        CREDENTIAL_TONE[tier],
         className
       )}
-      title={
-        syncNote ? `Floor seat: ${label} (${syncNote})` : `Floor seat: ${label}`
-      }
+      title={ariaLabel}
     >
-      <span>{label}</span>
-      {syncNote ? (
-        <span className="text-[var(--t-muted)] normal-case tracking-normal">
-          · {syncNote}
-        </span>
-      ) : null}
+      <span aria-hidden="true">{label}</span>
     </span>
   );
 }
+
+/** Alias for list/detail surfaces — same Gallery-hide credential rules. */
+export const FloorCredential = SeatTierBadgeView;
 
 /** Public / owner badge fed by getPublicTraderTier (no private amounts). */
 export function SeatTierBadge({
@@ -72,15 +82,13 @@ export function SeatTierBadge({
     traderId: traderId as Id<"traders">,
   });
 
-  // undefined = query loading (show syncing); null = no row yet (plain Gallery).
-  const tier = publicTier?.effectiveTier ?? "Gallery";
-  const syncStatus =
-    publicTier === undefined ? "syncing" : publicTier?.syncStatus;
+  // undefined = loading → no credential; null/missing → Gallery → no credential.
+  if (publicTier === undefined) return null;
 
   return (
     <SeatTierBadgeView
-      tier={tier}
-      syncStatus={syncStatus}
+      tier={publicTier?.effectiveTier ?? "Gallery"}
+      syncStatus={publicTier?.syncStatus}
       className={className}
       compact={compact}
     />

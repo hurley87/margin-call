@@ -8,6 +8,8 @@ import {
 } from "./lib/profileImage";
 import { readPublicTraits } from "./lib/portraitSeed";
 import { isMcpSubject } from "./mcp/subject";
+import { mapDisplayTiersByTraderId } from "./seatVault/publicDisplay";
+import { seatTierValidator } from "./seatVault/validators";
 
 const FEATURED_TRADER_NAMES = ["HurlingAlpha", "Wolf"] as const;
 const LANDING_ROSTER_DEFAULT_LIMIT = 4;
@@ -30,6 +32,8 @@ const landingRosterTraderValidator = v.object({
   name: v.string(),
   profileImageUrl: v.string(),
   traits: publicTraitsValidator,
+  /** Public floor credential only — never staker/pending/unlock. */
+  effectiveTier: seatTierValidator,
 });
 
 type Stats = {
@@ -93,7 +97,7 @@ export const listLandingRoster = query({
       ...recentReadyTraders,
     ];
     const seenTraderIds = new Set<string>();
-    const roster: Array<{
+    const pending: Array<{
       id: Doc<"traders">["_id"];
       name: string;
       profileImageUrl: string;
@@ -101,14 +105,14 @@ export const listLandingRoster = query({
     }> = [];
 
     for (const trader of orderedCandidates) {
-      if (roster.length >= cappedLimit) break;
+      if (pending.length >= cappedLimit) break;
       if (seenTraderIds.has(trader._id)) continue;
       seenTraderIds.add(trader._id);
 
       const profileImageUrl = await resolveReadyProfileImageUrl(ctx, trader);
       if (!profileImageUrl) continue;
 
-      roster.push({
+      pending.push({
         id: trader._id,
         name: trader.name,
         profileImageUrl,
@@ -116,7 +120,15 @@ export const listLandingRoster = query({
       });
     }
 
-    return roster;
+    const tiers = await mapDisplayTiersByTraderId(
+      ctx,
+      pending.map((row) => row.id)
+    );
+
+    return pending.map((row) => ({
+      ...row,
+      effectiveTier: tiers.get(String(row.id)) ?? "Gallery",
+    }));
   },
 });
 
@@ -167,6 +179,11 @@ export const listTraderStats = query({
       isAgentDeskById.set(String(deskId), isMcpSubject(dm?.subject));
     }
 
+    const tiers = await mapDisplayTiersByTraderId(
+      ctx,
+      traders.map((t) => t._id)
+    );
+
     const leaderboard = await Promise.all(
       traders.map(async (t) => {
         const tid = t._id;
@@ -202,6 +219,7 @@ export const listTraderStats = query({
             totalDealsLogged > 0 ? (s.wins / totalDealsLogged) * 100 : 0,
           total_value: escrow + assetValue,
           is_agent_desk: isAgentDesk,
+          effectiveTier: tiers.get(String(tid)) ?? "Gallery",
         };
       })
     );

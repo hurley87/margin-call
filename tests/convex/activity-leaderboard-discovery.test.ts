@@ -480,6 +480,7 @@ describe("Landing roster", () => {
         vice: "none",
         fieldFlourish: "plain",
       },
+      effectiveTier: "Gallery",
     });
   });
 

@@ -75,6 +75,7 @@ import type * as seatVault_actions from "../seatVault/actions.js";
 import type * as seatVault_config from "../seatVault/config.js";
 import type * as seatVault_indexer from "../seatVault/indexer.js";
 import type * as seatVault_policy from "../seatVault/policy.js";
+import type * as seatVault_publicDisplay from "../seatVault/publicDisplay.js";
 import type * as seatVault_queries from "../seatVault/queries.js";
 import type * as seatVault_rpc from "../seatVault/rpc.js";
 import type * as seatVault_store from "../seatVault/store.js";
@@ -186,6 +187,7 @@ declare const fullApi: ApiFromModules<{
   "seatVault/config": typeof seatVault_config;
   "seatVault/indexer": typeof seatVault_indexer;
   "seatVault/policy": typeof seatVault_policy;
+  "seatVault/publicDisplay": typeof seatVault_publicDisplay;
   "seatVault/queries": typeof seatVault_queries;
   "seatVault/rpc": typeof seatVault_rpc;
   "seatVault/store": typeof seatVault_store;

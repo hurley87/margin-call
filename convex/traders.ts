@@ -27,6 +27,7 @@ import { walletStepValidator } from "./schema";
 import { TRADER_NAME_REGEX } from "../src/lib/trader-name";
 import { normalizeEmail } from "../src/lib/email";
 import { isMcpSubject } from "./mcp/subject";
+import { resolvePublicTraderTier } from "./seatVault/publicDisplay";
 
 // Vitest sets MC_SKIP_WALLET_SCHEDULE so any caller that would otherwise
 // enqueue wallet.createForTrader skips the scheduler. convex-test runs
@@ -244,11 +245,15 @@ export const getPublicProfile = query({
     const basics = await publicTraderBasics(ctx, trader);
     const dm = await ctx.db.get(trader.deskManagerId);
     const isAgentDesk = isMcpSubject(dm?.subject);
+    const publicTier = await resolvePublicTraderTier(ctx, traderId);
     return {
       ...basics,
       escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,
       ownerAddress: dm?.walletAddress ?? null,
       isAgentDesk,
+      /** Public floor credential only — never staker/pending/unlock. */
+      effectiveTier: publicTier.effectiveTier,
+      seatSyncStatus: publicTier.syncStatus,
       recentActivity: recentActivity.map((entry) => ({
         activityType: entry.activityType,
         message: entry.message,
