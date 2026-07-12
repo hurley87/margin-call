@@ -35,3 +35,36 @@ jobs:
 
       - name: Typecheck
         run: pnpm typecheck
+
+  # Push Convex functions on merge to main so the backend never lags the
+  # Vercel frontend deploy. Skipping this is what broke the trader dialog:
+  # the frontend shipped calling seatVault/queries:getPublicTraderTier while
+  # the deployment never had it. Runs only after checks pass.
+  deploy-convex:
+    name: Deploy Convex functions
+    needs: checks
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # CONVEX_DEPLOY_KEY targets the deployment associated with the key
+      # (formal-pigeon-323). Add it as a repo secret: Settings → Secrets and
+      # variables → Actions. Generate with `npx convex dashboard` → Settings,
+      # or reuse the key in .env.local.
+      - name: Deploy to Convex
+        run: npx convex deploy
+        env:
+          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
