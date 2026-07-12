@@ -2,33 +2,31 @@ import { Doc } from "../_generated/dataModel";
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import { clampLimit } from "../lib/limits";
+import { GALLERY_CYCLE_INTERVAL_MS, MIN_CYCLE_INTERVAL_MS } from "./capacity";
 
 /** Cycle lease TTL: 90 seconds. Longer than the cycle itself to avoid false-recovery. */
 export const CYCLE_LEASE_TTL_MS = 90_000;
 
 /**
- * Minimum time between successful cycle completions for traders without acceleration.
- * The Convex cron runs every minute as a heartbeat; eligibility is gated by this
- * per-trader interval (not by the cron period).
+ * Gallery / fail-closed cadence. Authoritative SeatVault tiers may shorten this
+ * (see `convex/agent/capacity.ts`); queries cannot RPC so they pre-filter with
+ * {@link MIN_CYCLE_INTERVAL_MS} and scheduler/cycle re-check on-chain.
  */
-export const DEFAULT_CYCLE_INTERVAL_MS = 10 * 60_000;
+export const DEFAULT_CYCLE_INTERVAL_MS = GALLERY_CYCLE_INTERVAL_MS;
+
+/** @deprecated Prefer MIN_CYCLE_INTERVAL_MS from capacity — kept for call-site clarity. */
+export const SPEED_TOKEN_CYCLE_INTERVAL_MS = MIN_CYCLE_INTERVAL_MS;
 
 /**
- * Future: interval when speed-token acceleration applies (stored flags only; no chain reads).
- * Matches default today — reserved so the resolver can branch without API churn later.
- */
-export const SPEED_TOKEN_CYCLE_INTERVAL_MS = 10 * 60_000;
-
-/**
- * Per-trader minimum spacing between cycles. Extend with stored fields such as
- * `speedTokenEligible` / `hasSpeedToken` later; never read on-chain balances here.
+ * Pre-filter interval for listStaleTradersForCycle. Uses the shortest tier
+ * cadence so Seat/Corner Office are not missed; scheduler + cycle apply
+ * authoritative `tierOf` before granting capacity. Never trusts chain here.
  */
 export function resolveCycleIntervalMsForTrader(
   _trader: Doc<"traders">
 ): number {
   void _trader;
-  // Future: if (_trader.speedTokenEligible ?? false) return SPEED_TOKEN_CYCLE_INTERVAL_MS;
-  return DEFAULT_CYCLE_INTERVAL_MS;
+  return MIN_CYCLE_INTERVAL_MS;
 }
 
 // ── Queries ───────────────────────────────────────────────────────────────────
@@ -49,10 +47,12 @@ export const loadTraderForCycle = internalQuery({
  *   - status === "active"
  *   - walletStatus === "ready"
  *   - escrowBalanceUsdc > 0
- *   - lastCycleAt is either unset or older than resolveCycleIntervalMsForTrader(trader)
+ *   - lastCycleAt is either unset or older than MIN_CYCLE_INTERVAL_MS (5m pre-filter)
  *   - cycleLeaseUntil is either unset or in the past (no active lease)
  *
- * The 1-minute cron is only a heartbeat; each trader uses their own eligibility interval.
+ * The 1-minute cron is only a heartbeat. This query uses the shortest SeatVault
+ * cadence as a pre-filter; the scheduler action re-checks authoritative on-chain
+ * `tierOf` before enqueueing (Gallery remains 10m).
  * Called by the scheduler action — no auth context required.
  */
 export const listStaleTradersForCycle = internalQuery({
