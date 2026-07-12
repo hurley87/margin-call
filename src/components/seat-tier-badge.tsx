@@ -72,31 +72,15 @@ export function SeatTierBadge({
     traderId: traderId as Id<"traders">,
   });
 
-  if (publicTier === undefined) {
-    return (
-      <SeatTierBadgeView
-        tier="Gallery"
-        syncStatus="syncing"
-        className={className}
-        compact={compact}
-      />
-    );
-  }
-
-  if (publicTier === null) {
-    return (
-      <SeatTierBadgeView
-        tier="Gallery"
-        className={className}
-        compact={compact}
-      />
-    );
-  }
+  // undefined = query loading (show syncing); null = no row yet (plain Gallery).
+  const tier = publicTier?.effectiveTier ?? "Gallery";
+  const syncStatus =
+    publicTier === undefined ? "syncing" : publicTier?.syncStatus;
 
   return (
     <SeatTierBadgeView
-      tier={publicTier.effectiveTier}
-      syncStatus={publicTier.syncStatus}
+      tier={tier}
+      syncStatus={syncStatus}
       className={className}
       compact={compact}
     />

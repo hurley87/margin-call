@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { useAction } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useReadContract } from "wagmi";
-import { erc20Abi, maxUint256 } from "viem";
+import { erc20Abi, isAddressEqual, maxUint256, zeroAddress } from "viem";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
@@ -42,12 +42,6 @@ type SeatVaultState = {
   error?: string;
   txHash?: `0x${string}`;
 };
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
-function floorError(message: string): Error {
-  return new Error(message);
-}
 
 export function useBlowBalance() {
   const { user } = usePrivy();
@@ -88,7 +82,7 @@ export function useTraderDepositor(onChainTraderId: number | undefined) {
   });
 
   const depositor =
-    data && data.toLowerCase() !== ZERO_ADDRESS.toLowerCase()
+    data && !isAddressEqual(data as `0x${string}`, zeroAddress)
       ? (data as `0x${string}`)
       : null;
 
@@ -115,13 +109,13 @@ export function useSeatVaultFlows() {
 
   const assertWalletReady = useCallback(() => {
     if (!walletAddress) {
-      throw floorError("Connect the desk treasury wallet first.");
+      throw new Error("Connect the desk treasury wallet first.");
     }
     if (isWrongNetwork) {
-      throw floorError("Wrong chain — switch to Base Sepolia before posting.");
+      throw new Error("Wrong chain — switch to Base Sepolia before posting.");
     }
     if (state.step !== "idle" && state.step !== "done") {
-      throw floorError("A floor ticket is already pending. Wait for the wire.");
+      throw new Error("A floor ticket is already pending. Wait for the wire.");
     }
     return walletAddress;
   }, [walletAddress, isWrongNetwork, state.step]);
@@ -144,19 +138,19 @@ export function useSeatVaultFlows() {
         try {
           amountWei = BigInt(parseBlowAmount(args.amountHuman));
         } catch {
-          throw floorError("Enter a valid $BLOW amount.");
+          throw new Error("Enter a valid $BLOW amount.");
         }
         if (amountWei <= BigInt(0)) {
-          throw floorError("Zero won't clear compliance. Post a real figure.");
+          throw new Error("Zero won't clear compliance. Post a real figure.");
         }
 
         if (!args.depositor) {
-          throw floorError(
+          throw new Error(
             "No depositor on file — fund escrow first so the desk owns this badge."
           );
         }
         if (args.depositor.toLowerCase() !== wallet.toLowerCase()) {
-          throw floorError(
+          throw new Error(
             "Depositor mismatch — only the assigned desk treasury can post principal."
           );
         }
@@ -179,7 +173,7 @@ export function useSeatVaultFlows() {
         ]);
 
         if (balance < amountWei) {
-          throw floorError(
+          throw new Error(
             "Insufficient $BLOW on the desk — wire more chips before posting."
           );
         }
@@ -250,20 +244,20 @@ export function useSeatVaultFlows() {
         try {
           amountWei = BigInt(parseBlowAmount(args.amountHuman));
         } catch {
-          throw floorError("Enter a valid $BLOW amount.");
+          throw new Error("Enter a valid $BLOW amount.");
         }
         if (amountWei <= BigInt(0)) {
-          throw floorError("Zero won't clear compliance. Name a real pull.");
+          throw new Error("Zero won't clear compliance. Name a real pull.");
         }
         if (amountWei > BigInt(args.activeWei)) {
-          throw floorError("That pull exceeds active principal on this seat.");
+          throw new Error("That pull exceeds active principal on this seat.");
         }
 
         const walletLc = wallet.toLowerCase();
         const depositorLc = args.depositor?.toLowerCase();
         const stakerLc = args.staker?.toLowerCase();
         if (walletLc !== depositorLc && walletLc !== stakerLc) {
-          throw floorError(
+          throw new Error(
             "Not authorized — only the depositor or recorded staker can pull principal."
           );
         }
@@ -310,11 +304,11 @@ export function useSeatVaultFlows() {
       try {
         assertWalletReady();
         if (BigInt(args.pendingWei) <= BigInt(0)) {
-          throw floorError("Nothing pending on this vault.");
+          throw new Error("Nothing pending on this vault.");
         }
         const nowSeconds = Math.floor(Date.now() / 1000);
         if (nowSeconds < args.unlockTime) {
-          throw floorError(
+          throw new Error(
             "Cooldown still running — the cage won't release principal yet."
           );
         }

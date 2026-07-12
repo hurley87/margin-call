@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -15,6 +15,7 @@ import {
 } from "@/hooks/use-seat-vault";
 import { useBaseNetwork } from "@/hooks/use-base-network";
 import {
+  capacityForTier,
   formatBlowAmount,
   SEAT_VAULT_ADDRESS,
   type SeatTierName,
@@ -105,13 +106,7 @@ export function SeatStakePanel({
   const [localError, setLocalError] = useState<string | undefined>();
 
   const active = seatState ?? null;
-  const nextTier = useMemo(
-    () =>
-      active
-        ? amountNeededForNextTier(active.activeAmountWei)
-        : amountNeededForNextTier("0"),
-    [active]
-  );
+  const nextTier = amountNeededForNextTier(active?.activeAmountWei ?? "0");
 
   const canStake = canPostPrincipal({
     walletAddress,
@@ -246,7 +241,7 @@ export function SeatStakePanel({
         />
         <DatumCell
           label="Cadence / open tickets"
-          value={`${Math.round((active?.cycleIntervalMs ?? 600_000) / 60_000)}m · ${active?.maxUnresolvedEntries ?? 1}`}
+          value={`${Math.round((active?.cycleIntervalMs ?? capacityForTier("Gallery").cycleIntervalMs) / 60_000)}m · ${active?.maxUnresolvedEntries ?? capacityForTier("Gallery").maxUnresolvedEntries}`}
           className="border-0"
         />
       </div>
