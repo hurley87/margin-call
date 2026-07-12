@@ -94,6 +94,8 @@ import { useWireTickOnNew } from "@/hooks/use-wire-tick-on-new";
 import { usePnlStreaks, useRankDeltas } from "@/hooks/use-rank-deltas";
 import { useSecondTick } from "@/hooks/use-second-tick";
 import { useUsdcBalance } from "@/hooks/use-usdc-balance";
+import { useBlowBalance } from "@/hooks/use-seat-vault";
+import { formatBlowAmount } from "@/lib/contracts/seatVault";
 import {
   DIALOG_BACKDROP_CLASS,
   dialogPopupClass,
@@ -127,6 +129,10 @@ const TONE_CLASS = {
 } as const;
 
 const EMPTY_PENDING: PendingApproval[] = [];
+
+function formatBlow(value: number): string {
+  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
+}
 
 // Fallback copy only appears when Convex has no generated wire epochs yet.
 const FALLBACK_WIRE_ITEMS = [
@@ -764,6 +770,18 @@ function TopStatusBar({
     ...NY_TIME,
   });
   const { isOpen, countdownLabel: hms } = useMarketHours();
+  const { balanceWei: blowWei } = useBlowBalance();
+  const blowHoldings =
+    blowWei === undefined
+      ? undefined
+      : (() => {
+          try {
+            const n = Number(formatBlowAmount(blowWei.toString()));
+            return Number.isFinite(n) ? n : undefined;
+          } catch {
+            return undefined;
+          }
+        })();
   const shortDeskWallet = deskWalletAddress
     ? formatShortAddress(deskWalletAddress)
     : "Embedding...";
@@ -892,7 +910,17 @@ function TopStatusBar({
         </div>
 
         <div className="terminal-panel grid grid-cols-4 divide-x divide-[var(--t-divider)] text-[11px] uppercase">
-          <StatusCell label="Firm" value="Trading Desk" />
+          <StatusCell
+            label="$BLOW"
+            value={
+              blowHoldings === undefined ? (
+                "..."
+              ) : (
+                <AnimatedNumber value={blowHoldings} format={formatBlow} live />
+              )
+            }
+            tone="amber"
+          />
           <StatusCell
             label="Cash"
             value={
