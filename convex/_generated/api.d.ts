@@ -71,6 +71,7 @@ import type * as ops_wipeSmokeTraders from "../ops/wipeSmokeTraders.js";
 import type * as portfolio from "../portfolio.js";
 import type * as portraits from "../portraits.js";
 import type * as seasons from "../seasons.js";
+import type * as seatVault_actions from "../seatVault/actions.js";
 import type * as seatVault_config from "../seatVault/config.js";
 import type * as seatVault_indexer from "../seatVault/indexer.js";
 import type * as seatVault_policy from "../seatVault/policy.js";
@@ -181,6 +182,7 @@ declare const fullApi: ApiFromModules<{
   portfolio: typeof portfolio;
   portraits: typeof portraits;
   seasons: typeof seasons;
+  "seatVault/actions": typeof seatVault_actions;
   "seatVault/config": typeof seatVault_config;
   "seatVault/indexer": typeof seatVault_indexer;
   "seatVault/policy": typeof seatVault_policy;

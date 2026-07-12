@@ -8,6 +8,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import { SeatTierBadge } from "@/components/seat-tier-badge";
 import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
 import { formatStatus } from "@/lib/format-status";
 import {
@@ -106,6 +107,8 @@ function PublicTraderContent({
               ) : null}
             </h2>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+              <SeatTierBadge traderId={trader.traderId} compact />
+              <span className="text-[var(--t-divider)]">/</span>
               <span>
                 File{" "}
                 <span className="text-[var(--t-text)]">
