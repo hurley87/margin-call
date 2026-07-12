@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { Armchair, Crown } from "lucide-react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { SeatTierName } from "@/lib/contracts/seatVault";
@@ -10,11 +11,17 @@ import { cn } from "@/lib/utils";
 /**
  * Two-ink screenprint credentials for floor access.
  * Gallery / loading / stale-sync → render nothing (never grant a credential).
+ * Boxed tone for detail surfaces; subtle text-only tone for dense lists (compact).
  */
 const CREDENTIAL_TONE: Record<"Seat" | "CornerOffice", string> = {
   Seat: "border-[var(--t-amber)]/55 text-[var(--t-amber)] bg-[var(--t-amber)]/10",
   CornerOffice:
     "border-[var(--t-green)]/55 text-[var(--t-green)] bg-[var(--t-green)]/10",
+};
+
+const CREDENTIAL_TONE_COMPACT: Record<"Seat" | "CornerOffice", string> = {
+  Seat: "text-[var(--t-amber)]/70",
+  CornerOffice: "text-[var(--t-green)]/70",
 };
 
 function isCredentialTier(tier: SeatTierName): tier is "Seat" | "CornerOffice" {
@@ -46,15 +53,31 @@ export function SeatTierBadgeView({
       ? "Floor credential: Corner Office"
       : "Floor credential: Seat";
 
+  // Dense lists (compact) show only a quiet tier icon — no text label.
+  if (compact) {
+    const Icon = tier === "CornerOffice" ? Crown : Armchair;
+    return (
+      <span
+        role="status"
+        aria-label={ariaLabel}
+        title={ariaLabel}
+        className={cn(
+          "inline-flex shrink-0 items-center",
+          CREDENTIAL_TONE_COMPACT[tier],
+          className
+        )}
+      >
+        <Icon aria-hidden="true" className="h-3 w-3" strokeWidth={2} />
+      </span>
+    );
+  }
+
   return (
     <span
       role="status"
       aria-label={ariaLabel}
       className={cn(
-        "inline-flex shrink-0 items-center gap-1 rounded border font-mono font-semibold uppercase",
-        compact
-          ? "px-1.5 py-px text-[9px] tracking-[0.14em]"
-          : "px-2 py-0.5 text-[10px] tracking-[0.18em]",
+        "inline-flex shrink-0 items-center gap-1 rounded border px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-[0.18em]",
         CREDENTIAL_TONE[tier],
         className
       )}
