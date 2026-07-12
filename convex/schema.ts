@@ -162,7 +162,8 @@ export default defineSchema({
     .index("byOwnerAndName", ["ownerSubject", "name"])
     .index("byNameLower", ["nameLower"])
     .index("byImageStatusAndCreatedAt", ["imageStatus", "createdAt"])
-    .index("byCreatedAt", ["createdAt"]),
+    .index("byCreatedAt", ["createdAt"])
+    .index("byTokenId", ["tokenId"]),
 
   deals: defineTable({
     // nullable: on-chain synced deals use creatorAddress instead
@@ -591,4 +592,107 @@ export default defineSchema({
     ])
     .index("byStatus", ["status"])
     .index("byTxHash", ["txHash"]),
+
+  /**
+   * Versioned SeatVault deployments. Only `isActive === true` grants capacity;
+   * prior versions remain listed so desks can withdraw pending principal.
+   */
+  seatVaultDeployments: defineTable({
+    version: v.number(),
+    address: v.string(),
+    isActive: v.boolean(),
+    seatThresholdWei: v.string(),
+    cornerOfficeThresholdWei: v.string(),
+    unstakeCooldownSeconds: v.number(),
+    margincallToken: v.optional(v.string()),
+    escrow: v.optional(v.string()),
+    deployedAt: v.number(),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("byAddress", ["address"])
+    .index("byVersion", ["version"])
+    .index("byIsActive", ["isActive"]),
+
+  /**
+   * Per-trader reactive SeatVault read model. Active-vault rows drive badges /
+   * capacity UI; inactive-vault rows preserve withdrawal metadata only.
+   * Authoritative capacity still comes from on-chain tierOf during reconcile.
+   */
+  traderSeatState: defineTable({
+    traderId: v.id("traders"),
+    onChainTraderId: v.number(),
+    vaultAddress: v.string(),
+    vaultVersion: v.number(),
+    isActiveVault: v.boolean(),
+    effectiveTier: v.union(
+      v.literal("Gallery"),
+      v.literal("Seat"),
+      v.literal("CornerOffice")
+    ),
+    staker: v.optional(v.string()),
+    activeAmountWei: v.string(),
+    pendingAmountWei: v.string(),
+    unlockTime: v.number(),
+    syncStatus: v.union(
+      v.literal("ok"),
+      v.literal("syncing"),
+      v.literal("error")
+    ),
+    syncError: v.optional(v.string()),
+    lastReconciledAt: v.optional(v.number()),
+    updatedAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("byTrader", ["traderId"])
+    .index("byTraderAndVault", ["traderId", "vaultAddress"])
+    .index("byOnChainTraderId", ["onChainTraderId"])
+    .index("byVaultAddress", ["vaultAddress"])
+    .index("byActiveVaultAndTier", ["isActiveVault", "effectiveTier"]),
+
+  /**
+   * Bounded SeatVault event feed (Staked / UnstakeInitiated / Unstaked).
+   * Dedupe key = vaultAddress:blockNumber:logIndex.
+   */
+  seatVaultEvents: defineTable({
+    vaultAddress: v.string(),
+    vaultVersion: v.number(),
+    eventName: v.union(
+      v.literal("Staked"),
+      v.literal("UnstakeInitiated"),
+      v.literal("Unstaked")
+    ),
+    onChainTraderId: v.number(),
+    traderId: v.optional(v.id("traders")),
+    staker: v.string(),
+    amountWei: v.string(),
+    unlockTime: v.optional(v.number()),
+    blockNumber: v.number(),
+    logIndex: v.number(),
+    txHash: v.string(),
+    dedupeKey: v.string(),
+    createdAt: v.number(),
+  })
+    .index("byDedupeKey", ["dedupeKey"])
+    .index("byVaultAndBlock", ["vaultAddress", "blockNumber"])
+    .index("byOnChainTraderAndCreatedAt", ["onChainTraderId", "createdAt"])
+    .index("byTraderAndCreatedAt", ["traderId", "createdAt"])
+    .index("byCreatedAt", ["createdAt"]),
+
+  /**
+   * Resumable per-vault block cursor for SeatVault log ingestion.
+   */
+  seatVaultSyncCursors: defineTable({
+    vaultAddress: v.string(),
+    lastProcessedBlock: v.number(),
+    confirmationDepth: v.number(),
+    syncStatus: v.union(
+      v.literal("ok"),
+      v.literal("syncing"),
+      v.literal("error")
+    ),
+    lastError: v.optional(v.string()),
+    updatedAt: v.number(),
+    createdAt: v.number(),
+  }).index("byVaultAddress", ["vaultAddress"]),
 });
