@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { Check } from "lucide-react";
 import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
@@ -16,12 +17,13 @@ import {
 import { useBaseNetwork } from "@/hooks/use-base-network";
 import {
   capacityForTier,
+  CORNER_OFFICE_THRESHOLD_WEI,
   formatBlowAmount,
+  SEAT_THRESHOLD_WEI,
   SEAT_VAULT_ADDRESS,
   type SeatTierName,
 } from "@/lib/contracts/seatVault";
 import {
-  amountNeededForNextTier,
   canCompleteWithdrawal,
   canInitiateUnstake,
   canPostPrincipal,
@@ -55,6 +57,18 @@ function formatWeiOrDash(wei: string): string {
   } catch {
     return "—";
   }
+}
+
+/** Floor ladder, cheapest first — drives the one-click tier picker. */
+const TIER_LADDER: { tier: SeatTierName; thresholdWei: string }[] = [
+  { tier: "Gallery", thresholdWei: "0" },
+  { tier: "Seat", thresholdWei: SEAT_THRESHOLD_WEI },
+  { tier: "CornerOffice", thresholdWei: CORNER_OFFICE_THRESHOLD_WEI },
+];
+
+function tierCapacityLabel(tier: SeatTierName): string {
+  const cap = capacityForTier(tier);
+  return `${Math.round(cap.cycleIntervalMs / 60_000)}m cadence · ${cap.maxUnresolvedEntries} open`;
 }
 
 function sectionTitle(title: string) {
@@ -106,7 +120,10 @@ export function SeatStakePanel({
   const [localError, setLocalError] = useState<string | undefined>();
 
   const active = seatState ?? null;
-  const nextTier = amountNeededForNextTier(active?.activeAmountWei ?? "0");
+  const currentTier: SeatTierName = active?.effectiveTier ?? "Gallery";
+  const activeWei = BigInt(active?.activeAmountWei ?? "0");
+  const balanceBig =
+    balanceWei !== undefined ? BigInt(balanceWei.toString()) : undefined;
 
   const canStake = canPostPrincipal({
     walletAddress,
@@ -136,8 +153,7 @@ export function SeatStakePanel({
 
   const displayError = localError ?? error;
 
-  async function handleStake(e: FormEvent) {
-    e.preventDefault();
+  async function postPrincipal(amountHuman: string) {
     setLocalError(undefined);
     if (!walletAddress) {
       setLocalError("Connect the desk treasury wallet first.");
@@ -151,7 +167,7 @@ export function SeatStakePanel({
       await stake({
         convexTraderId: convexId,
         onChainTraderId,
-        amountHuman: stakeAmount,
+        amountHuman,
         vaultAddress: (active?.vaultAddress ||
           SEAT_VAULT_ADDRESS) as `0x${string}`,
         depositor,
@@ -162,6 +178,11 @@ export function SeatStakePanel({
     } catch {
       // surfaced via hook
     }
+  }
+
+  async function handleStake(e: FormEvent) {
+    e.preventDefault();
+    await postPrincipal(stakeAmount);
   }
 
   async function handleInitiate(e: FormEvent) {
@@ -254,24 +275,6 @@ export function SeatStakePanel({
           </p>
         ) : null}
 
-        {nextTier ? (
-          <p className="text-xs uppercase tracking-[0.14em] text-[var(--t-muted)]">
-            Need{" "}
-            <span className="text-[var(--t-text)]">
-              {nextTier.deltaHuman} $BLOW
-            </span>{" "}
-            more active principal for{" "}
-            <span className="text-[var(--t-amber)]">
-              {SEAT_TIER_FLOOR_LABEL[nextTier.nextTier]}
-            </span>
-            .
-          </p>
-        ) : (
-          <p className="text-xs uppercase tracking-[0.14em] text-[var(--t-green)]">
-            Corner Office cleared — no higher floor desk.
-          </p>
-        )}
-
         <p className="text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
           Desk $BLOW:{" "}
           <span className="text-[var(--t-text)]">{balanceHuman}</span>
@@ -291,32 +294,116 @@ export function SeatStakePanel({
         </p>
 
         {canStake ? (
-          <form
-            onSubmit={handleStake}
-            className="flex flex-wrap items-end gap-2"
-          >
-            <label className="min-w-[10rem] flex-1">
-              <span className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
-                Post principal
-              </span>
-              <input
-                type="text"
-                inputMode="decimal"
-                value={stakeAmount}
-                onChange={(e) => setStakeAmount(e.target.value)}
-                placeholder="0"
-                disabled={isLoading}
-                className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 font-mono text-sm text-[var(--t-text)] outline-none focus:border-[var(--t-amber)]"
-              />
-            </label>
-            <button
-              type="submit"
-              disabled={isLoading || !stakeAmount.trim()}
-              className="min-h-10 border border-[var(--t-amber)]/60 bg-[var(--t-amber)]/10 px-4 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--t-amber)] transition-colors hover:bg-[var(--t-amber)]/20 disabled:opacity-40"
+          <div className="space-y-3">
+            <p className="text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+              Choose your floor
+            </p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {TIER_LADDER.map((entry) => {
+                const thresholdWei = BigInt(entry.thresholdWei);
+                const cleared = activeWei >= thresholdWei;
+                const deltaWei = cleared ? BigInt(0) : thresholdWei - activeWei;
+                const deltaHuman = formatBlowAmount(deltaWei.toString());
+                const affordable =
+                  balanceBig !== undefined && balanceBig >= deltaWei;
+                const isCurrent = currentTier === entry.tier;
+                const isGallery = entry.tier === "Gallery";
+                return (
+                  <div
+                    key={entry.tier}
+                    className={cn(
+                      "flex flex-col gap-1.5 border p-3",
+                      isCurrent
+                        ? "border-[var(--t-amber)] bg-[var(--t-amber)]/5"
+                        : "border-[var(--t-divider)] bg-[var(--t-bg)]/40"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-text)]">
+                        {SEAT_TIER_FLOOR_LABEL[entry.tier]}
+                      </span>
+                      {isCurrent ? (
+                        <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-[var(--t-amber)]">
+                          Current
+                        </span>
+                      ) : cleared ? (
+                        <Check className="h-3.5 w-3.5 text-[var(--t-green)]" />
+                      ) : null}
+                    </div>
+                    <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)]">
+                      {isGallery
+                        ? "Free floor"
+                        : `${formatBlowAmount(entry.thresholdWei)} $BLOW`}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-[0.1em] text-[var(--t-muted)]">
+                      {tierCapacityLabel(entry.tier)}
+                    </p>
+                    <div className="mt-auto pt-1.5">
+                      {isGallery || cleared ? (
+                        <p
+                          className={cn(
+                            "text-[10px] font-bold uppercase tracking-[0.14em]",
+                            isCurrent
+                              ? "text-[var(--t-amber)]"
+                              : "text-[var(--t-green)]"
+                          )}
+                        >
+                          {isCurrent
+                            ? "Seated here"
+                            : cleared
+                              ? "Cleared"
+                              : "Base floor"}
+                        </p>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={isLoading || !affordable}
+                          onClick={() => void postPrincipal(deltaHuman)}
+                          title={
+                            affordable
+                              ? `Post ${deltaHuman} $BLOW to take the ${SEAT_TIER_FLOOR_LABEL[entry.tier]}`
+                              : `Need ${deltaHuman} $BLOW — desk holds ${balanceHuman}`
+                          }
+                          className="w-full border border-[var(--t-amber)]/60 bg-[var(--t-amber)]/10 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--t-amber)] transition-colors hover:bg-[var(--t-amber)]/20 disabled:opacity-40"
+                        >
+                          {affordable
+                            ? `Post ${deltaHuman} $BLOW`
+                            : `Need ${deltaHuman} $BLOW`}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <form
+              onSubmit={handleStake}
+              className="flex flex-wrap items-end gap-2 border-t border-[var(--t-divider)] pt-3"
             >
-              Post $BLOW
-            </button>
-          </form>
+              <label className="min-w-[10rem] flex-1">
+                <span className="mb-1 block text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
+                  Custom top-up
+                </span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={stakeAmount}
+                  onChange={(e) => setStakeAmount(e.target.value)}
+                  placeholder="0"
+                  disabled={isLoading}
+                  className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 font-mono text-sm text-[var(--t-text)] outline-none focus:border-[var(--t-amber)]"
+                />
+              </label>
+              <button
+                type="submit"
+                disabled={isLoading || !stakeAmount.trim()}
+                className="min-h-10 border border-[var(--t-divider)] px-4 text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--t-text)] transition-colors hover:border-[var(--t-amber)] hover:text-[var(--t-amber)] disabled:opacity-40"
+              >
+                Post $BLOW
+              </button>
+            </form>
+          </div>
         ) : (
           <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)]">
             {!walletAddress

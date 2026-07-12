@@ -18,6 +18,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import {
   ArrowRight,
   Check,
+  ChevronsUp,
   Copy,
   Github,
   HelpCircle,
@@ -48,6 +49,7 @@ import { TraderAvatar } from "@/components/trader-avatar";
 import { pickFunTraits, type FunTrait } from "@/lib/portrait-traits";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { FloorCredential } from "@/components/seat-tier-badge";
+import { SeatUpgradeDialog } from "@/components/seat-upgrade-dialog";
 import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
 import { IntroSequence } from "@/components/intro-sequence";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
@@ -473,6 +475,9 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const [selectedPublicTraderId, setSelectedPublicTraderId] = useState<
     string | null
   >(null);
+  const [selectedUpgradeTraderId, setSelectedUpgradeTraderId] = useState<
+    string | null
+  >(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("desk");
 
   const openTraderProfile = useCallback((traderId: string) => {
@@ -480,6 +485,9 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   }, []);
   const openTraderWallet = useCallback((traderId: string) => {
     setSelectedWalletTraderId(traderId);
+  }, []);
+  const openTraderUpgrade = useCallback((traderId: string) => {
+    setSelectedUpgradeTraderId(traderId);
   }, []);
 
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
@@ -610,6 +618,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
               portfolioLoading={portfolioLoading}
               onOpenProfile={openTraderProfile}
               onManageWallet={openTraderWallet}
+              onUpgrade={openTraderUpgrade}
               onHireTrader={() => {
                 if (!deskWalletFunded) return;
                 setHireDialogOpen(true);
@@ -719,6 +728,11 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         traderId={selectedPublicTraderId}
         open={selectedPublicTraderId !== null}
         onOpenChange={(open) => !open && setSelectedPublicTraderId(null)}
+      />
+      <SeatUpgradeDialog
+        traderId={selectedUpgradeTraderId}
+        open={selectedUpgradeTraderId !== null}
+        onOpenChange={(open) => !open && setSelectedUpgradeTraderId(null)}
       />
     </div>
   );
@@ -2168,6 +2182,7 @@ function TradingDeskPanel({
   portfolioLoading,
   onOpenProfile,
   onManageWallet,
+  onUpgrade,
   onHireTrader,
   canHireTrader,
   hireDisabledReason,
@@ -2180,6 +2195,7 @@ function TradingDeskPanel({
   portfolioLoading: boolean;
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
+  onUpgrade: (id: string) => void;
   onHireTrader: () => void;
   canHireTrader: boolean;
   hireDisabledReason: string;
@@ -2259,6 +2275,7 @@ function TradingDeskPanel({
         nowMs={nowMs}
         onOpenProfile={onOpenProfile}
         onManageWallet={onManageWallet}
+        onUpgrade={onUpgrade}
         onOpenDeal={onOpenDeal}
         onHireTrader={onHireTrader}
         canHireTrader={canHireTrader}
@@ -2277,6 +2294,7 @@ function TradingDeskMain({
   nowMs,
   onOpenProfile,
   onManageWallet,
+  onUpgrade,
   onOpenDeal,
   onHireTrader,
   canHireTrader,
@@ -2290,6 +2308,7 @@ function TradingDeskMain({
   nowMs: number;
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
+  onUpgrade: (id: string) => void;
   onOpenDeal: (dealId: string) => void;
   onHireTrader: () => void;
   canHireTrader: boolean;
@@ -2335,23 +2354,26 @@ function TradingDeskMain({
       traders={traders}
       onOpenProfile={onOpenProfile}
       onManageWallet={onManageWallet}
+      onUpgrade={onUpgrade}
       nowMs={nowMs}
     />
   );
 }
 
 const DESK_ROW_GRID =
-  "grid-cols-[2rem_2.25rem_minmax(0,1fr)_3.5rem] sm:grid-cols-[2rem_2.25rem_minmax(0,1fr)_5rem_5.5rem_5rem_4.5rem_5rem_3.5rem]";
+  "grid-cols-[2rem_2.25rem_minmax(0,1fr)_5.5rem] sm:grid-cols-[2rem_2.25rem_minmax(0,1fr)_5rem_5.5rem_5rem_4.5rem_5rem_5.5rem]";
 
 function DeskTradersView({
   traders,
   onOpenProfile,
   onManageWallet,
+  onUpgrade,
   nowMs,
 }: {
   traders: TraderSummary[];
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
+  onUpgrade: (id: string) => void;
   nowMs: number;
 }) {
   const ranked = useMemo(
@@ -2386,6 +2408,7 @@ function DeskTradersView({
             nowMs={nowMs}
             onOpenProfile={onOpenProfile}
             onManageWallet={onManageWallet}
+            onUpgrade={onUpgrade}
           />
         ))}
       </div>
@@ -2399,12 +2422,14 @@ function DeskTraderRow({
   nowMs,
   onOpenProfile,
   onManageWallet,
+  onUpgrade,
 }: {
   rank: number;
   trader: TraderSummary;
   nowMs: number;
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
+  onUpgrade: (id: string) => void;
 }) {
   const statusTone = statusToneClass(trader.status);
   const pnlPct = pnlPercent(trader.total_pnl, trader.total_value_usdc);
@@ -2474,6 +2499,17 @@ function DeskTraderRow({
         {cycleUi.text}
       </span>
       <div className="flex items-center justify-end gap-1">
+        {trader.effective_tier !== "CornerOffice" ? (
+          <button
+            type="button"
+            onClick={() => onUpgrade(trader.id)}
+            title="Upgrade floor seat with $BLOW"
+            aria-label={`Upgrade ${trader.name} floor seat`}
+            className="grid h-6 w-6 place-items-center border border-[var(--t-amber)]/70 text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] hover:bg-[var(--t-amber)]/10 focus:border-[var(--t-amber)] focus:outline-none"
+          >
+            <ChevronsUp className="h-3.5 w-3.5" />
+          </button>
+        ) : null}
         <button
           type="button"
           onClick={() => onManageWallet(trader.id)}
