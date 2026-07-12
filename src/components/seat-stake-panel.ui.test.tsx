@@ -5,23 +5,37 @@ import { SeatStakePanelStatic } from "./seat-stake-panel";
 import { SeatTierBadgeView } from "./seat-tier-badge";
 
 describe("SeatTierBadgeView", () => {
-  it("renders floor tier labels", () => {
-    const html = renderToStaticMarkup(
+  it("renders distinct Seat and Corner Office credentials with a11y labels", () => {
+    const corner = renderToStaticMarkup(
       <SeatTierBadgeView tier="CornerOffice" syncStatus="ok" />
     );
-    expect(html).toContain("Corner Office");
-    expect(html).not.toContain("yield");
-    expect(html).not.toContain("reward");
+    expect(corner).toContain("Corner Office");
+    expect(corner).toContain('aria-label="Floor credential: Corner Office"');
+    expect(corner).toContain('role="status"');
+    expect(corner).not.toContain("yield");
+    expect(corner).not.toContain("reward");
+
+    const seat = renderToStaticMarkup(
+      <SeatTierBadgeView tier="Seat" syncStatus="ok" compact />
+    );
+    expect(seat).toContain("Seat");
+    expect(seat).toContain('aria-label="Floor credential: Seat"');
   });
 
-  it("surfaces sync lag without private amounts", () => {
-    const html = renderToStaticMarkup(
-      <SeatTierBadgeView tier="Seat" syncStatus="syncing" compact />
-    );
-    expect(html).toContain("Seat");
-    expect(html).toContain("syncing");
-    expect(html).not.toContain("Pending");
-    expect(html).not.toContain("Complete withdrawal");
+  it("renders nothing for Gallery, loading, and stale-sync states", () => {
+    expect(
+      renderToStaticMarkup(<SeatTierBadgeView tier="Gallery" syncStatus="ok" />)
+    ).toBe("");
+    expect(
+      renderToStaticMarkup(
+        <SeatTierBadgeView tier="Seat" syncStatus="syncing" compact />
+      )
+    ).toBe("");
+    expect(
+      renderToStaticMarkup(
+        <SeatTierBadgeView tier="CornerOffice" syncStatus="error" />
+      )
+    ).toBe("");
   });
 });
 

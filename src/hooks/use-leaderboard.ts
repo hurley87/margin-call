@@ -21,6 +21,8 @@ export interface LeaderboardTrader {
   win_rate: number;
   total_value: number;
   is_agent_desk?: boolean;
+  /** Public floor credential — Gallery / Seat / Corner Office. */
+  effectiveTier?: "Gallery" | "Seat" | "CornerOffice";
 }
 
 /** Public leaderboard — Convex subscription. */

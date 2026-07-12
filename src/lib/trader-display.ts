@@ -14,6 +14,9 @@ export type PublicTraderProfile = {
   profileImageUrl: string | null;
   ownerAddress?: string | null;
   isAgentDesk?: boolean;
+  /** Public floor credential only — Gallery when missing/stale. */
+  effectiveTier?: "Gallery" | "Seat" | "CornerOffice";
+  seatSyncStatus?: "ok" | "syncing" | "error";
   recentActivity: Array<{
     activityType: string;
     message: string;

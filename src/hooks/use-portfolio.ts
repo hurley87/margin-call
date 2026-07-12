@@ -21,6 +21,8 @@ export interface TraderSummary {
   losses: number;
   wipeouts: number;
   deal_count: number;
+  /** Public floor credential — Gallery / Seat / Corner Office. */
+  effective_tier: "Gallery" | "Seat" | "CornerOffice";
 }
 
 export interface PnlPoint {
@@ -72,6 +74,7 @@ export function usePortfolio(): {
       losses: t.losses,
       wipeouts: t.wipeouts,
       deal_count: t.dealCount,
+      effective_tier: t.effectiveTier,
     })),
     pnl_history: result.pnlHistory.map((p) => ({
       timestamp: new Date(p.createdAt).toISOString(),

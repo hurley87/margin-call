@@ -29,6 +29,7 @@ import { useDeskManager } from "@/hooks/use-desk";
 import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import { FloorCredential } from "@/components/seat-tier-badge";
 import { AnimatedNumber } from "@/components/animated-number";
 import {
   DIALOG_BACKDROP_CLASS,
@@ -468,6 +469,10 @@ export function DealDetailContent({
                       >
                         {formatOutcomeResult(outcome)}
                       </span>
+                      <FloorCredential
+                        tier={outcome.effective_tier ?? "Gallery"}
+                        compact
+                      />
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
                       {outcome.trader_wiped_out && (

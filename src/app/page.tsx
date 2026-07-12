@@ -47,6 +47,7 @@ import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { pickFunTraits, type FunTrait } from "@/lib/portrait-traits";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import { FloorCredential } from "@/components/seat-tier-badge";
 import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
 import { IntroSequence } from "@/components/intro-sequence";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
@@ -269,6 +270,7 @@ type RosterTile = {
   src: string | null;
   imageStatus: "pending" | "generating" | "ready" | "error";
   traits: FunTrait[];
+  effectiveTier?: "Gallery" | "Seat" | "CornerOffice";
 };
 
 /** Tier → chip color, mirroring the persona-traits palette. */
@@ -305,6 +307,7 @@ function LandingScreen({ onLogin }: { onLogin: () => void }) {
       src: t.profileImageUrl,
       imageStatus: "ready" as const,
       traits: t.traits ? pickFunTraits(t.traits) : [],
+      effectiveTier: t.effectiveTier,
     }));
   }, [landingRoster]);
 
@@ -370,8 +373,13 @@ function LandingScreen({ onLogin }: { onLogin: () => void }) {
                 />
               </div>
               <figcaption className="flex flex-col gap-1.5 border-t border-[var(--t-divider)] px-2 py-2">
-                <span className="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
-                  {tile.name}
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
+                    {tile.name}
+                  </span>
+                  {tile.effectiveTier ? (
+                    <FloorCredential tier={tile.effectiveTier} compact />
+                  ) : null}
                 </span>
                 {tile.traits.length > 0 && (
                   <span className="flex flex-wrap gap-1">
@@ -2395,8 +2403,11 @@ function DeskTraderRow({
         imageStatus={trader.image_status}
         size="sm"
       />
-      <span className="truncate font-bold uppercase tracking-wider text-[var(--t-amber)]">
-        {trader.name}
+      <span className="flex min-w-0 items-center gap-1.5 truncate">
+        <span className="truncate font-bold uppercase tracking-wider text-[var(--t-amber)]">
+          {trader.name}
+        </span>
+        <FloorCredential tier={trader.effective_tier} compact />
       </span>
       <span
         className={cn(
@@ -2869,6 +2880,10 @@ function MarketPlayersPanel({
                       <p className="min-w-0 truncate text-[var(--t-text)]">
                         {trader.name}
                       </p>
+                      <FloorCredential
+                        tier={trader.effectiveTier ?? "Gallery"}
+                        compact
+                      />
                       {trader.is_agent_desk ? <AgentDeskBadge compact /> : null}
                       {rankDelta !== undefined && (
                         <span

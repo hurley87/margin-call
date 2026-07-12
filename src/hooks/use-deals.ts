@@ -35,6 +35,8 @@ export interface DealOutcome {
   deal_id: string;
   trader_id: string;
   trader_name?: string;
+  /** Public floor credential — Gallery / Seat / Corner Office. */
+  effective_tier?: "Gallery" | "Seat" | "CornerOffice";
   trader_pnl_usdc: number;
   pot_change_usdc: number;
   pot_change_inferred: boolean;
@@ -70,7 +72,10 @@ function mapConvexDeal(deal: Doc<"deals">): Deal {
   };
 }
 
-type DealOutcomeDoc = Doc<"dealOutcomes"> & { traderName?: string };
+type DealOutcomeDoc = Doc<"dealOutcomes"> & {
+  traderName?: string;
+  effectiveTier?: "Gallery" | "Seat" | "CornerOffice";
+};
 
 function mapConvexOutcome(o: DealOutcomeDoc): DealOutcome {
   const traderPnlUsdc = o.traderPnlUsdc ?? 0;
@@ -85,6 +90,7 @@ function mapConvexOutcome(o: DealOutcomeDoc): DealOutcome {
     deal_id: o.dealId,
     trader_id: String(o.traderId),
     trader_name: o.traderName,
+    effective_tier: o.effectiveTier,
     trader_pnl_usdc: traderPnlUsdc,
     pot_change_usdc: potChangeUsdc,
     pot_change_inferred: potChangeInferred,

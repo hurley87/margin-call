@@ -108,7 +108,6 @@ function PublicTraderContent({
             </h2>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
               <SeatTierBadge traderId={trader.traderId} compact />
-              <span className="text-[var(--t-divider)]">/</span>
               <span>
                 File{" "}
                 <span className="text-[var(--t-text)]">

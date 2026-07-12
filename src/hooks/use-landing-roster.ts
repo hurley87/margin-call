@@ -9,6 +9,8 @@ export type LandingRosterTrader = {
   name: string;
   profileImageUrl: string;
   traits: PublicPortraitTraits | null;
+  /** Public floor credential — Gallery / Seat / Corner Office. */
+  effectiveTier: "Gallery" | "Seat" | "CornerOffice";
 };
 
 /** Lightweight public roster used only by the unauthenticated landing page. */
