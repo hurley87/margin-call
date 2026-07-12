@@ -7,43 +7,8 @@
  *
  * Usage: pnpm deploy:escrow
  */
-import { execSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
 import { privateKeyToAccount } from "viem/accounts";
-
-const ROOT = join(import.meta.dirname, "..");
-const ENV_LOCAL = join(ROOT, ".env.local");
-
-function loadEnvLocal(): Record<string, string> {
-  if (!existsSync(ENV_LOCAL)) {
-    throw new Error(
-      ".env.local not found — copy .env.example and set OPERATOR_PRIVATE_KEY"
-    );
-  }
-  const lines = readFileSync(ENV_LOCAL, "utf8").split("\n");
-  const env: Record<string, string> = {};
-  for (const line of lines) {
-    const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    env[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
-  }
-  return env;
-}
-
-function patchEnvLocal(key: string, value: string) {
-  let content = readFileSync(ENV_LOCAL, "utf8");
-  const line = `${key}=${value}`;
-  const pattern = new RegExp(`^${key}=.*$`, "m");
-  if (pattern.test(content)) {
-    content = content.replace(pattern, line);
-  } else {
-    content = content.trimEnd() + `\n${line}\n`;
-  }
-  writeFileSync(ENV_LOCAL, content);
-}
+import { loadEnvLocal, patchEnvLocal, runForgeDeploy } from "./deploy-utils";
 
 function main() {
   const env = loadEnvLocal();
@@ -60,27 +25,14 @@ function main() {
 
   console.log(`Deploying MarginCallEscrow with operator ${operatorAddress}…`);
 
-  const output = execSync(
-    `forge script script/DeployMarginCallEscrow.s.sol:DeployMarginCallEscrow --rpc-url "${rpcUrl}" --private-key "${operatorKey}" --broadcast -vv`,
-    {
-      cwd: join(ROOT, "contracts"),
-      env: {
-        ...process.env,
-        OPERATOR_ADDRESS: operatorAddress,
-      },
-      encoding: "utf8",
-    }
-  );
+  const { address } = runForgeDeploy({
+    scriptTarget: "script/DeployMarginCallEscrow.s.sol:DeployMarginCallEscrow",
+    rpcUrl,
+    privateKey: operatorKey,
+    addressLabel: "MarginCallEscrow",
+    env: { OPERATOR_ADDRESS: operatorAddress },
+  });
 
-  console.log(output);
-
-  const match = output.match(
-    /MarginCallEscrow deployed at:\s*(0x[a-fA-F0-9]{40})/
-  );
-  if (!match) {
-    throw new Error("Could not parse deployed address from forge output");
-  }
-  const address = match[1] as string;
   patchEnvLocal("NEXT_PUBLIC_ESCROW_ADDRESS", address);
   patchEnvLocal("ESCROW_ADDRESS", address);
 

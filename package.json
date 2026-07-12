@@ -11,7 +11,9 @@
     "test:convex": "vitest run tests/convex",
     "seed:wire": "convex run seasons:importSeason",
     "prepare": "husky",
-    "deploy:escrow": "tsx scripts/deploy-escrow.ts"
+    "deploy:escrow": "tsx scripts/deploy-escrow.ts",
+    "deploy:margincall-token": "tsx scripts/deploy-margincall-token.ts",
+    "deploy:seat-vault": "tsx scripts/deploy-seat-vault.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.2.0",
