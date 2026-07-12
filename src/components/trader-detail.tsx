@@ -29,6 +29,8 @@ import {
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
+import { SeatStakePanel } from "@/components/seat-stake-panel";
+import { SeatTierBadge } from "@/components/seat-tier-badge";
 import { MarketClosedButton } from "@/components/market-closed-button";
 import { shortAssetLabel } from "@/lib/format-asset-label";
 import { useMarketHours } from "@/hooks/use-market-hours";
@@ -248,6 +250,7 @@ export function TraderDetailContent({
               {trader.name}
             </h2>
             <StatusBadge status={trader.status} />
+            <SeatTierBadge traderId={id} compact />
             <span className="min-w-0">
               <TraderCycleLine trader={trader} />
             </span>
@@ -345,6 +348,7 @@ export function TraderDetailContent({
             walletReady={trader.wallet_status === "ready"}
             onOpenWallet={() => setWalletOpen(true)}
           />
+          <SeatStakePanel traderId={id} onChainTraderId={trader.token_id} />
           <TraderPendingApprovals traderId={id} />
           <ReputationSection traderId={id} />
           <MandateConfig

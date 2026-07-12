@@ -39,3 +39,12 @@ const RESOLVED_SEAT_VAULT_ADDRESS =
   SEAT_VAULT_V1.address;
 
 export const SEAT_VAULT_ADDRESS = RESOLVED_SEAT_VAULT_ADDRESS as `0x${string}`;
+
+const RESOLVED_MARGINCALL_TOKEN_ADDRESS =
+  process.env.NEXT_PUBLIC_MARGINCALL_TOKEN_ADDRESS ??
+  process.env.MARGINCALL_TOKEN_ADDRESS ??
+  SEAT_VAULT_V1.margincallToken;
+
+/** $BLOW staking token (on-chain symbol may be MARGINCALL). */
+export const MARGINCALL_TOKEN_ADDRESS =
+  RESOLVED_MARGINCALL_TOKEN_ADDRESS as `0x${string}`;

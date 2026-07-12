@@ -3,6 +3,7 @@ import {
   BLOW_DECIMALS,
   CORNER_OFFICE_THRESHOLD_HUMAN,
   CORNER_OFFICE_THRESHOLD_WEI,
+  MARGINCALL_TOKEN_ADDRESS,
   SEAT_THRESHOLD_HUMAN,
   SEAT_THRESHOLD_WEI,
   SEAT_VAULT_V1,
@@ -16,6 +17,7 @@ import {
   parseBlowAmount,
   seatTierNameFromOnChain,
   seatTierToOnChain,
+  seatVaultAbi,
   seatVaultEventDedupeKey,
   tierFromActiveAmount,
 } from "@/lib/contracts/seatVault";
@@ -104,5 +106,23 @@ describe("seatVaultEventDedupeKey", () => {
         3
       )
     ).toBe("0xa8595b279aeadc8a0d2ce779dc8ba4d978ea2f44:12:3");
+  });
+});
+
+describe("client token + write ABI", () => {
+  it("exports MARGINCALL_TOKEN_ADDRESS from v1 defaults", () => {
+    expect(MARGINCALL_TOKEN_ADDRESS.toLowerCase()).toBe(
+      SEAT_VAULT_V1.margincallToken.toLowerCase()
+    );
+  });
+
+  it("includes stake / initiateUnstake / completeUnstake writes", () => {
+    const names = seatVaultAbi
+      .filter((item) => item.type === "function")
+      .map((item) => item.name);
+    expect(names).toContain("stake");
+    expect(names).toContain("initiateUnstake");
+    expect(names).toContain("completeUnstake");
+    expect(names).toContain("stakeOf");
   });
 });

@@ -9,6 +9,7 @@ import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
 import { DatumCell } from "@/components/datum-cell";
 import { EmptyState } from "@/components/empty-state";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
+import { SeatTierBadgeView } from "@/components/seat-tier-badge";
 import { formatStatus } from "@/lib/format-status";
 import {
   formatPortraitStatus,
@@ -19,9 +20,15 @@ import {
   type PublicTraderProfile,
 } from "@/lib/trader-display";
 import { formatActivityTime, formatUsdc } from "@/lib/utils";
+import type { SeatTierName } from "@/lib/contracts/seatVault";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+type PublicTierSnapshot = {
+  effectiveTier: SeatTierName;
+  syncStatus: "ok" | "syncing" | "error";
+};
 
 function createPublicConvexClient(): ConvexHttpClient {
   const url = process.env.NEXT_PUBLIC_CONVEX_URL;
@@ -48,25 +55,43 @@ async function loadTraderProfile(traderId: string) {
   }
 }
 
+async function loadPublicTier(
+  traderId: string
+): Promise<PublicTierSnapshot | null> {
+  try {
+    const convex = createPublicConvexClient();
+    return await convex.query(api.seatVault.queries.getPublicTraderTier, {
+      traderId: traderId as Id<"traders">,
+    });
+  } catch {
+    return null;
+  }
+}
+
 export default async function PublicTraderPage({
   params,
 }: {
   params: Promise<{ traderId: string }>;
 }) {
   const { traderId } = await params;
-  const trader = await loadTraderProfile(traderId);
+  const [trader, publicTier] = await Promise.all([
+    loadTraderProfile(traderId),
+    loadPublicTier(traderId),
+  ]);
 
   if (!trader) {
     notFound();
   }
 
-  return <PublicTraderDossier trader={trader} />;
+  return <PublicTraderDossier trader={trader} publicTier={publicTier} />;
 }
 
 export function PublicTraderDossier({
   trader,
+  publicTier = null,
 }: {
   trader: PublicTraderProfile;
+  publicTier?: PublicTierSnapshot | null;
 }) {
   let portraitUrl: string = TRADER_PLACEHOLDER_IMAGE_PATH;
   if (trader.portraitStatus === "ready" && trader.profileImageUrl) {
@@ -75,6 +100,8 @@ export function PublicTraderDossier({
   const showFallbackInitials = trader.portraitStatus !== "ready";
   const statusTone = getStatusTone(trader.status);
   const portraitTone = getPortraitTone(trader.portraitStatus);
+  const tier = publicTier?.effectiveTier ?? "Gallery";
+  const syncStatus = publicTier?.syncStatus;
 
   return (
     <main className="min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
@@ -90,9 +117,12 @@ export function PublicTraderDossier({
                 <AgentDeskBadge className="ml-2 scale-125 align-baseline" />
               ) : null}
             </h1>
-            <p className="mt-2 max-w-2xl text-xs uppercase tracking-[0.16em] text-[var(--t-muted)]">
-              Read-only reputation, escrow posture, and last public calls from
-              the exchange floor.
+            <p className="mt-2 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.16em] text-[var(--t-muted)]">
+              <SeatTierBadgeView tier={tier} syncStatus={syncStatus} />
+              <span>
+                Read-only reputation, escrow posture, and last public calls from
+                the exchange floor.
+              </span>
             </p>
           </div>
           <Link

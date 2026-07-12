@@ -177,6 +177,33 @@ export const SEAT_VAULT_MAX_BLOCKS_PER_TICK = 2_000;
 export const seatVaultAbi = [
   {
     type: "function",
+    name: "stake",
+    inputs: [
+      { name: "traderId", type: "uint256" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "initiateUnstake",
+    inputs: [
+      { name: "traderId", type: "uint256" },
+      { name: "amount", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "completeUnstake",
+    inputs: [{ name: "traderId", type: "uint256" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "stakeOf",
     inputs: [{ name: "traderId", type: "uint256" }],
     outputs: [
