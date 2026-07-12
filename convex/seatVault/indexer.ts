@@ -33,7 +33,17 @@ export const tick = internalAction({
     tradersReconciled: v.number(),
     error: v.optional(v.string()),
   }),
-  handler: async (ctx) => {
+  handler: async (
+    ctx
+  ): Promise<{
+    ok: boolean;
+    vaultAddress: string;
+    fromBlock?: number;
+    toBlock?: number;
+    eventsInserted: number;
+    tradersReconciled: number;
+    error?: string;
+  }> => {
     const vaultAddress = normalizeAddress(resolveConfiguredSeatVaultAddress());
     try {
       // Threshold/token/escrow fields default to SEAT_VAULT_V1 inside the
@@ -47,7 +57,7 @@ export const tick = internalAction({
       const client = createSeatVaultPublicClient(resolveRpcUrl());
       const tip = await client.getBlockNumber();
       const confirmedTip = tip - BigInt(confirmationDepth);
-      if (confirmedTip < 0n) {
+      if (confirmedTip < BigInt(0)) {
         return {
           ok: true,
           vaultAddress,
@@ -217,7 +227,14 @@ export const reconcileTrader = internalAction({
     ),
     error: v.optional(v.string()),
   }),
-  handler: async (ctx, args) => {
+  handler: async (
+    ctx,
+    args
+  ): Promise<{
+    ok: boolean;
+    effectiveTier: SeatTierName;
+    error?: string;
+  }> => {
     const active = await ctx.runQuery(
       internal.seatVault.store.getActiveDeploymentInternal,
       {}

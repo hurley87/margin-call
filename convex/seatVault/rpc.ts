@@ -1,6 +1,6 @@
 "use node";
 
-import { createPublicClient, http, type PublicClient, type Log } from "viem";
+import { createPublicClient, http, type Log } from "viem";
 import { baseSepolia } from "viem/chains";
 import {
   seatTierNameFromOnChain,
@@ -30,15 +30,18 @@ export type DecodedSeatVaultLog = {
 
 export function createSeatVaultPublicClient(
   rpcUrl: string | undefined = resolveRpcUrl()
-): PublicClient {
+) {
   return createPublicClient({
     chain: baseSepolia,
     transport: http(rpcUrl),
   });
 }
 
+/** Concrete public-client type returned by the factory above. */
+export type SeatVaultClient = ReturnType<typeof createSeatVaultPublicClient>;
+
 export async function readStakeOf(
-  client: PublicClient,
+  client: SeatVaultClient,
   vaultAddress: `0x${string}`,
   onChainTraderId: number
 ): Promise<SeatVaultStakeInfo> {
@@ -58,7 +61,7 @@ export async function readStakeOf(
 }
 
 export async function readTierOf(
-  client: PublicClient,
+  client: SeatVaultClient,
   vaultAddress: `0x${string}`,
   onChainTraderId: number
 ): Promise<SeatTierName> {
@@ -76,7 +79,7 @@ export async function readTierOf(
  * Caller applies confirmation depth before choosing toBlock.
  */
 export async function fetchSeatVaultLogs(
-  client: PublicClient,
+  client: SeatVaultClient,
   vaultAddress: `0x${string}`,
   fromBlock: bigint,
   toBlock: bigint
