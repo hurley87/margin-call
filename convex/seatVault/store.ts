@@ -3,7 +3,6 @@ import { v } from "convex/values";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import {
-  capacityForTiers,
   seatVaultEventDedupeKey,
   SEAT_VAULT_V1,
   type SeatTierName,
@@ -535,8 +534,3 @@ export const listSeatStatesForVault = internalQuery({
     }));
   },
 });
-
-/** Exported for unit tests — capacity mapping from published tier. */
-export function capacitySnapshot(tier: SeatTierName) {
-  return capacityForTiers(tier);
-}

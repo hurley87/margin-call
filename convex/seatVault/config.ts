@@ -16,8 +16,7 @@ export function resolveConfiguredSeatVaultAddress(): string {
 export function resolveRpcUrl(): string | undefined {
   return (
     process.env.BASE_SEPOLIA_RPC_URL ??
-    process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL ??
-    undefined
+    process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL
   );
 }
 

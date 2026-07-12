@@ -1,6 +1,7 @@
 import { query } from "../_generated/server";
 import { v } from "convex/values";
-import { capacityForTier } from "./policy";
+import type { Doc } from "../_generated/dataModel";
+import { capacityForTier, type SeatTierName } from "./policy";
 import {
   seatVaultDeploymentPublicValidator,
   seatVaultEventPublicValidator,
@@ -8,6 +9,31 @@ import {
   traderSeatStatePublicValidator,
 } from "./validators";
 import { normalizeAddress } from "./config";
+
+/** Map a persisted seat-state row to the public shape with tier capacity. */
+function toPublicSeatState(
+  row: Doc<"traderSeatState">,
+  effectiveTier: SeatTierName
+) {
+  const capacity = capacityForTier(effectiveTier);
+  return {
+    traderId: row.traderId,
+    onChainTraderId: row.onChainTraderId,
+    vaultAddress: row.vaultAddress,
+    vaultVersion: row.vaultVersion,
+    isActiveVault: row.isActiveVault,
+    effectiveTier,
+    staker: row.staker ?? null,
+    activeAmountWei: row.activeAmountWei,
+    pendingAmountWei: row.pendingAmountWei,
+    unlockTime: row.unlockTime,
+    syncStatus: row.syncStatus,
+    syncError: row.syncError ?? null,
+    lastReconciledAt: row.lastReconciledAt ?? null,
+    cycleIntervalMs: capacity.cycleIntervalMs,
+    maxUnresolvedEntries: capacity.maxUnresolvedEntries,
+  };
+}
 
 /**
  * Private stake details for a trader the caller owns.
@@ -42,24 +68,7 @@ export const getTraderSeatState = query({
       : null;
 
     if (activeState) {
-      const capacity = capacityForTier(activeState.effectiveTier);
-      return {
-        traderId: activeState.traderId,
-        onChainTraderId: activeState.onChainTraderId,
-        vaultAddress: activeState.vaultAddress,
-        vaultVersion: activeState.vaultVersion,
-        isActiveVault: activeState.isActiveVault,
-        effectiveTier: activeState.effectiveTier,
-        staker: activeState.staker ?? null,
-        activeAmountWei: activeState.activeAmountWei,
-        pendingAmountWei: activeState.pendingAmountWei,
-        unlockTime: activeState.unlockTime,
-        syncStatus: activeState.syncStatus,
-        syncError: activeState.syncError ?? null,
-        lastReconciledAt: activeState.lastReconciledAt ?? null,
-        cycleIntervalMs: capacity.cycleIntervalMs,
-        maxUnresolvedEntries: capacity.maxUnresolvedEntries,
-      };
+      return toPublicSeatState(activeState, activeState.effectiveTier);
     }
 
     // No row yet — fail closed to Gallery for UI badges.
@@ -106,27 +115,9 @@ export const listTraderVaultWithdrawals = query({
       .withIndex("byTrader", (q) => q.eq("traderId", args.traderId))
       .collect();
 
-    return rows.map((row) => {
-      const effectiveTier = row.isActiveVault ? row.effectiveTier : "Gallery";
-      const capacity = capacityForTier(effectiveTier);
-      return {
-        traderId: row.traderId,
-        onChainTraderId: row.onChainTraderId,
-        vaultAddress: row.vaultAddress,
-        vaultVersion: row.vaultVersion,
-        isActiveVault: row.isActiveVault,
-        effectiveTier,
-        staker: row.staker ?? null,
-        activeAmountWei: row.activeAmountWei,
-        pendingAmountWei: row.pendingAmountWei,
-        unlockTime: row.unlockTime,
-        syncStatus: row.syncStatus,
-        syncError: row.syncError ?? null,
-        lastReconciledAt: row.lastReconciledAt ?? null,
-        cycleIntervalMs: capacity.cycleIntervalMs,
-        maxUnresolvedEntries: capacity.maxUnresolvedEntries,
-      };
-    });
+    return rows.map((row) =>
+      toPublicSeatState(row, row.isActiveVault ? row.effectiveTier : "Gallery")
+    );
   },
 });
 

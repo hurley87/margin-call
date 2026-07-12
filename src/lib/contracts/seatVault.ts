@@ -30,11 +30,12 @@ export {
   type SeatTierName,
   type SeatVaultEventName,
 } from "../../../convex/seatVault/policy";
+import { SEAT_VAULT_V1 } from "../../../convex/seatVault/policy";
 
 const RESOLVED_SEAT_VAULT_ADDRESS =
   process.env.NEXT_PUBLIC_SEAT_VAULT_ADDRESS ??
   process.env.SEAT_VAULT_ADDRESS ??
   // Fallback to deployed Base Sepolia v1 so local UI can read without env.
-  "0xa8595b279Aeadc8a0d2ce779Dc8Ba4d978eA2f44";
+  SEAT_VAULT_V1.address;
 
 export const SEAT_VAULT_ADDRESS = RESOLVED_SEAT_VAULT_ADDRESS as `0x${string}`;

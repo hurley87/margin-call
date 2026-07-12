@@ -1,13 +1,9 @@
 "use node";
 
-import { internalAction } from "../_generated/server";
+import { internalAction, type ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import {
-  SEAT_VAULT_MAX_BLOCKS_PER_TICK,
-  SEAT_VAULT_V1,
-  type SeatTierName,
-} from "./policy";
+import { SEAT_VAULT_MAX_BLOCKS_PER_TICK, type SeatTierName } from "./policy";
 import {
   resolveConfiguredSeatVaultAddress,
   resolveConfirmationDepth,
@@ -40,23 +36,11 @@ export const tick = internalAction({
   handler: async (ctx) => {
     const vaultAddress = normalizeAddress(resolveConfiguredSeatVaultAddress());
     try {
-      const isV1 = vaultAddress === normalizeAddress(SEAT_VAULT_V1.address);
+      // Threshold/token/escrow fields default to SEAT_VAULT_V1 inside the
+      // mutation, so only the address is needed here.
       const ensured = await ctx.runMutation(
         internal.seatVault.store.ensureActiveVaultDeployment,
-        {
-          address: vaultAddress,
-          ...(isV1
-            ? {
-                version: SEAT_VAULT_V1.version,
-                seatThresholdWei: SEAT_VAULT_V1.seatThresholdWei,
-                cornerOfficeThresholdWei:
-                  SEAT_VAULT_V1.cornerOfficeThresholdWei,
-                unstakeCooldownSeconds: SEAT_VAULT_V1.unstakeCooldownSeconds,
-                margincallToken: SEAT_VAULT_V1.margincallToken,
-                escrow: SEAT_VAULT_V1.escrow,
-              }
-            : {}),
-        }
+        { address: vaultAddress }
       );
 
       const confirmationDepth = resolveConfirmationDepth();
@@ -150,17 +134,19 @@ export const tick = internalAction({
         affectedTraderIds.add(log.onChainTraderId);
       }
 
-      let tradersReconciled = 0;
-      for (const onChainTraderId of affectedTraderIds) {
-        const ok = await reconcileOneTrader(ctx, {
-          vaultAddress,
-          vaultVersion: ensured.version,
-          isActiveVault: true,
-          onChainTraderId,
-          client,
-        });
-        if (ok) tradersReconciled += 1;
-      }
+      // Traders are independent — reconcile them concurrently.
+      const reconcileResults = await Promise.all(
+        [...affectedTraderIds].map((onChainTraderId) =>
+          reconcileOneTrader(ctx, {
+            vaultAddress,
+            vaultVersion: ensured.version,
+            isActiveVault: true,
+            onChainTraderId,
+            client,
+          })
+        )
+      );
+      const tradersReconciled = reconcileResults.filter(Boolean).length;
 
       await ctx.runMutation(internal.seatVault.store.upsertCursor, {
         vaultAddress,
@@ -270,27 +256,13 @@ export const reconcileTrader = internalAction({
       };
     }
 
-    const trader = await ctx.runQuery(
-      internal.seatVault.store.findTraderByTokenId,
-      { onChainTraderId: args.onChainTraderId }
-    );
-    if (!trader) {
-      return { ok: true, effectiveTier: "Gallery" as const };
-    }
-
-    // Re-read published state is overkill; return ok Gallery default for unknown.
+    // Seat state is persisted by reconcileOneTrader; callers read the
+    // authoritative tier via the seat-state queries.
     return { ok: true, effectiveTier: "Gallery" as const };
   },
 });
 
-type ReconcileCtx = {
-  runQuery: (
-    ...args: Parameters<import("../_generated/server").ActionCtx["runQuery"]>
-  ) => ReturnType<import("../_generated/server").ActionCtx["runQuery"]>;
-  runMutation: (
-    ...args: Parameters<import("../_generated/server").ActionCtx["runMutation"]>
-  ) => ReturnType<import("../_generated/server").ActionCtx["runMutation"]>;
-};
+type ReconcileCtx = Pick<ActionCtx, "runQuery" | "runMutation">;
 
 async function reconcileOneTrader(
   ctx: ReconcileCtx,
