@@ -17,6 +17,7 @@ import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
 import { internal } from "../../convex/_generated/api";
 import { DEFAULT_CYCLE_INTERVAL_MS } from "../../convex/agent/internal";
+import { MIN_CYCLE_INTERVAL_MS } from "../../convex/agent/capacity";
 import { seedDeskManager, seedActiveTrader, seedDeal } from "./setup";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
@@ -49,10 +50,10 @@ describe("Cycle lease: stale trader eligibility", () => {
     expect(stale.length).toBe(1);
   });
 
-  it("returns stale trader (lastCycleAt past default interval) as eligible", async () => {
+  it("returns stale trader (lastCycleAt past min pre-filter interval) as eligible", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);
-    const oldCycleAt = Date.now() - DEFAULT_CYCLE_INTERVAL_MS;
+    const oldCycleAt = Date.now() - MIN_CYCLE_INTERVAL_MS;
     await seedActiveTrader(t, dmId, { lastCycleAt: oldCycleAt });
 
     const stale = await t.query(
@@ -62,10 +63,10 @@ describe("Cycle lease: stale trader eligibility", () => {
     expect(stale.length).toBe(1);
   });
 
-  it("does NOT return trader with lastCycleAt within default cycle interval", async () => {
+  it("does NOT return trader with lastCycleAt within min pre-filter interval", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);
-    const freshCycleAt = Date.now() - 10_000; // well inside the default interval
+    const freshCycleAt = Date.now() - 10_000; // well inside the min interval
     await seedActiveTrader(t, dmId, { lastCycleAt: freshCycleAt });
 
     const stale = await t.query(
@@ -75,11 +76,10 @@ describe("Cycle lease: stale trader eligibility", () => {
     expect(stale.length).toBe(0);
   });
 
-  it("does NOT return trader whose lastCycleAt is just inside the cycle interval (boundary: still fresh)", async () => {
+  it("does NOT return trader whose lastCycleAt is just inside the min interval (boundary: still fresh)", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);
-    const justInsideInterval =
-      Date.now() - (DEFAULT_CYCLE_INTERVAL_MS - 60_000);
+    const justInsideInterval = Date.now() - (MIN_CYCLE_INTERVAL_MS - 60_000);
     await seedActiveTrader(t, dmId, { lastCycleAt: justInsideInterval });
 
     const stale = await t.query(
@@ -89,11 +89,30 @@ describe("Cycle lease: stale trader eligibility", () => {
     expect(stale.length).toBe(0);
   });
 
-  it("returns trader whose lastCycleAt is older than default interval by a margin", async () => {
+  it("returns trader whose lastCycleAt is older than min interval by a margin", async () => {
     const t = convexTest(schema, modules);
     const dmId = await seedDeskManager(t);
-    const wellPastInterval = Date.now() - DEFAULT_CYCLE_INTERVAL_MS - 1_000;
+    const wellPastInterval = Date.now() - MIN_CYCLE_INTERVAL_MS - 1_000;
     await seedActiveTrader(t, dmId, { lastCycleAt: wellPastInterval });
+
+    const stale = await t.query(
+      internal.agent.internal.listStaleTradersForCycle,
+      { now: Date.now() }
+    );
+    expect(stale.length).toBe(1);
+  });
+
+  it("pre-filter may surface Gallery traders before authoritative 10m cadence (scheduler re-checks)", async () => {
+    // listStale uses MIN (5m) so Seat/Corner are not missed; Gallery is filtered
+    // again by authoritative tierOf in the scheduler/cycle.
+    const t = convexTest(schema, modules);
+    const dmId = await seedDeskManager(t);
+    const betweenMinAndGallery = Date.now() - (MIN_CYCLE_INTERVAL_MS + 1_000);
+    // Still inside Gallery's DEFAULT (10m) window.
+    expect(betweenMinAndGallery).toBeGreaterThan(
+      Date.now() - DEFAULT_CYCLE_INTERVAL_MS
+    );
+    await seedActiveTrader(t, dmId, { lastCycleAt: betweenMinAndGallery });
 
     const stale = await t.query(
       internal.agent.internal.listStaleTradersForCycle,

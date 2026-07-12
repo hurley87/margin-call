@@ -4,7 +4,14 @@ import { internalAction, type ActionCtx } from "../_generated/server";
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
-import { CYCLE_LEASE_TTL_MS, DEFAULT_CYCLE_INTERVAL_MS } from "./internal";
+import { CYCLE_LEASE_TTL_MS } from "./internal";
+import {
+  getTierOfReaderOverride,
+  isCycleIntervalElapsed,
+  resolveAuthoritativeCapacity,
+  type AuthoritativeCapacity,
+  type TierOfReader,
+} from "./capacity";
 import { APPROVAL_EXPIRY_MS } from "./_constants";
 import { selectDeal } from "./dealSelection";
 import { resolveOutcome, type ResolvedOutcome } from "./outcomeResolver";
@@ -16,7 +23,64 @@ import {
   isTradingHours,
 } from "../lib/tradingHours";
 import { ESCROW_ADDRESS } from "../mcp/escrowConstants";
+import { createSeatVaultPublicClient, readTierOf } from "../seatVault/rpc";
 const USDC_DECIMALS = 1_000_000;
+
+async function defaultReadTierOf(
+  vaultAddress: `0x${string}`,
+  onChainTraderId: number
+) {
+  const client = createSeatVaultPublicClient();
+  return readTierOf(client, vaultAddress, onChainTraderId);
+}
+
+function resolveTierReader(): TierOfReader {
+  return getTierOfReaderOverride() ?? defaultReadTierOf;
+}
+
+async function loadAuthoritativeCapacity(
+  ctx: ActionCtx,
+  trader: { tokenId?: number | null }
+): Promise<AuthoritativeCapacity> {
+  const deployment = await ctx.runQuery(
+    internal.seatVault.store.getActiveDeploymentInternal,
+    {}
+  );
+  return resolveAuthoritativeCapacity({
+    onChainTraderId: trader.tokenId,
+    vaultAddress: deployment?.address ?? null,
+    readTierOf: resolveTierReader(),
+  });
+}
+
+async function logCapacityDiagnostic(
+  ctx: ActionCtx,
+  {
+    traderId,
+    capacity,
+    correlationId,
+  }: {
+    traderId: Id<"traders">;
+    capacity: AuthoritativeCapacity;
+    correlationId?: string;
+  }
+) {
+  if (capacity.source !== "fail_closed" || !capacity.diagnostic) return;
+  console.warn(
+    `[cycle] capacity fail-closed Gallery for ${traderId}: ${capacity.diagnostic}`
+  );
+  await ctx.runMutation(internal.agentActivityLog.append, {
+    traderId,
+    activityType: "capacity_diagnostic",
+    message: `SeatVault tier read failed closed to Gallery: ${capacity.diagnostic}`,
+    metadata: {
+      diagnostic: capacity.diagnostic,
+      tier: capacity.tier,
+      source: capacity.source,
+    },
+    correlationId,
+  });
+}
 
 function usdcToRaw(amountUsdc: number): bigint {
   return BigInt(Math.max(0, Math.round(amountUsdc * USDC_DECIMALS)));
@@ -474,12 +538,20 @@ export const cycle = internalAction({
       );
       if (!recoveryEntry) {
         // Stamp `lastCycleAt = nextOpenAt - intervalMs` so the trader becomes
-        // stale exactly at the next open. Falls back to `now` if the trading
-        // calendar can't resolve a next open (defensive — shouldn't happen).
+        // stale exactly at the next open. Use authoritative tier cadence.
+        // Falls back to `now` if the trading calendar can't resolve a next open.
+        // Fail-closed diagnostics stay on console here so the silent skip
+        // (no activity rows) contract from trading-hours tests is preserved.
+        const capacity = await loadAuthoritativeCapacity(ctx, trader);
+        if (capacity.source === "fail_closed" && capacity.diagnostic) {
+          console.warn(
+            `[cycle] capacity fail-closed Gallery for ${traderId}: ${capacity.diagnostic}`
+          );
+        }
         const state = getTradingHoursState(now);
         const lastCycleAt =
           state.nextOpenAt !== undefined
-            ? state.nextOpenAt - DEFAULT_CYCLE_INTERVAL_MS
+            ? state.nextOpenAt - capacity.cycleIntervalMs
             : now;
         await ctx.runMutation(internal.agent.internal.stampLastCycleAt, {
           traderId,
@@ -636,6 +708,7 @@ export const cycle = internalAction({
       const mandate = (trader.mandate ?? {}) as Mandate;
 
       // Read live on-chain balance so stale Convex cache never blocks trading.
+      // Hoisted so after-hours recovery / outcome resolution can reuse it.
       let escrowBalanceUsdc = trader.escrowBalanceUsdc ?? 0;
       if (trader.tokenId !== undefined && trader.tokenId !== null) {
         try {
@@ -680,6 +753,67 @@ export const cycle = internalAction({
       let bestDeal: Deal | null = null;
 
       if (marketOpen) {
+        // Capacity gate for NEW entries (approval bypass + cron share this path).
+        // §3c recovery above is intentionally ungated. Cadence + unresolved-entry
+        // caps always apply before selectDeal / enterDeal.
+        const capacity = await loadAuthoritativeCapacity(ctx, trader);
+        await logCapacityDiagnostic(ctx, {
+          traderId,
+          capacity,
+          correlationId,
+        });
+
+        if (
+          !isCycleIntervalElapsed(
+            trader.lastCycleAt,
+            now,
+            capacity.cycleIntervalMs
+          )
+        ) {
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "cycle_end",
+            message: `Cycle complete — cadence not elapsed for ${capacity.tier} (${capacity.cycleIntervalMs}ms)`,
+            metadata: {
+              tier: capacity.tier,
+              cycle_interval_ms: capacity.cycleIntervalMs,
+              source: capacity.source,
+            },
+            correlationId,
+          });
+          await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+            traderId,
+            generation,
+            lastCycleAt: trader.lastCycleAt ?? now,
+          });
+          return;
+        }
+
+        const unresolvedCount = await ctx.runQuery(
+          internal.agent.capacity.countUnresolvedEntries,
+          { traderId, now }
+        );
+        if (unresolvedCount >= capacity.maxUnresolvedEntries) {
+          await ctx.runMutation(internal.agentActivityLog.append, {
+            traderId,
+            activityType: "cycle_end",
+            message: `Cycle complete — unresolved entry cap reached (${unresolvedCount}/${capacity.maxUnresolvedEntries} for ${capacity.tier})`,
+            metadata: {
+              tier: capacity.tier,
+              unresolved_count: unresolvedCount,
+              max_unresolved_entries: capacity.maxUnresolvedEntries,
+              source: capacity.source,
+            },
+            correlationId,
+          });
+          await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+            traderId,
+            generation,
+            lastCycleAt: Date.now(),
+          });
+          return;
+        }
+
         const selection = await selectDeal(ctx, {
           traderId,
           traderName: trader.name,

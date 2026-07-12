@@ -13,6 +13,7 @@ import type * as agent__ctx from "../agent/_ctx.js";
 import type * as agent__evaluator from "../agent/_evaluator.js";
 import type * as agent__schemas from "../agent/_schemas.js";
 import type * as agent__types from "../agent/_types.js";
+import type * as agent_capacity from "../agent/capacity.js";
 import type * as agent_cycle from "../agent/cycle.js";
 import type * as agent_dealSelection from "../agent/dealSelection.js";
 import type * as agent_internal from "../agent/internal.js";
@@ -123,6 +124,7 @@ declare const fullApi: ApiFromModules<{
   "agent/_evaluator": typeof agent__evaluator;
   "agent/_schemas": typeof agent__schemas;
   "agent/_types": typeof agent__types;
+  "agent/capacity": typeof agent_capacity;
   "agent/cycle": typeof agent_cycle;
   "agent/dealSelection": typeof agent_dealSelection;
   "agent/internal": typeof agent_internal;
