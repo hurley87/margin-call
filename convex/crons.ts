@@ -118,4 +118,17 @@ crons.interval(
   {}
 );
 
+/**
+ * SeatVault indexer — ingest confirmed Staked / UnstakeInitiated / Unstaked
+ * logs and reconcile traderSeatState against authoritative stakeOf/tierOf.
+ * Failures fail closed to Gallery and update sync cursor error state.
+ * See convex/seatVault/indexer.ts.
+ */
+crons.interval(
+  "seat-vault-indexer",
+  { minutes: 2 },
+  internal.seatVault.indexer.tick,
+  {}
+);
+
 export default crons;

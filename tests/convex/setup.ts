@@ -87,6 +87,7 @@ export async function seedActiveTrader(
     status?: "active" | "paused" | "wiped_out";
     walletStatus?: "pending" | "creating" | "ready" | "error";
     mandate?: Record<string, unknown>;
+    tokenId?: number;
   } = {}
 ) {
   return t.run(async (ctx) => {
@@ -104,6 +105,7 @@ export async function seedActiveTrader(
       cycleLeaseUntil: opts.cycleLeaseUntil,
       cycleGeneration: opts.cycleGeneration ?? 0,
       mandate: opts.mandate ?? {},
+      tokenId: opts.tokenId,
       createdAt: now,
       updatedAt: now,
     });
