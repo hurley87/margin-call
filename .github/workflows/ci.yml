@@ -132,16 +132,27 @@ jobs:
 
       - uses: ./.github/actions/setup-foundry
 
-      # Let crytic-compile drive `forge build` itself. Pre-building and passing
-      # ignore-compile: true made Slither parse Foundry's build-info artifacts,
-      # whose newer layout (no top-level "output" key) crashes crytic-compile
-      # with KeyError: 'output'. Compiling in-process avoids that stale path.
-      - name: Run Slither
-        uses: crytic/slither-action@v0.4.0
+      - uses: actions/setup-python@v5
         with:
-          target: contracts
-          fail-on: high
-          slither-config: contracts/slither.config.json
+          python-version: "3.10"
+
+      # Run Slither directly instead of via crytic/slither-action. The action
+      # ran two things that both broke here:
+      #   1. ignore-compile made crytic-compile parse Foundry build-info, whose
+      #      newer layout (no top-level "output" key) crashes it with
+      #      KeyError: 'output'.
+      #   2. its dependency-install wrapper runs `git submodule` at the repo
+      #      root, which fails on the stray `.claude/skills` gitlink.
+      # Letting crytic-compile drive `forge build` with the pinned toolchain
+      # (deps already installed by setup-foundry) avoids both.
+      - name: Install Slither
+        run: pip install "slither-analyzer==0.11.4"
+
+      - name: Run Slither
+        working-directory: contracts
+        # --fail-high mirrors the action's `fail-on: high`: exit non-zero only
+        # on High-severity findings.
+        run: slither . --config-file slither.config.json --fail-high
 
   contracts-fork:
     name: Foundry (Base Sepolia fork)
