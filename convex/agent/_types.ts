@@ -23,6 +23,7 @@ export interface Deal {
   on_chain_deal_id?: number | null;
   creator_id?: string | null;
   creator_address?: string | null;
+  max_extraction_amount_usdc?: number | null;
   entry_count?: number;
   wipeout_count?: number;
   [key: string]: unknown;

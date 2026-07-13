@@ -1,6 +1,8 @@
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
+import { isOwnDeskCreatedDeal } from "../lib/dealEntryEligibility";
+import { dealCreationCapFields } from "../lib/extractionCap";
 
 export type McpDealWriteResult = {
   dealId: string;
@@ -36,9 +38,19 @@ export const list = internalQuery({
     }
 
     const deals = await q.take(bounded);
+    const desk = await ctx.db.get(deskManagerId);
 
     const items = deals.map((d) => {
-      const isOwnDesk = d.creatorDeskManagerId === deskManagerId;
+      const isOwnDesk = isOwnDeskCreatedDeal(
+        {
+          creatorDeskManagerId: d.creatorDeskManagerId,
+          creatorAddress: d.creatorAddress,
+        },
+        {
+          deskManagerId: String(deskManagerId),
+          deskWalletAddress: desk?.walletAddress,
+        }
+      );
       return {
         dealId: d._id,
         prompt: d.prompt,
@@ -108,6 +120,7 @@ export const recordOnChainCreationForMcp = internalMutation({
       prompt: args.prompt,
       potUsdc: args.potUsdc,
       entryCostUsdc: args.entryCostUsdc,
+      ...dealCreationCapFields(args.potUsdc),
       sourceHeadline: args.sourceHeadline,
       status: "open",
       onChainDealId: args.onChainDealId,

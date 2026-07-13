@@ -19,7 +19,6 @@ import type { RunActionCtx } from "./_ctx";
 import { internal } from "../_generated/api";
 import {
   RAKE_PERCENTAGE,
-  MAX_EXTRACTION_PERCENTAGE,
   BASE_WIN_PROBABILITY,
   WIN_PROB_MARKET_SWING,
   MIN_WIN_PROBABILITY,
@@ -29,6 +28,7 @@ import {
   LOSS_MAGNITUDE_MIN_FRACTION,
   LOSS_MAGNITUDE_MAX_FRACTION,
 } from "./_constants";
+import { maxWinValueUsdc } from "../lib/extractionCap";
 import { DealOutcomeSchema, type DealOutcomePayload } from "./_schemas";
 import type { Deal } from "./_types";
 
@@ -115,8 +115,8 @@ export async function resolveOutcome(
           .map((a) => `${a.name} ($${a.valueUsdc ?? 0} USDC)`)
           .join(", ");
 
-  // Max win value: MAX_EXTRACTION_PERCENTAGE % of pot
-  const maxValuePerWin = deal.pot_usdc * (MAX_EXTRACTION_PERCENTAGE / 100);
+  // Max win value: frozen extraction cap at creation (fallback: live pot * 25%).
+  const maxValuePerWin = maxWinValueUsdc(deal);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const narrative = marketNarrative as Record<string, any> | null;

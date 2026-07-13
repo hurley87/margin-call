@@ -147,6 +147,7 @@ export async function selectDeal(
       on_chain_deal_id: d.onChainDealId ?? null,
       creator_id: d.creatorDeskManagerId ?? null,
       creator_address: d.creatorAddress ?? null,
+      max_extraction_amount_usdc: d.maxExtractionAmountUsdc ?? null,
       entry_count: d.entryCount ?? 0,
       wipeout_count: d.wipeoutCount ?? 0,
     }));
@@ -160,11 +161,20 @@ export async function selectDeal(
   }
 
   // ── 2b. Exclude own desk's deals (adversarial / no self-dealing) ───────────
+  const deskManager = await ctx.runQuery(
+    internal.deskManagers.getByIdInternal,
+    { id: deskManagerId as Id<"deskManagers"> }
+  );
+  const deskWalletAddress = deskManager?.walletAddress ?? null;
+
   const notOwnDeskDeals = deals.filter(
     (d) =>
       !isOwnDeskCreatedDeal(
-        { creatorDeskManagerId: d.creator_id },
-        deskManagerId
+        {
+          creatorDeskManagerId: d.creator_id,
+          creatorAddress: d.creator_address,
+        },
+        { deskManagerId, deskWalletAddress }
       )
   );
   const skippedOwnDeskCount = deals.length - notOwnDeskDeals.length;
