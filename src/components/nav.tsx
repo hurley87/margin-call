@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
-import { Github, Twitter } from "lucide-react";
+import { Github, Twitter } from "@/components/icons/social-icons";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS = [{ href: "/", label: "DESK" }];
