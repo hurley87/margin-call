@@ -46,14 +46,16 @@ async function ensureDepositorOnChain(
 ): Promise<void> {
   const { createWalletClient, http } = await import("viem");
   const { privateKeyToAccount } = await import("viem/accounts");
-  const { baseSepolia } = await import("viem/chains");
+  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
+  const { requireBaseSepoliaRpcUrl } =
+    await import("../lib/requireBaseSepoliaRpcUrl");
 
   const operatorKey = requireEnv("OPERATOR_PRIVATE_KEY");
   const account = privateKeyToAccount(operatorKey as `0x${string}`);
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
-    transport: http(),
+    chain: CONTRACTS_CHAIN,
+    transport: http(requireBaseSepoliaRpcUrl()),
   });
   const publicClient = await getBaseSepoliaPublicClient();
 

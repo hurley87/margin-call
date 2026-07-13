@@ -1,35 +1,34 @@
-import { baseSepolia } from "viem/chains";
+import {
+  ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
+  CONTRACTS_CHAIN,
+  CONTRACTS_CHAIN_ID,
+  ERC6551_DEFAULT_IMPLEMENTATION,
+  ERC6551_REGISTRY_ADDRESS,
+  IDENTITY_REGISTRY_ADDRESS,
+  REPUTATION_REGISTRY_ADDRESS,
+  USDC_SEPOLIA_ADDRESS,
+  resolveAddress,
+} from "@/lib/network";
 
 /** MarginCallEscrow deal status: 0 = Open, 1 = Closed. */
 export const DEAL_STATUS_OPEN = 0;
 export const DEAL_STATUS_CLOSED = 1;
 
-const RESOLVED_ESCROW_ADDRESS =
-  process.env.NEXT_PUBLIC_ESCROW_ADDRESS ?? process.env.ESCROW_ADDRESS;
+export const ESCROW_ADDRESS = resolveAddress(
+  [process.env.NEXT_PUBLIC_ESCROW_ADDRESS, process.env.ESCROW_ADDRESS],
+  ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow,
+  "ESCROW_ADDRESS"
+);
 
-if (!RESOLVED_ESCROW_ADDRESS) {
-  throw new Error(
-    "NEXT_PUBLIC_ESCROW_ADDRESS env is not set. Add it to .env.local (and Vercel for production) matching the deployed MarginCallEscrow."
-  );
-}
-
-export const ESCROW_ADDRESS = RESOLVED_ESCROW_ADDRESS as `0x${string}`;
-
-export const IDENTITY_REGISTRY_ADDRESS =
-  "0x8004A818BFB912233c491871b3d84c89A494BD9e" as const;
-
-export const REPUTATION_REGISTRY_ADDRESS =
-  "0x8004B663056A597Dffe9eCcC1965A193B7388713" as const;
-
-export const ERC6551_REGISTRY_ADDRESS =
-  "0x000000006551c19487814612e58FE06813775758" as const;
-
-export const CONTRACTS_CHAIN = baseSepolia;
-export const CONTRACTS_CHAIN_ID = baseSepolia.id;
-
-// USDC on Base Sepolia (Circle test token)
-export const USDC_SEPOLIA_ADDRESS =
-  "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
+export {
+  IDENTITY_REGISTRY_ADDRESS,
+  REPUTATION_REGISTRY_ADDRESS,
+  ERC6551_REGISTRY_ADDRESS,
+  CONTRACTS_CHAIN,
+  CONTRACTS_CHAIN_ID,
+  USDC_SEPOLIA_ADDRESS,
+  ERC6551_DEFAULT_IMPLEMENTATION,
+};
 
 // ABI for MarginCallEscrow
 export const escrowAbi = [
@@ -359,7 +358,3 @@ export const erc6551RegistryAbi = [
     stateMutability: "nonpayable",
   },
 ] as const;
-
-// Default ERC-6551 account implementation (reference implementation on Base Sepolia)
-export const ERC6551_DEFAULT_IMPLEMENTATION =
-  "0x55266d75D1a14E4572138116aF39863Ed6596E7F" as const;

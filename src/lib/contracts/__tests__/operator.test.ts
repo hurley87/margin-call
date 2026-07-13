@@ -26,7 +26,7 @@ vi.mock("viem/accounts", () => ({
 }));
 
 vi.mock("@/lib/contracts/client", () => ({
-  baseSepoliaRpcUrl: "https://example-rpc.test",
+  baseSepoliaRpcUrl: () => "https://example-rpc.test",
   makePublicClient: mocks.makePublicClient,
 }));
 

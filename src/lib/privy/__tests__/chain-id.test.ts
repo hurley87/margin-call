@@ -32,6 +32,11 @@ describe("payment chain id helpers", () => {
         "users-without-wallets"
       );
     });
+
+    it("supports only Base Sepolia (no mainnet)", () => {
+      expect(privyConfig.supportedChains).toHaveLength(1);
+      expect(privyConfig.supportedChains?.[0]?.id).toBe(84532);
+    });
   });
 
   describe("isChainIdBase", () => {
@@ -45,6 +50,12 @@ describe("payment chain id helpers", () => {
 
     it("returns true for string version of chain id", () => {
       expect(isChainIdBase(String(BASE_CHAIN_ID))).toBe(true);
+    });
+
+    it("returns false for Base mainnet chain id", () => {
+      expect(isChainIdBase(8453)).toBe(false);
+      expect(isChainIdBase("8453")).toBe(false);
+      expect(isChainIdBase("eip155:8453")).toBe(false);
     });
 
     it("returns false for other chain id numbers", () => {

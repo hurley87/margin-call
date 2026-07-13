@@ -35,7 +35,7 @@ The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the 
 
 - **Auth/Wallet:** Privy (email OTP, embedded EVM wallets, sponsored transactions) on Base Sepolia.
 - **Database:** Convex (reactive database + scheduler/crons). Supabase is fully removed.
-- **Payments:** Operator-signed `enterDeal` on the `MarginCallEscrow` contract (`OPERATOR_PRIVATE_KEY`) for deal entry; non-custodial Base MCP **prepare → `send_calls` → `confirm_intent`** for desk treasury (fund/withdraw/create_deal/close_deal). No x402.
+- **Payments:** Operator-signed `enterDeal` on the `MarginCallEscrow` contract (`OPERATOR_PRIVATE_KEY`) for deal entry; non-custodial Base MCP **prepare → `send_calls` → `confirm_intent`** for desk treasury (fund/withdraw/create_deal/close_deal). No x402. Chain and contract addresses: see `docs/base-sepolia-configuration.md`.
 - **Agent Wallets:** Coinbase CDP smart accounts (`@coinbase/cdp-sdk`), minted server-side per trader as ERC-8004 NFTs.
 - **AI:** Deal selection and outcome narration use `gpt-4o-mini`; the Wire narrative engine uses `gpt-5-mini`. Outcome odds are computed mechanically (market mood + SEC heat); the LLM only narrates the pre-decided result.
 - **Agent Runtime:** Convex crons (`convex/crons.ts`) — `agent-scheduler` fires every 1 min → `internal.agent.scheduler.scheduler` queries stale active traders and fans out `internal.agent.cycle.cycle` per trader via `ctx.scheduler.runAfter(0, ...)`. Per-trader interval spacing, max 5 cycles/tick, lease-based concurrency. Deal pick (`gpt-4o-mini`): mandate filter → desk dedup → LLM rank, with ratio fallback. Traders cannot enter deals created by their own desk (enforced in selection and `recordVerifiedEntry`). All cycles gated to NYSE hours (Mon–Fri 09:30–16:00 ET).

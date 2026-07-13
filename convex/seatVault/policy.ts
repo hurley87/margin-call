@@ -7,6 +7,7 @@
  * Product name: $BLOW. On-chain Sepolia token symbol may be MARGINCALL.
  * Stake amounts are always decimal strings of 18-decimal wei (exceeds int64).
  */
+import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/activeDeployment";
 
 /** On-chain Tier enum: Gallery = 0, Seat = 1, CornerOffice = 2. */
 export const TIER_GALLERY = 0;
@@ -155,14 +156,15 @@ export const SEAT_VAULT_EVENT_NAMES = [
 export type SeatVaultEventName = (typeof SEAT_VAULT_EVENT_NAMES)[number];
 
 /**
- * Base Sepolia SeatVault v1 (see contracts/deployments/base-sepolia.seat-vaults.json).
- * Runtime activation still uses env / seatVaultDeployments.isActive.
+ * Base Sepolia SeatVault v1 (see contracts/deployments/base-sepolia.seat-vaults.json
+ * and contracts/deployments/base-sepolia.active.json).
+ * Runtime activation uses env validation against the active deployment record.
  */
 export const SEAT_VAULT_V1 = {
-  version: 1,
-  address: "0xa8595b279Aeadc8a0d2ce779Dc8Ba4d978eA2f44" as const,
-  margincallToken: "0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7" as const,
-  escrow: "0xa244550f0e35032E9c0b09DA4EB4933848d28d16" as const,
+  version: ACTIVE_BASE_SEPOLIA_DEPLOYMENT.version,
+  address: ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault,
+  margincallToken: ACTIVE_BASE_SEPOLIA_DEPLOYMENT.margincallToken,
+  escrow: ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow,
   seatThresholdWei: SEAT_THRESHOLD_WEI,
   cornerOfficeThresholdWei: CORNER_OFFICE_THRESHOLD_WEI,
   unstakeCooldownSeconds: UNSTAKE_COOLDOWN_SECONDS,

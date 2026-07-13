@@ -23,11 +23,16 @@ export function requireDeskWallet(
 
 const TX_RECEIPT_TIMEOUT_MS = 60_000;
 
-/** Build a Base Sepolia public client with the default HTTP transport. */
+/** Build a Base Sepolia public client with an explicit RPC URL. */
 export async function getBaseSepoliaPublicClient() {
   const { createPublicClient, http } = await import("viem");
-  const { baseSepolia } = await import("viem/chains");
-  return createPublicClient({ chain: baseSepolia, transport: http() });
+  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
+  const { requireBaseSepoliaRpcUrl } =
+    await import("../lib/requireBaseSepoliaRpcUrl");
+  return createPublicClient({
+    chain: CONTRACTS_CHAIN,
+    transport: http(requireBaseSepoliaRpcUrl()),
+  });
 }
 
 /**

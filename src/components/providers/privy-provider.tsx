@@ -3,18 +3,16 @@
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PrivyProvider as BasePrivyProvider } from "@privy-io/react-auth";
-import { base, baseSepolia } from "viem/chains";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { BaseNetworkGuard } from "@/components/providers/base-network-guard";
 import { baseSepoliaRpcUrl } from "@/lib/contracts/client";
-import { privyConfig } from "@/lib/privy/config";
+import { PAYMENT_CHAIN, privyConfig } from "@/lib/privy/config";
 import { ConvexClientProvider } from "@/components/providers/convex-provider";
 
 const wagmiConfig = createConfig({
-  chains: [baseSepolia, base],
+  chains: [PAYMENT_CHAIN],
   transports: {
-    [baseSepolia.id]: http(baseSepoliaRpcUrl),
-    [base.id]: http(),
+    [PAYMENT_CHAIN.id]: http(baseSepoliaRpcUrl()),
   },
 });
 
