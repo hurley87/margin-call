@@ -36,8 +36,7 @@ contract BaseSepoliaForkTest is Test {
     }
 
     function test_fork_escrowCanonicalAddressesAndPolicy() public view {
-        IEscrowDeploymentProbe escrow =
-            IEscrowDeploymentProbe(BaseSepoliaConstants.ESCROW);
+        IEscrowDeploymentProbe escrow = IEscrowDeploymentProbe(BaseSepoliaConstants.ESCROW);
         assertEq(escrow.usdc(), BaseSepoliaConstants.USDC);
         assertEq(escrow.identityRegistry(), BaseSepoliaConstants.IDENTITY_REGISTRY);
         assertTrue(escrow.owner() != address(0));

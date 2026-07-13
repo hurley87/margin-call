@@ -28,13 +28,7 @@ contract MarginCallEscrowTest is Test {
         usdc = new MockERC20("USD Coin", "USDC", 6);
         registry = new MockIdentityRegistry();
         seatVault = new MockSeatVault();
-        escrow = new MarginCallEscrow(
-            address(usdc),
-            address(registry),
-            settlementOp,
-            depositorBinder,
-            ENTRY_TIMEOUT
-        );
+        escrow = new MarginCallEscrow(address(usdc), address(registry), settlementOp, depositorBinder, ENTRY_TIMEOUT);
 
         registry.setOwner(TRADER_A, alice);
         registry.setOwner(TRADER_B, bob);

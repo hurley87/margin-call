@@ -2,6 +2,11 @@
   "name": "mc",
   "version": "0.1.0",
   "private": true,
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": "22.x",
+    "pnpm": "10.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "node scripts/check-convex-codegen.mjs && next build",
@@ -15,6 +20,10 @@
     "test:contracts": "cd contracts && forge test --no-match-path 'test/fork/**'",
     "test:contracts:ci": "cd contracts && FOUNDRY_PROFILE=ci forge test --no-match-path 'test/fork/**'",
     "test:contracts:fork": "cd contracts && forge test --match-path 'test/fork/**'",
+    "install:forge-deps": "bash scripts/install-forge-deps.sh",
+    "audit:prod": "pnpm audit --prod --audit-level=high",
+    "audit:all": "pnpm audit --audit-level=high",
+    "audit:all:gated": "node scripts/audit-all-gated.mjs",
     "seed:wire": "convex run seasons:importSeason",
     "prepare": "husky",
     "deploy:escrow": "tsx scripts/deploy-escrow.ts",
@@ -36,7 +45,7 @@
     "clsx": "^2.1.1",
     "convex": "^1.41.0",
     "lucide-react": "^0.577.0",
-    "next": "16.1.6",
+    "next": "16.2.6",
     "openai": "^6.27.0",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -54,15 +63,33 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "^4.1.5",
+    "@vitest/coverage-v8": "4.1.10",
     "convex-test": "^0.0.53",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.2.6",
     "husky": "^9.1.7",
     "lint-staged": "^16.3.2",
     "prettier": "^3.8.1",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.0.18"
+    "vitest": "4.1.10"
+  },
+  "pnpm": {
+    "overrides": {
+      "axios": ">=1.16.0",
+      "ws@<8": ">=7.5.11",
+      "ws@>=8": ">=8.21.0",
+      "form-data": ">=4.0.6",
+      "flatted": ">=3.4.2",
+      "path-to-regexp@>=8": ">=8.4.0",
+      "hono": ">=4.12.25",
+      "socket.io-parser": ">=4.2.6",
+      "h3": ">=1.15.6",
+      "defu": ">=6.1.5",
+      "js-cookie": ">=3.0.7",
+      "lodash": ">=4.18.0",
+      "picomatch@2": "2.3.2",
+      "picomatch@4": "4.0.4"
+    }
   }
 }

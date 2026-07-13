@@ -183,10 +183,7 @@ contract MarginCallEscrow {
     function setDepositor(uint256 traderId, address depositor) external onlyDepositorBinder {
         require(depositor != address(0), "Zero depositor");
         address current = depositors[traderId];
-        require(
-            current == address(0) || balances[traderId] == 0,
-            "Depositor locked while balance > 0"
-        );
+        require(current == address(0) || balances[traderId] == 0, "Depositor locked while balance > 0");
         if (address(seatVault) != address(0)) {
             require(!seatVault.hasLockedPrincipal(traderId), "Depositor locked while vault principal");
         }
@@ -232,11 +229,7 @@ contract MarginCallEscrow {
         deal.pendingEntries++;
         deal.reservedAmount += deal.entryCost;
 
-        _entries[dealId][traderId] = EntryInfo({
-            entryTime: block.timestamp,
-            entryCost: deal.entryCost,
-            pending: true
-        });
+        _entries[dealId][traderId] = EntryInfo({entryTime: block.timestamp, entryCost: deal.entryCost, pending: true});
 
         emit DealEntered(dealId, traderId);
     }
@@ -259,10 +252,7 @@ contract MarginCallEscrow {
         require(rake <= profitFromPot, "Rake exceeds profit");
         // A payout may draw down the unreserved pot plus this entry's own reserve,
         // but must leave every other pending entry's principal refundable.
-        require(
-            grossPayout <= deal.potAmount - deal.reservedAmount + entryCost,
-            "Exceeds available pot"
-        );
+        require(grossPayout <= deal.potAmount - deal.reservedAmount + entryCost, "Exceeds available pot");
 
         if (grossPayout > 0) {
             deal.potAmount -= grossPayout;

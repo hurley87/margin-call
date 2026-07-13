@@ -146,13 +146,7 @@ contract MarginCallEscrowInvariantTest is StdInvariant, Test {
     function setUp() public {
         usdc = new MockERC20("USD Coin", "USDC", 6);
         registry = new MockIdentityRegistry();
-        escrow = new MarginCallEscrow(
-            address(usdc),
-            address(registry),
-            settlementOp,
-            depositorBinder,
-            3600
-        );
+        escrow = new MarginCallEscrow(address(usdc), address(registry), settlementOp, depositorBinder, 3600);
 
         registry.setOwner(1, alice);
         registry.setOwner(2, bob);
@@ -168,9 +162,7 @@ contract MarginCallEscrowInvariantTest is StdInvariant, Test {
         vm.prank(bob);
         usdc.approve(address(escrow), type(uint256).max);
 
-        handler = new EscrowHandler(
-            escrow, usdc, registry, settlementOp, depositorBinder, alice, bob
-        );
+        handler = new EscrowHandler(escrow, usdc, registry, settlementOp, depositorBinder, alice, bob);
         // Fund handler path is via alice/bob approvals; target the handler.
         targetContract(address(handler));
     }
@@ -200,11 +192,7 @@ contract MarginCallEscrowInvariantTest is StdInvariant, Test {
             if (deal.status != MarginCallEscrow.DealStatus.Open) continue;
             // With a single entry-cost per deal, reserved == pendingEntries * entryCost
             // when every pending entry paid that deal's entryCost (always true in this protocol).
-            assertEq(
-                deal.reservedAmount,
-                deal.pendingEntries * deal.entryCost,
-                "reserved vs pending"
-            );
+            assertEq(deal.reservedAmount, deal.pendingEntries * deal.entryCost, "reserved vs pending");
             assertGe(deal.potAmount, deal.reservedAmount, "pot solvency");
         }
     }

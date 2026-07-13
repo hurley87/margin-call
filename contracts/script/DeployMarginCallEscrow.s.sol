@@ -19,13 +19,8 @@ contract DeployMarginCallEscrow is Script {
         uint256 entryTimeoutSeconds = vm.envOr("ENTRY_TIMEOUT_SECONDS", uint256(3600));
 
         vm.startBroadcast();
-        MarginCallEscrow escrow = new MarginCallEscrow(
-            USDC,
-            IDENTITY_REGISTRY,
-            settlementOperator,
-            depositorBinder,
-            entryTimeoutSeconds
-        );
+        MarginCallEscrow escrow =
+            new MarginCallEscrow(USDC, IDENTITY_REGISTRY, settlementOperator, depositorBinder, entryTimeoutSeconds);
         vm.stopBroadcast();
 
         console2.log("MarginCallEscrow deployed at:", address(escrow));

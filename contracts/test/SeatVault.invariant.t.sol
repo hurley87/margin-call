@@ -16,12 +16,7 @@ contract SeatVaultHandler is Test {
     uint256 public constant TRADER = 1;
     uint256 public constant COOLDOWN = 1 days;
 
-    constructor(
-        SeatVault vault_,
-        MarginCallToken token_,
-        MockEscrowDepositors escrow_,
-        address desk_
-    ) {
+    constructor(SeatVault vault_, MarginCallToken token_, MockEscrowDepositors escrow_, address desk_) {
         vault = vault_;
         token = token_;
         escrow = escrow_;

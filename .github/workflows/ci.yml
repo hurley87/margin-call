@@ -14,11 +14,11 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.0.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: ".nvmrc"
           cache: pnpm
 
       - name: Install dependencies
@@ -44,11 +44,11 @@ jobs:
 
       - uses: pnpm/action-setup@v4
         with:
-          version: 10
+          version: 10.0.0
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: ".nvmrc"
           cache: pnpm
 
       - name: Install dependencies
@@ -57,8 +57,55 @@ jobs:
       - name: Run unit / Convex tests
         run: pnpm test
 
+  audit-prod:
+    name: Production dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Audit production dependencies (high+)
+        run: pnpm audit:prod
+
+  audit-all:
+    name: Full dependency audit (gated)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.0.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Raw report for humans; gated script fails on undocumented high/critical.
+      - name: Full audit report
+        continue-on-error: true
+        run: pnpm audit:all
+
+      - name: Gate undocumented high/critical
+        run: pnpm audit:all:gated
+
   contracts:
-    name: Foundry (unit, fuzz, invariant)
+    name: Foundry (format, build, unit, fuzz, invariant)
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -68,11 +115,34 @@ jobs:
 
       - uses: ./.github/actions/setup-foundry
 
+      - name: Forge fmt
+        run: forge fmt --check
+
       - name: Forge build
         run: forge build
 
       - name: Forge test (exclude fork)
         run: FOUNDRY_PROFILE=ci forge test --no-match-path 'test/fork/**'
+
+  contracts-static:
+    name: Slither static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-foundry
+
+      - name: Forge build (artifacts for Slither)
+        working-directory: contracts
+        run: forge build
+
+      - name: Run Slither
+        uses: crytic/slither-action@v0.4.0
+        with:
+          target: contracts
+          fail-on: high
+          ignore-compile: true
+          slither-config: contracts/slither.config.json
 
   contracts-fork:
     name: Foundry (Base Sepolia fork)
@@ -98,7 +168,7 @@ jobs:
   # the deployment never had it. Runs only after checks pass.
   deploy-convex:
     name: Deploy Convex functions
-    needs: [checks, vitest, contracts]
+    needs: [checks, vitest, audit-prod, audit-all, contracts, contracts-static]
     # Only on merge to main, and only when a deploy key is actually configured.
     # Without the secret `npx convex deploy` errors ("No CONVEX_DEPLOYMENT set"),
     # so the job is gated on it rather than painting every main commit red.
@@ -117,12 +187,12 @@ jobs:
       - uses: pnpm/action-setup@v4
         if: steps.guard.outputs.enabled == 'true'
         with:
-          version: 10
+          version: 10.0.0
 
       - uses: actions/setup-node@v4
         if: steps.guard.outputs.enabled == 'true'
         with:
-          node-version: 22
+          node-version-file: ".nvmrc"
           cache: pnpm
 
       - name: Install dependencies

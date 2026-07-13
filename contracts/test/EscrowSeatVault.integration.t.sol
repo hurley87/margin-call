@@ -31,13 +31,7 @@ contract EscrowSeatVaultIntegrationTest is Test {
         usdc = new MockERC20("USD Coin", "USDC", 6);
         blow = new MarginCallToken();
         registry = new MockIdentityRegistry();
-        escrow = new MarginCallEscrow(
-            address(usdc),
-            address(registry),
-            settlementOp,
-            depositorBinder,
-            3600
-        );
+        escrow = new MarginCallEscrow(address(usdc), address(registry), settlementOp, depositorBinder, 3600);
         vault = new SeatVault(address(escrow), address(blow), SEAT, CORNER, COOLDOWN);
         escrow.setSeatVault(address(vault));
 

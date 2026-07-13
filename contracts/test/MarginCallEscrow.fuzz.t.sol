@@ -24,13 +24,7 @@ contract MarginCallEscrowFuzzTest is Test {
     function setUp() public {
         usdc = new MockERC20("USD Coin", "USDC", 6);
         registry = new MockIdentityRegistry();
-        escrow = new MarginCallEscrow(
-            address(usdc),
-            address(registry),
-            settlementOp,
-            depositorBinder,
-            ENTRY_TIMEOUT
-        );
+        escrow = new MarginCallEscrow(address(usdc), address(registry), settlementOp, depositorBinder, ENTRY_TIMEOUT);
 
         registry.setOwner(TRADER_A, alice);
         registry.setOwner(TRADER_B, bob);
@@ -70,8 +64,7 @@ contract MarginCallEscrowFuzzTest is Test {
 
         deal = escrow.getDeal(dealId);
         uint256 available = deal.potAmount - deal.reservedAmount + entryCost;
-        uint256 maxGross =
-            _min(deal.potAmount, _min(available, entryCost + deal.maxExtractionAmount));
+        uint256 maxGross = _min(deal.potAmount, _min(available, entryCost + deal.maxExtractionAmount));
 
         uint256 gross = bound(uint256(grossRaw), 0, maxGross);
         uint256 profit = gross > entryCost ? gross - entryCost : 0;
@@ -95,11 +88,9 @@ contract MarginCallEscrowFuzzTest is Test {
         }
     }
 
-    function testFuzz_settleEntry_revertsWhenGrossExceedsAvailable(
-        uint96 potRaw,
-        uint96 entryRaw,
-        uint96 excessRaw
-    ) public {
+    function testFuzz_settleEntry_revertsWhenGrossExceedsAvailable(uint96 potRaw, uint96 entryRaw, uint96 excessRaw)
+        public
+    {
         uint256 potAmount = bound(uint256(potRaw), 100e6, 1_000_000e6);
         uint256 entryCost = bound(uint256(entryRaw), 1e6, potAmount / 10);
         vm.assume((potAmount - (potAmount * 5) / 100) * 2500 >= 10_000);
@@ -128,8 +119,7 @@ contract MarginCallEscrowFuzzTest is Test {
 
         MarginCallEscrow.Deal memory deal = escrow.getDeal(dealId);
         uint256 available = deal.potAmount - deal.reservedAmount + entryCost;
-        uint256 excess =
-            bound(uint256(excessRaw), available + 1, available + deal.maxExtractionAmount + entryCost + 1);
+        uint256 excess = bound(uint256(excessRaw), available + 1, available + deal.maxExtractionAmount + entryCost + 1);
         // Cap to something that might also trip extraction/pot checks; prefer available.
         if (excess > deal.potAmount) excess = deal.potAmount;
         vm.assume(excess > available);
@@ -204,21 +194,13 @@ contract MarginCallEscrowFuzzTest is Test {
         assertFalse(escrow.hasPendingEntry(dealId, TRADER_B));
     }
 
-    function _outcomeGross(uint256 kind, uint256 entryCost, uint256 maxProfit)
-        internal
-        pure
-        returns (uint256)
-    {
+    function _outcomeGross(uint256 kind, uint256 entryCost, uint256 maxProfit) internal pure returns (uint256) {
         if (kind == 0) return entryCost;
         if (kind == 1) return entryCost / 2;
         return entryCost + maxProfit;
     }
 
-    function _clampForSecond(uint256 dealId, uint256 traderId, uint256 desired)
-        internal
-        view
-        returns (uint256)
-    {
+    function _clampForSecond(uint256 dealId, uint256 traderId, uint256 desired) internal view returns (uint256) {
         MarginCallEscrow.Deal memory deal = escrow.getDeal(dealId);
         MarginCallEscrow.EntryInfo memory entry = escrow.getEntry(dealId, traderId);
         uint256 available = deal.potAmount - deal.reservedAmount + entry.entryCost;

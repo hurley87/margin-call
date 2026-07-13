@@ -67,9 +67,7 @@ contract SeatVaultFuzzTest is Test {
         assertEq(token.balanceOf(address(vault)), info.active);
     }
 
-    function testFuzz_replacementDepositorCannotInitiate(uint256 stakeAmt, uint256 unstakeAmt)
-        public
-    {
+    function testFuzz_replacementDepositorCannotInitiate(uint256 stakeAmt, uint256 unstakeAmt) public {
         stakeAmt = bound(stakeAmt, 1, 100_000e18);
         unstakeAmt = bound(unstakeAmt, 1, stakeAmt);
 

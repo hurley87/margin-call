@@ -1,0 +1,25 @@
+# Dependency advisory exceptions
+
+Production `pnpm audit --prod --audit-level=high` must remain clean (exit 0).
+This file documents **non-production** high/critical findings that remain after
+overrides, so full-tree `pnpm audit --audit-level=high` can be reviewed without
+blocking release of app dependencies we do not ship.
+
+Owner: Margin Call maintainers. Review on Dependabot PRs and at least quarterly.
+
+| Advisory                                                                                                                                                                                                                     | Package                            | Severity | Reachability                                                                                                                                                      | Mitigation                                                                                                                              | Expiry     |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| [GHSA-v2wj-q39q-566r](https://github.com/advisories/GHSA-v2wj-q39q-566r), [GHSA-p9ff-h696-f583](https://github.com/advisories/GHSA-p9ff-h696-f583), [GHSA-fx2h-pf6j-xcff](https://github.com/advisories/GHSA-fx2h-pf6j-xcff) | `vite` `7.3.1` via `vitest@4.1.10` | high     | **Dev-only.** Vitest / Vite transform path used in unit tests and optional Vitest UI. Not in Next.js production bundle; UI server is not run in CI or production. | Stay on Vitest `4.1.x`; bump when Vitest ships a release that depends on Vite `>=7.3.5`. Do not expose Vitest UI on untrusted networks. | 2026-10-13 |
+
+## Overrides already applied
+
+See `package.json` → `pnpm.overrides` for transitive pins that cleared production
+critical/high advisories (axios, ws, hono, path-to-regexp, lodash, js-cookie,
+socket.io-parser, h3, defu, picomatch, form-data, flatted).
+
+## Process
+
+1. Run `pnpm audit:prod` — must pass at `--audit-level=high`.
+2. Run `pnpm audit:all` — any **new** high/critical not listed above must be
+   fixed with an upgrade/override or added here with reachability analysis.
+3. Prefer fixing upstream over extending this table.

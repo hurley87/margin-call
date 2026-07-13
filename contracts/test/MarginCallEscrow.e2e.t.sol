@@ -26,13 +26,7 @@ contract MarginCallEscrowE2ETest is Test {
     function setUp() public {
         usdc = new MockERC20("USD Coin", "USDC", 6);
         registry = new MockIdentityRegistry();
-        escrow = new MarginCallEscrow(
-            address(usdc),
-            address(registry),
-            settlementOp,
-            depositorBinder,
-            ENTRY_TIMEOUT
-        );
+        escrow = new MarginCallEscrow(address(usdc), address(registry), settlementOp, depositorBinder, ENTRY_TIMEOUT);
 
         registry.setOwner(TRADER_A, alice);
         registry.setOwner(TRADER_B, bob);
@@ -129,9 +123,6 @@ contract MarginCallEscrowE2ETest is Test {
         assertEq(escrow.getBalance(TRADER_B), 0);
 
         // Escrow holds only remaining trader balances (Carol + Dave).
-        assertEq(
-            usdc.balanceOf(address(escrow)),
-            escrow.getBalance(TRADER_C) + escrow.getBalance(traderD)
-        );
+        assertEq(usdc.balanceOf(address(escrow)), escrow.getBalance(TRADER_C) + escrow.getBalance(traderD));
     }
 }
