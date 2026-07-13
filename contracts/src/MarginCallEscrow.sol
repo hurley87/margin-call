@@ -100,6 +100,11 @@ contract MarginCallEscrow {
         _;
     }
 
+    modifier onlyPauser() {
+        require(msg.sender == owner || msg.sender == pauser, "Not pauser");
+        _;
+    }
+
     constructor(
         address _usdc,
         address _identityRegistry,
@@ -292,14 +297,12 @@ contract MarginCallEscrow {
         emit FeesWithdrawn(owner, amount);
     }
 
-    function pause() external {
-        require(msg.sender == owner || msg.sender == pauser, "Not pauser");
+    function pause() external onlyPauser {
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unpause() external {
-        require(msg.sender == owner || msg.sender == pauser, "Not pauser");
+    function unpause() external onlyPauser {
         paused = false;
         emit Unpaused(msg.sender);
     }

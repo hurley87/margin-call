@@ -22,7 +22,7 @@ import {
   getTradingHoursState,
   isTradingHours,
 } from "../lib/tradingHours";
-import { ESCROW_ADDRESS } from "../mcp/escrowConstants";
+import { ESCROW_ADDRESS, escrowAbi } from "../mcp/escrowConstants";
 import { createSeatVaultPublicClient, readTierOf } from "../seatVault/rpc";
 const USDC_DECIMALS = 1_000_000;
 
@@ -205,54 +205,6 @@ export async function resolveOnChainEntry({
   const { requireBaseSepoliaRpcUrl } =
     await import("../lib/requireBaseSepoliaRpcUrl");
 
-  const abi = [
-    {
-      type: "function",
-      name: "getDeal",
-      inputs: [{ name: "dealId", type: "uint256" }],
-      outputs: [
-        {
-          name: "",
-          type: "tuple",
-          components: [
-            { name: "creator", type: "address" },
-            { name: "prompt", type: "string" },
-            { name: "potAmount", type: "uint256" },
-            { name: "entryCost", type: "uint256" },
-            { name: "fee", type: "uint256" },
-            { name: "status", type: "uint8" },
-            { name: "pendingEntries", type: "uint256" },
-            { name: "reservedAmount", type: "uint256" },
-            { name: "maxExtractionAmount", type: "uint256" },
-          ],
-        },
-      ],
-      stateMutability: "view",
-    },
-    {
-      type: "function",
-      name: "hasPendingEntry",
-      inputs: [
-        { name: "dealId", type: "uint256" },
-        { name: "traderId", type: "uint256" },
-      ],
-      outputs: [{ name: "", type: "bool" }],
-      stateMutability: "view",
-    },
-    {
-      type: "function",
-      name: "settleEntry",
-      inputs: [
-        { name: "dealId", type: "uint256" },
-        { name: "traderId", type: "uint256" },
-        { name: "grossPayout", type: "uint256" },
-        { name: "rake", type: "uint256" },
-      ],
-      outputs: [],
-      stateMutability: "nonpayable",
-    },
-  ] as const;
-
   const transport = http(requireBaseSepoliaRpcUrl());
   const account = privateKeyToAccount(operatorKey as `0x${string}`);
   const walletClient = createWalletClient({
@@ -275,14 +227,14 @@ export async function resolveOnChainEntry({
   // no pending entry; the global count then just distinguishes the two reasons.
   const hasPending = await publicClient.readContract({
     address: ESCROW_ADDRESS,
-    abi,
+    abi: escrowAbi,
     functionName: "hasPendingEntry",
     args: [BigInt(onChainDealId), BigInt(tokenId)],
   });
   if (!hasPending) {
     const onChainDeal = await publicClient.readContract({
       address: ESCROW_ADDRESS,
-      abi,
+      abi: escrowAbi,
       functionName: "getDeal",
       args: [BigInt(onChainDealId)],
     });
@@ -299,7 +251,7 @@ export async function resolveOnChainEntry({
   try {
     const hash = await walletClient.writeContract({
       address: ESCROW_ADDRESS,
-      abi,
+      abi: escrowAbi,
       functionName: "settleEntry",
       args: [
         BigInt(onChainDealId),

@@ -23,6 +23,3 @@ export function classifySettleEntryRevert(
   }
   return null;
 }
-
-/** @deprecated Use classifySettleEntryRevert */
-export const classifyResolveEntryRevert = classifySettleEntryRevert;
