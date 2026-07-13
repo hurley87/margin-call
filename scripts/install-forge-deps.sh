@@ -30,8 +30,8 @@ while IFS=$'\t' read -r name dep; do
   [[ -z "$name" || -z "$dep" ]] && continue
   # Replace any prior checkout so local + CI always match the manifest tag.
   rm -rf "$LIB_DIR/$name"
-  # --no-git installs as plain dirs (not submodules), avoiding forge's
-  # whole-repo submodule scan on orphan gitlinks (e.g. .claude/skills).
+  # --no-git installs as plain dirs (not submodules), keeping deps out of the
+  # repo's submodule machinery so install is reproducible from the manifest.
   forge install "$dep" --no-git
   count=$((count + 1))
 done < <(
