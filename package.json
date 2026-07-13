@@ -9,6 +9,7 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "check:codegen": "node scripts/check-convex-codegen.mjs",
+    "check:ci": "pnpm check:codegen && pnpm lint && pnpm typecheck",
     "test": "vitest run",
     "test:convex": "vitest run tests/convex",
     "seed:wire": "convex run seasons:importSeason",
