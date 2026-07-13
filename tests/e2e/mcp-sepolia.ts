@@ -12,8 +12,13 @@
  *   4. create_trader (fresh idempotencyKey)
  *   5. create_trader REPEAT (same key) → asserts `cached: true`
  *   6. set_desk_wallet (if desk unbound; uses desk wallet or MARGIN_CALL_DESK_WALLET)
- *   7. fund_trader / withdraw_from_trader / create_deal / close_deal → prepare phase only
- *      (on-chain execution requires Base MCP + confirm_intent — manual)
+ *   7. fund_trader / withdraw_from_trader / create_deal / close_deal → prepare phase
+ *   8. (optional) MCP_E2E_CONFIRM=1 → confirm_intent + assert resulting state
+ *
+ * Confirm mode (secret-gated; never in CI):
+ *   MCP_E2E_CONFIRM=1
+ *   MCP_E2E_TX_HASH=0x…   optional; if omitted, pauses for interactive Base MCP send_calls
+ *                          then prompts for the tx hash
  *
  * Hard-fails on any non-2xx. Logs but does not abort if the desk lacks
  * funds for a given step (so partial runs against a fresh testnet desk
@@ -23,6 +28,8 @@
  *   MARGIN_CALL_MCP_KEY=mc_live_... \
  *   MARGIN_CALL_API_URL=https://deployment.example.com \
  *   pnpm tsx tests/e2e/mcp-sepolia.ts
+ *
+ * See docs/e2e-testing.md for the full secret matrix.
  */
 
 import { randomUUID } from "node:crypto";
@@ -32,6 +39,7 @@ const API_URL = (
   process.env.MARGIN_CALL_API_URL ?? "http://localhost:3000"
 ).replace(/\/$/, "");
 const API_KEY = process.env.MARGIN_CALL_MCP_KEY ?? "";
+const CONFIRM_MODE = process.env.MCP_E2E_CONFIRM === "1";
 
 if (!API_KEY) {
   console.error(
@@ -74,9 +82,6 @@ async function call(
   const durationMs = Date.now() - started;
   const tool = path.replace("/api/mcp/", "");
   if (!res.ok) {
-    // allowFail: surface the error but let the caller decide whether it is an
-    // expected outcome (e.g. withdraw before any confirmed deposit) vs a real
-    // failure. The returned envelope is tagged so the caller can branch on it.
     if (opts?.allowFail) {
       console.warn(
         `⚠️  [${tool} ${durationMs}ms] ${res.status} ${shortPreview(json)}`
@@ -103,9 +108,53 @@ async function pause(question: string): Promise<void> {
   rl.close();
 }
 
+async function promptTxHash(): Promise<string> {
+  const fromEnv = process.env.MCP_E2E_TX_HASH?.trim();
+  if (fromEnv) return fromEnv;
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stdout,
+  });
+  const hash = (
+    await rl.question(
+      "\nPaste the Base Sepolia tx hash from Base MCP send_calls: "
+    )
+  ).trim();
+  rl.close();
+  if (!/^0x[0-9a-fA-F]{64}$/.test(hash)) {
+    throw new Error(`Invalid tx hash: ${hash}`);
+  }
+  return hash;
+}
+
+async function confirmIntent(
+  intentId: string,
+  label: string
+): Promise<JsonRecord> {
+  await pause(
+    `${label}: execute the prepare calls via Base MCP send_calls (Base Account approval), then continue.`
+  );
+  const txHash = await promptTxHash();
+  const confirmed = await call("POST", "/api/mcp/intents/confirm", {
+    intentId,
+    txHash,
+  });
+  if (confirmed.status === "confirmed" || confirmed.phase === "confirmed") {
+    console.log(`  → ${label} confirm OK (${txHash.slice(0, 10)}…)`);
+  } else if (confirmed.cached) {
+    console.log(`  → ${label} confirm replay (cached)`);
+  } else {
+    console.log(`  → ${label} confirm response: ${shortPreview(confirmed)}`);
+  }
+  return confirmed;
+}
+
 async function main() {
   console.log(`Margin Call MCP smoke test → ${API_URL}`);
-  console.log(`Key suffix: …${API_KEY.slice(-4)}\n`);
+  console.log(`Key suffix: …${API_KEY.slice(-4)}`);
+  console.log(
+    `Confirm mode: ${CONFIRM_MODE ? "ON (MCP_E2E_CONFIRM=1)" : "off (prepare-only)"}\n`
+  );
 
   // 1. Desk snapshot.
   const desk = (await call("GET", "/api/mcp/desks")) as JsonRecord & {
@@ -126,9 +175,7 @@ async function main() {
     );
   }
 
-  // 2. Refresh on-chain balance BEFORE gating. get_desk only returns the cached
-  // walletBalanceUsdc (0 for a freshly-bound desk); sync-wallet performs the live
-  // balanceOf read and writes it back, so it must run before the funding check.
+  // 2. Refresh on-chain balance BEFORE gating.
   const sync = (await call(
     "GET",
     "/api/mcp/desks/sync-wallet"
@@ -177,11 +224,11 @@ async function main() {
     throw new Error("create_trader did not return a traderId");
   }
 
-  // 6. Treasury prepare (BYO — confirm via Base MCP is manual).
+  // 6. Treasury prepare (BYO).
   const fundPrep = (await call("POST", `/api/mcp/traders/${traderId}/fund`, {
     amountUsdc: 1,
     idempotencyKey: randomUUID(),
-  })) as JsonRecord & { phase?: string; intentId?: string };
+  })) as JsonRecord & { phase?: string; intentId?: string; cached?: boolean };
   if (fundPrep.phase !== "prepare" && !fundPrep.cached) {
     console.warn("  → fund_trader: expected phase=prepare (or cached confirm)");
   } else {
@@ -190,11 +237,23 @@ async function main() {
     );
   }
 
-  // withdraw_from_trader gates on the trader's escrow balance, which is only
-  // non-zero after a fund intent is executed via Base MCP + confirm_intent.
-  // In this prepare-only smoke run a freshly-created trader always has 0 escrow,
-  // so an "Insufficient escrow balance" 400/500 here is the expected outcome,
-  // not a failure — only a different error should abort.
+  if (CONFIRM_MODE && fundPrep.phase === "prepare" && fundPrep.intentId) {
+    await confirmIntent(String(fundPrep.intentId), "fund_trader");
+    // Assert resulting desk/trader state after confirm.
+    const afterFund = (await call(
+      "GET",
+      `/api/mcp/traders/${traderId}`
+    )) as JsonRecord & { escrowBalanceUsdc?: number };
+    const bal = afterFund.escrowBalanceUsdc ?? 0;
+    if (bal < 1) {
+      throw new Error(
+        `Expected trader escrow ≥ 1 USDC after fund confirm; got ${bal}`
+      );
+    }
+    console.log(`  → Post-confirm escrow balance: ${bal} USDC`);
+  }
+
+  // withdraw_from_trader — prepare always; confirm only when funded.
   const withdrawPrep = (await call(
     "POST",
     `/api/mcp/traders/${traderId}/withdraw`,
@@ -203,9 +262,20 @@ async function main() {
       idempotencyKey: randomUUID(),
     },
     { allowFail: true }
-  )) as JsonRecord & { phase?: string; _failed?: boolean; error?: string };
+  )) as JsonRecord & {
+    phase?: string;
+    intentId?: string;
+    _failed?: boolean;
+    error?: string;
+  };
   if (withdrawPrep.phase === "prepare") {
-    console.log("  → withdraw_from_trader prepare OK (confirm manually)");
+    console.log("  → withdraw_from_trader prepare OK");
+    if (CONFIRM_MODE && withdrawPrep.intentId) {
+      await confirmIntent(
+        String(withdrawPrep.intentId),
+        "withdraw_from_trader"
+      );
+    }
   } else if (withdrawPrep._failed) {
     const msg = withdrawPrep.error ?? "";
     if (/insufficient escrow balance/i.test(msg)) {
@@ -217,9 +287,7 @@ async function main() {
     }
   }
 
-  // create_deal is gated by assertTradingHours() (9:30 AM–4:00 PM ET, Mon–Fri).
-  // Outside those hours a "Market is closed" 400/500 is the expected outcome,
-  // so tolerate it here; any other error still aborts.
+  // create_deal is gated by trading hours.
   const dealPrep = (await call(
     "POST",
     "/api/mcp/deals/create",
@@ -232,6 +300,7 @@ async function main() {
     { allowFail: true }
   )) as JsonRecord & {
     phase?: string;
+    intentId?: string;
     dealId?: string;
     _failed?: boolean;
     error?: string;
@@ -247,19 +316,29 @@ async function main() {
       throw new Error(`create_deal failed unexpectedly: ${msg}`);
     }
   } else if (dealPrep.phase === "prepare") {
-    console.log("  → create_deal prepare OK (confirm manually before close)");
+    console.log("  → create_deal prepare OK");
+    if (CONFIRM_MODE && dealPrep.intentId) {
+      await confirmIntent(String(dealPrep.intentId), "create_deal");
+      // After confirm, deal should appear in list / desk state.
+      await call("GET", "/api/mcp/deals?limit=5");
+    }
   } else if (typeof dealPrep.dealId === "string") {
     const closePrep = (await call("POST", "/api/mcp/deals/close", {
       dealId: dealPrep.dealId,
       idempotencyKey: randomUUID(),
-    })) as JsonRecord & { phase?: string };
+    })) as JsonRecord & { phase?: string; intentId?: string };
     if (closePrep.phase === "prepare") {
-      console.log("  → close_deal prepare OK (confirm manually)");
+      console.log("  → close_deal prepare OK");
+      if (CONFIRM_MODE && closePrep.intentId) {
+        await confirmIntent(String(closePrep.intentId), "close_deal");
+      }
     }
   }
 
   console.log(
-    "\n✓ Smoke test completed (prepare-phase treasury; full on-chain flow needs Base MCP + confirm_intent)."
+    CONFIRM_MODE
+      ? "\n✓ Smoke test completed (prepare → tx → confirm → state)."
+      : "\n✓ Smoke test completed (prepare-phase treasury; set MCP_E2E_CONFIRM=1 for full confirm flow)."
   );
 }
 

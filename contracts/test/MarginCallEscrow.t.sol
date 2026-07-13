@@ -834,7 +834,96 @@ contract MarginCallEscrowTest is Test {
         assertEq(escrow.getDeal(dealId).pendingEntries, 0);
     }
 
-    // ========== Minimum pot (issue #206: extraction cap must be > 0) ==========
+    // ========== Admin setters (issue #207 gaps) ==========
+
+    function test_setEntryTimeout() public {
+        escrow.setEntryTimeout(7200);
+        assertEq(escrow.entryTimeoutSeconds(), 7200);
+    }
+
+    function test_setEntryTimeout_revertsZero() public {
+        vm.expectRevert("Zero timeout");
+        escrow.setEntryTimeout(0);
+    }
+
+    function test_setEntryTimeout_revertsNonOwner() public {
+        vm.prank(alice);
+        vm.expectRevert("Not owner");
+        escrow.setEntryTimeout(100);
+    }
+
+    function test_setPauserAndUnpause() public {
+        address designated = address(0xABC123);
+        escrow.setPauser(designated);
+        assertEq(escrow.pauser(), designated);
+
+        vm.prank(designated);
+        escrow.pause();
+        assertTrue(escrow.paused());
+
+        vm.prank(designated);
+        escrow.unpause();
+        assertFalse(escrow.paused());
+    }
+
+    function test_ownershipTwoStep() public {
+        address newOwner = address(0x04E1);
+        escrow.transferOwnership(newOwner);
+        assertEq(escrow.pendingOwner(), newOwner);
+        vm.prank(newOwner);
+        escrow.acceptOwnership();
+        assertEq(escrow.owner(), newOwner);
+    }
+
+    function test_removeDepositorBinder() public {
+        escrow.removeDepositorBinder(depositorBinder);
+        assertFalse(escrow.depositorBinders(depositorBinder));
+        vm.prank(depositorBinder);
+        vm.expectRevert("Not depositor binder");
+        escrow.setDepositor(99, alice);
+    }
+
+    function test_depositFor_revertsZeroAmount() public {
+        vm.prank(alice);
+        vm.expectRevert("Amount must be > 0");
+        escrow.depositFor(TRADER_A, 0);
+    }
+
+    function test_withdraw_revertsZeroAmount() public {
+        vm.prank(alice);
+        escrow.depositFor(TRADER_A, 100e6);
+        vm.prank(alice);
+        vm.expectRevert("Amount must be > 0");
+        escrow.withdraw(TRADER_A, 0);
+    }
+
+    function test_settleEntry_revertsDoubleSettle() public {
+        vm.prank(alice);
+        uint256 dealId = escrow.createDeal("Once", 1000e6, 100e6);
+        vm.prank(bob);
+        escrow.depositFor(TRADER_B, 200e6);
+        vm.prank(settlementOp);
+        escrow.enterDeal(dealId, TRADER_B);
+        vm.prank(settlementOp);
+        escrow.settleEntry(dealId, TRADER_B, 100e6, 0);
+        vm.prank(settlementOp);
+        vm.expectRevert("No pending entry");
+        escrow.settleEntry(dealId, TRADER_B, 100e6, 0);
+    }
+
+    function test_settleEntry_revertsAfterRefund() public {
+        vm.prank(alice);
+        uint256 dealId = escrow.createDeal("Refund then settle", 1000e6, 100e6);
+        vm.prank(bob);
+        escrow.depositFor(TRADER_B, 200e6);
+        vm.prank(settlementOp);
+        escrow.enterDeal(dealId, TRADER_B);
+        vm.warp(block.timestamp + ENTRY_TIMEOUT + 1);
+        escrow.refundExpiredEntry(dealId, TRADER_B);
+        vm.prank(settlementOp);
+        vm.expectRevert("No pending entry");
+        escrow.settleEntry(dealId, TRADER_B, 100e6, 0);
+    }
 
     function test_createDeal_revertsIfPotTooSmallForCap() public {
         vm.prank(alice);

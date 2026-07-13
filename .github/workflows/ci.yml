@@ -36,13 +36,69 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+  vitest:
+    name: Vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run unit / Convex tests
+        run: pnpm test
+
+  contracts:
+    name: Foundry (unit, fuzz, invariant)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-foundry
+
+      - name: Forge build
+        run: forge build
+
+      - name: Forge test (exclude fork)
+        run: FOUNDRY_PROFILE=ci forge test --no-match-path 'test/fork/**'
+
+  contracts-fork:
+    name: Foundry (Base Sepolia fork)
+    runs-on: ubuntu-latest
+    # Soft-skips inside the suite when BASE_SEPOLIA_RPC_URL is unset
+    # (secrets cannot be compared in job-level `if`).
+    defaults:
+      run:
+        working-directory: contracts
+    env:
+      BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ./.github/actions/setup-foundry
+
+      - name: Forge fork tests
+        run: forge test --match-path 'test/fork/**'
+
   # Push Convex functions on merge to main so the backend never lags the
   # Vercel frontend deploy. Skipping this is what broke the trader dialog:
   # the frontend shipped calling seatVault/queries:getPublicTraderTier while
   # the deployment never had it. Runs only after checks pass.
   deploy-convex:
     name: Deploy Convex functions
-    needs: checks
+    needs: [checks, vitest, contracts]
     # Only on merge to main, and only when a deploy key is actually configured.
     # Without the secret `npx convex deploy` errors ("No CONVEX_DEPLOYMENT set"),
     # so the job is gated on it rather than painting every main commit red.

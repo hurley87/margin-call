@@ -1,0 +1,14 @@
+name: Setup Foundry
+description: Install Foundry and the pinned forge dependencies (forge-std, OpenZeppelin).
+runs:
+  using: composite
+  steps:
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+
+    - name: Install forge dependencies
+      shell: bash
+      working-directory: contracts
+      run: |
+        forge install foundry-rs/forge-std@v1.9.4 --no-commit
+        forge install OpenZeppelin/openzeppelin-contracts@v5.2.0 --no-commit
