@@ -7,6 +7,18 @@ blocking release of app dependencies we do not ship.
 
 Owner: Margin Call maintainers. Review on Dependabot PRs and at least quarterly.
 
+## Security documentation
+
+| Doc | Purpose |
+| --- | ------- |
+| [`../SECURITY.md`](../../SECURITY.md) | Vulnerability reporting and disclosure |
+| [`AUDIT_SCOPE.md`](./AUDIT_SCOPE.md) | Commit, contracts, exclusions, stale-review caveat |
+| [`threat-model.md`](./threat-model.md) | Trust assumptions and threat themes |
+| [`role-matrix.md`](./role-matrix.md) | Privileged roles, impact, rotation |
+| [`base-sepolia-operations.md`](./base-sepolia-operations.md) | Day-2 Base Sepolia runbook |
+| [`incident-response.md`](./incident-response.md) | Pause, rotate, refund, rollback, recovery |
+| [`evidence-requirements.md`](./evidence-requirements.md) | Deploy / verify / operate evidence checklist |
+
 | Advisory                                                                                                                                                                                                                     | Package                            | Severity | Reachability                                                                                                                                                      | Mitigation                                                                                                                              | Expiry     |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
 | [GHSA-v2wj-q39q-566r](https://github.com/advisories/GHSA-v2wj-q39q-566r), [GHSA-p9ff-h696-f583](https://github.com/advisories/GHSA-p9ff-h696-f583), [GHSA-fx2h-pf6j-xcff](https://github.com/advisories/GHSA-fx2h-pf6j-xcff) | `vite` `7.3.1` via `vitest@4.1.10` | high     | **Dev-only.** Vitest / Vite transform path used in unit tests and optional Vitest UI. Not in Next.js production bundle; UI server is not run in CI or production. | Stay on Vitest `4.1.x`; bump when Vitest ships a release that depends on Vite `>=7.3.5`. Do not expose Vitest UI on untrusted networks. | 2026-10-13 |

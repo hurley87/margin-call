@@ -10,13 +10,13 @@ jobs:
     name: Lint, Typecheck & Codegen
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.0.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
@@ -40,13 +40,13 @@ jobs:
     name: Vitest
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.0.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
@@ -61,13 +61,13 @@ jobs:
     name: Production dependency audit
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.0.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
@@ -82,13 +82,13 @@ jobs:
     name: Full dependency audit (gated)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.0.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version-file: ".nvmrc"
           cache: pnpm
@@ -111,7 +111,7 @@ jobs:
       run:
         working-directory: contracts
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-foundry
 
@@ -128,21 +128,28 @@ jobs:
     name: Slither static analysis
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-foundry
 
-      - name: Forge build (artifacts for Slither)
-        working-directory: contracts
-        run: forge build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # Run Slither directly instead of via crytic/slither-action. The action
+      # forced ignore-compile, which made crytic-compile parse Foundry
+      # build-info whose newer layout (no top-level "output" key) crashes it
+      # with KeyError: 'output'. Letting crytic-compile drive `forge build`
+      # with the pinned toolchain (deps already installed by setup-foundry)
+      # avoids that.
+      - name: Install Slither
+        run: pip install "slither-analyzer==0.11.4"
 
       - name: Run Slither
-        uses: crytic/slither-action@v0.4.0
-        with:
-          target: contracts
-          fail-on: high
-          ignore-compile: true
-          slither-config: contracts/slither.config.json
+        working-directory: contracts
+        # --fail-high mirrors the action's `fail-on: high`: exit non-zero only
+        # on High-severity findings.
+        run: slither . --config-file slither.config.json --fail-high
 
   contracts-fork:
     name: Foundry (Base Sepolia fork)
@@ -155,7 +162,7 @@ jobs:
     env:
       BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-foundry
 
@@ -181,15 +188,15 @@ jobs:
         id: guard
         run: echo "enabled=${{ env.CONVEX_DEPLOY_KEY != '' }}" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: steps.guard.outputs.enabled == 'true'
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         if: steps.guard.outputs.enabled == 'true'
         with:
           version: 10.0.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         if: steps.guard.outputs.enabled == 'true'
         with:
           node-version-file: ".nvmrc"

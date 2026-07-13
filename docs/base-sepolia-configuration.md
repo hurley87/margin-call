@@ -48,6 +48,10 @@ Changing the active deployment requires human approval ([#211](https://github.co
 - MCP plugin markdown matches canonical chain slug, escrow, and USDC
 - Mainnet chain `8453` and mainnet USDC are not reachable from active exports
 
+## Security documentation
+
+Operational security posture for this testnet configuration lives under [`docs/security/`](./security/AUDIT_SCOPE.md) (audit scope, threat model, role matrix, runbooks, evidence). Reporting policy: [`SECURITY.md`](../SECURITY.md).
+
 ## Explicitly prohibited
 
 - Base mainnet chain `8453` in wallet `supportedChains`
