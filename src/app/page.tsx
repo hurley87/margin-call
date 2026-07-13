@@ -20,18 +20,17 @@ import {
   Check,
   ChevronsUp,
   Copy,
-  Github,
   HelpCircle,
   LogOut,
   MoreVertical,
   Plus,
-  Twitter,
   User,
   Volume2,
   VolumeX,
   Wallet,
   X,
 } from "lucide-react";
+import { Github, Twitter } from "@/components/icons/social-icons";
 import { useQuery } from "convex/react";
 import { usePrivy } from "@privy-io/react-auth";
 import { api } from "../../convex/_generated/api";
