@@ -141,6 +141,9 @@ contract MarginCallEscrow {
 
         uint256 fee = (potAmount * 5) / 100;
         uint256 netPot = potAmount - fee;
+        // Reject pots so small the extraction cap would round to 0 (which would
+        // make every winning settlement revert "Exceeds extraction cap").
+        require(netPot * MAX_EXTRACTION_BPS >= 10_000, "Pot too small");
         platformFees += fee;
 
         dealId = dealCount++;
@@ -254,6 +257,12 @@ contract MarginCallEscrow {
         uint256 profitFromPot = grossPayout > entryCost ? grossPayout - entryCost : 0;
         require(profitFromPot <= deal.maxExtractionAmount, "Exceeds extraction cap");
         require(rake <= profitFromPot, "Rake exceeds profit");
+        // A payout may draw down the unreserved pot plus this entry's own reserve,
+        // but must leave every other pending entry's principal refundable.
+        require(
+            grossPayout <= deal.potAmount - deal.reservedAmount + entryCost,
+            "Exceeds available pot"
+        );
 
         if (grossPayout > 0) {
             deal.potAmount -= grossPayout;

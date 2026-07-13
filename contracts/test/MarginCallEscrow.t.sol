@@ -767,4 +767,84 @@ contract MarginCallEscrowTest is Test {
         vm.expectRevert("Zero timeout");
         new MarginCallEscrow(address(usdc), address(registry), settlementOp, depositorBinder, 0);
     }
+
+    // ========== Reserve solvency (issue #206: refund reserves) ==========
+
+    /// Enter `count` traders (ids 100..100+count) on `dealId`, each depositing `entryCost`.
+    function _enterManyTraders(uint256 dealId, uint256 count, uint256 entryCost) internal {
+        for (uint256 i = 0; i < count; i++) {
+            uint256 tid = 100 + i;
+            address desk = address(uint160(0xD00D0000 + i));
+            registry.setOwner(tid, desk);
+            vm.prank(depositorBinder);
+            escrow.setDepositor(tid, desk);
+            usdc.mint(desk, 1_000_000e6);
+            vm.prank(desk);
+            usdc.approve(address(escrow), type(uint256).max);
+            vm.prank(desk);
+            escrow.depositFor(tid, entryCost);
+            vm.prank(settlementOp);
+            escrow.enterDeal(dealId, tid);
+        }
+    }
+
+    function test_settleEntry_cannotConsumeOtherPendingReserve() public {
+        // netPot=950e6, maxExtraction=237.5e6, entryCost=100e6.
+        vm.prank(alice);
+        uint256 dealId = escrow.createDeal("Crowded deal", 1000e6, 100e6);
+        _enterManyTraders(dealId, 6, 100e6); // pot=1550e6, reserved=600e6
+
+        // Four winners each take the max profit (gross = 100 + 237.5 = 337.5e6).
+        uint256 maxGross = 100e6 + 237_500_000;
+        for (uint256 i = 0; i < 4; i++) {
+            vm.prank(settlementOp);
+            escrow.settleEntry(dealId, 100 + i, maxGross, 0);
+        }
+        // pot=200e6, reserved=200e6 (traders 104, 105 still pending).
+
+        // A win that dips into peers' reserved principal must revert.
+        // available = pot - reserved + entryCost = 200 - 200 + 100 = 100e6.
+        vm.prank(settlementOp);
+        vm.expectRevert("Exceeds available pot");
+        escrow.settleEntry(dealId, 104, 150e6, 0);
+
+        // Break-even (only the trader's own reserved principal) still settles.
+        vm.prank(settlementOp);
+        escrow.settleEntry(dealId, 104, 100e6, 0);
+        assertEq(escrow.getBalance(104), 100e6);
+    }
+
+    function test_refundExpiredEntry_solventAfterMaxWinners() public {
+        vm.prank(alice);
+        uint256 dealId = escrow.createDeal("Crowded deal", 1000e6, 100e6);
+        _enterManyTraders(dealId, 6, 100e6);
+
+        uint256 maxGross = 100e6 + 237_500_000;
+        for (uint256 i = 0; i < 4; i++) {
+            vm.prank(settlementOp);
+            escrow.settleEntry(dealId, 100 + i, maxGross, 0);
+        }
+
+        // Remaining pending entries (104, 105) stay refundable after timeout.
+        vm.warp(block.timestamp + ENTRY_TIMEOUT + 1);
+        escrow.refundExpiredEntry(dealId, 104);
+        escrow.refundExpiredEntry(dealId, 105);
+        assertEq(escrow.getBalance(104), 100e6);
+        assertEq(escrow.getBalance(105), 100e6);
+        assertEq(escrow.getDeal(dealId).pendingEntries, 0);
+    }
+
+    // ========== Minimum pot (issue #206: extraction cap must be > 0) ==========
+
+    function test_createDeal_revertsIfPotTooSmallForCap() public {
+        vm.prank(alice);
+        vm.expectRevert("Pot too small");
+        escrow.createDeal("Dust", 3, 1); // netPot=3 -> cap rounds to 0
+    }
+
+    function test_createDeal_allowsSmallestViablePot() public {
+        vm.prank(alice);
+        uint256 dealId = escrow.createDeal("Tiny", 4, 1); // netPot=4 -> cap=1
+        assertEq(escrow.getDeal(dealId).maxExtractionAmount, 1);
+    }
 }

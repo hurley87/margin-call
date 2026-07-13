@@ -247,18 +247,39 @@ export async function resolveOnChainEntry({
     };
   }
 
-  const grossPayoutUsdc = Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc);
+  // Clamp the payout to the contract's on-chain caps so settleEntry can never
+  // revert for economic reasons (#206). The contract is the source of truth:
+  // the extraction cap is frozen at deal creation (25% of net pot), and the pot
+  // must stay solvent for every other pending entry's reserve. The off-chain
+  // outcome engine sizes wins against a live, growing pot, which can drift above
+  // these frozen on-chain limits; clamping here keeps the two in agreement
+  // instead of letting settleEntry revert and strand the entry.
+  const deal = await publicClient.readContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getDeal",
+    args: [BigInt(onChainDealId)],
+  });
+  const entryCostRaw = deal.entryCost;
+  const capByExtractionRaw = entryCostRaw + deal.maxExtractionAmount;
+  const availableRaw = deal.potAmount - deal.reservedAmount + entryCostRaw;
+  let grossPayoutRaw = usdcToRaw(
+    Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc)
+  );
+  if (grossPayoutRaw > capByExtractionRaw) grossPayoutRaw = capByExtractionRaw;
+  if (grossPayoutRaw > availableRaw) grossPayoutRaw = availableRaw;
+  if (grossPayoutRaw > deal.potAmount) grossPayoutRaw = deal.potAmount;
+  // Rake cannot exceed the (possibly clamped) profit above entry cost.
+  const profitRaw =
+    grossPayoutRaw > entryCostRaw ? grossPayoutRaw - entryCostRaw : BigInt(0);
+  let rakeRaw = usdcToRaw(rakeUsdc);
+  if (rakeRaw > profitRaw) rakeRaw = profitRaw;
   try {
     const hash = await walletClient.writeContract({
       address: ESCROW_ADDRESS,
       abi: escrowAbi,
       functionName: "settleEntry",
-      args: [
-        BigInt(onChainDealId),
-        BigInt(tokenId),
-        usdcToRaw(grossPayoutUsdc),
-        usdcToRaw(rakeUsdc),
-      ],
+      args: [BigInt(onChainDealId), BigInt(tokenId), grossPayoutRaw, rakeRaw],
       chain: CONTRACTS_CHAIN,
       account,
     });
@@ -1023,6 +1044,23 @@ export const cycle = internalAction({
               // at/after 09:30 will retry naturally.
               console.log("[cycle] /api/deal/enter rejected — market closed");
               marketClosedAtEntry = true;
+            } else if (httpStatus === 422) {
+              // Own-desk / ineligible entry rejected on-chain. Non-retryable for
+              // this deal; skip cleanly without erroring the cycle.
+              await ctx.runMutation(internal.agentActivityLog.append, {
+                traderId,
+                activityType: "enter",
+                message:
+                  "Deal entry rejected — own-desk deal is ineligible; skipping",
+                dealId: dealId as never,
+                correlationId,
+              });
+              await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+                traderId,
+                generation,
+                lastCycleAt: Date.now(),
+              });
+              return;
             } else {
               // Non-409 / non-423 error: log and re-throw so the lease is released
               const msg =
