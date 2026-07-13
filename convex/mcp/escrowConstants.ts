@@ -128,6 +128,18 @@ export const escrowAbi = [
   },
   {
     type: "function",
+    name: "settleEntry",
+    inputs: [
+      { name: "dealId", type: "uint256" },
+      { name: "traderId", type: "uint256" },
+      { name: "grossPayout", type: "uint256" },
+      { name: "rake", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "getDeal",
     inputs: [{ name: "dealId", type: "uint256" }],
     outputs: [
@@ -142,6 +154,8 @@ export const escrowAbi = [
           { name: "fee", type: "uint256" },
           { name: "status", type: "uint8" },
           { name: "pendingEntries", type: "uint256" },
+          { name: "reservedAmount", type: "uint256" },
+          { name: "maxExtractionAmount", type: "uint256" },
         ],
       },
     ],

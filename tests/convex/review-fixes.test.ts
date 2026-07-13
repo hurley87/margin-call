@@ -8,7 +8,7 @@ import {
   verifyEscrowWithdrawalInReceipt,
 } from "../../convex/mcp/deskByo";
 import {
-  classifyResolveEntryRevert,
+  classifySettleEntryRevert,
   ON_CHAIN_TX_RECONCILED_NO_ENTRY,
   reconciledTxHash,
 } from "../../convex/agent/onChainSettlement";
@@ -85,15 +85,12 @@ describe("escrow receipt verification", () => {
 });
 
 describe("on-chain settlement reconciliation", () => {
-  it("classifies FIFO and ghost-resolve revert messages", () => {
-    expect(classifyResolveEntryRevert("Trader mismatch")).toEqual({
-      status: "queue_not_head",
-    });
-    expect(classifyResolveEntryRevert("No pending entry")).toEqual({
+  it("classifies ghost-resolve revert messages", () => {
+    expect(classifySettleEntryRevert("No pending entry")).toEqual({
       status: "already_resolved",
       reason: "no_trader_entry",
     });
-    expect(classifyResolveEntryRevert("PnL exceeds pot")).toBeNull();
+    expect(classifySettleEntryRevert("Gross exceeds pot")).toBeNull();
   });
 
   it("findUnresolvedOnChain skips reconciled sentinel outcomes", async () => {

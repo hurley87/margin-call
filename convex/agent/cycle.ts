@@ -22,7 +22,7 @@ import {
   getTradingHoursState,
   isTradingHours,
 } from "../lib/tradingHours";
-import { ESCROW_ADDRESS } from "../mcp/escrowConstants";
+import { ESCROW_ADDRESS, escrowAbi } from "../mcp/escrowConstants";
 import { createSeatVaultPublicClient, readTierOf } from "../seatVault/rpc";
 const USDC_DECIMALS = 1_000_000;
 
@@ -87,7 +87,7 @@ function usdcToRaw(amountUsdc: number): bigint {
 }
 
 import {
-  classifyResolveEntryRevert,
+  classifySettleEntryRevert,
   reconciledTxHash,
   type OnChainResolveResult,
 } from "./onChainSettlement";
@@ -205,52 +205,6 @@ export async function resolveOnChainEntry({
   const { requireBaseSepoliaRpcUrl } =
     await import("../lib/requireBaseSepoliaRpcUrl");
 
-  const abi = [
-    {
-      type: "function",
-      name: "getDeal",
-      inputs: [{ name: "dealId", type: "uint256" }],
-      outputs: [
-        {
-          name: "",
-          type: "tuple",
-          components: [
-            { name: "creator", type: "address" },
-            { name: "prompt", type: "string" },
-            { name: "potAmount", type: "uint256" },
-            { name: "entryCost", type: "uint256" },
-            { name: "fee", type: "uint256" },
-            { name: "status", type: "uint8" },
-            { name: "pendingEntries", type: "uint256" },
-          ],
-        },
-      ],
-      stateMutability: "view",
-    },
-    {
-      type: "function",
-      name: "hasPendingEntry",
-      inputs: [
-        { name: "dealId", type: "uint256" },
-        { name: "traderId", type: "uint256" },
-      ],
-      outputs: [{ name: "", type: "bool" }],
-      stateMutability: "view",
-    },
-    {
-      type: "function",
-      name: "resolveEntry",
-      inputs: [
-        { name: "dealId", type: "uint256" },
-        { name: "traderId", type: "uint256" },
-        { name: "pnl", type: "int256" },
-        { name: "rake", type: "uint256" },
-      ],
-      outputs: [],
-      stateMutability: "nonpayable",
-    },
-  ] as const;
-
   const transport = http(requireBaseSepoliaRpcUrl());
   const account = privateKeyToAccount(operatorKey as `0x${string}`);
   const walletClient = createWalletClient({
@@ -273,14 +227,14 @@ export async function resolveOnChainEntry({
   // no pending entry; the global count then just distinguishes the two reasons.
   const hasPending = await publicClient.readContract({
     address: ESCROW_ADDRESS,
-    abi,
+    abi: escrowAbi,
     functionName: "hasPendingEntry",
     args: [BigInt(onChainDealId), BigInt(tokenId)],
   });
   if (!hasPending) {
     const onChainDeal = await publicClient.readContract({
       address: ESCROW_ADDRESS,
-      abi,
+      abi: escrowAbi,
       functionName: "getDeal",
       args: [BigInt(onChainDealId)],
     });
@@ -293,18 +247,39 @@ export async function resolveOnChainEntry({
     };
   }
 
-  const grossPayoutUsdc = Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc);
+  // Clamp the payout to the contract's on-chain caps so settleEntry can never
+  // revert for economic reasons (#206). The contract is the source of truth:
+  // the extraction cap is frozen at deal creation (25% of net pot), and the pot
+  // must stay solvent for every other pending entry's reserve. The off-chain
+  // outcome engine sizes wins against a live, growing pot, which can drift above
+  // these frozen on-chain limits; clamping here keeps the two in agreement
+  // instead of letting settleEntry revert and strand the entry.
+  const deal = await publicClient.readContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getDeal",
+    args: [BigInt(onChainDealId)],
+  });
+  const entryCostRaw = deal.entryCost;
+  const capByExtractionRaw = entryCostRaw + deal.maxExtractionAmount;
+  const availableRaw = deal.potAmount - deal.reservedAmount + entryCostRaw;
+  let grossPayoutRaw = usdcToRaw(
+    Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc)
+  );
+  if (grossPayoutRaw > capByExtractionRaw) grossPayoutRaw = capByExtractionRaw;
+  if (grossPayoutRaw > availableRaw) grossPayoutRaw = availableRaw;
+  if (grossPayoutRaw > deal.potAmount) grossPayoutRaw = deal.potAmount;
+  // Rake cannot exceed the (possibly clamped) profit above entry cost.
+  const profitRaw =
+    grossPayoutRaw > entryCostRaw ? grossPayoutRaw - entryCostRaw : BigInt(0);
+  let rakeRaw = usdcToRaw(rakeUsdc);
+  if (rakeRaw > profitRaw) rakeRaw = profitRaw;
   try {
     const hash = await walletClient.writeContract({
       address: ESCROW_ADDRESS,
-      abi,
-      functionName: "resolveEntry",
-      args: [
-        BigInt(onChainDealId),
-        BigInt(tokenId),
-        usdcToRaw(grossPayoutUsdc),
-        usdcToRaw(rakeUsdc),
-      ],
+      abi: escrowAbi,
+      functionName: "settleEntry",
+      args: [BigInt(onChainDealId), BigInt(tokenId), grossPayoutRaw, rakeRaw],
       chain: CONTRACTS_CHAIN,
       account,
     });
@@ -313,7 +288,7 @@ export async function resolveOnChainEntry({
     return { status: "resolved", txHash: receipt.transactionHash };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const classified = classifyResolveEntryRevert(message);
+    const classified = classifySettleEntryRevert(message);
     if (classified) {
       return classified;
     }
@@ -616,11 +591,10 @@ export const cycle = internalAction({
         }
       }
 
-      // ── 3c. On-chain settlement retry (handles FIFO "Trader mismatch") ────
+      // ── 3c. On-chain settlement retry ─────────────────────────────────────
       // If a prior cycle persisted an outcome but the contract reverted the
-      // resolveEntry call (e.g. another trader was at the head of the FIFO
-      // queue), retry only the on-chain step here. Skips both selectDeal and
-      // the LLM — the outcome is already authoritative off-chain.
+      // settleEntry call, retry only the on-chain step here. Skips both
+      // selectDeal and the LLM — the outcome is already authoritative off-chain.
       if (trader.tokenId !== undefined && trader.tokenId !== null) {
         const pending = await ctx.runQuery(
           internal.dealOutcomes.findUnresolvedOnChain,
@@ -638,23 +612,6 @@ export const cycle = internalAction({
             traderPnlUsdc: pending.outcome.traderPnlUsdc ?? 0,
             rakeUsdc: pending.outcome.rakeUsdc ?? 0,
           });
-
-          if (retry.status === "queue_not_head") {
-            await ctx.runMutation(internal.agentActivityLog.append, {
-              traderId,
-              activityType: "resolve_pending",
-              message:
-                "On-chain settlement waiting for prior trader at head of FIFO queue — will retry next cycle",
-              dealId: pending.outcome.dealId as never,
-              correlationId,
-            });
-            await ctx.runMutation(internal.agent.internal.markCycleComplete, {
-              traderId,
-              generation,
-              lastCycleAt: Date.now(),
-            });
-            return;
-          }
 
           if (retry.status === "resolved") {
             await finalizeOnChainOutcome(ctx, {
@@ -1087,6 +1044,23 @@ export const cycle = internalAction({
               // at/after 09:30 will retry naturally.
               console.log("[cycle] /api/deal/enter rejected — market closed");
               marketClosedAtEntry = true;
+            } else if (httpStatus === 422) {
+              // Own-desk / ineligible entry rejected on-chain. Non-retryable for
+              // this deal; skip cleanly without erroring the cycle.
+              await ctx.runMutation(internal.agentActivityLog.append, {
+                traderId,
+                activityType: "enter",
+                message:
+                  "Deal entry rejected — own-desk deal is ineligible; skipping",
+                dealId: dealId as never,
+                correlationId,
+              });
+              await ctx.runMutation(internal.agent.internal.markCycleComplete, {
+                traderId,
+                generation,
+                lastCycleAt: Date.now(),
+              });
+              return;
             } else {
               // Non-409 / non-423 error: log and re-throw so the lease is released
               const msg =
@@ -1174,11 +1148,11 @@ export const cycle = internalAction({
         pendingOutcome = resolved;
       }
 
-      // ── 9. Persist outcome BEFORE on-chain resolve ─────────────────────────
+      // ── 9. Persist outcome BEFORE on-chain settle ────────────────────────────
       // Apply order matters: we record the off-chain outcome first so that if
-      // the contract reverts the resolveEntry call (e.g. FIFO "Trader
-      // mismatch"), the next cycle's `findUnresolvedOnChain` query picks it
-      // up and retries only the on-chain step — without re-running the LLM.
+      // the contract reverts settleEntry, the next cycle's
+      // `findUnresolvedOnChain` query picks it up and retries only the on-chain
+      // step — without re-running the LLM.
       if (pendingOutcome) {
         outcomeId = (await ctx.runMutation(internal.dealOutcomes.apply, {
           dealId: dealId as never,
@@ -1194,7 +1168,7 @@ export const cycle = internalAction({
         })) as string;
       }
 
-      // ── 10. Resolve on-chain pending entry ─────────────────────────────────
+      // ── 10. Settle on-chain pending entry ──────────────────────────────────
       let resolveResult: OnChainResolveResult | null = null;
       if (
         bestDeal.on_chain_deal_id !== undefined &&
@@ -1208,27 +1182,6 @@ export const cycle = internalAction({
           traderPnlUsdc,
           rakeUsdc,
         });
-      }
-
-      if (resolveResult?.status === "queue_not_head" && outcomeId !== null) {
-        // Another trader is ahead in the FIFO queue. The outcome is already
-        // persisted; release the lease cleanly and let the next cycle retry
-        // via the early on-chain settlement retry path (3c).
-        await ctx.runMutation(internal.agentActivityLog.append, {
-          traderId,
-          activityType: "resolve_pending",
-          message:
-            "On-chain settlement waiting for prior trader at head of FIFO queue — will retry next cycle",
-          dealId: dealId as never,
-          metadata: { outcome_id: outcomeId },
-          correlationId,
-        });
-        await ctx.runMutation(internal.agent.internal.markCycleComplete, {
-          traderId,
-          generation,
-          lastCycleAt: Date.now(),
-        });
-        return;
       }
 
       if (resolveResult?.status === "resolved" && outcomeId !== null) {

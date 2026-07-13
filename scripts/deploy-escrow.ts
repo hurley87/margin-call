@@ -23,14 +23,20 @@ function main() {
     operatorKey as `0x${string}`
   ).address;
 
-  console.log(`Deploying MarginCallEscrow with operator ${operatorAddress}…`);
+  console.log(
+    `Deploying MarginCallEscrow with settlement operator ${operatorAddress}…`
+  );
 
   const { address } = runForgeDeploy({
     scriptTarget: "script/DeployMarginCallEscrow.s.sol:DeployMarginCallEscrow",
     rpcUrl,
     privateKey: operatorKey,
     addressLabel: "MarginCallEscrow",
-    env: { OPERATOR_ADDRESS: operatorAddress },
+    env: {
+      SETTLEMENT_OPERATOR_ADDRESS: operatorAddress,
+      DEPOSITOR_BINDER_ADDRESS: operatorAddress,
+      ENTRY_TIMEOUT_SECONDS: "3600",
+    },
   });
 
   patchEnvLocal("NEXT_PUBLIC_ESCROW_ADDRESS", address);

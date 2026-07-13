@@ -32,7 +32,7 @@ let cached: ReturnType<typeof buildOperatorClient> | null = null;
 /**
  * Get the operator wallet client (cached singleton).
  * The operator is the server-side signer authorized to call
- * enterDeal() and resolveEntry() on the escrow contract.
+ * enterDeal() and settleEntry() on the escrow contract.
  *
  * This module is server-only — it must never be imported from client code.
  */

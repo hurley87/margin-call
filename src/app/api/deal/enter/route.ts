@@ -311,6 +311,18 @@ async function handleAgentCycleDealEnter(
           });
         }
       }
+      // The contract rejects entering a deal created by the trader's own desk
+      // (depositor wallet == deal creator). Surface it as a non-retryable 422 so
+      // the agent cycle skips this deal cleanly instead of erroring on a 500.
+      if (message.includes("Own desk entry")) {
+        return NextResponse.json(
+          {
+            error:
+              "Own desk entry — a trader may not enter a deal created by its own desk",
+          },
+          { status: 422 }
+        );
+      }
       throw enterErr;
     }
   }
