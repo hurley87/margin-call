@@ -97,19 +97,17 @@ describe("lapsed seat + authorization", () => {
     ).toBe(false);
   });
 
-  it("allows depositor or staker to initiate; complete only after cooldown", () => {
+  it("allows only recorded staker to initiate; complete only after cooldown", () => {
     expect(
       canInitiateUnstake({
         walletAddress: "0x1",
-        depositorAddress: "0x1",
         stakerAddress: "0x2",
         activeWei: parseBlowAmount("10"),
       })
-    ).toBe(true);
+    ).toBe(false);
     expect(
       canInitiateUnstake({
         walletAddress: "0x2",
-        depositorAddress: "0x1",
         stakerAddress: "0x2",
         activeWei: parseBlowAmount("10"),
       })
@@ -117,7 +115,6 @@ describe("lapsed seat + authorization", () => {
     expect(
       canInitiateUnstake({
         walletAddress: "0x3",
-        depositorAddress: "0x1",
         stakerAddress: "0x2",
         activeWei: parseBlowAmount("10"),
       })
@@ -125,7 +122,6 @@ describe("lapsed seat + authorization", () => {
     expect(
       canInitiateUnstake({
         walletAddress: "0x1",
-        depositorAddress: "0x1",
         stakerAddress: "0x1",
         activeWei: "0",
       })

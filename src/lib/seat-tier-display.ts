@@ -122,20 +122,18 @@ export function canPostPrincipal(args: {
 
 /**
  * Can this wallet pull principal off the floor (initiate unstake)?
- * Contract: current depositor OR recorded staker.
+ * Contract: only the recorded staker may initiate.
  */
 export function canInitiateUnstake(args: {
   walletAddress: string | null | undefined;
-  depositorAddress: string | null | undefined;
   stakerAddress: string | null | undefined;
   activeWei: string;
 }): boolean {
   if (!args.walletAddress) return false;
   if (compareWei(args.activeWei, "0") <= 0) return false;
   const wallet = args.walletAddress.toLowerCase();
-  const depositor = args.depositorAddress?.toLowerCase();
   const staker = args.stakerAddress?.toLowerCase();
-  return wallet === depositor || wallet === staker;
+  return wallet === staker;
 }
 
 /**

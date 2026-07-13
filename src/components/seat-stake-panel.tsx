@@ -134,7 +134,6 @@ export function SeatStakePanel({
   const canPull = active
     ? canInitiateUnstake({
         walletAddress,
-        depositorAddress: depositor,
         stakerAddress: active.staker,
         activeWei: active.activeAmountWei,
       })

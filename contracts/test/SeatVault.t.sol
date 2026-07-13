@@ -214,7 +214,32 @@ contract SeatVaultTest is Test {
         _assertTier(SeatVault.Tier.Seat);
     }
 
-    function test_setPolicy_newCooldownAffectsNewInitiatesOnly() public {
+    function test_replacementDepositorCannotInitiateUnstake() public {
+        _stake(5_000e18);
+        escrow.setDepositor(TRADER, otherDesk);
+
+        vm.prank(otherDesk);
+        vm.expectRevert("Not staker");
+        vault.initiateUnstake(TRADER, 1_000e18);
+    }
+
+    function test_repeatedInitiateDoesNotExtendCooldown() public {
+        _stake(1_000e18);
+
+        vm.prank(desk);
+        vault.initiateUnstake(TRADER, 100e18);
+        uint256 unlockAfterFirst = vault.stakeOf(TRADER).unlockTime;
+
+        vm.warp(block.timestamp + 1 hours);
+
+        vm.prank(desk);
+        vault.initiateUnstake(TRADER, 50e18);
+        uint256 unlockAfterSecond = vault.stakeOf(TRADER).unlockTime;
+
+        assertEq(unlockAfterSecond, unlockAfterFirst);
+    }
+
+    function test_setPolicy_newCooldownDoesNotAffectExistingPending() public {
         _stake(1_000e18);
 
         vm.prank(desk);
@@ -223,16 +248,100 @@ contract SeatVaultTest is Test {
 
         vault.setPolicy(SEAT, CORNER, 2 days);
 
-        // Existing pending unlock is unchanged until another initiate refreshes it.
         assertEq(vault.stakeOf(TRADER).unlockTime, unlockAfterFirst);
 
         vm.warp(block.timestamp + 1 hours);
         vm.prank(desk);
         vault.initiateUnstake(TRADER, 50e18);
+
+        assertEq(vault.stakeOf(TRADER).unlockTime, unlockAfterFirst);
+    }
+
+    // ========== Pause ==========
+
+    function test_pause_blocksStake() public {
+        vault.pause();
+
+        vm.prank(desk);
+        vm.expectRevert("Paused");
+        vault.stake(TRADER, 1_000e18);
+    }
+
+    function test_pause_blocksInitiate() public {
+        _stake(1_000e18);
+        vault.pause();
+
+        vm.prank(desk);
+        vm.expectRevert("Paused");
+        vault.initiateUnstake(TRADER, 500e18);
+    }
+
+    function test_pause_allowsMaturedClaim() public {
+        _stake(1_000e18);
+        vm.prank(desk);
+        vault.initiateUnstake(TRADER, 400e18);
+
+        vm.warp(block.timestamp + COOLDOWN);
+        vault.pause();
+
+        uint256 before = token.balanceOf(desk);
+        vault.completeUnstake(TRADER);
+        assertEq(token.balanceOf(desk) - before, 400e18);
+    }
+
+    function test_pause_onlyPauserOrOwner() public {
+        vm.prank(attacker);
+        vm.expectRevert("Not pauser");
+        vault.pause();
+
+        address pauserAddr = makeAddr("pauser");
+        vault.setPauser(pauserAddr);
+        vm.prank(pauserAddr);
+        vault.pause();
+        assertTrue(vault.paused());
+    }
+
+    // ========== hasLockedPrincipal ==========
+
+    function test_hasLockedPrincipal() public {
+        assertFalse(vault.hasLockedPrincipal(TRADER));
+
+        _stake(1_000e18);
+        assertTrue(vault.hasLockedPrincipal(TRADER));
+
+        vm.prank(desk);
+        vault.initiateUnstake(TRADER, 400e18);
+        assertTrue(vault.hasLockedPrincipal(TRADER));
+
+        vm.warp(block.timestamp + COOLDOWN);
+        vault.completeUnstake(TRADER);
+        assertTrue(vault.hasLockedPrincipal(TRADER));
+
+        vm.prank(desk);
+        vault.initiateUnstake(TRADER, 600e18);
+        vm.warp(block.timestamp + COOLDOWN);
+        vault.completeUnstake(TRADER);
+        assertFalse(vault.hasLockedPrincipal(TRADER));
+    }
+
+    function test_setPolicy_newCooldownAffectsNewInitiatesOnly() public {
+        _stake(1_000e18);
+
+        vm.prank(desk);
+        vault.initiateUnstake(TRADER, 100e18);
+        uint256 unlockAfterFirst = vault.stakeOf(TRADER).unlockTime;
+
+        vm.warp(block.timestamp + COOLDOWN);
+        vault.completeUnstake(TRADER);
+
+        vault.setPolicy(SEAT, CORNER, 2 days);
+
+        vm.prank(desk);
+        vault.initiateUnstake(TRADER, 50e18);
         uint256 unlockAfterSecond = vault.stakeOf(TRADER).unlockTime;
 
-        assertGt(unlockAfterSecond, unlockAfterFirst);
         assertGe(unlockAfterSecond, block.timestamp + 2 days);
+        assertGt(unlockAfterSecond, unlockAfterFirst);
     }
 
     // ========== setToken ==========
