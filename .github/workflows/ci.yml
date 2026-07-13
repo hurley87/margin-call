@@ -137,14 +137,11 @@ jobs:
           python-version: "3.10"
 
       # Run Slither directly instead of via crytic/slither-action. The action
-      # ran two things that both broke here:
-      #   1. ignore-compile made crytic-compile parse Foundry build-info, whose
-      #      newer layout (no top-level "output" key) crashes it with
-      #      KeyError: 'output'.
-      #   2. its dependency-install wrapper runs `git submodule` at the repo
-      #      root, which fails on the stray `.claude/skills` gitlink.
-      # Letting crytic-compile drive `forge build` with the pinned toolchain
-      # (deps already installed by setup-foundry) avoids both.
+      # forced ignore-compile, which made crytic-compile parse Foundry
+      # build-info whose newer layout (no top-level "output" key) crashes it
+      # with KeyError: 'output'. Letting crytic-compile drive `forge build`
+      # with the pinned toolchain (deps already installed by setup-foundry)
+      # avoids that.
       - name: Install Slither
         run: pip install "slither-analyzer==0.11.4"
 
