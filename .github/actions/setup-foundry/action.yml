@@ -1,0 +1,17 @@
+name: Setup Foundry
+description: Install Foundry and the pinned forge dependencies (forge-std, OpenZeppelin).
+runs:
+  using: composite
+  steps:
+    - name: Install Foundry
+      uses: foundry-rs/foundry-toolchain@v1
+
+    - name: Install forge dependencies
+      shell: bash
+      working-directory: contracts
+      # --no-git installs deps as plain dirs (not submodules), which avoids
+      # forge's whole-repo submodule scan choking on the orphan .claude/skills
+      # gitlink that has no .gitmodules mapping.
+      run: |
+        forge install foundry-rs/forge-std@v1.9.4 --no-git
+        forge install OpenZeppelin/openzeppelin-contracts@v5.2.0 --no-git

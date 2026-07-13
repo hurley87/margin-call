@@ -434,6 +434,30 @@ contract SeatVaultTest is Test {
         assertEq(vault.totalPrincipal(), 12_000e18);
         assertEq(token.balanceOf(address(vault)), 12_000e18);
     }
+
+    // ========== Constructor / initiate gaps (issue #207) ==========
+
+    function test_constructor_revertsZeroEscrow() public {
+        vm.expectRevert("Zero escrow");
+        new SeatVault(address(0), address(token), SEAT, CORNER, COOLDOWN);
+    }
+
+    function test_constructor_revertsZeroToken() public {
+        vm.expectRevert("Zero token");
+        new SeatVault(address(escrow), address(0), SEAT, CORNER, COOLDOWN);
+    }
+
+    function test_constructor_revertsCornerBelowSeat() public {
+        vm.expectRevert("Corner below seat");
+        new SeatVault(address(escrow), address(token), CORNER, SEAT, COOLDOWN);
+    }
+
+    function test_initiateUnstake_revertsZeroAmount() public {
+        _stake(1_000e18);
+        vm.prank(desk);
+        vm.expectRevert("Zero amount");
+        vault.initiateUnstake(TRADER, 0);
+    }
 }
 
 contract SeatVaultReentrancyTest is Test {

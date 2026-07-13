@@ -43,6 +43,7 @@ import type * as lib_portraitSeed from "../lib/portraitSeed.js";
 import type * as lib_profileImage from "../lib/profileImage.js";
 import type * as lib_requireBaseSepoliaRpcUrl from "../lib/requireBaseSepoliaRpcUrl.js";
 import type * as lib_resolveAddress from "../lib/resolveAddress.js";
+import type * as lib_settlementEncoding from "../lib/settlementEncoding.js";
 import type * as lib_tradingHours from "../lib/tradingHours.js";
 import type * as marketNarratives from "../marketNarratives.js";
 import type * as mcp_activity from "../mcp/activity.js";
@@ -160,6 +161,7 @@ declare const fullApi: ApiFromModules<{
   "lib/profileImage": typeof lib_profileImage;
   "lib/requireBaseSepoliaRpcUrl": typeof lib_requireBaseSepoliaRpcUrl;
   "lib/resolveAddress": typeof lib_resolveAddress;
+  "lib/settlementEncoding": typeof lib_settlementEncoding;
   "lib/tradingHours": typeof lib_tradingHours;
   marketNarratives: typeof marketNarratives;
   "mcp/activity": typeof mcp_activity;

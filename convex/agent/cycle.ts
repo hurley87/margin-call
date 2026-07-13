@@ -22,9 +22,12 @@ import {
   getTradingHoursState,
   isTradingHours,
 } from "../lib/tradingHours";
-import { ESCROW_ADDRESS, escrowAbi } from "../mcp/escrowConstants";
+import {
+  ESCROW_ADDRESS,
+  USDC_DECIMALS,
+  escrowAbi,
+} from "../mcp/escrowConstants";
 import { createSeatVaultPublicClient, readTierOf } from "../seatVault/rpc";
-const USDC_DECIMALS = 1_000_000;
 
 async function defaultReadTierOf(
   vaultAddress: `0x${string}`,
@@ -82,15 +85,12 @@ async function logCapacityDiagnostic(
   });
 }
 
-function usdcToRaw(amountUsdc: number): bigint {
-  return BigInt(Math.max(0, Math.round(amountUsdc * USDC_DECIMALS)));
-}
-
 import {
   classifySettleEntryRevert,
   reconciledTxHash,
   type OnChainResolveResult,
 } from "./onChainSettlement";
+import { clampSettleEntryArgs } from "../lib/settlementEncoding";
 
 async function finalizeOnChainOutcome(
   ctx: ActionCtx,
@@ -260,20 +260,15 @@ export async function resolveOnChainEntry({
     functionName: "getDeal",
     args: [BigInt(onChainDealId)],
   });
-  const entryCostRaw = deal.entryCost;
-  const capByExtractionRaw = entryCostRaw + deal.maxExtractionAmount;
-  const availableRaw = deal.potAmount - deal.reservedAmount + entryCostRaw;
-  let grossPayoutRaw = usdcToRaw(
-    Math.max(0, entryCostUsdc + traderPnlUsdc + rakeUsdc)
-  );
-  if (grossPayoutRaw > capByExtractionRaw) grossPayoutRaw = capByExtractionRaw;
-  if (grossPayoutRaw > availableRaw) grossPayoutRaw = availableRaw;
-  if (grossPayoutRaw > deal.potAmount) grossPayoutRaw = deal.potAmount;
-  // Rake cannot exceed the (possibly clamped) profit above entry cost.
-  const profitRaw =
-    grossPayoutRaw > entryCostRaw ? grossPayoutRaw - entryCostRaw : BigInt(0);
-  let rakeRaw = usdcToRaw(rakeUsdc);
-  if (rakeRaw > profitRaw) rakeRaw = profitRaw;
+  const { grossPayoutRaw, rakeRaw } = clampSettleEntryArgs({
+    entryCostRaw: deal.entryCost,
+    potAmountRaw: deal.potAmount,
+    reservedAmountRaw: deal.reservedAmount,
+    maxExtractionAmountRaw: deal.maxExtractionAmount,
+    entryCostUsdc,
+    traderPnlUsdc,
+    rakeUsdc,
+  });
   try {
     const hash = await walletClient.writeContract({
       address: ESCROW_ADDRESS,
