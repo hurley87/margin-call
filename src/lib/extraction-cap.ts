@@ -9,12 +9,17 @@ export type ExtractionCapDealFields = {
   max_extraction_amount_usdc?: number | null;
 };
 
-/** Max gross win value (USDC) before rake — frozen cap when set, else live pot fallback. */
+/**
+ * Max profit from pot (USDC) before rake — requires the creation-frozen cap.
+ * Matches on-chain `maxExtractionAmount`; never derive from the live pot.
+ */
 export function maxWinValueUsdc(deal: ExtractionCapDealFields): number {
-  if (deal.max_extraction_amount_usdc != null) {
-    return deal.max_extraction_amount_usdc;
+  if (deal.max_extraction_amount_usdc == null) {
+    throw new Error(
+      "Deal missing frozen maxExtractionAmountUsdc — stamp at creation via dealCreationCapFields"
+    );
   }
-  return frozenMaxExtractionAmountUsdc(deal.pot_usdc);
+  return deal.max_extraction_amount_usdc;
 }
 
 /** Derive the frozen cap from creation-time net pot (matches on-chain maxExtractionAmount). */

@@ -11,6 +11,7 @@
  */
 import { convexTest } from "convex-test";
 import schema from "../../convex/schema";
+import { dealCreationCapFields } from "../../convex/lib/extractionCap";
 
 // Module glob — must cover the Convex backend tree under convex/ (not tests/).
 // Evaluated at runtime by Vite/Vitest from tests/convex.
@@ -142,16 +143,24 @@ export async function seedDeal(
     creatorAddress?: string;
     onChainDealId?: number;
     onChainTxHash?: string;
+    maxExtractionAmountUsdc?: number;
+    maxExtractionPercentage?: number;
   } = {}
 ) {
   return t.run(async (ctx) => {
     const now = Date.now();
+    const potUsdc = opts.potUsdc ?? 500;
+    const caps = dealCreationCapFields(potUsdc);
     return ctx.db.insert("deals", {
       prompt: opts.prompt ?? "Buy low, sell high on IBM",
-      potUsdc: opts.potUsdc ?? 500,
+      potUsdc,
       entryCostUsdc: opts.entryCostUsdc ?? 50,
       status: opts.status ?? "open",
       creatorType: "desk_manager",
+      maxExtractionPercentage:
+        opts.maxExtractionPercentage ?? caps.maxExtractionPercentage,
+      maxExtractionAmountUsdc:
+        opts.maxExtractionAmountUsdc ?? caps.maxExtractionAmountUsdc,
       ...(opts.creatorDeskManagerId !== undefined
         ? { creatorDeskManagerId: opts.creatorDeskManagerId as never }
         : {}),

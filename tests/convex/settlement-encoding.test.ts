@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   clampSettleEntryArgs,
+  rawToUsdc,
   usdcToRaw,
 } from "../../convex/lib/settlementEncoding";
 
@@ -25,9 +26,12 @@ describe("clampSettleEntryArgs (#206/#207 settlement encoding)", () => {
     expect(out.grossPayoutRaw).toBe(e6(100));
     expect(out.rakeRaw).toBe(0n);
     expect(out.profitRaw).toBe(0n);
+    expect(out.traderPnlUsdc).toBe(0);
+    expect(out.rakeUsdc).toBe(0);
+    expect(out.potChangeUsdc).toBe(0);
   });
 
-  it("clamps win to extraction cap", () => {
+  it("clamps win to extraction cap and returns matching USDC economics", () => {
     // Desired: entry + 500 profit + 10 rake → far above 237.5 cap.
     const out = clampSettleEntryArgs({
       ...baseCaps,
@@ -40,6 +44,10 @@ describe("clampSettleEntryArgs (#206/#207 settlement encoding)", () => {
     expect(out.grossPayoutRaw).toBe(e6(100) + e6(237.5));
     expect(out.profitRaw).toBe(e6(237.5));
     expect(out.rakeRaw).toBe(e6(10)); // still ≤ profit
+    // Recorded PnL = clamped profit − rake (what the trader is actually paid).
+    expect(out.traderPnlUsdc).toBe(237.5 - 10);
+    expect(out.rakeUsdc).toBe(10);
+    expect(out.potChangeUsdc).toBe(-237.5);
   });
 
   it("clamps rake to clamped profit", () => {
@@ -55,6 +63,9 @@ describe("clampSettleEntryArgs (#206/#207 settlement encoding)", () => {
     expect(out.grossPayoutRaw).toBe(e6(230));
     expect(out.profitRaw).toBe(e6(130));
     expect(out.rakeRaw).toBe(e6(80));
+    expect(out.traderPnlUsdc).toBe(50);
+    expect(out.rakeUsdc).toBe(80);
+    expect(out.potChangeUsdc).toBe(-130);
   });
 
   it("forces rake to 0 on full loss", () => {
@@ -71,6 +82,9 @@ describe("clampSettleEntryArgs (#206/#207 settlement encoding)", () => {
     expect(out.grossPayoutRaw).toBe(e6(25));
     expect(out.profitRaw).toBe(0n);
     expect(out.rakeRaw).toBe(0n);
+    expect(out.traderPnlUsdc).toBe(-75);
+    expect(out.rakeUsdc).toBe(0);
+    expect(out.potChangeUsdc).toBe(75);
   });
 
   it("clamps to available pot leaving peer reserves", () => {
@@ -86,10 +100,29 @@ describe("clampSettleEntryArgs (#206/#207 settlement encoding)", () => {
     });
     expect(out.grossPayoutRaw).toBe(e6(100));
     expect(out.profitRaw).toBe(0n);
+    expect(out.traderPnlUsdc).toBe(0);
+    expect(out.rakeUsdc).toBe(0);
+    expect(out.potChangeUsdc).toBe(0);
+  });
+
+  it("passes through a normal loss unchanged", () => {
+    const out = clampSettleEntryArgs({
+      ...baseCaps,
+      reservedAmountRaw: e6(100),
+      potAmountRaw: e6(1050),
+      entryCostUsdc: 100,
+      traderPnlUsdc: -70,
+      rakeUsdc: 0,
+    });
+    expect(out.grossPayoutRaw).toBe(e6(30));
+    expect(out.traderPnlUsdc).toBe(-70);
+    expect(out.rakeUsdc).toBe(0);
+    expect(out.potChangeUsdc).toBe(70);
   });
 
   it("usdcToRaw rounds and floors negatives", () => {
     expect(usdcToRaw(1.2345678)).toBe(1234568n);
     expect(usdcToRaw(-5)).toBe(0n);
+    expect(rawToUsdc(e6(237.5))).toBe(237.5);
   });
 });
