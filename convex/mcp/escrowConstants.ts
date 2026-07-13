@@ -142,6 +142,8 @@ export const escrowAbi = [
           { name: "fee", type: "uint256" },
           { name: "status", type: "uint8" },
           { name: "pendingEntries", type: "uint256" },
+          { name: "reservedAmount", type: "uint256" },
+          { name: "maxExtractionAmount", type: "uint256" },
         ],
       },
     ],

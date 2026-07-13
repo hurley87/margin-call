@@ -87,7 +87,7 @@ function usdcToRaw(amountUsdc: number): bigint {
 }
 
 import {
-  classifyResolveEntryRevert,
+  classifySettleEntryRevert,
   reconciledTxHash,
   type OnChainResolveResult,
 } from "./onChainSettlement";
@@ -222,6 +222,8 @@ export async function resolveOnChainEntry({
             { name: "fee", type: "uint256" },
             { name: "status", type: "uint8" },
             { name: "pendingEntries", type: "uint256" },
+            { name: "reservedAmount", type: "uint256" },
+            { name: "maxExtractionAmount", type: "uint256" },
           ],
         },
       ],
@@ -239,11 +241,11 @@ export async function resolveOnChainEntry({
     },
     {
       type: "function",
-      name: "resolveEntry",
+      name: "settleEntry",
       inputs: [
         { name: "dealId", type: "uint256" },
         { name: "traderId", type: "uint256" },
-        { name: "pnl", type: "int256" },
+        { name: "grossPayout", type: "uint256" },
         { name: "rake", type: "uint256" },
       ],
       outputs: [],
@@ -298,7 +300,7 @@ export async function resolveOnChainEntry({
     const hash = await walletClient.writeContract({
       address: ESCROW_ADDRESS,
       abi,
-      functionName: "resolveEntry",
+      functionName: "settleEntry",
       args: [
         BigInt(onChainDealId),
         BigInt(tokenId),
@@ -313,7 +315,7 @@ export async function resolveOnChainEntry({
     return { status: "resolved", txHash: receipt.transactionHash };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const classified = classifyResolveEntryRevert(message);
+    const classified = classifySettleEntryRevert(message);
     if (classified) {
       return classified;
     }
@@ -616,11 +618,10 @@ export const cycle = internalAction({
         }
       }
 
-      // ── 3c. On-chain settlement retry (handles FIFO "Trader mismatch") ────
+      // ── 3c. On-chain settlement retry ─────────────────────────────────────
       // If a prior cycle persisted an outcome but the contract reverted the
-      // resolveEntry call (e.g. another trader was at the head of the FIFO
-      // queue), retry only the on-chain step here. Skips both selectDeal and
-      // the LLM — the outcome is already authoritative off-chain.
+      // settleEntry call, retry only the on-chain step here. Skips both
+      // selectDeal and the LLM — the outcome is already authoritative off-chain.
       if (trader.tokenId !== undefined && trader.tokenId !== null) {
         const pending = await ctx.runQuery(
           internal.dealOutcomes.findUnresolvedOnChain,
@@ -638,23 +639,6 @@ export const cycle = internalAction({
             traderPnlUsdc: pending.outcome.traderPnlUsdc ?? 0,
             rakeUsdc: pending.outcome.rakeUsdc ?? 0,
           });
-
-          if (retry.status === "queue_not_head") {
-            await ctx.runMutation(internal.agentActivityLog.append, {
-              traderId,
-              activityType: "resolve_pending",
-              message:
-                "On-chain settlement waiting for prior trader at head of FIFO queue — will retry next cycle",
-              dealId: pending.outcome.dealId as never,
-              correlationId,
-            });
-            await ctx.runMutation(internal.agent.internal.markCycleComplete, {
-              traderId,
-              generation,
-              lastCycleAt: Date.now(),
-            });
-            return;
-          }
 
           if (retry.status === "resolved") {
             await finalizeOnChainOutcome(ctx, {
@@ -1174,11 +1158,11 @@ export const cycle = internalAction({
         pendingOutcome = resolved;
       }
 
-      // ── 9. Persist outcome BEFORE on-chain resolve ─────────────────────────
+      // ── 9. Persist outcome BEFORE on-chain settle ────────────────────────────
       // Apply order matters: we record the off-chain outcome first so that if
-      // the contract reverts the resolveEntry call (e.g. FIFO "Trader
-      // mismatch"), the next cycle's `findUnresolvedOnChain` query picks it
-      // up and retries only the on-chain step — without re-running the LLM.
+      // the contract reverts settleEntry, the next cycle's
+      // `findUnresolvedOnChain` query picks it up and retries only the on-chain
+      // step — without re-running the LLM.
       if (pendingOutcome) {
         outcomeId = (await ctx.runMutation(internal.dealOutcomes.apply, {
           dealId: dealId as never,
@@ -1194,7 +1178,7 @@ export const cycle = internalAction({
         })) as string;
       }
 
-      // ── 10. Resolve on-chain pending entry ─────────────────────────────────
+      // ── 10. Settle on-chain pending entry ──────────────────────────────────
       let resolveResult: OnChainResolveResult | null = null;
       if (
         bestDeal.on_chain_deal_id !== undefined &&
@@ -1208,27 +1192,6 @@ export const cycle = internalAction({
           traderPnlUsdc,
           rakeUsdc,
         });
-      }
-
-      if (resolveResult?.status === "queue_not_head" && outcomeId !== null) {
-        // Another trader is ahead in the FIFO queue. The outcome is already
-        // persisted; release the lease cleanly and let the next cycle retry
-        // via the early on-chain settlement retry path (3c).
-        await ctx.runMutation(internal.agentActivityLog.append, {
-          traderId,
-          activityType: "resolve_pending",
-          message:
-            "On-chain settlement waiting for prior trader at head of FIFO queue — will retry next cycle",
-          dealId: dealId as never,
-          metadata: { outcome_id: outcomeId },
-          correlationId,
-        });
-        await ctx.runMutation(internal.agent.internal.markCycleComplete, {
-          traderId,
-          generation,
-          lastCycleAt: Date.now(),
-        });
-        return;
       }
 
       if (resolveResult?.status === "resolved" && outcomeId !== null) {

@@ -34,8 +34,6 @@ const DEFAULT_STALE_MINUTES = 10;
  *    refund-settled it and clear the row.
  *  - `already_resolved` — the entry never landed or was resolved elsewhere;
  *    nothing to settle, just clear the row.
- *  - `queue_not_head` — another trader is ahead in the contract's FIFO queue;
- *    leave the orphan for the next tick, which retries once the queue advances.
  *
  * Idempotent and safe to run on any cadence.
  */
@@ -99,9 +97,6 @@ export const reconcileOrphanEntries = internalAction({
         if (didClear) refunded++;
       } else if (result.status === "already_resolved") {
         await clear(orphan, `no pending entry on-chain (${result.reason})`);
-      } else {
-        // queue_not_head — another trader ahead in FIFO; retry next tick.
-        skipped++;
       }
     }
 
@@ -122,7 +117,7 @@ type StuckSummary = {
  * A stuck entry is a fully-verified entry on a still-open deal whose outcome was
  * voided with a `reconciled:*` sentinel — `resolveOnChainEntry` read a stale
  * `pendingEntries === 0` and concluded the deal was settled, so it never called
- * `resolveEntry` and the trader's entry is still pending on-chain (blocking the
+ * `settleEntry` and the trader's entry is still pending on-chain (blocking the
  * creator from closing). This sweep re-checks the contract and, for any entry
  * that is genuinely still pending, settles it break-even (entry cost refunded,
  * no pnl/rake — matching the void's "don't trust the LLM PnL" decision) and
@@ -131,8 +126,6 @@ type StuckSummary = {
  *  - `resolved` — was still pending on-chain; settled break-even and stamped.
  *  - `already_resolved` — the sentinel was correct (no pending entry on-chain);
  *    re-stamp the sentinel so the audit trail records the confirmation.
- *  - `queue_not_head` — another trader is ahead in the FIFO queue; leave it for
- *    the next tick, which retries once the queue advances.
  *
  * Idempotent (once a real `0x…` tx is stamped the entry is no longer a
  * candidate) and safe to run on any cadence.
@@ -180,9 +173,6 @@ export const reconcileStuckVerifiedEntries = internalAction({
           resolveTxHash: reconciledTxHash(result.reason),
         });
         confirmed++;
-      } else {
-        // queue_not_head — another trader ahead in FIFO; retry next tick.
-        skipped++;
       }
     }
 

@@ -5,8 +5,8 @@ import { makePublicClient } from "@/lib/contracts/client";
 import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
 
 /**
- * Register a Smart Account address as an authorized operator on the escrow contract.
- * Uses the existing OPERATOR_PRIVATE_KEY (contract owner) to call addOperator().
+ * Register a Smart Account address as a settlement operator on the escrow contract.
+ * Uses the existing OPERATOR_PRIVATE_KEY (contract owner) to call addSettlementOperator().
  * This is low-frequency (once per trader creation), so no nonce contention.
  */
 export async function registerTraderAsOperator(
@@ -18,7 +18,7 @@ export async function registerTraderAsOperator(
   const hash = await walletClient.writeContract({
     address: ESCROW_ADDRESS,
     abi: escrowAbi,
-    functionName: "addOperator",
+    functionName: "addSettlementOperator",
     args: [smartAccountAddress],
   });
 

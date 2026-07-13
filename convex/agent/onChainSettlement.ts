@@ -4,8 +4,7 @@ export const ON_CHAIN_TX_RECONCILED_NO_ENTRY = "reconciled:no-trader-entry";
 
 export type OnChainResolveResult =
   | { status: "resolved"; txHash: `0x${string}` }
-  | { status: "already_resolved"; reason: "deal_settled" | "no_trader_entry" }
-  | { status: "queue_not_head" };
+  | { status: "already_resolved"; reason: "deal_settled" | "no_trader_entry" };
 
 export function reconciledTxHash(
   reason: "deal_settled" | "no_trader_entry"
@@ -16,17 +15,14 @@ export function reconciledTxHash(
 }
 
 /** Map contract revert reasons to retry/reconcile signals (testable without RPC). */
-export function classifyResolveEntryRevert(
+export function classifySettleEntryRevert(
   message: string
-): Extract<
-  OnChainResolveResult,
-  { status: "queue_not_head" | "already_resolved" }
-> | null {
-  if (message.includes("Trader mismatch")) {
-    return { status: "queue_not_head" };
-  }
+): Extract<OnChainResolveResult, { status: "already_resolved" }> | null {
   if (message.includes("No pending entry")) {
     return { status: "already_resolved", reason: "no_trader_entry" };
   }
   return null;
 }
+
+/** @deprecated Use classifySettleEntryRevert */
+export const classifyResolveEntryRevert = classifySettleEntryRevert;
