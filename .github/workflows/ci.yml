@@ -132,16 +132,15 @@ jobs:
 
       - uses: ./.github/actions/setup-foundry
 
-      - name: Forge build (artifacts for Slither)
-        working-directory: contracts
-        run: forge build
-
+      # Let crytic-compile drive `forge build` itself. Pre-building and passing
+      # ignore-compile: true made Slither parse Foundry's build-info artifacts,
+      # whose newer layout (no top-level "output" key) crashes crytic-compile
+      # with KeyError: 'output'. Compiling in-process avoids that stale path.
       - name: Run Slither
         uses: crytic/slither-action@v0.4.0
         with:
           target: contracts
           fail-on: high
-          ignore-compile: true
           slither-config: contracts/slither.config.json
 
   contracts-fork:
