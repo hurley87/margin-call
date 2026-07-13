@@ -371,11 +371,18 @@ export const recordDealEntry = internalMutation({
     }
 
     const now = Date.now();
-    const { idempotencyKey: _key, traderId: _traderId, ...dealData } = args;
+    const {
+      idempotencyKey: _key,
+      traderId: _traderId,
+      maxExtractionPercentage: _pct,
+      ...dealData
+    } = args;
     void _key;
     void _traderId;
+    void _pct;
     return ctx.db.insert("deals", {
       ...dealData,
+      ...dealCreationCapFields(args.potUsdc),
       status: "open",
       entryCount: 1,
       wipeoutCount: 0,

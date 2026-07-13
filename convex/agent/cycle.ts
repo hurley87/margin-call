@@ -90,7 +90,80 @@ import {
   reconciledTxHash,
   type OnChainResolveResult,
 } from "./onChainSettlement";
-import { clampSettleEntryArgs } from "../lib/settlementEncoding";
+import {
+  clampSettleEntryArgs,
+  type ClampedSettleEntry,
+} from "../lib/settlementEncoding";
+
+async function createEscrowViemClients() {
+  const operatorKey = process.env.OPERATOR_PRIVATE_KEY;
+  if (!operatorKey) {
+    throw new Error("OPERATOR_PRIVATE_KEY env var is not set");
+  }
+
+  const { createWalletClient, http } = await import("viem");
+  const { privateKeyToAccount } = await import("viem/accounts");
+  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
+  const { requireBaseSepoliaRpcUrl } =
+    await import("../lib/requireBaseSepoliaRpcUrl");
+  const { getBaseSepoliaPublicClient } = await import("../mcp/deskByo");
+
+  const account = privateKeyToAccount(operatorKey as `0x${string}`);
+  const walletClient = createWalletClient({
+    account,
+    chain: CONTRACTS_CHAIN,
+    transport: http(requireBaseSepoliaRpcUrl()),
+  });
+  const publicClient = await getBaseSepoliaPublicClient();
+  return { account, walletClient, publicClient, CONTRACTS_CHAIN };
+}
+
+/**
+ * Read live getDeal caps and clamp outcome economics to what settleEntry will
+ * pay. Returns null when this trader has no pending entry (caller will hit
+ * already_resolved on settle).
+ */
+export async function clampOutcomeToOnChainCaps({
+  onChainDealId,
+  tokenId,
+  entryCostUsdc,
+  traderPnlUsdc,
+  rakeUsdc,
+}: {
+  onChainDealId: number;
+  tokenId: number;
+  entryCostUsdc: number;
+  traderPnlUsdc: number;
+  rakeUsdc: number;
+}): Promise<ClampedSettleEntry | null> {
+  // Read-only path: never signs, so use the shared public-client factory rather
+  // than building an operator wallet client we would only discard.
+  const { getBaseSepoliaPublicClient } = await import("../mcp/deskByo");
+  const publicClient = await getBaseSepoliaPublicClient();
+  const hasPending = await publicClient.readContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "hasPendingEntry",
+    args: [BigInt(onChainDealId), BigInt(tokenId)],
+  });
+  if (!hasPending) return null;
+
+  const deal = await publicClient.readContract({
+    address: ESCROW_ADDRESS,
+    abi: escrowAbi,
+    functionName: "getDeal",
+    args: [BigInt(onChainDealId)],
+  });
+  return clampSettleEntryArgs({
+    entryCostRaw: deal.entryCost,
+    potAmountRaw: deal.potAmount,
+    reservedAmountRaw: deal.reservedAmount,
+    maxExtractionAmountRaw: deal.maxExtractionAmount,
+    entryCostUsdc,
+    traderPnlUsdc,
+    rakeUsdc,
+  });
+}
 
 async function finalizeOnChainOutcome(
   ctx: ActionCtx,
@@ -187,35 +260,21 @@ export async function resolveOnChainEntry({
   entryCostUsdc,
   traderPnlUsdc,
   rakeUsdc,
+  /**
+   * Precomputed settle args from `clampOutcomeToOnChainCaps` / `clampSettleEntryArgs`.
+   * When provided, skip a second getDeal clamp so recorded PnL matches the tx.
+   */
+  settleArgs,
 }: {
   onChainDealId: number;
   tokenId: number;
   entryCostUsdc: number;
   traderPnlUsdc: number;
   rakeUsdc: number;
+  settleArgs?: { grossPayoutRaw: bigint; rakeRaw: bigint };
 }): Promise<OnChainResolveResult> {
-  const operatorKey = process.env.OPERATOR_PRIVATE_KEY;
-  if (!operatorKey) {
-    throw new Error("OPERATOR_PRIVATE_KEY env var is not set");
-  }
-
-  const { createPublicClient, createWalletClient, http } = await import("viem");
-  const { privateKeyToAccount } = await import("viem/accounts");
-  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
-  const { requireBaseSepoliaRpcUrl } =
-    await import("../lib/requireBaseSepoliaRpcUrl");
-
-  const transport = http(requireBaseSepoliaRpcUrl());
-  const account = privateKeyToAccount(operatorKey as `0x${string}`);
-  const walletClient = createWalletClient({
-    account,
-    chain: CONTRACTS_CHAIN,
-    transport,
-  });
-  const publicClient = createPublicClient({
-    chain: CONTRACTS_CHAIN,
-    transport,
-  });
+  const { account, walletClient, publicClient, CONTRACTS_CHAIN } =
+    await createEscrowViemClients();
 
   // Gate on THIS trader's pending status, read first. The global
   // `pendingEntries` count is unsafe as a short-circuit: a lagging RPC replica
@@ -247,28 +306,29 @@ export async function resolveOnChainEntry({
     };
   }
 
-  // Clamp the payout to the contract's on-chain caps so settleEntry can never
-  // revert for economic reasons (#206). The contract is the source of truth:
-  // the extraction cap is frozen at deal creation (25% of net pot), and the pot
-  // must stay solvent for every other pending entry's reserve. The off-chain
-  // outcome engine sizes wins against a live, growing pot, which can drift above
-  // these frozen on-chain limits; clamping here keeps the two in agreement
-  // instead of letting settleEntry revert and strand the entry.
-  const deal = await publicClient.readContract({
-    address: ESCROW_ADDRESS,
-    abi: escrowAbi,
-    functionName: "getDeal",
-    args: [BigInt(onChainDealId)],
-  });
-  const { grossPayoutRaw, rakeRaw } = clampSettleEntryArgs({
-    entryCostRaw: deal.entryCost,
-    potAmountRaw: deal.potAmount,
-    reservedAmountRaw: deal.reservedAmount,
-    maxExtractionAmountRaw: deal.maxExtractionAmount,
-    entryCostUsdc,
-    traderPnlUsdc,
-    rakeUsdc,
-  });
+  let settle: { grossPayoutRaw: bigint; rakeRaw: bigint } | undefined =
+    settleArgs;
+  if (!settle) {
+    // Retry path: clamp again from live getDeal so settleEntry cannot revert
+    // for economic reasons (#206). Prefer precomputed settleArgs on the happy
+    // path so persisted dealOutcomes match the on-chain payout (#216).
+    const deal = await publicClient.readContract({
+      address: ESCROW_ADDRESS,
+      abi: escrowAbi,
+      functionName: "getDeal",
+      args: [BigInt(onChainDealId)],
+    });
+    settle = clampSettleEntryArgs({
+      entryCostRaw: deal.entryCost,
+      potAmountRaw: deal.potAmount,
+      reservedAmountRaw: deal.reservedAmount,
+      maxExtractionAmountRaw: deal.maxExtractionAmount,
+      entryCostUsdc,
+      traderPnlUsdc,
+      rakeUsdc,
+    });
+  }
+  const { grossPayoutRaw, rakeRaw } = settle;
   try {
     const hash = await walletClient.writeContract({
       address: ESCROW_ADDRESS,
@@ -1145,6 +1205,37 @@ export const cycle = internalAction({
         pendingOutcome = resolved;
       }
 
+      // Pre-clamp on-chain economics before persist so dealOutcomes match what
+      // settleEntry will pay (#216). Off-chain-only deals skip this.
+      let settleArgs: { grossPayoutRaw: bigint; rakeRaw: bigint } | undefined;
+      if (
+        pendingOutcome &&
+        bestDeal.on_chain_deal_id != null &&
+        traderTokenId !== undefined
+      ) {
+        const clamped = await clampOutcomeToOnChainCaps({
+          onChainDealId: bestDeal.on_chain_deal_id,
+          tokenId: traderTokenId,
+          entryCostUsdc: bestDeal.entry_cost_usdc,
+          traderPnlUsdc: pendingOutcome.traderPnlUsdc,
+          rakeUsdc: pendingOutcome.rakeUsdc,
+        });
+        if (clamped) {
+          pendingOutcome = {
+            ...pendingOutcome,
+            traderPnlUsdc: clamped.traderPnlUsdc,
+            rakeUsdc: clamped.rakeUsdc,
+            potChangeUsdc: clamped.potChangeUsdc,
+          };
+          traderPnlUsdc = clamped.traderPnlUsdc;
+          rakeUsdc = clamped.rakeUsdc;
+          settleArgs = {
+            grossPayoutRaw: clamped.grossPayoutRaw,
+            rakeRaw: clamped.rakeRaw,
+          };
+        }
+      }
+
       // ── 9. Persist outcome BEFORE on-chain settle ────────────────────────────
       // Apply order matters: we record the off-chain outcome first so that if
       // the contract reverts settleEntry, the next cycle's
@@ -1167,17 +1258,14 @@ export const cycle = internalAction({
 
       // ── 10. Settle on-chain pending entry ──────────────────────────────────
       let resolveResult: OnChainResolveResult | null = null;
-      if (
-        bestDeal.on_chain_deal_id !== undefined &&
-        bestDeal.on_chain_deal_id !== null &&
-        traderTokenId !== undefined
-      ) {
+      if (bestDeal.on_chain_deal_id != null && traderTokenId !== undefined) {
         resolveResult = await resolveOnChainEntry({
           onChainDealId: bestDeal.on_chain_deal_id,
           tokenId: traderTokenId,
           entryCostUsdc: bestDeal.entry_cost_usdc,
           traderPnlUsdc,
           rakeUsdc,
+          settleArgs,
         });
       }
 

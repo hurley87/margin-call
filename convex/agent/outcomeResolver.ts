@@ -115,7 +115,7 @@ export async function resolveOutcome(
           .map((a) => `${a.name} ($${a.valueUsdc ?? 0} USDC)`)
           .join(", ");
 
-  // Max win value: frozen extraction cap at creation (fallback: live pot * 25%).
+  // Max win profit: creation-frozen extraction cap (required; never live pot).
   const maxValuePerWin = maxWinValueUsdc(deal);
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

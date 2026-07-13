@@ -10,6 +10,10 @@ export function usdcToRaw(amountUsdc: number): bigint {
   return BigInt(Math.max(0, Math.round(amountUsdc * USDC_DECIMALS)));
 }
 
+export function rawToUsdc(raw: bigint): number {
+  return Number(raw) / USDC_DECIMALS;
+}
+
 export type SettleEntryCaps = {
   entryCostRaw: bigint;
   potAmountRaw: bigint;
@@ -27,6 +31,12 @@ export type ClampedSettleEntry = {
   grossPayoutRaw: bigint;
   rakeRaw: bigint;
   profitRaw: bigint;
+  /** Net trader PnL after rake (USDC), matching on-chain paid profit − rake. */
+  traderPnlUsdc: number;
+  /** Rake paid on-chain (USDC). */
+  rakeUsdc: number;
+  /** Pot delta: −profit on wins, +|loss| on losses. */
+  potChangeUsdc: number;
 };
 
 /**
@@ -35,6 +45,9 @@ export type ClampedSettleEntry = {
  * - gross ≤ pot - reserved + entryCost (leave peer reserves intact)
  * - gross ≤ pot
  * - rake ≤ profit (gross - entryCost, floored at 0)
+ *
+ * Also returns USDC economics derived from the clamped raw values so recorded
+ * outcomes match what settleEntry actually pays (#216).
  */
 export function clampSettleEntryArgs(
   input: ClampSettleEntryInput
@@ -64,5 +77,18 @@ export function clampSettleEntryArgs(
   let rakeRaw = usdcToRaw(rakeUsdc);
   if (rakeRaw > profitRaw) rakeRaw = profitRaw;
 
-  return { grossPayoutRaw, rakeRaw, profitRaw };
+  const entryFromRaw = rawToUsdc(entryCostRaw);
+  const grossUsdc = rawToUsdc(grossPayoutRaw);
+  const rakeUsdcClamped = rawToUsdc(rakeRaw);
+  const traderPnlUsdcClamped = grossUsdc - entryFromRaw - rakeUsdcClamped;
+  const potChangeUsdc = entryFromRaw - grossUsdc;
+
+  return {
+    grossPayoutRaw,
+    rakeRaw,
+    profitRaw,
+    traderPnlUsdc: traderPnlUsdcClamped,
+    rakeUsdc: rakeUsdcClamped,
+    potChangeUsdc,
+  };
 }
