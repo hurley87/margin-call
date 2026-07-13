@@ -43,21 +43,34 @@ jobs:
   deploy-convex:
     name: Deploy Convex functions
     needs: checks
+    # Only on merge to main, and only when a deploy key is actually configured.
+    # Without the secret `npx convex deploy` errors ("No CONVEX_DEPLOYMENT set"),
+    # so the job is gated on it rather than painting every main commit red.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    env:
+      CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
     steps:
+      - name: Check for deploy key
+        id: guard
+        run: echo "enabled=${{ env.CONVEX_DEPLOY_KEY != '' }}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@v4
+        if: steps.guard.outputs.enabled == 'true'
 
       - uses: pnpm/action-setup@v4
+        if: steps.guard.outputs.enabled == 'true'
         with:
           version: 10
 
       - uses: actions/setup-node@v4
+        if: steps.guard.outputs.enabled == 'true'
         with:
           node-version: 22
           cache: pnpm
 
       - name: Install dependencies
+        if: steps.guard.outputs.enabled == 'true'
         run: pnpm install --frozen-lockfile
 
       # CONVEX_DEPLOY_KEY targets the deployment associated with the key
@@ -65,6 +78,5 @@ jobs:
       # variables → Actions. Generate with `npx convex dashboard` → Settings,
       # or reuse the key in .env.local.
       - name: Deploy to Convex
+        if: steps.guard.outputs.enabled == 'true'
         run: npx convex deploy
-        env:
-          CONVEX_DEPLOY_KEY: ${{ secrets.CONVEX_DEPLOY_KEY }}
