@@ -231,7 +231,6 @@ export function useSeatVaultFlows() {
       amountHuman: string;
       vaultAddress?: `0x${string}`;
       activeWei: string;
-      depositor: string | null;
       staker: string | null;
     }) => {
       setState({ step: "checking" });

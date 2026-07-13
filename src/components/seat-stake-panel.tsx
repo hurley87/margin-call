@@ -195,7 +195,6 @@ export function SeatStakePanel({
         amountHuman: unstakeAmount,
         vaultAddress: active.vaultAddress as `0x${string}`,
         activeWei: active.activeAmountWei,
-        depositor,
         staker: active.staker,
       });
       setUnstakeAmount("");

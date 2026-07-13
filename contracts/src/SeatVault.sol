@@ -64,6 +64,11 @@ contract SeatVault {
         _;
     }
 
+    modifier onlyPauser() {
+        require(msg.sender == owner || msg.sender == pauser, "Not pauser");
+        _;
+    }
+
     constructor(
         address escrow_,
         address token_,
@@ -117,10 +122,12 @@ contract SeatVault {
         require(msg.sender == info.staker, "Not staker");
 
         info.active -= amount;
-        info.pending += amount;
-        if (info.pending == amount) {
+        // Only a fresh pending batch (nothing pending before) starts the
+        // cooldown clock; a repeated initiate must not extend an open one.
+        if (info.pending == 0) {
             info.unlockTime = block.timestamp + unstakeCooldown;
         }
+        info.pending += amount;
 
         emit UnstakeInitiated(traderId, info.staker, amount, info.unlockTime);
     }
@@ -190,14 +197,12 @@ contract SeatVault {
         return info.active + info.pending > 0;
     }
 
-    function pause() external {
-        require(msg.sender == owner || msg.sender == pauser, "Not pauser");
+    function pause() external onlyPauser {
         paused = true;
         emit Paused(msg.sender);
     }
 
-    function unpause() external {
-        require(msg.sender == owner || msg.sender == pauser, "Not pauser");
+    function unpause() external onlyPauser {
         paused = false;
         emit Unpaused(msg.sender);
     }
