@@ -1,19 +1,21 @@
 /** Shared escrow + USDC addresses for MCP BYO desk treasury (Base Sepolia). */
 
-const RESOLVED_ESCROW_ADDRESS =
-  process.env.ESCROW_ADDRESS ?? process.env.NEXT_PUBLIC_ESCROW_ADDRESS;
+import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/activeDeployment";
+import {
+  BASE_SEPOLIA_SLUG,
+  USDC_SEPOLIA_ADDRESS,
+} from "../lib/baseSepoliaNetwork";
+import { resolveAddress } from "../lib/resolveAddress";
 
-if (!RESOLVED_ESCROW_ADDRESS) {
-  throw new Error(
-    "ESCROW_ADDRESS env is not set in Convex. Run `npx convex env set ESCROW_ADDRESS <address>` (matching the deployed MarginCallEscrow)."
-  );
-}
+export const ESCROW_ADDRESS = resolveAddress(
+  [process.env.ESCROW_ADDRESS, process.env.NEXT_PUBLIC_ESCROW_ADDRESS],
+  ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow,
+  "ESCROW_ADDRESS"
+);
 
-export const ESCROW_ADDRESS = RESOLVED_ESCROW_ADDRESS as `0x${string}`;
-export const USDC_SEPOLIA_ADDRESS =
-  "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
+export { USDC_SEPOLIA_ADDRESS };
 export const USDC_DECIMALS = 1_000_000;
-export const MCP_CHAIN = "base-sepolia" as const;
+export const MCP_CHAIN = BASE_SEPOLIA_SLUG;
 
 /** MarginCallEscrow deal status: 0 = Open, 1 = Closed. */
 export const DEAL_STATUS_CLOSED = 1;

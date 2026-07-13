@@ -1,7 +1,7 @@
 "use node";
 
 import { createPublicClient, http, type Log } from "viem";
-import { baseSepolia } from "viem/chains";
+import { CONTRACTS_CHAIN } from "../lib/baseSepoliaNetwork";
 import {
   seatTierNameFromOnChain,
   seatVaultAbi,
@@ -28,11 +28,9 @@ export type DecodedSeatVaultLog = {
   txHash: string;
 };
 
-export function createSeatVaultPublicClient(
-  rpcUrl: string | undefined = resolveRpcUrl()
-) {
+export function createSeatVaultPublicClient(rpcUrl: string = resolveRpcUrl()) {
   return createPublicClient({
-    chain: baseSepolia,
+    chain: CONTRACTS_CHAIN,
     transport: http(rpcUrl),
   });
 }

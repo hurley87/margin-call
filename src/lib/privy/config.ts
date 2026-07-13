@@ -1,15 +1,19 @@
 import type { PrivyClientConfig } from "@privy-io/react-auth";
-import { base, baseSepolia } from "viem/chains";
+import {
+  BASE_SEPOLIA_CAIP2,
+  BASE_SEPOLIA_CHAIN_ID,
+  CONTRACTS_CHAIN,
+  isBaseSepoliaChainId,
+} from "@/lib/network";
 
-export const PAYMENT_CHAIN = baseSepolia;
+export const PAYMENT_CHAIN = CONTRACTS_CHAIN;
 export const PAYMENT_CHAIN_NAME = PAYMENT_CHAIN.name;
-export const BASE_CHAIN_ID = PAYMENT_CHAIN.id;
-export const BASE_CHAIN_ID_CAIP2 = `eip155:${BASE_CHAIN_ID}` as const;
+export const BASE_CHAIN_ID = BASE_SEPOLIA_CHAIN_ID;
+export const BASE_CHAIN_ID_CAIP2 = BASE_SEPOLIA_CAIP2;
 
 /** True when `chainId` is the configured payment chain (numeric id, numeric string, or CAIP-2). */
 export function isChainIdBase(chainId: string | number): boolean {
-  if (typeof chainId === "number") return chainId === BASE_CHAIN_ID;
-  return chainId === BASE_CHAIN_ID_CAIP2 || chainId === String(BASE_CHAIN_ID);
+  return isBaseSepoliaChainId(chainId);
 }
 
 export const privyConfig: PrivyClientConfig = {
@@ -24,5 +28,5 @@ export const privyConfig: PrivyClientConfig = {
     },
   },
   defaultChain: PAYMENT_CHAIN,
-  supportedChains: [PAYMENT_CHAIN, base],
+  supportedChains: [PAYMENT_CHAIN],
 };

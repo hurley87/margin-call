@@ -24,9 +24,13 @@ vi.mock("viem/siwe", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/contracts/client", () => ({
-  makePublicClient: vi.fn(() => ({})),
-}));
+vi.mock("@/lib/network", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/network")>();
+  return {
+    ...actual,
+    requireBaseSepoliaRpcUrl: () => "https://example-rpc.test",
+  };
+});
 
 import {
   buildDeskSiweMessage,
@@ -178,14 +182,8 @@ describe("verifyDeskSiwe", () => {
   it("verifies a real EOA signature end-to-end when mocked client defers to viem", async () => {
     const { verifySiweMessage: realVerify } =
       await vi.importActual<typeof import("viem/siwe")>("viem/siwe");
-    const { makePublicClient: realMakeClient } = await vi.importActual<
-      typeof import("@/lib/contracts/client")
-    >("@/lib/contracts/client");
 
     mockVerifySiweMessage.mockImplementation(realVerify);
-    vi.mocked(
-      await import("@/lib/contracts/client")
-    ).makePublicClient.mockImplementation(realMakeClient);
 
     mockConsume.mockResolvedValueOnce(true);
     const account = privateKeyToAccount(

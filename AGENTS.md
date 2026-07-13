@@ -4,7 +4,7 @@
 
 ### Project overview
 
-Margin Call is a Next.js 16 (App Router) web app — an AI-powered PvP trading game on 1980s Wall Street. See `CLAUDE.md` for tech stack, commands, and architecture details. See `docs/wall-street-agent-game.md` for the full game design spec.
+Margin Call is a Next.js 16 (App Router) web app — an AI-powered PvP trading game on 1980s Wall Street. See `CLAUDE.md` for tech stack, commands, and architecture details. See `docs/wall-street-agent-game.md` for the full game design spec. Base Sepolia chain/contract configuration: `docs/base-sepolia-configuration.md`.
 
 ### Commands
 

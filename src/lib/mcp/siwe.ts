@@ -1,7 +1,6 @@
 import "server-only";
 
 import { createPublicClient, getAddress, http } from "viem";
-import { baseSepolia } from "viem/chains";
 import {
   createSiweMessage,
   generateSiweNonce,
@@ -9,6 +8,11 @@ import {
   verifySiweMessage,
 } from "viem/siwe";
 import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
+import {
+  BASE_SEPOLIA_CHAIN_ID,
+  CONTRACTS_CHAIN,
+  requireBaseSepoliaRpcUrl,
+} from "@/lib/network";
 
 const nonceStore = createConvexNonceStore();
 
@@ -17,9 +21,12 @@ const nonceStore = createConvexNonceStore();
 // at verification time, and the Base MCP signer binds to Base Sepolia — the chain
 // the desk/escrow actually operates on — so verification must run against the
 // Base Sepolia deployment, not Base mainnet.
-const SIWE_CHAIN_ID = baseSepolia.id;
+const SIWE_CHAIN_ID = BASE_SEPOLIA_CHAIN_ID;
 function siwePublicClient() {
-  return createPublicClient({ chain: baseSepolia, transport: http() });
+  return createPublicClient({
+    chain: CONTRACTS_CHAIN,
+    transport: http(requireBaseSepoliaRpcUrl()),
+  });
 }
 
 export const MCP_BASE_SUBJECT_PREFIX = "mcp:base:" as const;

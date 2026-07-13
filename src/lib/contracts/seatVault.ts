@@ -1,6 +1,6 @@
 /**
  * SeatVault client helpers — re-exports the canonical Convex policy module
- * and resolves the active vault address from env for the Next.js app.
+ * and resolves the active vault address from the canonical deployment record.
  */
 export {
   BLOW_DECIMALS,
@@ -30,21 +30,26 @@ export {
   type SeatTierName,
   type SeatVaultEventName,
 } from "../../../convex/seatVault/policy";
-import { SEAT_VAULT_V1 } from "../../../convex/seatVault/policy";
+import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT, resolveAddress } from "@/lib/network";
 
-const RESOLVED_SEAT_VAULT_ADDRESS =
-  process.env.NEXT_PUBLIC_SEAT_VAULT_ADDRESS ??
-  process.env.SEAT_VAULT_ADDRESS ??
-  // Fallback to deployed Base Sepolia v1 so local UI can read without env.
-  SEAT_VAULT_V1.address;
-
-export const SEAT_VAULT_ADDRESS = RESOLVED_SEAT_VAULT_ADDRESS as `0x${string}`;
-
-const RESOLVED_MARGINCALL_TOKEN_ADDRESS =
-  process.env.NEXT_PUBLIC_MARGINCALL_TOKEN_ADDRESS ??
-  process.env.MARGINCALL_TOKEN_ADDRESS ??
-  SEAT_VAULT_V1.margincallToken;
+export const SEAT_VAULT_ADDRESS = resolveAddress(
+  [
+    process.env.NEXT_PUBLIC_SEAT_VAULT_ADDRESS,
+    process.env.SEAT_VAULT_ADDRESS,
+    process.env.ACTIVE_SEAT_VAULT_ADDRESS,
+  ],
+  ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault,
+  "SEAT_VAULT_ADDRESS"
+);
 
 /** $BLOW staking token (on-chain symbol may be MARGINCALL). */
-export const MARGINCALL_TOKEN_ADDRESS =
-  RESOLVED_MARGINCALL_TOKEN_ADDRESS as `0x${string}`;
+export const MARGINCALL_TOKEN_ADDRESS = resolveAddress(
+  [
+    process.env.NEXT_PUBLIC_MARGINCALL_TOKEN_ADDRESS,
+    process.env.MARGINCALL_TOKEN_ADDRESS,
+    process.env.NEXT_PUBLIC_MARGINCALL_TOKEN,
+    process.env.MARGINCALL_TOKEN,
+  ],
+  ACTIVE_BASE_SEPOLIA_DEPLOYMENT.margincallToken,
+  "MARGINCALL_TOKEN_ADDRESS"
+);

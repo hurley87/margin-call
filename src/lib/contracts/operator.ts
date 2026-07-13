@@ -23,7 +23,7 @@ function buildOperatorClient() {
   return createWalletClient({
     account,
     chain: CONTRACTS_CHAIN,
-    transport: http(baseSepoliaRpcUrl),
+    transport: http(baseSepoliaRpcUrl()),
   });
 }
 

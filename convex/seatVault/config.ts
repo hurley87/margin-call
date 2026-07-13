@@ -1,23 +1,26 @@
-import { SEAT_VAULT_CONFIRMATION_DEPTH, SEAT_VAULT_V1 } from "./policy";
+import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/activeDeployment";
+import { resolveAddress } from "../lib/resolveAddress";
+import { requireBaseSepoliaRpcUrl } from "../lib/requireBaseSepoliaRpcUrl";
+import { SEAT_VAULT_CONFIRMATION_DEPTH } from "./policy";
 
 /**
- * Resolve configured SeatVault address for Convex (no module-load throw).
- * Prefer ACTIVE_SEAT_VAULT_ADDRESS, then SEAT_VAULT_ADDRESS, then v1 deploy.
+ * Resolve configured SeatVault address from the canonical active deployment.
+ * Env vars, if set, must match the active record.
  */
 export function resolveConfiguredSeatVaultAddress(): string {
-  const fromEnv =
-    process.env.ACTIVE_SEAT_VAULT_ADDRESS ?? process.env.SEAT_VAULT_ADDRESS;
-  if (fromEnv && /^0x[a-fA-F0-9]{40}$/.test(fromEnv)) {
-    return fromEnv.toLowerCase();
-  }
-  return SEAT_VAULT_V1.address.toLowerCase();
+  return resolveAddress(
+    [
+      process.env.ACTIVE_SEAT_VAULT_ADDRESS,
+      process.env.SEAT_VAULT_ADDRESS,
+      process.env.NEXT_PUBLIC_SEAT_VAULT_ADDRESS,
+    ],
+    ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault,
+    "SEAT_VAULT_ADDRESS"
+  ).toLowerCase();
 }
 
-export function resolveRpcUrl(): string | undefined {
-  return (
-    process.env.BASE_SEPOLIA_RPC_URL ??
-    process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL
-  );
+export function resolveRpcUrl(): string {
+  return requireBaseSepoliaRpcUrl();
 }
 
 export function resolveConfirmationDepth(): number {

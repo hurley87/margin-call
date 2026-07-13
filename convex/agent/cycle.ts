@@ -201,7 +201,9 @@ export async function resolveOnChainEntry({
 
   const { createPublicClient, createWalletClient, http } = await import("viem");
   const { privateKeyToAccount } = await import("viem/accounts");
-  const { baseSepolia } = await import("viem/chains");
+  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
+  const { requireBaseSepoliaRpcUrl } =
+    await import("../lib/requireBaseSepoliaRpcUrl");
 
   const abi = [
     {
@@ -249,14 +251,17 @@ export async function resolveOnChainEntry({
     },
   ] as const;
 
-  const transport = http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL);
+  const transport = http(requireBaseSepoliaRpcUrl());
   const account = privateKeyToAccount(operatorKey as `0x${string}`);
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: CONTRACTS_CHAIN,
     transport,
   });
-  const publicClient = createPublicClient({ chain: baseSepolia, transport });
+  const publicClient = createPublicClient({
+    chain: CONTRACTS_CHAIN,
+    transport,
+  });
 
   // Gate on THIS trader's pending status, read first. The global
   // `pendingEntries` count is unsafe as a short-circuit: a lagging RPC replica
@@ -300,7 +305,7 @@ export async function resolveOnChainEntry({
         usdcToRaw(grossPayoutUsdc),
         usdcToRaw(rakeUsdc),
       ],
-      chain: baseSepolia,
+      chain: CONTRACTS_CHAIN,
       account,
     });
 
@@ -375,15 +380,16 @@ async function callDealEnter(
   const { signSIWAMessage } = await import("@buildersgarden/siwa/siwa");
   const domain = baseUrl.replace(/^https?:\/\//, "");
 
-  // CONTRACTS_CHAIN_ID is only accessible from src/; read the env var directly.
-  const chainId = Number(
-    process.env.CONTRACTS_CHAIN_ID ??
-      process.env.NEXT_PUBLIC_CHAIN_ID ??
-      "84532" // Base Sepolia fallback
+  const { BASE_SEPOLIA_CHAIN_ID, IDENTITY_REGISTRY_ADDRESS } =
+    await import("../lib/baseSepoliaNetwork");
+  const { resolveAddress } = await import("../lib/resolveAddress");
+
+  const chainId = BASE_SEPOLIA_CHAIN_ID;
+  const identityRegistryAddress = resolveAddress(
+    [process.env.IDENTITY_REGISTRY_ADDRESS],
+    IDENTITY_REGISTRY_ADDRESS,
+    "IDENTITY_REGISTRY_ADDRESS"
   );
-  const identityRegistryAddress =
-    process.env.IDENTITY_REGISTRY_ADDRESS ??
-    "0x8004A818BFB912233c491871b3d84c89A494BD9e";
 
   const signer = {
     getAddress: async () => smartAccount.address as `0x${string}`,
@@ -712,12 +718,8 @@ export const cycle = internalAction({
       let escrowBalanceUsdc = trader.escrowBalanceUsdc ?? 0;
       if (trader.tokenId !== undefined && trader.tokenId !== null) {
         try {
-          const { createPublicClient, http } = await import("viem");
-          const { baseSepolia } = await import("viem/chains");
-          const publicClient = createPublicClient({
-            chain: baseSepolia,
-            transport: http(),
-          });
+          const { getBaseSepoliaPublicClient } = await import("../mcp/deskByo");
+          const publicClient = await getBaseSepoliaPublicClient();
           const raw = await publicClient.readContract({
             address: ESCROW_ADDRESS,
             abi: [

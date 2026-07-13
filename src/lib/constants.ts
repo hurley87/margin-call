@@ -1,9 +1,3 @@
-// Base chain ID (used by Privy config and network guard)
-export const BASE_CHAIN_ID = 8453;
-
-// USDC on Base mainnet
-export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-
 // Platform wallet (receives rake/fees)
 export const PLATFORM_WALLET_ADDRESS =
   process.env.NEXT_PUBLIC_PLATFORM_WALLET_ADDRESS ?? "";

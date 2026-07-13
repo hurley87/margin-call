@@ -10,13 +10,9 @@ import { buildTraderMetadataUrl } from "../src/lib/trader-metadata";
  *   CDP_API_KEY_ID        — Coinbase CDP API key ID
  *   CDP_API_KEY_SECRET    — Coinbase CDP API key secret (PEM)
  *   CDP_WALLET_SECRET     — Coinbase CDP wallet encryption secret
- *   IDENTITY_REGISTRY_ADDRESS — ERC-8004 identity registry contract address
+ *   IDENTITY_REGISTRY_ADDRESS — optional; if set must match canonical Base Sepolia registry
+ *   BASE_SEPOLIA_RPC_URL or NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL — Base Sepolia JSON-RPC
  *   NEXT_PUBLIC_APP_URL   — public app URL used for ERC-721 metadata
- *
- * Set via: npx convex env set CDP_API_KEY_ID <value>
- *          npx convex env set CDP_API_KEY_SECRET <value>
- *          npx convex env set CDP_WALLET_SECRET <value>
- *          npx convex env set IDENTITY_REGISTRY_ADDRESS <value>
  */
 
 // If a `creating` job hasn't progressed in this long, treat it as crashed and allow a retry.
@@ -103,15 +99,18 @@ export const createForTrader = internalAction({
       const cdpApiKeyId = requireEnv("CDP_API_KEY_ID");
       const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
       const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
-      const identityRegistryAddress = requireEnv(
+      const { IDENTITY_REGISTRY_ADDRESS: canonicalIdentityRegistry } =
+        await import("./lib/baseSepoliaNetwork");
+      const { resolveAddress } = await import("./lib/resolveAddress");
+      const identityRegistryAddress = resolveAddress(
+        [process.env.IDENTITY_REGISTRY_ADDRESS],
+        canonicalIdentityRegistry,
         "IDENTITY_REGISTRY_ADDRESS"
-      ) as `0x${string}`;
+      );
       const appUrl = requireEnv("NEXT_PUBLIC_APP_URL");
 
       const { CdpClient } = await import("@coinbase/cdp-sdk");
-      const { createPublicClient, decodeEventLog, encodeFunctionData, http } =
-        await import("viem");
-      const { baseSepolia } = await import("viem/chains");
+      const { decodeEventLog, encodeFunctionData } = await import("viem");
 
       const cdp = new CdpClient({
         apiKeyId: cdpApiKeyId,
@@ -189,10 +188,8 @@ export const createForTrader = internalAction({
       let transferTxHash = "";
 
       // Parse Transfer event to get tokenId
-      const publicClient = createPublicClient({
-        chain: baseSepolia,
-        transport: http(),
-      });
+      const { getBaseSepoliaPublicClient } = await import("./mcp/deskByo");
+      const publicClient = await getBaseSepoliaPublicClient();
       const receipt = await publicClient.waitForTransactionReceipt({
         hash: mintReceipt.transactionHash as `0x${string}`,
       });
