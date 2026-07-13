@@ -122,6 +122,7 @@ async function handleAgentCycleDealEnter(
     entryCostUsdc: number;
     onChainDealId?: number | null;
     creatorDeskManagerId?: Id<"deskManagers">;
+    creatorAddress?: string | null;
   } | null;
 
   if (!deal) {
@@ -157,10 +158,22 @@ async function handleAgentCycleDealEnter(
     });
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const loadDeskFn = internal.deskManagers.getByIdInternal as any;
+  const deskManager = (await convex.query(loadDeskFn, {
+    id: trader.deskManagerId,
+  })) as { walletAddress?: string } | null;
+
   if (
     !isTraderEligibleToEnterDealByDesk(
-      { creatorDeskManagerId: deal.creatorDeskManagerId ?? null },
-      { deskManagerId: String(trader.deskManagerId) }
+      {
+        creatorDeskManagerId: deal.creatorDeskManagerId,
+        creatorAddress: deal.creatorAddress,
+      },
+      {
+        deskManagerId: String(trader.deskManagerId),
+        deskWalletAddress: deskManager?.walletAddress,
+      }
     )
   ) {
     return NextResponse.json(

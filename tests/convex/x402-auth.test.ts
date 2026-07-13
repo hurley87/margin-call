@@ -212,6 +212,22 @@ describe("recordVerifiedEntry same-desk rule (no self-dealing)", () => {
     });
     expect(entryId).toBeTruthy();
   });
+
+  it("rejects entry when creator wallet matches desk wallet without creatorDeskManagerId", async () => {
+    const t = makeT();
+    const dmId = await seedDeskManager(t, { walletAddress: "0xabc123" });
+    const traderId = await seedActiveTrader(t, dmId);
+    const dealId = await seedDeal(t, { creatorAddress: "0xabc123" });
+
+    await expect(
+      t.mutation(internal.deals.recordVerifiedEntry, {
+        paymentId: "pay-own-wallet",
+        dealId: dealId as never,
+        traderId,
+        entryCostUsdc: 50,
+      })
+    ).rejects.toThrow("Trader cannot enter deals created by its own desk.");
+  });
 });
 
 // ── x402 boundary: no public mutation surface for verified flags ───────────────
@@ -450,6 +466,10 @@ describe("Auth-protected mutations: authenticated callers succeed", () => {
     );
 
     expect(replayedDealId).toBe(dealId);
+
+    const deal = await t.run(async (ctx) => ctx.db.get(dealId as never));
+    expect(deal?.maxExtractionAmountUsdc).toBe(125);
+    expect(deal?.maxExtractionPercentage).toBe(25);
   });
 
   it("traders.setStatus rejects activation before wallet is ready", async () => {

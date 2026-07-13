@@ -139,6 +139,7 @@ export async function seedDeal(
     status?: "open" | "closed" | "depleted";
     /** When set, deal is treated as created by that desk (not house). */
     creatorDeskManagerId?: string;
+    creatorAddress?: string;
     onChainDealId?: number;
     onChainTxHash?: string;
   } = {}
@@ -153,6 +154,9 @@ export async function seedDeal(
       creatorType: "desk_manager",
       ...(opts.creatorDeskManagerId !== undefined
         ? { creatorDeskManagerId: opts.creatorDeskManagerId as never }
+        : {}),
+      ...(opts.creatorAddress !== undefined
+        ? { creatorAddress: opts.creatorAddress }
         : {}),
       ...(opts.onChainDealId !== undefined
         ? { onChainDealId: opts.onChainDealId }

@@ -4,12 +4,14 @@ import {
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
   type QueryCtx,
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { isOwnDeskCreatedDeal } from "./lib/dealEntryEligibility";
+import { dealCreationCapFields } from "./lib/extractionCap";
 import { clampLimit } from "./lib/limits";
 import { assertTradingHoursWithCloseGrace } from "./lib/tradingHours";
 import { isMcpSubject } from "./mcp/subject";
@@ -45,6 +47,28 @@ async function enrichWithCreatorAgentStatus(
     }
     return { ...d, creatorIsAgentDesk };
   });
+}
+
+async function assertTraderCanEnterDeal(
+  ctx: MutationCtx,
+  dealDoc: Doc<"deals">,
+  traderDoc: Doc<"traders">
+): Promise<void> {
+  const dm = await ctx.db.get(traderDoc.deskManagerId);
+  if (
+    isOwnDeskCreatedDeal(
+      {
+        creatorDeskManagerId: dealDoc.creatorDeskManagerId,
+        creatorAddress: dealDoc.creatorAddress,
+      },
+      {
+        deskManagerId: String(traderDoc.deskManagerId),
+        deskWalletAddress: dm?.walletAddress,
+      }
+    )
+  ) {
+    throw new Error("Trader cannot enter deals created by its own desk.");
+  }
 }
 
 // ── Public queries (auth-checked) ──────────────────────────────────────────
@@ -162,6 +186,7 @@ export const recordOnChainCreationVerified = internalMutation({
       prompt: args.prompt,
       potUsdc: args.potUsdc,
       entryCostUsdc: args.entryCostUsdc,
+      ...dealCreationCapFields(args.potUsdc),
       status: "open",
       onChainDealId: args.onChainDealId,
       onChainTxHash: args.onChainTxHash,
@@ -460,14 +485,7 @@ export const beginEntryRecording = internalMutation({
     if (traderDoc.status !== "active") {
       throw new Error("Trader is not active");
     }
-    if (
-      isOwnDeskCreatedDeal(
-        { creatorDeskManagerId: dealDoc.creatorDeskManagerId },
-        String(traderDoc.deskManagerId)
-      )
-    ) {
-      throw new Error("Trader cannot enter deals created by its own desk.");
-    }
+    await assertTraderCanEnterDeal(ctx, dealDoc, traderDoc);
 
     const paymentId = `pending:${args.traderId}:${args.dealId}`;
     const entryId = await ctx.db.insert("dealEntries", {
@@ -546,14 +564,7 @@ export const recordVerifiedEntry = internalMutation({
         if (args.entryCostUsdc !== dealDoc.entryCostUsdc) {
           throw new Error("Entry cost mismatch");
         }
-        if (
-          isOwnDeskCreatedDeal(
-            { creatorDeskManagerId: dealDoc.creatorDeskManagerId },
-            String(traderDoc.deskManagerId)
-          )
-        ) {
-          throw new Error("Trader cannot enter deals created by its own desk.");
-        }
+        await assertTraderCanEnterDeal(ctx, dealDoc, traderDoc);
 
         await ctx.db.patch(existingByPair._id, {
           paymentId: args.paymentId,
@@ -595,14 +606,7 @@ export const recordVerifiedEntry = internalMutation({
     if (args.entryCostUsdc !== dealDoc.entryCostUsdc) {
       throw new Error("Entry cost mismatch");
     }
-    if (
-      isOwnDeskCreatedDeal(
-        { creatorDeskManagerId: dealDoc.creatorDeskManagerId },
-        String(traderDoc.deskManagerId)
-      )
-    ) {
-      throw new Error("Trader cannot enter deals created by its own desk.");
-    }
+    await assertTraderCanEnterDeal(ctx, dealDoc, traderDoc);
 
     const id = await ctx.db.insert("dealEntries", {
       ...args,

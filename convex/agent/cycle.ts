@@ -865,6 +865,8 @@ export const cycle = internalAction({
           on_chain_deal_id: recoveryDeal.onChainDealId ?? null,
           creator_id: recoveryDeal.creatorDeskManagerId ?? null,
           creator_address: recoveryDeal.creatorAddress ?? null,
+          max_extraction_amount_usdc:
+            recoveryDeal.maxExtractionAmountUsdc ?? null,
           entry_count: recoveryDeal.entryCount ?? 0,
           wipeout_count: recoveryDeal.wipeoutCount ?? 0,
         };

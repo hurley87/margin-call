@@ -174,6 +174,8 @@ export default defineSchema({
     potUsdc: v.number(),
     entryCostUsdc: v.number(),
     maxExtractionPercentage: v.optional(v.number()),
+    /** Frozen at deal creation: netPot * maxExtractionPercentage (matches on-chain maxExtractionAmount). */
+    maxExtractionAmountUsdc: v.optional(v.number()),
     feeUsdc: v.optional(v.number()),
     status: v.union(
       v.literal("open"),

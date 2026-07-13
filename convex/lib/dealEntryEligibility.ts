@@ -4,24 +4,37 @@
 
 export type DealDeskCreatorFields = {
   creatorDeskManagerId?: string | null;
+  creatorAddress?: string | null;
 };
 
 export type TraderDeskFields = {
   deskManagerId: string;
+  deskWalletAddress?: string | null;
 };
+
+function walletAddressesMatch(
+  a: string | null | undefined,
+  b: string | null | undefined
+): boolean {
+  if (!a || !b) return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
 
 export function isOwnDeskCreatedDeal(
   deal: DealDeskCreatorFields,
-  traderDeskManagerId: string
+  trader: TraderDeskFields
 ): boolean {
   const creator = deal.creatorDeskManagerId;
-  if (creator == null || creator === "") return false;
-  return String(creator) === String(traderDeskManagerId);
+  const idMatch = !!creator && String(creator) === String(trader.deskManagerId);
+  return (
+    idMatch ||
+    walletAddressesMatch(deal.creatorAddress, trader.deskWalletAddress)
+  );
 }
 
 export function isTraderEligibleToEnterDealByDesk(
   deal: DealDeskCreatorFields,
   trader: TraderDeskFields
 ): boolean {
-  return !isOwnDeskCreatedDeal(deal, trader.deskManagerId);
+  return !isOwnDeskCreatedDeal(deal, trader);
 }

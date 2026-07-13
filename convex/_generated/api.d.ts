@@ -36,6 +36,7 @@ import type * as leaderboard from "../leaderboard.js";
 import type * as lib_activeDeployment from "../lib/activeDeployment.js";
 import type * as lib_baseSepoliaNetwork from "../lib/baseSepoliaNetwork.js";
 import type * as lib_dealEntryEligibility from "../lib/dealEntryEligibility.js";
+import type * as lib_extractionCap from "../lib/extractionCap.js";
 import type * as lib_limits from "../lib/limits.js";
 import type * as lib_portraitChecks from "../lib/portraitChecks.js";
 import type * as lib_portraitSeed from "../lib/portraitSeed.js";
@@ -152,6 +153,7 @@ declare const fullApi: ApiFromModules<{
   "lib/activeDeployment": typeof lib_activeDeployment;
   "lib/baseSepoliaNetwork": typeof lib_baseSepoliaNetwork;
   "lib/dealEntryEligibility": typeof lib_dealEntryEligibility;
+  "lib/extractionCap": typeof lib_extractionCap;
   "lib/limits": typeof lib_limits;
   "lib/portraitChecks": typeof lib_portraitChecks;
   "lib/portraitSeed": typeof lib_portraitSeed;
