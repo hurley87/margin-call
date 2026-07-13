@@ -108,7 +108,11 @@ export async function fetchSeatVaultLogs(
 
 type DecodedContractLog = Log & {
   eventName?: string;
-  args?: {
+  // `getContractEvents({ strict: true })` yields a union of per-event arg
+  // shapes (some SeatVault events carry only `{ account }`). Keep the shape
+  // open so any event assigns here; we read the stake fields below and return
+  // null for everything else.
+  args?: Record<string, unknown> & {
     traderId?: bigint;
     staker?: `0x${string}`;
     amount?: bigint;

@@ -30,6 +30,9 @@ contract SeatVault {
 
     address public owner;
     address public pendingOwner;
+    address public pauser;
+
+    bool public paused;
 
     IERC20 public token;
     uint256 public seatThreshold;
@@ -47,9 +50,22 @@ contract SeatVault {
     event TokenUpdated(address indexed token);
     event OwnershipTransferStarted(address indexed previousOwner, address indexed newOwner);
     event OwnershipTransferred(address indexed previousOwner, address indexed newOwner);
+    event Paused(address indexed account);
+    event Unpaused(address indexed account);
+    event PauserUpdated(address indexed pauser);
 
     modifier onlyOwner() {
         require(msg.sender == owner, "Not owner");
+        _;
+    }
+
+    modifier whenNotPaused() {
+        require(!paused, "Paused");
+        _;
+    }
+
+    modifier onlyPauser() {
+        require(msg.sender == owner || msg.sender == pauser, "Not pauser");
         _;
     }
 
@@ -72,7 +88,7 @@ contract SeatVault {
         owner = msg.sender;
     }
 
-    function stake(uint256 traderId, uint256 amount) external {
+    function stake(uint256 traderId, uint256 amount) external whenNotPaused {
         require(amount > 0, "Zero amount");
 
         address depositor = escrow.depositors(traderId);
@@ -97,19 +113,21 @@ contract SeatVault {
         emit Staked(traderId, msg.sender, received);
     }
 
-    function initiateUnstake(uint256 traderId, uint256 amount) external {
+    function initiateUnstake(uint256 traderId, uint256 amount) external whenNotPaused {
         require(amount > 0, "Zero amount");
 
         StakeInfo storage info = _stakes[traderId];
         require(info.staker != address(0), "No stake");
         require(info.active >= amount, "Over unstake");
-
-        address depositor = escrow.depositors(traderId);
-        require(msg.sender == depositor || msg.sender == info.staker, "Not authorized");
+        require(msg.sender == info.staker, "Not staker");
 
         info.active -= amount;
+        // Only a fresh pending batch (nothing pending before) starts the
+        // cooldown clock; a repeated initiate must not extend an open one.
+        if (info.pending == 0) {
+            info.unlockTime = block.timestamp + unstakeCooldown;
+        }
         info.pending += amount;
-        info.unlockTime = block.timestamp + unstakeCooldown;
 
         emit UnstakeInitiated(traderId, info.staker, amount, info.unlockTime);
     }
@@ -172,6 +190,26 @@ contract SeatVault {
 
     function stakeOf(uint256 traderId) external view returns (StakeInfo memory) {
         return _stakes[traderId];
+    }
+
+    function hasLockedPrincipal(uint256 traderId) external view returns (bool) {
+        StakeInfo storage info = _stakes[traderId];
+        return info.active + info.pending > 0;
+    }
+
+    function pause() external onlyPauser {
+        paused = true;
+        emit Paused(msg.sender);
+    }
+
+    function unpause() external onlyPauser {
+        paused = false;
+        emit Unpaused(msg.sender);
+    }
+
+    function setPauser(address pauser_) external onlyOwner {
+        pauser = pauser_;
+        emit PauserUpdated(pauser_);
     }
 
     function tierOf(uint256 traderId) external view returns (Tier) {

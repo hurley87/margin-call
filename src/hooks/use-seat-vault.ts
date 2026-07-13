@@ -231,7 +231,6 @@ export function useSeatVaultFlows() {
       amountHuman: string;
       vaultAddress?: `0x${string}`;
       activeWei: string;
-      depositor: string | null;
       staker: string | null;
     }) => {
       setState({ step: "checking" });
@@ -254,11 +253,10 @@ export function useSeatVaultFlows() {
         }
 
         const walletLc = wallet.toLowerCase();
-        const depositorLc = args.depositor?.toLowerCase();
         const stakerLc = args.staker?.toLowerCase();
-        if (walletLc !== depositorLc && walletLc !== stakerLc) {
+        if (walletLc !== stakerLc) {
           throw new Error(
-            "Not authorized — only the depositor or recorded staker can pull principal."
+            "Not authorized — only the recorded staker can pull principal."
           );
         }
 

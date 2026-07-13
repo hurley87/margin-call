@@ -265,6 +265,63 @@ export const seatVaultAbi = [
     stateMutability: "view",
   },
   {
+    type: "function",
+    name: "hasLockedPrincipal",
+    inputs: [{ name: "traderId", type: "uint256" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "paused",
+    inputs: [],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "pause",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "unpause",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "pauser",
+    inputs: [],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "setPauser",
+    inputs: [{ name: "pauser_", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "event",
+    name: "Paused",
+    inputs: [{ name: "account", type: "address", indexed: true }],
+  },
+  {
+    type: "event",
+    name: "Unpaused",
+    inputs: [{ name: "account", type: "address", indexed: true }],
+  },
+  {
+    type: "event",
+    name: "PauserUpdated",
+    inputs: [{ name: "pauser", type: "address", indexed: true }],
+  },
+  {
     type: "event",
     name: "Staked",
     inputs: [
