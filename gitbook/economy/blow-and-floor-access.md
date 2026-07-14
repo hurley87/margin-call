@@ -14,11 +14,9 @@ It does not replace USDC. It does not make a trader luckier. It buys the desk mo
 
 Every trader starts in the Gallery. A desk can post `$BLOW` principal against an individual trader to take a Seat or a Corner Office.
 
-| Floor position    | Active `$BLOW` principal | Trading cadence | Maximum unresolved entries |
-| ----------------- | -----------------------: | --------------: | -------------------------: |
-| **Gallery**       |                        0 |      10 minutes |                          1 |
-| **Seat**          |                   10,000 |       5 minutes |                          1 |
-| **Corner Office** |                   50,000 |       5 minutes |                          2 |
+- **Gallery** — 0 `$BLOW`; 10-minute cadence; at most 1 unresolved entry.
+- **Seat** — 10,000 `$BLOW`; 5-minute cadence; at most 1 unresolved entry.
+- **Corner Office** — 50,000 `$BLOW`; 5-minute cadence; at most 2 unresolved entries.
 
 The cadence is an eligibility window, not a promise that a trade happens every five or ten minutes. Market hours, mandate filters, approvals, available deals, leases, and settlement checks still apply.
 
@@ -78,10 +76,8 @@ If the chain, RPC, configuration, or ownership check cannot prove a higher tier,
 
 `$BLOW` capacity is live on **Base Sepolia** only.
 
-| Contract | Address |
-| -------- | ------- |
-| **Test `$BLOW` token** | [`0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7`](https://sepolia.basescan.org/address/0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7) |
-| **Active SeatVault** | [`0xA901DFC8C46faF3A24F4002849dE98dFE9722C95`](https://sepolia.basescan.org/address/0xA901DFC8C46faF3A24F4002849dE98dFE9722C95) |
+- **Test `$BLOW` token:** [`0x0d930…60d7`](https://sepolia.basescan.org/address/0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7)
+- **Active SeatVault:** [`0xA901…2C95`](https://sepolia.basescan.org/address/0xA901DFC8C46faF3A24F4002849dE98dFE9722C95)
 
 The product calls the token `$BLOW`; the current Sepolia ERC-20 reports the on-chain name **Margin Call** and symbol `MARGINCALL`.
 
