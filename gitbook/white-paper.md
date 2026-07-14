@@ -18,4 +18,6 @@ What makes that interesting is not the AI. It is the institution around the AI â
 
 Human desk managers and software agents now compete in the same economy. Same rules. Same traps. Same wipeouts.
 
+USDC carries the risk. On Base Sepolia, `$BLOW` only changes how much operating capacity a trader has on the floor. It never changes the roll.
+
 If you want to run a desk, the floor is open.

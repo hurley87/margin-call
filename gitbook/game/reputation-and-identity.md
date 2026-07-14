@@ -18,34 +18,40 @@ Together, they give each trader:
 
 - A name and visual identity
 - A wallet that can hold value
-- A public, permanent reputation history
-- Full portability — traders can be bought and sold on any NFT marketplace
+- A public in-game performance history
+- NFT-standard identity that can support future portability
 
 ---
 
 ## How Reputation Works
 
-After every deal resolution, the market updates the trader's visible history:
+After every deal resolution, Convex updates the trader's visible game history. The current profile derives:
 
-| Field     | Description                          |
-| --------- | ------------------------------------ |
-| **Score** | 0 to 100, updated after each outcome |
-| **Tags**  | Win, loss, wipeout, deal type        |
-| **Link**  | Reference to detailed outcome data   |
+| Field           | Description                                             |
+| --------------- | ------------------------------------------------------- |
+| **Score**       | `max(0, wins × 3 − losses − wipeouts × 5)`              |
+| **Wins/losses** | Counts derived from settled trader P&L                  |
+| **Win rate**    | Wins divided by all recorded outcomes                   |
+| **Wipeouts**    | Outcomes that mechanically reduced the bankroll to zero |
+| **Total P&L**   | Sum of the trader's recorded net results                |
 
-Reputation is public and lasting.
+The trader identity NFT is on-chain. The performance record shown by the current product is a Convex-backed game read model; outcomes are not currently posted to the ERC-8004 Reputation Registry.
 
-It is not a private score hidden inside the app.
+That distinction matters: public in-game history is available today, while fully on-chain outcome reputation remains future integration work.
 
 ---
 
-## Reputation Affects Outcomes
+## Reputation Records Outcomes
 
-Trader reputation is part of the context used when the game resolves outcomes.
+Trader reputation is public evidence of what has already happened.
 
-- **Strong reputation** improves a trader's odds in deal resolution
-- **Weak or no reputation** makes traders more vulnerable to traps
-- **Reputation is a statistical advantage, not a deterministic one** — even high-reputation traders can lose
+- wins, losses, and wipeouts remain visible
+- other desks can use that history when judging a trader or its owner
+- the record persists with the trader identity
+
+Reputation does **not currently modify the mechanical win probability**. The game computes each win/loss from market mood and SEC heat before the model writes the narrative. Reputation is tracked and displayed, not fed into that roll.
+
+The same firewall applies to [`$BLOW` floor access](../economy/blow-and-floor-access.md): credentials change capacity, never outcome probability.
 
 ---
 
@@ -62,33 +68,25 @@ This flywheel is counterbalanced by [Anti-Snowball Mechanics](../economy/anti-sn
 
 ---
 
-## What Transfers With a Trader
+## Portability Is Future Work
 
-When a trader changes hands, the buyer receives:
+Margin Call does not currently ship a marketplace or supported trader-transfer flow.
 
-| What Transfers             | Details                                                            |
-| -------------------------- | ------------------------------------------------------------------ |
-| **NFT ownership**          | Authorization to fund, withdraw, configure, and control the trader |
-| **Linked wallet identity** | The trader's bankroll and economic footprint                       |
-| **Reputation history**     | The wins, losses, wipeouts, and scars already earned               |
-| **Carried assets**         | Items accumulated through deal outcomes                            |
+The NFT and its public identity can be transferred at the protocol level, but current game control also depends on application ownership, escrow depositor authority, and wallet bindings. Those do not automatically migrate through an unsupported marketplace transfer.
 
-The mandate configuration carries over but can be changed by the new owner. The trader's name and visual identity persist.
+Any future marketplace must specify how the following behave:
 
-{% hint style="warning" %}
-Reputation follows the token ID, not the owner. A trader with a bad record cannot be "reset" by selling it. The buyer inherits the full history, which the market will price accordingly.
-{% endhint %}
+- application control and mandate configuration
+- escrow bankroll and depositor reassignment
+- carried assets and pending approvals
+- active or pending `$BLOW` principal
+- persistent identity, portrait, and reputation history
 
 ---
 
 ## Why This Matters
 
-Because traders are portable and reputational:
-
-- A desk can **build and sell** a proven trader
-- A buyer can **inspect public history** before acquiring
-- Performance can **outlive the original owner**
-- The market can **price judgment as an asset**
+The on-chain identity gives the future marketplace something durable to build around. Until that workflow ships, the docs do not treat NFT transfer as equivalent to transferring a playable trader.
 
 They are not disposable save files.
 

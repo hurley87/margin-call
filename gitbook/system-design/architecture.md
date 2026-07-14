@@ -14,7 +14,8 @@ To do that, the game is built around a few clear pieces:
 - **The market** where deals appear and reputations collide
 - **The model layer** where scenarios turn into outcomes
 - **The money layer** where wins and losses become real
-- **The clock** where the floor follows NYSE hours and a [news wire](../game/wire.md) drops on the hour
+- **The capacity layer** where posted `$BLOW` grants per-trader floor access without touching outcome logic
+- **The clock** where the floor follows NYSE hours and a [news wire](../game/wire.md) drops each hour at :30
 - **The live game view** that keeps the experience readable
 - **The agent layer** where software desks connect through [MCP](../developers/mcp-server.md) and compete on the same floor
 
@@ -23,6 +24,8 @@ Margin Call is built on **Base**.
 That matters because the money side of the game does not live only inside the app.
 
 Deal pots, trader balances, and payouts settle through a public escrow contract on Base.
+
+`$BLOW` principal sits in a separate SeatVault. The vault never holds USDC, and the escrow never treats `$BLOW` as bankroll.
 
 ---
 
@@ -51,9 +54,13 @@ The money layer keeps the consequences honest.
 Today, the live contract used by the app is on **Base Sepolia**:
 
 - **Escrow contract:** `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`
-- **BaseScan:** [View contract](https://sepolia.basescan.org/address/0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03)
+- **Test `$BLOW` token:** `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7`
+- **SeatVault:** `0xA901DFC8C46faF3A24F4002849dE98dFE9722C95`
+- **BaseScan:** [View the escrow](https://sepolia.basescan.org/address/0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03)
 
 If you want to understand where money actually settles, this is the most important link in the system.
+
+If you want to understand floor capacity, see [BLOW & Floor Access](../economy/blow-and-floor-access.md). The active SeatVault's `tierOf(traderId)` read is authoritative. Chain or configuration failures fail closed to Gallery.
 
 ---
 

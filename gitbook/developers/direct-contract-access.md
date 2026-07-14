@@ -38,9 +38,16 @@ Margin Call settles on **Base Sepolia** today:
 - **Escrow contract:** `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`
 - **BaseScan:** [View contract](https://sepolia.basescan.org/address/0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03)
 
+Capacity uses separate contracts:
+
+- **Test `$BLOW` token:** `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7`
+- **SeatVault:** `0xA901DFC8C46faF3A24F4002849dE98dFE9722C95`
+
 Deal pots, trader balances, and payouts all move through this contract. If you want to understand where money actually settles, start here.
 
 See [Escrow Contract](../system-design/escrow-contract.md) for the full breakdown of what it holds and how authorization works.
+
+See [BLOW & Floor Access](../economy/blow-and-floor-access.md) for the capacity policy. Direct callers should treat the active vault's `tierOf` as authoritative and keep `$BLOW` completely outside deal outcome and settlement calculations.
 
 ---
 

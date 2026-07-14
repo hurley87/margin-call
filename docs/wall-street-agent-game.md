@@ -4,7 +4,7 @@
 
 ## What Is This
 
-An AI-powered trading game set on 1980s Wall Street. Players act as **desk managers** — they fund and configure AI **trader agents** that autonomously enter **deals**. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates each outcome; the market Wire uses `gpt-5-mini`. All money flows in USDC on Base through a smart contract escrow. Traders are ERC-8004 NFTs with on-chain identity and reputation — they can be bought and sold on any NFT marketplace.
+An AI-powered trading game set on 1980s Wall Street. Players act as **desk managers** — they fund and configure AI **trader agents** that autonomously enter **deals**. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates each outcome; the market Wire uses `gpt-5-mini`. All money flows in USDC on Base through a smart contract escrow. Traders use ERC-8004 NFTs for persistent identity and reputation; a supported marketplace remains future work.
 
 ---
 
@@ -18,7 +18,7 @@ An AI-powered trading game set on 1980s Wall Street. Players act as **desk manag
 5. WATCH       →  Agent autonomously scans and enters deals
 6. INTERVENE   →  Approve/reject big deals, adjust strategy
 7. CASH OUT    →  Withdraw USDC from escrow back to your wallet
-8. TRADE UP    →  Sell high-performing traders as NFTs
+8. BUILD RECORD →  Grow a trader's public history or replace a failed one
 ```
 
 ### The PvP Dynamic
@@ -35,21 +35,19 @@ Every dollar gained by one party was lost by another. Zero-sum.
 ## Architecture
 
 ```
-Desk Manager (Privy wallet)
-  │  create deals / fund traders / withdraw (direct contract interaction)
-  ▼
-┌──────────────────────────────────────────────────┐
-│  ESCROW CONTRACT (Base)                          │
-│  Deal pots, trader balances, fund distribution   │
-│  ERC-8004 NFT ownership = authorization          │
-└──────────────────────────────────────────────────┘
-  ▲                          ▲
-  │                          │
-Server (Oracle)          ERC-8004 Registries (Base)
-  │ resolveEntry()           │ Identity (ERC-721 NFTs)
-  │ LLM resolution           │ Reputation (deal outcomes)
-  │                          │
-  ▼                          │
+Desk Manager (Privy wallet / Base Account)
+  ├─ USDC ─────► ESCROW (pots, bankroll, settlement)
+  └─ $BLOW ────► SEATVAULT (per-trader capacity principal)
+
+Convex agent runtime
+  ├─ reads SeatVault tierOf() for capacity
+  ├─ decides outcome mechanically
+  ├─ asks gpt-4o-mini to narrate the fixed result
+  └─ settles verified PnL through the escrow
+
+ERC-8004 Registries (Base)
+  └─ trader identity NFT + public reputation history
+
 ┌──────────────────────────────────────────────────┐
 │  NEXT.JS (App Router)                            │
 │  HTTP boundary (/api/deal/enter, /api/mcp/*)     │
@@ -66,7 +64,7 @@ Server (Oracle)          ERC-8004 Registries (Base)
 | ---------------------- | ----------------------------------------------------------------------- |
 | **App**                | Next.js (App Router) — frontend + API routes                            |
 | **Auth / Wallet**      | Privy (wallet connect, embedded wallets, auth)                          |
-| **Smart Contracts**    | Solidity — escrow/game contract on Base                                 |
+| **Smart Contracts**    | Solidity — USDC escrow + separate `$BLOW` SeatVault on Base Sepolia     |
 | **Agent Identity**     | ERC-8004 (Identity + Reputation Registries, already deployed on Base)   |
 | **Agent Wallets**      | ERC-6551 (Token Bound Accounts, derived from ERC-8004 NFT)              |
 | **Database**           | Convex (reactive database + scheduler/crons)                            |
@@ -94,16 +92,17 @@ All USDC flows through the escrow contract. No platform wallet custody.
 **Desk adversarial rule:** Traders cannot enter deals created by their own desk. Deals are intended to be public market opportunities and traps for **rival** desks—house or system-created deals remain open to everyone. Same-desk entry is blocked in deal selection and at verified entry (`recordVerifiedEntry`).
 
 1. Trader's agent runtime (server) decides to enter a deal
-2. Server calls `resolveEntry(dealId, traderAddress, pnl, rakeAmount)` on the contract after LLM resolution
-3. Contract checks trader has sufficient balance in escrow
-4. **Win** → contract sends (winnings - rake) from pot to trader's balance, rake to platform
-5. **Loss** → contract moves loss amount from trader's balance into the pot
+2. Code decides win/loss and magnitude mechanically, then `gpt-4o-mini` narrates the fixed result
+3. Server calls `resolveEntry(dealId, traderAddress, pnl, rakeAmount)` on the contract
+4. Contract checks trader has sufficient balance in escrow
+5. **Win** → contract sends (winnings - rake) from pot to trader's balance, rake to platform
+6. **Loss** → contract moves loss amount from trader's balance into the pot
 
-No upfront entry payment. The LLM resolves the outcome, then the contract moves money based on the result.
+No upfront entry payment. Win/loss starts from a 50% baseline shifted by market mood and SEC heat. Magnitudes are sized from entry cost, with average losses heavier than average wins. The model cannot choose or alter the financial result.
 
 ### Funding Traders
 
-Desk manager calls `depositFor(traderId, amount)` on the escrow contract. USDC moves from their wallet into the trader's balance in the contract. Requires `ownerOf(traderId) == msg.sender`.
+Desk manager calls `depositFor(traderId, amount)` on the escrow contract. USDC moves from their wallet into the trader's balance and the escrow records that wallet as the trader's depositor.
 
 ### Withdrawing
 
@@ -130,6 +129,22 @@ Platform owner can withdraw accumulated fees from the contract.
 
 ---
 
+## `$BLOW` Floor Capacity
+
+`$BLOW` is Base Sepolia capacity principal, not settlement money.
+
+| Tier          | Active `$BLOW` | Cycle interval | Max unresolved entries |
+| ------------- | -------------: | -------------: | ---------------------: |
+| Gallery       |              0 |     10 minutes |                      1 |
+| Seat          |         10,000 |      5 minutes |                      1 |
+| Corner Office |         50,000 |      5 minutes |                      2 |
+
+**Stake affects capacity, never outcome probability.** The active SeatVault never touches USDC and staking state is excluded from selection, probability, payout, rake, and deal creation. Only the current escrow depositor can add principal. Initiated withdrawals stop granting capacity immediately and return to the original staker after a 24-hour cooldown.
+
+The active on-chain `tierOf(traderId)` read is authoritative; failures fail closed to Gallery. See [`docs/trader-fuel-token.md`](./trader-fuel-token.md) for the complete shipped design and testnet addresses.
+
+---
+
 ## Trader Identity (ERC-8004)
 
 Traders are ERC-8004 agent identities — standard ERC-721 NFTs registered on the existing Identity Registry deployed on Base.
@@ -149,21 +164,21 @@ Traders are ERC-8004 agent identities — standard ERC-721 NFTs registered on th
 - Mandate configuration
 - Capabilities and endpoints
 
-Traders appear on OpenSea and any NFT marketplace automatically.
+The identity uses NFT standards, but the application does not currently ship a marketplace or supported ownership-transfer flow.
 
 ### Reputation
 
-After every deal resolution, the server posts to the ERC-8004 Reputation Registry:
+After every deal resolution, Convex records the outcome and the current UI derives:
 
-- Score (0-100)
-- Tags (win/loss, deal type, wipeout)
-- Link to detailed outcome data
+- Score: `max(0, wins * 3 - losses - wipeouts * 5)`
+- Wins, losses, win rate, and wipeout count
+- Total recorded P&L
 
-Reputation is public, permanent, and on-chain. A trader's track record is verifiable by anyone — not just a number the platform claims.
+The ERC-8004 trader identity is on-chain. The displayed performance record is currently a Convex-backed game read model; outcomes are not written to the ERC-8004 Reputation Registry today.
 
-### Reputation (design intent)
+### Reputation
 
-Reputation is public and on-chain, and a trader's full context is available to the resolver:
+The public profile derives performance context from Convex outcomes:
 
 ```
 Trader: "Gordon"
@@ -173,18 +188,13 @@ Assets: SEC immunity, insider contact at Goldman
 Portfolio: 340 USDC
 ```
 
-The intended economy: experienced traders with strong records get better odds, new traders walk in blind, and proven traders appreciate in value. **Current implementation note:** win probability is computed mechanically from market conditions (world mood + SEC heat) in `convex/agent/outcomeResolver.ts`; reputation is displayed and tracked on-chain but is not yet a direct input to the odds. Tying reputation into the win-probability model is a natural extension.
+The record helps desks evaluate traders and counterparties, but it is not passed into the mechanical win roll. Win probability is computed from market conditions (world mood + SEC heat) in `convex/agent/outcomeResolver.ts`; reputation is displayed from game history and is not an input to odds, payout, or rake.
 
-### Selling Traders
+### Marketplace Direction (Future)
 
-Since traders are standard ERC-721 NFTs:
+Trader identities use ERC-721-compatible standards, but a protocol-level transfer is not currently treated as transferring a playable trader. Game control also depends on application ownership, escrow depositor authority, and wallet bindings.
 
-- List on OpenSea, Blur, or any Base NFT marketplace
-- Buyer gets the NFT → controls the ERC-6551 wallet → controls the escrow balance
-- Reputation follows the token ID (on-chain, not the owner)
-- Game contract checks `ownerOf(traderId)` at call time — ownership transfers are instant
-
-High-performing traders are worth more than their balance — you're buying proven performance. Wiped-out traders are worthless NFTs. PvP meta: target a high-value trader with trap deals before a sale to tank their record.
+Future marketplace work must define how application control, escrow deposits, mandates, assets, approvals, and `$BLOW` principal migrate. Until then, identity and reputation are persistent but buy/sell gameplay is not available.
 
 ---
 
@@ -342,20 +352,20 @@ Any wallet can interact with the escrow contract directly:
 
 The agent pays gas but has full autonomy.
 
-### Path 2: MCP Server (future)
+### Path 2: MCP Server (shipped)
 
-Install the MCP server, it provisions a Coinbase Smart Wallet (gasless), and exposes game tools:
+Connect Base MCP, issue a per-desk key by signing a SIWE challenge, and use either the Base MCP plugin or standalone server. The signing Base Account is automatically bound as the non-custodial desk treasury.
 
 ```
-create_trader(name, mandate)    -> provisions wallet, registers trader
-fund_trader(traderId, amount)   -> deposits USDC into escrow
-list_deals()                    -> open deals with pot sizes
-enter_deal(dealId)              -> enters deal via API
-get_balance()                   -> trader's escrow balance
-withdraw(traderId, amount)      -> pulls USDC from escrow
+create_trader(name, mandate)          -> mints a trader identity
+list_deals()                          -> open deals with eligibility context
+fund_trader(traderId, amount)         -> prepares a treasury transaction
+create_deal(dispatchId, parameters)   -> prepares a Wire-sourced deal
+confirm_intent(intentId, txHash)      -> verifies the Base Account transaction
+answer_approval(approvalId, decision) -> approves or rejects a high-stakes entry
 ```
 
-Any MCP-compatible agent (Claude Code, etc.) can play with one config line. The MCP server handles all contract interaction — the agent just calls tools.
+Treasury operations use prepare → Base MCP `send_calls` → confirm. The agent never receives the Base Account private key. Autonomous traders, not the desk agent, choose individual deal entries.
 
 ### Path 3: Automated Desk Manager
 
@@ -375,15 +385,9 @@ The line between desk manager and trader blurs. AI managing AI, competing agains
 ### Pages
 
 ```
-/                    -> Dashboard (portfolio overview, P&L chart)
-/traders             -> List of desk manager's traders (NFTs)
-/traders/[id]        -> Individual trader (activity feed, stats, mandate config, reputation)
-/deals               -> Browse open deals
-/deals/create        -> Create a deal (direct contract interaction + AI-assisted prompt)
-/deals/[id]          -> Deal detail (outcomes, stats, pot history)
-/approvals           -> Pending approval queue for big deals
-/marketplace         -> Browse traders for sale (NFT marketplace integration)
-/settings            -> Desk manager settings
+/                    -> Landing, onboarding, and authenticated trading desk
+/traders/[traderId]  -> Public/owned trader detail and floor-seat controls
+/admin/wire          -> Operator-only Wire controls
 ```
 
 ### Key Features
@@ -394,8 +398,8 @@ The line between desk manager and trader blurs. AI managing AI, competing agains
 - **Agent activity feed** — live stream of what your trader is doing
 - **Deal approval queue** — agent asks permission for big plays
 - **P&L tracking** — portfolio value over time, per-deal breakdown
-- **Trader marketplace** — browse, buy, and sell trader NFTs
-- **On-chain reputation display** — verified win/loss record, reputation score
+- **Future marketplace direction** — not part of the current application
+- **Public reputation display** — Convex-backed win/loss record, score, win rate, wipeouts, and P&L
 
 ---
 
@@ -435,19 +439,19 @@ The win/loss decision and magnitude are computed **mechanically** in `convex/age
 
 Balance transfers and wipeout status are applied mechanically from the validated PnL — the LLM cannot set them.
 
-### Reputation Impact (design intent)
+### Reputation Impact
 
-The intended economy has experienced traders with strong track records earning better outcomes while new traders are more likely to fall for traps:
+Reputation makes a trader's history legible without granting a mechanical advantage:
 
-- New traders are cheap — worse odds, low resale value
-- Proven traders appreciate — better odds, worth more on the market
+- New traders have little evidence behind them
+- Proven traders carry a visible record the market can evaluate
 - Wiping out a strong trader is devastating — reputation gone, NFT worthless
 
-**Current implementation note:** odds are computed mechanically from market conditions (world mood + SEC heat), not from reputation. Reputation is tracked and displayed but not yet an input to the win-probability model.
+Odds are computed mechanically from market conditions (world mood + SEC heat), not from reputation. Reputation is tracked and displayed but is not an input to win probability, payouts, or rake.
 
-### Correction Flow
+### Narrative Consistency
 
-After the outcome is determined, if validation modified the result (e.g., capped the winnings), a second LLM call rewrites the narrative to match what actually happened.
+Code decides and clamps the financial result before it is persisted. The model is instructed to narrate that decided result and cannot set P&L or wipeout status.
 
 ### AI Deal Prompt Suggestions
 
@@ -493,7 +497,6 @@ The desk manager must mint a new trader to continue. The wiped-out trader NFT re
 │   │   ├── page.tsx              # Browse deals
 │   │   ├── create/page.tsx       # Create deal (contract interaction + AI-assisted)
 │   │   └── [id]/page.tsx         # Deal detail
-│   ├── marketplace/page.tsx      # Trader NFT marketplace
 │   ├── approvals/page.tsx        # Approval queue
 │   ├── settings/page.tsx         # Desk manager settings
 │   ├── api/                      # Thin HTTP boundary (game CRUD is in convex/)
@@ -530,7 +533,6 @@ The desk manager must mint a new trader to continue. The wiped-out trader NFT re
 │   ├── dashboard/
 │   ├── trader/
 │   ├── deal/
-│   ├── marketplace/
 │   └── shared/
 │
 ├── hooks/                        # React hooks for game state
@@ -553,7 +555,7 @@ The desk manager must mint a new trader to continue. The wiped-out trader NFT re
 
 ## Build Phases
 
-> **Status (historical roadmap).** Phases 1–11 and 13 have shipped. Two specifics below are out of date versus what actually shipped: the backend runs on **Convex** (not Supabase), and the agent loop runs on **Convex crons + scheduler** (not Vercel Workflow). The outcome/selection model is **`gpt-4o-mini`** (Wire uses `gpt-5-mini`). Phase 12 (Trader Fuel Token) remains a future exploration — see [`docs/trader-fuel-token.md`](./trader-fuel-token.md). Tech names in the phase text below are preserved as the original plan of record.
+> **Status (historical roadmap).** Phases 1–10, 12, and 13 have shipped; Phase 11 marketplace support has not. Two specifics below are out of date versus what actually shipped: the backend runs on **Convex** (not Supabase), and the agent loop runs on **Convex crons + scheduler** (not Vercel Workflow). The outcome/selection model is **`gpt-4o-mini`** (Wire uses `gpt-5-mini`). Phase 12 shipped in a different form: `$BLOW` is a per-trader capacity token, not an earn/stake/burn fuel loop. See [`docs/trader-fuel-token.md`](./trader-fuel-token.md). Tech names in the phase text below are preserved as the original plan of record.
 
 ### Phase 1: Foundation
 
@@ -592,8 +594,8 @@ The desk manager must mint a new trader to continue. The wiped-out trader NFT re
 - `POST /api/deal/enter` — LLM resolution + `resolveEntry()` contract call
 - OpenAI GPT-5 mini integration with structured output
 - Reputation data fed into LLM prompt
-- Correction flow (second LLM call if validation modifies outcome)
-- Post outcome to ERC-8004 Reputation Registry
+- Narrate the mechanically decided and bounded outcome
+- Record outcome history in Convex for the public reputation display
 - Mirror outcome to Supabase
 
 ### Phase 6: Agent Runtime (Autonomous Trade Loop)
@@ -617,7 +619,7 @@ The desk manager must mint a new trader to continue. The wiped-out trader NFT re
 - Live agent activity feed (Supabase Realtime)
 - Deal status updates in realtime
 - Approval queue with realtime updates
-- On-chain reputation display
+- Convex-backed public reputation display
 
 ### Phase 9: Assets + Wipeout System
 
@@ -631,20 +633,20 @@ The desk manager must mint a new trader to continue. The wiped-out trader NFT re
 - `POST /api/prompt/suggest` — AI-generated deal prompts
 - `/deals/create` includes "suggest prompts" feature
 
-### Phase 11: Trader Marketplace
+### Phase 11: Trader Marketplace — Future
 
 - `/marketplace` page — browse traders for sale
 - Integration with OpenSea / Base NFT marketplaces
 - Game-specific listing context (reputation, balance, P&L)
 - Buy/sell flow
 
-### Phase 12: Trader Fuel Token
+### Phase 12: `$BLOW` Capacity — Shipped On Base Sepolia
 
-- Deploy a desk-level ERC-20 fuel token on Base
-- Award token rewards on successful deal outcomes
-- Add staking for lower rake tiers
-- Add token-burn revival flow for wiped-out traders
-- Surface token balance, staking state, and revive actions in the desk UI
+- Deploy a separate SeatVault for per-trader `$BLOW` principal
+- Apply Gallery, Seat, and Corner Office capacity to cycle cadence and unresolved-entry limits
+- Keep staking state out of selection, probability, payouts, rake, and deal creation
+- Surface `$BLOW` balance, staking/unstaking state, and floor credentials in the desk UI
+- Fail closed to Gallery when the active on-chain tier cannot be proven
 
 ### Phase 13: Polish + Launch
 
@@ -656,10 +658,10 @@ The desk manager must mint a new trader to continue. The wiped-out trader NFT re
 
 ### Upcoming Features
 
-- **MCP Server** — Wraps game as MCP tools. Any MCP-compatible agent (Claude Code, etc.) plays with one config line. Provisions Coinbase Smart Wallet (gasless). Enables playing from the terminal.
+- **MCP Server** — Shipped. MCP-compatible agents run non-custodial desks using SIWE-issued keys and a Base Account treasury through prepare → `send_calls` → confirm.
 - **Automated Desk Managers** — Fully autonomous AI desk managers that create deals, manage traders, and compete against other desks.
 - **Desk-manager decision feedback** — Post-outcome "good call / bad call" ratings with structured reasons that help tune a desk's future trader behavior without changing settlement or public reputation. See [`docs/trader-decision-feedback.md`](./trader-decision-feedback.md).
-- **Trader fuel token** — A simple ERC-20 loop for desk progression: win deals to earn the token, stake it for lower fees, and burn it to revive wiped-out traders. Final name TBD. See [`docs/trader-fuel-token.md`](./trader-fuel-token.md).
+- **Base mainnet launch plan** — Future, approval-gated work for official `$BLOW` supply/distribution, token and vault addresses, liquidity, compatibility evidence, and mainnet escrow activation. The Sepolia token is test infrastructure only.
 - **House deal auto-generation** — Cron job to keep the floor active when player activity is low.
 - **Builder Code Attribution (ERC-8021)** — Append Base Builder Code attribution suffix to all on-chain transactions for rewards, analytics, and Base ecosystem visibility.
 

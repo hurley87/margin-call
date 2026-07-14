@@ -13,15 +13,16 @@ Each trader is a persistent character with its own identity, history, and bankro
 | **Name**         | A persistent identity on the floor                                                    |
 | **Mandate**      | Risk tolerance, deal filters, bankroll rules, approval threshold                      |
 | **Balance**      | The capital the trader can put at risk                                                |
-| **Reputation**   | A visible score shaped by outcomes over time                                          |
+| **Reputation**   | A visible record shaped by outcomes over time                                         |
 | **Assets**       | Items with narrative and monetary value (insider tips, contacts, regulatory immunity) |
 | **Track record** | Full public history of wins, losses, and wipeouts                                     |
+| **Floor access** | Gallery, Seat, or Corner Office capacity posted with testnet `$BLOW`                  |
 
 ---
 
 ## How a Trader Thinks
 
-Each trader repeats the same basic rhythm. The cycle runs every few minutes, only while the [market is open](how-to-play.md#when-the-market-is-open):
+Each trader repeats the same basic rhythm, only while the [market is open](how-to-play.md#when-the-market-is-open). Its eligibility cadence depends on [floor access](../economy/blow-and-floor-access.md): ten minutes from the Gallery, or five minutes from a Seat or Corner Office.
 
 1. **Scan** open deals from the market
 2. **Filter** against mandate rules — risk tolerance, deal size limits, bankroll percentage caps
@@ -75,19 +76,17 @@ Assets can change how a situation plays out.
 
 The right edge at the right moment can matter.
 
-Losing a valuable asset can make the next bad decision even worse.
+Assets can inform which eligible deal the trader ranks highest and give the narrator context. They do not change the mechanical win roll or bypass the mandate.
 
 ---
 
 ## Reputation and Outcomes
 
-Reputation affects how future moments are read.
+Reputation records how a trader has performed and gives other desks evidence about who they are facing.
 
-Experienced traders with strong records get better odds. New traders with no history are more vulnerable. This creates a natural economy:
+It does **not currently improve win probability**. Win/loss is calculated mechanically from market mood and SEC heat; the model narrates the result after the roll is decided.
 
-- **New traders** are cheap — worse odds, low resale value
-- **Proven traders** appreciate — better odds, worth more on the market
-- **Wiped-out traders** are worthless NFTs — permanent record of failure
+The same separation applies to [`$BLOW`](../economy/blow-and-floor-access.md): a stronger floor credential grants capacity, never luck.
 
 ---
 
@@ -104,15 +103,10 @@ The same trader name, mandate, and personality always produce the same portrait.
 
 ---
 
-## Selling Traders
+## Marketplace Direction
 
-Because traders can be bought and sold, a great record can become an asset in itself.
+Trader identities use NFT standards, so portable ownership is possible at the protocol level. Margin Call does **not currently ship a marketplace or supported trader-transfer workflow**.
 
-When a trader changes hands, the buyer receives:
+Future marketplace work must define how application control, escrow depositor authority, mandates, assets, and pending `$BLOW` principal move—or do not move—when an identity changes hands.
 
-- **Ownership of the NFT** — authorization to fund, withdraw, configure, and control the trader
-- **The trader's linked bankroll** — including the money held in the game
-- **The full reputation history** — the wins, losses, and scars already earned
-- **All carried assets** — items accumulated through deal outcomes
-
-Reputation follows the token ID, not the owner. A trader with a bad record cannot be "reset" by selling it. The buyer inherits the full history.
+The durable part already exists: identity, portrait, and reputation stay attached to the trader record. That does not mean a third-party NFT transfer automatically grants control of escrow or the current application state today.

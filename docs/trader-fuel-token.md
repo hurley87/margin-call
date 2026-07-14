@@ -1,339 +1,99 @@
-# Trader Fuel Token
+# BLOW Capacity Token
 
-> **Status: Future exploration (not started).** No fuel token is deployed or wired into the game today. This is a forward-looking exploration of adding a single ERC-20 token that players earn from successful deals, stake for lower fees, and burn to revive wiped-out traders.
+> **Status: shipped on Base Sepolia.** The original fuel-token proposal in this file has been superseded. `$BLOW` now has one narrow role: desk managers post it against individual traders to increase agent operating capacity. It does not replace USDC or influence outcomes.
 
-## Summary
+## Core Invariant
 
-The game already has two strong assets:
+> **Stake affects capacity, never outcome probability.**
 
-- `USDC` for bankroll, escrow, deal pots, and payouts
-- Trader NFTs for identity, ownership, and reputation
+No staking state may be imported, queried, or passed into deal selection, resolution prompts, probability calculations, payouts, rake calculations, or deal creation.
 
-This feature adds a third asset with a very narrow purpose:
+## Current Policy
 
-- win deals to earn the token
-- stake the token to reduce rake
-- burn the token to revive dead traders
+| Tier              | Active `$BLOW` | Cycle interval | Maximum unresolved entries |
+| ----------------- | -------------: | -------------: | -------------------------: |
+| **Gallery**       |              0 |     10 minutes |                          1 |
+| **Seat**          |         10,000 |      5 minutes |                          1 |
+| **Corner Office** |         50,000 |      5 minutes |                          2 |
 
-The token should be treated as desk fuel, not settlement currency. It powers progression and survival around the core PvP loop without replacing `USDC` as the unit of account.
+- Deal creation remains unlimited for every tier.
+- The cycle interval controls eligibility, not guaranteed trade frequency.
+- Market hours, mandate filters, approvals, leases, available deals, and settlement recovery still apply.
+- RPC, configuration, malformed-tier, or depositor failures fail closed to Gallery.
 
----
+## Asset Separation
 
-## Why This Fits The Game
+The game now has three distinct asset roles:
 
-The core fantasy is not passive holding. It is running a dangerous desk:
+- **USDC** — trader bankroll, deal pots, wins, losses, and platform fees.
+- **Trader NFTs** — persistent identity, ownership, portraits, and reputation history.
+- **`$BLOW`** — refundable principal posted for per-trader operating capacity.
 
-- funding traders
-- surviving wipeouts
-- squeezing more profit out of each win
-- keeping a strong trader alive long enough to build a record
+The active SeatVault never holds USDC. The USDC escrow never treats `$BLOW` as bankroll.
 
-A fuel token supports that fantasy cleanly:
+The vault exposes no reward, yield, dividend, slashing, claim, fee-discount, or bonus-payout path. `$BLOW` is not earned from wins, and wiped-out traders cannot be revived by burning it.
 
-- winning produces fuel
-- fuel improves desk economics
-- fuel can save a trader from permanent death
+## Staking Authority
 
-That is much easier to explain than governance, voting, or abstract roadmap utility.
+Staking authority comes from `MarginCallEscrow.depositors(traderId)`.
 
----
+- Only the current nonzero escrow depositor can add principal for a trader.
+- Repeated stakes from the same depositor increase active principal.
+- A depositor change makes the effective tier Gallery.
+- The original staker retains withdrawal rights even after a depositor change.
+- Principal is never redirected to a replacement depositor or administrator.
 
-## Recommended Product Shape
+This authority model exists because trader identity NFTs are held by trader CDP accounts while the desk treasury is the party funding escrow and posting capacity principal.
 
-### 1. Earn on successful deals
+## Unstaking
 
-When a trader wins a deal, the desk manager earns token rewards alongside the `USDC` outcome.
+Unstaking is intentionally two-phase:
 
-The simplest useful version is a fixed reward table based on the significance of the win rather than a complicated emissions formula.
+1. `initiateUnstake(traderId, amount)` moves principal from active to pending immediately. Tier calculations use only active principal, so capacity drops as soon as a threshold is crossed.
+2. `completeUnstake(traderId)` returns the pending batch to the original staker after the 24-hour cooldown.
 
-Example:
+A pending batch keeps its recorded unlock time if policy changes later. Previous vault versions remain discoverable so former stakers can recover pending or active principal after a replacement vault is activated.
 
-- small win: `+5`
-- medium win: `+15`
-- large win: `+40`
+## Source Of Truth And Read Model
 
-The reward can be determined from one or more of:
+The active SeatVault's on-chain `tierOf(traderId)` is authoritative for scheduling capacity.
 
-- realized `USDC` profit
-- deal pot size
-- entry cost tier
-- deal risk band
+Convex indexes confirmed `Staked`, `UnstakeInitiated`, and `Unstaked` events and reconciles them against `stakeOf` and `tierOf`. That read model powers reactive credentials and owner controls; it cannot independently grant accelerated capacity.
 
-Keep the first version intentionally legible. Players should be able to predict roughly what they are earning.
+The scheduler and cycle action read the active vault at capacity boundaries. Missing configuration, invalid values, ownership mismatch, or RPC failure returns Gallery capacity with an observable diagnostic.
 
-### 2. Burn to revive a wiped trader
+## Current Base Sepolia Deployment
 
-This should be the primary sink.
+| Component          | Address                                      |
+| ------------------ | -------------------------------------------- |
+| Escrow             | `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03` |
+| Test `$BLOW` token | `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7` |
+| SeatVault          | `0xA901DFC8C46faF3A24F4002849dE98dFE9722C95` |
 
-When a trader is wiped out, the desk manager can burn tokens to revive that trader instead of minting a brand-new one immediately.
+The product name is `$BLOW`; the current Sepolia token reports the on-chain name `Margin Call` and symbol `MARGINCALL`.
 
-Recommended rules:
+This token is testnet infrastructure. It has no promised market value, and the application currently provides no purchase, reward, faucet, or official distribution flow.
 
-- revival restores the trader to an active state
-- revival does not mint new `USDC`
-- the trader returns with `0` bankroll and must be funded again
-- reputation history remains intact
+## Administration And Versioning
 
-To prevent immortality, revival cost should increase with each revival.
+The SeatVault is non-upgradeable but owner-administered:
 
-Example:
+- `setPolicy` can update thresholds and the cooldown.
+- Policy changes do not alter unlock times already recorded for pending batches.
+- `setToken` can change the staking token only when no principal is outstanding.
+- Pause controls can stop new stakes and unstake initiations, but completing an already-unlocked withdrawal remains available.
 
-- first revive: `250`
-- second revive: `500`
-- third revive: `1000`
+Application configuration identifies one active vault. Only that vault grants capacity. Historical vault records remain available for withdrawals.
 
-An escalating cost preserves the drama of death while still giving players a meaningful recovery path.
+## Mainnet Boundary
 
-### 3. Stake for lower fees
+A Base mainnet `$BLOW` launch has not been completed. The following remain separate, approval-gated work:
 
-Desk managers can stake tokens at the wallet level to reduce rake on winnings.
+- official mainnet token address and verified source
+- supply and distribution model
+- acquisition and liquidity venues
+- compatibility evidence for the mainnet SeatVault
+- mainnet escrow and vault deployment
+- any proposed utility beyond capacity
 
-Recommended principles:
-
-- stake per desk manager wallet, not per trader
-- make discounts meaningful but bounded
-- do not reduce rake to zero
-
-Example:
-
-- no stake: `10.0%` rake
-- `10,000` staked: `9.5%`
-- `50,000` staked: `9.0%`
-- `150,000` staked: `8.0%`
-
-This creates a clean reason to hold the token without turning it into direct pay-to-win.
-
----
-
-## Design Principles
-
-### 1. Keep `USDC` as the settlement asset
-
-The token should not replace `USDC` for:
-
-- deal creation
-- trader funding
-- escrow balances
-- payouts
-
-`USDC` keeps the risk loop readable and stable. The token sits around that loop as fuel.
-
-### 2. Do not make the token affect win odds directly
-
-Holding or staking more token should improve economics, not outcomes.
-
-Good:
-
-- lower rake
-- survival utility
-- future progression utility
-
-Bad:
-
-- better LLM outcome odds
-- higher extraction caps
-- direct combat advantage
-
-This preserves competitive integrity and avoids obvious pay-to-win complaints.
-
-### 3. Keep the loop narrow
-
-The strongest version of this feature is intentionally small:
-
-- earn
-- stake
-- burn
-
-Avoid adding governance, bonding, voting, or seasonal systems in the first implementation.
-
-### 4. Revival should preserve consequences
-
-Death must still matter.
-
-A revived trader should return with:
-
-- the same identity
-- the same track record
-- no new bankroll
-
-That keeps revival from acting like a free reset button.
-
----
-
-## Gameplay Impact
-
-This feature strengthens several existing loops:
-
-### Stronger post-win progression
-
-Winning does more than increase `USDC` bankroll. It also powers future desk optimization.
-
-### Meaningful recovery after wipeouts
-
-Players get a second-chance mechanic that is tied to performance, not pure spending.
-
-### More desk-level strategy
-
-Managers can choose between:
-
-- staking for better long-term margins
-- holding liquid token for emergency revives
-
-That tradeoff is intuitive and should create good tension.
-
----
-
-## Suggested Contract / System Shape
-
-The cleanest implementation is to keep the token logic mostly adjacent to the escrow contract, not merged into every settlement path.
-
-High-level components:
-
-- `FuelToken` ERC-20 contract
-- `FuelStaking` contract for rake tiers
-- revival logic in the game contract or an authorized token sink
-- reward minting or distribution hook triggered after validated winning outcomes
-
-### Settlement interaction
-
-At a high level:
-
-1. deal resolves in `USDC`
-2. escrow settles balances as it does today
-3. if the outcome is a valid win, the system awards token rewards
-4. if the trader is wiped out later, the desk manager may burn tokens to revive
-
-This keeps the money flow and the fuel flow conceptually separate.
-
-### Rake tier lookup
-
-The escrow or settlement path should read a simple fee tier for the desk manager's wallet.
-
-Example interface:
-
-```solidity
-interface IFuelStaking {
-  function getRakeBps(address account) external view returns (uint16);
-}
-```
-
-### Revival hook
-
-Revival should be explicit and auditable:
-
-```solidity
-function reviveTrader(uint256 traderId) external;
-```
-
-Expected checks:
-
-- caller owns the trader NFT
-- trader is currently wiped out
-- required token amount is burned
-- revival count increments
-- trader status changes back to active
-
----
-
-## Anti-Abuse Rules
-
-This feature is easy to understand, but it still needs guardrails.
-
-### Reward farming
-
-Without protections, a player could try to create low-quality or self-serving loops that emit token rewards too cheaply.
-
-Suggested controls:
-
-- no rewards for obviously invalid or zero-value outcomes
-- minimum deal size before rewards apply
-- no rewards for self-dealing patterns if detectable
-- optional daily cap per trader or desk
-
-### Stake hopping
-
-Players should not be able to stake immediately before a win and unstake immediately after settlement with no tradeoff.
-
-Suggested controls:
-
-- unstake cooldown
-- minimum warm-up period before discounts apply
-- or snapshot-based tiering
-
-### Infinite revive loop
-
-If revival is too cheap, death loses meaning.
-
-Suggested controls:
-
-- escalating revival cost
-- optional hard cap on revives
-- revived traders return unfunded
-
-### Oversupply
-
-If rewards are too generous relative to staking demand and revival burns, the token will feel inflated quickly.
-
-Suggested controls:
-
-- conservative win rewards at launch
-- meaningful revive costs
-- shallow but attractive staking tiers
-
----
-
-## Rollout Path
-
-### Phase 1
-
-Add token rewards on successful deal outcomes and surface token balance in the desk UI.
-
-### Phase 2
-
-Add staking with simple rake discount tiers.
-
-### Phase 3
-
-Add trader revival using token burn with escalating cost.
-
-### Phase 4
-
-If needed later, add one more sink such as rerolling or retraining a trader. This should only happen if the first three mechanics do not create enough demand.
-
----
-
-## Naming Note
-
-The role of the token is clearer than its final name.
-
-Strong candidates so far:
-
-- `JUICE`
-- `POWDER`
-- `RUSH`
-
-`COCAINE` is the most aggressive and memorable option, but it likely creates more friction with partners, platforms, and distribution than the alternatives.
-
-`JUICE` currently feels like the strongest balance of:
-
-- thematic fit
-- ease of use in product copy
-- lower branding risk
-
-Example copy:
-
-- win deals, earn `JUICE`
-- stake `JUICE` for lower fees
-- burn `JUICE` to revive a trader
-
----
-
-## Open Questions
-
-Questions worth revisiting before implementation:
-
-1. Should rewards be minted directly on each win, or emitted from a fixed treasury?
-2. Should revival cost depend only on prior revives, or also on trader reputation / level?
-3. Should a revived trader keep every historical stat, or should some metrics mark the revive event visibly?
-4. How much of a fee discount is enough to matter without making staking mandatory?
-5. Is one additional future sink needed, or are earn plus stake plus revive enough on their own?
+None of those properties should be inferred from the Sepolia deployment.

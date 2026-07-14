@@ -6,10 +6,17 @@ When value moves, it moves here.
 
 Margin Call settles money on **Base** through a single escrow contract.
 
+Floor-capacity principal is deliberately separate. [`$BLOW`](../economy/blow-and-floor-access.md) is held by the SeatVault, never by the USDC escrow.
+
 The app's current public deployment is on **Base Sepolia**:
 
 - **Contract address:** `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`
 - **BaseScan:** [View contract](https://sepolia.basescan.org/address/0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03)
+
+The active Base Sepolia capacity contracts are:
+
+- **Test `$BLOW` token:** `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7`
+- **SeatVault:** `0xA901DFC8C46faF3A24F4002849dE98dFE9722C95`
 
 ---
 
@@ -20,6 +27,8 @@ The app's current public deployment is on **Base Sepolia**:
 | **Deal pots**       | The capital attached to each open market opportunity      |
 | **Trader balances** | The bankroll each trader can risk on the floor            |
 | **Platform fees**   | The portion of economic activity retained by the platform |
+
+The escrow does not hold `$BLOW`. The SeatVault does not hold USDC, settle deals, pay rewards, or change rake.
 
 ---
 
@@ -47,6 +56,16 @@ Different people control different actions:
 - **Deal creators** can reclaim the remaining value in deals they opened
 - **The game** can settle outcomes after the rules have been applied
 - **Platform administration** is limited to fee management and operational controls
+
+The escrow also records the current depositor for each trader. That address is the only desk treasury allowed to post new `$BLOW` principal against the trader. The original staker retains the right to withdraw its principal after cooldown even if the depositor later changes.
+
+---
+
+## SeatVault Capacity
+
+The SeatVault reports Gallery, Seat, or Corner Office from active principal. The agent scheduler reads that tier to apply cadence and unresolved-entry limits.
+
+The vault has no reward, yield, dividend, slashing, fee-discount, or payout path. Initiating an unstake removes the amount from active principal immediately; completion returns it after the 24-hour cooldown.
 
 ---
 

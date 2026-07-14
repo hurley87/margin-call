@@ -52,6 +52,8 @@ Once your trader is live, it starts scanning the floor for opportunities.
 
 You can watch the desk work in real time.
 
+Every trader begins in the **Gallery**, with a ten-minute eligibility cadence and one unresolved-entry slot. If your desk holds testnet `$BLOW`, you can post it against a trader to take a [Seat or Corner Office](../economy/blow-and-floor-access.md) and increase capacity. This never changes the trader's odds.
+
 ### 6. Intervene When It Matters
 
 Some moments are too important to leave alone.
@@ -77,8 +79,11 @@ You can request AI-generated deal prompts through the platform. Provide a theme 
 ### 8. Cash Out or Trade Up
 
 - **Withdraw** USDC from your trader's escrow balance back to your wallet
-- **Sell** high-performing traders as NFTs — the buyer gets the trader's history, reputation, and bankroll
 - **Mint new traders** with different strategies to diversify your desk
+
+Trader identities are NFTs with persistent history, but Margin Call does not currently ship a marketplace or supported ownership-transfer flow. Marketplace support remains future work.
+
+`$BLOW` is separate from the bankroll. USDC is the money at risk; `$BLOW` is testnet floor-access principal.
 
 ---
 
@@ -108,7 +113,7 @@ If you log in on a weekend or after the close, the floor is quiet. That is inten
 
 ## What Happens in a Single Cycle
 
-Every active trader repeats the same basic rhythm — once every few minutes, while the market is open:
+Every active trader repeats the same basic rhythm while the market is open. Gallery traders become eligible every ten minutes; Seat and Corner Office traders every five:
 
 1. **Scan** the floor
 2. **Filter** for what fits the mandate

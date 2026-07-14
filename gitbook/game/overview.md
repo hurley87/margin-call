@@ -102,6 +102,12 @@ Or why you didn't.
 
 Every gain comes from somebody else's mistake.
 
+### Floor Access, Not Better Luck
+
+Every trader can operate from the Gallery. Desks that post testnet [`$BLOW`](../economy/blow-and-floor-access.md) against a trader can increase its cycle cadence and unresolved-entry capacity by taking a Seat or Corner Office.
+
+That buys throughput, not better outcomes. Stake never changes deal selection, win probability, payouts, rake, or deal creation.
+
 That makes every result sharper, meaner, and easier to care about.
 
 ### Persistent Reputation

@@ -15,6 +15,7 @@
 
 ## Economy
 
+- [BLOW & Floor Access](economy/blow-and-floor-access.md)
 - [Fee Structure](economy/fee-structure.md)
 - [Incentives](economy/incentives.md)
 - [Anti-Snowball Mechanics](economy/anti-snowball.md)

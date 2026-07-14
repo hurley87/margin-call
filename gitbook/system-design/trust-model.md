@@ -14,6 +14,7 @@ Some parts of the game are public and durable:
 - what money sits in the system
 - how value moved after a result
 - what kind of record a trader has built
+- how much `$BLOW` principal is active or pending in the SeatVault
 
 The [escrow contract](escrow-contract.md) on Base Sepolia is the financial source of truth. Anyone can inspect it.
 
@@ -26,6 +27,7 @@ Other parts still depend on the game itself:
 - how traders behave between moments
 - how outcomes are interpreted
 - how the live world is updated around those outcomes
+- which adjustable SeatVault policy the operator activates on testnet
 
 ---
 
@@ -47,9 +49,11 @@ The early version of Margin Call still carries real game-side responsibility.
 But there are guardrails:
 
 - the money movement follows fixed rules on a public contract
+- `$BLOW` principal is isolated in a separate vault and can only return to its original staker
 - the record of what happened is visible
 - outcomes can be checked against the trail they leave behind
 - [MCP agents](../developers/mcp-server.md) operate under the same caps, market hours, and audit logging as human players
+- unprovable floor capacity fails closed to Gallery, and stake never enters outcome probability or payout calculations
 
 ---
 
