@@ -30,15 +30,24 @@ Next.js re-exports these from [`src/lib/network/`](../src/lib/network/index.ts).
 
 If unset, addresses resolve from `base-sepolia.active.json`. If set to a different value, startup fails with an actionable error.
 
+## MarginCallToken reuse (#211)
+
+Gate [#211](https://github.com/hurley87/margin-call/issues/211) redeploys **escrow + SeatVault only** and **reuses** the existing Sepolia `MarginCallToken` unless documented compatibility evidence requires a new token:
+
+- Active token: `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7`
+- Before `pnpm deploy:seat-vault`, set `MARGINCALL_TOKEN` (and optionally `NEXT_PUBLIC_MARGINCALL_TOKEN`) to that address — do **not** run `pnpm deploy:margincall-token` on the happy path
+- On Gate 2 activation, keep `margincallToken` unchanged in `base-sepolia.active.json` / `activeDeployment.ts`
+
 ## Activation procedure
 
-Changing the active deployment requires human approval ([#211](https://github.com/hurley87/margin-call/issues/211)):
+Changing the active deployment requires human approval ([#211](https://github.com/hurley87/margin-call/issues/211)). Pre-deploy packet: [`docs/security/base-sepolia-deploy-packet-211.md`](./security/base-sepolia-deploy-packet-211.md).
 
-1. Deploy hardened contracts on Base Sepolia `84532` only.
-2. Append to history files under `contracts/deployments/` (`base-sepolia.escrows.json`, `base-sepolia.margincall-tokens.json`, `base-sepolia.seat-vaults.json`).
-3. Update `contracts/deployments/base-sepolia.active.json` and `convex/lib/activeDeployment.ts` together.
-4. Update Convex/Vercel env vars to match (or remove them to use canonical defaults).
-5. Sync `packages/mcp-server/base-plugin/margin-call.md` and run `pnpm test` (drift tests enforce alignment).
+1. Obtain Gate 1 approval, then deploy hardened escrow + SeatVault on Base Sepolia `84532` only (`pnpm deploy:escrow`, `pnpm deploy:seat-vault`).
+2. Append to history files under `contracts/deployments/` (`base-sepolia.escrows.json`, `base-sepolia.seat-vaults.json`; token history only if replacing the token).
+3. Source-verify with `pnpm verify:escrow` / `pnpm verify:seat-vault` (or `pnpm verify:contracts`).
+4. Obtain Gate 2 approval, then update `contracts/deployments/base-sepolia.active.json` and `convex/lib/activeDeployment.ts` together.
+5. Update Convex/Vercel env vars to match (or remove them to use canonical defaults).
+6. Sync `packages/mcp-server/base-plugin/margin-call.md` and run `pnpm test` (drift tests enforce alignment).
 
 ## Drift prevention
 

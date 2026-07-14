@@ -7,17 +7,17 @@ Severity is relative to **testnet funds and reputation**, but treat procedures a
 
 ## Severity guide
 
-| Level | Examples | Initial action |
-| ----- | -------- | -------------- |
-| Sev-1 | Active unauthorized settles; binder reassigning depositors; mass drain | Pause escrow (+ SeatVault if needed); remove bad roles |
-| Sev-2 | Stale RPC causing false confirms; pending-entry backlog; operator key exposure without observed abuse | Pause if uncertain; rotate; verify chain state |
-| Sev-3 | Dependency advisory; docs drift; monitoring gap | Ticket; no unnecessary pause |
+| Level | Examples                                                                                              | Initial action                                         |
+| ----- | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Sev-1 | Active unauthorized settles; binder reassigning depositors; mass drain                                | Pause escrow (+ SeatVault if needed); remove bad roles |
+| Sev-2 | Stale RPC causing false confirms; pending-entry backlog; operator key exposure without observed abuse | Pause if uncertain; rotate; verify chain state         |
+| Sev-3 | Dependency advisory; docs drift; monitoring gap                                                       | Ticket; no unnecessary pause                           |
 
 ## Immediate containment (Sev-1 / uncertain Sev-2)
 
 1. **Pause** escrow via pauser or owner: `pause()`.
 2. **Pause** SeatVault if stakes are at risk: `pause()`.
-3. **Disable** autonomous cycles (Convex cron / feature flag / withhold Gate 3 approval) so operators stop calling `enterDeal`.
+3. **Disable** autonomous cycles (`npx convex env set AGENT_CYCLES_ENABLED 0` — or unset; scheduler skips with `autonomy_disabled`) so operators stop calling `enterDeal`. Additionally pause/resume traders as needed.
 4. **Snapshot** evidence: block number, `eth_chainId`, role mappings, recent txs, Convex logs (see [evidence requirements](./evidence-requirements.md)).
 5. **Communicate** to maintainers on a private channel; no public issue with exploit detail.
 
@@ -61,16 +61,16 @@ Full matrix: [role-matrix.md](./role-matrix.md).
 
 ## Rollback
 
-| Action | Reversible? | Notes |
-| ------ | ----------- | ----- |
-| App / Convex code deploy | Yes | Redeploy prior revision |
-| Env var change | Yes (config) | Can break address fail-closed checks if mismatched |
-| Active pointer JSON | Yes (pointer) | On-chain state of old/new contracts remains |
-| Pause / unpause | Yes | Log who unpaused |
-| Settlement / binder membership | Yes | Additive history remains on-chain |
-| Ownership transfer (completed) | Difficult | Only via new transfer by current owner |
-| Individual `settleEntry` payout | **No** | Funds already moved; compensate only via new txs if policy allows |
-| Desk USDC spent with confirmation | **No** on-chain | Desk controls Base Account |
+| Action                            | Reversible?     | Notes                                                             |
+| --------------------------------- | --------------- | ----------------------------------------------------------------- |
+| App / Convex code deploy          | Yes             | Redeploy prior revision                                           |
+| Env var change                    | Yes (config)    | Can break address fail-closed checks if mismatched                |
+| Active pointer JSON               | Yes (pointer)   | On-chain state of old/new contracts remains                       |
+| Pause / unpause                   | Yes             | Log who unpaused                                                  |
+| Settlement / binder membership    | Yes             | Additive history remains on-chain                                 |
+| Ownership transfer (completed)    | Difficult       | Only via new transfer by current owner                            |
+| Individual `settleEntry` payout   | **No**          | Funds already moved; compensate only via new txs if policy allows |
+| Desk USDC spent with confirmation | **No** on-chain | Desk controls Base Account                                        |
 
 Freeze the **active pointer** and hosted config under incident lead approval rather than hastily “rolling forward” to an unaudited bytecode.
 

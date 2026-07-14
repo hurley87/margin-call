@@ -26,6 +26,28 @@ describe("agent scheduler cost controls", () => {
     restoreEnv();
   });
 
+  it("exits when AGENT_CYCLES_ENABLED is not 1 (Gate 3 autonomy off)", async () => {
+    vi.setSystemTime(new Date(MON_10_ET));
+    const previous = process.env.AGENT_CYCLES_ENABLED;
+    process.env.AGENT_CYCLES_ENABLED = "0";
+
+    try {
+      const t = convexTest(schema, modules);
+      const dmId = await seedDeskManager(t);
+      await seedActiveTrader(t, dmId, { lastCycleAt: undefined });
+
+      const result = await t.action(internal.agent.scheduler.scheduler, {});
+
+      expect(result).toMatchObject({
+        enqueued: 0,
+        skipped: "autonomy_disabled",
+      });
+    } finally {
+      if (previous === undefined) delete process.env.AGENT_CYCLES_ENABLED;
+      else process.env.AGENT_CYCLES_ENABLED = previous;
+    }
+  });
+
   it("exits off-hours before querying/enqueuing trader cycles", async () => {
     vi.setSystemTime(new Date(SAT_NOON_ET));
 

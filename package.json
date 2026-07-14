@@ -28,7 +28,10 @@
     "prepare": "husky",
     "deploy:escrow": "tsx scripts/deploy-escrow.ts",
     "deploy:margincall-token": "tsx scripts/deploy-margincall-token.ts",
-    "deploy:seat-vault": "tsx scripts/deploy-seat-vault.ts"
+    "deploy:seat-vault": "tsx scripts/deploy-seat-vault.ts",
+    "verify:escrow": "tsx scripts/verify-contracts.ts --target=escrow",
+    "verify:seat-vault": "tsx scripts/verify-contracts.ts --target=seat-vault",
+    "verify:contracts": "tsx scripts/verify-contracts.ts --target=all"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

@@ -8,28 +8,28 @@ This file defines what a reviewer or auditor should treat as in scope for the cu
 
 ## Review posture kinds (keep distinct)
 
-| Kind | What it proves | What it does not prove |
-| ---- | -------------- | ---------------------- |
-| Source review | Someone read code at a point in time | That HEAD is safe, or that on-chain code matches |
-| Vulnerability audit | A scoped engagement's findings against a fixed commit + deployment | Ongoing production safety after later commits |
-| Source verification | Bytecode at an address matches a build of reviewed source | Economic safety or off-chain key hygiene |
-| Deployment evidence | Who deployed what, when, with which roles and pins | That ops or IR were exercised |
+| Kind                | What it proves                                                     | What it does not prove                           |
+| ------------------- | ------------------------------------------------------------------ | ------------------------------------------------ |
+| Source review       | Someone read code at a point in time                               | That HEAD is safe, or that on-chain code matches |
+| Vulnerability audit | A scoped engagement's findings against a fixed commit + deployment | Ongoing production safety after later commits    |
+| Source verification | Bytecode at an address matches a build of reviewed source          | Economic safety or off-chain key hygiene         |
+| Deployment evidence | Who deployed what, when, with which roles and pins                 | That ops or IR were exercised                    |
 
 ## Immutable anchors (fill / refresh at each review)
 
 Update before citing this file as evidence for a review.
 
-| Field | Value |
-| ----- | ----- |
-| Reviewed git commit | `b36f504a443b5d68f0371474c98e3cce986a6482` (tip of `main` when this doc landed; **refresh for each engagement**) |
-| Active deployment pointer | [`contracts/deployments/base-sepolia.active.json`](../../contracts/deployments/base-sepolia.active.json) |
-| Chain ID | `84532` |
-| Active escrow | `0xa244550f0e35032E9c0b09DA4EB4933848d28d16` |
-| Active `MarginCallToken` (`$BLOW` test) | `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7` |
-| Active SeatVault | `0xa8595b279Aeadc8a0d2ce779Dc8Ba4d978eA2f44` |
-| Active pointer `deployedAt` | `2026-07-11T14:54:08.995Z` |
-| Sepolia USDC (canonical) | `0x036CbD53842c5426634e7929541eC2318f3dCF7e` |
-| Identity registry (canonical) | `0x8004A818BFB912233c491871b3d84c89A494BD9e` |
+| Field                                   | Value                                                                                                                 |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| Reviewed git commit                     | Refresh to the #211 activation commit after merge; tip at packet build was `5f52b9a97bf7c29c76d0622366d2a0a336625902` |
+| Active deployment pointer               | [`contracts/deployments/base-sepolia.active.json`](../../contracts/deployments/base-sepolia.active.json)              |
+| Chain ID                                | `84532`                                                                                                               |
+| Active escrow                           | `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`                                                                          |
+| Active `MarginCallToken` (`$BLOW` test) | `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7`                                                                          |
+| Active SeatVault                        | `0xA901DFC8C46faF3A24F4002849dE98dFE9722C95`                                                                          |
+| Active pointer `deployedAt`             | `2026-07-14T01:20:34.822Z`                                                                                            |
+| Sepolia USDC (canonical)                | `0x036CbD53842c5426634e7929541eC2318f3dCF7e`                                                                          |
+| Identity registry (canonical)           | `0x8004A818BFB912233c491871b3d84c89A494BD9e`                                                                          |
 
 History append-only lists (do not treat historical rows as active unless they match `base-sepolia.active.json`):
 

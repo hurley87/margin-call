@@ -9,7 +9,7 @@ import {
 } from "../../convex/mcp/simulate";
 
 const usdc = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
-const escrow = "0xa244550f0e35032E9c0b09DA4EB4933848d28d16" as const;
+const escrow = "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03" as const;
 const account = "0x000000000000000000000000000000000000beef" as const;
 const dest = "0x000000000000000000000000000000000000cafe" as const;
 

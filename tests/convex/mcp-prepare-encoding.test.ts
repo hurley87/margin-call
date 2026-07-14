@@ -40,7 +40,7 @@ describe("MCP prepare encoding (#207)", () => {
         chain: MCP_CHAIN,
         calls: [
           serializeCall({
-            to: "0xa244550f0e35032E9c0b09DA4EB4933848d28d16",
+            to: "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03",
             value: 0n,
             data: "0x1234",
           }),
@@ -56,7 +56,7 @@ describe("MCP prepare encoding (#207)", () => {
     });
     expect(Array.isArray(shaped.calls)).toBe(true);
     expect((shaped.calls as unknown[])[0]).toMatchObject({
-      to: "0xa244550f0e35032E9c0b09DA4EB4933848d28d16",
+      to: "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03",
       value: "0x0",
       data: "0x1234",
     });
@@ -75,7 +75,7 @@ describe("MCP prepare encoding (#207)", () => {
   });
 
   it("fund_trader calldata encodes approve + depositFor", () => {
-    const escrow = "0xa244550f0e35032E9c0b09DA4EB4933848d28d16" as const;
+    const escrow = "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03" as const;
     const usdc = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const;
     const amount = parseUnits("25", 6);
     const approveData = encodeFunctionData({
@@ -107,7 +107,7 @@ describe("MCP confirm → intent state (#207)", () => {
         chain: MCP_CHAIN,
         calls: [
           {
-            to: "0xa244550f0e35032E9c0b09DA4EB4933848d28d16",
+            to: "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03",
             value: "0x0",
             data: "0xdead",
           },

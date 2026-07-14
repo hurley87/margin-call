@@ -9,15 +9,16 @@ Owner: Margin Call maintainers. Review on Dependabot PRs and at least quarterly.
 
 ## Security documentation
 
-| Doc | Purpose |
-| --- | ------- |
-| [`../SECURITY.md`](../../SECURITY.md) | Vulnerability reporting and disclosure |
-| [`AUDIT_SCOPE.md`](./AUDIT_SCOPE.md) | Commit, contracts, exclusions, stale-review caveat |
-| [`threat-model.md`](./threat-model.md) | Trust assumptions and threat themes |
-| [`role-matrix.md`](./role-matrix.md) | Privileged roles, impact, rotation |
-| [`base-sepolia-operations.md`](./base-sepolia-operations.md) | Day-2 Base Sepolia runbook |
-| [`incident-response.md`](./incident-response.md) | Pause, rotate, refund, rollback, recovery |
-| [`evidence-requirements.md`](./evidence-requirements.md) | Deploy / verify / operate evidence checklist |
+| Doc                                                                        | Purpose                                            |
+| -------------------------------------------------------------------------- | -------------------------------------------------- |
+| [`../SECURITY.md`](../../SECURITY.md)                                      | Vulnerability reporting and disclosure             |
+| [`AUDIT_SCOPE.md`](./AUDIT_SCOPE.md)                                       | Commit, contracts, exclusions, stale-review caveat |
+| [`threat-model.md`](./threat-model.md)                                     | Trust assumptions and threat themes                |
+| [`role-matrix.md`](./role-matrix.md)                                       | Privileged roles, impact, rotation                 |
+| [`base-sepolia-operations.md`](./base-sepolia-operations.md)               | Day-2 Base Sepolia runbook                         |
+| [`incident-response.md`](./incident-response.md)                           | Pause, rotate, refund, rollback, recovery          |
+| [`evidence-requirements.md`](./evidence-requirements.md)                   | Deploy / verify / operate evidence checklist       |
+| [`base-sepolia-deploy-packet-211.md`](./base-sepolia-deploy-packet-211.md) | #211 Gate 1 pre-deploy approval packet             |
 
 | Advisory                                                                                                                                                                                                                     | Package                            | Severity | Reachability                                                                                                                                                      | Mitigation                                                                                                                              | Expiry     |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------- |

@@ -4,6 +4,8 @@
 > These steps are for another operator to run day-2 testnet operations with faucet/test funds.  
 > This document does **not** authorize deployment, env mutation, or enabling autonomous cycles — those require human approval under [#211](https://github.com/hurley87/margin-call/issues/211).
 
+Pre-deploy Gate 1 packet: [`base-sepolia-deploy-packet-211.md`](./base-sepolia-deploy-packet-211.md).
+
 Canonical config: [`docs/base-sepolia-configuration.md`](../base-sepolia-configuration.md).  
 Active contracts: [`contracts/deployments/base-sepolia.active.json`](../../contracts/deployments/base-sepolia.active.json).
 
@@ -15,7 +17,7 @@ Active contracts: [`contracts/deployments/base-sepolia.active.json`](../../contr
 - [ ] Optional address env vars unset **or** exact match to active JSON
 - [ ] Operator EOA is an on-chain `settlementOperators` entry and funded with Sepolia ETH for gas
 - [ ] Escrow / SeatVault `paused == false` unless intentionally halted
-- [ ] Autonomous agent cycles enabled only after explicit [#211](https://github.com/hurley87/margin-call/issues/211) Gate 3 approval
+- [x] Autonomous agent cycles enabled only after explicit [#211](https://github.com/hurley87/margin-call/issues/211) Gate 3 approval (`AGENT_CYCLES_ENABLED=1` on Convex)
 
 ## Read health
 
@@ -40,13 +42,13 @@ SeatVault path (capacity): stake → optional initiate unstake → wait cooldown
 
 ## Monitoring (minimum)
 
-| Signal | Action if bad |
-| ------ | ------------- |
-| Escrow or SeatVault `paused` unexpectedly | Investigate; do not unpause until root cause known ([IR](./incident-response.md)) |
-| Pending entries older than `entryTimeoutSeconds` | Refund expired entries; page operator |
-| RPC errors / chain ID mismatch | Fail closed; fix env; do not “try mainnet RPC” |
-| Operator wallet ETH low | Top up Sepolia ETH only |
-| Drift test / CI fail on addresses | Block activation; restore active JSON + TS mirror |
+| Signal                                           | Action if bad                                                                     |
+| ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| Escrow or SeatVault `paused` unexpectedly        | Investigate; do not unpause until root cause known ([IR](./incident-response.md)) |
+| Pending entries older than `entryTimeoutSeconds` | Refund expired entries; page operator                                             |
+| RPC errors / chain ID mismatch                   | Fail closed; fix env; do not “try mainnet RPC”                                    |
+| Operator wallet ETH low                          | Top up Sepolia ETH only                                                           |
+| Drift test / CI fail on addresses                | Block activation; restore active JSON + TS mirror                                 |
 
 ## Pause / unpause (operational)
 

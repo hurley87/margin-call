@@ -5,5 +5,18 @@
     "usdc": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
     "identityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
     "deployedAt": "2026-07-11T14:54:08.995Z"
+  },
+  {
+    "version": 2,
+    "address": "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03",
+    "usdc": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "identityRegistry": "0x8004A818BFB912233c491871b3d84c89A494BD9e",
+    "settlementOperator": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+    "depositorBinder": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+    "entryTimeoutSeconds": 3600,
+    "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+    "txHash": "0x8a78e6ab0b2c86e369adf47dd6a82966718cffc6752418c0fb4c139021691070",
+    "blockNumber": 44110841,
+    "deployedAt": "2026-07-14T00:46:13.370Z"
   }
 ]
