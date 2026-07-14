@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as admin_resetEscrowState from "../admin/resetEscrowState.js";
 import type * as agent__constants from "../agent/_constants.js";
 import type * as agent__ctx from "../agent/_ctx.js";
 import type * as agent__evaluator from "../agent/_evaluator.js";
@@ -126,6 +127,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "admin/resetEscrowState": typeof admin_resetEscrowState;
   "agent/_constants": typeof agent__constants;
   "agent/_ctx": typeof agent__ctx;
   "agent/_evaluator": typeof agent__evaluator;
