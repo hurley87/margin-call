@@ -5,6 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { PublicPortraitTraits } from "@/lib/portrait-traits";
+import type { SeatTierName } from "@/lib/contracts/seatVault";
 
 type TraderReadModel = Pick<
   Doc<"traders">,
@@ -32,6 +33,7 @@ type TraderReadModel = Pick<
   profileImageUrl: string;
   traits: PublicPortraitTraits | null;
   rarity: string;
+  effectiveTier: SeatTierName;
 };
 
 export type TraderStatus = "active" | "paused" | "wiped_out";
@@ -61,6 +63,8 @@ export interface Trader {
   last_cycle_at_ms: number | null;
   cycle_lease_until_ms: number | null;
   last_cycle_at: string | null;
+  /** SeatVault tier — drives cycle cadence (Seat/CornerOffice run faster). */
+  effective_tier: SeatTierName;
   created_at: string;
   updated_at: string;
 }
@@ -92,6 +96,7 @@ function mapTrader(doc: TraderReadModel, ownerAddress: string): Trader {
     last_cycle_at: doc.lastCycleAt
       ? new Date(doc.lastCycleAt).toISOString()
       : null,
+    effective_tier: doc.effectiveTier,
     created_at: new Date(doc.createdAt).toISOString(),
     updated_at: new Date(doc.updatedAt).toISOString(),
   };

@@ -3,6 +3,7 @@ import {
   DEFAULT_CYCLE_INTERVAL_MS,
   SPEED_TOKEN_CYCLE_INTERVAL_MS,
 } from "@/lib/constants";
+import { capacityForTier, type SeatTierName } from "@/lib/contracts/seatVault";
 
 /** Fields needed for cycle eligibility display (Convex trader doc subset). */
 export type TraderCycleDoc = Pick<
@@ -11,11 +12,18 @@ export type TraderCycleDoc = Pick<
 > & {
   /** Future: persisted flag when speed token applies (no contract reads). */
   speedTokenEligible?: boolean;
+  /** SeatVault tier — drives cadence (Seat/CornerOffice = faster than Gallery). */
+  effectiveTier?: SeatTierName;
 };
 
 export function resolveTraderCycleIntervalMs(trader: TraderCycleDoc): number {
   if (trader.speedTokenEligible === true) {
     return SPEED_TOKEN_CYCLE_INTERVAL_MS;
+  }
+  // Match the backend scheduler, which gates cycles on the on-chain seat tier's
+  // cadence (convex/agent/capacity.ts). Gallery falls back to the 10m default.
+  if (trader.effectiveTier) {
+    return capacityForTier(trader.effectiveTier).cycleIntervalMs;
   }
   return DEFAULT_CYCLE_INTERVAL_MS;
 }
@@ -206,6 +214,7 @@ export function traderCycleDocFromDeskSummary(summary: {
   last_cycle_at?: number;
   cycle_lease_until?: number;
   wallet_error?: string;
+  effective_tier?: SeatTierName;
 }): TraderCycleDoc {
   return {
     status: summary.status as TraderCycleDoc["status"],
@@ -213,6 +222,7 @@ export function traderCycleDocFromDeskSummary(summary: {
     lastCycleAt: summary.last_cycle_at,
     cycleLeaseUntil: summary.cycle_lease_until,
     walletError: summary.wallet_error,
+    effectiveTier: summary.effective_tier,
   };
 }
 
@@ -223,6 +233,7 @@ export function traderCycleDocFromDetailTrader(trader: {
   last_cycle_at_ms: number | null;
   cycle_lease_until_ms: number | null;
   wallet_error: string | null;
+  effective_tier?: SeatTierName;
 }): TraderCycleDoc {
   return {
     status: trader.status,
@@ -230,5 +241,6 @@ export function traderCycleDocFromDetailTrader(trader: {
     lastCycleAt: trader.last_cycle_at_ms ?? undefined,
     cycleLeaseUntil: trader.cycle_lease_until_ms ?? undefined,
     walletError: trader.wallet_error ?? undefined,
+    effectiveTier: trader.effective_tier,
   };
 }
