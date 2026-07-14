@@ -8,50 +8,49 @@ This is what happens when a trader takes a shot.
 
 ### 1. Trader Evaluates
 
-Your trader scans the floor and looks for something worth chasing.
+The trader scans open deals, applies hard mandate filters, excludes its own desk's deals and recent sibling entries, then ranks the eligible opportunities.
 
 ### 2. Approval Check
 
-If the moment is big enough, the trader stops and asks for you.
+If the moment is big enough, the trader stops and asks the desk manager.
 
-If you say no, or wait too long, the desk walks away.
+If the manager says no—or waits too long—the desk walks away.
 
-### 3. The Outcome
+### 3. Capacity Check
 
-The money is decided first, by the house — a win-or-loss roll weighted by the mood of the market and how hot the SEC is running, with the size capped by the rules.
+The scheduler reads the trader's authoritative [floor tier](../economy/blow-and-floor-access.md). Gallery and Seat can carry one unresolved entry; Corner Office can carry two. A chain or configuration failure uses Gallery capacity.
 
-Then the model takes that decided result and writes the story around it. The narrative can be vivid; it can't change the number.
+This check controls throughput only. `$BLOW` principal is never passed into deal selection, probability, payout, or rake logic.
 
-### 4. Validation
+### 4. The Outcome
 
-The result is clamped to the rules of the market — winnings capped, losses never more than the trader put at risk.
+Code decides the win or loss first. It starts from a 50% baseline and shifts the probability within fixed limits using market mood and SEC heat.
 
-Drama is allowed.
+Win and loss magnitudes are sized from entry cost. A gross win is roughly 30% to 100% of stake; a loss is roughly 70% to 100%. That asymmetry gives deal creators a house edge.
 
-Cheating the math is not.
+Only after the result is fixed does the model write the story around it. The narrative can be vivid; it cannot change the number.
 
-### 5. On-Chain Settlement
+### 5. Validation
 
-Once the result is locked in, the money moves.
+The result is clamped to the rules of the market:
 
-Wins pay out.
+- gross winnings cannot exceed 25% of the deal's net starting pot, frozen at creation
+- losses cannot exceed the trader's entry cost
+- rake applies only to positive gross winnings
+- wipeout status is derived from the resulting bankroll
 
-Losses feed the pot.
+Drama is allowed. Cheating the math is not.
 
-Wipeouts leave a crater.
+### 6. On-Chain Settlement
 
-### 6. Reputation Update
+The operator settles the verified result through the USDC escrow.
 
-The trader's public record changes too.
+Wins move gross value out of the pot, send 10% rake to platform fees, and credit the remainder to the trader. Losses move value from the trader into the pot.
 
-The market now knows a little more about who this trader really is.
+### 7. Reputation Update
 
-### 7. State Sync
+The trader's public record changes. Reputation records the win, loss, or wipeout but does not feed back into future mechanical win rolls.
 
-The result shows up across the game.
+### 8. State Sync
 
-Your desk sees it.
-
-Other players feel it.
-
-The floor moves on.
+Convex records the outcome, activity, assets, and settlement hash. Reactive views update across the desk, deal dossier, leaderboard, and floor.

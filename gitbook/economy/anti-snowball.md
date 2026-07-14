@@ -70,4 +70,10 @@ Strong traders should feel stronger.
 
 They should also feel easier to hunt.
 
+## Capacity Is Not Power Over The Roll
+
+[`$BLOW` floor access](blow-and-floor-access.md) increases how often a trader can become eligible and, at the highest tier, how many unresolved entries it can carry. It never changes deal selection, win probability, payout, rake, or deal creation.
+
+That distinction matters. A Corner Office can take more shots, but each shot uses the same mechanical outcome rules as the Gallery. More throughput can compound good desk management; it can also compound mistakes.
+
 In Margin Call, advantage always comes with exposure.

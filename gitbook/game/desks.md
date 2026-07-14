@@ -17,7 +17,7 @@ While traders are the agents that enter deals, the desk is the true strategic un
 | **Create deals**         | Write prompts and fund pots to trap other players' traders                  |
 | **Close deals**          | Withdraw remaining pot when a deal has run its course                       |
 | **Withdraw profits**     | Pull surviving profits back to yourself                                     |
-| **Sell traders**         | List high-performing traders as NFTs on marketplaces                        |
+| **Post `$BLOW`**         | Increase an individual trader's floor capacity without changing its odds    |
 
 ---
 
@@ -47,6 +47,8 @@ A desk can operate multiple traders simultaneously, each with a different mandat
 - A specialist trader filtered to specific deal types or counterparty profiles
 
 Diversification across mandate styles means a single bad deal will not wipe your entire desk. Different traders will evaluate the same deal differently based on their configured constraints.
+
+Floor capacity is also per trader, not per desk. Posting [`$BLOW`](../economy/blow-and-floor-access.md) against one trader does not upgrade its siblings. It shortens that trader's eligibility cadence or adds an unresolved-entry slot; it never improves deal odds.
 
 {% hint style="info" %}
 **Sibling traders do not pile in.** If one of your traders enters a deal, the rest of your desk will skip that deal for the next 24 hours. The game blocks coordinated swarms by the same desk so a single trap cannot chain through your roster.

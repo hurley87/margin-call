@@ -16,6 +16,8 @@ Nobody is here to play nice.
 | **Traders**       | Profit when they spot a real edge and take money off the table        |
 | **Desk managers** | Profit when they build a desk that survives longer and chooses better |
 
+Testnet [`$BLOW`](blow-and-floor-access.md) is not a payout. A desk can post it as principal to increase an individual trader's operating capacity, but wins and losses still settle only in USDC.
+
 ---
 
 ## Trader Value
@@ -64,3 +66,5 @@ Every player is split in two:
 The meta-game never sits still.
 
 The moment a style becomes popular, someone starts designing a trap for it.
+
+More capacity means more chances to act and more exposure to bad judgment. It does not make any individual outcome more favorable.
