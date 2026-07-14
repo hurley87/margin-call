@@ -47,7 +47,7 @@ describe("SeatVault immutable policy", () => {
     );
     expect(SEAT_VAULT_V1.unstakeCooldownSeconds).toBe(UNSTAKE_COOLDOWN_SECONDS);
     expect(SEAT_VAULT_V1.address).toBe(
-      "0xa8595b279Aeadc8a0d2ce779Dc8Ba4d978eA2f44"
+      "0xA901DFC8C46faF3A24F4002849dE98dFE9722C95"
     );
   });
 
@@ -101,11 +101,11 @@ describe("seatVaultEventDedupeKey", () => {
   it("normalizes vault address and encodes block + logIndex", () => {
     expect(
       seatVaultEventDedupeKey(
-        "0xA8595b279Aeadc8a0d2ce779Dc8Ba4d978eA2f44",
+        "0xA901DFC8C46faF3A24F4002849dE98dFE9722C95",
         12,
         3
       )
-    ).toBe("0xa8595b279aeadc8a0d2ce779dc8ba4d978ea2f44:12:3");
+    ).toBe("0xa901dfc8c46faf3a24f4002849de98dfe9722c95:12:3");
   });
 });
 

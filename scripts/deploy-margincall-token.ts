@@ -13,11 +13,13 @@ import {
   appendDeploymentRecord,
   loadEnvLocal,
   patchEnvLocal,
+  requireGate1Approval,
   runForgeDeploy,
 } from "./deploy-utils";
 
 function main() {
   const env = loadEnvLocal();
+  requireGate1Approval(env);
   const rpcUrl = env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL;
   const operatorKey = env.OPERATOR_PRIVATE_KEY;
   if (!rpcUrl) {

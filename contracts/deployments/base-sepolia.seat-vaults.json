@@ -8,5 +8,17 @@
     "cornerOfficeThreshold": "50000000000000000000000",
     "unstakeCooldown": "86400",
     "deployedAt": "2026-07-11T14:54:08.995Z"
+  },
+  {
+    "version": 2,
+    "address": "0xA901DFC8C46faF3A24F4002849dE98dFE9722C95",
+    "margincallToken": "0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7",
+    "escrow": "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03",
+    "seatThreshold": "10000000000000000000000",
+    "cornerOfficeThreshold": "50000000000000000000000",
+    "unstakeCooldown": "86400",
+    "txHash": "0x5bf64781a5712356271a561ec4c1ad0d33876a231e20ea567d0c1992a78a9a9b",
+    "blockNumber": 44111872,
+    "deployedAt": "2026-07-14T01:20:34.822Z"
   }
 ]

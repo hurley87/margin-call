@@ -4,14 +4,16 @@
 > Collect and retain the artifacts below so another reviewer can verify what was deployed, configured, and operated.  
 > Filling this checklist is **not** itself an approval to deploy — see [#211](https://github.com/hurley87/margin-call/issues/211).
 
+**Gate 1 pre-deploy packet:** [`base-sepolia-deploy-packet-211.md`](./base-sepolia-deploy-packet-211.md) (commit, bytecode hashes, roles, constructor args, smoke/rollback). Sign Gate 1 there before any `--broadcast`.
+
 Distinguish evidence kinds ([AUDIT_SCOPE.md](./AUDIT_SCOPE.md)):
 
-| Kind | Typical artifacts |
-| ---- | ----------------- |
-| Source review | Diff comments, commit SHA, reviewer identity, date |
-| Vulnerability audit | Engagement letter, fixed commit, findings PDF, remediation PR links |
+| Kind                | Typical artifacts                                                          |
+| ------------------- | -------------------------------------------------------------------------- |
+| Source review       | Diff comments, commit SHA, reviewer identity, date                         |
+| Vulnerability audit | Engagement letter, fixed commit, findings PDF, remediation PR links        |
 | Source verification | Explorer verification URL, matching solc/optimizer settings, bytecode hash |
-| Deployment evidence | Tx hashes, addresses, constructor args, role holders, block numbers |
+| Deployment evidence | Tx hashes, addresses, constructor args, role holders, block numbers        |
 
 ## Deploy
 

@@ -14,7 +14,20 @@ import { createSeatVaultPublicClient, readTierOf } from "../seatVault/rpc";
 
 export const MAX_CYCLES_PER_SCHEDULER_TICK = 5;
 
+/**
+ * Gate 3 (#211): autonomous enterDeal cycles require explicit enablement.
+ * Set `AGENT_CYCLES_ENABLED=1` in Convex (and local) after human approval.
+ * Any other value (including unset in deployed env) keeps the scheduler idle.
+ * Vitest sets this to `1` so unit tests exercise the enqueue path.
+ */
+export function isAgentCyclesEnabled(
+  env: NodeJS.ProcessEnv = process.env
+): boolean {
+  return env.AGENT_CYCLES_ENABLED === "1";
+}
+
 type SchedulerResult =
+  | { enqueued: number; skipped: "autonomy_disabled" }
   | { enqueued: number; skipped: "market_closed"; nextOpenAt?: number }
   | { enqueued: number; skipped: "no_eligible_traders" }
   | { enqueued: number; skipped: null };
@@ -47,6 +60,13 @@ function resolveTierReader(): TierOfReader {
 export const scheduler = internalAction({
   args: {},
   handler: async (ctx): Promise<SchedulerResult> => {
+    if (!isAgentCyclesEnabled()) {
+      console.log(
+        "[scheduler] skipped: AGENT_CYCLES_ENABLED is not 1 (Gate 3 autonomy off)"
+      );
+      return { enqueued: 0, skipped: "autonomy_disabled" as const };
+    }
+
     const marketState = getTradingHoursState();
     if (!marketState.isOpen) {
       return {

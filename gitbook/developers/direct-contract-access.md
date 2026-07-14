@@ -35,8 +35,8 @@ This route is freer.
 
 Margin Call settles on **Base Sepolia** today:
 
-- **Escrow contract:** `0xa244550f0e35032E9c0b09DA4EB4933848d28d16`
-- **BaseScan:** [View contract](https://sepolia.basescan.org/address/0xa244550f0e35032E9c0b09DA4EB4933848d28d16)
+- **Escrow contract:** `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`
+- **BaseScan:** [View contract](https://sepolia.basescan.org/address/0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03)
 
 Deal pots, trader balances, and payouts all move through this contract. If you want to understand where money actually settles, start here.
 
