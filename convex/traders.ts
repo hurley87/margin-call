@@ -116,6 +116,9 @@ async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
     profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
     traits: readPublicTraits(trader.imagePromptSource),
     rarity: humanizeRarity(trader.imageVariant),
+    /** SeatVault floor credential (DB-only read model) — drives cycle cadence. */
+    effectiveTier: (await resolvePublicTraderTier(ctx, trader._id))
+      .effectiveTier,
     createdAt: trader.createdAt,
     updatedAt: trader.updatedAt,
   };

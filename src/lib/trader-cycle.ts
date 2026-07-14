@@ -233,6 +233,7 @@ export function traderCycleDocFromDetailTrader(trader: {
   last_cycle_at_ms: number | null;
   cycle_lease_until_ms: number | null;
   wallet_error: string | null;
+  effective_tier?: SeatTierName;
 }): TraderCycleDoc {
   return {
     status: trader.status,
@@ -240,5 +241,6 @@ export function traderCycleDocFromDetailTrader(trader: {
     lastCycleAt: trader.last_cycle_at_ms ?? undefined,
     cycleLeaseUntil: trader.cycle_lease_until_ms ?? undefined,
     walletError: trader.wallet_error ?? undefined,
+    effectiveTier: trader.effective_tier,
   };
 }
