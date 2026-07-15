@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
+import { internal } from "../_generated/api";
 import { isOwnDeskCreatedDeal } from "../lib/dealEntryEligibility";
 import { dealCreationCapFields } from "../lib/extractionCap";
 
@@ -128,6 +129,10 @@ export const recordOnChainCreationForMcp = internalMutation({
       entryCount: 0,
       createdAt: now,
       updatedAt: now,
+    });
+
+    await ctx.scheduler.runAfter(0, internal.wire.dealTweet.postDealCreated, {
+      dealId: newId,
     });
 
     return {

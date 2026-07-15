@@ -21,8 +21,17 @@ import { createHmac, randomBytes } from "crypto";
 
 export interface TweetRequest {
   text: string;
-  epoch: number;
+  /** Wire epoch slot — used for dry-run / error logs. */
+  epoch?: number;
+  /** Alternate log label when not a wire epoch (e.g. `deal:<id>`). */
+  context?: string;
   subjectHandle?: string | null;
+}
+
+function tweetLogLabel(req: TweetRequest): string {
+  if (req.context) return req.context;
+  if (req.epoch != null) return `epoch ${req.epoch}`;
+  return "unknown";
 }
 
 export interface TweetResult {
@@ -39,7 +48,7 @@ export interface TweetPoster {
 export class DryRunTweetPoster implements TweetPoster {
   async post(req: TweetRequest): Promise<TweetResult> {
     console.log(
-      `[wire/tweet] DRY RUN (epoch ${req.epoch}, ${req.text.length} chars): ${req.text}`
+      `[wire/tweet] DRY RUN (${tweetLogLabel(req)}, ${req.text.length} chars): ${req.text}`
     );
     return { status: "dry_run" };
   }
@@ -151,18 +160,18 @@ export class LiveTweetPoster implements TweetPoster {
         const err =
           `HTTP ${res.status} ${body.title ?? ""} ${body.detail ?? ""}`.trim();
         console.error(
-          `[wire/tweet] live post failed (epoch ${req.epoch}): ${err}`
+          `[wire/tweet] live post failed (${tweetLogLabel(req)}): ${err}`
         );
         return { status: "failed", error: err };
       }
       console.log(
-        `[wire/tweet] posted (epoch ${req.epoch}) id=${body.data?.id ?? "?"}`
+        `[wire/tweet] posted (${tweetLogLabel(req)}) id=${body.data?.id ?? "?"}`
       );
       return { status: "posted", id: body.data?.id };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(
-        `[wire/tweet] live post error (epoch ${req.epoch}): ${msg}`
+        `[wire/tweet] live post error (${tweetLogLabel(req)}): ${msg}`
       );
       return { status: "failed", error: msg };
     }

@@ -101,6 +101,9 @@ export const TOKEN_REGISTRY: TokenEntry[] = loadRegistry();
 const BY_ADDRESS = new Map(TOKEN_REGISTRY.map((t) => [t.addressLc, t]));
 const BY_SYMBOL = new Map(TOKEN_REGISTRY.map((t) => [t.symbol, t]));
 const BY_SLUG = new Map(TOKEN_REGISTRY.map((t) => [t.slug, t]));
+const BY_HANDLE = new Map(
+  TOKEN_REGISTRY.map((t) => [t.xHandle.toLowerCase(), t])
+);
 
 export function tokenByAddress(address: string): TokenEntry | undefined {
   return BY_ADDRESS.get(address.toLowerCase());
@@ -112,6 +115,14 @@ export function tokenBySymbol(symbol: string): TokenEntry | undefined {
 
 export function tokenBySlug(slug: string): TokenEntry | undefined {
   return BY_SLUG.get(slug.toLowerCase());
+}
+
+/** Lookup by `@handle` (case-insensitive). Accepts with or without leading `@`. */
+export function tokenByHandle(handle: string): TokenEntry | undefined {
+  const normalized = handle.trim().startsWith("@")
+    ? handle.trim().toLowerCase()
+    : `@${handle.trim().toLowerCase()}`;
+  return BY_HANDLE.get(normalized);
 }
 
 export function houseToken(): TokenEntry | undefined {

@@ -205,6 +205,10 @@ export const recordOnChainCreationVerified = internalMutation({
       });
     }
 
+    await ctx.scheduler.runAfter(0, internal.wire.dealTweet.postDealCreated, {
+      dealId,
+    });
+
     return dealId;
   },
 });
