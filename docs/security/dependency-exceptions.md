@@ -1,9 +1,12 @@
 # Dependency advisory exceptions
 
-Production `pnpm audit --prod --audit-level=high` must remain clean (exit 0).
-This file documents **non-production** high/critical findings that remain after
-overrides, so full-tree `pnpm audit --audit-level=high` can be reviewed without
-blocking release of app dependencies we do not ship.
+Production `pnpm audit --prod --audit-level=high` should remain clean (exit 0)
+when the audit client works. **CI gates are suspended** while npm's legacy
+`/-/npm/v1/security/audits` endpoint returns 410 (retired); local
+`pnpm audit:*` scripts may fail the same way until pnpm uses the bulk advisory
+API. This file documents **non-production** high/critical findings that remain
+after overrides, so full-tree audit can be reviewed without blocking release of
+app dependencies we do not ship.
 
 Owner: Margin Call maintainers. Review on Dependabot PRs and at least quarterly.
 

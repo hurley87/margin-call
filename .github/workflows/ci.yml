@@ -57,52 +57,9 @@ jobs:
       - name: Run unit / Convex tests
         run: pnpm test
 
-  audit-prod:
-    name: Production dependency audit
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.0.0
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: ".nvmrc"
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Audit production dependencies (high+)
-        run: pnpm audit:prod
-
-  audit-all:
-    name: Full dependency audit (gated)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.0.0
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: ".nvmrc"
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      # Raw report for humans; gated script fails on undocumented high/critical.
-      - name: Full audit report
-        continue-on-error: true
-        run: pnpm audit:all
-
-      - name: Gate undocumented high/critical
-        run: pnpm audit:all:gated
+  # pnpm audit jobs removed: npm retired `/-/npm/v1/security/audits` (HTTP 410).
+  # Re-enable when pnpm supports the bulk advisory endpoint (or pin a working client).
+  # Local scripts remain: `pnpm audit:prod` / `pnpm audit:all:gated`.
 
   contracts:
     name: Foundry (format, build, unit, fuzz, invariant)
@@ -175,7 +132,7 @@ jobs:
   # the deployment never had it. Runs only after checks pass.
   deploy-convex:
     name: Deploy Convex functions
-    needs: [checks, vitest, audit-prod, audit-all, contracts, contracts-static]
+    needs: [checks, vitest, contracts, contracts-static]
     # Only on merge to main, and only when a deploy key is actually configured.
     # Without the secret `npx convex deploy` errors ("No CONVEX_DEPLOYMENT set"),
     # so the job is gated on it rather than painting every main commit red.
