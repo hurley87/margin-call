@@ -187,6 +187,10 @@ export default defineSchema({
     onChainDealId: v.optional(v.number()),
     onChainTxHash: v.optional(v.string()),
     sourceHeadline: v.optional(v.string()),
+    // X marketing variant for deal-created posts (mirrors marketNarratives).
+    tweetVariant: v.optional(v.string()),
+    // "dry_run" | "posted" | "skipped" | "failed"
+    tweetStatus: v.optional(v.string()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
