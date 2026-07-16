@@ -50,7 +50,6 @@ import { FloorCredential } from "@/components/seat-tier-badge";
 import { SeatUpgradeDialog } from "@/components/seat-upgrade-dialog";
 import { IntroSequence } from "@/components/intro-sequence";
 import { LandingScreen } from "@/components/landing/landing-screen";
-import { MarketStatusStrip } from "@/components/desk/market-status-strip";
 import { MobileMarketPulse } from "@/components/desk/mobile-market-pulse";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
@@ -84,7 +83,6 @@ import {
   type LeaderboardTrader,
 } from "@/hooks/use-leaderboard";
 import { useSfx } from "@/hooks/use-sfx";
-import { useMarketPulse } from "@/hooks/use-market-pulse";
 import {
   usePortfolio,
   type Portfolio,
@@ -111,7 +109,6 @@ import {
 import { AnimatedNumber } from "@/components/animated-number";
 import { SkeletonRows } from "@/components/ui/skeleton-line";
 import { PanelHeader } from "@/components/ui/desk-panel";
-import { StatusChip } from "@/components/ui/status-chip";
 import { TickerTape } from "@/components/ticker-tape";
 import { staggerDelay } from "@/lib/motion-tokens";
 import {
@@ -399,7 +396,6 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         dealsLoading={myDealsLoading}
         approvalsCount={pendingApprovals.length}
       />
-      <MarketStatusStrip />
 
       <main className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden px-2 pb-2 lg:grid lg:min-h-0 lg:max-w-[112rem] lg:grid-cols-[20rem_minmax(28rem,1fr)_24rem] lg:pb-3 xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem]">
         <div
@@ -1254,7 +1250,6 @@ function NewswirePanel({
   onOpenDeal: (dealId: string) => void;
   onOpenTrader: (traderId: string) => void;
 }) {
-  const pulse = useMarketPulse();
   const [dealDialog, setDealDialog] = useState<NewswireCreateDialog | null>(
     null
   );
@@ -1331,25 +1326,15 @@ function NewswirePanel({
           canShowOpenDealsList ? () => setOpenDealsListOpen(true) : undefined
         }
         action={
-          <div className="flex items-center gap-1.5">
-            {!pulse.isLoading ? (
-              <StatusChip
-                tone={pulse.heatTone}
-                className="hidden sm:inline-flex"
-              >
-                SEC {pulse.heatLabel}
-              </StatusChip>
-            ) : null}
-            <button
-              type="button"
-              onClick={() => setHelpOpen(true)}
-              title="How deals work"
-              aria-label="How deals work"
-              className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none"
-            >
-              <HelpCircle className="h-3.5 w-3.5" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setHelpOpen(true)}
+            title="How deals work"
+            aria-label="How deals work"
+            className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none"
+          >
+            <HelpCircle className="h-3.5 w-3.5" />
+          </button>
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">

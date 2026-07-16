@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import Image from "next/image";
 import Link from "next/link";
 
 import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
@@ -96,12 +95,7 @@ export function LandingScreen({ onLogin }: { onLogin: () => void }) {
         onLogin={onLogin}
         marketOpen={marketHours.isOpen}
         countdownLabel={marketHours.countdownLabel}
-        moodLabel={pulse.moodLabel}
-        moodTone={pulse.moodTone}
-        heatLabel={pulse.heatLabel}
-        heatTone={pulse.heatTone}
         headline={pulse.headline}
-        isPulseLoading={pulse.isLoading}
       />
 
       <section className="relative border-t border-[var(--t-bronze)] px-5 py-14 sm:px-8">
@@ -250,7 +244,7 @@ export function LandingScreen({ onLogin }: { onLogin: () => void }) {
               <h3 className="mt-4 font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase leading-tight tracking-wide text-[var(--t-amber)] sm:text-2xl">
                 {pulse.headline}
               </h3>
-              <p className="mt-3 max-w-2xl text-sm leading-6 text-[var(--t-muted)]">
+              <p className="mt-3 truncate text-sm leading-6 text-[var(--t-muted)] whitespace-nowrap">
                 Desk managers turn wire pressure into deals. Rival agents walk
                 in. Someone pays the room.
               </p>
@@ -286,64 +280,45 @@ function LandingHero({
   onLogin,
   marketOpen,
   countdownLabel,
-  moodLabel,
-  moodTone: moodToneValue,
-  heatLabel,
-  heatTone: heatToneValue,
   headline,
-  isPulseLoading,
 }: {
   onLogin: () => void;
   marketOpen: boolean;
   countdownLabel: string;
-  moodLabel: string;
-  moodTone: "live" | "accent" | "warn" | "danger" | "neutral";
-  heatLabel: string;
-  heatTone: "live" | "accent" | "warn" | "danger" | "neutral";
   headline: string | null;
-  isPulseLoading: boolean;
 }) {
   return (
-    <section className="relative isolate min-h-[calc(100svh)] overflow-hidden">
-      <Image
-        src="/banner.png"
-        alt=""
-        fill
-        priority
-        sizes="100vw"
-        className="object-cover object-[58%_42%] sm:object-[62%_40%]"
+    <section className="relative isolate min-h-[100svh] overflow-hidden bg-[#050706]">
+      {/* CRT terminal plane — no photo; phosphor + scanlines carry the floor */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-[radial-gradient(ellipse_120%_80%_at_12%_88%,rgba(214,166,96,0.18),transparent_46%),radial-gradient(ellipse_70%_55%_at_88%_18%,rgba(101,160,94,0.12),transparent_50%),linear-gradient(180deg,#040605_0%,#070b09_52%,#050706_100%)]"
       />
       <div
         aria-hidden
-        className="absolute inset-0 bg-[linear-gradient(105deg,rgba(5,7,10,0.94)_0%,rgba(5,7,10,0.82)_38%,rgba(5,7,10,0.45)_62%,rgba(5,7,10,0.72)_100%)]"
+        className="pointer-events-none absolute inset-0 crt-line-grid opacity-[0.14]"
       />
       <div
         aria-hidden
-        className="absolute inset-0 bg-[radial-gradient(circle_at_20%_80%,rgba(214,166,96,0.14),transparent_42%)]"
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_35%,rgba(0,0,0,0.72)_100%)]"
       />
-      <div
+      <p
         aria-hidden
-        className="pointer-events-none absolute inset-0 crt-line-grid opacity-[0.12]"
-      />
+        className="pointer-events-none absolute -right-6 top-1/2 hidden -translate-y-1/2 select-none font-[family-name:var(--font-plex-sans)] text-[clamp(8rem,28vw,18rem)] font-black uppercase leading-none tracking-tighter text-[var(--t-accent)]/[0.06] sm:block"
+      >
+        $BLOW
+      </p>
 
-      <div className="relative z-10 flex min-h-[calc(100svh)] flex-col">
-        <div className="flex flex-wrap items-center justify-between gap-3 px-5 pt-5 sm:px-8 sm:pt-6">
+      <div className="relative z-10 flex min-h-[100svh] flex-col">
+        <div className="flex items-center px-5 pt-5 sm:px-8 sm:pt-6">
           <StatusChip tone={marketOpen ? "live" : "warn"} pulse={marketOpen}>
             {marketOpen
               ? `NYSE open · ${countdownLabel}`
               : `NYSE closed · ${countdownLabel}`}
           </StatusChip>
-          <div className="flex flex-wrap items-center gap-2">
-            {!isPulseLoading ? (
-              <>
-                <StatusChip tone={moodToneValue}>Mood {moodLabel}</StatusChip>
-                <StatusChip tone={heatToneValue}>SEC {heatLabel}</StatusChip>
-              </>
-            ) : null}
-          </div>
         </div>
 
-        <div className="mc-crt-reveal flex flex-1 flex-col justify-end px-5 pb-10 pt-16 sm:px-8 sm:pb-14 md:max-w-[38rem] lg:max-w-[42rem]">
+        <div className="mc-crt-reveal flex flex-1 flex-col justify-center px-5 pb-16 pt-10 sm:px-8 sm:pb-20 md:max-w-[40rem] lg:max-w-[44rem]">
           <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-[var(--t-green)]">
             Desk_OS 1987 // private wire
           </p>
