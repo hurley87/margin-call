@@ -39,13 +39,6 @@ vi.mock("@/hooks/use-market-hours", () => ({
   }),
 }));
 
-vi.mock("next/image", () => ({
-  default: (props: { alt?: string; src?: string }) => (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img alt={props.alt ?? ""} src={props.src} />
-  ),
-}));
-
 vi.mock("@/components/connect-mcp-dialog", () => ({
   ConnectMcpDialog: () => <button type="button">Connect via MCP</button>,
 }));
@@ -63,7 +56,9 @@ describe("LandingScreen", () => {
     expect(html).toContain("Vic Sterling");
     expect(html).toContain("Hire. Fund. Bait. Collect.");
     expect(html).toContain("Junk desks scramble");
-    expect(html).toContain("banner.png");
-    expect(html).toContain("SEC Elevated");
+    expect(html).toContain("NYSE open");
+    expect(html).not.toContain("banner.png");
+    expect(html).not.toContain("SEC Elevated");
+    expect(html).not.toContain("SEC Critical");
   });
 });
