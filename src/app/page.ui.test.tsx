@@ -60,6 +60,7 @@ describe("HowDealsWorkBrief", () => {
     expect(html).toContain("Desk brief");
     expect(html).toContain("How Deals Work");
     expect(html).toContain("Pick a wire");
+    expect(html).toContain("market mood + SEC heat");
     expect(html).toContain("Deal economics");
     expect(html).toContain("Sizing tactics");
     expect(html).toContain("Rule of thumb");

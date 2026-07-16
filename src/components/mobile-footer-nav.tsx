@@ -31,7 +31,7 @@ export function MobileFooterNav({
   return (
     <nav
       aria-label="Main navigation"
-      className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--t-bronze)] bg-[#050706]/98 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm xl:hidden"
+      className="fixed inset-x-0 bottom-0 z-50 border-t border-[var(--t-bronze)] bg-[#050706]/98 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm lg:hidden"
     >
       <div className="mx-auto grid h-16 max-w-lg grid-cols-4">
         {TABS.map(({ id, label, icon: Icon }) => {

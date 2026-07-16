@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Volume2, VolumeX } from "lucide-react";
 
+import { GameButton } from "@/components/ui/game-button";
 import { useSfx } from "@/hooks/use-sfx";
 import { cn } from "@/lib/utils";
 
@@ -55,7 +56,6 @@ export function IntroSequence({
   onComplete: (triggerLogin: boolean) => void;
 }) {
   const [screen, setScreen] = useState<Screen>(0);
-  const [checks, setChecks] = useState<boolean[]>(() => RULES.map(() => false));
   const [muted, setMuted] = useState(false);
   const [musicStarted, setMusicStarted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -95,17 +95,6 @@ export function IntroSequence({
     }
   }
 
-  function toggleCheck(index: number) {
-    setChecks((current) => {
-      const next = [...current];
-      next[index] = !next[index];
-      return next;
-    });
-    sfx.playApprovalPing();
-  }
-
-  const allChecked = useMemo(() => checks.every(Boolean), [checks]);
-
   function finish(triggerLogin: boolean) {
     if (typeof window !== "undefined") {
       localStorage.setItem("mc-intro-seen", "true");
@@ -123,7 +112,7 @@ export function IntroSequence({
         <button
           type="button"
           onClick={() => finish(false)}
-          className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-accent)]"
+          className="text-[11px] font-bold uppercase tracking-[0.22em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-accent)] focus-visible:text-[var(--t-accent)] focus-visible:outline-none"
         >
           [ SKIP INTRO ]
         </button>
@@ -132,7 +121,7 @@ export function IntroSequence({
           onClick={toggleMute}
           aria-label={muted ? "Unmute music" : "Mute music"}
           title={muted ? "Unmute music" : "Mute music"}
-          className="grid h-9 w-9 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-text)]"
+          className="grid h-9 w-9 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:bg-[var(--t-accent-soft)] hover:text-[var(--t-text)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none"
         >
           {muted ? (
             <VolumeX className="h-4 w-4" />
@@ -142,22 +131,15 @@ export function IntroSequence({
         </button>
       </header>
 
-      <main className="flex flex-1 items-center justify-center px-5 py-8 sm:px-8">
+      <main className="flex flex-1 items-center justify-center overflow-y-auto px-5 py-8 sm:px-8">
         <div className="mx-auto w-full max-w-3xl">
           {screen === 0 && <SceneSet onAdvance={advance} />}
           {screen === 1 && <HowItWorks onAdvance={advance} />}
-          {screen === 2 && (
-            <RulesAndAgree
-              checks={checks}
-              onToggle={toggleCheck}
-              allChecked={allChecked}
-              onAgree={() => finish(true)}
-            />
-          )}
+          {screen === 2 && <RulesAndAgree onContinue={() => finish(false)} />}
         </div>
       </main>
 
-      <footer className="flex items-center justify-center gap-2 px-4 pb-6 text-[10px] uppercase tracking-[0.22em] text-[var(--t-muted)] sm:pb-8">
+      <footer className="flex items-center justify-center gap-2 px-4 pb-6 text-[11px] uppercase tracking-[0.22em] text-[var(--t-muted)] sm:pb-8">
         {[0, 1, 2].map((i) => (
           <span
             key={i}
@@ -174,36 +156,10 @@ export function IntroSequence({
   );
 }
 
-function PrimaryButton({
-  onClick,
-  disabled,
-  children,
-}: {
-  onClick: () => void;
-  disabled?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "group inline-flex min-h-12 items-center gap-2 border bg-[var(--t-panel-strong)] px-6 py-3 font-mono text-sm font-black uppercase tracking-[0.18em] transition-colors focus:outline-none",
-        disabled
-          ? "cursor-not-allowed border-[var(--t-divider)] text-[var(--t-muted)] opacity-60"
-          : "border-[var(--t-accent)] text-[var(--t-accent)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] focus:bg-[var(--t-accent)] focus:text-[var(--t-bg)]"
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
 function SceneSet({ onAdvance }: { onAdvance: () => void }) {
   return (
     <div className="mc-crt-reveal flex flex-col gap-6 sm:gap-8">
-      <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--t-green)]">
+      <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[var(--t-green)]">
         New York · October 1987 · 04:58 ET
       </p>
       <h1 className="font-[family-name:var(--font-plex-sans)] text-5xl font-black uppercase leading-[0.95] tracking-tight text-[var(--t-accent)] sm:text-7xl">
@@ -227,12 +183,12 @@ function SceneSet({ onAdvance }: { onAdvance: () => void }) {
         </p>
       </div>
       <div className="pt-4">
-        <PrimaryButton onClick={onAdvance}>
+        <GameButton onClick={onAdvance} size="lg">
           {">"} Step onto the floor
           <span className="cursor-blink">█</span>
-        </PrimaryButton>
-        <p className="mt-3 text-[10px] uppercase tracking-[0.22em] text-[var(--t-muted)]">
-          Audio starts on click. Click the speaker icon to mute.
+        </GameButton>
+        <p className="mt-3 text-[11px] uppercase tracking-[0.22em] text-[var(--t-muted)]">
+          Audio starts on click. Mute anytime from the speaker icon.
         </p>
       </div>
     </div>
@@ -243,7 +199,7 @@ function HowItWorks({ onAdvance }: { onAdvance: () => void }) {
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <div className="flex flex-col gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--t-green)]">
+        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[var(--t-green)]">
           The game · how your desk earns
         </p>
         <h2 className="font-[family-name:var(--font-plex-sans)] text-4xl font-black uppercase leading-tight tracking-tight text-[var(--t-accent)] sm:text-5xl">
@@ -267,92 +223,48 @@ function HowItWorks({ onAdvance }: { onAdvance: () => void }) {
         ))}
       </ol>
       <div className="pt-2">
-        <PrimaryButton onClick={onAdvance}>
+        <GameButton onClick={onAdvance} size="lg">
           {">"} Show me the rules
           <span className="cursor-blink">█</span>
-        </PrimaryButton>
+        </GameButton>
       </div>
     </div>
   );
 }
 
-function RulesAndAgree({
-  checks,
-  onToggle,
-  allChecked,
-  onAgree,
-}: {
-  checks: boolean[];
-  onToggle: (index: number) => void;
-  allChecked: boolean;
-  onAgree: () => void;
-}) {
+function RulesAndAgree({ onContinue }: { onContinue: () => void }) {
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <div className="flex flex-col gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.32em] text-[var(--t-amber)]">
-          The fine print · check every box
+        <p className="text-[11px] font-bold uppercase tracking-[0.32em] text-[var(--t-amber)]">
+          The fine print · read it once
         </p>
         <h2 className="font-[family-name:var(--font-plex-sans)] text-4xl font-black uppercase leading-tight tracking-tight text-[var(--t-accent)] sm:text-5xl">
           Sign on the dotted line.
         </h2>
       </div>
       <ul className="space-y-3">
-        {RULES.map((rule, i) => {
-          const checked = checks[i];
-          return (
-            <li key={rule.title}>
-              <button
-                type="button"
-                onClick={() => onToggle(i)}
-                aria-pressed={checked}
-                className={cn(
-                  "group flex w-full items-start gap-4 border px-4 py-3 text-left transition-colors focus:outline-none",
-                  checked
-                    ? "border-[var(--t-green)] bg-[var(--t-green)]/[0.06]"
-                    : "border-[var(--t-divider)] bg-[var(--t-panel-strong)] hover:border-[var(--t-accent)]"
-                )}
-              >
-                <span
-                  className={cn(
-                    "mt-0.5 grid h-6 w-6 shrink-0 place-items-center border font-mono text-xs font-black",
-                    checked
-                      ? "border-[var(--t-green)] bg-[var(--t-green)] text-[var(--t-bg)]"
-                      : "border-[var(--t-divider)] text-[var(--t-muted)] group-hover:border-[var(--t-accent)] group-hover:text-[var(--t-accent)]"
-                  )}
-                  aria-hidden
-                >
-                  {checked ? "✓" : ""}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span
-                    className={cn(
-                      "block font-[family-name:var(--font-plex-sans)] text-base font-black uppercase tracking-wide",
-                      checked
-                        ? "text-[var(--t-green)]"
-                        : "text-[var(--t-accent)]"
-                    )}
-                  >
-                    {rule.title}
-                  </span>
-                  <span className="mt-1 block text-sm leading-6 text-[var(--t-text)]/90">
-                    {rule.body}
-                  </span>
-                </span>
-              </button>
-            </li>
-          );
-        })}
+        {RULES.map((rule) => (
+          <li
+            key={rule.title}
+            className="border border-[var(--t-divider)] bg-[var(--t-panel-strong)] px-4 py-3"
+          >
+            <p className="font-[family-name:var(--font-plex-sans)] text-base font-black uppercase tracking-wide text-[var(--t-accent)]">
+              {rule.title}
+            </p>
+            <p className="mt-1 text-sm leading-6 text-[var(--t-text)]/90">
+              {rule.body}
+            </p>
+          </li>
+        ))}
       </ul>
       <div className="pt-2">
-        <PrimaryButton onClick={onAgree} disabled={!allChecked}>
-          {">"} I&apos;m in
+        <GameButton onClick={onContinue} size="lg">
+          {">"} I&apos;m in — show me the floor
           <span className="cursor-blink">█</span>
-        </PrimaryButton>
-        <p className="mt-3 text-[10px] uppercase tracking-[0.22em] text-[var(--t-muted)]">
-          {allChecked
-            ? "Email OTP on the next screen. Welcome to the desk."
-            : "Acknowledge every rule to continue."}
+        </GameButton>
+        <p className="mt-3 text-[11px] uppercase tracking-[0.22em] text-[var(--t-muted)]">
+          Next: live roster and enter by email when you&apos;re ready.
         </p>
       </div>
     </div>

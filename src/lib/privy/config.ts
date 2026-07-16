@@ -20,7 +20,7 @@ export const privyConfig: PrivyClientConfig = {
   loginMethods: ["email"],
   appearance: {
     theme: "dark",
-    accentColor: "#22c55e",
+    accentColor: "#d6a660",
   },
   embeddedWallets: {
     ethereum: {
