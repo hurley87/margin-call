@@ -45,12 +45,13 @@ import {
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
-import { pickFunTraits, type FunTrait } from "@/lib/portrait-traits";
 import { AgentDeskBadge } from "@/components/agent-desk-badge";
 import { FloorCredential } from "@/components/seat-tier-badge";
 import { SeatUpgradeDialog } from "@/components/seat-upgrade-dialog";
-import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
 import { IntroSequence } from "@/components/intro-sequence";
+import { LandingScreen } from "@/components/landing/landing-screen";
+import { MarketStatusStrip } from "@/components/desk/market-status-strip";
+import { MobileMarketPulse } from "@/components/desk/mobile-market-pulse";
 import { ConvexIdentityDebug } from "@/components/convex-identity-debug";
 import { LiveGameToasts } from "@/components/live-game-toasts";
 import { MomentLayer } from "@/components/moments/moment-overlay";
@@ -82,8 +83,8 @@ import {
   useLeaderboard,
   type LeaderboardTrader,
 } from "@/hooks/use-leaderboard";
-import { useLandingRoster } from "@/hooks/use-landing-roster";
 import { useSfx } from "@/hooks/use-sfx";
+import { useMarketPulse } from "@/hooks/use-market-pulse";
 import {
   usePortfolio,
   type Portfolio,
@@ -109,6 +110,8 @@ import {
 } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/animated-number";
 import { SkeletonRows } from "@/components/ui/skeleton-line";
+import { PanelHeader } from "@/components/ui/desk-panel";
+import { StatusChip } from "@/components/ui/status-chip";
 import { TickerTape } from "@/components/ticker-tape";
 import { staggerDelay } from "@/lib/motion-tokens";
 import {
@@ -146,11 +149,7 @@ const FALLBACK_WIRE_ITEMS = [
 ] as const;
 
 type WireCategory =
-  | "deal_seed"
-  | "breaking"
-  | "market_update"
-  | "market"
-  | "rumor";
+  "deal_seed" | "breaking" | "market_update" | "market" | "rumor";
 
 const CATEGORY_RAIL: Record<WireCategory, string> = {
   deal_seed: "bg-[var(--t-red)]",
@@ -260,184 +259,6 @@ export default function Home() {
       <Dashboard deskWalletAddress={deskManager.wallet_address} />
       {process.env.NODE_ENV === "development" && <ConvexIdentityDebug />}
     </>
-  );
-}
-
-/** Fallback roster shown before any real portraits have finished generating. */
-const SAMPLE_TRADER_NAMES = [
-  "Vic Sterling",
-  "Dana Cross",
-  "Rex Malloy",
-  "Sable Quinn",
-];
-
-type RosterTile = {
-  key: string;
-  name: string;
-  src: string | null;
-  imageStatus: "pending" | "generating" | "ready" | "error";
-  traits: FunTrait[];
-  effectiveTier?: "Gallery" | "Seat" | "CornerOffice";
-};
-
-/** Tier → chip color, mirroring the persona-traits palette. */
-const TRAIT_CHIP_TONE: Record<string, string> = {
-  Common: "border-[var(--t-divider)] text-[var(--t-muted)]",
-  Uncommon: "border-[var(--t-green)]/50 text-[var(--t-green)]",
-  Rare: "border-[var(--t-blue)]/60 text-[var(--t-blue)]",
-  Legendary: "border-[var(--t-amber)]/60 text-[var(--t-amber-hot)]",
-};
-
-/**
- * Unauthenticated landing screen. Renders the hero, the "first run" checklist,
- * and a live roster of real trader portraits (from a lightweight public query)
- * next to a "mint your own" slot so it's clear the player creates their own 1-of-1
- * AI trader. Each tile surfaces a couple of fun persona traits.
- */
-function LandingScreen({ onLogin }: { onLogin: () => void }) {
-  const { data: landingRoster } = useLandingRoster();
-
-  const galleryTiles = useMemo<RosterTile[]>(() => {
-    if (!landingRoster || landingRoster.length === 0) {
-      return SAMPLE_TRADER_NAMES.map((name) => ({
-        key: name,
-        name,
-        src: null,
-        imageStatus: "pending" as const,
-        traits: [],
-      }));
-    }
-
-    return landingRoster.map((t) => ({
-      key: t.id,
-      name: t.name,
-      src: t.profileImageUrl,
-      imageStatus: "ready" as const,
-      traits: t.traits ? pickFunTraits(t.traits) : [],
-      effectiveTier: t.effectiveTier,
-    }));
-  }, [landingRoster]);
-
-  return (
-    <div className="flex min-h-screen flex-col justify-center gap-8 bg-[var(--t-bg)] px-5 py-8 font-mono text-[var(--t-text)]">
-      <div className="mx-auto grid w-full max-w-4xl gap-7 md:grid-cols-[minmax(0,1.25fr)_minmax(17rem,0.75fr)] md:items-end">
-        <section className="min-w-0">
-          <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--t-green)]">
-            DESK_OS 1987 // PRIVATE WIRE
-          </p>
-          <h1 className="font-[family-name:var(--font-plex-sans)] text-4xl font-black uppercase leading-none tracking-wide text-[var(--t-accent)] sm:text-5xl">
-            MARGIN CALL
-          </h1>
-          <p className="mt-3 max-w-[42rem] text-sm leading-6 text-[var(--t-green)]/90 sm:text-base">
-            Run a hostile Wall Street desk. Fund your wallet, mint a 1-of-1 AI
-            trader, then write deals that lure rival agents into bad rooms.
-          </p>
-        </section>
-
-        <section className="terminal-panel px-4 py-4">
-          <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.16em] text-[var(--t-amber)]">
-            First run
-          </h2>
-          <ol className="mt-4 grid gap-3 text-xs uppercase tracking-[0.14em] text-[var(--t-muted)]">
-            {[
-              "Enter by email",
-              "Fund desk wallet",
-              "Mint your AI trader",
-              "Create first deal",
-            ].map((step, index) => (
-              <li key={step} className="flex items-center gap-3">
-                <span className="grid h-7 w-7 shrink-0 place-items-center border border-[var(--t-divider)] text-[var(--t-accent)]">
-                  {String(index + 1).padStart(2, "0")}
-                </span>
-                <span>{step}</span>
-              </li>
-            ))}
-          </ol>
-        </section>
-      </div>
-
-      <section className="mx-auto w-full max-w-4xl">
-        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[var(--t-green)]">
-            THE FLOOR // LIVE ROSTER
-          </p>
-          <p className="text-[10px] uppercase tracking-widest text-[var(--t-muted)]">
-            Every trader is a 1-of-1, minted onchain from your desk
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5">
-          {galleryTiles.map((tile) => (
-            <figure
-              key={tile.key}
-              className="terminal-panel flex flex-col overflow-hidden"
-            >
-              <div className="relative aspect-square">
-                <TraderAvatar
-                  name={tile.name}
-                  src={tile.src}
-                  imageStatus={tile.imageStatus}
-                  size="lg"
-                />
-              </div>
-              <figcaption className="flex flex-col gap-1.5 border-t border-[var(--t-divider)] px-2 py-2">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
-                    {tile.name}
-                  </span>
-                  {tile.effectiveTier ? (
-                    <FloorCredential tier={tile.effectiveTier} compact />
-                  ) : null}
-                </span>
-                {tile.traits.length > 0 && (
-                  <span className="flex flex-wrap gap-1">
-                    {tile.traits.map((trait) => (
-                      <span
-                        key={trait.key}
-                        className={cn(
-                          "truncate border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]",
-                          TRAIT_CHIP_TONE[trait.tier] ?? TRAIT_CHIP_TONE.Common
-                        )}
-                      >
-                        {trait.label}
-                      </span>
-                    ))}
-                  </span>
-                )}
-              </figcaption>
-            </figure>
-          ))}
-
-          <button
-            type="button"
-            onClick={onLogin}
-            className="group flex flex-col overflow-hidden border border-dashed border-[var(--t-accent)]/50 bg-[var(--t-accent-soft)] text-left transition-colors hover:border-[var(--t-accent)] focus:border-[var(--t-accent)] focus:outline-none"
-          >
-            <div className="relative flex aspect-square items-center justify-center">
-              <span className="font-[family-name:var(--font-plex-sans)] text-4xl font-black text-[var(--t-accent)]/70 transition-colors group-hover:text-[var(--t-accent)]">
-                +
-              </span>
-              <div className="pointer-events-none absolute inset-0 crt-line-grid opacity-30" />
-            </div>
-            <span className="truncate border-t border-dashed border-[var(--t-accent)]/40 px-2 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
-              Mint your trader
-            </span>
-          </button>
-        </div>
-      </section>
-
-      <div className="mx-auto flex w-full max-w-4xl flex-col items-start gap-3 sm:flex-row sm:items-center">
-        <button
-          onClick={onLogin}
-          className="min-h-11 border border-[var(--t-border)] bg-[var(--t-panel-strong)] px-6 py-3 font-mono text-sm font-black uppercase tracking-wider text-[var(--t-accent)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-text)] focus:border-[var(--t-accent)] focus:outline-none"
-        >
-          {">"} Enter by email<span className="cursor-blink">█</span>
-        </button>
-        <ConnectMcpDialog />
-        <p className="text-[11px] uppercase tracking-widest text-[var(--t-muted)]">
-          Email OTP access, or connect your AI agent via MCP.
-        </p>
-      </div>
-    </div>
   );
 }
 
@@ -578,13 +399,14 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         dealsLoading={myDealsLoading}
         approvalsCount={pendingApprovals.length}
       />
+      <MarketStatusStrip />
 
-      <main className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden px-2 pb-2 xl:grid xl:min-h-0 xl:max-w-[112rem] xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem] xl:pb-3">
+      <main className="mx-auto flex min-h-0 w-full flex-1 flex-col gap-2 overflow-hidden px-2 pb-2 lg:grid lg:min-h-0 lg:max-w-[112rem] lg:grid-cols-[20rem_minmax(28rem,1fr)_24rem] lg:pb-3 xl:grid-cols-[22rem_minmax(36rem,1fr)_28rem]">
         <div
           className={cn(
             "min-h-0 flex-1 flex-col overflow-hidden",
             mobileTab === "wire" ? "flex" : "hidden",
-            "xl:contents"
+            "lg:contents"
           )}
         >
           <NewswirePanel
@@ -601,14 +423,14 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
           className={cn(
             "grid min-h-0 flex-1 gap-2 overflow-hidden",
             mobileTab === "desk" || mobileTab === "feed" ? "grid" : "hidden",
-            "xl:grid xl:min-h-0 xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]"
+            "lg:grid lg:min-h-0 lg:grid-rows-[minmax(18rem,20rem)_minmax(0,1fr)] xl:grid-rows-[minmax(22rem,23rem)_minmax(0,1fr)]"
           )}
         >
           <div
             className={cn(
               "min-h-0 flex-1 flex-col overflow-hidden",
               mobileTab === "desk" ? "flex" : "hidden",
-              "xl:flex xl:min-h-0"
+              "lg:flex lg:min-h-0"
             )}
           >
             <TradingDeskPanel
@@ -635,7 +457,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
             className={cn(
               "min-h-0 flex-1 flex-col overflow-hidden",
               mobileTab === "feed" ? "flex" : "hidden",
-              "xl:flex xl:min-h-0"
+              "lg:flex lg:min-h-0"
             )}
           >
             <TraderFeedPanel
@@ -661,7 +483,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
           className={cn(
             "min-h-0 flex-1 flex-col gap-2 overflow-hidden",
             mobileTab === "floor" ? "flex" : "hidden",
-            "xl:grid xl:min-h-0 xl:grid-rows-[minmax(0,1.6fr)_minmax(0,1fr)]"
+            "lg:grid lg:min-h-0 lg:grid-rows-[minmax(0,1.6fr)_minmax(0,1fr)]"
           )}
         >
           <MarketPlayersPanel
@@ -681,6 +503,7 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
       </main>
 
       <TickerTape pnl={pnl} approvalsCount={pendingApprovals.length} />
+      <MobileMarketPulse pnl={pnl} approvalsCount={pendingApprovals.length} />
 
       <MobileFooterNav
         activeTab={mobileTab}
@@ -837,7 +660,7 @@ function TopStatusBar({
 
   return (
     <header className="z-40 shrink-0 bg-[#050706]/95 px-2 pt-2 shadow-[0_1px_0_0_rgba(255,255,255,0.04)] backdrop-blur-sm">
-      <div className="border border-[var(--t-divider)] bg-[#070b09]/90 px-2 py-2 xl:hidden">
+      <div className="border border-[var(--t-divider)] bg-[#070b09]/90 px-2 py-2 lg:hidden">
         <div className="flex items-center gap-2">
           <div className="min-w-0 flex-1">
             <h1 className="truncate font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-wide text-[var(--t-accent)]">
@@ -897,7 +720,7 @@ function TopStatusBar({
         </div>
       </div>
 
-      <div className="hidden gap-2 xl:grid xl:grid-cols-[18rem_14rem_minmax(42rem,1fr)_max-content]">
+      <div className="hidden gap-2 lg:grid lg:grid-cols-[14rem_12rem_minmax(0,1fr)_max-content] xl:grid-cols-[18rem_14rem_minmax(42rem,1fr)_max-content]">
         <div className="terminal-panel px-3 py-2">
           <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black leading-none tracking-wide text-[var(--t-accent)]">
             MARGIN CALL
@@ -1160,6 +983,7 @@ export function DeskCommandStrip({
       value: `${approvalsCount}`,
       tone: approvalsCount > 0 ? "amber" : "green",
       status: approvalsCount > 0 ? "Needs call" : "Clear",
+      urgent: approvalsCount > 0,
     },
   ] as const;
 
@@ -1169,7 +993,12 @@ export function DeskCommandStrip({
         {steps.map((step, index) => (
           <div
             key={step.label}
-            className="grid min-h-12 min-w-[11rem] shrink-0 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border border-[var(--t-divider)] bg-[#070b09]/90 px-3 py-2 xl:min-h-14 xl:min-w-0"
+            className={cn(
+              "grid min-h-12 min-w-[11rem] shrink-0 grid-cols-[2.25rem_minmax(0,1fr)_auto] items-center gap-3 border bg-[#070b09]/90 px-3 py-2 xl:min-h-14 xl:min-w-0",
+              "urgent" in step && step.urgent
+                ? "border-[var(--t-amber)]/55 shadow-[inset_0_0_0_1px_rgba(235,193,122,0.12)]"
+                : "border-[var(--t-divider)]"
+            )}
           >
             <span
               className={cn(
@@ -1189,6 +1018,12 @@ export function DeskCommandStrip({
                   STEP_TONE_STATUS[step.tone]
                 )}
               >
+                {"urgent" in step && step.urgent ? (
+                  <span
+                    aria-hidden
+                    className="live-pulse mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[var(--t-amber)]"
+                  />
+                ) : null}
                 {step.status}
               </p>
             </div>
@@ -1394,6 +1229,8 @@ function NewswirePanel({
     | Array<{
         createdAt: string;
         isFlash?: boolean;
+        mood?: string;
+        topArcTension?: number | null;
         subjects?: Array<{ type: "trader" | "deal" | "manager"; id: string }>;
         dispatches: Array<{
           headline: string;
@@ -1417,6 +1254,7 @@ function NewswirePanel({
   onOpenDeal: (dealId: string) => void;
   onOpenTrader: (traderId: string) => void;
 }) {
+  const pulse = useMarketPulse();
   const [dealDialog, setDealDialog] = useState<NewswireCreateDialog | null>(
     null
   );
@@ -1493,15 +1331,25 @@ function NewswirePanel({
           canShowOpenDealsList ? () => setOpenDealsListOpen(true) : undefined
         }
         action={
-          <button
-            type="button"
-            onClick={() => setHelpOpen(true)}
-            title="How deals work"
-            aria-label="How deals work"
-            className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
-          >
-            <HelpCircle className="h-3.5 w-3.5" />
-          </button>
+          <div className="flex items-center gap-1.5">
+            {!pulse.isLoading ? (
+              <StatusChip
+                tone={pulse.heatTone}
+                className="hidden sm:inline-flex"
+              >
+                SEC {pulse.heatLabel}
+              </StatusChip>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => setHelpOpen(true)}
+              title="How deals work"
+              aria-label="How deals work"
+              className="grid h-7 w-7 place-items-center border border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none"
+            >
+              <HelpCircle className="h-3.5 w-3.5" />
+            </button>
+          </div>
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
@@ -1626,7 +1474,7 @@ export function HowDealsWorkBrief({ onClose }: { onClose: () => void }) {
             [
               "03",
               "Let agents trade",
-              "GPT resolves each agent against the scenario.",
+              "Odds are rolled from market mood + SEC heat; the model only narrates.",
             ],
           ].map(([step, title, body]) => (
             <section
@@ -3009,47 +2857,6 @@ function MarketPlayersPanel({
         </div>
       )}
     </aside>
-  );
-}
-
-function PanelHeader({
-  title,
-  meta,
-  metaAriaLabel,
-  onMetaClick,
-  action,
-}: {
-  title: string;
-  meta?: string;
-  metaAriaLabel?: string;
-  onMetaClick?: () => void;
-  action?: ReactNode;
-}) {
-  return (
-    <div className="flex min-h-10 items-center justify-between gap-3 border-b border-[var(--t-divider)] bg-[#0b100d] px-3 py-2">
-      <h2 className="truncate font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
-        {title}
-      </h2>
-      <div className="flex shrink-0 items-center gap-2">
-        {meta &&
-          (onMetaClick ? (
-            <button
-              type="button"
-              onClick={onMetaClick}
-              title={metaAriaLabel ?? meta}
-              aria-label={metaAriaLabel ?? meta}
-              className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus:border-[var(--t-accent)] focus:text-[var(--t-accent)] focus:outline-none"
-            >
-              {meta}
-            </button>
-          ) : (
-            <span className="border border-[var(--t-divider)] px-2 py-1 text-[10px] uppercase tracking-wider text-[var(--t-muted)]">
-              {meta}
-            </span>
-          ))}
-        {action}
-      </div>
-    </div>
   );
 }
 

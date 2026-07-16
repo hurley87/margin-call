@@ -81,7 +81,7 @@
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
 
-  /* Trading floor palette */
+  /* Trading floor palette — semantic game tokens */
   --t-bg: #090b10;
   --t-surface: #11161f;
   --t-panel: rgba(17, 22, 31, 0.82);
@@ -102,6 +102,15 @@
   --t-green-hot: #92f5b8;
   --t-red-hot: #ff9d93;
   --t-amber-hot: #ffd58a;
+
+  /* Urgency / market-state accents */
+  --t-urgency: #f0a35a;
+  --t-threat: #ff6b5c;
+  --t-safe: #6fd99a;
+  --t-focus-ring: rgba(214, 166, 96, 0.55);
+  --t-hero-scrim: rgba(5, 7, 10, 0.88);
+  --t-type-label: 0.6875rem; /* 11px — readable micro-labels */
+  --t-type-body: 0.875rem;
 
   /* ── MOTION TOKENS — keep in sync with src/lib/motion-tokens.ts ── */
   --mc-dur-fast: 120ms;
@@ -674,6 +683,12 @@
   }
   button:not(:disabled):active {
     transform: scale(0.97);
+  }
+  a:focus-visible,
+  button:focus-visible,
+  [role="button"]:focus-visible {
+    outline: 2px solid var(--t-focus-ring);
+    outline-offset: 2px;
   }
   @media (prefers-reduced-motion: reduce) {
     button:not(:disabled):active {
