@@ -100,12 +100,13 @@ export const createForTrader = internalAction({
       const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
       const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
       const { IDENTITY_REGISTRY_ADDRESS: canonicalIdentityRegistry } =
-        await import("./lib/baseSepoliaNetwork");
+        await import("./lib/networks");
       const { resolveAddress } = await import("./lib/resolveAddress");
       const identityRegistryAddress = resolveAddress(
         [process.env.IDENTITY_REGISTRY_ADDRESS],
         canonicalIdentityRegistry,
-        "IDENTITY_REGISTRY_ADDRESS"
+        "IDENTITY_REGISTRY_ADDRESS",
+        "active Base Sepolia deployment"
       );
       const appUrl = requireEnv("NEXT_PUBLIC_APP_URL");
 

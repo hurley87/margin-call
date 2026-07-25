@@ -70,3 +70,8 @@ export {
   recommendWaitBlocks,
   seatVaultConfirmationDepth,
 } from "./confirmations";
+
+export {
+  ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
+  type ActiveBaseSepoliaDeployment,
+} from "./deployments";

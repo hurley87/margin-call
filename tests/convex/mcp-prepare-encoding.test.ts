@@ -9,7 +9,7 @@ import {
   type PreparedCall,
 } from "../../convex/mcp/escrowConstants";
 import { shapePrepareResult } from "../../convex/mcp/intents";
-import { BASE_SEPOLIA_SLUG } from "../../convex/lib/baseSepoliaNetwork";
+import { BASE_SEPOLIA_SLUG } from "../../convex/lib/networks";
 import { makeT, seedDeskManager } from "./setup";
 import { internal } from "../../convex/_generated/api";
 

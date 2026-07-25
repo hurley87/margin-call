@@ -1,4 +1,9 @@
-import { BASE_SEPOLIA_CHAIN_ID } from "./baseSepoliaNetwork";
+/**
+ * Per-network deployment address records (#249).
+ * Base Sepolia escrow/SeatVault remain until #262 cutover.
+ * Environment-free: no RPC, no env reads.
+ */
+import { BASE_SEPOLIA_CHAIN_ID } from "./base-sepolia";
 
 /**
  * Typed mirror of contracts/deployments/base-sepolia.active.json.
@@ -6,6 +11,8 @@ import { BASE_SEPOLIA_CHAIN_ID } from "./baseSepoliaNetwork";
  * Update this file and the JSON together when activating a new deployment
  * (requires human approval per #211). Env vars, if set, must match these
  * addresses or the app fails closed at startup.
+ *
+ * @deprecated Legacy deal-game deployment — removed at #262.
  */
 export type ActiveBaseSepoliaDeployment = {
   version: number;
@@ -16,6 +23,7 @@ export type ActiveBaseSepoliaDeployment = {
   deployedAt: string;
 };
 
+/** @deprecated Legacy deal-game deployment — removed at #262. */
 export const ACTIVE_BASE_SEPOLIA_DEPLOYMENT = {
   version: 2,
   chainId: BASE_SEPOLIA_CHAIN_ID,

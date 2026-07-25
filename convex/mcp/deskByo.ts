@@ -26,12 +26,11 @@ const TX_RECEIPT_TIMEOUT_MS = 60_000;
 /** Build a Base Sepolia public client with an explicit RPC URL. */
 export async function getBaseSepoliaPublicClient() {
   const { createPublicClient, http } = await import("viem");
-  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
-  const { requireBaseSepoliaRpcUrl } =
-    await import("../lib/requireBaseSepoliaRpcUrl");
+  const { BASE_SEPOLIA_SLUG, getViemChain, requireRpcUrl } =
+    await import("../lib/networks");
   return createPublicClient({
-    chain: CONTRACTS_CHAIN,
-    transport: http(requireBaseSepoliaRpcUrl()),
+    chain: getViemChain(BASE_SEPOLIA_SLUG),
+    transport: http(requireRpcUrl(BASE_SEPOLIA_SLUG)),
   });
 }
 

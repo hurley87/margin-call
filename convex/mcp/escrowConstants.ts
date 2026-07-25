@@ -1,20 +1,22 @@
-/** Shared escrow + USDC addresses for MCP BYO desk treasury (Base Sepolia). */
+/** Shared escrow + USDC addresses for MCP BYO desk treasury (legacy Base Sepolia). */
 
-import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/activeDeployment";
 import {
+  ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
   BASE_SEPOLIA_SLUG,
   USDC_SEPOLIA_ADDRESS,
-} from "../lib/baseSepoliaNetwork";
+} from "../lib/networks";
 import { resolveAddress } from "../lib/resolveAddress";
 
 export const ESCROW_ADDRESS = resolveAddress(
   [process.env.ESCROW_ADDRESS, process.env.NEXT_PUBLIC_ESCROW_ADDRESS],
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow,
-  "ESCROW_ADDRESS"
+  "ESCROW_ADDRESS",
+  "active Base Sepolia deployment"
 );
 
 export { USDC_SEPOLIA_ADDRESS };
 export const USDC_DECIMALS = 1_000_000;
+/** Legacy deal-game MCP chain slug — removed at #262. */
 export const MCP_CHAIN = BASE_SEPOLIA_SLUG;
 
 /** MarginCallEscrow deal status: 0 = Open, 1 = Closed. */

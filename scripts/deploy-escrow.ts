@@ -28,7 +28,7 @@ import {
 import {
   IDENTITY_REGISTRY_ADDRESS,
   USDC_SEPOLIA_ADDRESS,
-} from "../convex/lib/baseSepoliaNetwork";
+} from "../convex/lib/networks";
 
 function main() {
   const env = loadEnvLocal();

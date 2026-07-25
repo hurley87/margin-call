@@ -1,7 +1,10 @@
-import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/activeDeployment";
+import {
+  ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
+  BASE_SEPOLIA_SLUG,
+  requireRpcUrl,
+  seatVaultConfirmationDepth,
+} from "../lib/networks";
 import { resolveAddress } from "../lib/resolveAddress";
-import { requireBaseSepoliaRpcUrl } from "../lib/requireBaseSepoliaRpcUrl";
-import { SEAT_VAULT_CONFIRMATION_DEPTH } from "./policy";
 
 /**
  * Resolve configured SeatVault address from the canonical active deployment.
@@ -15,12 +18,13 @@ export function resolveConfiguredSeatVaultAddress(): string {
       process.env.NEXT_PUBLIC_SEAT_VAULT_ADDRESS,
     ],
     ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault,
-    "SEAT_VAULT_ADDRESS"
+    "SEAT_VAULT_ADDRESS",
+    "active Base Sepolia deployment"
   ).toLowerCase();
 }
 
 export function resolveRpcUrl(): string {
-  return requireBaseSepoliaRpcUrl();
+  return requireRpcUrl(BASE_SEPOLIA_SLUG);
 }
 
 export function resolveConfirmationDepth(): number {
@@ -29,7 +33,7 @@ export function resolveConfirmationDepth(): number {
     const n = Number.parseInt(raw, 10);
     if (Number.isFinite(n) && n >= 0) return n;
   }
-  return SEAT_VAULT_CONFIRMATION_DEPTH;
+  return seatVaultConfirmationDepth(BASE_SEPOLIA_SLUG);
 }
 
 export function normalizeAddress(address: string): string {

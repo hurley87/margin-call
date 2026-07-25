@@ -103,19 +103,24 @@ async function createEscrowViemClients() {
 
   const { createWalletClient, http } = await import("viem");
   const { privateKeyToAccount } = await import("viem/accounts");
-  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
-  const { requireBaseSepoliaRpcUrl } =
-    await import("../lib/requireBaseSepoliaRpcUrl");
+  const { BASE_SEPOLIA_SLUG, getViemChain, requireRpcUrl } =
+    await import("../lib/networks");
   const { getBaseSepoliaPublicClient } = await import("../mcp/deskByo");
 
   const account = privateKeyToAccount(operatorKey as `0x${string}`);
+  const contractsChain = getViemChain(BASE_SEPOLIA_SLUG);
   const walletClient = createWalletClient({
     account,
-    chain: CONTRACTS_CHAIN,
-    transport: http(requireBaseSepoliaRpcUrl()),
+    chain: contractsChain,
+    transport: http(requireRpcUrl(BASE_SEPOLIA_SLUG)),
   });
   const publicClient = await getBaseSepoliaPublicClient();
-  return { account, walletClient, publicClient, CONTRACTS_CHAIN };
+  return {
+    account,
+    walletClient,
+    publicClient,
+    CONTRACTS_CHAIN: contractsChain,
+  };
 }
 
 /**
@@ -411,14 +416,15 @@ async function callDealEnter(
   const domain = baseUrl.replace(/^https?:\/\//, "");
 
   const { BASE_SEPOLIA_CHAIN_ID, IDENTITY_REGISTRY_ADDRESS } =
-    await import("../lib/baseSepoliaNetwork");
+    await import("../lib/networks");
   const { resolveAddress } = await import("../lib/resolveAddress");
 
   const chainId = BASE_SEPOLIA_CHAIN_ID;
   const identityRegistryAddress = resolveAddress(
     [process.env.IDENTITY_REGISTRY_ADDRESS],
     IDENTITY_REGISTRY_ADDRESS,
-    "IDENTITY_REGISTRY_ADDRESS"
+    "IDENTITY_REGISTRY_ADDRESS",
+    "active Base Sepolia deployment"
   );
 
   const signer = {

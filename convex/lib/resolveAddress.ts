@@ -5,13 +5,14 @@
 export function resolveAddress(
   envValues: readonly (string | undefined)[],
   canonical: `0x${string}`,
-  label: string
+  label: string,
+  networkLabel = "active deployment"
 ): `0x${string}` {
   for (const envValue of envValues) {
     if (envValue !== undefined && envValue.trim() !== "") {
       if (envValue.toLowerCase() !== canonical.toLowerCase()) {
         throw new Error(
-          `${label} env (${envValue}) does not match active Base Sepolia deployment (${canonical}). Update env or contracts/deployments/base-sepolia.active.json together.`
+          `${label} env (${envValue}) does not match ${networkLabel} (${canonical}). Update env or the canonical deployment record together.`
         );
       }
       return canonical;

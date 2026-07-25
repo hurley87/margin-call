@@ -87,6 +87,17 @@ describe("resolveAddress", () => {
         canonical,
         "ESCROW_ADDRESS"
       )
+    ).toThrow(/does not match active deployment/);
+  });
+
+  it("includes network label in mismatch errors when provided", () => {
+    expect(() =>
+      resolveAddress(
+        ["0x0000000000000000000000000000000000000001"],
+        canonical,
+        "ESCROW_ADDRESS",
+        "active Base Sepolia deployment"
+      )
     ).toThrow(/does not match active Base Sepolia deployment/);
   });
 });
