@@ -10,6 +10,7 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import { useBaseNetwork } from "@/hooks/use-base-network";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
+import { PAYMENT_CHAIN_NAME } from "@/lib/privy/config";
 import { makePublicClient } from "@/lib/contracts/client";
 import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
 import {
@@ -113,7 +114,9 @@ export function useSeatVaultFlows() {
       throw new Error("Connect the desk treasury wallet first.");
     }
     if (isWrongNetwork) {
-      throw new Error("Wrong chain — switch to Base Sepolia before posting.");
+      throw new Error(
+        `Wrong chain — switch to ${PAYMENT_CHAIN_NAME} before posting.`
+      );
     }
     if (state.step !== "idle" && state.step !== "done") {
       throw new Error("A floor ticket is already pending. Wait for the wire.");

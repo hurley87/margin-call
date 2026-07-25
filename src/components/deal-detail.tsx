@@ -17,6 +17,7 @@ import {
   escrowAbi,
 } from "@/lib/contracts/escrow";
 import { BASE_SEPOLIA_CHAIN_ID, BASE_SEPOLIA_SLUG, txUrl } from "@/lib/network";
+import { NetworkBadge } from "@/components/shared/network-badge";
 import { makePublicClient } from "@/lib/contracts/client";
 import {
   closeDealButtonLabel,
@@ -412,6 +413,7 @@ export function DealDetailContent({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
+            <NetworkBadge slug={BASE_SEPOLIA_SLUG} />
             {deal.on_chain_tx_hash && (
               <a
                 href={txUrl(BASE_SEPOLIA_SLUG, deal.on_chain_tx_hash)}

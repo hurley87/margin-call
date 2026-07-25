@@ -143,9 +143,9 @@ describe("MCP plugin drift", () => {
     );
     const plugin = readFileSync(pluginPath, "utf8");
 
-    expect(plugin).toContain(
-      `**Chain:** Base Sepolia (\`${BASE_SEPOLIA_SLUG}\`)`
-    );
+    expect(plugin).toContain(`Base Sepolia (\`${BASE_SEPOLIA_SLUG}\`)`);
+    expect(plugin).toContain("robinhood-testnet");
+    expect(plugin).toContain("Margin Call Test Asset");
     expect(plugin).toContain(ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow);
     expect(plugin).toContain(USDC_SEPOLIA_ADDRESS);
     expect(plugin).not.toContain(String(FORBIDDEN_MAINNET_CHAIN_ID));

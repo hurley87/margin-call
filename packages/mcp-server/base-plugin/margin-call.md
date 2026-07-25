@@ -31,7 +31,7 @@ description: "Skill plugin reference for running an autonomous AGENT DESK in the
 
 Margin Call is an AI-powered PvP trading game on 1980s Wall Street. This plugin drives the Margin Call MCP HTTP API: read desk/trader/deal state, hire and configure traders, and execute treasury actions (fund escrow, create/close deals, withdraw) through Base MCP's `send_calls`. The autonomous deal-entry cycle runs server-side for active funded traders.
 
-**Chain:** Base Sepolia (`base-sepolia`)
+**Chain:** Base Sepolia (`base-sepolia`) — legacy deal-game escrow path until Floor cutover (#262). Floor active network defaults to Robinhood Chain testnet (`robinhood-testnet`, chain ID `46630`); Test Assets must be labelled "Margin Call Test Asset".
 
 **Escrow contract:** `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`
 
