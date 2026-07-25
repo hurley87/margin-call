@@ -600,6 +600,54 @@ export default defineSchema({
     .index("byTxHash", ["txHash"]),
 
   /**
+   * Generalized on-chain write intents (#249).
+   * One stable intentKey identity across prepare → sign/sponsor → submit →
+   * confirm / fail / reconcile. Ambiguous submissions are reconciled by
+   * transaction identity — never blindly re-signed or resubmitted.
+   */
+  chainIntents: defineTable({
+    networkSlug: v.string(),
+    intentKey: v.string(),
+    intentType: v.string(),
+    status: v.union(
+      v.literal("prepared"),
+      v.literal("signing"),
+      v.literal("submitted"),
+      v.literal("confirmed"),
+      v.literal("failed"),
+      v.literal("reconciling"),
+      v.literal("abandoned")
+    ),
+    deskManagerId: v.optional(v.id("deskManagers")),
+    calls: v.optional(
+      v.array(
+        v.object({
+          to: v.string(),
+          value: v.string(),
+          data: v.string(),
+        })
+      )
+    ),
+    payload: v.optional(v.any()),
+    attempts: v.number(),
+    txHash: v.optional(v.string()),
+    senderAddress: v.optional(v.string()),
+    senderNonce: v.optional(v.number()),
+    submittedAt: v.optional(v.number()),
+    confirmedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
+    confirmResult: v.optional(v.any()),
+    expiresAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("byIntentKey", ["intentKey"])
+    .index("byNetworkSlugAndStatus", ["networkSlug", "status"])
+    .index("byStatus", ["status"])
+    .index("byTxHash", ["txHash"])
+    .index("byDeskManagerAndIntentKey", ["deskManagerId", "intentKey"]),
+
+  /**
    * Versioned SeatVault deployments. Only `isActive === true` grants capacity;
    * prior versions remain listed so desks can withdraw pending principal.
    */
