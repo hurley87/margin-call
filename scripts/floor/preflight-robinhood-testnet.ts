@@ -34,6 +34,7 @@ import {
   runOfflinePreflight,
   type PreflightFinding,
 } from "./preflight-checks";
+import { loadFloorEnvLocal } from "./load-env";
 
 const ROOT = join(import.meta.dirname, "../..");
 const EVIDENCE_DIR = join(ROOT, ".floor-evidence");
@@ -120,10 +121,11 @@ type ProbeResult = {
 };
 
 function requireRpcUrl(): string {
+  loadFloorEnvLocal();
   const url = process.env.ROBINHOOD_TESTNET_RPC_URL?.trim();
   if (!url) {
     throw new Error(
-      "ROBINHOOD_TESTNET_RPC_URL is required — set an explicit Robinhood Chain testnet RPC (no silent public fallback)"
+      "ROBINHOOD_TESTNET_RPC_URL is required — set it in .env.local or the shell (no silent public fallback)"
     );
   }
   if (/mainnet\.chain\.robinhood\.com/i.test(url)) {

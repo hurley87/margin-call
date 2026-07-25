@@ -32,6 +32,7 @@ import {
   ROBINHOOD_TESTNET_SLUG,
 } from "./dependencies";
 import { assertAllowedChainId } from "./preflight-checks";
+import { loadFloorEnvLocal } from "./load-env";
 
 const ROOT = join(import.meta.dirname, "../..");
 const EVIDENCE_DIR = join(ROOT, ".floor-evidence");
@@ -70,9 +71,10 @@ function parseArgs(argv: string[]): {
 }
 
 function requireEnv(name: string): string {
+  loadFloorEnvLocal();
   const value = process.env[name]?.trim();
   if (!value) {
-    throw new Error(`${name} is required`);
+    throw new Error(`${name} is required (set in .env.local or the shell)`);
   }
   return value;
 }
@@ -105,6 +107,7 @@ function requireProofKey(): Hex {
 }
 
 function sponsorshipMode(): SponsorshipMode {
+  loadFloorEnvLocal();
   const mode = (process.env.FLOOR_SPONSORSHIP_MODE ?? "none")
     .trim()
     .toLowerCase();
