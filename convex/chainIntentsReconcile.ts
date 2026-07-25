@@ -6,6 +6,7 @@
  */
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
   decideReconcile,
@@ -17,6 +18,22 @@ import type { ChainIntentStatus } from "./lib/chainIntents/stateMachine";
 
 const STUCK_AFTER_MS = 60_000;
 const MAX_PER_TICK = 25;
+
+type StuckIntent = {
+  _id: Id<"chainIntents">;
+  status: string;
+  networkSlug: string;
+  txHash?: string;
+  attempts: number;
+};
+
+type ReconcileStuckResult = {
+  examined: number;
+  confirmed: number;
+  failed: number;
+  abandoned: number;
+  stillReconciling: number;
+};
 
 async function lookupReceipt(
   networkSlug: string,
@@ -53,15 +70,15 @@ export const reconcileStuck = internalAction({
     abandoned: v.number(),
     stillReconciling: v.number(),
   }),
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<ReconcileStuckResult> => {
     const now = args.now ?? Date.now();
     const olderThanMs = args.olderThanMs ?? STUCK_AFTER_MS;
 
-    const stuck = await ctx.runQuery(internal.chainIntents.listStuck, {
+    const stuck = (await ctx.runQuery(internal.chainIntents.listStuck, {
       olderThanMs,
       now,
       limit: MAX_PER_TICK,
-    });
+    })) as StuckIntent[];
 
     let confirmed = 0;
     let failed = 0;

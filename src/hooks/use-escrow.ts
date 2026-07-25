@@ -13,8 +13,8 @@ import {
   USDC_SEPOLIA_ADDRESS,
 } from "@/lib/contracts/escrow";
 import {
-  BASE_SEPOLIA_CHAIN_ID,
-  BASE_SEPOLIA_SLUG,
+  ROBINHOOD_TESTNET_CHAIN_ID,
+  ROBINHOOD_TESTNET_SLUG,
   recommendWaitBlocks,
 } from "@/lib/network";
 import { usdcFromRaw } from "@/lib/contracts/balance";
@@ -28,7 +28,7 @@ export function useSepoliaUsdcBalance() {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: walletAddress ? [walletAddress] : undefined,
-    chainId: BASE_SEPOLIA_CHAIN_ID,
+    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
     query: {
       enabled: !!walletAddress,
       refetchInterval: 15_000,
@@ -49,7 +49,7 @@ export function useTraderEscrowBalance(
     abi: escrowAbi,
     functionName: "getBalance",
     args: tokenId ? [BigInt(tokenId)] : undefined,
-    chainId: BASE_SEPOLIA_CHAIN_ID,
+    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
     query: {
       enabled: !!tokenId,
       refetchInterval: options?.refetchInterval ?? 15_000,
@@ -86,7 +86,7 @@ export function useDepositFlow() {
           abi: erc20Abi,
           functionName: "approve",
           args: [ESCROW_ADDRESS, amount],
-          chainId: BASE_SEPOLIA_CHAIN_ID,
+          chainId: ROBINHOOD_TESTNET_CHAIN_ID,
         });
 
         await publicClient.waitForTransactionReceipt({ hash: approveHash });
@@ -98,12 +98,12 @@ export function useDepositFlow() {
           abi: escrowAbi,
           functionName: "depositFor",
           args: [traderId, amount],
-          chainId: BASE_SEPOLIA_CHAIN_ID,
+          chainId: ROBINHOOD_TESTNET_CHAIN_ID,
         });
 
         await publicClient.waitForTransactionReceipt({
           hash: depositHash,
-          confirmations: recommendWaitBlocks(BASE_SEPOLIA_SLUG),
+          confirmations: recommendWaitBlocks(ROBINHOOD_TESTNET_SLUG),
         });
 
         setState({ step: "done" });
@@ -153,12 +153,12 @@ export function useWithdrawFlow() {
           abi: escrowAbi,
           functionName: "withdraw",
           args: [traderId, amount],
-          chainId: BASE_SEPOLIA_CHAIN_ID,
+          chainId: ROBINHOOD_TESTNET_CHAIN_ID,
         });
 
         await publicClient.waitForTransactionReceipt({
           hash,
-          confirmations: recommendWaitBlocks(BASE_SEPOLIA_SLUG),
+          confirmations: recommendWaitBlocks(ROBINHOOD_TESTNET_SLUG),
         });
 
         setState({ busy: false, done: true });

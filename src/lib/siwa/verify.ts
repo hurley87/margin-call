@@ -1,5 +1,5 @@
 import "server-only";
-import { BASE_SEPOLIA_CHAIN_ID } from "@/lib/network";
+import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 
 import { createSIWANonce, parseSIWAMessage } from "@buildersgarden/siwa/siwa";
 import { recoverMessageAddress, getAddress } from "viem";
@@ -24,7 +24,7 @@ export async function createNonce(agentId: number, address: string) {
     {
       agentId,
       address,
-      agentRegistry: `eip155:${BASE_SEPOLIA_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
+      agentRegistry: `eip155:${ROBINHOOD_TESTNET_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
     },
     client,
     { nonceStore }
@@ -89,8 +89,8 @@ export async function verifySIWARequest(
     if (
       registryParts.length !== 3 ||
       registryParts[0] !== "eip155" ||
-      Number(fields.chainId) !== BASE_SEPOLIA_CHAIN_ID ||
-      Number(registryParts[1]) !== BASE_SEPOLIA_CHAIN_ID ||
+      Number(fields.chainId) !== ROBINHOOD_TESTNET_CHAIN_ID ||
+      Number(registryParts[1]) !== ROBINHOOD_TESTNET_CHAIN_ID ||
       getAddress(registryParts[2]) !== getAddress(IDENTITY_REGISTRY_ADDRESS)
     ) {
       console.error("[SIWA verify] Agent registry or chain mismatch");

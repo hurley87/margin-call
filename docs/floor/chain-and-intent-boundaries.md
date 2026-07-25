@@ -6,12 +6,12 @@ This document is the handoff from the expand-phase chain/intent boundary (#249) 
 
 ## Active network
 
-| Field        | Value                                                        |
-| ------------ | ------------------------------------------------------------ |
-| Default slug | `robinhood-testnet`                                          |
-| Env          | `MARGIN_CALL_NETWORK` (or `NEXT_PUBLIC_MARGIN_CALL_NETWORK`) |
-| Supported    | `robinhood-testnet`, `base-sepolia` (legacy)                 |
-| Forbidden    | Base mainnet `8453`, Robinhood mainnet `4663`                |
+| Field        | Value                                                                     |
+| ------------ | ------------------------------------------------------------------------- |
+| Default slug | `robinhood-testnet`                                                       |
+| Env          | `MARGIN_CALL_NETWORK` (or `NEXT_PUBLIC_MARGIN_CALL_NETWORK`)              |
+| Supported    | `robinhood-testnet` only                                                  |
+| Forbidden    | Base mainnet `8453`, Robinhood mainnet `4663`; Base Sepolia is not active |
 
 Canonical registry: [`convex/lib/networks/`](../../convex/lib/networks/index.ts)  
 Dependency packet: [`docs/floor/robinhood-testnet-dependency-packet.md`](./robinhood-testnet-dependency-packet.md)
@@ -22,7 +22,7 @@ ROBINHOOD_TESTNET_RPC_URL=https://rpc.testnet.chain.robinhood.com
 MARGIN_CALL_NETWORK=robinhood-testnet   # default when unset
 ```
 
-Legacy deal-game paths still pin `base-sepolia` explicitly (escrow, SeatVault, MCP treasury). They are removed at [#262](https://github.com/hurley87/margin-call/issues/262).
+Base Sepolia is **not** an active Floor network (`MARGIN_CALL_NETWORK=base-sepolia` fails closed). Historical escrow/SeatVault/USDC addresses live in [`convex/lib/legacy/`](../../convex/lib/legacy/index.ts) until [#262](https://github.com/hurley87/margin-call/issues/262) deletes the deal-game path. Runtime Privy, SIWE, MCP chain, RPC clients, and badges use Robinhood Chain testnet.
 
 ## What resolves through the registry
 

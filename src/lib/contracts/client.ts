@@ -1,17 +1,24 @@
 import { createPublicClient, http } from "viem";
-import { BASE_SEPOLIA_SLUG, getViemChain, requireRpcUrl } from "@/lib/network";
+import {
+  getActiveViemChain,
+  requireRpcUrl,
+  resolveActiveNetworkSlug,
+} from "@/lib/network";
 
-/** Legacy deal-game RPC URL — removed at #262. */
+/** Floor active-network RPC URL (Robinhood Chain testnet). */
+export function activeNetworkRpcUrl(): string {
+  return requireRpcUrl(resolveActiveNetworkSlug());
+}
+
+/** @deprecated Prefer activeNetworkRpcUrl. */
 export function baseSepoliaRpcUrl(): string {
-  return requireRpcUrl(BASE_SEPOLIA_SLUG);
+  return activeNetworkRpcUrl();
 }
 
 function buildPublicClient() {
   return createPublicClient({
-    chain: getViemChain(BASE_SEPOLIA_SLUG),
-    transport: http(baseSepoliaRpcUrl()),
-    // Base blocks land in ~2s; poll faster than viem's 4s default so receipt
-    // waits between the approve and createDeal txs resolve promptly.
+    chain: getActiveViemChain(),
+    transport: http(activeNetworkRpcUrl()),
     pollingInterval: 1_000,
   });
 }

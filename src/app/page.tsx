@@ -117,7 +117,7 @@ import {
 } from "@/lib/trader-cycle";
 import { EmptyState } from "@/components/empty-state";
 import { NetworkBadge } from "@/components/shared/network-badge";
-import { BASE_SEPOLIA_SLUG } from "@/lib/network";
+import { ROBINHOOD_TESTNET_SLUG } from "@/lib/network";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const NY_TIME: Intl.DateTimeFormatOptions = {
@@ -849,7 +849,7 @@ function TopStatusBar({
                 <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
                   Fund Wallet To Start
                 </h2>
-                <NetworkBadge slug={BASE_SEPOLIA_SLUG} />
+                <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
               </div>
               {!forceFundWallet && (
                 <Dialog.Close

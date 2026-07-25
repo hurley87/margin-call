@@ -7,7 +7,7 @@
  * Product name: $BLOW. On-chain Sepolia token symbol may be MARGINCALL.
  * Stake amounts are always decimal strings of 18-decimal wei (exceeds int64).
  */
-import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/networks";
+import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/legacy";
 
 /** On-chain Tier enum: Gallery = 0, Seat = 1, CornerOffice = 2. */
 export const TIER_GALLERY = 0;

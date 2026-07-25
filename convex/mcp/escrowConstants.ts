@@ -1,23 +1,23 @@
-/** Shared escrow + USDC addresses for MCP BYO desk treasury (legacy Base Sepolia). */
+/** Shared escrow + USDC addresses for MCP BYO desk treasury (legacy addresses on Floor chain). */
 
 import {
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
-  BASE_SEPOLIA_SLUG,
   USDC_SEPOLIA_ADDRESS,
-} from "../lib/networks";
+} from "../lib/legacy";
+import { ROBINHOOD_TESTNET_SLUG } from "../lib/networks";
 import { resolveAddress } from "../lib/resolveAddress";
 
 export const ESCROW_ADDRESS = resolveAddress(
   [process.env.ESCROW_ADDRESS, process.env.NEXT_PUBLIC_ESCROW_ADDRESS],
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow,
   "ESCROW_ADDRESS",
-  "active Base Sepolia deployment"
+  "legacy Base Sepolia deployment (addresses only until Floor escrow ships)"
 );
 
 export { USDC_SEPOLIA_ADDRESS };
 export const USDC_DECIMALS = 1_000_000;
-/** Legacy deal-game MCP chain slug — removed at #262. */
-export const MCP_CHAIN = BASE_SEPOLIA_SLUG;
+/** Floor MCP chain slug — Robinhood Chain testnet. */
+export const MCP_CHAIN = ROBINHOOD_TESTNET_SLUG;
 
 /** MarginCallEscrow deal status: 0 = Open, 1 = Closed. */
 export const DEAL_STATUS_CLOSED = 1;

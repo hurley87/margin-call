@@ -7,10 +7,7 @@ import {
   confirmationDepth,
   evaluateReceipt,
 } from "../../convex/lib/chainIntents/confirm";
-import {
-  BASE_SEPOLIA_SLUG,
-  ROBINHOOD_TESTNET_SLUG,
-} from "../../convex/lib/networks";
+import { ROBINHOOD_TESTNET_SLUG } from "../../convex/lib/networks";
 import { makeT } from "./setup";
 import { internal } from "../../convex/_generated/api";
 
@@ -45,9 +42,8 @@ describe("evaluateReceipt", () => {
 });
 
 describe("confirmationDepth", () => {
-  it("uses 1 for robinhood-testnet and 2 for base-sepolia", () => {
+  it("uses 1 for robinhood-testnet", () => {
     expect(confirmationDepth(ROBINHOOD_TESTNET_SLUG)).toBe(1);
-    expect(confirmationDepth(BASE_SEPOLIA_SLUG)).toBe(2);
   });
 });
 
@@ -130,7 +126,7 @@ describe("chainIntents reconcile transitions", () => {
     const t = makeT();
     const now = Date.now();
     const prepared = await t.mutation(internal.chainIntents.prepare, {
-      networkSlug: BASE_SEPOLIA_SLUG,
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
       intentKey: "reconcile:happy",
       intentType: "fund_trader",
       now,

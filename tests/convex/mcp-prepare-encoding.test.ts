@@ -9,14 +9,14 @@ import {
   type PreparedCall,
 } from "../../convex/mcp/escrowConstants";
 import { shapePrepareResult } from "../../convex/mcp/intents";
-import { BASE_SEPOLIA_SLUG } from "../../convex/lib/networks";
+import { ROBINHOOD_TESTNET_SLUG } from "../../convex/lib/networks";
 import { makeT, seedDeskManager } from "./setup";
 import { internal } from "../../convex/_generated/api";
 
 describe("MCP prepare encoding (#207)", () => {
-  it("MCP_CHAIN is Base Sepolia slug", () => {
-    expect(MCP_CHAIN).toBe(BASE_SEPOLIA_SLUG);
-    expect(MCP_CHAIN).toBe("base-sepolia");
+  it("MCP_CHAIN is Robinhood Chain testnet slug", () => {
+    expect(MCP_CHAIN).toBe(ROBINHOOD_TESTNET_SLUG);
+    expect(MCP_CHAIN).toBe("robinhood-testnet");
   });
 
   it("serializeCall hex-encodes value and preserves calldata", () => {
@@ -50,7 +50,7 @@ describe("MCP prepare encoding (#207)", () => {
     );
     expect(shaped).toMatchObject({
       phase: "prepare",
-      chain: "base-sepolia",
+      chain: "robinhood-testnet",
       instructions: PREPARE_INSTRUCTIONS,
       summary: "Fund trader",
     });

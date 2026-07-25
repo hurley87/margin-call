@@ -1,6 +1,6 @@
 "use client";
 
-import { BASE_SEPOLIA_CHAIN_ID } from "@/lib/network";
+import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 import { useState, useCallback } from "react";
 import { erc20Abi, parseUnits, decodeEventLog, maxUint256 } from "viem";
 import { useMutation, useAction } from "convex/react";
@@ -100,7 +100,7 @@ export function useCreateDeal() {
             abi: erc20Abi,
             functionName: "approve",
             args: [ESCROW_ADDRESS, maxUint256],
-            chainId: BASE_SEPOLIA_CHAIN_ID,
+            chainId: ROBINHOOD_TESTNET_CHAIN_ID,
           });
 
           setState((s) => ({ ...s, approveHash, step: "confirmingApproval" }));
@@ -115,7 +115,7 @@ export function useCreateDeal() {
           abi: escrowAbi,
           functionName: "createDeal",
           args: [prompt, potAmountRaw, entryCostRaw],
-          chainId: BASE_SEPOLIA_CHAIN_ID,
+          chainId: ROBINHOOD_TESTNET_CHAIN_ID,
         });
 
         setState((s) => ({ ...s, createHash, step: "confirmingCreate" }));

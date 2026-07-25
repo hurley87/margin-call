@@ -16,7 +16,11 @@ import {
   ESCROW_ADDRESS,
   escrowAbi,
 } from "@/lib/contracts/escrow";
-import { BASE_SEPOLIA_CHAIN_ID, BASE_SEPOLIA_SLUG, txUrl } from "@/lib/network";
+import {
+  ROBINHOOD_TESTNET_CHAIN_ID,
+  ROBINHOOD_TESTNET_SLUG,
+  txUrl,
+} from "@/lib/network";
 import { NetworkBadge } from "@/components/shared/network-badge";
 import { makePublicClient } from "@/lib/contracts/client";
 import {
@@ -246,7 +250,7 @@ export function DealDetailContent({
     abi: escrowAbi,
     functionName: "getDeal",
     args: onChainDealId !== undefined ? [BigInt(onChainDealId)] : undefined,
-    chainId: BASE_SEPOLIA_CHAIN_ID,
+    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
     query: {
       enabled: onChainDealId !== undefined,
       refetchInterval: shouldPollOnChainDeal ? 5_000 : false,
@@ -413,10 +417,10 @@ export function DealDetailContent({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
-            <NetworkBadge slug={BASE_SEPOLIA_SLUG} />
+            <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
             {deal.on_chain_tx_hash && (
               <a
-                href={txUrl(BASE_SEPOLIA_SLUG, deal.on_chain_tx_hash)}
+                href={txUrl(ROBINHOOD_TESTNET_SLUG, deal.on_chain_tx_hash)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
@@ -528,7 +532,7 @@ export function DealDetailContent({
                     {outcome.on_chain_tx_hash && (
                       <a
                         href={txUrl(
-                          BASE_SEPOLIA_SLUG,
+                          ROBINHOOD_TESTNET_SLUG,
                           outcome.on_chain_tx_hash
                         )}
                         target="_blank"
@@ -698,7 +702,7 @@ function CloseDealButton({
         abi: escrowAbi,
         functionName: "closeDeal",
         args: [BigInt(onChainDealId)],
-        chainId: BASE_SEPOLIA_CHAIN_ID,
+        chainId: ROBINHOOD_TESTNET_CHAIN_ID,
       });
 
       setPhase("confirming");
@@ -726,7 +730,7 @@ function CloseDealButton({
         </p>
         {txHash && (
           <a
-            href={txUrl(BASE_SEPOLIA_SLUG, txHash)}
+            href={txUrl(ROBINHOOD_TESTNET_SLUG, txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"

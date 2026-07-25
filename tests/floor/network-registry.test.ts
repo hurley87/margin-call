@@ -1,8 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ACTIVE_NETWORK_ENV_KEY,
-  BASE_SEPOLIA_CHAIN_ID,
-  BASE_SEPOLIA_SLUG,
   DEFAULT_ACTIVE_NETWORK_SLUG,
   FORBIDDEN_MAINNET_CHAIN_ID,
   FORBIDDEN_ROBINHOOD_MAINNET_CHAIN_ID,
@@ -26,12 +24,12 @@ import {
   seatVaultConfirmationDepth,
   txUrl,
 } from "../../convex/lib/networks";
+import { BASE_SEPOLIA_CHAIN_ID } from "../../convex/lib/legacy";
 
 describe("network registry", () => {
-  it("lists both supported networks", () => {
+  it("lists only robinhood-testnet", () => {
     const slugs = listNetworks().map((n) => n.slug);
-    expect(slugs).toContain(ROBINHOOD_TESTNET_SLUG);
-    expect(slugs).toContain(BASE_SEPOLIA_SLUG);
+    expect(slugs).toEqual([ROBINHOOD_TESTNET_SLUG]);
   });
 
   it("resolves robinhood-testnet identity", () => {
@@ -44,10 +42,8 @@ describe("network registry", () => {
     );
   });
 
-  it("resolves base-sepolia as legacy", () => {
-    const network = getNetwork(BASE_SEPOLIA_SLUG);
-    expect(network.chainId).toBe(BASE_SEPOLIA_CHAIN_ID);
-    expect(network.legacy).toBe(true);
+  it("rejects base-sepolia as a Floor network", () => {
+    expect(() => getNetwork("base-sepolia")).toThrow(/Unknown network slug/);
   });
 
   it("throws on unknown slug", () => {
@@ -58,7 +54,7 @@ describe("network registry", () => {
 
   it("isNetworkSlug narrows correctly", () => {
     expect(isNetworkSlug("robinhood-testnet")).toBe(true);
-    expect(isNetworkSlug("base-sepolia")).toBe(true);
+    expect(isNetworkSlug("base-sepolia")).toBe(false);
     expect(isNetworkSlug("mainnet")).toBe(false);
   });
 });
@@ -84,10 +80,11 @@ describe("active network selection", () => {
     expect(getActiveNetwork().slug).toBe(ROBINHOOD_TESTNET_SLUG);
   });
 
-  it("honors MARGIN_CALL_NETWORK=base-sepolia", () => {
+  it("rejects MARGIN_CALL_NETWORK=base-sepolia", () => {
     process.env[ACTIVE_NETWORK_ENV_KEY] = "base-sepolia";
-    expect(resolveActiveNetworkSlug()).toBe(BASE_SEPOLIA_SLUG);
-    expect(getActiveNetwork().slug).toBe(BASE_SEPOLIA_SLUG);
+    expect(() => resolveActiveNetworkSlug()).toThrow(
+      /Floor supports only robinhood-testnet/
+    );
   });
 
   it("throws on unsupported configuration", () => {
@@ -113,7 +110,7 @@ describe("forbidden mainnet refusal", () => {
     );
   });
 
-  it("allows testnet chain IDs", () => {
+  it("allows Floor and legacy testnet chain IDs", () => {
     expect(isForbiddenMainnetChainId(ROBINHOOD_TESTNET_CHAIN_ID)).toBe(false);
     expect(isForbiddenMainnetChainId(BASE_SEPOLIA_CHAIN_ID)).toBe(false);
   });
@@ -123,8 +120,6 @@ describe("requireRpcUrl", () => {
   const keys = [
     "ROBINHOOD_TESTNET_RPC_URL",
     "NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL",
-    "BASE_SEPOLIA_RPC_URL",
-    "NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL",
   ] as const;
   const originals: Record<string, string | undefined> = {};
 
@@ -175,12 +170,6 @@ describe("explorer URLs", () => {
       "https://explorer.testnet.chain.robinhood.com/block/42"
     );
   });
-
-  it("builds base-sepolia explorer links", () => {
-    expect(txUrl(BASE_SEPOLIA_SLUG, "0xabc")).toBe(
-      "https://sepolia.basescan.org/tx/0xabc"
-    );
-  });
 });
 
 describe("asset labels", () => {
@@ -213,11 +202,6 @@ describe("confirmation policy", () => {
     expect(getConfirmationPolicy(ROBINHOOD_TESTNET_SLUG).finalityModel).toBe(
       "arbitrum-nitro-l2"
     );
-  });
-
-  it("keeps Base Sepolia confirmations and SeatVault depth", () => {
-    expect(recommendWaitBlocks(BASE_SEPOLIA_SLUG)).toBe(2);
-    expect(seatVaultConfirmationDepth(BASE_SEPOLIA_SLUG)).toBe(8);
   });
 
   it("throws SeatVault depth on robinhood-testnet", () => {

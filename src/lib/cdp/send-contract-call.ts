@@ -1,7 +1,7 @@
 import "server-only";
 
 import { encodeFunctionData, type Abi } from "viem";
-import { BASE_SEPOLIA_SLUG } from "@/lib/network";
+import { resolveActiveNetworkSlug } from "@/lib/network";
 import type { TraderSmartAccount } from "./trader-wallet";
 
 interface ContractCallParams {
@@ -13,17 +13,19 @@ interface ContractCallParams {
 
 /**
  * Send a contract call from a CDP Smart Account using a UserOperation.
- * Gas is automatically sponsored on Base Sepolia (no paymaster needed).
- * For mainnet, pass paymasterUrl in the sendUserOperation options.
+ * Network follows the active Floor slug (Robinhood Chain testnet).
+ * CDP may not yet support robinhood-testnet — mint/send will fail closed until it does.
  */
 export async function sendContractCall(
   smartAccount: TraderSmartAccount,
   { address, abi, functionName, args }: ContractCallParams
 ): Promise<{ userOpHash: string; transactionHash: string }> {
   const data = encodeFunctionData({ abi, functionName, args });
+  const network = resolveActiveNetworkSlug();
 
   const { userOpHash } = await smartAccount.sendUserOperation({
-    network: BASE_SEPOLIA_SLUG,
+    // CDP typed networks are Base/Eth today; Floor passes the active slug.
+    network: network as "base-sepolia",
     calls: [{ to: address, value: BigInt(0), data }],
   });
 
@@ -49,9 +51,10 @@ export async function sendBatchContractCalls(
     value: BigInt(0),
     data: encodeFunctionData({ abi, functionName, args }),
   }));
+  const network = resolveActiveNetworkSlug();
 
   const { userOpHash } = await smartAccount.sendUserOperation({
-    network: BASE_SEPOLIA_SLUG,
+    network: network as "base-sepolia",
     calls: encoded,
   });
 

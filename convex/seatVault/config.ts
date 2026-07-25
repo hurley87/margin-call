@@ -1,14 +1,13 @@
 import {
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
-  BASE_SEPOLIA_SLUG,
-  requireRpcUrl,
-  seatVaultConfirmationDepth,
-} from "../lib/networks";
+  LEGACY_SEAT_VAULT_CONFIRMATION_DEPTH,
+} from "../lib/legacy";
+import { requireRpcUrl, resolveActiveNetworkSlug } from "../lib/networks";
 import { resolveAddress } from "../lib/resolveAddress";
 
 /**
- * Resolve configured SeatVault address from the canonical active deployment.
- * Env vars, if set, must match the active record.
+ * Resolve configured SeatVault address from the legacy deployment record.
+ * Env vars, if set, must match. SeatVault itself is retired at #262.
  */
 export function resolveConfiguredSeatVaultAddress(): string {
   return resolveAddress(
@@ -19,12 +18,12 @@ export function resolveConfiguredSeatVaultAddress(): string {
     ],
     ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault,
     "SEAT_VAULT_ADDRESS",
-    "active Base Sepolia deployment"
+    "legacy Base Sepolia deployment"
   ).toLowerCase();
 }
 
 export function resolveRpcUrl(): string {
-  return requireRpcUrl(BASE_SEPOLIA_SLUG);
+  return requireRpcUrl(resolveActiveNetworkSlug());
 }
 
 export function resolveConfirmationDepth(): number {
@@ -33,7 +32,7 @@ export function resolveConfirmationDepth(): number {
     const n = Number.parseInt(raw, 10);
     if (Number.isFinite(n) && n >= 0) return n;
   }
-  return seatVaultConfirmationDepth(BASE_SEPOLIA_SLUG);
+  return LEGACY_SEAT_VAULT_CONFIRMATION_DEPTH;
 }
 
 export function normalizeAddress(address: string): string {

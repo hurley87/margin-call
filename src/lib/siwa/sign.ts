@@ -1,5 +1,5 @@
 import "server-only";
-import { BASE_SEPOLIA_CHAIN_ID } from "@/lib/network";
+import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 
 import { signSIWAMessage } from "@buildersgarden/siwa/siwa";
 // Define Signer interface locally to avoid pulling in @buildersgarden/siwa/signer
@@ -47,8 +47,8 @@ export async function signAgentRequest(
       domain,
       uri,
       agentId: tokenId,
-      agentRegistry: `eip155:${BASE_SEPOLIA_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
-      chainId: BASE_SEPOLIA_CHAIN_ID,
+      agentRegistry: `eip155:${ROBINHOOD_TESTNET_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
+      chainId: ROBINHOOD_TESTNET_CHAIN_ID,
       nonce,
       issuedAt: new Date().toISOString(),
     },

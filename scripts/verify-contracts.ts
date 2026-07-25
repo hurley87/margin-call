@@ -31,7 +31,7 @@ import {
 import {
   IDENTITY_REGISTRY_ADDRESS,
   USDC_SEPOLIA_ADDRESS,
-} from "../convex/lib/networks";
+} from "../convex/lib/legacy";
 
 const DEFAULT_SEAT = "10000000000000000000000";
 const DEFAULT_CORNER = "50000000000000000000000";

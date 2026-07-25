@@ -30,7 +30,8 @@ export {
   type SeatTierName,
   type SeatVaultEventName,
 } from "../../../convex/seatVault/policy";
-import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT, resolveAddress } from "@/lib/network";
+import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "@/lib/legacy";
+import { resolveAddress } from "@/lib/network";
 
 export const SEAT_VAULT_ADDRESS = resolveAddress(
   [
@@ -40,7 +41,7 @@ export const SEAT_VAULT_ADDRESS = resolveAddress(
   ],
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault,
   "SEAT_VAULT_ADDRESS",
-  "active Base Sepolia deployment"
+  "legacy Base Sepolia deployment"
 );
 
 /** $BLOW staking token (on-chain symbol may be MARGINCALL). */

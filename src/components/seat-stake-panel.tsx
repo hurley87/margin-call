@@ -17,7 +17,7 @@ import {
 import { useBaseNetwork } from "@/hooks/use-base-network";
 import { PAYMENT_CHAIN_NAME } from "@/lib/privy/config";
 import { NetworkBadge } from "@/components/shared/network-badge";
-import { BASE_SEPOLIA_SLUG } from "@/lib/network";
+import { ROBINHOOD_TESTNET_SLUG } from "@/lib/network";
 import {
   capacityForTier,
   CORNER_OFFICE_THRESHOLD_WEI,
@@ -240,7 +240,7 @@ export function SeatStakePanel({
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--t-divider)] p-3">
         <div className="flex flex-wrap items-center gap-2">
           {sectionTitle("Floor seat · $BLOW principal")}
-          <NetworkBadge slug={BASE_SEPOLIA_SLUG} />
+          <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
         </div>
         <SeatTierBadgeView
           tier={active?.effectiveTier ?? "Gallery"}

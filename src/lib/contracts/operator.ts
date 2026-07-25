@@ -2,8 +2,8 @@ import "server-only";
 
 import { createWalletClient, http, nonceManager, type Abi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { BASE_SEPOLIA_SLUG, getViemChain } from "@/lib/network";
-import { baseSepoliaRpcUrl, makePublicClient } from "./client";
+import { getActiveViemChain } from "@/lib/network";
+import { activeNetworkRpcUrl, makePublicClient } from "./client";
 
 interface OperatorContractCallParams {
   address: `0x${string}`;
@@ -22,8 +22,8 @@ function buildOperatorClient() {
   });
   return createWalletClient({
     account,
-    chain: getViemChain(BASE_SEPOLIA_SLUG),
-    transport: http(baseSepoliaRpcUrl()),
+    chain: getActiveViemChain(),
+    transport: http(activeNetworkRpcUrl()),
   });
 }
 

@@ -10,9 +10,9 @@ import {
   FORBIDDEN_MAINNET_USDC,
   USDC_SEPOLIA_ADDRESS,
   isBaseSepoliaChainId,
-  requireRpcUrl,
-  resolveAddress,
-} from "@/lib/network";
+  requireBaseSepoliaRpcUrl,
+} from "@/lib/legacy";
+import { ROBINHOOD_TESTNET_SLUG, resolveAddress } from "@/lib/network";
 import { SEAT_VAULT_V1 } from "../../../../convex/seatVault/policy";
 
 const ACTIVE_JSON_PATH = join(
@@ -20,7 +20,7 @@ const ACTIVE_JSON_PATH = join(
   "contracts/deployments/base-sepolia.active.json"
 );
 
-describe("baseSepoliaNetwork", () => {
+describe("legacy baseSepolia constants", () => {
   it("exports Base Sepolia chain identity only", () => {
     expect(BASE_SEPOLIA_CHAIN_ID).toBe(84532);
     expect(BASE_SEPOLIA_CAIP2).toBe("eip155:84532");
@@ -38,7 +38,7 @@ describe("baseSepoliaNetwork", () => {
   });
 });
 
-describe("activeDeployment", () => {
+describe("legacy activeDeployment", () => {
   it("matches contracts/deployments/base-sepolia.active.json", () => {
     const json = JSON.parse(readFileSync(ACTIVE_JSON_PATH, "utf8")) as {
       version: number;
@@ -53,7 +53,7 @@ describe("activeDeployment", () => {
     expect(ACTIVE_BASE_SEPOLIA_DEPLOYMENT.chainId).toBe(BASE_SEPOLIA_CHAIN_ID);
   });
 
-  it("aligns SEAT_VAULT_V1 with the active record", () => {
+  it("aligns SEAT_VAULT_V1 with the legacy record", () => {
     expect(SEAT_VAULT_V1.address).toBe(
       ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault
     );
@@ -102,7 +102,7 @@ describe("resolveAddress", () => {
   });
 });
 
-describe("requireRpcUrl(base-sepolia)", () => {
+describe("requireBaseSepoliaRpcUrl (legacy)", () => {
   const originalBase = process.env.BASE_SEPOLIA_RPC_URL;
   const originalPublic = process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL;
 
@@ -122,7 +122,7 @@ describe("requireRpcUrl(base-sepolia)", () => {
   it("throws when RPC URL is missing", () => {
     delete process.env.BASE_SEPOLIA_RPC_URL;
     delete process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL;
-    expect(() => requireRpcUrl(BASE_SEPOLIA_SLUG)).toThrow(
+    expect(() => requireBaseSepoliaRpcUrl()).toThrow(
       /Base Sepolia RPC URL is required/
     );
   });
@@ -131,20 +131,20 @@ describe("requireRpcUrl(base-sepolia)", () => {
     process.env.BASE_SEPOLIA_RPC_URL = "https://convex-rpc.example";
     process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL =
       "https://next-public-rpc.example";
-    expect(requireRpcUrl(BASE_SEPOLIA_SLUG)).toBe("https://convex-rpc.example");
+    expect(requireBaseSepoliaRpcUrl()).toBe("https://convex-rpc.example");
   });
 });
 
 describe("MCP plugin drift", () => {
-  it("matches canonical chain slug, escrow, and USDC", () => {
+  it("matches Floor chain slug, escrow, and USDC labels", () => {
     const pluginPath = join(
       process.cwd(),
       "packages/mcp-server/base-plugin/margin-call.md"
     );
     const plugin = readFileSync(pluginPath, "utf8");
 
-    expect(plugin).toContain(`Base Sepolia (\`${BASE_SEPOLIA_SLUG}\`)`);
-    expect(plugin).toContain("robinhood-testnet");
+    expect(plugin).toContain(ROBINHOOD_TESTNET_SLUG);
+    expect(plugin).toContain("Robinhood Chain testnet");
     expect(plugin).toContain("Margin Call Test Asset");
     expect(plugin).toContain(ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow);
     expect(plugin).toContain(USDC_SEPOLIA_ADDRESS);

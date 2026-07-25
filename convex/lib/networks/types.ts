@@ -1,10 +1,13 @@
 /**
- * Shared types for the slug-driven multi-network registry (#249).
+ * Shared types for the Floor slug-driven network registry (#249).
  * Environment-free: no RPC, no env reads.
+ *
+ * Floor supports Robinhood Chain testnet only. Base Sepolia lives in
+ * `convex/lib/legacy` until #262 deletes the deal-game path.
  */
 
-/** Supported network slugs. Default active network is robinhood-testnet. */
-export type NetworkSlug = "robinhood-testnet" | "base-sepolia";
+/** Floor network slug. Active runtime is always robinhood-testnet. */
+export type NetworkSlug = "robinhood-testnet";
 
 /** Asset / dependency status from the #248 packet. */
 export type AssetStatus = "canonical" | "test-asset-fallback" | "unverified";

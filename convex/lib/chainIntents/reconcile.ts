@@ -10,7 +10,11 @@ import {
 } from "./confirm";
 
 export type ReconcileDecision =
-  | { action: "confirm"; txHash: string; outcome: ConfirmationOutcome }
+  | {
+      action: "confirm";
+      txHash: string;
+      outcome: Extract<ConfirmationOutcome, { kind: "confirmed" }>;
+    }
   | { action: "fail"; txHash?: string; reason: string }
   | { action: "stay_reconciling"; reason: string }
   | { action: "abandon"; reason: string };

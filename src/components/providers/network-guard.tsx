@@ -3,7 +3,7 @@
 import { useBaseNetwork } from "@/hooks/use-base-network";
 import { PAYMENT_CHAIN_NAME } from "@/lib/privy/config";
 import { NetworkBadge } from "@/components/shared/network-badge";
-import { BASE_SEPOLIA_SLUG } from "@/lib/network";
+import { ROBINHOOD_TESTNET_SLUG } from "@/lib/network";
 
 /**
  * Renders a persistent banner when the connected wallet is on the wrong network,
@@ -21,7 +21,7 @@ export function NetworkGuard() {
       role="alert"
       className="flex flex-wrap items-center justify-center gap-3 border-b border-[var(--t-amber)]/45 bg-[#1a1208]/95 px-4 py-3 font-mono text-sm text-[var(--t-text)]"
     >
-      <NetworkBadge slug={BASE_SEPOLIA_SLUG} />
+      <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
       <span className="text-xs uppercase tracking-[0.14em] text-[var(--t-amber)]">
         Network mismatch: embedded desk wallet is off-floor. Switch to{" "}
         {PAYMENT_CHAIN_NAME} to use this app.

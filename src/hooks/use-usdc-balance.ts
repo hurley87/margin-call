@@ -8,7 +8,7 @@ import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
 import { syncDeskWalletBalance } from "@/lib/api";
 import { USDC_SEPOLIA_ADDRESS } from "@/lib/contracts/escrow";
 import { usdcFromRaw } from "@/lib/contracts/balance";
-import { BASE_SEPOLIA_CHAIN_ID } from "@/lib/network";
+import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 
 // Module-level dedup so two callers (e.g. dashboard + create-deal dialog) of the
 // same wallet share one sync POST per balance change instead of double-firing.
@@ -24,7 +24,7 @@ export function useUsdcBalance() {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: walletAddress ? [walletAddress] : undefined,
-    chainId: BASE_SEPOLIA_CHAIN_ID,
+    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
     query: {
       enabled: !!walletAddress,
       refetchInterval: 15_000,
