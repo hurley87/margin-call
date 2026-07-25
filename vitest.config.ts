@@ -7,6 +7,8 @@ export default defineConfig({
     // Skip scheduling wallet:createForTrader during Vitest — convex-test executes
     // that internal action with incomplete transaction context (runQuery throws).
     env: {
+      MC_SKIP_WALLET_SCHEDULE: "1",
+      AGENT_CYCLES_ENABLED: "1",
       MARGIN_CALL_NETWORK: "robinhood-testnet",
       NEXT_PUBLIC_MARGIN_CALL_NETWORK: "robinhood-testnet",
       NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL:
