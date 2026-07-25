@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "issue": 248,
+  "network": {
+    "name": "Robinhood Chain Testnet",
+    "slug": "robinhood-testnet",
+    "chainId": 46630,
+    "caip2": "eip155:46630",
+    "nativeGasAsset": {
+      "symbol": "ETH",
+      "decimals": 18,
+      "label": "test ETH (no real value)"
+    },
+    "rpc": {
+      "public": "https://rpc.testnet.chain.robinhood.com",
+      "alchemyTemplate": "https://robinhood-testnet.g.alchemy.com/v2/{API_KEY}",
+      "envKey": "ROBINHOOD_TESTNET_RPC_URL"
+    },
+    "websocket": {
+      "alchemyTemplate": "wss://robinhood-testnet.g.alchemy.com/v2/{API_KEY}"
+    },
+    "sequencer": {
+      "http": "https://sequencer.testnet.chain.robinhood.com",
+      "feedWs": "wss://feed.testnet.chain.robinhood.com"
+    },
+    "explorer": {
+      "browserUrl": "https://explorer.testnet.chain.robinhood.com",
+      "apiUrl": "https://explorer.testnet.chain.robinhood.com/api/",
+      "verifier": "blockscout"
+    },
+    "faucet": "https://faucet.testnet.chain.robinhood.com",
+    "confirmationAssumptions": {
+      "finalityModel": "arbitrum-nitro-l2",
+      "recommendWaitBlocks": 1,
+      "notes": "Treat a successful receipt as confirmed for testnet smoke. Do not assume Base Sepolia confirmation semantics."
+    },
+    "docs": {
+      "connecting": "https://docs.robinhood.com/chain/connecting/",
+      "oracles": "https://docs.robinhood.com/chain/oracles-and-price-feeds/",
+      "contracts": "https://docs.robinhood.com/chain/contracts/"
+    }
+  },
+  "forbidden": {
+    "mainnetChainId": 4663,
+    "mainnetCaip2": "eip155:4663",
+    "notes": "No mainnet deployment, bridge, or real-value funds are authorized by issue #248."
+  },
+  "dependencies": [
+    {
+      "id": "erc6551-registry",
+      "kind": "registry",
+      "status": "canonical",
+      "label": "ERC-6551 Token Bound Account Registry",
+      "address": "0x000000006551c19487814612e58FE06813775758",
+      "expectedInterfaces": ["IERC6551Registry"],
+      "notes": "CREATE2-deployed canonical registry. Live eth_getCode on 2026-07-25 returned non-empty bytecode on Robinhood Chain testnet."
+    },
+    {
+      "id": "erc6551-account-implementation",
+      "kind": "account-implementation",
+      "status": "test-asset-fallback",
+      "label": "Margin Call Test Asset — TBA account implementation (to deploy)",
+      "address": null,
+      "candidateReference": {
+        "name": "Tokenbound AccountV3 (audited lineage)",
+        "referenceAddressOtherChain": "0x55266d75D1a14E4572138116aF39863Ed6596E7F",
+        "referenceChain": "base-sepolia",
+        "notes": "Do not assume this address contains code on Robinhood Chain testnet. Live eth_getCode returned empty. Deploy and verify a compatible audited implementation under a Floor deployment address."
+      },
+      "expectedInterfaces": ["IERC6551Account", "IERC6551Executable"],
+      "notes": "PRD requires deploying a compatible audited account implementation because cross-chain implementation addresses must not be assumed."
+    },
+    {
+      "id": "usdg",
+      "kind": "payment-token",
+      "status": "test-asset-fallback",
+      "label": "Margin Call Test Asset — test USDG",
+      "address": null,
+      "canonicalMainnetReference": {
+        "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+        "chainId": 4663,
+        "notes": "Mainnet USDG from Robinhood token contracts docs. Live eth_getCode on testnet returned empty — do not present as a Robinhood testnet USDG."
+      },
+      "expectedInterfaces": ["IERC20", "IERC20Metadata"],
+      "decimalsHint": 6,
+      "notes": "No canonical testnet USDG bytecode found at the published mainnet address. Floor v1 uses a visibly labelled Margin Call Test Asset."
+    },
+    {
+      "id": "stock-token-aapl",
+      "kind": "stock-token",
+      "status": "test-asset-fallback",
+      "label": "Margin Call Test Asset — AAPL",
+      "ticker": "AAPL",
+      "address": null,
+      "expectedInterfaces": [
+        "IERC20",
+        "IERC20Metadata",
+        "IERC8056",
+        "oraclePaused"
+      ],
+      "decimalsHint": 18,
+      "notes": "Canonical Robinhood Stock Token addresses are published for mainnet via the live asset registry. Testnet has no confirmed AAPL bytecode yet; use a labelled Test Asset."
+    },
+    {
+      "id": "stock-token-nvda",
+      "kind": "stock-token",
+      "status": "test-asset-fallback",
+      "label": "Margin Call Test Asset — NVDA",
+      "ticker": "NVDA",
+      "address": null,
+      "expectedInterfaces": [
+        "IERC20",
+        "IERC20Metadata",
+        "IERC8056",
+        "oraclePaused"
+      ],
+      "decimalsHint": 18,
+      "notes": "Same as AAPL: fallback until a canonical testnet Stock Token is confirmed."
+    },
+    {
+      "id": "price-feed-aapl",
+      "kind": "price-feed",
+      "status": "test-asset-fallback",
+      "label": "Margin Call Test Asset — AAPL price feed",
+      "ticker": "AAPL",
+      "address": null,
+      "expectedInterfaces": ["AggregatorV3Interface"],
+      "heartbeatSecondsHint": 86400,
+      "notes": "Chainlink documents Robinhood equity feeds for mainnet. No confirmed testnet AAPL feed proxy yet."
+    },
+    {
+      "id": "price-feed-nvda",
+      "kind": "price-feed",
+      "status": "test-asset-fallback",
+      "label": "Margin Call Test Asset — NVDA price feed",
+      "ticker": "NVDA",
+      "address": null,
+      "expectedInterfaces": ["AggregatorV3Interface"],
+      "heartbeatSecondsHint": 86400,
+      "notes": "Same as AAPL feed: fallback until a canonical testnet feed proxy is confirmed."
+    },
+    {
+      "id": "sequencer-uptime-feed",
+      "kind": "sequencer-uptime-feed",
+      "status": "test-asset-fallback",
+      "label": "Margin Call Test Asset — sequencer uptime feed",
+      "address": null,
+      "candidateReference": {
+        "name": "Chainlink L2 Sequencer Uptime Feed (Arbitrum-style address)",
+        "referenceAddressOtherChain": "0xFdB631F5EE196F0ed6FAa767e557c4e71eF0A6f6",
+        "referenceChain": "arbitrum-one",
+        "notes": "Live eth_getCode on Robinhood testnet returned empty. Do not reuse blindly."
+      },
+      "expectedInterfaces": ["AggregatorV3Interface"],
+      "notes": "Robinhood docs recommend checking a Chainlink L2 Sequencer Uptime Feed before trusting prices. Address remains unset until a canonical testnet feed is published."
+    },
+    {
+      "id": "erc8056-multiplier",
+      "kind": "interface-capability",
+      "status": "unverified",
+      "label": "ERC-8056 uiMultiplier support on Stock Tokens",
+      "address": null,
+      "expectedInterfaces": ["IERC8056"],
+      "notes": "Canonical Stock Tokens document uiMultiplier()/newUIMultiplier()/effectiveAt(). Capability is unverified on testnet until a live Stock Token address exists; Test Asset doubles must implement the same interface shape."
+    },
+    {
+      "id": "gas-sponsorship",
+      "kind": "infra",
+      "status": "unverified",
+      "label": "Alchemy gasless / sponsorship path",
+      "address": null,
+      "expectedInterfaces": [],
+      "notes": "Robinhood docs list Alchemy Gasless Transaction Infrastructure. Sponsorship proof (#248 AC) must demonstrate an independently controlled wallet can submit a harmless call; path details recorded in the packet after the live proof."
+    }
+  ]
+}
