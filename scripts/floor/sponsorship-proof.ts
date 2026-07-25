@@ -125,6 +125,7 @@ async function submitAlchemySponsored(_opts: {
   rpcUrl: string;
   sender: `0x${string}`;
 }): Promise<never> {
+  void _opts;
   const apiKey = process.env.ALCHEMY_API_KEY?.trim();
   const policyId = process.env.ALCHEMY_GAS_POLICY_ID?.trim();
   if (!apiKey || !policyId) {

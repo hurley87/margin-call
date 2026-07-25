@@ -36,6 +36,9 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      - name: Floor offline preflight (#248)
+        run: pnpm floor:preflight
+
   vitest:
     name: Vitest
     runs-on: ubuntu-latest
@@ -125,6 +128,36 @@ jobs:
 
       - name: Forge fork tests
         run: forge test --match-path 'test/fork/**'
+
+  floor-preflight-live:
+    name: Floor (Robinhood testnet live preflight)
+    runs-on: ubuntu-latest
+    # Soft-skips when ROBINHOOD_TESTNET_RPC_URL is unset (secrets cannot be
+    # compared in job-level `if`). Mirror contracts-fork gating.
+    env:
+      ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.0.0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: ".nvmrc"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Live dependency probe
+        run: |
+          if [ -z "$ROBINHOOD_TESTNET_RPC_URL" ]; then
+            echo "ROBINHOOD_TESTNET_RPC_URL unset — skipping live Floor preflight"
+            exit 0
+          fi
+          pnpm floor:preflight:live
 
   # Push Convex functions on merge to main so the backend never lags the
   # Vercel frontend deploy. Skipping this is what broke the trader dialog:
