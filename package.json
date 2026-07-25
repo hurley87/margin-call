@@ -31,7 +31,11 @@
     "deploy:seat-vault": "tsx scripts/deploy-seat-vault.ts",
     "verify:escrow": "tsx scripts/verify-contracts.ts --target=escrow",
     "verify:seat-vault": "tsx scripts/verify-contracts.ts --target=seat-vault",
-    "verify:contracts": "tsx scripts/verify-contracts.ts --target=all"
+    "verify:contracts": "tsx scripts/verify-contracts.ts --target=all",
+    "floor:preflight": "tsx scripts/floor/preflight.ts",
+    "floor:preflight:live": "tsx scripts/floor/preflight-robinhood-testnet.ts",
+    "floor:sponsorship-proof": "tsx scripts/floor/sponsorship-proof.ts",
+    "test:floor": "vitest run tests/floor"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",
@@ -74,6 +78,7 @@
     "lint-staged": "^17.1.0",
     "prettier": "^3.9.5",
     "tailwindcss": "^4",
+    "tsx": "^4.23.1",
     "typescript": "^5",
     "vitest": "4.1.10"
   },

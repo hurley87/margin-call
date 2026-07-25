@@ -22,6 +22,7 @@ export default defineConfig({
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
       "tests/convex/**/*.test.ts",
+      "tests/floor/**/*.test.ts",
     ],
     exclude: ["**/node_modules/**", "contracts/lib/**"],
   },

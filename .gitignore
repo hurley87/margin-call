@@ -51,3 +51,6 @@ next-env.d.ts
 # agent skills (managed locally)
 .agents/skills/
 .claude/skills/
+
+# Floor #248 live probe / sponsorship evidence (secrets + RPC artifacts)
+.floor-evidence/
