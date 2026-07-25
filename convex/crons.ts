@@ -86,6 +86,17 @@ crons.interval(
 );
 
 /**
+ * Reconcile stuck chainIntents (submitted / reconciling) by transaction
+ * identity. Never re-signs or resubmits. See convex/chainIntentsReconcile.ts.
+ */
+crons.interval(
+  "chain-intents-reconcile-stuck",
+  { minutes: 1 },
+  internal.chainIntentsReconcile.reconcileStuck,
+  {}
+);
+
+/**
  * Reconcile orphaned deal-entry reservations. If a process dies between the
  * on-chain `enterDeal` and the Convex `recordVerifiedEntry`, the contract keeps
  * the entry in its `pendingEntries` count (blocking the creator from closing
