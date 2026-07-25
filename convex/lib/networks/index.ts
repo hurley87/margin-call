@@ -1,6 +1,6 @@
 /**
- * Slug-driven multi-network registry (#249).
- * Re-exports the public surface used by Convex and Next.js.
+ * Floor slug-driven network registry (#249) — Robinhood Chain testnet only.
+ * Base Sepolia deal-game constants: `convex/lib/legacy`.
  */
 
 export type {
@@ -15,22 +15,6 @@ export type {
 } from "./types";
 
 export {
-  BASE_SEPOLIA_CAIP2,
-  BASE_SEPOLIA_CHAIN_ID,
-  BASE_SEPOLIA_NETWORK,
-  BASE_SEPOLIA_SLUG,
-  ERC6551_DEFAULT_IMPLEMENTATION,
-  ERC6551_REGISTRY_ADDRESS,
-  FORBIDDEN_MAINNET_CHAIN_ID,
-  FORBIDDEN_MAINNET_USDC,
-  IDENTITY_REGISTRY_ADDRESS,
-  REPUTATION_REGISTRY_ADDRESS,
-  USDC_SEPOLIA_ADDRESS,
-  baseSepoliaChain,
-  isBaseSepoliaChainId,
-} from "./base-sepolia";
-
-export {
   FORBIDDEN_ROBINHOOD_MAINNET_CHAIN_ID,
   ROBINHOOD_ERC6551_REGISTRY_ADDRESS,
   ROBINHOOD_TESTNET_CAIP2,
@@ -38,7 +22,10 @@ export {
   ROBINHOOD_TESTNET_NETWORK,
   ROBINHOOD_TESTNET_SLUG,
   robinhoodTestnet,
-} from "./robinhood-testnet";
+} from "./robinhoodTestnet";
+
+/** Re-export Base mainnet forbid constant used by Floor refuse checks. */
+export { FORBIDDEN_MAINNET_CHAIN_ID } from "../legacy/baseSepolia";
 
 export {
   SUPPORTED_SLUGS,
@@ -56,6 +43,7 @@ export {
   DEFAULT_ACTIVE_NETWORK_SLUG,
   getActiveNetwork,
   getActiveViemChain,
+  isActiveChainId,
   resolveActiveNetworkSlug,
 } from "./active";
 
@@ -70,8 +58,3 @@ export {
   recommendWaitBlocks,
   seatVaultConfirmationDepth,
 } from "./confirmations";
-
-export {
-  ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
-  type ActiveBaseSepoliaDeployment,
-} from "./deployments";
