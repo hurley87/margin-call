@@ -10,8 +10,9 @@ import {
 import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
 import {
   BASE_SEPOLIA_CHAIN_ID,
-  CONTRACTS_CHAIN,
-  requireBaseSepoliaRpcUrl,
+  BASE_SEPOLIA_SLUG,
+  getViemChain,
+  requireRpcUrl,
 } from "@/lib/network";
 
 const nonceStore = createConvexNonceStore();
@@ -24,8 +25,8 @@ const nonceStore = createConvexNonceStore();
 const SIWE_CHAIN_ID = BASE_SEPOLIA_CHAIN_ID;
 function siwePublicClient() {
   return createPublicClient({
-    chain: CONTRACTS_CHAIN,
-    transport: http(requireBaseSepoliaRpcUrl()),
+    chain: getViemChain(BASE_SEPOLIA_SLUG),
+    transport: http(requireRpcUrl(BASE_SEPOLIA_SLUG)),
   });
 }
 
@@ -112,8 +113,7 @@ export async function issueDeskSiweChallenge(address: string): Promise<{
 }
 
 export type VerifyDeskSiweResult =
-  | { valid: true; address: `0x${string}` }
-  | { valid: false; error: string };
+  { valid: true; address: `0x${string}` } | { valid: false; error: string };
 
 /**
  * Verify a SIWE message + signature from a Base Account (EIP-1271 / ERC-6492).

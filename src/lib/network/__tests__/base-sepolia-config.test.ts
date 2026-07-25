@@ -10,7 +10,7 @@ import {
   FORBIDDEN_MAINNET_USDC,
   USDC_SEPOLIA_ADDRESS,
   isBaseSepoliaChainId,
-  requireBaseSepoliaRpcUrl,
+  requireRpcUrl,
   resolveAddress,
 } from "@/lib/network";
 import { SEAT_VAULT_V1 } from "../../../../convex/seatVault/policy";
@@ -102,7 +102,7 @@ describe("resolveAddress", () => {
   });
 });
 
-describe("requireBaseSepoliaRpcUrl", () => {
+describe("requireRpcUrl(base-sepolia)", () => {
   const originalBase = process.env.BASE_SEPOLIA_RPC_URL;
   const originalPublic = process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL;
 
@@ -122,7 +122,7 @@ describe("requireBaseSepoliaRpcUrl", () => {
   it("throws when RPC URL is missing", () => {
     delete process.env.BASE_SEPOLIA_RPC_URL;
     delete process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL;
-    expect(() => requireBaseSepoliaRpcUrl()).toThrow(
+    expect(() => requireRpcUrl(BASE_SEPOLIA_SLUG)).toThrow(
       /Base Sepolia RPC URL is required/
     );
   });
@@ -131,7 +131,7 @@ describe("requireBaseSepoliaRpcUrl", () => {
     process.env.BASE_SEPOLIA_RPC_URL = "https://convex-rpc.example";
     process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL =
       "https://next-public-rpc.example";
-    expect(requireBaseSepoliaRpcUrl()).toBe("https://convex-rpc.example");
+    expect(requireRpcUrl(BASE_SEPOLIA_SLUG)).toBe("https://convex-rpc.example");
   });
 });
 

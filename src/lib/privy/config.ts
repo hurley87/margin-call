@@ -2,11 +2,13 @@ import type { PrivyClientConfig } from "@privy-io/react-auth";
 import {
   BASE_SEPOLIA_CAIP2,
   BASE_SEPOLIA_CHAIN_ID,
-  CONTRACTS_CHAIN,
+  BASE_SEPOLIA_SLUG,
+  getViemChain,
   isBaseSepoliaChainId,
 } from "@/lib/network";
 
-export const PAYMENT_CHAIN = CONTRACTS_CHAIN;
+/** Legacy deal-game payment chain — removed at #262. */
+export const PAYMENT_CHAIN = getViemChain(BASE_SEPOLIA_SLUG);
 export const PAYMENT_CHAIN_NAME = PAYMENT_CHAIN.name;
 export const BASE_CHAIN_ID = BASE_SEPOLIA_CHAIN_ID;
 export const BASE_CHAIN_ID_CAIP2 = BASE_SEPOLIA_CAIP2;

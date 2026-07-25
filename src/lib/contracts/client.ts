@@ -1,14 +1,14 @@
 import { createPublicClient, http } from "viem";
-import { CONTRACTS_CHAIN } from "./escrow";
-import { requireBaseSepoliaRpcUrl } from "@/lib/network";
+import { BASE_SEPOLIA_SLUG, getViemChain, requireRpcUrl } from "@/lib/network";
 
+/** Legacy deal-game RPC URL — removed at #262. */
 export function baseSepoliaRpcUrl(): string {
-  return requireBaseSepoliaRpcUrl();
+  return requireRpcUrl(BASE_SEPOLIA_SLUG);
 }
 
 function buildPublicClient() {
   return createPublicClient({
-    chain: CONTRACTS_CHAIN,
+    chain: getViemChain(BASE_SEPOLIA_SLUG),
     transport: http(baseSepoliaRpcUrl()),
     // Base blocks land in ~2s; poll faster than viem's 4s default so receipt
     // waits between the approve and createDeal txs resolve promptly.

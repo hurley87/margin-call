@@ -1,9 +1,10 @@
 /**
  * Next.js re-exports of the slug-driven network registry (source: convex/lib/networks).
- * Legacy Base Sepolia symbols remain for deal-game consumers until #262.
  */
 export {
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
+  ACTIVE_NETWORK_ENV_KEY,
+  ACTIVE_NETWORK_PUBLIC_ENV_KEY,
   BASE_SEPOLIA_CAIP2,
   BASE_SEPOLIA_CHAIN_ID,
   BASE_SEPOLIA_NETWORK,
@@ -48,24 +49,4 @@ export {
   type NetworkSlug,
 } from "../../../convex/lib/networks";
 
-import {
-  BASE_SEPOLIA_CHAIN_ID,
-  BASE_SEPOLIA_SLUG,
-  baseSepoliaChain,
-  requireRpcUrl,
-} from "../../../convex/lib/networks";
-
 export { resolveAddress } from "../../../convex/lib/resolveAddress";
-
-/** @deprecated Prefer getViemChain(BASE_SEPOLIA_SLUG) or getActiveViemChain(). */
-export const CONTRACTS_CHAIN = baseSepoliaChain;
-
-/** @deprecated Prefer BASE_SEPOLIA_CHAIN_ID or getActiveNetwork().chainId. */
-export const CONTRACTS_CHAIN_ID = BASE_SEPOLIA_CHAIN_ID;
-
-/**
- * @deprecated Prefer requireRpcUrl(BASE_SEPOLIA_SLUG) or requireRpcUrl(getActiveNetwork().slug).
- */
-export function requireBaseSepoliaRpcUrl(): string {
-  return requireRpcUrl(BASE_SEPOLIA_SLUG);
-}

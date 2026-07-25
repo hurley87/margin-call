@@ -28,7 +28,7 @@ vi.mock("@/lib/network", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/network")>();
   return {
     ...actual,
-    requireBaseSepoliaRpcUrl: () => "https://example-rpc.test",
+    requireRpcUrl: () => "https://example-rpc.test",
   };
 });
 

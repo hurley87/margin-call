@@ -1,6 +1,7 @@
 import "server-only";
 
 import { encodeFunctionData, type Abi } from "viem";
+import { BASE_SEPOLIA_SLUG } from "@/lib/network";
 import type { TraderSmartAccount } from "./trader-wallet";
 
 interface ContractCallParams {
@@ -22,7 +23,7 @@ export async function sendContractCall(
   const data = encodeFunctionData({ abi, functionName, args });
 
   const { userOpHash } = await smartAccount.sendUserOperation({
-    network: "base-sepolia",
+    network: BASE_SEPOLIA_SLUG,
     calls: [{ to: address, value: BigInt(0), data }],
   });
 
@@ -50,7 +51,7 @@ export async function sendBatchContractCalls(
   }));
 
   const { userOpHash } = await smartAccount.sendUserOperation({
-    network: "base-sepolia",
+    network: BASE_SEPOLIA_SLUG,
     calls: encoded,
   });
 

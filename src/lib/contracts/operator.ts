@@ -2,7 +2,7 @@ import "server-only";
 
 import { createWalletClient, http, nonceManager, type Abi } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { CONTRACTS_CHAIN } from "./escrow";
+import { BASE_SEPOLIA_SLUG, getViemChain } from "@/lib/network";
 import { baseSepoliaRpcUrl, makePublicClient } from "./client";
 
 interface OperatorContractCallParams {
@@ -22,7 +22,7 @@ function buildOperatorClient() {
   });
   return createWalletClient({
     account,
-    chain: CONTRACTS_CHAIN,
+    chain: getViemChain(BASE_SEPOLIA_SLUG),
     transport: http(baseSepoliaRpcUrl()),
   });
 }

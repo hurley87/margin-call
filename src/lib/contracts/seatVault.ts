@@ -39,7 +39,8 @@ export const SEAT_VAULT_ADDRESS = resolveAddress(
     process.env.ACTIVE_SEAT_VAULT_ADDRESS,
   ],
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault,
-  "SEAT_VAULT_ADDRESS"
+  "SEAT_VAULT_ADDRESS",
+  "active Base Sepolia deployment"
 );
 
 /** $BLOW staking token (on-chain symbol may be MARGINCALL). */
@@ -51,5 +52,6 @@ export const MARGINCALL_TOKEN_ADDRESS = resolveAddress(
     process.env.MARGINCALL_TOKEN,
   ],
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT.margincallToken,
-  "MARGINCALL_TOKEN_ADDRESS"
+  "MARGINCALL_TOKEN_ADDRESS",
+  "active Base Sepolia deployment"
 );

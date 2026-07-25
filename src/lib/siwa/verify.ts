@@ -1,12 +1,10 @@
 import "server-only";
+import { BASE_SEPOLIA_CHAIN_ID } from "@/lib/network";
 
 import { createSIWANonce, parseSIWAMessage } from "@buildersgarden/siwa/siwa";
 import { recoverMessageAddress, getAddress } from "viem";
 import { makePublicClient } from "@/lib/contracts/client";
-import {
-  IDENTITY_REGISTRY_ADDRESS,
-  CONTRACTS_CHAIN_ID,
-} from "@/lib/contracts/escrow";
+import { IDENTITY_REGISTRY_ADDRESS } from "@/lib/contracts/escrow";
 import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
 
 const nonceStore = createConvexNonceStore();
@@ -26,7 +24,7 @@ export async function createNonce(agentId: number, address: string) {
     {
       agentId,
       address,
-      agentRegistry: `eip155:${CONTRACTS_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
+      agentRegistry: `eip155:${BASE_SEPOLIA_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
     },
     client,
     { nonceStore }
@@ -91,8 +89,8 @@ export async function verifySIWARequest(
     if (
       registryParts.length !== 3 ||
       registryParts[0] !== "eip155" ||
-      Number(fields.chainId) !== CONTRACTS_CHAIN_ID ||
-      Number(registryParts[1]) !== CONTRACTS_CHAIN_ID ||
+      Number(fields.chainId) !== BASE_SEPOLIA_CHAIN_ID ||
+      Number(registryParts[1]) !== BASE_SEPOLIA_CHAIN_ID ||
       getAddress(registryParts[2]) !== getAddress(IDENTITY_REGISTRY_ADDRESS)
     ) {
       console.error("[SIWA verify] Agent registry or chain mismatch");
