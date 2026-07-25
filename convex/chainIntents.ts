@@ -32,8 +32,9 @@ const INTENT_TTL_MS = 60 * 60 * 1000;
 
 /**
  * Create or reuse a prepared intent under a stable intentKey.
- * Re-prepare never mints a second identity for the same key while a
- * non-terminal intent exists.
+ * Re-prepare never mints a second identity for the same key — including after
+ * the prior row reached a terminal status. A genuinely new logical write must
+ * use a new intentKey.
  */
 export const prepare = internalMutation({
   args: {
@@ -104,6 +105,18 @@ export const prepare = internalMutation({
         status: active.status as ChainIntentStatus,
         reused: true,
       };
+    }
+
+    // Terminal row already owns this key — never mint a second identity.
+    // Callers must choose a new intentKey for a new logical write.
+    const terminal = existing
+      .filter((row) => isTerminalStatus(row.status as ChainIntentStatus))
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (terminal) {
+      throw new Error(
+        `Intent key "${args.intentKey}" already ended as ${terminal.status} ` +
+          `(intentId=${terminal._id}). Use a new intentKey for a new logical write.`
+      );
     }
 
     const intentId = await ctx.db.insert("chainIntents", {

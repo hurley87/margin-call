@@ -130,6 +130,21 @@ export const create = internalMutation({
       };
     }
 
+    // Terminal row already owns this key — never mint a second identity.
+    const terminal = existing
+      .filter(
+        (row) =>
+          row.intentType === args.intentType &&
+          isTerminalStatus(row.status as ChainIntentStatus)
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)[0];
+    if (terminal) {
+      throw new Error(
+        `Intent key "${intentKey}" already ended as ${terminal.status} ` +
+          `(intentId=${terminal._id}). Use a new idempotencyKey for a new logical write.`
+      );
+    }
+
     const intentId = await ctx.db.insert("chainIntents", {
       networkSlug: args.chain,
       intentKey,
@@ -191,7 +206,7 @@ export const getForConfirm = internalQuery({
 
 /**
  * Cron entrypoint: abandon prepared intents past their TTL.
- * Rows are kept so intentKey lookup won't reuse an abandoned envelope.
+ * Rows are kept so the same intentKey cannot mint a second identity.
  */
 export const expirePending = internalMutation({
   args: {},

@@ -38,7 +38,7 @@ Table: `chainIntents` in [`convex/schema.ts`](../../convex/schema.ts)
 
 Statuses: `prepared → signing → submitted → confirmed | failed | reconciling → abandoned`
 
-- One stable `intentKey` per logical write. Re-prepare never mints a second identity.
+- One stable `intentKey` per logical write. Re-prepare never mints a second identity — including after `failed` / `abandoned`. A new logical write needs a new key.
 - Ambiguous submissions move to `reconciling` and are resolved by **transaction identity** (`txHash`, then sender nonce) — **never** by re-signing or resubmitting.
 - MCP treasury prepare/confirm is a facade over `chainIntents` ([`convex/mcp/intents.ts`](../../convex/mcp/intents.ts)).
 - Cron: `chain-intents-reconcile-stuck` every 1 minute.

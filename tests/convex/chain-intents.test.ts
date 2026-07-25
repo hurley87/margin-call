@@ -8,7 +8,7 @@ import {
 } from "../../convex/lib/chainIntents/stateMachine";
 import { makeT, seedDeskManager } from "./setup";
 import { internal } from "../../convex/_generated/api";
-import { BASE_SEPOLIA_SLUG } from "../../convex/lib/networks";
+import { ROBINHOOD_TESTNET_SLUG } from "../../convex/lib/networks";
 
 describe("chain intent state machine", () => {
   it("allows the happy path prepare → signing → submitted → confirmed", () => {
@@ -59,7 +59,7 @@ describe("chainIntents prepare identity", () => {
     const now = Date.now();
 
     const first = await t.mutation(internal.chainIntents.prepare, {
-      networkSlug: BASE_SEPOLIA_SLUG,
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
       intentKey: "desk:fund:trader-1:100",
       intentType: "fund_trader",
       deskManagerId: deskId,
@@ -70,7 +70,7 @@ describe("chainIntents prepare identity", () => {
     expect(first.status).toBe("prepared");
 
     const second = await t.mutation(internal.chainIntents.prepare, {
-      networkSlug: BASE_SEPOLIA_SLUG,
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
       intentKey: "desk:fund:trader-1:100",
       intentType: "fund_trader",
       deskManagerId: deskId,
@@ -87,7 +87,7 @@ describe("chainIntents prepare identity", () => {
     const now = Date.now();
 
     const prepared = await t.mutation(internal.chainIntents.prepare, {
-      networkSlug: BASE_SEPOLIA_SLUG,
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
       intentKey: "desk:create:deal-a",
       intentType: "create_deal",
       deskManagerId: deskId,
@@ -102,7 +102,7 @@ describe("chainIntents prepare identity", () => {
     });
 
     const again = await t.mutation(internal.chainIntents.prepare, {
-      networkSlug: BASE_SEPOLIA_SLUG,
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
       intentKey: "desk:create:deal-a",
       intentType: "create_deal",
       deskManagerId: deskId,
@@ -118,7 +118,7 @@ describe("chainIntents prepare identity", () => {
     const now = Date.now();
 
     const prepared = await t.mutation(internal.chainIntents.prepare, {
-      networkSlug: BASE_SEPOLIA_SLUG,
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
       intentKey: "desk:withdraw:1",
       intentType: "withdraw",
       deskManagerId: deskId,
@@ -140,7 +140,7 @@ describe("chainIntents prepare identity", () => {
     });
 
     const cached = await t.mutation(internal.chainIntents.prepare, {
-      networkSlug: BASE_SEPOLIA_SLUG,
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
       intentKey: "desk:withdraw:1",
       intentType: "withdraw",
       deskManagerId: deskId,
@@ -150,10 +150,89 @@ describe("chainIntents prepare identity", () => {
     expect(cached.confirmResult).toEqual({ ok: true, amount: 10 });
   });
 
+  it("rejects re-prepare after failed — does not mint a second identity", async () => {
+    const t = makeT();
+    const deskId = await seedDeskManager(t);
+    const now = Date.now();
+    const intentKey = "desk:fund:retry-same-key";
+
+    const prepared = await t.mutation(internal.chainIntents.prepare, {
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
+      intentKey,
+      intentType: "fund_trader",
+      deskManagerId: deskId,
+      now,
+    });
+
+    await t.mutation(internal.chainIntents.transition, {
+      intentId: prepared.intentId,
+      to: "failed",
+      lastError: "user rejected",
+      now: now + 1,
+    });
+
+    await expect(
+      t.mutation(internal.chainIntents.prepare, {
+        networkSlug: ROBINHOOD_TESTNET_SLUG,
+        intentKey,
+        intentType: "fund_trader",
+        deskManagerId: deskId,
+        now: now + 2,
+      })
+    ).rejects.toThrow(/already ended as failed/);
+
+    const rows = await t.run(async (ctx) =>
+      ctx.db
+        .query("chainIntents")
+        .withIndex("byIntentKey", (q) => q.eq("intentKey", intentKey))
+        .collect()
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!._id).toBe(prepared.intentId);
+  });
+
+  it("rejects re-prepare after abandoned — requires a new intentKey", async () => {
+    const t = makeT();
+    const now = Date.now();
+    const intentKey = "desk:fund:abandoned-key";
+
+    const prepared = await t.mutation(internal.chainIntents.prepare, {
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
+      intentKey,
+      intentType: "fund_trader",
+      now,
+    });
+
+    await t.mutation(internal.chainIntents.transition, {
+      intentId: prepared.intentId,
+      to: "abandoned",
+      lastError: "TTL expired before submit",
+      now: now + 1,
+    });
+
+    await expect(
+      t.mutation(internal.chainIntents.prepare, {
+        networkSlug: ROBINHOOD_TESTNET_SLUG,
+        intentKey,
+        intentType: "fund_trader",
+        now: now + 2,
+      })
+    ).rejects.toThrow(/already ended as abandoned/);
+
+    const retry = await t.mutation(internal.chainIntents.prepare, {
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
+      intentKey: `${intentKey}:v2`,
+      intentType: "fund_trader",
+      now: now + 3,
+    });
+    expect(retry.reused).toBe(false);
+    expect(retry.intentId).not.toBe(prepared.intentId);
+  });
+
   it("rejects illegal transition mutations", async () => {
     const t = makeT();
     const prepared = await t.mutation(internal.chainIntents.prepare, {
-      networkSlug: BASE_SEPOLIA_SLUG,
+      networkSlug: ROBINHOOD_TESTNET_SLUG,
       intentKey: "desk:bad-transition",
       intentType: "fund_trader",
       now: Date.now(),
