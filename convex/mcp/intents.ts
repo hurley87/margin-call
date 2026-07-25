@@ -1,3 +1,7 @@
+/**
+ * MCP treasury prepare/confirm facade over chainIntents (#249).
+ * Stable intent identity; ambiguous submissions reconcile by txHash.
+ */
 import { internalMutation, internalQuery } from "../_generated/server";
 import { v } from "convex/values";
 import type { Id } from "../_generated/dataModel";
@@ -5,20 +9,22 @@ import {
   PREPARE_INSTRUCTIONS,
   type SerializedPreparedCall,
 } from "./escrowConstants";
+import {
+  assertTransition,
+  isTerminalStatus,
+  type ChainIntentStatus,
+} from "../lib/chainIntents/stateMachine";
+import { isNetworkSlug } from "../lib/networks";
 
-// Stored on the intent for observability/cleanup only. It does NOT gate
-// confirmation: a human-in-the-loop Base Account approval can take longer than
-// this, and once the on-chain tx has executed (irreversibly) refusing to record
-// it would orphan a real deal / lock the pot. See `getForConfirm`.
 const INTENT_TTL_MS = 60 * 60 * 1000;
 
 /**
- * Shape an `intents.create` result into the response a prepare action returns:
+ * Shape a prepare result into the response a prepare action returns:
  * either the cached confirmed result (replay) or the prepare envelope.
  */
 export function shapePrepareResult(
   intent: {
-    intentId: Id<"mcpIntents">;
+    intentId: Id<"chainIntents">;
     chain?: string;
     calls?: SerializedPreparedCall[];
     cached?: true;
@@ -42,6 +48,18 @@ export function shapePrepareResult(
   };
 }
 
+function mcpIntentKey(
+  deskManagerId: Id<"deskManagers">,
+  intentType: string,
+  idempotencyKey: string | undefined,
+  now: number
+): string {
+  if (idempotencyKey && idempotencyKey.trim() !== "") {
+    return `mcp:${deskManagerId}:${intentType}:${idempotencyKey}`;
+  }
+  return `mcp:${deskManagerId}:${intentType}:${now}`;
+}
+
 export const create = internalMutation({
   args: {
     deskManagerId: v.id("deskManagers"),
@@ -59,52 +77,68 @@ export const create = internalMutation({
     now: v.number(),
   },
   handler: async (ctx, args) => {
-    if (args.idempotencyKey) {
-      const existing = await ctx.db
-        .query("mcpIntents")
-        .withIndex("byDeskManagerAndIdempotencyKey", (q) =>
-          q
-            .eq("deskManagerId", args.deskManagerId)
-            .eq("idempotencyKey", args.idempotencyKey)
-        )
-        .collect();
-      // Reuse any pending intent for this idempotency key regardless of age:
-      // re-preparing must never mint a second intent (and therefore a second
-      // on-chain spend) for the same key, even after the TTL has elapsed.
-      const pending = existing.find(
-        (row) => row.intentType === args.intentType && row.status === "pending"
-      );
-      if (pending) {
-        return {
-          intentId: pending._id,
-          chain: pending.chain,
-          calls: pending.calls as SerializedPreparedCall[],
-          reused: true as const,
-        };
-      }
-      const confirmed = existing.find(
-        (row) =>
-          row.intentType === args.intentType &&
-          row.status === "confirmed" &&
-          row.confirmResult !== undefined
-      );
-      if (confirmed?.confirmResult) {
-        return {
-          intentId: confirmed._id,
-          cached: true as const,
-          confirmResult: confirmed.confirmResult,
-        };
-      }
+    if (!isNetworkSlug(args.chain)) {
+      throw new Error(`Unknown network slug "${args.chain}"`);
     }
 
-    const intentId = await ctx.db.insert("mcpIntents", {
-      deskManagerId: args.deskManagerId,
+    const intentKey = mcpIntentKey(
+      args.deskManagerId,
+      args.intentType,
+      args.idempotencyKey,
+      args.now
+    );
+
+    const existing = await ctx.db
+      .query("chainIntents")
+      .withIndex("byIntentKey", (q) => q.eq("intentKey", intentKey))
+      .collect();
+
+    const confirmed = existing.find(
+      (row) =>
+        row.intentType === args.intentType &&
+        row.status === "confirmed" &&
+        row.confirmResult !== undefined
+    );
+    if (confirmed?.confirmResult) {
+      return {
+        intentId: confirmed._id,
+        cached: true as const,
+        confirmResult: confirmed.confirmResult,
+      };
+    }
+
+    const active = existing.find(
+      (row) =>
+        row.intentType === args.intentType &&
+        !isTerminalStatus(row.status as ChainIntentStatus)
+    );
+    if (active) {
+      if (active.status === "prepared" || active.status === "signing") {
+        await ctx.db.patch(active._id, {
+          calls: args.calls,
+          payload: args.payload,
+          networkSlug: args.chain,
+          expiresAt: args.now + INTENT_TTL_MS,
+          updatedAt: args.now,
+        });
+      }
+      return {
+        intentId: active._id,
+        chain: active.networkSlug,
+        calls: (active.calls ?? args.calls) as SerializedPreparedCall[],
+        reused: true as const,
+      };
+    }
+
+    const intentId = await ctx.db.insert("chainIntents", {
+      networkSlug: args.chain,
+      intentKey,
       intentType: args.intentType,
-      status: "pending",
-      chain: args.chain,
+      status: "prepared",
+      deskManagerId: args.deskManagerId,
       calls: args.calls,
       payload: args.payload,
-      idempotencyKey: args.idempotencyKey,
+      attempts: 0,
       expiresAt: args.now + INTENT_TTL_MS,
       createdAt: args.now,
       updatedAt: args.now,
@@ -121,7 +155,7 @@ export const create = internalMutation({
 
 export const getForConfirm = internalQuery({
   args: {
-    intentId: v.id("mcpIntents"),
+    intentId: v.id("chainIntents"),
     deskManagerId: v.id("deskManagers"),
     now: v.number(),
   },
@@ -133,56 +167,76 @@ export const getForConfirm = internalQuery({
     if (intent.status === "confirmed" && intent.confirmResult !== undefined) {
       return { intent, alreadyConfirmed: true as const };
     }
-    if (intent.status !== "pending") {
+    // Allow confirm from prepared/signing/submitted/reconciling — the client
+    // already broadcast the tx. Map to a pending-compatible view for callers.
+    if (
+      intent.status !== "prepared" &&
+      intent.status !== "signing" &&
+      intent.status !== "submitted" &&
+      intent.status !== "reconciling"
+    ) {
       throw new Error(`Intent is ${intent.status}`);
     }
-    // Intentionally NOT rejecting on `expiresAt`: confirm always supplies a
-    // txHash that the caller has already broadcast and that each confirm
-    // handler verifies + binds to this intent (DealCreated event / on-chain
-    // status / balance re-read). Rejecting a late-but-executed tx would orphan
-    // a real on-chain deal and lock the pot with no recovery path.
-    return { intent, alreadyConfirmed: false as const };
+    return {
+      intent: {
+        ...intent,
+        // Legacy callers expect `chain` and `status: pending`.
+        chain: intent.networkSlug,
+        status: "pending" as const,
+      },
+      alreadyConfirmed: false as const,
+    };
   },
 });
 
 /**
- * Cron entrypoint: mark pending intents past their TTL as `expired`.
- * Rows are kept (not deleted) so the idempotency-key lookup in `create`
- * won't reuse an abandoned envelope and the audit trail survives.
- * Batch cap of 200 stays well within Convex mutation transaction limits.
+ * Cron entrypoint: abandon prepared intents past their TTL.
+ * Rows are kept so intentKey lookup won't reuse an abandoned envelope.
  */
 export const expirePending = internalMutation({
   args: {},
+  returns: v.object({ expired: v.number() }),
   handler: async (ctx) => {
     const now = Date.now();
     const rows = await ctx.db
-      .query("mcpIntents")
-      .withIndex("byStatus", (q) => q.eq("status", "pending"))
-      .filter((q) => q.lt(q.field("expiresAt"), now))
+      .query("chainIntents")
+      .withIndex("byStatus", (q) => q.eq("status", "prepared"))
       .take(200);
 
+    let expired = 0;
     for (const row of rows) {
-      await ctx.db.patch(row._id, { status: "expired", updatedAt: now });
+      if (row.expiresAt !== undefined && row.expiresAt < now) {
+        assertTransition("prepared", "abandoned");
+        await ctx.db.patch(row._id, {
+          status: "abandoned",
+          updatedAt: now,
+          lastError: "TTL expired before submit",
+        });
+        expired += 1;
+      }
     }
-    if (rows.length > 0) {
+    if (expired > 0) {
       console.log(
-        `[mcp/intents] expired ${rows.length} pending intent(s) past TTL`
+        `[mcp/intents] abandoned ${expired} prepared intent(s) past TTL`
       );
     }
-    return { expired: rows.length };
+    return { expired };
   },
 });
 
 export const markConfirmed = internalMutation({
   args: {
-    intentId: v.id("mcpIntents"),
+    intentId: v.id("chainIntents"),
     txHash: v.string(),
     confirmResult: v.any(),
     now: v.number(),
   },
   handler: async (ctx, { intentId, txHash, confirmResult, now }) => {
+    const intent = await ctx.db.get(intentId);
+    if (!intent) throw new Error("Intent not found");
+
     const reused = await ctx.db
-      .query("mcpIntents")
+      .query("chainIntents")
       .withIndex("byTxHash", (q) => q.eq("txHash", txHash))
       .collect();
     if (reused.some((row) => row._id !== intentId)) {
@@ -190,11 +244,37 @@ export const markConfirmed = internalMutation({
         "This txHash has already been used to confirm a different intent"
       );
     }
-    await ctx.db.patch(intentId, {
-      status: "confirmed",
-      txHash,
-      confirmResult,
-      updatedAt: now,
-    });
+
+    if (intent.status === "confirmed") {
+      return;
+    }
+
+    // prepared/signing → submitted → confirmed (never skip identity binding).
+    let status = intent.status as ChainIntentStatus;
+    if (status === "prepared" || status === "signing") {
+      assertTransition(status, "submitted");
+      await ctx.db.patch(intentId, {
+        status: "submitted",
+        txHash,
+        submittedAt: now,
+        attempts: intent.attempts + 1,
+        updatedAt: now,
+      });
+      status = "submitted";
+    }
+
+    if (status === "reconciling" || status === "submitted") {
+      assertTransition(status, "confirmed");
+      await ctx.db.patch(intentId, {
+        status: "confirmed",
+        txHash,
+        confirmResult,
+        confirmedAt: now,
+        updatedAt: now,
+      });
+      return;
+    }
+
+    throw new Error(`Intent is ${intent.status}`);
   },
 });

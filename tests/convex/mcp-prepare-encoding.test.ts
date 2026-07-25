@@ -101,10 +101,11 @@ describe("MCP confirm → intent state (#207)", () => {
     const now = Date.now();
 
     const intentId = await t.run(async (ctx) => {
-      return ctx.db.insert("mcpIntents", {
+      return ctx.db.insert("chainIntents", {
         deskManagerId: deskId,
         intentType: "fund_trader",
-        chain: MCP_CHAIN,
+        networkSlug: MCP_CHAIN,
+        intentKey: `mcp:${deskId}:fund_trader:test-1`,
         calls: [
           {
             to: "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03",
@@ -113,7 +114,8 @@ describe("MCP confirm → intent state (#207)", () => {
           },
         ],
         payload: { traderId: "t1", amountUsdc: 10 },
-        status: "pending",
+        status: "prepared",
+        attempts: 0,
         expiresAt: now + 3_600_000,
         createdAt: now,
         updatedAt: now,
@@ -135,13 +137,15 @@ describe("MCP confirm → intent state (#207)", () => {
     });
 
     const otherId = await t.run(async (ctx) => {
-      return ctx.db.insert("mcpIntents", {
+      return ctx.db.insert("chainIntents", {
         deskManagerId: deskId,
         intentType: "fund_trader",
-        chain: MCP_CHAIN,
+        networkSlug: MCP_CHAIN,
+        intentKey: `mcp:${deskId}:fund_trader:test-2`,
         calls: [],
         payload: {},
-        status: "pending",
+        status: "prepared",
+        attempts: 0,
         expiresAt: now + 3_600_000,
         createdAt: now,
         updatedAt: now,

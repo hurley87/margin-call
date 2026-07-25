@@ -115,7 +115,7 @@ function parseConfirmIntentBody(body: Record<string, unknown>) {
     ok: true as const,
     parsed: {
       deskManagerId: body.deskManagerId as Id<"deskManagers">,
-      intentId: body.intentId.trim() as Id<"mcpIntents">,
+      intentId: body.intentId.trim() as Id<"chainIntents">,
       txHash,
     },
   };

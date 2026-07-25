@@ -253,7 +253,7 @@ export const fundPrepareForMcp = internalAction({
 export const fundConfirmForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
-    intentId: v.id("mcpIntents"),
+    intentId: v.id("chainIntents"),
     txHash: v.string(),
   },
   handler: async (ctx, args): Promise<McpTraderWriteResult> => {
@@ -399,7 +399,7 @@ export const withdrawPrepareForMcp = internalAction({
 export const withdrawConfirmForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
-    intentId: v.id("mcpIntents"),
+    intentId: v.id("chainIntents"),
     txHash: v.string(),
   },
   handler: async (ctx, args): Promise<McpTraderWriteResult> => {

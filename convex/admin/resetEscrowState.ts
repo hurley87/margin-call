@@ -35,7 +35,7 @@ const TABLES_TO_CLEAR: TableNames[] = [
   "seatVaultEvents",
   "seatVaultSyncCursors",
   // Non-custodial treasury prepare/confirm intents (calldata targets old escrow)
-  "mcpIntents",
+  "chainIntents",
   "mcpRequests",
   // Join table linking wire seeds → deals (dealId FKs now dangling)
   "wireDealSeedLinks",

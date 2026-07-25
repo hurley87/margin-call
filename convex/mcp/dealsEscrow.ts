@@ -184,7 +184,7 @@ export const createPrepareForMcp = internalAction({
 export const createConfirmForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
-    intentId: v.id("mcpIntents"),
+    intentId: v.id("chainIntents"),
     txHash: v.string(),
   },
   handler: async (ctx, args): Promise<McpDealWriteResult> => {
@@ -338,7 +338,7 @@ export const closePrepareForMcp = internalAction({
 export const closeConfirmForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
-    intentId: v.id("mcpIntents"),
+    intentId: v.id("chainIntents"),
     txHash: v.string(),
   },
   handler: async (ctx, args): Promise<McpDealWriteResult> => {

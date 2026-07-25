@@ -73,10 +73,9 @@ crons.interval(
 );
 
 /**
- * Age out abandoned MCP intent envelopes (prepare → Base MCP → confirm flow).
- * If the agent never broadcasts the prepared calls before expiresAt, the row
- * sits as `pending` forever. Marking it `expired` keeps the table bounded
- * while preserving the audit trail. See convex/mcp/intents.ts.
+ * Age out abandoned prepared chain intents (MCP prepare → confirm flow).
+ * If the agent never broadcasts before expiresAt, mark the row abandoned.
+ * See convex/mcp/intents.ts.
  */
 crons.interval(
   "mcp-intents-expire-pending",
