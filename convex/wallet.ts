@@ -10,8 +10,8 @@ import { buildTraderMetadataUrl } from "../src/lib/trader-metadata";
  *   CDP_API_KEY_ID        — Coinbase CDP API key ID
  *   CDP_API_KEY_SECRET    — Coinbase CDP API key secret (PEM)
  *   CDP_WALLET_SECRET     — Coinbase CDP wallet encryption secret
- *   IDENTITY_REGISTRY_ADDRESS — optional; if set must match canonical Base Sepolia registry
- *   BASE_SEPOLIA_RPC_URL or NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL — Base Sepolia JSON-RPC
+ *   IDENTITY_REGISTRY_ADDRESS — optional; if set must match canonical registry
+ *   ROBINHOOD_TESTNET_RPC_URL or NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL — Floor RPC
  *   NEXT_PUBLIC_APP_URL   — public app URL used for ERC-721 metadata
  */
 
@@ -100,14 +100,17 @@ export const createForTrader = internalAction({
       const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
       const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
       const { IDENTITY_REGISTRY_ADDRESS: canonicalIdentityRegistry } =
-        await import("./lib/baseSepoliaNetwork");
+        await import("./lib/legacy");
       const { resolveAddress } = await import("./lib/resolveAddress");
+      const { resolveActiveNetworkSlug } = await import("./lib/networks");
       const identityRegistryAddress = resolveAddress(
         [process.env.IDENTITY_REGISTRY_ADDRESS],
         canonicalIdentityRegistry,
-        "IDENTITY_REGISTRY_ADDRESS"
+        "IDENTITY_REGISTRY_ADDRESS",
+        "legacy identity registry (Floor TBA ships in #250)"
       );
       const appUrl = requireEnv("NEXT_PUBLIC_APP_URL");
+      const cdpNetwork = resolveActiveNetworkSlug() as "base-sepolia";
 
       const { CdpClient } = await import("@coinbase/cdp-sdk");
       const { decodeEventLog, encodeFunctionData } = await import("viem");
@@ -169,7 +172,7 @@ export const createForTrader = internalAction({
 
       const { userOpHash: mintOpHash } =
         await mintSmartAccount.sendUserOperation({
-          network: "base-sepolia",
+          network: cdpNetwork,
           calls: [
             { to: identityRegistryAddress, value: BigInt(0), data: mintData },
           ],
@@ -237,7 +240,7 @@ export const createForTrader = internalAction({
         try {
           const { userOpHash: transferOpHash } =
             await mintSmartAccount.sendUserOperation({
-              network: "base-sepolia",
+              network: cdpNetwork,
               calls: [
                 {
                   to: identityRegistryAddress,

@@ -27,7 +27,7 @@ import {
   requireGate1Approval,
   runForgeDeploy,
 } from "./deploy-utils";
-import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../convex/lib/activeDeployment";
+import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../convex/lib/legacy";
 
 /** Active Base Sepolia MarginCallToken — prefer reuse for #211. */
 const ACTIVE_MARGINCALL_TOKEN = ACTIVE_BASE_SEPOLIA_DEPLOYMENT.margincallToken;

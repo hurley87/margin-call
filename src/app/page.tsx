@@ -116,6 +116,8 @@ import {
   traderCycleDocFromDeskSummary,
 } from "@/lib/trader-cycle";
 import { EmptyState } from "@/components/empty-state";
+import { NetworkBadge } from "@/components/shared/network-badge";
+import { ROBINHOOD_TESTNET_SLUG } from "@/lib/network";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const NY_TIME: Intl.DateTimeFormatOptions = {
@@ -843,9 +845,12 @@ function TopStatusBar({
               Fund Your Desk Wallet
             </Dialog.Title>
             <div className="flex items-center justify-between border-b border-[var(--t-divider)] bg-[#0b100d] px-4 py-3">
-              <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
-                Fund Wallet To Start
-              </h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
+                  Fund Wallet To Start
+                </h2>
+                <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
+              </div>
               {!forceFundWallet && (
                 <Dialog.Close
                   aria-label="Close"
@@ -859,12 +864,15 @@ function TopStatusBar({
             <div className="space-y-4 px-5 py-5 text-xs leading-relaxed text-[var(--t-text)]">
               <p className="text-[var(--t-green)]/90">
                 Your desk wallet needs USDC before you can hire traders or
-                create deals. Use the Circle faucet to request free test USDC
+                create deals. Use the Circle faucet to request free{" "}
+                <span className="font-bold text-[var(--t-accent)]">
+                  test USDC
+                </span>{" "}
                 for this wallet address. On the faucet page, be sure to select{" "}
                 <span className="font-bold text-[var(--t-accent)]">
                   Base Sepolia
                 </span>{" "}
-                as the network.
+                as the network. This is a testnet asset with no real value.
               </p>
               {forceFundWallet && (
                 <div className="border border-[var(--t-amber)]/50 bg-[var(--t-amber)]/[0.08] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-[var(--t-amber)]">

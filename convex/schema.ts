@@ -564,40 +564,53 @@ export default defineSchema({
     .index("byCreatedAt", ["createdAt"]),
 
   /**
-   * Pending on-chain intents for MCP treasury tools (prepare → Base MCP → confirm).
-   * The agent executes `calls` via Base MCP send_calls; confirm supplies txHash.
+   * Generalized on-chain write intents (#249).
+   * One stable intentKey identity across prepare → sign/sponsor → submit →
+   * confirm / fail / reconcile. Ambiguous submissions are reconciled by
+   * transaction identity — never blindly re-signed or resubmitted.
+   * Replaces the former mcpIntents table.
    */
-  mcpIntents: defineTable({
-    deskManagerId: v.id("deskManagers"),
+  chainIntents: defineTable({
+    networkSlug: v.string(),
+    intentKey: v.string(),
     intentType: v.string(),
     status: v.union(
-      v.literal("pending"),
+      v.literal("prepared"),
+      v.literal("signing"),
+      v.literal("submitted"),
       v.literal("confirmed"),
-      v.literal("expired")
+      v.literal("failed"),
+      v.literal("reconciling"),
+      v.literal("abandoned")
     ),
-    chain: v.string(),
-    calls: v.array(
-      v.object({
-        to: v.string(),
-        value: v.string(),
-        data: v.string(),
-      })
+    deskManagerId: v.optional(v.id("deskManagers")),
+    calls: v.optional(
+      v.array(
+        v.object({
+          to: v.string(),
+          value: v.string(),
+          data: v.string(),
+        })
+      )
     ),
-    payload: v.any(),
-    idempotencyKey: v.optional(v.string()),
-    expiresAt: v.number(),
+    payload: v.optional(v.any()),
+    attempts: v.number(),
     txHash: v.optional(v.string()),
+    senderAddress: v.optional(v.string()),
+    senderNonce: v.optional(v.number()),
+    submittedAt: v.optional(v.number()),
+    confirmedAt: v.optional(v.number()),
+    lastError: v.optional(v.string()),
     confirmResult: v.optional(v.any()),
+    expiresAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
-    .index("byDeskManagerAndStatus", ["deskManagerId", "status"])
-    .index("byDeskManagerAndIdempotencyKey", [
-      "deskManagerId",
-      "idempotencyKey",
-    ])
+    .index("byIntentKey", ["intentKey"])
+    .index("byNetworkSlugAndStatus", ["networkSlug", "status"])
     .index("byStatus", ["status"])
-    .index("byTxHash", ["txHash"]),
+    .index("byTxHash", ["txHash"])
+    .index("byDeskManagerAndIntentKey", ["deskManagerId", "intentKey"]),
 
   /**
    * Versioned SeatVault deployments. Only `isActive === true` grants capacity;

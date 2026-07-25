@@ -28,7 +28,7 @@ vi.mock("@/lib/network", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/network")>();
   return {
     ...actual,
-    requireBaseSepoliaRpcUrl: () => "https://example-rpc.test",
+    requireRpcUrl: () => "https://example-rpc.test",
   };
 });
 
@@ -70,11 +70,11 @@ describe("isMcpDeskSubject", () => {
 });
 
 describe("buildDeskSiweMessage", () => {
-  it("includes the MCP issuance statement and Base Sepolia chain", () => {
+  it("includes the MCP issuance statement and Robinhood Chain testnet", () => {
     const nonce = generateSiweNonce();
     const message = buildDeskSiweMessage({ address: TEST_ADDRESS, nonce });
     expect(message).toContain(MCP_ISSUE_STATEMENT);
-    expect(message).toContain("Chain ID: 84532");
+    expect(message).toContain("Chain ID: 46630");
     expect(message).toContain(TEST_ADDRESS);
     expect(message).toContain(`Nonce: ${nonce}`);
   });

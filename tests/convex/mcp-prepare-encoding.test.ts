@@ -9,14 +9,14 @@ import {
   type PreparedCall,
 } from "../../convex/mcp/escrowConstants";
 import { shapePrepareResult } from "../../convex/mcp/intents";
-import { BASE_SEPOLIA_SLUG } from "../../convex/lib/baseSepoliaNetwork";
+import { ROBINHOOD_TESTNET_SLUG } from "../../convex/lib/networks";
 import { makeT, seedDeskManager } from "./setup";
 import { internal } from "../../convex/_generated/api";
 
 describe("MCP prepare encoding (#207)", () => {
-  it("MCP_CHAIN is Base Sepolia slug", () => {
-    expect(MCP_CHAIN).toBe(BASE_SEPOLIA_SLUG);
-    expect(MCP_CHAIN).toBe("base-sepolia");
+  it("MCP_CHAIN is Robinhood Chain testnet slug", () => {
+    expect(MCP_CHAIN).toBe(ROBINHOOD_TESTNET_SLUG);
+    expect(MCP_CHAIN).toBe("robinhood-testnet");
   });
 
   it("serializeCall hex-encodes value and preserves calldata", () => {
@@ -50,7 +50,7 @@ describe("MCP prepare encoding (#207)", () => {
     );
     expect(shaped).toMatchObject({
       phase: "prepare",
-      chain: "base-sepolia",
+      chain: "robinhood-testnet",
       instructions: PREPARE_INSTRUCTIONS,
       summary: "Fund trader",
     });
@@ -101,10 +101,11 @@ describe("MCP confirm → intent state (#207)", () => {
     const now = Date.now();
 
     const intentId = await t.run(async (ctx) => {
-      return ctx.db.insert("mcpIntents", {
+      return ctx.db.insert("chainIntents", {
         deskManagerId: deskId,
         intentType: "fund_trader",
-        chain: MCP_CHAIN,
+        networkSlug: MCP_CHAIN,
+        intentKey: `mcp:${deskId}:fund_trader:test-1`,
         calls: [
           {
             to: "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03",
@@ -113,7 +114,8 @@ describe("MCP confirm → intent state (#207)", () => {
           },
         ],
         payload: { traderId: "t1", amountUsdc: 10 },
-        status: "pending",
+        status: "prepared",
+        attempts: 0,
         expiresAt: now + 3_600_000,
         createdAt: now,
         updatedAt: now,
@@ -135,13 +137,15 @@ describe("MCP confirm → intent state (#207)", () => {
     });
 
     const otherId = await t.run(async (ctx) => {
-      return ctx.db.insert("mcpIntents", {
+      return ctx.db.insert("chainIntents", {
         deskManagerId: deskId,
         intentType: "fund_trader",
-        chain: MCP_CHAIN,
+        networkSlug: MCP_CHAIN,
+        intentKey: `mcp:${deskId}:fund_trader:test-2`,
         calls: [],
         payload: {},
-        status: "pending",
+        status: "prepared",
+        attempts: 0,
         expiresAt: now + 3_600_000,
         createdAt: now,
         updatedAt: now,

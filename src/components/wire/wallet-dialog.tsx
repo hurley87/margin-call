@@ -5,6 +5,8 @@ import { Dialog } from "@base-ui/react/dialog";
 import { parseUnits } from "viem";
 import { useDepositFlow, useWithdrawFlow } from "@/hooks/use-escrow";
 import { WalletProvisioningError } from "@/components/wallet-provisioning-error";
+import { NetworkBadge } from "@/components/shared/network-badge";
+import { ROBINHOOD_TESTNET_SLUG } from "@/lib/network";
 import { authFetch } from "@/lib/api";
 import { DIALOG_BACKDROP_CLASS, formatUsdc } from "@/lib/utils";
 import { AnimatedNumber } from "@/components/animated-number";
@@ -175,6 +177,7 @@ export function WalletDialog({
               <h2 className="font-[family-name:var(--font-plex-sans)] text-base font-black uppercase tracking-wide text-[var(--t-amber)]">
                 Escrow wallet
               </h2>
+              <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} className="mt-1" />
             </div>
             <Dialog.Close className="min-h-10 shrink-0 px-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none">
               Close

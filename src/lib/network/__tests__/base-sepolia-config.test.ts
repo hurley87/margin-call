@@ -11,8 +11,8 @@ import {
   USDC_SEPOLIA_ADDRESS,
   isBaseSepoliaChainId,
   requireBaseSepoliaRpcUrl,
-  resolveAddress,
-} from "@/lib/network";
+} from "@/lib/legacy";
+import { ROBINHOOD_TESTNET_SLUG, resolveAddress } from "@/lib/network";
 import { SEAT_VAULT_V1 } from "../../../../convex/seatVault/policy";
 
 const ACTIVE_JSON_PATH = join(
@@ -20,7 +20,7 @@ const ACTIVE_JSON_PATH = join(
   "contracts/deployments/base-sepolia.active.json"
 );
 
-describe("baseSepoliaNetwork", () => {
+describe("legacy baseSepolia constants", () => {
   it("exports Base Sepolia chain identity only", () => {
     expect(BASE_SEPOLIA_CHAIN_ID).toBe(84532);
     expect(BASE_SEPOLIA_CAIP2).toBe("eip155:84532");
@@ -38,7 +38,7 @@ describe("baseSepoliaNetwork", () => {
   });
 });
 
-describe("activeDeployment", () => {
+describe("legacy activeDeployment", () => {
   it("matches contracts/deployments/base-sepolia.active.json", () => {
     const json = JSON.parse(readFileSync(ACTIVE_JSON_PATH, "utf8")) as {
       version: number;
@@ -53,7 +53,7 @@ describe("activeDeployment", () => {
     expect(ACTIVE_BASE_SEPOLIA_DEPLOYMENT.chainId).toBe(BASE_SEPOLIA_CHAIN_ID);
   });
 
-  it("aligns SEAT_VAULT_V1 with the active record", () => {
+  it("aligns SEAT_VAULT_V1 with the legacy record", () => {
     expect(SEAT_VAULT_V1.address).toBe(
       ACTIVE_BASE_SEPOLIA_DEPLOYMENT.seatVault
     );
@@ -87,11 +87,22 @@ describe("resolveAddress", () => {
         canonical,
         "ESCROW_ADDRESS"
       )
+    ).toThrow(/does not match active deployment/);
+  });
+
+  it("includes network label in mismatch errors when provided", () => {
+    expect(() =>
+      resolveAddress(
+        ["0x0000000000000000000000000000000000000001"],
+        canonical,
+        "ESCROW_ADDRESS",
+        "active Base Sepolia deployment"
+      )
     ).toThrow(/does not match active Base Sepolia deployment/);
   });
 });
 
-describe("requireBaseSepoliaRpcUrl", () => {
+describe("requireBaseSepoliaRpcUrl (legacy)", () => {
   const originalBase = process.env.BASE_SEPOLIA_RPC_URL;
   const originalPublic = process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL;
 
@@ -125,16 +136,16 @@ describe("requireBaseSepoliaRpcUrl", () => {
 });
 
 describe("MCP plugin drift", () => {
-  it("matches canonical chain slug, escrow, and USDC", () => {
+  it("matches Floor chain slug, escrow, and USDC labels", () => {
     const pluginPath = join(
       process.cwd(),
       "packages/mcp-server/base-plugin/margin-call.md"
     );
     const plugin = readFileSync(pluginPath, "utf8");
 
-    expect(plugin).toContain(
-      `**Chain:** Base Sepolia (\`${BASE_SEPOLIA_SLUG}\`)`
-    );
+    expect(plugin).toContain(ROBINHOOD_TESTNET_SLUG);
+    expect(plugin).toContain("Robinhood Chain testnet");
+    expect(plugin).toContain("Margin Call Test Asset");
     expect(plugin).toContain(ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow);
     expect(plugin).toContain(USDC_SEPOLIA_ADDRESS);
     expect(plugin).not.toContain(String(FORBIDDEN_MAINNET_CHAIN_ID));

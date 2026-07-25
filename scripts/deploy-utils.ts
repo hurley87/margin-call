@@ -4,7 +4,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { BASE_SEPOLIA_CHAIN_ID } from "../convex/lib/baseSepoliaNetwork";
+import { BASE_SEPOLIA_CHAIN_ID } from "../convex/lib/legacy";
 
 export const ROOT = join(import.meta.dirname, "..");
 export const ENV_LOCAL = join(ROOT, ".env.local");

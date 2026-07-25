@@ -254,7 +254,10 @@ export const reconcileTrader = internalAction({
               internal.seatVault.store.listDeploymentsInternal,
               {}
             )
-          ).find((d) => d.address === vaultAddress)?.version ?? 0);
+          ).find(
+            (d: { address: string; version: number }) =>
+              d.address === vaultAddress
+          )?.version ?? 0);
 
     const client = createSeatVaultPublicClient(resolveRpcUrl());
     const ok = await reconcileOneTrader(ctx, {

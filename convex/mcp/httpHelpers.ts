@@ -3,7 +3,7 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { authorizeMcpRequest } from "./deskBinding";
 
-export type McpIntentId = Id<"mcpIntents">;
+export type McpIntentId = Id<"chainIntents">;
 
 export const SERVICE_TOKEN = process.env.MCP_SERVICE_TOKEN ?? "";
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -92,8 +92,7 @@ export type McpWriteRouteSpec = {
   parseBody: (
     body: Record<string, unknown>
   ) =>
-    | { ok: true; parsed: McpWriteParsedBody }
-    | { ok: false; message: string };
+    { ok: true; parsed: McpWriteParsedBody } | { ok: false; message: string };
   execute: (
     ctx: ActionCtx,
     parsed: McpWriteParsedBody
@@ -194,8 +193,7 @@ export type McpConfirmRouteSpec = {
   parseBody: (
     body: Record<string, unknown>
   ) =>
-    | { ok: true; parsed: McpConfirmParsedBody }
-    | { ok: false; message: string };
+    { ok: true; parsed: McpConfirmParsedBody } | { ok: false; message: string };
   execute: (
     ctx: ActionCtx,
     parsed: McpConfirmParsedBody

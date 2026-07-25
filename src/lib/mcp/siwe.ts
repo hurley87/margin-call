@@ -9,23 +9,21 @@ import {
 } from "viem/siwe";
 import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
 import {
-  BASE_SEPOLIA_CHAIN_ID,
-  CONTRACTS_CHAIN,
-  requireBaseSepoliaRpcUrl,
+  getActiveNetwork,
+  getActiveViemChain,
+  requireRpcUrl,
+  resolveActiveNetworkSlug,
 } from "@/lib/network";
 
 const nonceStore = createConvexNonceStore();
 
-// SIWE handshake verifies a Coinbase Smart Wallet (Base Account) signature.
-// The Coinbase Smart Wallet recomputes its replay-safe hash from `block.chainid`
-// at verification time, and the Base MCP signer binds to Base Sepolia — the chain
-// the desk/escrow actually operates on — so verification must run against the
-// Base Sepolia deployment, not Base mainnet.
-const SIWE_CHAIN_ID = BASE_SEPOLIA_CHAIN_ID;
+// SIWE handshake verifies a wallet signature against the active Floor chain
+// (Robinhood Chain testnet). Forbidden mainnets are refused by the registry.
+const SIWE_CHAIN_ID = getActiveNetwork().chainId;
 function siwePublicClient() {
   return createPublicClient({
-    chain: CONTRACTS_CHAIN,
-    transport: http(requireBaseSepoliaRpcUrl()),
+    chain: getActiveViemChain(),
+    transport: http(requireRpcUrl(resolveActiveNetworkSlug())),
   });
 }
 
@@ -112,8 +110,7 @@ export async function issueDeskSiweChallenge(address: string): Promise<{
 }
 
 export type VerifyDeskSiweResult =
-  | { valid: true; address: `0x${string}` }
-  | { valid: false; error: string };
+  { valid: true; address: `0x${string}` } | { valid: false; error: string };
 
 /**
  * Verify a SIWE message + signature from a Base Account (EIP-1271 / ERC-6492).

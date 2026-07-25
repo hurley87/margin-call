@@ -10,12 +10,14 @@ import type { Id } from "../../convex/_generated/dataModel";
 import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import { useBaseNetwork } from "@/hooks/use-base-network";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
+import { PAYMENT_CHAIN_NAME } from "@/lib/privy/config";
 import { makePublicClient } from "@/lib/contracts/client";
+import { ESCROW_ADDRESS, escrowAbi } from "@/lib/contracts/escrow";
 import {
-  CONTRACTS_CHAIN_ID,
-  ESCROW_ADDRESS,
-  escrowAbi,
-} from "@/lib/contracts/escrow";
+  ROBINHOOD_TESTNET_CHAIN_ID,
+  ROBINHOOD_TESTNET_SLUG,
+  recommendWaitBlocks,
+} from "@/lib/network";
 import {
   MARGINCALL_TOKEN_ADDRESS,
   SEAT_VAULT_ADDRESS,
@@ -52,7 +54,7 @@ export function useBlowBalance() {
     abi: erc20Abi,
     functionName: "balanceOf",
     args: walletAddress ? [walletAddress] : undefined,
-    chainId: CONTRACTS_CHAIN_ID,
+    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
     query: {
       enabled: !!walletAddress,
       refetchInterval: 15_000,
@@ -74,7 +76,7 @@ export function useTraderDepositor(onChainTraderId: number | undefined) {
     abi: escrowAbi,
     functionName: "depositors",
     args: onChainTraderId !== undefined ? [BigInt(onChainTraderId)] : undefined,
-    chainId: CONTRACTS_CHAIN_ID,
+    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
     query: {
       enabled: onChainTraderId !== undefined && onChainTraderId > 0,
       refetchInterval: 30_000,
@@ -93,7 +95,7 @@ async function waitConfirmed(hash: `0x${string}`) {
   const publicClient = makePublicClient();
   return publicClient.waitForTransactionReceipt({
     hash,
-    confirmations: 2,
+    confirmations: recommendWaitBlocks(ROBINHOOD_TESTNET_SLUG),
   });
 }
 
@@ -112,7 +114,9 @@ export function useSeatVaultFlows() {
       throw new Error("Connect the desk treasury wallet first.");
     }
     if (isWrongNetwork) {
-      throw new Error("Wrong chain — switch to Base Sepolia before posting.");
+      throw new Error(
+        `Wrong chain — switch to ${PAYMENT_CHAIN_NAME} before posting.`
+      );
     }
     if (state.step !== "idle" && state.step !== "done") {
       throw new Error("A floor ticket is already pending. Wait for the wire.");
@@ -186,7 +190,7 @@ export function useSeatVaultFlows() {
             abi: erc20Abi,
             functionName: "approve",
             args: [vault, maxUint256],
-            chainId: CONTRACTS_CHAIN_ID,
+            chainId: ROBINHOOD_TESTNET_CHAIN_ID,
           });
           setState({
             step: "confirmingApproval",
@@ -201,7 +205,7 @@ export function useSeatVaultFlows() {
           abi: seatVaultAbi,
           functionName: "stake",
           args: [BigInt(args.onChainTraderId), amountWei],
-          chainId: CONTRACTS_CHAIN_ID,
+          chainId: ROBINHOOD_TESTNET_CHAIN_ID,
         });
         setState({ step: "confirmingStake", txHash: stakeHash });
         await waitConfirmed(stakeHash);
@@ -266,7 +270,7 @@ export function useSeatVaultFlows() {
           abi: seatVaultAbi,
           functionName: "initiateUnstake",
           args: [BigInt(args.onChainTraderId), amountWei],
-          chainId: CONTRACTS_CHAIN_ID,
+          chainId: ROBINHOOD_TESTNET_CHAIN_ID,
         });
         setState({ step: "confirmingInitiate", txHash: hash });
         await waitConfirmed(hash);
@@ -317,7 +321,7 @@ export function useSeatVaultFlows() {
           abi: seatVaultAbi,
           functionName: "completeUnstake",
           args: [BigInt(args.onChainTraderId)],
-          chainId: CONTRACTS_CHAIN_ID,
+          chainId: ROBINHOOD_TESTNET_CHAIN_ID,
         });
         setState({ step: "confirmingComplete", txHash: hash });
         await waitConfirmed(hash);

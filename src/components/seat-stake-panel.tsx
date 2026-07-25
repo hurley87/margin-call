@@ -15,6 +15,9 @@ import {
   seatVaultStepLabel,
 } from "@/hooks/use-seat-vault";
 import { useBaseNetwork } from "@/hooks/use-base-network";
+import { PAYMENT_CHAIN_NAME } from "@/lib/privy/config";
+import { NetworkBadge } from "@/components/shared/network-badge";
+import { ROBINHOOD_TESTNET_SLUG } from "@/lib/network";
 import {
   capacityForTier,
   CORNER_OFFICE_THRESHOLD_WEI,
@@ -159,7 +162,7 @@ export function SeatStakePanel({
       return;
     }
     if (isWrongNetwork) {
-      setLocalError("Wrong chain — switch to Base Sepolia.");
+      setLocalError(`Wrong chain — switch to ${PAYMENT_CHAIN_NAME}.`);
       return;
     }
     try {
@@ -235,7 +238,10 @@ export function SeatStakePanel({
   return (
     <section className="overflow-hidden border border-[var(--t-divider)] bg-[#070b09]">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--t-divider)] p-3">
-        {sectionTitle("Floor seat · $BLOW principal")}
+        <div className="flex flex-wrap items-center gap-2">
+          {sectionTitle("Floor seat · $BLOW principal")}
+          <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
+        </div>
         <SeatTierBadgeView
           tier={active?.effectiveTier ?? "Gallery"}
           syncStatus={active?.syncStatus}
@@ -285,7 +291,7 @@ export function SeatStakePanel({
                 disabled={isSwitching}
                 className="text-[var(--t-amber)] underline-offset-2 hover:underline"
               >
-                {isSwitching ? "Switching…" : "Switch to Base Sepolia"}
+                {isSwitching ? "Switching…" : `Switch to ${PAYMENT_CHAIN_NAME}`}
               </button>
             </>
           ) : null}

@@ -12,11 +12,16 @@ import { api } from "../../convex/_generated/api";
 import { NarrativeRenderer } from "@/components/narrative-renderer";
 import { shortAssetLabel } from "@/lib/format-asset-label";
 import {
-  CONTRACTS_CHAIN_ID,
   DEAL_STATUS_CLOSED,
   ESCROW_ADDRESS,
   escrowAbi,
 } from "@/lib/contracts/escrow";
+import {
+  ROBINHOOD_TESTNET_CHAIN_ID,
+  ROBINHOOD_TESTNET_SLUG,
+  txUrl,
+} from "@/lib/network";
+import { NetworkBadge } from "@/components/shared/network-badge";
 import { makePublicClient } from "@/lib/contracts/client";
 import {
   closeDealButtonLabel,
@@ -245,7 +250,7 @@ export function DealDetailContent({
     abi: escrowAbi,
     functionName: "getDeal",
     args: onChainDealId !== undefined ? [BigInt(onChainDealId)] : undefined,
-    chainId: CONTRACTS_CHAIN_ID,
+    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
     query: {
       enabled: onChainDealId !== undefined,
       refetchInterval: shouldPollOnChainDeal ? 5_000 : false,
@@ -412,9 +417,10 @@ export function DealDetailContent({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
+            <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
             {deal.on_chain_tx_hash && (
               <a
-                href={`https://sepolia.basescan.org/tx/${deal.on_chain_tx_hash}`}
+                href={txUrl(ROBINHOOD_TESTNET_SLUG, deal.on_chain_tx_hash)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
@@ -525,7 +531,10 @@ export function DealDetailContent({
                     <span>{new Date(outcome.created_at).toLocaleString()}</span>
                     {outcome.on_chain_tx_hash && (
                       <a
-                        href={`https://sepolia.basescan.org/tx/${outcome.on_chain_tx_hash}`}
+                        href={txUrl(
+                          ROBINHOOD_TESTNET_SLUG,
+                          outcome.on_chain_tx_hash
+                        )}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
@@ -693,7 +702,7 @@ function CloseDealButton({
         abi: escrowAbi,
         functionName: "closeDeal",
         args: [BigInt(onChainDealId)],
-        chainId: CONTRACTS_CHAIN_ID,
+        chainId: ROBINHOOD_TESTNET_CHAIN_ID,
       });
 
       setPhase("confirming");
@@ -721,7 +730,7 @@ function CloseDealButton({
         </p>
         {txHash && (
           <a
-            href={`https://sepolia.basescan.org/tx/${txHash}`}
+            href={txUrl(ROBINHOOD_TESTNET_SLUG, txHash)}
             target="_blank"
             rel="noopener noreferrer"
             className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"

@@ -23,17 +23,19 @@ export function requireDeskWallet(
 
 const TX_RECEIPT_TIMEOUT_MS = 60_000;
 
-/** Build a Base Sepolia public client with an explicit RPC URL. */
-export async function getBaseSepoliaPublicClient() {
+/** Build a Floor active-network public client with an explicit RPC URL. */
+export async function getActiveNetworkPublicClient() {
   const { createPublicClient, http } = await import("viem");
-  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
-  const { requireBaseSepoliaRpcUrl } =
-    await import("../lib/requireBaseSepoliaRpcUrl");
+  const { getActiveViemChain, requireRpcUrl, resolveActiveNetworkSlug } =
+    await import("../lib/networks");
   return createPublicClient({
-    chain: CONTRACTS_CHAIN,
-    transport: http(requireBaseSepoliaRpcUrl()),
+    chain: getActiveViemChain(),
+    transport: http(requireRpcUrl(resolveActiveNetworkSlug())),
   });
 }
+
+/** @deprecated Prefer getActiveNetworkPublicClient. */
+export const getBaseSepoliaPublicClient = getActiveNetworkPublicClient;
 
 /**
  * Wait for a submitted tx to mine and assert it did not revert. Returns both

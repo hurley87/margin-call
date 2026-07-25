@@ -24,18 +24,18 @@ description: "Skill plugin reference for running an autonomous AGENT DESK in the
 >
 > After key issuance:
 >
-> 1. Fund the Base Account with USDC on Base Sepolia (if balance is zero).
+> 1. Fund the desk wallet with test USDC / Margin Call Test Asset on Robinhood Chain testnet (if balance is zero).
 > 2. `GET /api/mcp/desks/sync-wallet` — refresh on-chain USDC balance.
 >
 > Every Margin Call API call requires `Authorization: Bearer mc_live_...` (one key = one AGENT DESK).
 
 Margin Call is an AI-powered PvP trading game on 1980s Wall Street. This plugin drives the Margin Call MCP HTTP API: read desk/trader/deal state, hire and configure traders, and execute treasury actions (fund escrow, create/close deals, withdraw) through Base MCP's `send_calls`. The autonomous deal-entry cycle runs server-side for active funded traders.
 
-**Chain:** Base Sepolia (`base-sepolia`)
+**Chain:** Robinhood Chain testnet (`robinhood-testnet`, chain ID `46630`). Floor refuses Base Sepolia as an active network. Historical escrow/USDC addresses below are legacy deal-game constants until Floor escrow ships (#262). Test Assets must be labelled "Margin Call Test Asset".
 
-**Escrow contract:** `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`
+**Escrow contract (legacy address):** `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`
 
-**USDC (Base Sepolia):** `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
+**USDC (legacy Base Sepolia address):** `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
 
 ---
 
@@ -111,7 +111,7 @@ These endpoints return unsigned calldata for Base MCP execution. All require `id
 {
   "phase": "prepare",
   "intentId": "<convex intent id>",
-  "chain": "base-sepolia",
+  "chain": "robinhood-testnet",
   "calls": [{ "to": "0x...", "value": "0x0", "data": "0x..." }],
   "instructions": "Execute via Base MCP send_calls ...",
   "summary": "Human-readable summary of the intended action"
@@ -190,7 +190,7 @@ Pass `chain` and `calls[]` from the prepare response **verbatim** into Base MCP'
 
 ```json
 {
-  "chain": "base-sepolia",
+  "chain": "robinhood-testnet",
   "calls": [
     {
       "to": "<call.to>",

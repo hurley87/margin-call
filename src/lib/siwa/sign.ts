@@ -1,4 +1,5 @@
 import "server-only";
+import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 
 import { signSIWAMessage } from "@buildersgarden/siwa/siwa";
 // Define Signer interface locally to avoid pulling in @buildersgarden/siwa/signer
@@ -7,10 +8,7 @@ interface Signer {
   getAddress(): Promise<`0x${string}`>;
   signMessage(message: string): Promise<`0x${string}`>;
 }
-import {
-  IDENTITY_REGISTRY_ADDRESS,
-  CONTRACTS_CHAIN_ID,
-} from "@/lib/contracts/escrow";
+import { IDENTITY_REGISTRY_ADDRESS } from "@/lib/contracts/escrow";
 import type {
   TraderOwnerAccount,
   TraderSmartAccount,
@@ -49,8 +47,8 @@ export async function signAgentRequest(
       domain,
       uri,
       agentId: tokenId,
-      agentRegistry: `eip155:${CONTRACTS_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
-      chainId: CONTRACTS_CHAIN_ID,
+      agentRegistry: `eip155:${ROBINHOOD_TESTNET_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
+      chainId: ROBINHOOD_TESTNET_CHAIN_ID,
       nonce,
       issuedAt: new Date().toISOString(),
     },

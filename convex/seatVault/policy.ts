@@ -7,7 +7,7 @@
  * Product name: $BLOW. On-chain Sepolia token symbol may be MARGINCALL.
  * Stake amounts are always decimal strings of 18-decimal wei (exceeds int64).
  */
-import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/activeDeployment";
+import { ACTIVE_BASE_SEPOLIA_DEPLOYMENT } from "../lib/legacy";
 
 /** On-chain Tier enum: Gallery = 0, Seat = 1, CornerOffice = 2. */
 export const TIER_GALLERY = 0;
@@ -171,6 +171,7 @@ export const SEAT_VAULT_V1 = {
 } as const;
 
 /** Blocks to lag behind tip before treating logs as confirmed (Base ~2s blocks). */
+/** @deprecated Prefer seatVaultConfirmationDepth(BASE_SEPOLIA_SLUG) from networks. */
 export const SEAT_VAULT_CONFIRMATION_DEPTH = 8;
 
 /** Max blocks scanned per indexer tick. */

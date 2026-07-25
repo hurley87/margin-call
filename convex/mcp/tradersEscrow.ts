@@ -46,16 +46,16 @@ async function ensureDepositorOnChain(
 ): Promise<void> {
   const { createWalletClient, http } = await import("viem");
   const { privateKeyToAccount } = await import("viem/accounts");
-  const { CONTRACTS_CHAIN } = await import("../lib/baseSepoliaNetwork");
-  const { requireBaseSepoliaRpcUrl } =
-    await import("../lib/requireBaseSepoliaRpcUrl");
+  const { getActiveViemChain, requireRpcUrl, resolveActiveNetworkSlug } =
+    await import("../lib/networks");
 
   const operatorKey = requireEnv("OPERATOR_PRIVATE_KEY");
   const account = privateKeyToAccount(operatorKey as `0x${string}`);
+  const contractsChain = getActiveViemChain();
   const walletClient = createWalletClient({
     account,
-    chain: CONTRACTS_CHAIN,
-    transport: http(requireBaseSepoliaRpcUrl()),
+    chain: contractsChain,
+    transport: http(requireRpcUrl(resolveActiveNetworkSlug())),
   });
   const publicClient = await getBaseSepoliaPublicClient();
 
@@ -253,7 +253,7 @@ export const fundPrepareForMcp = internalAction({
 export const fundConfirmForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
-    intentId: v.id("mcpIntents"),
+    intentId: v.id("chainIntents"),
     txHash: v.string(),
   },
   handler: async (ctx, args): Promise<McpTraderWriteResult> => {
@@ -399,7 +399,7 @@ export const withdrawPrepareForMcp = internalAction({
 export const withdrawConfirmForMcp = internalAction({
   args: {
     deskManagerId: v.id("deskManagers"),
-    intentId: v.id("mcpIntents"),
+    intentId: v.id("chainIntents"),
     txHash: v.string(),
   },
   handler: async (ctx, args): Promise<McpTraderWriteResult> => {

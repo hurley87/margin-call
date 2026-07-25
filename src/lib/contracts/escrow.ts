@@ -1,12 +1,14 @@
 import {
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT,
-  CONTRACTS_CHAIN,
-  CONTRACTS_CHAIN_ID,
   ERC6551_DEFAULT_IMPLEMENTATION,
   ERC6551_REGISTRY_ADDRESS,
   IDENTITY_REGISTRY_ADDRESS,
   REPUTATION_REGISTRY_ADDRESS,
   USDC_SEPOLIA_ADDRESS,
+} from "@/lib/legacy";
+import {
+  getActiveNetwork,
+  getActiveViemChain,
   resolveAddress,
 } from "@/lib/network";
 
@@ -17,15 +19,18 @@ export const DEAL_STATUS_CLOSED = 1;
 export const ESCROW_ADDRESS = resolveAddress(
   [process.env.NEXT_PUBLIC_ESCROW_ADDRESS, process.env.ESCROW_ADDRESS],
   ACTIVE_BASE_SEPOLIA_DEPLOYMENT.escrow,
-  "ESCROW_ADDRESS"
+  "ESCROW_ADDRESS",
+  "legacy Base Sepolia deployment (addresses only until Floor escrow ships)"
 );
+
+/** Floor payment chain (Robinhood Chain testnet). */
+export const CONTRACTS_CHAIN = getActiveViemChain();
+export const CONTRACTS_CHAIN_ID = getActiveNetwork().chainId;
 
 export {
   IDENTITY_REGISTRY_ADDRESS,
   REPUTATION_REGISTRY_ADDRESS,
   ERC6551_REGISTRY_ADDRESS,
-  CONTRACTS_CHAIN,
-  CONTRACTS_CHAIN_ID,
   USDC_SEPOLIA_ADDRESS,
   ERC6551_DEFAULT_IMPLEMENTATION,
 };

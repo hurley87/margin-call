@@ -5,18 +5,17 @@ import {
   isChainIdBase,
   privyConfig,
 } from "@/lib/privy/config";
+import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 
 /**
- * Payment chain is Base Sepolia (84532) in development.
- * These tests validate the chain-id helpers against the actual configured chain,
- * not a hardcoded mainnet assumption.
+ * Payment chain is Robinhood Chain testnet (46630).
  */
 describe("payment chain id helpers", () => {
   describe("constants", () => {
     it("BASE_CHAIN_ID matches the configured payment chain", () => {
-      // Config uses baseSepolia (84532) — assert the actual value
       expect(typeof BASE_CHAIN_ID).toBe("number");
-      expect(BASE_CHAIN_ID).toBe(84532);
+      expect(BASE_CHAIN_ID).toBe(ROBINHOOD_TESTNET_CHAIN_ID);
+      expect(BASE_CHAIN_ID).toBe(46630);
     });
 
     it("BASE_CHAIN_ID_CAIP2 matches the configured payment chain", () => {
@@ -33,9 +32,9 @@ describe("payment chain id helpers", () => {
       );
     });
 
-    it("supports only Base Sepolia (no mainnet)", () => {
+    it("supports only Robinhood Chain testnet (no mainnet)", () => {
       expect(privyConfig.supportedChains).toHaveLength(1);
-      expect(privyConfig.supportedChains?.[0]?.id).toBe(84532);
+      expect(privyConfig.supportedChains?.[0]?.id).toBe(46630);
     });
   });
 
@@ -56,6 +55,10 @@ describe("payment chain id helpers", () => {
       expect(isChainIdBase(8453)).toBe(false);
       expect(isChainIdBase("8453")).toBe(false);
       expect(isChainIdBase("eip155:8453")).toBe(false);
+    });
+
+    it("returns false for Base Sepolia", () => {
+      expect(isChainIdBase(84532)).toBe(false);
     });
 
     it("returns false for other chain id numbers", () => {
