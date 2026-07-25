@@ -1,16 +1,18 @@
-# Base Sepolia configuration
+# Base Sepolia configuration (legacy)
 
-Margin Call runs on **Base Sepolia only** (chain ID `84532`). No mainnet configuration or transactions are authorized in this repository.
+> **Legacy deal-game network.** Prefer [`docs/floor/chain-and-intent-boundaries.md`](./floor/chain-and-intent-boundaries.md) and [`convex/lib/networks/`](../convex/lib/networks/index.ts) for The Floor (#249+). Base Sepolia escrow / SeatVault paths remain until cutover ([#262](https://github.com/hurley87/margin-call/issues/262)).
+
+Margin Call's **legacy deal game** runs on **Base Sepolia** (chain ID `84532`). No mainnet configuration or transactions are authorized in this repository. The Floor default active network is Robinhood Chain testnet (`46630`).
 
 ## Canonical sources
 
-| File                                                                                                  | Purpose                                                                                         |
-| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`convex/lib/baseSepoliaNetwork.ts`](../convex/lib/baseSepoliaNetwork.ts)                             | Environment-free chain identity: chain ID, CAIP-2, slug, Sepolia USDC, ERC-8004/6551 registries |
-| [`contracts/deployments/base-sepolia.active.json`](../contracts/deployments/base-sepolia.active.json) | Source-controlled active deployment pointer (escrow, `$BLOW` token, SeatVault)                  |
-| [`convex/lib/activeDeployment.ts`](../convex/lib/activeDeployment.ts)                                 | Typed TypeScript mirror of the active JSON (update both together)                               |
-| [`convex/lib/requireBaseSepoliaRpcUrl.ts`](../convex/lib/requireBaseSepoliaRpcUrl.ts)                 | RPC URL resolver — fails closed if missing                                                      |
-| [`convex/lib/resolveAddress.ts`](../convex/lib/resolveAddress.ts)                                     | Address resolver — env must match canonical or throw                                            |
+| File                                                                                                  | Purpose                                                                        |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| [`convex/lib/networks/`](../convex/lib/networks/index.ts)                                             | Slug-driven multi-network registry (Robinhood testnet + Base Sepolia legacy)   |
+| [`contracts/deployments/base-sepolia.active.json`](../contracts/deployments/base-sepolia.active.json) | Source-controlled active deployment pointer (escrow, `$BLOW` token, SeatVault) |
+| [`convex/lib/networks/deployments.ts`](../convex/lib/networks/deployments.ts)                         | Typed TypeScript mirror of the active JSON (update both together)              |
+| [`convex/lib/networks/rpc.ts`](../convex/lib/networks/rpc.ts)                                         | RPC URL resolver — fails closed if missing                                     |
+| [`convex/lib/resolveAddress.ts`](../convex/lib/resolveAddress.ts)                                     | Address resolver — env must match canonical or throw                           |
 
 Next.js re-exports these from [`src/lib/network/`](../src/lib/network/index.ts).
 
@@ -36,7 +38,7 @@ Gate [#211](https://github.com/hurley87/margin-call/issues/211) redeploys **escr
 
 - Active token: `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7`
 - Before `pnpm deploy:seat-vault`, set `MARGINCALL_TOKEN` (and optionally `NEXT_PUBLIC_MARGINCALL_TOKEN`) to that address — do **not** run `pnpm deploy:margincall-token` on the happy path
-- On Gate 2 activation, keep `margincallToken` unchanged in `base-sepolia.active.json` / `activeDeployment.ts`
+- On Gate 2 activation, keep `margincallToken` unchanged in `base-sepolia.active.json` / `convex/lib/networks/deployments.ts`
 
 ## Activation procedure
 
@@ -45,7 +47,7 @@ Changing the active deployment requires human approval ([#211](https://github.co
 1. Obtain Gate 1 approval, then deploy hardened escrow + SeatVault on Base Sepolia `84532` only (`pnpm deploy:escrow`, `pnpm deploy:seat-vault`).
 2. Append to history files under `contracts/deployments/` (`base-sepolia.escrows.json`, `base-sepolia.seat-vaults.json`; token history only if replacing the token).
 3. Source-verify with `pnpm verify:escrow` / `pnpm verify:seat-vault` (or `pnpm verify:contracts`).
-4. Obtain Gate 2 approval, then update `contracts/deployments/base-sepolia.active.json` and `convex/lib/activeDeployment.ts` together.
+4. Obtain Gate 2 approval, then update `contracts/deployments/base-sepolia.active.json` and `convex/lib/networks/deployments.ts` together.
 5. Update Convex/Vercel env vars to match (or remove them to use canonical defaults).
 6. Sync `packages/mcp-server/base-plugin/margin-call.md` and run `pnpm test` (drift tests enforce alignment).
 

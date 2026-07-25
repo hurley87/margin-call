@@ -253,7 +253,7 @@ The full schema lives in `convex/schema.ts`. Core tables:
 - **agentActivityLog** — structured per-trader activity records
 - **marketNarratives**, **narrativeSeasons**, **narrativeArcs**, **narrativeEntities** — Wire narrative engine state
 - **mcpApiKeys** — per-desk MCP Bearer token hashes
-- **mcpIntents** — pending on-chain treasury intents (prepare → Base MCP → confirm flow)
+- mcpIntents / **chainIntents** — on-chain treasury intents (prepare → sign/submit → confirm / reconcile; #249)
 
 Convex is the sole source of truth for working game state and LLM prompt construction. The `MarginCallEscrow` contract on Base is the source of truth for balances and reputation; on divergence, the contract wins.
 
