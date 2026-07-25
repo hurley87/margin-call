@@ -63,7 +63,7 @@ Statuses:
 | `price-feed-nvda`                | price-feed             | test-asset-fallback | _null_                                       | Margin Call Test Asset — NVDA price feed                        | `AggregatorV3Interface`                                |
 | `sequencer-uptime-feed`          | sequencer-uptime-feed  | test-asset-fallback | _null_                                       | Margin Call Test Asset — sequencer uptime feed                  | `AggregatorV3Interface`                                |
 | `erc8056-multiplier`             | interface-capability   | unverified          | _null_                                       | ERC-8056 uiMultiplier support on Stock Tokens                   | `IERC8056`                                             |
-| `gas-sponsorship`                | infra                  | unverified          | _null_                                       | Alchemy gasless / sponsorship path                              | —                                                      |
+| `gas-sponsorship`                | infra                  | unverified          | _null_                                       | Privy gas sponsorship path                                      | —                                                      |
 
 ### Registry bytecode evidence
 
@@ -107,11 +107,11 @@ Evidence (gitignored): `.floor-evidence/sponsorship-proof.json`
 | --------- | -------------------------------------------------------------------------------------------------------- |
 | Sender    | Independently controlled test wallet (`FLOOR_PROOF_PRIVATE_KEY`) — must not equal `OPERATOR_PRIVATE_KEY` |
 | Call      | Harmless 0-value self-transfer                                                                           |
-| Sponsored | `false` until Alchemy gas policy integration is proved                                                   |
+| Sponsored | `false` until Privy gas sponsorship on Robinhood Chain testnet is proved                                 |
 | Chain ID  | `46630` only                                                                                             |
 | Artifact  | tx hash, block number, sender, gas payer                                                                 |
 
-Alchemy Gasless Transaction Infrastructure is documented by Robinhood / Alchemy but is **not yet integrated** in this repository. `FLOOR_SPONSORSHIP_MODE=alchemy` fails closed with an actionable message. Product wiring belongs to later Floor slices; this packet records sponsorship as `unverified`.
+Floor gas sponsorship uses **Privy** (`sendTransaction` with `{ sponsor: true }`), matching the existing Base Sepolia desk path — not Alchemy Gasless Transaction Infrastructure (even though Robinhood/Alchemy document that option). Privy must have Robinhood Chain testnet sponsorship enabled in the dashboard before product wiring (#249+) can prove a sponsored receipt. Until then `FLOOR_SPONSORSHIP_MODE=privy` fails closed, and this packet records sponsorship as `unverified`.
 
 ## Executable checks
 

@@ -2,14 +2,15 @@
  * Independent-wallet signing + sponsorship proof for Robinhood Chain testnet (#248).
  *
  * Proves a non-House key can sign and submit a harmless call. Prefers the
- * intended sponsorship path when configured; otherwise requires an explicit
- * --allow-self-funded flag so the packet can honestly record gas payer === sender.
+ * intended Privy sponsorship path when configured; otherwise requires an
+ * explicit --allow-self-funded flag so the packet can honestly record
+ * gas payer === sender.
  *
  * Env:
  *   ROBINHOOD_TESTNET_RPC_URL          required
  *   FLOOR_PROOF_PRIVATE_KEY            required (independently controlled test key)
- *   FLOOR_SPONSORSHIP_MODE             optional: "alchemy" | "none" (default none)
- *   ALCHEMY_API_KEY / ALCHEMY_GAS_POLICY_ID  required when mode=alchemy
+ *   FLOOR_SPONSORSHIP_MODE             optional: "privy" | "none" (default none)
+ *   NEXT_PUBLIC_PRIVY_APP_ID / PRIVY_APP_SECRET  required when mode=privy
  *
  * Usage:
  *   ROBINHOOD_TESTNET_RPC_URL=... FLOOR_PROOF_PRIVATE_KEY=0x... \
@@ -38,7 +39,7 @@ const ROOT = join(import.meta.dirname, "../..");
 const EVIDENCE_DIR = join(ROOT, ".floor-evidence");
 const EVIDENCE_PATH = join(EVIDENCE_DIR, "sponsorship-proof.json");
 
-type SponsorshipMode = "alchemy" | "none";
+type SponsorshipMode = "privy" | "none";
 
 type ProofEvidence = {
   provedAt: string;
@@ -111,33 +112,34 @@ function sponsorshipMode(): SponsorshipMode {
   const mode = (process.env.FLOOR_SPONSORSHIP_MODE ?? "none")
     .trim()
     .toLowerCase();
-  if (mode === "alchemy") return "alchemy";
+  if (mode === "privy") return "privy";
   if (mode === "none" || mode === "") return "none";
   throw new Error(
-    `Unknown FLOOR_SPONSORSHIP_MODE="${mode}" (expected alchemy|none)`
+    `Unknown FLOOR_SPONSORSHIP_MODE="${mode}" (expected privy|none)`
   );
 }
 
 /**
- * Alchemy gas sponsorship for Robinhood is documented but not yet wired into
- * Margin Call product code (#249). When mode=alchemy, require policy credentials
- * and fail with an actionable message until the integration lands — do not fake
- * a sponsored receipt.
+ * Floor intends Privy gas sponsorship on Robinhood Chain testnet (same
+ * sendTransaction({ sponsor: true }) pattern as Base Sepolia). When
+ * mode=privy, require Privy credentials and fail closed until dashboard
+ * sponsorship for chain 46630 is enabled and product wiring lands — do not
+ * fake a sponsored receipt. Alchemy Gasless is intentionally not used.
  */
-async function submitAlchemySponsored(_opts: {
+async function submitPrivySponsored(_opts: {
   rpcUrl: string;
   sender: `0x${string}`;
 }): Promise<never> {
   void _opts;
-  const apiKey = process.env.ALCHEMY_API_KEY?.trim();
-  const policyId = process.env.ALCHEMY_GAS_POLICY_ID?.trim();
-  if (!apiKey || !policyId) {
+  const appId = process.env.NEXT_PUBLIC_PRIVY_APP_ID?.trim();
+  const appSecret = process.env.PRIVY_APP_SECRET?.trim();
+  if (!appId || !appSecret) {
     throw new Error(
-      "FLOOR_SPONSORSHIP_MODE=alchemy requires ALCHEMY_API_KEY and ALCHEMY_GAS_POLICY_ID"
+      "FLOOR_SPONSORSHIP_MODE=privy requires NEXT_PUBLIC_PRIVY_APP_ID and PRIVY_APP_SECRET"
     );
   }
   throw new Error(
-    "Alchemy gas sponsorship on Robinhood Chain testnet is not yet integrated in this repository. Record sponsorship as unverified in the #248 packet, or re-run with FLOOR_SPONSORSHIP_MODE=none --allow-self-funded to prove independent signing/submit first."
+    "Privy gas sponsorship on Robinhood Chain testnet is not yet proved in this repository. Enable Robinhood Chain testnet sponsorship in the Privy dashboard, wire Floor writes through sendTransaction({ sponsor: true }), then re-run. Until then record sponsorship as unverified in the #248 packet, or use FLOOR_SPONSORSHIP_MODE=none --allow-self-funded to prove independent signing/submit first."
   );
 }
 
@@ -231,14 +233,14 @@ async function main() {
   const rpcUrl = requireRpcUrl();
   const privateKey = requireProofKey();
 
-  if (mode === "alchemy") {
+  if (mode === "privy") {
     const account = privateKeyToAccount(privateKey);
-    await submitAlchemySponsored({ rpcUrl, sender: account.address });
+    await submitPrivySponsored({ rpcUrl, sender: account.address });
   }
 
   if (!args.allowSelfFunded) {
     throw new Error(
-      "Sponsorship path unavailable/unconfigured. Re-run with --allow-self-funded to prove independent signing and submission (gas payer will equal sender), or set FLOOR_SPONSORSHIP_MODE=alchemy with policy credentials once integrated."
+      "Sponsorship path unavailable/unconfigured. Re-run with --allow-self-funded to prove independent signing and submission (gas payer will equal sender), or set FLOOR_SPONSORSHIP_MODE=privy once Privy Robinhood testnet sponsorship is enabled and wired."
     );
   }
 
@@ -260,7 +262,7 @@ async function main() {
     blockNumber: result.blockNumber.toString(),
     callKind: "self-zero-transfer",
     notes:
-      "Self-funded harmless 0-value self-transfer. Alchemy sponsorship remains unverified until FLOOR_SPONSORSHIP_MODE=alchemy is integrated and proved.",
+      "Self-funded harmless 0-value self-transfer. Privy sponsorship remains unverified until FLOOR_SPONSORSHIP_MODE=privy is enabled for Robinhood Chain testnet and proved.",
     noMainnet: true,
     noRealFunds: true,
   };

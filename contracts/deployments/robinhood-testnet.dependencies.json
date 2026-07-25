@@ -167,10 +167,10 @@
       "id": "gas-sponsorship",
       "kind": "infra",
       "status": "unverified",
-      "label": "Alchemy gasless / sponsorship path",
+      "label": "Privy gas sponsorship path",
       "address": null,
       "expectedInterfaces": [],
-      "notes": "Robinhood docs list Alchemy Gasless Transaction Infrastructure. Sponsorship proof (#248 AC) must demonstrate an independently controlled wallet can submit a harmless call; path details recorded in the packet after the live proof."
+      "notes": "Floor uses Privy sponsored transactions (same pattern as Base Sepolia via sendTransaction({ sponsor: true })), not Alchemy Gasless. Sponsorship proof (#248 AC) must demonstrate an independently controlled wallet can submit a harmless call; path details recorded in the packet after Privy enables Robinhood Chain testnet sponsorship and the live proof lands."
     }
   ]
 }
