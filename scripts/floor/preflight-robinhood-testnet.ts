@@ -35,6 +35,7 @@ import {
   type PreflightFinding,
 } from "./preflight-checks";
 import { loadFloorEnvLocal } from "./load-env";
+import { loadActiveFloorTraderDeployment } from "./trader-deployment";
 
 const ROOT = join(import.meta.dirname, "../..");
 const EVIDENCE_DIR = join(ROOT, ".floor-evidence");
@@ -327,7 +328,9 @@ async function main() {
   const rpcUrl = requireRpcUrl();
   const deps = loadRobinhoodTestnetDependencies();
 
-  const offlineFindings = runOfflinePreflight(deps);
+  const offlineFindings = runOfflinePreflight(deps, {
+    traderDeployment: loadActiveFloorTraderDeployment(),
+  });
   if (offlinePreflightHasErrors(offlineFindings)) {
     console.error("Offline preflight failed:");
     for (const f of offlineFindings) {

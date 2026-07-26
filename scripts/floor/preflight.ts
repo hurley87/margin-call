@@ -7,10 +7,12 @@ import {
   offlinePreflightHasErrors,
   runOfflinePreflight,
 } from "./preflight-checks";
+import { loadActiveFloorTraderDeployment } from "./trader-deployment";
 
 function main() {
   const deps = loadRobinhoodTestnetDependencies();
-  const findings = runOfflinePreflight(deps);
+  const traderDeployment = loadActiveFloorTraderDeployment();
+  const findings = runOfflinePreflight(deps, { traderDeployment });
 
   console.log(
     JSON.stringify(
@@ -18,6 +20,7 @@ function main() {
         ok: !offlinePreflightHasErrors(findings),
         chainId: deps.network.chainId,
         dependencyCount: deps.dependencies.length,
+        traderDeploymentVersion: traderDeployment?.version ?? null,
         findings,
       },
       null,

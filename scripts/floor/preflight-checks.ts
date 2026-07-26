@@ -11,6 +11,7 @@ import {
   isForbiddenRobinhoodMainnetChainId,
   isRobinhoodTestnetChainId,
 } from "./dependencies";
+import type { FloorTraderDeployment } from "./trader-deployment";
 
 export type PreflightFinding = {
   code: string;
@@ -129,21 +130,104 @@ export function isFeedStale(opts: {
   return age > heartbeatSeconds + graceSeconds;
 }
 
+/**
+ * Any entry that pins an address must have bytecode there, whatever its status.
+ * A pinned address with no code is a dead pointer regardless of whether it
+ * names a canonical asset or a Floor-deployed one, and the Trader account
+ * implementation is recorded as a fallback precisely because we deploy it
+ * ourselves.
+ */
 export function checkBytecodeExpectation(opts: {
   entry: DependencyEntry;
   code: string | null | undefined;
 }): PreflightFinding | null {
   const { entry, code } = opts;
-  if (entry.status !== "canonical") return null;
+  if (entry.status !== "canonical" && entry.address === null) return null;
   if (!hasContractBytecode(code)) {
     return {
       code: "bytecode-missing",
       severity: "error",
       dependencyId: entry.id,
-      message: `Canonical dependency "${entry.id}" expected bytecode at ${entry.address ?? "unknown"} but eth_getCode was empty`,
+      message: `Dependency "${entry.id}" (status=${entry.status}) expected bytecode at ${entry.address ?? "unknown"} but eth_getCode was empty`,
     };
   }
   return null;
+}
+
+export const TRADER_ACCOUNT_IMPLEMENTATION_ID =
+  "erc6551-account-implementation";
+
+function sameAddress(a: string | null, b: string | null): boolean {
+  if (a === null || b === null) return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+/**
+ * Keep the dependency matrix and the recorded Floor Trader deployment from
+ * drifting apart. A pinned account implementation that no deployment record
+ * accounts for, or one that names a different address than the contract we
+ * actually deployed, would send every Trader's token-bound account to the
+ * wrong implementation.
+ */
+export function checkTraderDeploymentConsistency(opts: {
+  deps: RobinhoodTestnetDependencies;
+  deployment: FloorTraderDeployment | null;
+}): PreflightFinding[] {
+  const { deps, deployment } = opts;
+  const findings: PreflightFinding[] = [];
+
+  const entry = deps.dependencies.find(
+    (d) => d.id === TRADER_ACCOUNT_IMPLEMENTATION_ID
+  );
+  if (!entry) {
+    findings.push({
+      code: "account-implementation-entry-missing",
+      severity: "error",
+      dependencyId: TRADER_ACCOUNT_IMPLEMENTATION_ID,
+      message: `Dependency matrix must contain "${TRADER_ACCOUNT_IMPLEMENTATION_ID}"`,
+    });
+    return findings;
+  }
+
+  if (deployment === null) {
+    if (entry.address !== null) {
+      findings.push({
+        code: "account-implementation-unrecorded",
+        severity: "error",
+        dependencyId: entry.id,
+        message: `Matrix pins account implementation ${entry.address} but no Floor Trader deployment is recorded`,
+      });
+    }
+    return findings;
+  }
+
+  if (entry.address === null) {
+    findings.push({
+      code: "account-implementation-address-missing",
+      severity: "error",
+      dependencyId: entry.id,
+      message: `Floor Trader deployment v${deployment.version} deployed account implementation ${deployment.accountImplementation} but the matrix still pins null`,
+    });
+  } else if (!sameAddress(entry.address, deployment.accountImplementation)) {
+    findings.push({
+      code: "account-implementation-drift",
+      severity: "error",
+      dependencyId: entry.id,
+      message: `Matrix pins account implementation ${entry.address} but deployment v${deployment.version} recorded ${deployment.accountImplementation}`,
+    });
+  }
+
+  const registry = deps.dependencies.find((d) => d.id === "erc6551-registry");
+  if (registry && !sameAddress(registry.address, deployment.registry)) {
+    findings.push({
+      code: "registry-drift",
+      severity: "error",
+      dependencyId: "erc6551-registry",
+      message: `Floor Trader deployment v${deployment.version} used registry ${deployment.registry} but the matrix pins ${registry.address ?? "null"}`,
+    });
+  }
+
+  return findings;
 }
 
 export function assertAllowedChainId(chainId: string | number): void {
@@ -164,7 +248,8 @@ export function assertAllowedChainId(chainId: string | number): void {
  * By default, any error-severity finding means the matrix is not shippable.
  */
 export function runOfflinePreflight(
-  deps: RobinhoodTestnetDependencies
+  deps: RobinhoodTestnetDependencies,
+  opts: { traderDeployment?: FloorTraderDeployment | null } = {}
 ): PreflightFinding[] {
   const findings: PreflightFinding[] = [];
 
@@ -216,6 +301,13 @@ export function runOfflinePreflight(
         "erc6551-registry must be present as a canonical dependency with an address",
     });
   }
+
+  findings.push(
+    ...checkTraderDeploymentConsistency({
+      deps,
+      deployment: opts.traderDeployment ?? null,
+    })
+  );
 
   return findings;
 }

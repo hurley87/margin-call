@@ -54,6 +54,11 @@ export function loadEnvLocal(): Record<string, string> {
     "SEAT_THRESHOLD",
     "CORNER_THRESHOLD",
     "UNSTAKE_COOLDOWN",
+    "ROBINHOOD_TESTNET_RPC_URL",
+    "MARGIN_CALL_FLOOR_DEPLOY_APPROVED",
+    "TRADER_NAME",
+    "TRADER_SYMBOL",
+    "TRADER_BASE_URI",
   ]) {
     const value = process.env[key];
     if (value !== undefined && value !== "") {
@@ -95,6 +100,20 @@ export function requireGate1Approval(env: Record<string, string>) {
   if (env.MARGIN_CALL_DEPLOY_GATE1_APPROVED !== "1") {
     throw new Error(
       "Gate 1 not approved — refusing broadcast. Sign docs/security/base-sepolia-deploy-packet-211.md, then set MARGIN_CALL_DEPLOY_GATE1_APPROVED=1 for this shell only (see #211)."
+    );
+  }
+}
+
+/**
+ * Hard stop unless a Floor deployment is explicitly approved for this shell.
+ * Separate from Gate 1, which covers the Base Sepolia deal-game contracts: an
+ * operator approved to redeploy those has not thereby approved putting a new
+ * Trader collection on Robinhood Chain testnet.
+ */
+export function requireFloorDeployApproval(env: Record<string, string>) {
+  if (env.MARGIN_CALL_FLOOR_DEPLOY_APPROVED !== "1") {
+    throw new Error(
+      "Floor deploy not approved — refusing broadcast. Review docs/floor/chain-and-intent-boundaries.md, then set MARGIN_CALL_FLOOR_DEPLOY_APPROVED=1 for this shell only."
     );
   }
 }
@@ -225,6 +244,66 @@ export function runForgeDeploy(opts: {
     throw new Error("Could not parse deployed address from forge output");
   }
   return { address: match[1] as string, output };
+}
+
+/**
+ * Run a Foundry deploy script that creates several contracts in one broadcast
+ * and return every labelled address. Fails if any label is missing rather than
+ * returning a partial set, since a half-parsed multi-contract deployment would
+ * be recorded as if it were complete.
+ */
+export function runForgeDeployMany(opts: {
+  scriptTarget: string;
+  rpcUrl: string;
+  privateKey: string;
+  addressLabels: string[];
+  env?: Record<string, string>;
+  foundryProfile?: string;
+}): { addresses: Record<string, string>; output: string } {
+  const output = execFileSync(
+    "forge",
+    [
+      "script",
+      opts.scriptTarget,
+      "--rpc-url",
+      opts.rpcUrl,
+      "--private-key",
+      opts.privateKey,
+      "--broadcast",
+      "-vv",
+    ],
+    {
+      cwd: CONTRACTS_DIR,
+      env: {
+        ...process.env,
+        ...opts.env,
+        ...(opts.foundryProfile
+          ? { FOUNDRY_PROFILE: opts.foundryProfile }
+          : {}),
+      },
+      encoding: "utf8",
+    }
+  );
+  console.log(output);
+
+  const addresses: Record<string, string> = {};
+  const missing: string[] = [];
+  for (const label of opts.addressLabels) {
+    const match = output.match(
+      new RegExp(`${label} deployed at:\\s*(0x[a-fA-F0-9]{40})`)
+    );
+    if (match) {
+      addresses[label] = match[1] as string;
+    } else {
+      missing.push(label);
+    }
+  }
+  if (missing.length > 0) {
+    throw new Error(
+      `Could not parse deployed address for: ${missing.join(", ")}`
+    );
+  }
+  return { addresses, output };
 }
 
 export function appendDeploymentRecord<T extends Record<string, unknown>>(
