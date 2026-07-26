@@ -18,6 +18,7 @@ import { privateKeyToAccount } from "viem/accounts";
 import {
   appendDeploymentRecord,
   broadcastRecordFields,
+  LEGACY_FOUNDRY_PROFILE,
   loadEnvLocal,
   patchEnvLocal,
   readLatestBroadcastCreate,
@@ -79,6 +80,7 @@ function main() {
       DEPOSITOR_BINDER_ADDRESS: depositorBinder,
       ENTRY_TIMEOUT_SECONDS: entryTimeoutSeconds,
     },
+    foundryProfile: LEGACY_FOUNDRY_PROFILE,
   });
 
   const broadcast = readLatestBroadcastCreate({

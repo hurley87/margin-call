@@ -11,6 +11,7 @@
  */
 import {
   appendDeploymentRecord,
+  LEGACY_FOUNDRY_PROFILE,
   loadEnvLocal,
   patchEnvLocal,
   requireGate1Approval,
@@ -37,6 +38,7 @@ function main() {
     privateKey: operatorKey,
     addressLabel: "MARGINCALL",
     env: { INITIAL_MINT: env.INITIAL_MINT ?? "1000000000000000000000000" },
+    foundryProfile: LEGACY_FOUNDRY_PROFILE,
   });
 
   patchEnvLocal("MARGINCALL_TOKEN", address);

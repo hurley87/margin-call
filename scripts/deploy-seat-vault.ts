@@ -20,6 +20,7 @@
 import {
   appendDeploymentRecord,
   broadcastRecordFields,
+  LEGACY_FOUNDRY_PROFILE,
   loadEnvLocal,
   patchEnvLocal,
   readLatestBroadcastCreate,
@@ -90,6 +91,7 @@ function main() {
     privateKey: operatorKey,
     addressLabel: "SeatVault",
     env: forgeEnv,
+    foundryProfile: LEGACY_FOUNDRY_PROFILE,
   });
 
   const broadcast = readLatestBroadcastCreate({

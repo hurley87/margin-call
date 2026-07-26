@@ -24,6 +24,7 @@
  */
 import {
   castAbiEncode,
+  LEGACY_FOUNDRY_PROFILE,
   loadEnvLocal,
   requireAddress,
   runForgeVerify,
@@ -78,6 +79,7 @@ function verifyContract(opts: {
     contractPath: opts.contractPath,
     constructorArgsHex: opts.constructorArgsHex,
     etherscanApiKey: opts.key,
+    foundryProfile: LEGACY_FOUNDRY_PROFILE,
   });
   console.log(output);
   console.log(

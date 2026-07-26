@@ -13,6 +13,14 @@ export const DEPLOYMENTS_DIR = join(CONTRACTS_DIR, "deployments");
 
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
+/**
+ * Foundry profile that reproduces the bytecode of the Base Sepolia deal-game
+ * contracts, which were built before the default profile stripped metadata and
+ * raised optimizer runs. Legacy deploy and verify calls must pass this or
+ * Basescan will reject the recompiled source.
+ */
+export const LEGACY_FOUNDRY_PROFILE = "legacy";
+
 export function loadEnvLocal(): Record<string, string> {
   if (!existsSync(ENV_LOCAL)) {
     throw new Error(
@@ -182,6 +190,7 @@ export function runForgeDeploy(opts: {
   privateKey: string;
   addressLabel: string;
   env?: Record<string, string>;
+  foundryProfile?: string;
 }): { address: string; output: string } {
   const output = execFileSync(
     "forge",
@@ -197,7 +206,13 @@ export function runForgeDeploy(opts: {
     ],
     {
       cwd: CONTRACTS_DIR,
-      env: { ...process.env, ...opts.env },
+      env: {
+        ...process.env,
+        ...opts.env,
+        ...(opts.foundryProfile
+          ? { FOUNDRY_PROFILE: opts.foundryProfile }
+          : {}),
+      },
       encoding: "utf8",
     }
   );
@@ -245,6 +260,7 @@ export function runForgeVerify(opts: {
   constructorArgsHex: string;
   etherscanApiKey: string;
   chainId?: number;
+  foundryProfile?: string;
 }): string {
   const chainId = opts.chainId ?? BASE_SEPOLIA_CHAIN_ID;
   return execFileSync(
@@ -263,6 +279,12 @@ export function runForgeVerify(opts: {
     ],
     {
       cwd: CONTRACTS_DIR,
+      env: {
+        ...process.env,
+        ...(opts.foundryProfile
+          ? { FOUNDRY_PROFILE: opts.foundryProfile }
+          : {}),
+      },
       encoding: "utf8",
     }
   );
