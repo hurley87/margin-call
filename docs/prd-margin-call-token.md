@@ -9,7 +9,7 @@
 
 Margin Call V1 is a fixed-price Pack-ripping game operated through persistent Trader identities. Packs are the immediate game object; Traders are the long game.
 
-Creators permissionlessly fund auditable Packs of approved tokenized-stock ERC-20s. A Desk Manager funds a Trader with the configured rip-payment asset and assigns it to a named pool or tier. Every funded, eligible Trader may Rip exactly one Pack in each hourly window at that pool's fixed price. The protocol randomly selects an eligible Pack, immediately completes the Rip, and delivers the Pack to the Trader. There is no discretionary buy, hold-unripped, resell, or market-timing decision in V1.
+Creators permissionlessly fund auditable Packs of approved tokenized-stock ERC-20s. A Desk Manager funds a Trader with the configured rip-payment asset and assigns it to a named pool or tier. Every funded, eligible Trader may Rip exactly one Pack in each hourly window at that pool's fixed price. The protocol selects uniformly at random: every eligible Pack has an equal chance regardless of oracle NAV, game-token balance, creator identity, or any other Pack attribute. Selection immediately completes the Rip and delivers the Pack to the Trader. There is no discretionary buy, hold-unripped, resell, or market-timing decision in V1.
 
 The game token's primary active V1 incentive at launch is bounded creator emissions. A future ripper participation-reward configuration exists but is disabled with a value of zero at launch. The token is not the rip-payment asset, does not change Pack selection odds, and does not buy faster Trader cadence in V1. The product makes no promise that the token will appreciate or that any participant will earn a profit.
 
@@ -19,10 +19,10 @@ Rips are disclosed negative-expected-value entertainment: creators fund possible
 
 1. A creator mints and fully funds a Pack with an approved basket of tokenized-stock ERC-20s.
 2. The protocol records the Pack's immutable basket accounting and publishes its contents, oracle NAV, fees, and redemption terms.
-3. The Pack enters a named fixed-price pool or tier only after satisfying objective asset, funding, freshness, and anti-spam eligibility rules.
+3. The Pack enters and remains in a named fixed-price pool or tier only while satisfying objective asset, funding, freshness, anti-spam, and current pool NAV-bound rules.
 4. A Desk Manager funds a Trader's ERC-6551 account with the configured rip-payment asset, chooses one eligible pool, and enables its deterministic schedule.
 5. Once per hourly window, an enabled Trader with sufficient funds may spend exactly one fixed Rip Price. It cannot spend more often, exceed its balance, or choose among eligible Packs.
-6. The protocol selects one eligible Pack using the pool's published random-selection rule. Selection immediately completes the Rip and delivers the Pack to the Trader; V1 does not create an unopened-Pack decision point.
+6. The protocol selects uniformly at random from the eligible set, giving every eligible Pack an equal chance. Selection immediately completes the Rip and delivers the Pack to the Trader; V1 does not create an unopened-Pack decision point.
 7. The confirmed Rip, payment, selected Pack, basket, NAV snapshot, fees, and Trader history are publicly auditable. The manager may later refill or pause the Trader.
 
 If a Trader is unfunded, paused, ineligible, or the pool cannot safely execute, it does nothing for that window. Missed windows do not accumulate and cannot be replayed as a burst.
@@ -54,7 +54,11 @@ If a Trader is unfunded, paused, ineligible, or the pool cannot safely execute, 
 
 ### Pool and protocol
 
-- Each pool or tier has a stable public name, one rip-payment asset, one fixed Rip Price, approved asset rules, eligibility rules, fees, and a published selection method.
+- Each pool or tier has a stable public name, one rip-payment asset, one fixed Rip Price, approved asset rules, fees, and published minimum and maximum oracle NAV bounds.
+- The initial `$25` pool's starting hypothesis is a `$15` minimum NAV and `$100` maximum NAV. These are versioned, evented pool configuration, not immutable universal constants.
+- NAV bounds are continuously enforced for active eligibility, and the maximum protects pool risk rather than serving only as a listing-time check. A Pack outside either bound leaves the eligible selection set and stops creator emissions until price movement or a permitted top-up returns it within bounds; its redemption right remains intact.
+- Bound changes apply prospectively to new listings or a new pool version and never silently rewrite the bounds governing existing active Packs.
+- Selection within a pool is uniform: oracle NAV, game-token balance, creator identity, and all other Pack attributes have zero selection weight.
 - V1 may launch with one pool. Additional fixed-price pools are configuration expansions, not variable pricing within a pool.
 - The protocol validates funding and eligibility, enforces one Rip per Trader per hourly window, selects the Pack, settles the fixed payment, and records finality exactly once.
 - The House may operate the selection and scheduling infrastructure and can affect liveness. It cannot create an unfunded Pack, alter a selected basket, charge a different price, reuse a Rip, bypass frequency limits, or block the Pack holder's disclosed exit.
@@ -67,7 +71,11 @@ The game token is a fixed-maximum-supply ERC-20 whose primary active V1 use at l
 
 The contract retains a future ripper participation-reward configuration set to zero at launch. The owner may later set it only within an immutable deployment-time maximum and a bounded published budget; every configuration change is evented and auditable. It is a participation reward, never a return, yield, appreciation, or guarantee.
 
-The token is not required to Rip, create, transfer, or redeem a Pack. It does not affect Pack contents, NAV, unwrap output, selection odds, Trader cadence, or the fixed Rip Price.
+At V1 launch, the token is earned-only and transfer-restricted. Normal external wallet-to-wallet `transfer` and `transferFrom` are disabled; user balances are earned only through eligible creator emissions and, if later enabled, the bounded participation reward. Protocol mints, burns, and strictly required internal movements remain allowed.
+
+The contract retains a separately approved path to enable ordinary ERC-20 transfers through an explicit, evented, time-delayed, preferably irreversible switch. Enabling transfers does not itself create external buying; a market or liquidity venue requires a separate decision. Mainnet and external-market opening remain outside V1, with no price, return, availability, or transfer-enablement promise.
+
+The token is not required to Rip, create, or redeem a Pack. It does not affect Pack contents, NAV, unwrap output, selection odds, Trader cadence, or the fixed Rip Price.
 
 Ongoing emissions are gated by prior realized protocol fees: a zero-revenue period creates no new ongoing emission budget, and unused budget does not accumulate for later release. A finite bootstrap allocation, if approved, must be published separately and cannot be represented as revenue-backed. Exact allocations, vesting, emission rates, and any mainnet token launch remain approval-gated decisions.
 
@@ -78,11 +86,13 @@ Creator emissions stop when inventory leaves eligible supply. All creator-emissi
 - Every active Pack is fully backed by its recorded basket; fee assets and protocol-owned assets are never counted as Pack backing.
 - A Pack can be selected at most once and its fixed Rip payment settles at most once. Failure and retry paths reconcile the same intent and never create a second Rip.
 - Every funded, eligible Trader can complete at most one Rip in an hourly window. Ownership transfer, pause, insufficient balance, or ineligibility fails closed.
-- Pack selection uses only the published eligible set and random-selection rule. Game-token holdings or stake never change V1 odds.
+- Pack selection is uniform across the published eligible set. Every eligible Pack has equal odds; oracle NAV, game-token holdings or stake, creator identity, and Pack attributes never add selection weight.
+- Pool NAV bounds are continuously enforced. An out-of-bounds Pack leaves selection and creator-emission eligibility until it returns within bounds, without losing its redemption right; versioned bound changes apply prospectively rather than rewriting active-Pack terms.
 - The fixed Rip Price, selected Pack, basket, NAV snapshot, payment, fees, and terminal state are preserved in confirmed audit records.
 - Redemption releases only the selected Pack's recorded raw-token basket less disclosed fees. Stale or unavailable oracle data makes NAV-dependent eligibility fail closed; oracle or scheduler failure cannot rewrite custody or permanently block the defined exit.
 - Creator emissions come only from a bounded published budget and are never described as offsetting creator loss or promising a return.
 - A nonzero ripper participation reward applies only after one confirmed, settled Rip, excludes same-Desk Rips, and remains below the disclosed game cost. Failed, pending, or retried intents never qualify.
+- Ordinary external token transfers fail closed at launch. Any later transfer-enablement transition is separately approved, evented, time-delayed, bounded to enabling transferability rather than promising a market, and preferably irreversible.
 - Testnet assets and tokens are visibly labelled as valueless test assets. V1 makes no mainnet, yield, appreciation, or guaranteed-profit claim.
 
 ## V1 acceptance path
@@ -98,9 +108,10 @@ On Robinhood Chain testnet, independent participants can create and fully fund e
 
 ## Open decisions before implementation planning
 
-- The V1 pool name, fixed rip-payment asset, fixed Rip Price, approved Stock Token set, fee schedule, oracle freshness limits, and objective anti-spam eligibility rules.
+- The V1 pool name, fixed rip-payment asset, approved Stock Token set, fee schedule, oracle freshness limits, objective anti-spam eligibility rules, and whether the `$25` / `$15` / `$100` starting hypotheses become launch configuration.
 - The random-selection mechanism, audit evidence, outage behavior, and required consumer disclosures.
 - The fixed token cap, bootstrap allocation if any, ongoing creator-emission budget, vesting and claim rules, and the immutable ripper-reward maximum and published budget.
+- Permitted Pack top-up rules, exact pool-version transition behavior, the transfer-enablement delay, whether that switch is strictly irreversible, and any separately approved external venue or liquidity plan.
 - The exact Pack redemption rules and fees, including whether V1 exposes manual redemption in the application or only preserves the protocol right.
 - Regulatory and consumer-protection review for paid random selection backed by tokenized financial assets.
 
