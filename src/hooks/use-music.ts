@@ -29,7 +29,11 @@ function getAudio(initialVolume: number): HTMLAudioElement {
 }
 
 export function useMusic() {
-  const [playing, setPlaying] = useState(false);
+  // Seeded from the shared element so a later mount picks up audio that another
+  // consumer already started. Null on the server and on first hydration.
+  const [playing, setPlaying] = useState(
+    () => sharedAudio !== null && !sharedAudio.paused
+  );
   const [volume, setVolumeState] = useState(() =>
     getStored(STORAGE_KEY_VOLUME, 0.5)
   );
@@ -44,9 +48,6 @@ export function useMusic() {
     const onPause = () => setPlaying(false);
     audio.addEventListener("play", onPlay);
     audio.addEventListener("pause", onPause);
-
-    // Sync initial state if audio is already playing (from another mount)
-    setPlaying(!audio.paused);
 
     // Auto-play if previously playing and audio isn't already active
     if (audio.paused && getStored(STORAGE_KEY_PLAYING, false)) {
