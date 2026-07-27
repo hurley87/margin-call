@@ -20,6 +20,8 @@
     "test:contracts": "cd contracts && forge test",
     "test:contracts:ci": "cd contracts && FOUNDRY_PROFILE=ci forge test",
     "install:forge-deps": "bash scripts/install-forge-deps.sh",
+    "deploy:mockusd": "tsx scripts/deploy-mockusd.ts",
+    "verify:mockusd": "tsx scripts/verify-mockusd.ts",
     "audit:prod": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "audit:all:gated": "node scripts/audit-all-gated.mjs",
