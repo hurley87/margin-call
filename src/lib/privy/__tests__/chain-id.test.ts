@@ -4,8 +4,8 @@ import {
   BASE_CHAIN_ID_CAIP2,
   isChainIdBase,
   privyConfig,
+  PAYMENT_CHAIN_ID,
 } from "@/lib/privy/config";
-import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 
 /**
  * Payment chain is Robinhood Chain testnet (46630).
@@ -14,7 +14,7 @@ describe("payment chain id helpers", () => {
   describe("constants", () => {
     it("BASE_CHAIN_ID matches the configured payment chain", () => {
       expect(typeof BASE_CHAIN_ID).toBe("number");
-      expect(BASE_CHAIN_ID).toBe(ROBINHOOD_TESTNET_CHAIN_ID);
+      expect(BASE_CHAIN_ID).toBe(PAYMENT_CHAIN_ID);
       expect(BASE_CHAIN_ID).toBe(46630);
     });
 

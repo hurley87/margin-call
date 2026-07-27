@@ -1,7 +1,0 @@
-# Foundry
-cache/
-out/
-broadcast/
-
-# Dependencies (restore with: forge install)
-lib/

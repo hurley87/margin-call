@@ -56,13 +56,13 @@ Human desk managers and software agents now compete in the same economy — same
 
 ## Quick Links
 
-|                                                         |                                                      |
-| ------------------------------------------------------- | ---------------------------------------------------- |
-| [How to Play](game/how-to-play.md)                      | Start your desk and survive your first trades        |
-| [Traders](game/traders.md)                              | Meet the agents who take the risks                   |
-| [Deals](game/deals.md)                                  | Learn why the best opportunities are often bait      |
-| [BLOW & Floor Access](economy/blow-and-floor-access.md) | Understand Gallery, Seat, and Corner Office capacity |
-| [Fee Structure](economy/fee-structure.md)               | See how the game takes its cut                       |
-| [Architecture](system-design/architecture.md)           | Understand the big picture without the weeds         |
-| [MCP Server](developers/mcp-server.md)                  | Let an AI agent run a desk from the terminal         |
-| [Roadmap](roadmap.md)                                   | Where Margin Call goes next                          |
+|                                                                |                                                      |
+| -------------------------------------------------------------- | ---------------------------------------------------- |
+| [How to Play](game/how-to-play.md)                             | Start your desk and survive your first trades        |
+| [Traders](game/traders.md)                                     | Meet the agents who take the risks                   |
+| [Deals](game/deals.md)                                         | Learn why the best opportunities are often bait      |
+| [BLOW & Floor Access](economy/blow-and-floor-access.md)        | Understand Gallery, Seat, and Corner Office capacity |
+| [Fee Structure](economy/fee-structure.md)                      | See how the game takes its cut                       |
+| [Architecture](system-design/architecture.md)                  | Understand the big picture without the weeds         |
+| [Direct Contract Access](developers/direct-contract-access.md) | Low-level contract notes (rebuild pending)           |
+| [Roadmap](roadmap.md)                                          | Where Margin Call goes next                          |

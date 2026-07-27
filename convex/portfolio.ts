@@ -1,8 +1,6 @@
 import { query } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 import { resolveTraderProfileImageUrl } from "./lib/profileImage";
-import { mapDisplayTiersByTraderId } from "./seatVault/publicDisplay";
-import type { SeatTierName } from "./seatVault/policy";
 
 type DeskPortfolio = {
   totalValueUsdc: number;
@@ -24,8 +22,8 @@ type DeskPortfolio = {
     losses: number;
     wipeouts: number;
     dealCount: number;
-    /** Public floor credential only — never staker/pending/unlock. */
-    effectiveTier: SeatTierName;
+    /** SeatVault torn down — always Gallery until Floor replacement. */
+    effectiveTier: "Gallery";
   }[];
   pnlHistory: { createdAt: number; cumulativePnl: number }[];
   stats: {
@@ -136,10 +134,6 @@ export const forDesk = query({
     }
 
     let totalValueUsdc = 0;
-    const tiers = await mapDisplayTiersByTraderId(
-      ctx,
-      perTrader.map((row) => row.tr._id)
-    );
     const traderSummaries: DeskPortfolio["traders"] = perTrader.map(
       ({ tr, assetSum, outs, profileImageUrl }) => {
         const escrow = tr.escrowBalanceUsdc ?? 0;
@@ -164,7 +158,7 @@ export const forDesk = query({
           losses: s.losses,
           wipeouts: s.wipeouts,
           dealCount: outs.length,
-          effectiveTier: tiers.get(String(tr._id)) ?? "Gallery",
+          effectiveTier: "Gallery",
         };
       }
     );

@@ -20,7 +20,7 @@ import { v } from "convex/values";
 import { internalMutation } from "../_generated/server";
 import type { Doc, TableNames } from "../_generated/dataModel";
 
-/** Tables whose every row references the old escrow/SeatVault and is discarded. */
+/** Tables whose every row references the old escrow and is discarded. */
 const TABLES_TO_CLEAR: TableNames[] = [
   // Deal registry + settlement records (carry onChainDealId / tx hashes)
   "deals",
@@ -30,13 +30,6 @@ const TABLES_TO_CLEAR: TableNames[] = [
   // Money movement + activity history against the old escrow
   "traderTransactions",
   "agentActivityLog",
-  // SeatVault read model + ingestion (address changed → all stale)
-  "traderSeatState",
-  "seatVaultEvents",
-  "seatVaultSyncCursors",
-  // Non-custodial treasury prepare/confirm intents (calldata targets old escrow)
-  "chainIntents",
-  "mcpRequests",
   // Join table linking wire seeds → deals (dealId FKs now dangling)
   "wireDealSeedLinks",
 ];

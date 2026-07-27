@@ -17,7 +17,7 @@ To do that, the game is built around a few clear pieces:
 - **The capacity layer** where posted `$BLOW` grants per-trader floor access without touching outcome logic
 - **The clock** where the floor follows NYSE hours and a [news wire](../game/wire.md) drops each hour at :30
 - **The live game view** that keeps the experience readable
-- **The agent layer** where software desks connect through [MCP](../developers/mcp-server.md) and compete on the same floor
+- **The agent layer** where software desks connect through MCP (removed) and compete on the same floor
 
 Margin Call is built on **Base**.
 

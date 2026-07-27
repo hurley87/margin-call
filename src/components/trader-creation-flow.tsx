@@ -3,16 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Dialog } from "@base-ui/react/dialog";
-import { parseUnits } from "viem";
 
 import {
   useConvexCreateTrader,
   useConvexTraders,
 } from "@/hooks/use-convex-traders";
 import { useTrader } from "@/hooks/use-traders";
-import { useDepositFlow, useTraderEscrowBalance } from "@/hooks/use-escrow";
-import { useResumeTrader, useSyncTraderBalance } from "@/hooks/use-agent";
-import { authFetch, syncDeskWalletBalance } from "@/lib/api";
+import { useResumeTrader } from "@/hooks/use-agent";
 import { DIALOG_BACKDROP_CLASS, cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
 import { ActivateTradingLabel } from "@/components/activate-trading-label";
@@ -239,7 +236,6 @@ function TraderCreationFlow({
     setIsCreating(true);
     setCreateError(undefined);
     try {
-      await syncDeskWalletBalance("Fund your wallet before hiring a trader");
       const traderId = await createTrader({
         name: trimmedName,
         mandate,
@@ -568,32 +564,10 @@ function FundAndActivateStep({
   onDone: () => void;
 }) {
   const { data: trader } = useTrader(convexTraderId);
-  const tokenId = trader?.token_id ?? 0;
   const walletReady = trader?.wallet_status === "ready";
   const walletErrored = trader?.wallet_status === "error";
   const walletErrorMsg = trader?.wallet_error ?? null;
-
-  const {
-    balanceUsdc,
-    unfunded,
-    refetch: refetchBalance,
-  } = useTraderEscrowBalance(tokenId, { refetchInterval: 5_000 });
-  const funded = !unfunded;
   const convexFunded = (trader?.escrow_balance_usdc ?? 0) > 0;
-  const isSyncingDeposit = funded && !convexFunded && walletReady;
-  useSyncTraderBalance(convexTraderId, isSyncingDeposit);
-
-  const [amount, setAmount] = useState("");
-  const [ensureError, setEnsureError] = useState<string | undefined>();
-  const [syncError, setSyncError] = useState<string | undefined>();
-  const [isPreparing, setIsPreparing] = useState(false);
-  const {
-    deposit,
-    reset: resetDeposit,
-    step: depositStep,
-    error: depositError,
-    isLoading: isDepositBusy,
-  } = useDepositFlow();
 
   const resume = useResumeTrader();
   const activating = useRef(false);
@@ -607,262 +581,84 @@ function FundAndActivateStep({
     }
   }, [resume.isPending, resume.isError, onDone]);
 
-  async function handleDeposit(e: React.FormEvent) {
-    e.preventDefault();
-    const parsed = parseUnits(amount, 6);
-    if (parsed === BigInt(0)) return;
-    setEnsureError(undefined);
-    setSyncError(undefined);
-    setIsPreparing(true);
-
-    try {
-      try {
-        const res = await authFetch(
-          `/api/trader/${convexTraderId}/ensure-depositor`,
-          { method: "POST" }
-        );
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          setEnsureError((body as { error?: string }).error ?? "Setup failed");
-          return;
-        }
-      } catch {
-        setEnsureError("Network error during depositor setup");
-        return;
-      }
-
-      try {
-        await deposit(BigInt(tokenId), parsed);
-        const syncRes = await authFetch(
-          `/api/trader/${convexTraderId}/sync-balance`,
-          { method: "POST" }
-        );
-        if (!syncRes.ok) {
-          setSyncError("Balance sync failed — check escrow then activate");
-        } else {
-          setAmount("");
-          refetchBalance();
-        }
-      } catch {
-        // depositError surfaced via hook state
-      }
-    } finally {
-      setIsPreparing(false);
-    }
-  }
-
   function handleActivate() {
     activating.current = true;
     resume.mutate(convexTraderId);
   }
 
-  const depositDisplayError = ensureError ?? syncError ?? depositError;
-  const busy = isPreparing || isDepositBusy;
-  const canDeposit = !!tokenId && !!amount && !busy;
-  const canActivate =
-    walletReady &&
-    funded &&
-    convexFunded &&
-    !resume.isPending &&
-    !isSyncingDeposit;
-  const needsFunding = balanceUsdc !== null && !funded;
-
-  const depositButtonLabel =
-    isPreparing && depositStep === "idle"
-      ? "Preparing..."
-      : {
-          idle: "Fund escrow",
-          approving: "Approving USDC...",
-          depositing: "Depositing...",
-          done: "Fund escrow",
-        }[depositStep];
+  const canActivate = walletReady && !resume.isPending;
 
   return (
     <div className="grid gap-4 p-4">
       <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
         <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--t-divider)] pb-3">
           <h3 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-            Fund escrow
+            Activate trader
           </h3>
           <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]/70">
-            Stake {traderName} before they can hit the wire
+            {traderName}
           </span>
         </div>
 
-        {needsFunding && (
-          <div className="mb-4 border border-[var(--t-amber)]/40 bg-[var(--t-amber)]/[0.06] px-3 py-2">
-            <p className="text-[11px] font-black uppercase tracking-[0.16em] text-[var(--t-amber)]">
-              {traderName} can&apos;t hit the wire — escrow is unfunded
-            </p>
-            <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-amber)]/70">
-              Deposit USDC below to send them to the floor.
-            </p>
-          </div>
+        {walletErrored ? (
+          <WalletProvisioningError
+            traderId={convexTraderId as Id<"traders">}
+            walletError={walletErrorMsg}
+          />
+        ) : trader ? (
+          <WalletOnboardingChecklist
+            walletStatus={trader.wallet_status}
+            walletStep={trader.wallet_step ?? null}
+            tokenId={trader.token_id}
+            traderName={traderName}
+            imageStatus={trader.image_status ?? null}
+            profileImageUrl={trader.profile_image_url}
+            traits={trader.traits}
+            rarity={trader.rarity}
+          />
+        ) : (
+          <p className="text-xs uppercase tracking-[0.14em] text-[var(--t-muted)]">
+            Preparing desk seat…
+          </p>
         )}
 
-        <div className="mb-4 grid gap-3">
-          {walletErrored ? (
-            <WalletProvisioningError
-              traderId={convexTraderId as Id<"traders">}
-              walletError={walletErrorMsg}
-            />
-          ) : (
-            <WalletOnboardingChecklist
-              walletStatus={trader?.wallet_status ?? "pending"}
-              walletStep={trader?.wallet_step ?? null}
-              tokenId={trader?.wallet_step_token_id ?? (tokenId || null)}
-              traderName={traderName}
-              imageStatus={trader?.image_status ?? null}
-              profileImageUrl={trader?.profile_image_url ?? ""}
-              traits={trader?.traits ?? null}
-              rarity={trader?.rarity ?? "Common"}
-            />
-          )}
-          <DatumCell
-            label="Escrow"
-            value={balanceUsdc !== null ? `$${balanceUsdc.toFixed(2)}` : "..."}
-            valueClassName={
-              funded ? "text-[var(--t-green)]" : "text-[var(--t-amber)]"
+        <p className="mt-4 text-xs uppercase tracking-[0.14em] text-[var(--t-amber)]">
+          Escrow funding is temporarily unavailable
+          {convexFunded ? "" : " (escrow unfunded)"}. You can still activate if
+          the wallet is ready.
+        </p>
+
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <MarketClosedButton
+            isClosed={!marketOpen && canActivate}
+            countdownLabel={marketCountdown}
+            enabledChildren={
+              <button
+                type="button"
+                onClick={handleActivate}
+                disabled={!canActivate}
+                className="min-h-10 border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 text-xs font-black uppercase tracking-[0.16em] text-[var(--t-accent)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                <ActivateTradingLabel
+                  isActivating={resume.isPending}
+                  isSyncingDeposit={false}
+                />
+              </button>
             }
           />
-        </div>
-
-        <form
-          onSubmit={handleDeposit}
-          className={`flex flex-col gap-3 ${
-            needsFunding
-              ? "border border-[var(--t-amber)]/40 bg-[var(--t-amber)]/[0.03] p-3"
-              : ""
-          }`}
-        >
-          <label className="block">
-            <span className="mb-1 block text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-              Deposit USDC
-            </span>
-            <input
-              type="number"
-              step="0.000001"
-              min="0"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="0.00 USDC"
-              disabled={busy || !tokenId}
-              className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
-            />
-          </label>
-          <div className="flex flex-wrap gap-2">
-            {DEPOSIT_PRESETS.map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => setAmount(preset)}
-                disabled={busy || !tokenId}
-                className={`border px-3 py-1 text-[11px] uppercase tracking-[0.16em] transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
-                  amount === preset
-                    ? "border-[var(--t-accent)] text-[var(--t-accent)]"
-                    : "border-[var(--t-divider)] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]"
-                }`}
-              >
-                ${preset}
-              </button>
-            ))}
-          </div>
           <button
-            type="submit"
-            disabled={!canDeposit}
-            className="self-start border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
+            type="button"
+            onClick={onDone}
+            className="min-h-10 border border-[var(--t-divider)] px-3 text-xs uppercase tracking-[0.16em] text-[var(--t-muted)] hover:text-[var(--t-text)]"
           >
-            {depositButtonLabel}
+            Skip for now
           </button>
-        </form>
-
-        {depositStep === "done" && (
-          <div className="mt-3 border border-[var(--t-green)]/40 bg-[var(--t-green)]/[0.06] px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[var(--t-green)]">
-            {funded ? "Escrow funded" : "Deposit confirmed — balance syncing"}
-          </div>
-        )}
-
-        {depositDisplayError && (
-          <div className="mt-3 flex items-center justify-between gap-3 border border-[var(--t-red)]/30 bg-[var(--t-red)]/[0.06] px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[var(--t-red)]">
-            <span className="min-w-0 truncate">
-              {depositDisplayError.slice(0, 120)}
-            </span>
-            {depositError && !ensureError && (
-              <button
-                type="button"
-                onClick={resetDeposit}
-                className="shrink-0 underline transition-colors hover:text-[var(--t-text)]"
-              >
-                Retry
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
-        <div className="mb-3 flex items-baseline justify-between gap-3 border-b border-[var(--t-divider)] pb-3">
-          <h3 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-            Activate trading
-          </h3>
-          <span className="text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]/70">
-            Send {traderName} to the floor
-          </span>
         </div>
-        <MarketClosedButton
-          // When wallet isn't ready or escrow isn't funded, keep the existing
-          // disabled state so the helper text below still applies. Only flip to
-          // MARKET CLOSED once the trader is actually ready to be activated.
-          isClosed={
-            !marketOpen &&
-            walletReady &&
-            funded &&
-            convexFunded &&
-            !resume.isPending &&
-            !isSyncingDeposit
-          }
-          countdownLabel={marketCountdown}
-          enabledChildren={
-            <ActivateTradingLabel
-              isActivating={resume.isPending}
-              isSyncingDeposit={isSyncingDeposit}
-              idleLabel="Activate trading"
-            />
-          }
-          onClick={handleActivate}
-          disabled={!canActivate}
-          className="border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-        />
-        <p className="mt-3 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
-          {`Cycles every ${DEFAULT_CYCLE_MINUTES} min once active`}
-        </p>
-        {isSyncingDeposit && (
-          <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-amber)]">
-            Confirming your deposit on-chain — this takes a few seconds…
+        {resume.isError ? (
+          <p className="mt-2 text-xs text-[var(--t-red)]">
+            {resume.error?.message ?? "Activate failed"}
           </p>
-        )}
-        {!canActivate && !isSyncingDeposit && (
-          <p className="mt-1 text-[10px] uppercase tracking-[0.16em] text-[var(--t-muted)]">
-            {!walletReady
-              ? "Waiting for wallet setup to complete..."
-              : "Fund escrow above to enable activation"}
-          </p>
-        )}
-        {resume.isError && (
-          <div className="mt-3 border border-[var(--t-red)]/30 bg-[var(--t-red)]/[0.06] px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[var(--t-red)]">
-            {resume.error?.message}
-          </div>
-        )}
-      </div>
-
-      <div className="flex items-center justify-end pt-1">
-        <button
-          type="button"
-          onClick={onDone}
-          className="text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)]"
-        >
-          Skip for now &rarr;
-        </button>
+        ) : null}
       </div>
     </div>
   );

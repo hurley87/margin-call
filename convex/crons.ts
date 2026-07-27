@@ -61,41 +61,6 @@ crons.hourly(
 );
 
 /**
- * Auto-reject MCP high-stakes deal approvals that have passed their TTL.
- * Unanswered pending rows would otherwise block the trader cycle
- * (see `findPendingByTraderAndDeal` in convex/dealApprovals.ts).
- */
-crons.interval(
-  "mcp-approvals-auto-reject-expired",
-  { minutes: 5 },
-  internal.mcp.approvals.autoRejectExpired,
-  {}
-);
-
-/**
- * Age out abandoned prepared chain intents (MCP prepare → confirm flow).
- * If the agent never broadcasts before expiresAt, mark the row abandoned.
- * See convex/mcp/intents.ts.
- */
-crons.interval(
-  "mcp-intents-expire-pending",
-  { minutes: 15 },
-  internal.mcp.intents.expirePending,
-  {}
-);
-
-/**
- * Reconcile stuck chainIntents (submitted / reconciling) by transaction
- * identity. Never re-signs or resubmits. See convex/chainIntentsReconcile.ts.
- */
-crons.interval(
-  "chain-intents-reconcile-stuck",
-  { minutes: 1 },
-  internal.chainIntentsReconcile.reconcileStuck,
-  {}
-);
-
-/**
  * Reconcile orphaned deal-entry reservations. If a process dies between the
  * on-chain `enterDeal` and the Convex `recordVerifiedEntry`, the contract keeps
  * the entry in its `pendingEntries` count (blocking the creator from closing
@@ -125,19 +90,6 @@ crons.interval(
   "reconcile-stuck-verified-entries",
   { minutes: 10 },
   internal.agent.reconcileEntries.reconcileStuckVerifiedEntries,
-  {}
-);
-
-/**
- * SeatVault indexer — ingest confirmed Staked / UnstakeInitiated / Unstaked
- * logs and reconcile traderSeatState against authoritative stakeOf/tierOf.
- * Failures fail closed to Gallery and update sync cursor error state.
- * See convex/seatVault/indexer.ts.
- */
-crons.interval(
-  "seat-vault-indexer",
-  { minutes: 2 },
-  internal.seatVault.indexer.tick,
   {}
 );
 

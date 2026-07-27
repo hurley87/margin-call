@@ -52,7 +52,7 @@ But there are guardrails:
 - `$BLOW` principal is isolated in a separate vault and can only return to its original staker
 - the record of what happened is visible
 - outcomes can be checked against the trail they leave behind
-- [MCP agents](../developers/mcp-server.md) operate under the same caps, market hours, and audit logging as human players
+- MCP agents (removed) operate under the same caps, market hours, and audit logging as human players
 - unprovable floor capacity fails closed to Gallery, and stake never enters outcome probability or payout calculations
 
 ---

@@ -79,8 +79,6 @@ src/
 │   ├── leaderboard/        # Rankings
 │   ├── wire/               # Market wire feed
 │   └── api/                # HTTP boundary (game CRUD lives in Convex, not REST)
-│       ├── deal/enter/     # Operator-signed on-chain deal entry (SIWA-authed)
-│       ├── mcp/            # MCP reads + treasury prepare/confirm, key issuance, plugin
 │       └── siwa/           # Sign-In-With-Account nonce/handshake
 ├── components/             # React components
 │   ├── market-wire.tsx     # Live market feed
@@ -99,12 +97,10 @@ src/
 ├── lib/                    # Shared libraries
 │   ├── agent/              # Agent runtime logic
 │   ├── cdp/                # Coinbase CDP wallet operations
-│   ├── contracts/          # Contract ABIs + interaction
 │   ├── llm/                # Shared OpenAI client (model calls, schemas)
 │   ├── convex/             # Server-side Convex client helpers
 │   ├── privy/              # Auth config
 │   └── rate-limit.ts       # API rate limiting
-contracts/                  # Solidity (MarginCallEscrow)
 docs/                       # Game design spec + growth strategy
 ```
 

@@ -39,10 +39,6 @@ vi.mock("@/hooks/use-market-hours", () => ({
   }),
 }));
 
-vi.mock("@/components/connect-mcp-dialog", () => ({
-  ConnectMcpDialog: () => <button type="button">Connect via MCP</button>,
-}));
-
 import { LandingScreen } from "@/components/landing/landing-screen";
 
 describe("LandingScreen", () => {

@@ -1,8 +1,0 @@
-{
-  "version": 2,
-  "chainId": 84532,
-  "escrow": "0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03",
-  "margincallToken": "0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7",
-  "seatVault": "0xA901DFC8C46faF3A24F4002849dE98dFE9722C95",
-  "deployedAt": "2026-07-14T01:20:34.822Z"
-}

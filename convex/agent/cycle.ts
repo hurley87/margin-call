@@ -6,11 +6,9 @@ import { internal } from "../_generated/api";
 import type { Id } from "../_generated/dataModel";
 import { CYCLE_LEASE_TTL_MS } from "./internal";
 import {
-  getTierOfReaderOverride,
   isCycleIntervalElapsed,
   resolveAuthoritativeCapacity,
   type AuthoritativeCapacity,
-  type TierOfReader,
 } from "./capacity";
 import { APPROVAL_EXPIRY_MS } from "./_constants";
 import { selectDeal } from "./dealSelection";
@@ -23,36 +21,18 @@ import {
   isTradingHours,
 } from "../lib/tradingHours";
 import {
-  ESCROW_ADDRESS,
-  USDC_DECIMALS,
-  escrowAbi,
-} from "../mcp/escrowConstants";
-import { createSeatVaultPublicClient, readTierOf } from "../seatVault/rpc";
-
-async function defaultReadTierOf(
-  vaultAddress: `0x${string}`,
-  onChainTraderId: number
-) {
-  const client = createSeatVaultPublicClient();
-  return readTierOf(client, vaultAddress, onChainTraderId);
-}
-
-function resolveTierReader(): TierOfReader {
-  return getTierOfReaderOverride() ?? defaultReadTierOf;
-}
+  reconciledTxHash,
+  type OnChainResolveResult,
+} from "./onChainSettlement";
 
 async function loadAuthoritativeCapacity(
-  ctx: ActionCtx,
+  _ctx: ActionCtx,
   trader: { tokenId?: number | null }
 ): Promise<AuthoritativeCapacity> {
-  const deployment = await ctx.runQuery(
-    internal.seatVault.store.getActiveDeploymentInternal,
-    {}
-  );
+  // SeatVault RPC torn down — Gallery fail-closed for all traders.
   return resolveAuthoritativeCapacity({
     onChainTraderId: trader.tokenId,
-    vaultAddress: deployment?.address ?? null,
-    readTierOf: resolveTierReader(),
+    vaultAddress: null,
   });
 }
 
@@ -85,89 +65,19 @@ async function logCapacityDiagnostic(
   });
 }
 
-import {
-  classifySettleEntryRevert,
-  reconciledTxHash,
-  type OnChainResolveResult,
-} from "./onChainSettlement";
-import {
-  clampSettleEntryArgs,
-  type ClampedSettleEntry,
-} from "../lib/settlementEncoding";
-
-async function createEscrowViemClients() {
-  const operatorKey = process.env.OPERATOR_PRIVATE_KEY;
-  if (!operatorKey) {
-    throw new Error("OPERATOR_PRIVATE_KEY env var is not set");
-  }
-
-  const { createWalletClient, http } = await import("viem");
-  const { privateKeyToAccount } = await import("viem/accounts");
-  const { getActiveViemChain, requireRpcUrl, resolveActiveNetworkSlug } =
-    await import("../lib/networks");
-  const { getBaseSepoliaPublicClient } = await import("../mcp/deskByo");
-
-  const account = privateKeyToAccount(operatorKey as `0x${string}`);
-  const contractsChain = getActiveViemChain();
-  const walletClient = createWalletClient({
-    account,
-    chain: contractsChain,
-    transport: http(requireRpcUrl(resolveActiveNetworkSlug())),
-  });
-  const publicClient = await getBaseSepoliaPublicClient();
-  return {
-    account,
-    walletClient,
-    publicClient,
-    CONTRACTS_CHAIN: contractsChain,
-  };
-}
-
 /**
- * Read live getDeal caps and clamp outcome economics to what settleEntry will
- * pay. Returns null when this trader has no pending entry (caller will hit
- * already_resolved on settle).
+ * Escrow settleEntry torn down with Floor migration. Treat as already resolved
+ * so reconcile/cycle paths typecheck and fail closed without RPC.
  */
-export async function clampOutcomeToOnChainCaps({
-  onChainDealId,
-  tokenId,
-  entryCostUsdc,
-  traderPnlUsdc,
-  rakeUsdc,
-}: {
+export async function resolveOnChainEntry(_args: {
   onChainDealId: number;
   tokenId: number;
   entryCostUsdc: number;
   traderPnlUsdc: number;
   rakeUsdc: number;
-}): Promise<ClampedSettleEntry | null> {
-  // Read-only path: never signs, so use the shared public-client factory rather
-  // than building an operator wallet client we would only discard.
-  const { getBaseSepoliaPublicClient } = await import("../mcp/deskByo");
-  const publicClient = await getBaseSepoliaPublicClient();
-  const hasPending = await publicClient.readContract({
-    address: ESCROW_ADDRESS,
-    abi: escrowAbi,
-    functionName: "hasPendingEntry",
-    args: [BigInt(onChainDealId), BigInt(tokenId)],
-  });
-  if (!hasPending) return null;
-
-  const deal = await publicClient.readContract({
-    address: ESCROW_ADDRESS,
-    abi: escrowAbi,
-    functionName: "getDeal",
-    args: [BigInt(onChainDealId)],
-  });
-  return clampSettleEntryArgs({
-    entryCostRaw: deal.entryCost,
-    potAmountRaw: deal.potAmount,
-    reservedAmountRaw: deal.reservedAmount,
-    maxExtractionAmountRaw: deal.maxExtractionAmount,
-    entryCostUsdc,
-    traderPnlUsdc,
-    rakeUsdc,
-  });
+  settleArgs?: { grossPayoutRaw: bigint; rakeRaw: bigint };
+}): Promise<OnChainResolveResult> {
+  return { status: "already_resolved", reason: "no_trader_entry" };
 }
 
 async function finalizeOnChainOutcome(
@@ -259,103 +169,6 @@ async function voidOnChainOutcome(
   }
 }
 
-export async function resolveOnChainEntry({
-  onChainDealId,
-  tokenId,
-  entryCostUsdc,
-  traderPnlUsdc,
-  rakeUsdc,
-  /**
-   * Precomputed settle args from `clampOutcomeToOnChainCaps` / `clampSettleEntryArgs`.
-   * When provided, skip a second getDeal clamp so recorded PnL matches the tx.
-   */
-  settleArgs,
-}: {
-  onChainDealId: number;
-  tokenId: number;
-  entryCostUsdc: number;
-  traderPnlUsdc: number;
-  rakeUsdc: number;
-  settleArgs?: { grossPayoutRaw: bigint; rakeRaw: bigint };
-}): Promise<OnChainResolveResult> {
-  const { account, walletClient, publicClient, CONTRACTS_CHAIN } =
-    await createEscrowViemClients();
-
-  // Gate on THIS trader's pending status, read first. The global
-  // `pendingEntries` count is unsafe as a short-circuit: a lagging RPC replica
-  // that hasn't yet indexed this trader's own `enterDeal` returns
-  // `pendingEntries === 0`, which previously voided the outcome
-  // (`reconciled:deal-settled`) and permanently stranded a genuinely-pending
-  // entry on-chain — blocking the creator from ever closing the deal. We only
-  // conclude "already resolved" when the contract says this specific trader has
-  // no pending entry; the global count then just distinguishes the two reasons.
-  const hasPending = await publicClient.readContract({
-    address: ESCROW_ADDRESS,
-    abi: escrowAbi,
-    functionName: "hasPendingEntry",
-    args: [BigInt(onChainDealId), BigInt(tokenId)],
-  });
-  if (!hasPending) {
-    const onChainDeal = await publicClient.readContract({
-      address: ESCROW_ADDRESS,
-      abi: escrowAbi,
-      functionName: "getDeal",
-      args: [BigInt(onChainDealId)],
-    });
-    return {
-      status: "already_resolved",
-      reason:
-        onChainDeal.pendingEntries === BigInt(0)
-          ? "deal_settled"
-          : "no_trader_entry",
-    };
-  }
-
-  let settle: { grossPayoutRaw: bigint; rakeRaw: bigint } | undefined =
-    settleArgs;
-  if (!settle) {
-    // Retry path: clamp again from live getDeal so settleEntry cannot revert
-    // for economic reasons (#206). Prefer precomputed settleArgs on the happy
-    // path so persisted dealOutcomes match the on-chain payout (#216).
-    const deal = await publicClient.readContract({
-      address: ESCROW_ADDRESS,
-      abi: escrowAbi,
-      functionName: "getDeal",
-      args: [BigInt(onChainDealId)],
-    });
-    settle = clampSettleEntryArgs({
-      entryCostRaw: deal.entryCost,
-      potAmountRaw: deal.potAmount,
-      reservedAmountRaw: deal.reservedAmount,
-      maxExtractionAmountRaw: deal.maxExtractionAmount,
-      entryCostUsdc,
-      traderPnlUsdc,
-      rakeUsdc,
-    });
-  }
-  const { grossPayoutRaw, rakeRaw } = settle;
-  try {
-    const hash = await walletClient.writeContract({
-      address: ESCROW_ADDRESS,
-      abi: escrowAbi,
-      functionName: "settleEntry",
-      args: [BigInt(onChainDealId), BigInt(tokenId), grossPayoutRaw, rakeRaw],
-      chain: CONTRACTS_CHAIN,
-      account,
-    });
-
-    const receipt = await publicClient.waitForTransactionReceipt({ hash });
-    return { status: "resolved", txHash: receipt.transactionHash };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    const classified = classifySettleEntryRevert(message);
-    if (classified) {
-      return classified;
-    }
-    throw err;
-  }
-}
-
 // ── x402 deal-entry helper ───────────────────────────────────────────────────
 
 /**
@@ -415,17 +228,20 @@ async function callDealEnter(
   const { signSIWAMessage } = await import("@buildersgarden/siwa/siwa");
   const domain = baseUrl.replace(/^https?:\/\//, "");
 
-  const { getActiveNetwork } = await import("../lib/networks");
-  const { IDENTITY_REGISTRY_ADDRESS } = await import("../lib/legacy");
-  const { resolveAddress } = await import("../lib/resolveAddress");
-
-  const chainId = getActiveNetwork().chainId;
-  const identityRegistryAddress = resolveAddress(
-    [process.env.IDENTITY_REGISTRY_ADDRESS],
-    IDENTITY_REGISTRY_ADDRESS,
-    "IDENTITY_REGISTRY_ADDRESS",
-    "legacy identity registry (Floor TBA ships in #250)"
+  const identityRegistryAddress = process.env.IDENTITY_REGISTRY_ADDRESS?.trim();
+  if (!identityRegistryAddress) {
+    throw new Error(
+      "[cycle] IDENTITY_REGISTRY_ADDRESS env var is required for SIWA deal entry"
+    );
+  }
+  const chainId = Number(
+    process.env.CHAIN_ID?.trim() ||
+      process.env.NEXT_PUBLIC_CHAIN_ID?.trim() ||
+      "84532"
   );
+  if (!Number.isFinite(chainId) || chainId <= 0) {
+    throw new Error("[cycle] CHAIN_ID / NEXT_PUBLIC_CHAIN_ID is invalid");
+  }
 
   const signer = {
     getAddress: async () => smartAccount.address as `0x${string}`,
@@ -731,41 +547,8 @@ export const cycle = internalAction({
       // ── 4. Deal selection (only when market is open) ───────────────────────
       const mandate = (trader.mandate ?? {}) as Mandate;
 
-      // Read live on-chain balance so stale Convex cache never blocks trading.
-      // Hoisted so after-hours recovery / outcome resolution can reuse it.
+      // Escrow balance RPC torn down — use Convex cache until Floor replacement.
       let escrowBalanceUsdc = trader.escrowBalanceUsdc ?? 0;
-      if (trader.tokenId !== undefined && trader.tokenId !== null) {
-        try {
-          const { getBaseSepoliaPublicClient } = await import("../mcp/deskByo");
-          const publicClient = await getBaseSepoliaPublicClient();
-          const raw = await publicClient.readContract({
-            address: ESCROW_ADDRESS,
-            abi: [
-              {
-                type: "function",
-                name: "getBalance",
-                inputs: [{ name: "traderId", type: "uint256" }],
-                outputs: [{ name: "", type: "uint256" }],
-                stateMutability: "view",
-              },
-            ] as const,
-            functionName: "getBalance",
-            args: [BigInt(trader.tokenId)],
-          });
-          escrowBalanceUsdc = Number(raw) / USDC_DECIMALS;
-          if (escrowBalanceUsdc !== (trader.escrowBalanceUsdc ?? 0)) {
-            await ctx.runMutation(internal.traders.syncEscrowBalance, {
-              traderId,
-              balanceUsdc: escrowBalanceUsdc,
-            });
-          }
-        } catch (err) {
-          console.warn(
-            "[cycle] on-chain balance read failed, using cached value",
-            err
-          );
-        }
-      }
 
       // Deal targeted by this cycle iteration. Populated by selectDeal when
       // the market is open, or by the recovery probe when we're after-hours
@@ -1211,36 +994,9 @@ export const cycle = internalAction({
         pendingOutcome = resolved;
       }
 
-      // Pre-clamp on-chain economics before persist so dealOutcomes match what
-      // settleEntry will pay (#216). Off-chain-only deals skip this.
-      let settleArgs: { grossPayoutRaw: bigint; rakeRaw: bigint } | undefined;
-      if (
-        pendingOutcome &&
-        bestDeal.on_chain_deal_id != null &&
-        traderTokenId !== undefined
-      ) {
-        const clamped = await clampOutcomeToOnChainCaps({
-          onChainDealId: bestDeal.on_chain_deal_id,
-          tokenId: traderTokenId,
-          entryCostUsdc: bestDeal.entry_cost_usdc,
-          traderPnlUsdc: pendingOutcome.traderPnlUsdc,
-          rakeUsdc: pendingOutcome.rakeUsdc,
-        });
-        if (clamped) {
-          pendingOutcome = {
-            ...pendingOutcome,
-            traderPnlUsdc: clamped.traderPnlUsdc,
-            rakeUsdc: clamped.rakeUsdc,
-            potChangeUsdc: clamped.potChangeUsdc,
-          };
-          traderPnlUsdc = clamped.traderPnlUsdc;
-          rakeUsdc = clamped.rakeUsdc;
-          settleArgs = {
-            grossPayoutRaw: clamped.grossPayoutRaw,
-            rakeRaw: clamped.rakeRaw,
-          };
-        }
-      }
+      // Escrow clamp/settleEntry torn down with Floor migration — skip pre-clamp.
+      const settleArgs:
+        { grossPayoutRaw: bigint; rakeRaw: bigint } | undefined = undefined;
 
       // ── 9. Persist outcome BEFORE on-chain settle ────────────────────────────
       // Apply order matters: we record the off-chain outcome first so that if

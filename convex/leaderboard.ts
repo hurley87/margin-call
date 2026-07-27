@@ -7,14 +7,16 @@ import {
   resolveTraderProfileImageUrl,
 } from "./lib/profileImage";
 import { readPublicTraits } from "./lib/portraitSeed";
-import { isMcpSubject } from "./mcp/subject";
-import { mapDisplayTiersByTraderId } from "./seatVault/publicDisplay";
-import { seatTierValidator } from "./seatVault/validators";
 
 const FEATURED_TRADER_NAMES = ["HurlingAlpha", "Wolf"] as const;
 const LANDING_ROSTER_DEFAULT_LIMIT = 4;
 const LANDING_ROSTER_MAX_LIMIT = 12;
 const LANDING_ROSTER_CANDIDATE_LIMIT = 48;
+
+/** Desk subjects issued via the former MCP SIWE path. */
+function isAgentDeskSubject(subject: string | undefined | null): boolean {
+  return typeof subject === "string" && subject.startsWith("mcp:");
+}
 
 const publicTraitsValidator = v.union(
   v.object({
@@ -32,8 +34,8 @@ const landingRosterTraderValidator = v.object({
   name: v.string(),
   profileImageUrl: v.string(),
   traits: publicTraitsValidator,
-  /** Public floor credential only — never staker/pending/unlock. */
-  effectiveTier: seatTierValidator,
+  /** SeatVault torn down — always Gallery until Floor replacement. */
+  effectiveTier: v.literal("Gallery"),
 });
 
 type Stats = {
@@ -120,14 +122,9 @@ export const listLandingRoster = query({
       });
     }
 
-    const tiers = await mapDisplayTiersByTraderId(
-      ctx,
-      pending.map((row) => row.id)
-    );
-
     return pending.map((row) => ({
       ...row,
-      effectiveTier: tiers.get(String(row.id)) ?? "Gallery",
+      effectiveTier: "Gallery" as const,
     }));
   },
 });
@@ -176,13 +173,8 @@ export const listTraderStats = query({
     for (const deskId of deskIds) {
       const dm = await ctx.db.get(deskId);
       deskWalletById.set(String(deskId), dm?.walletAddress);
-      isAgentDeskById.set(String(deskId), isMcpSubject(dm?.subject));
+      isAgentDeskById.set(String(deskId), isAgentDeskSubject(dm?.subject));
     }
-
-    const tiers = await mapDisplayTiersByTraderId(
-      ctx,
-      traders.map((t) => t._id)
-    );
 
     const leaderboard = await Promise.all(
       traders.map(async (t) => {
@@ -219,7 +211,7 @@ export const listTraderStats = query({
             totalDealsLogged > 0 ? (s.wins / totalDealsLogged) * 100 : 0,
           total_value: escrow + assetValue,
           is_agent_desk: isAgentDesk,
-          effectiveTier: tiers.get(String(tid)) ?? "Gallery",
+          effectiveTier: "Gallery" as const,
         };
       })
     );

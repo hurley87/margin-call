@@ -1,38 +1,36 @@
 import "server-only";
-import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 
 import { signSIWAMessage } from "@buildersgarden/siwa/siwa";
+
 // Define Signer interface locally to avoid pulling in @buildersgarden/siwa/signer
 // which transitively imports @openfort/openfort-node (optional dep).
 interface Signer {
   getAddress(): Promise<`0x${string}`>;
   signMessage(message: string): Promise<`0x${string}`>;
 }
-import { IDENTITY_REGISTRY_ADDRESS } from "@/lib/contracts/escrow";
-import type {
-  TraderOwnerAccount,
-  TraderSmartAccount,
-} from "@/lib/cdp/trader-wallet";
+
+/** Minimal account shape for SIWA signing (message/signature only). */
+export type SiwaSignerAccount = {
+  address: string;
+  signMessage: (args: { message: string }) => Promise<`0x${string}`>;
+};
 
 /**
  * Sign a SIWA message for agent authentication.
  *
- * The SIWA address is the smart account (the agent identity / NFT owner).
- * The EOA produces the signature. The verifier recovers the EOA address
- * and confirms it is the authorized key for this agent via the DB.
+ * Simplified post-teardown: message/signature only — no identity-registry
+ * or CDP trader-wallet binding. Chain/registry fields are placeholders.
  */
 export async function signAgentRequest(
-  traderOwnerAccount: TraderOwnerAccount,
+  traderOwnerAccount: SiwaSignerAccount,
   tokenId: number,
   nonce: string,
-  smartAccount: TraderSmartAccount
+  smartAccount: { address: string }
 ): Promise<{ message: string; signature: string }> {
   const domain =
     process.env.NEXT_PUBLIC_APP_URL?.replace(/^https?:\/\//, "") ??
     "localhost:3000";
 
-  // SIWA address = smart account (agent identity).
-  // EOA signs the message directly (ecRecover on verify side).
   const signer: Signer = {
     getAddress: async () => smartAccount.address as `0x${string}`,
     signMessage: async (message: string) => {
@@ -47,8 +45,8 @@ export async function signAgentRequest(
       domain,
       uri,
       agentId: tokenId,
-      agentRegistry: `eip155:${ROBINHOOD_TESTNET_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
-      chainId: ROBINHOOD_TESTNET_CHAIN_ID,
+      agentRegistry: `eip155:0:0x0000000000000000000000000000000000000000`,
+      chainId: 0,
       nonce,
       issuedAt: new Date().toISOString(),
     },
