@@ -3,8 +3,6 @@
 import { useMemo } from "react";
 import Link from "next/link";
 
-import { ConnectMcpDialog } from "@/components/connect-mcp-dialog";
-import { FloorCredential } from "@/components/seat-tier-badge";
 import { TraderAvatar } from "@/components/trader-avatar";
 import { GameButton } from "@/components/ui/game-button";
 import { StatusChip } from "@/components/ui/status-chip";
@@ -131,9 +129,6 @@ export function LandingScreen({ onLogin }: { onLogin: () => void }) {
                       <span className="truncate text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
                         {tile.name}
                       </span>
-                      {tile.effectiveTier ? (
-                        <FloorCredential tier={tile.effectiveTier} compact />
-                      ) : null}
                     </span>
                     {tile.traits.length > 0 && (
                       <span className="flex flex-wrap gap-1">
@@ -260,7 +255,7 @@ export function LandingScreen({ onLogin }: { onLogin: () => void }) {
               Step onto the floor
             </h2>
             <p className="mt-2 max-w-md text-sm text-[var(--t-muted)]">
-              Email OTP gets you a desk wallet. Or connect an AI agent via MCP.
+              Email OTP gets you a desk wallet.
             </p>
           </div>
           <div className="flex flex-col items-start gap-3 sm:items-end">
@@ -268,7 +263,6 @@ export function LandingScreen({ onLogin }: { onLogin: () => void }) {
               {">"} Enter by email
               <span className="cursor-blink">█</span>
             </GameButton>
-            <ConnectMcpDialog />
           </div>
         </div>
       </section>
@@ -339,7 +333,6 @@ function LandingHero({
               {">"} Enter by email
               <span className="cursor-blink">█</span>
             </GameButton>
-            <ConnectMcpDialog />
           </div>
         </div>
       </div>

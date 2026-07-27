@@ -5,12 +5,9 @@ import { internal } from "../_generated/api";
 import { getTradingHoursState } from "../lib/tradingHours";
 import type { Doc } from "../_generated/dataModel";
 import {
-  getTierOfReaderOverride,
   isCycleIntervalElapsed,
   resolveAuthoritativeCapacity,
-  type TierOfReader,
 } from "./capacity";
-import { createSeatVaultPublicClient, readTierOf } from "../seatVault/rpc";
 
 export const MAX_CYCLES_PER_SCHEDULER_TICK = 5;
 
@@ -32,30 +29,15 @@ type SchedulerResult =
   | { enqueued: number; skipped: "no_eligible_traders" }
   | { enqueued: number; skipped: null };
 
-async function defaultReadTierOf(
-  vaultAddress: `0x${string}`,
-  onChainTraderId: number
-) {
-  const client = createSeatVaultPublicClient();
-  return readTierOf(client, vaultAddress, onChainTraderId);
-}
-
-function resolveTierReader(): TierOfReader {
-  return getTierOfReaderOverride() ?? defaultReadTierOf;
-}
-
 /**
  * Convex internal scheduler action — replaces the legacy Vercel Cron HTTP path.
  *
  * Triggered every 1 minute via convex/crons.ts as a heartbeat (Convex minimum).
- * Trader eligibility uses per-trader cycle intervals from SeatVault tier capacity
- * (authoritative on-chain `tierOf`), not the cron period — traders may skip many
- * heartbeats until they are stale enough for their tier.
+ * SeatVault tier RPC is torn down: capacity fail-closes to Gallery cadence.
  *
  * For each eligible trader (active, wallet ready, no live lease,
- * lastCycleAt outside their authoritative spacing) it enqueues an immediate cycle
+ * lastCycleAt outside Gallery spacing) it enqueues an immediate cycle
  * action via ctx.scheduler.runAfter.
- * No HMAC, no HTTP self-call, no user auth context (internal-only action).
  */
 export const scheduler = internalAction({
   args: {},
@@ -77,7 +59,6 @@ export const scheduler = internalAction({
     }
 
     const now = Date.now();
-    // Pre-filter at the shortest cadence; authoritative tier may still skip.
     const candidates: Array<Doc<"traders">> = await ctx.runQuery(
       internal.agent.internal.listStaleTradersForCycle,
       { limit: MAX_CYCLES_PER_SCHEDULER_TICK * 4, now }
@@ -87,11 +68,6 @@ export const scheduler = internalAction({
       return { enqueued: 0, skipped: "no_eligible_traders" as const };
     }
 
-    const deployment = await ctx.runQuery(
-      internal.seatVault.store.getActiveDeploymentInternal,
-      {}
-    );
-    const readTierOfFn = resolveTierReader();
     const eligible: Array<Doc<"traders">> = [];
 
     for (const trader of candidates) {
@@ -99,8 +75,7 @@ export const scheduler = internalAction({
 
       const capacity = await resolveAuthoritativeCapacity({
         onChainTraderId: trader.tokenId,
-        vaultAddress: deployment?.address ?? null,
-        readTierOf: readTierOfFn,
+        vaultAddress: null,
       });
 
       if (capacity.source === "fail_closed" && capacity.diagnostic) {

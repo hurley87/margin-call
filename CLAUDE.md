@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s Wall Street. Players (desk managers) fund and configure AI trader agents that autonomously enter deals. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates the outcome; the Wire narrative engine uses `gpt-5-mini`. Money flows in USDC on Base: deal entry is an operator-signed `enterDeal` call on the `MarginCallEscrow` contract, and desk treasury actions go through a non-custodial Base MCP prepare/confirm flow. See `docs/wall-street-agent-game.md` for the full game design spec.
+Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s Wall Street. Players (desk managers) fund and configure AI trader agents that autonomously enter deals. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates the outcome; the Wire narrative engine uses `gpt-5-mini`. See `docs/wall-street-agent-game.md` for the full game design spec.
+
+On-chain escrow, SeatVault, Floor packet tooling, and MCP desk treasury have been removed pending a rebuild. Treat the repo as a Next + Convex shell until new money/contracts land.
 
 ## Commands
 
@@ -18,31 +20,26 @@ Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s W
 - **Styling:** Tailwind CSS v4 with `tw-animate-css`, `class-variance-authority`, `tailwind-merge`, `clsx`
 - **Data Fetching:** `convex/react` for game/dashboard reactive state; one-off REST calls use `authFetch` in hooks where no Convex query exists yet
 - **UI Components:** Base UI (`@base-ui/react`) + shadcn/ui pattern, Lucide icons
-- **Package Manager:** pnpm (workspace enabled)
+- **Package Manager:** pnpm
 - **Path alias:** `@/*` maps to `./src/*`
 
 ## Architecture
 
-The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the sole source of truth for game state; the `MarginCallEscrow` contract on Base is the source of truth for money.
+The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the sole source of truth for game state.
 
-- **`src/app/`** — Next.js App Router pages + the HTTP boundary under `src/app/api/`. Actual routes: `/api/deal/enter` (operator-signed on-chain entry, SIWA-authed), `/api/mcp/*` (MCP reads + treasury prepare/confirm), `/api/siwa/*`, `/api/mcp/keys*`, `/api/mcp/plugin`. Game CRUD lives in Convex functions, not REST.
-- **`convex/`** — Backend source of truth: schema, queries/mutations/actions, agent runtime (`convex/agent/`), Wire engine (`convex/wire/`), MCP server-side handlers (`convex/mcp/`), crons (`convex/crons.ts`), CDP wallet ops (`convex/wallet.ts`).
-- **`src/lib/`** — Shared client/server libraries: Privy auth, OpenAI client, contract ABIs, operator signing helpers.
+- **`src/app/`** — Next.js App Router pages + HTTP boundary under `src/app/api/` (SIWA and remaining helpers). Game CRUD lives in Convex functions, not REST.
+- **`convex/`** — Backend source of truth: schema, queries/mutations/actions, agent runtime (`convex/agent/`), Wire engine (`convex/wire/`), crons (`convex/crons.ts`), CDP wallet ops (`convex/wallet.ts`).
+- **`src/lib/`** — Shared client/server libraries: Privy auth, OpenAI client, SIWA helpers.
 - **`src/components/`** — React components organized by domain (dashboard, trader, deal, wire, shared).
 - **`src/hooks/`** — Convex (`convex/react`) hooks for game state (traders, deals, activity, approvals).
 
 ### Key integrations:
 
-- **Auth/Wallet:** Privy (email OTP, embedded EVM wallets, sponsored transactions). Floor runtime is Robinhood Chain testnet only via `MARGIN_CALL_NETWORK` ([docs/floor/chain-and-intent-boundaries.md](docs/floor/chain-and-intent-boundaries.md)). Base Sepolia is legacy-only (`convex/lib/legacy`) until #262.
-- **Database:** Convex (reactive database + scheduler/crons). Supabase is fully removed.
-- **Payments:** Operator-signed `enterDeal` on the `MarginCallEscrow` contract (`OPERATOR_PRIVATE_KEY`) for deal entry; non-custodial Base MCP **prepare → `send_calls` → `confirm_intent`** for desk treasury (fund/withdraw/create_deal/close_deal). No x402. Chain and contract addresses: see `docs/floor/chain-and-intent-boundaries.md` (Floor) and `docs/base-sepolia-configuration.md` (legacy addresses only).
-- **Agent Wallets:** Coinbase CDP smart accounts (`@coinbase/cdp-sdk`), minted server-side per trader as ERC-8004 NFTs.
+- **Auth/Wallet:** Privy (email OTP, embedded EVM wallets).
+- **Database:** Convex (reactive database + scheduler/crons).
+- **Agent Wallets:** Coinbase CDP smart accounts (`@coinbase/cdp-sdk`), minted server-side per trader where still wired.
 - **AI:** Deal selection and outcome narration use `gpt-4o-mini`; the Wire narrative engine uses `gpt-5-mini`. Outcome odds are computed mechanically (market mood + SEC heat); the LLM only narrates the pre-decided result.
-- **Agent Runtime:** Convex crons (`convex/crons.ts`) — `agent-scheduler` fires every 1 min → `internal.agent.scheduler.scheduler` queries stale active traders and fans out `internal.agent.cycle.cycle` per trader via `ctx.scheduler.runAfter(0, ...)`. Per-trader interval spacing, max 5 cycles/tick, lease-based concurrency. Deal pick (`gpt-4o-mini`): mandate filter → desk dedup → LLM rank, with ratio fallback. Traders cannot enter deals created by their own desk (enforced in selection and `recordVerifiedEntry`). All cycles gated to NYSE hours (Mon–Fri 09:30–16:00 ET).
-
-### Core game loop (Convex cron heartbeat):
-
-Scan deals → evaluate against mandate → check approval threshold → enter deal via escrow `enterDeal` → resolve (mechanical odds + `gpt-4o-mini` narration) → apply outcome → trader becomes eligible again on its own interval (driven by the 1-min cron, not an in-process sleep)
+- **Agent Runtime:** Convex crons (`convex/crons.ts`) — `agent-scheduler` fires every 1 min → `internal.agent.scheduler.scheduler` fans out cycles. On-chain enter/settle paths are currently stubbed/fail-closed.
 
 ## Conventions
 

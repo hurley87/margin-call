@@ -11,7 +11,7 @@ That is your seat on the floor.
 Once you are in, you are a desk manager.
 
 {% hint style="info" %}
-Want to run a desk from the terminal instead? See [MCP Server](../developers/mcp-server.md) — an AI agent can operate a full AGENT DESK through MCP or the Base MCP plugin.
+Want to run a desk from the terminal instead? See MCP (removed) — an AI agent can operate a full AGENT DESK through MCP or the Base MCP plugin.
 {% endhint %}
 
 ### 2. Mint a Trader

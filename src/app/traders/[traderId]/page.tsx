@@ -8,8 +8,6 @@ import { TRADER_PLACEHOLDER_IMAGE_PATH } from "@/lib/trader-metadata";
 import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
 import { DatumCell } from "@/components/datum-cell";
 import { EmptyState } from "@/components/empty-state";
-import { AgentDeskBadge } from "@/components/agent-desk-badge";
-import { FloorCredential } from "@/components/seat-tier-badge";
 import { formatStatus } from "@/lib/format-status";
 import {
   formatPortraitStatus,
@@ -76,8 +74,6 @@ export function PublicTraderDossier({
   const showFallbackInitials = trader.portraitStatus !== "ready";
   const statusTone = getStatusTone(trader.status);
   const portraitTone = getPortraitTone(trader.portraitStatus);
-  const tier = trader.effectiveTier ?? "Gallery";
-  const syncStatus = trader.seatSyncStatus;
 
   return (
     <main className="min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
@@ -89,12 +85,8 @@ export function PublicTraderDossier({
             </p>
             <h1 className="mt-1 font-[family-name:var(--font-plex-sans)] text-3xl font-black uppercase tracking-wide text-[var(--t-amber)] sm:text-5xl">
               {trader.name}
-              {trader.isAgentDesk ? (
-                <AgentDeskBadge className="ml-2 scale-125 align-baseline" />
-              ) : null}
             </h1>
             <p className="mt-2 flex flex-wrap items-center gap-2 text-xs uppercase tracking-[0.16em] text-[var(--t-muted)]">
-              <FloorCredential tier={tier} syncStatus={syncStatus} />
               <span>
                 Read-only reputation, escrow posture, and last public calls from
                 the exchange floor.

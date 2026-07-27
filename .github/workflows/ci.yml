@@ -36,9 +36,6 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Floor offline preflight (#248)
-        run: pnpm floor:preflight
-
   vitest:
     name: Vitest
     runs-on: ubuntu-latest
@@ -64,108 +61,11 @@ jobs:
   # Re-enable when pnpm supports the bulk advisory endpoint (or pin a working client).
   # Local scripts remain: `pnpm audit:prod` / `pnpm audit:all:gated`.
 
-  contracts:
-    name: Foundry (format, build, unit, fuzz, invariant)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: contracts
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup-foundry
-
-      - name: Forge fmt
-        run: forge fmt --check
-
-      - name: Forge build
-        run: forge build
-
-      - name: Forge test (exclude fork)
-        run: FOUNDRY_PROFILE=ci forge test --no-match-path 'test/fork/**'
-
-  contracts-static:
-    name: Slither static analysis
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup-foundry
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.10"
-
-      # Run Slither directly instead of via crytic/slither-action. The action
-      # forced ignore-compile, which made crytic-compile parse Foundry
-      # build-info whose newer layout (no top-level "output" key) crashes it
-      # with KeyError: 'output'. Letting crytic-compile drive `forge build`
-      # with the pinned toolchain (deps already installed by setup-foundry)
-      # avoids that.
-      - name: Install Slither
-        run: pip install "slither-analyzer==0.11.4"
-
-      - name: Run Slither
-        working-directory: contracts
-        # --fail-high mirrors the action's `fail-on: high`: exit non-zero only
-        # on High-severity findings.
-        run: slither . --config-file slither.config.json --fail-high
-
-  contracts-fork:
-    name: Foundry (Base Sepolia fork)
-    runs-on: ubuntu-latest
-    # Soft-skips inside the suite when BASE_SEPOLIA_RPC_URL is unset
-    # (secrets cannot be compared in job-level `if`).
-    defaults:
-      run:
-        working-directory: contracts
-    env:
-      BASE_SEPOLIA_RPC_URL: ${{ secrets.BASE_SEPOLIA_RPC_URL }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: ./.github/actions/setup-foundry
-
-      - name: Forge fork tests
-        run: forge test --match-path 'test/fork/**'
-
-  floor-preflight-live:
-    name: Floor (Robinhood testnet live preflight)
-    runs-on: ubuntu-latest
-    # Soft-skips when ROBINHOOD_TESTNET_RPC_URL is unset (secrets cannot be
-    # compared in job-level `if`). Mirror contracts-fork gating.
-    env:
-      ROBINHOOD_TESTNET_RPC_URL: ${{ secrets.ROBINHOOD_TESTNET_RPC_URL }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: 10.0.0
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: ".nvmrc"
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Live dependency probe
-        run: |
-          if [ -z "$ROBINHOOD_TESTNET_RPC_URL" ]; then
-            echo "ROBINHOOD_TESTNET_RPC_URL unset — skipping live Floor preflight"
-            exit 0
-          fi
-          pnpm floor:preflight:live
-
   # Push Convex functions on merge to main so the backend never lags the
-  # Vercel frontend deploy. Skipping this is what broke the trader dialog:
-  # the frontend shipped calling seatVault/queries:getPublicTraderTier while
-  # the deployment never had it. Runs only after checks pass.
+  # Vercel frontend deploy. Runs only after checks pass.
   deploy-convex:
     name: Deploy Convex functions
-    needs: [checks, vitest, contracts, contracts-static]
+    needs: [checks, vitest]
     # Only on merge to main, and only when a deploy key is actually configured.
     # Without the secret `npx convex deploy` errors ("No CONVEX_DEPLOYMENT set"),
     # so the job is gated on it rather than painting every main commit red.

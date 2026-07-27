@@ -1,22 +1,47 @@
 /**
- * SeatVault tier capacity for agent scheduling (PRD #187 / issue #190).
+ * Tier capacity for agent scheduling.
  *
- * Authoritative capacity comes from on-chain `tierOf` (via injectable reader).
- * RPC/config/malformed failures fail closed to Gallery. Tier is never fed into
- * deal selection, outcome narration, probability, payout, or rake.
- *
- * Queries cannot RPC — `listStaleTradersForCycle` uses the shortest cadence as
- * a pre-filter; scheduler + cycle re-check with this module before granting.
+ * SeatVault RPC was removed in the Floor teardown. Capacity fail-closes to
+ * Gallery for all traders until a Floor replacement lands. Tier is never fed
+ * into deal selection, outcome narration, probability, payout, or rake.
  */
 
 import { v } from "convex/values";
 import { internalQuery } from "../_generated/server";
-import {
-  capacityForTier,
-  SEAT_TIER_NAMES,
-  TIER_CAPACITY,
-  type SeatTierName,
-} from "../seatVault/policy";
+
+export type SeatTierName = "Gallery" | "Seat" | "CornerOffice";
+
+export const SEAT_TIER_NAMES = [
+  "Gallery",
+  "Seat",
+  "CornerOffice",
+] as const satisfies readonly SeatTierName[];
+
+/** Capacity granted by each tier (PRD #187). Deal creation is unlimited. */
+export const TIER_CAPACITY = {
+  Gallery: {
+    cycleIntervalMs: 10 * 60 * 1000,
+    maxUnresolvedEntries: 1,
+  },
+  Seat: {
+    cycleIntervalMs: 5 * 60 * 1000,
+    maxUnresolvedEntries: 1,
+  },
+  CornerOffice: {
+    cycleIntervalMs: 5 * 60 * 1000,
+    maxUnresolvedEntries: 2,
+  },
+} as const satisfies Record<
+  SeatTierName,
+  { cycleIntervalMs: number; maxUnresolvedEntries: number }
+>;
+
+export function capacityForTier(tier: SeatTierName): {
+  cycleIntervalMs: number;
+  maxUnresolvedEntries: number;
+} {
+  return TIER_CAPACITY[tier];
+}
 
 /** Gallery cadence — default / fail-closed interval. */
 export const GALLERY_CYCLE_INTERVAL_MS = TIER_CAPACITY.Gallery.cycleIntervalMs;
@@ -90,26 +115,25 @@ export function isCycleIntervalElapsed(
 }
 
 /**
- * Resolve capacity from on-chain tierOf (or injected test reader).
- * Never trusts traderSeatState alone for accelerated cadence.
+ * Resolve capacity. SeatVault RPC is torn down — always Gallery fail-closed
+ * unless a test injects a reader (kept for unit tests).
  */
 export async function resolveAuthoritativeCapacity(args: {
   onChainTraderId: number | null | undefined;
   vaultAddress: string | null | undefined;
   readTierOf?: TierOfReader;
 }): Promise<AuthoritativeCapacity> {
-  const { onChainTraderId, vaultAddress } = args;
+  const reader = args.readTierOf ?? tierOfReaderOverride;
+  if (!reader) {
+    return failClosedGallery("seat_vault_teardown");
+  }
 
+  const { onChainTraderId, vaultAddress } = args;
   if (onChainTraderId === null || onChainTraderId === undefined) {
     return failClosedGallery("missing_token_id");
   }
   if (!vaultAddress || !/^0x[a-fA-F0-9]{40}$/i.test(vaultAddress)) {
     return failClosedGallery("missing_or_invalid_vault");
-  }
-
-  const reader = args.readTierOf ?? tierOfReaderOverride;
-  if (!reader) {
-    return failClosedGallery("tier_reader_unavailable");
   }
 
   try {

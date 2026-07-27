@@ -39,9 +39,6 @@ export const resetGameState = internalMutation({
       "emailNotifications",
       "wireDealSeedLinks",
       "deals",
-      "chainIntents",
-      "mcpRequests",
-      "mcpApiKeys",
     ] as const satisfies readonly TableNames[];
 
     if (!confirm) {

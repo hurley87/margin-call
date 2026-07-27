@@ -18,7 +18,6 @@ import { Dialog } from "@base-ui/react/dialog";
 import {
   ArrowRight,
   Check,
-  ChevronsUp,
   Copy,
   HelpCircle,
   LogOut,
@@ -45,9 +44,6 @@ import {
 } from "@/components/feed-line";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { TraderAvatar } from "@/components/trader-avatar";
-import { AgentDeskBadge } from "@/components/agent-desk-badge";
-import { FloorCredential } from "@/components/seat-tier-badge";
-import { SeatUpgradeDialog } from "@/components/seat-upgrade-dialog";
 import { IntroSequence } from "@/components/intro-sequence";
 import { LandingScreen } from "@/components/landing/landing-screen";
 import { MobileMarketPulse } from "@/components/desk/mobile-market-pulse";
@@ -93,9 +89,6 @@ import { useMarketHours } from "@/hooks/use-market-hours";
 import { useWireTickOnNew } from "@/hooks/use-wire-tick-on-new";
 import { usePnlStreaks, useRankDeltas } from "@/hooks/use-rank-deltas";
 import { useSecondTick } from "@/hooks/use-second-tick";
-import { useUsdcBalance } from "@/hooks/use-usdc-balance";
-import { useBlowBalance } from "@/hooks/use-seat-vault";
-import { formatBlowAmount } from "@/lib/contracts/seatVault";
 import {
   DIALOG_BACKDROP_CLASS,
   dialogPopupClass,
@@ -117,7 +110,6 @@ import {
 } from "@/lib/trader-cycle";
 import { EmptyState } from "@/components/empty-state";
 import { NetworkBadge } from "@/components/shared/network-badge";
-import { ROBINHOOD_TESTNET_SLUG } from "@/lib/network";
 import type { Id } from "../../convex/_generated/dataModel";
 
 const NY_TIME: Intl.DateTimeFormatOptions = {
@@ -132,10 +124,6 @@ const TONE_CLASS = {
 } as const;
 
 const EMPTY_PENDING: PendingApproval[] = [];
-
-function formatBlow(value: number): string {
-  return value.toLocaleString("en-US", { maximumFractionDigits: 2 });
-}
 
 // Fallback copy only appears when Convex has no generated wire epochs yet.
 const FALLBACK_WIRE_ITEMS = [
@@ -274,7 +262,9 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const { data: approvals } = usePendingApprovals();
   const { data: feedData, isLoading: feedLoading } = useActivityFeed();
   const { data: leaderboard, isLoading: leaderboardLoading } = useLeaderboard();
-  const { balance: cashBalance, isLoading: cashLoading } = useUsdcBalance();
+  // On-chain USDC balance hook removed with contracts teardown.
+  const cashBalance: number | undefined = undefined;
+  const cashLoading = false;
   const drops = useQuery(api.marketNarratives.feedDrops, { limit: 6 });
   const sfx = useSfx();
 
@@ -294,9 +284,6 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const [selectedPublicTraderId, setSelectedPublicTraderId] = useState<
     string | null
   >(null);
-  const [selectedUpgradeTraderId, setSelectedUpgradeTraderId] = useState<
-    string | null
-  >(null);
   const [mobileTab, setMobileTab] = useState<MobileTab>("desk");
 
   const openTraderProfile = useCallback((traderId: string) => {
@@ -305,10 +292,6 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
   const openTraderWallet = useCallback((traderId: string) => {
     setSelectedWalletTraderId(traderId);
   }, []);
-  const openTraderUpgrade = useCallback((traderId: string) => {
-    setSelectedUpgradeTraderId(traderId);
-  }, []);
-
   const activity = useMemo(() => feedData?.activity ?? [], [feedData]);
   const traderNames = feedData?.traderNames ?? {};
   const traderProfiles = feedData?.traderProfiles ?? {};
@@ -349,12 +332,9 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
 
   const pnl = portfolio?.stats.total_pnl ?? 0;
   const equity = portfolio?.total_value_usdc ?? 0;
-  const deskWalletFunded = cashBalance !== undefined && cashBalance > 0;
-  const deskWalletFundingKnown = !cashLoading && cashBalance !== undefined;
-  // A desk that has already deployed capital into traders (or has any equity)
-  // has clearly funded its wallet at least once. Funding traders moves USDC out
-  // of the desk wallet, so cash can legitimately read $0 afterward — we must not
-  // trap such desks behind the forced funding gate.
+  // Funding gates that depended on on-chain USDC reads are disabled for now.
+  const deskWalletFunded = true;
+  const deskWalletFundingKnown = true;
   const deskHasCapital = (portfolio?.traders.length ?? 0) > 0 || equity > 0;
 
   return (
@@ -437,7 +417,6 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
               portfolioLoading={portfolioLoading}
               onOpenProfile={openTraderProfile}
               onManageWallet={openTraderWallet}
-              onUpgrade={openTraderUpgrade}
               onHireTrader={() => {
                 if (!deskWalletFunded) return;
                 setHireDialogOpen(true);
@@ -549,11 +528,6 @@ function Dashboard({ deskWalletAddress }: { deskWalletAddress: string }) {
         open={selectedPublicTraderId !== null}
         onOpenChange={(open) => !open && setSelectedPublicTraderId(null)}
       />
-      <SeatUpgradeDialog
-        traderId={selectedUpgradeTraderId}
-        open={selectedUpgradeTraderId !== null}
-        onOpenChange={(open) => !open && setSelectedUpgradeTraderId(null)}
-      />
     </div>
   );
 }
@@ -604,18 +578,6 @@ function TopStatusBar({
     ...NY_TIME,
   });
   const { isOpen, countdownLabel: hms } = useMarketHours();
-  const { balanceWei: blowWei } = useBlowBalance();
-  const blowHoldings =
-    blowWei === undefined
-      ? undefined
-      : (() => {
-          try {
-            const n = Number(formatBlowAmount(blowWei.toString()));
-            return Number.isFinite(n) ? n : undefined;
-          } catch {
-            return undefined;
-          }
-        })();
   const shortDeskWallet = deskWalletAddress
     ? formatShortAddress(deskWalletAddress)
     : "Embedding...";
@@ -744,17 +706,7 @@ function TopStatusBar({
         </div>
 
         <div className="terminal-panel grid grid-cols-4 divide-x divide-[var(--t-divider)] text-[11px] uppercase">
-          <StatusCell
-            label="$BLOW"
-            value={
-              blowHoldings === undefined ? (
-                "..."
-              ) : (
-                <AnimatedNumber value={blowHoldings} format={formatBlow} live />
-              )
-            }
-            tone="amber"
-          />
+          <StatusCell label="$BLOW" value="—" tone="amber" />
           <StatusCell
             label="Cash"
             value={
@@ -849,7 +801,7 @@ function TopStatusBar({
                 <h2 className="font-[family-name:var(--font-plex-sans)] text-sm font-black uppercase tracking-[0.14em] text-[var(--t-accent)]">
                   Fund Wallet To Start
                 </h2>
-                <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
+                <NetworkBadge />
               </div>
               {!forceFundWallet && (
                 <Dialog.Close
@@ -1914,9 +1866,6 @@ function NewswireDealCard({
           <span className="text-[var(--t-divider)]">/</span>
           <span className="inline-flex items-center gap-1 text-[var(--t-muted)]">
             {dealCreatorLabel(deal)}
-            {deal.creator_is_agent_desk ? (
-              <AgentDeskBadge className="scale-[0.85]" />
-            ) : null}
           </span>
         </div>
         <p className="mt-1 line-clamp-2 break-words text-[var(--t-text)] group-hover/deal:text-[var(--t-accent)]">
@@ -2022,7 +1971,6 @@ function TradingDeskPanel({
   portfolioLoading,
   onOpenProfile,
   onManageWallet,
-  onUpgrade,
   onHireTrader,
   canHireTrader,
   hireDisabledReason,
@@ -2035,7 +1983,6 @@ function TradingDeskPanel({
   portfolioLoading: boolean;
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
-  onUpgrade: (id: string) => void;
   onHireTrader: () => void;
   canHireTrader: boolean;
   hireDisabledReason: string;
@@ -2115,7 +2062,6 @@ function TradingDeskPanel({
         nowMs={nowMs}
         onOpenProfile={onOpenProfile}
         onManageWallet={onManageWallet}
-        onUpgrade={onUpgrade}
         onOpenDeal={onOpenDeal}
         onHireTrader={onHireTrader}
         canHireTrader={canHireTrader}
@@ -2134,7 +2080,6 @@ function TradingDeskMain({
   nowMs,
   onOpenProfile,
   onManageWallet,
-  onUpgrade,
   onOpenDeal,
   onHireTrader,
   canHireTrader,
@@ -2148,7 +2093,6 @@ function TradingDeskMain({
   nowMs: number;
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
-  onUpgrade: (id: string) => void;
   onOpenDeal: (dealId: string) => void;
   onHireTrader: () => void;
   canHireTrader: boolean;
@@ -2194,7 +2138,6 @@ function TradingDeskMain({
       traders={traders}
       onOpenProfile={onOpenProfile}
       onManageWallet={onManageWallet}
-      onUpgrade={onUpgrade}
       nowMs={nowMs}
     />
   );
@@ -2207,13 +2150,11 @@ function DeskTradersView({
   traders,
   onOpenProfile,
   onManageWallet,
-  onUpgrade,
   nowMs,
 }: {
   traders: TraderSummary[];
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
-  onUpgrade: (id: string) => void;
   nowMs: number;
 }) {
   const ranked = useMemo(
@@ -2248,7 +2189,6 @@ function DeskTradersView({
             nowMs={nowMs}
             onOpenProfile={onOpenProfile}
             onManageWallet={onManageWallet}
-            onUpgrade={onUpgrade}
           />
         ))}
       </div>
@@ -2262,14 +2202,12 @@ function DeskTraderRow({
   nowMs,
   onOpenProfile,
   onManageWallet,
-  onUpgrade,
 }: {
   rank: number;
   trader: TraderSummary;
   nowMs: number;
   onOpenProfile: (id: string) => void;
   onManageWallet: (id: string) => void;
-  onUpgrade: (id: string) => void;
 }) {
   const statusTone = statusToneClass(trader.status);
   const pnlPct = pnlPercent(trader.total_pnl, trader.total_value_usdc);
@@ -2300,7 +2238,6 @@ function DeskTraderRow({
         <span className="truncate font-bold uppercase tracking-wider text-[var(--t-amber)]">
           {trader.name}
         </span>
-        <FloorCredential tier={trader.effective_tier} compact />
       </span>
       <span
         className={cn(
@@ -2339,17 +2276,6 @@ function DeskTraderRow({
         {cycleUi.text}
       </span>
       <div className="flex items-center justify-end gap-1">
-        {trader.effective_tier !== "CornerOffice" ? (
-          <button
-            type="button"
-            onClick={() => onUpgrade(trader.id)}
-            title="Upgrade floor seat with $BLOW"
-            aria-label={`Upgrade ${trader.name} floor seat`}
-            className="grid h-6 w-6 place-items-center border border-[var(--t-amber)]/70 text-[var(--t-amber)] transition-colors hover:border-[var(--t-amber)] hover:bg-[var(--t-amber)]/10 focus:border-[var(--t-amber)] focus:outline-none"
-          >
-            <ChevronsUp className="h-3.5 w-3.5" />
-          </button>
-        ) : null}
         <button
           type="button"
           onClick={() => onManageWallet(trader.id)}
@@ -2784,11 +2710,6 @@ function MarketPlayersPanel({
                       <p className="min-w-0 truncate text-[var(--t-text)]">
                         {trader.name}
                       </p>
-                      <FloorCredential
-                        tier={trader.effectiveTier ?? "Gallery"}
-                        compact
-                      />
-                      {trader.is_agent_desk ? <AgentDeskBadge compact /> : null}
                       {rankDelta !== undefined && (
                         <span
                           key={bump}

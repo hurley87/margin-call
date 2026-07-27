@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, useState } from "react";
 import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
 import { useTrader, type Trader, type TraderStatus } from "@/hooks/use-traders";
@@ -9,16 +9,11 @@ import { DatumCell } from "@/components/datum-cell";
 import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
 import { formatStatus } from "@/lib/format-status";
 import {
-  useSepoliaUsdcBalance,
-  useTraderEscrowBalance,
-} from "@/hooks/use-escrow";
-import {
   useTraderOutcomes,
   useTraderAssets,
   usePauseTrader,
   useResumeTrader,
   useReviveTrader,
-  useSyncTraderBalance,
   type DealOutcomeWithNarrative,
 } from "@/hooks/use-agent";
 import { NarrativeRenderer } from "@/components/narrative-renderer";
@@ -29,8 +24,6 @@ import {
 import { TraderActivityPanel } from "@/components/trader-activity-panel";
 import { PendingApprovalCard } from "@/components/pending-approval-card";
 import { WalletDialog } from "@/components/wire/wallet-dialog";
-import { SeatStakePanel } from "@/components/seat-stake-panel";
-import { SeatTierBadge } from "@/components/seat-tier-badge";
 import { MarketClosedButton } from "@/components/market-closed-button";
 import { shortAssetLabel } from "@/lib/format-asset-label";
 import { useMarketHours } from "@/hooks/use-market-hours";
@@ -166,31 +159,12 @@ export function TraderDetailContent({
 }) {
   const { data: trader, isLoading, error } = useTrader(id);
 
-  const {
-    balanceUsdc,
-    unfunded,
-    refetch: refetchBalance,
-  } = useTraderEscrowBalance(trader?.token_id);
-
-  const { balance: walletUsdc } = useSepoliaUsdcBalance();
+  const balanceUsdc = trader?.escrow_balance_usdc ?? null;
+  const unfunded = balanceUsdc === null || balanceUsdc <= 0;
+  const walletUsdc: number | undefined = undefined;
+  const refetchBalance = () => {};
   const [walletOpen, setWalletOpen] = useState(false);
-  const hasAutoOpened = useRef(false);
   const isNewTrader = !!trader && trader.status === "paused" && unfunded;
-
-  // One-shot auto-open once async data lands; ref guard preserves user-close.
-  useEffect(() => {
-    if (compact) return;
-    if (hasAutoOpened.current) return;
-    if (!isNewTrader) return;
-    if (walletUsdc === undefined || walletUsdc > 0) return;
-    hasAutoOpened.current = true;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setWalletOpen(true);
-  }, [compact, isNewTrader, walletUsdc]);
-
-  useEffect(() => {
-    hasAutoOpened.current = false;
-  }, [id]);
 
   if (isLoading) {
     return (
@@ -250,7 +224,6 @@ export function TraderDetailContent({
               {trader.name}
             </h2>
             <StatusBadge status={trader.status} />
-            <SeatTierBadge traderId={id} compact />
             <span className="min-w-0">
               <TraderCycleLine trader={trader} />
             </span>
@@ -348,7 +321,6 @@ export function TraderDetailContent({
             walletReady={trader.wallet_status === "ready"}
             onOpenWallet={() => setWalletOpen(true)}
           />
-          <SeatStakePanel traderId={id} onChainTraderId={trader.token_id} />
           <TraderPendingApprovals traderId={id} />
           <ReputationSection traderId={id} />
           <MandateConfig
@@ -454,13 +426,11 @@ function TraderWalletDialogInner({
   onOpenChange: (open: boolean) => void;
 }) {
   const { data: trader } = useTrader(traderId);
-  const { balanceUsdc, unfunded, refetch } = useTraderEscrowBalance(
-    trader?.token_id
-  );
-  const { balance: walletUsdc } = useSepoliaUsdcBalance();
 
   if (!trader) return null;
 
+  const balanceUsdc = trader.escrow_balance_usdc ?? null;
+  const unfunded = balanceUsdc === null || balanceUsdc <= 0;
   const isNewTrader = trader.status === "paused" && unfunded;
 
   return (
@@ -469,14 +439,14 @@ function TraderWalletDialogInner({
       onOpenChange={onOpenChange}
       convexTraderId={trader.id}
       traderId={trader.token_id}
-      walletUsdc={walletUsdc}
+      walletUsdc={undefined}
       escrowUsdc={balanceUsdc}
       walletAddress={trader.cdp_wallet_address}
       ownerAddress={trader.owner_address}
       walletStatus={trader.wallet_status}
       walletError={trader.wallet_error}
       isNewTrader={isNewTrader}
-      onSuccess={refetch}
+      onSuccess={() => {}}
     />
   );
 }
@@ -575,7 +545,6 @@ function AgentControls({
 
   const convexFunded = convexEscrowUsdc > 0;
   const isSyncingDeposit = !unfunded && !convexFunded && walletReady;
-  useSyncTraderBalance(traderId, isSyncingDeposit);
   const canActivate =
     !unfunded && convexFunded && walletReady && !resume.isPending;
 

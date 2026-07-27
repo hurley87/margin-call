@@ -1,28 +1,15 @@
 "use client";
 
-import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { type ReactNode, useState } from "react";
 import Link from "next/link";
 import { Dialog } from "@base-ui/react/dialog";
 import { usePrivy } from "@privy-io/react-auth";
 import { useMutation } from "convex/react";
-import { formatUnits, type ReadContractReturnType } from "viem";
-import { useReadContract } from "wagmi";
 
 import { api } from "../../convex/_generated/api";
 import { NarrativeRenderer } from "@/components/narrative-renderer";
 import { shortAssetLabel } from "@/lib/format-asset-label";
-import {
-  DEAL_STATUS_CLOSED,
-  ESCROW_ADDRESS,
-  escrowAbi,
-} from "@/lib/contracts/escrow";
-import {
-  ROBINHOOD_TESTNET_CHAIN_ID,
-  ROBINHOOD_TESTNET_SLUG,
-  txUrl,
-} from "@/lib/network";
 import { NetworkBadge } from "@/components/shared/network-badge";
-import { makePublicClient } from "@/lib/contracts/client";
 import {
   closeDealButtonLabel,
   closeDealErrorMessage,
@@ -31,10 +18,8 @@ import {
 } from "@/lib/deal-close-state";
 import { useDeal, type DealOutcome } from "@/hooks/use-deals";
 import { useDeskManager } from "@/hooks/use-desk";
-import { useSponsoredContractWrite } from "@/hooks/use-sponsored-contract-write";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
-import { AgentDeskBadge } from "@/components/agent-desk-badge";
-import { FloorCredential } from "@/components/seat-tier-badge";
+import { txExplorerUrl } from "@/lib/privy/config";
 import { AnimatedNumber } from "@/components/animated-number";
 import {
   DIALOG_BACKDROP_CLASS,
@@ -79,41 +64,6 @@ function DealMetricCell({
 
 function formatPotMoney(value: number): string {
   return `$${value.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-}
-
-type OnChainDealData = ReadContractReturnType<typeof escrowAbi, "getDeal">;
-
-type OnChainDealReadState = {
-  onChainDeal: OnChainDealData | undefined;
-  isLoading: boolean;
-  isFetching: boolean;
-  error: Error | null;
-  refetch: () => Promise<{ data: OnChainDealData | undefined }>;
-};
-
-function formatPendingEntriesStatus({
-  pendingEntries,
-  isLoading,
-  isFetching,
-  error,
-}: {
-  pendingEntries: bigint | undefined;
-  isLoading: boolean;
-  isFetching: boolean;
-  error: Error | null;
-}) {
-  if (pendingEntries !== undefined) {
-    return ` (${pendingEntries.toString()} pending ${pendingEntries === BigInt(1) ? "entry" : "entries"})`;
-  }
-  if (error) {
-    return isFetching
-      ? " (retrying pending check...)"
-      : " (pending check failed)";
-  }
-  if (isLoading) {
-    return " (checking pending entries...)";
-  }
-  return " (checking pending entries...)";
 }
 
 export function DealMetricGrid({
@@ -228,42 +178,7 @@ export function DealDetailContent({
   const { data, isLoading, error } = useDeal(dealId);
   const { user } = usePrivy();
   const { data: deskManager } = useDeskManager();
-  const convexDeal = data?.deal;
-  const onChainDealId = convexDeal?.on_chain_deal_id;
   const walletAddress = getEmbeddedEvmWalletAddress(user) ?? undefined;
-  const shouldPollOnChainDeal =
-    data?.deal.status === "open" &&
-    data.deal.on_chain_deal_id !== undefined &&
-    data.deal.creator_id !== undefined &&
-    deskManager?.id === data.deal.creator_id &&
-    walletAddress !== undefined &&
-    (data.deal.creator_address === undefined ||
-      data.deal.creator_address.toLowerCase() === walletAddress.toLowerCase());
-  const {
-    data: onChainDeal,
-    isLoading: isLoadingOnChainDeal,
-    isFetching: isFetchingOnChainDeal,
-    error: onChainDealError,
-    refetch: refetchOnChainDeal,
-  } = useReadContract({
-    address: ESCROW_ADDRESS,
-    abi: escrowAbi,
-    functionName: "getDeal",
-    args: onChainDealId !== undefined ? [BigInt(onChainDealId)] : undefined,
-    chainId: ROBINHOOD_TESTNET_CHAIN_ID,
-    query: {
-      enabled: onChainDealId !== undefined,
-      refetchInterval: shouldPollOnChainDeal ? 5_000 : false,
-      staleTime: 0,
-    },
-  });
-  const onChainDealReadState: OnChainDealReadState = {
-    onChainDeal,
-    isLoading: isLoadingOnChainDeal,
-    isFetching: isFetchingOnChainDeal,
-    error: onChainDealError,
-    refetch: refetchOnChainDeal,
-  };
 
   if (isLoading) {
     return <DealLoadingState compact={compact} />;
@@ -287,10 +202,7 @@ export function DealDetailContent({
   const legacyPotDelta = outcomes
     .filter((outcome) => outcome.pot_change_inferred)
     .reduce((sum, outcome) => sum + outcome.pot_change_usdc, 0);
-  const displayPotUsdc =
-    onChainDeal !== undefined
-      ? Number(formatUnits(onChainDeal.potAmount, 6))
-      : deal.pot_usdc + legacyPotDelta;
+  const displayPotUsdc = deal.pot_usdc + legacyPotDelta;
   const potDeltaUsdc = outcomes.reduce(
     (sum, outcome) => sum + outcome.pot_change_usdc,
     0
@@ -380,9 +292,6 @@ export function DealDetailContent({
                   ? formatShortAddress(deal.creator_address)
                   : "Desk"}
               </span>
-              {deal.creator_is_agent_desk ? (
-                <AgentDeskBadge className="scale-[0.8]" />
-              ) : null}
             </div>
           )}
 
@@ -417,10 +326,10 @@ export function DealDetailContent({
           </div>
 
           <div className="flex flex-wrap items-center gap-3 border-t border-[var(--t-border)] px-3 py-2">
-            <NetworkBadge slug={ROBINHOOD_TESTNET_SLUG} />
+            <NetworkBadge />
             {deal.on_chain_tx_hash && (
               <a
-                href={txUrl(ROBINHOOD_TESTNET_SLUG, deal.on_chain_tx_hash)}
+                href={txExplorerUrl(deal.on_chain_tx_hash)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
@@ -436,7 +345,6 @@ export function DealDetailContent({
               <DealOwnerStatusFooter
                 status={deal.status}
                 onChainDealId={deal.on_chain_deal_id}
-                onChainDealReadState={onChainDealReadState}
               />
             )}
         </div>
@@ -475,10 +383,6 @@ export function DealDetailContent({
                       >
                         {formatOutcomeResult(outcome)}
                       </span>
-                      <FloorCredential
-                        tier={outcome.effective_tier ?? "Gallery"}
-                        compact
-                      />
                     </div>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
                       {outcome.trader_wiped_out && (
@@ -531,10 +435,7 @@ export function DealDetailContent({
                     <span>{new Date(outcome.created_at).toLocaleString()}</span>
                     {outcome.on_chain_tx_hash && (
                       <a
-                        href={txUrl(
-                          ROBINHOOD_TESTNET_SLUG,
-                          outcome.on_chain_tx_hash
-                        )}
+                        href={txExplorerUrl(outcome.on_chain_tx_hash)}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
@@ -598,19 +499,12 @@ export function DealDetailDialog({
 function DealOwnerStatusFooter({
   status,
   onChainDealId,
-  onChainDealReadState,
 }: {
   status: string;
   onChainDealId: number;
-  onChainDealReadState: OnChainDealReadState;
 }) {
   if (status === "open") {
-    return (
-      <CloseDealButton
-        onChainDealId={onChainDealId}
-        onChainDealReadState={onChainDealReadState}
-      />
-    );
+    return <CloseDealButton onChainDealId={onChainDealId} />;
   }
   if (status === "closed") {
     return (
@@ -622,39 +516,17 @@ function DealOwnerStatusFooter({
   return null;
 }
 
-function CloseDealButton({
-  onChainDealId,
-  onChainDealReadState,
-}: {
-  onChainDealId: number;
-  onChainDealReadState: OnChainDealReadState;
-}) {
+/** On-chain close removed — Convex status sync only when already settled. */
+function CloseDealButton({ onChainDealId }: { onChainDealId: number }) {
   const [phase, setPhase] = useState<CloseDealPhase>("idle");
-  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
   const [error, setError] = useState<string | null>(null);
-  const writeSponsoredContract = useSponsoredContractWrite();
-  const {
-    onChainDeal,
-    isLoading: isLoadingOnChainDeal,
-    isFetching: isFetchingOnChainDeal,
-    error: onChainDealError,
-    refetch: refetchOnChainDeal,
-  } = onChainDealReadState;
   const setStatusByOnChainId = useMutation(api.deals.setStatusByOnChainId);
-  const pendingEntries = onChainDeal?.pendingEntries;
-  const isOnChainClosed = onChainDeal?.status === DEAL_STATUS_CLOSED;
-  const hasConfirmedClose = txHash !== undefined;
   const isBusy = isCloseDealBusy(phase);
-  const isPendingEntriesUnknown =
-    pendingEntries === undefined &&
-    (isLoadingOnChainDeal || onChainDealError !== null);
-  const hasPendingEntries =
-    pendingEntries !== undefined && pendingEntries > BigInt(0);
 
-  const syncClosedDeal = useCallback(async () => {
-    setPhase("syncing");
+  async function handleClose() {
+    if (isBusy) return;
     setError(null);
-
+    setPhase("syncing");
     try {
       await setStatusByOnChainId({ onChainDealId, status: "closed" });
       setPhase("done");
@@ -663,115 +535,33 @@ function CloseDealButton({
       setPhase("error");
       setError(closeDealErrorMessage(err));
     }
-  }, [onChainDealId, setStatusByOnChainId]);
-
-  useEffect(() => {
-    if (!isOnChainClosed || phase !== "idle") return;
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void syncClosedDeal();
-  }, [isOnChainClosed, phase, syncClosedDeal]);
-
-  async function handleClose() {
-    if (isBusy) return;
-
-    if (isOnChainClosed || hasConfirmedClose) {
-      await syncClosedDeal();
-      return;
-    }
-
-    setError(null);
-
-    try {
-      const { data: freshOnChainDeal } = await refetchOnChainDeal();
-      const freshPendingEntries = freshOnChainDeal?.pendingEntries;
-      if (freshPendingEntries === undefined) {
-        throw new Error(
-          "Could not verify pending entries on-chain — try again in a moment"
-        );
-      }
-      if (freshPendingEntries > BigInt(0)) {
-        throw new Error(
-          `Cannot close deal: ${freshPendingEntries.toString()} pending entr${freshPendingEntries === BigInt(1) ? "y" : "ies"} on-chain`
-        );
-      }
-
-      setPhase("wallet");
-
-      const hash = await writeSponsoredContract({
-        address: ESCROW_ADDRESS,
-        abi: escrowAbi,
-        functionName: "closeDeal",
-        args: [BigInt(onChainDealId)],
-        chainId: ROBINHOOD_TESTNET_CHAIN_ID,
-      });
-
-      setPhase("confirming");
-
-      const publicClient = makePublicClient();
-      const receipt = await publicClient.waitForTransactionReceipt({ hash });
-      if (receipt.status === "reverted") {
-        throw new Error("Close deal transaction reverted");
-      }
-
-      setTxHash(hash);
-      await syncClosedDeal();
-    } catch (err) {
-      console.error("closeDeal failed:", err);
-      setPhase("error");
-      setError(closeDealErrorMessage(err));
-    }
   }
 
   if (phase === "done") {
     return (
       <div className="border-t border-[var(--t-green)]/40 bg-[var(--t-green)]/5 px-3 py-2">
-        <p className="text-[10px] text-[var(--t-green)]">
-          DEAL CLOSED SUCCESSFULLY
-        </p>
-        {txHash && (
-          <a
-            href={txUrl(ROBINHOOD_TESTNET_SLUG, txHash)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[10px] text-[var(--t-accent)] underline decoration-[var(--t-accent)]/50 hover:text-[var(--t-text)]"
-          >
-            View TX
-          </a>
-        )}
+        <p className="text-[10px] text-[var(--t-green)]">DEAL MARKED CLOSED</p>
       </div>
     );
   }
 
   return (
     <div className="border-t border-[var(--t-border)] px-3 py-2">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <p className="text-[10px] text-[var(--t-muted)]">
-          Withdraw remaining pot
-          {formatPendingEntriesStatus({
-            pendingEntries,
-            isLoading: isLoadingOnChainDeal,
-            isFetching: isFetchingOnChainDeal,
-            error: onChainDealError,
-          })}
+          On-chain close unavailable — mark closed in Convex only
         </p>
         <button
           onClick={handleClose}
-          disabled={
-            isBusy ||
-            (!isOnChainClosed &&
-              !hasConfirmedClose &&
-              (isPendingEntriesUnknown || hasPendingEntries))
-          }
+          disabled={isBusy}
           className="min-h-10 border border-[var(--t-border)] px-3 py-1 text-[10px] text-[var(--t-red)] transition-colors hover:border-[var(--t-red)] focus:border-[var(--t-red)] focus:outline-none disabled:opacity-50"
         >
-          {closeDealButtonLabel(phase, isOnChainClosed || hasConfirmedClose)}
+          {closeDealButtonLabel(phase, false)}
         </button>
       </div>
-      {error && (
-        <p className="mt-1 text-[10px] text-[var(--t-red)]">
-          {error.slice(0, 150)}
-        </p>
-      )}
+      {error ? (
+        <p className="mt-1 text-[10px] text-[var(--t-red)]">{error}</p>
+      ) : null}
     </div>
   );
 }

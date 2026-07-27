@@ -7,8 +7,6 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import { TraderAvatar } from "@/components/trader-avatar";
-import { AgentDeskBadge } from "@/components/agent-desk-badge";
-import { SeatTierBadge } from "@/components/seat-tier-badge";
 import { PersonaTraits, RarityBadge } from "@/components/persona-traits";
 import { formatStatus } from "@/lib/format-status";
 import {
@@ -102,12 +100,8 @@ function PublicTraderContent({
             </p>
             <h2 className="mt-1.5 truncate font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-wide text-[var(--t-amber)] sm:text-3xl">
               {trader.name}
-              {trader.isAgentDesk ? (
-                <AgentDeskBadge className="ml-2 align-middle" />
-              ) : null}
             </h2>
             <p className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
-              <SeatTierBadge traderId={trader.traderId} compact />
               <span>
                 File{" "}
                 <span className="text-[var(--t-text)]">

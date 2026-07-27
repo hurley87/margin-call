@@ -1,12 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { Dialog } from "@base-ui/react/dialog";
 import { useSuggestPrompts } from "@/hooks/use-deals";
-import { useCreateDeal } from "@/hooks/use-create-deal";
-import { useUsdcBalance } from "@/hooks/use-usdc-balance";
 import { useMarketHours } from "@/hooks/use-market-hours";
 import {
   DEAL_CREATION_FEE_PERCENTAGE,
@@ -17,16 +14,6 @@ import { DIALOG_BACKDROP_CLASS, cn } from "@/lib/utils";
 import { DatumCell } from "@/components/datum-cell";
 import { MarketClosedButton } from "@/components/market-closed-button";
 import type { Id } from "../../../convex/_generated/dataModel";
-
-const STEP_LABELS: Record<string, string> = {
-  checking: "CHECKING WALLET & ALLOWANCE...",
-  approving: "APPROVING USDC SPEND...",
-  confirmingApproval: "CONFIRMING APPROVAL ON-CHAIN...",
-  creating: "CREATING DEAL ON-CHAIN...",
-  confirmingCreate: "CONFIRMING DEAL ON-CHAIN...",
-  syncing: "SYNCING DEAL TO DATABASE...",
-  done: "DEAL CREATED SUCCESSFULLY",
-};
 
 type DialogState = "suggestions" | "configure" | "creating";
 
@@ -41,19 +28,6 @@ const STAGE_LABELS: Record<DialogState, string> = {
   configure: "Terms",
   creating: "Send",
 };
-
-const STEP_PROGRESS_WIDTH: Record<string, string> = {
-  checking: "12%",
-  approving: "28%",
-  confirmingApproval: "48%",
-  creating: "66%",
-  confirmingCreate: "86%",
-  syncing: "95%",
-};
-
-function createDealProgressWidth(step: string): string {
-  return STEP_PROGRESS_WIDTH[step] ?? "100%";
-}
 
 function StageIndicator({
   current,
@@ -209,12 +183,14 @@ interface CreateDealDialogProps {
   headline: { headline: string; body: string };
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** When provided, the dialog opens straight into "configure" with prefilled values. */
   dealSeed?: DealSeedPrefill;
-  /** When true, generate three choices before showing the final create form. */
   startWithSuggestions?: boolean;
 }
 
+/**
+ * Deal creation UI — on-chain create path removed with contracts teardown.
+ * Suggestions + configure remain; submit is disabled until a new path lands.
+ */
 export function CreateDealDialog({
   headline,
   open,
@@ -223,9 +199,7 @@ export function CreateDealDialog({
   startWithSuggestions = false,
 }: CreateDealDialogProps) {
   const { authenticated } = usePrivy();
-  const { balance } = useUsdcBalance();
 
-  // Deal seeds retain their exact prompt by default; normal headlines can request generated choices first.
   const openInConfigure =
     !startWithSuggestions && !!(dealSeed || headline.headline);
   const headlineBody = [headline.headline, headline.body]
@@ -247,93 +221,23 @@ export function CreateDealDialog({
       : MIN_ENTRY_COST.toString()
   );
 
-  const router = useRouter();
   const suggestQuery = useSuggestPrompts(
     headlineBody,
     !openInConfigure && suggestionsRequested
   );
-  const {
-    createDeal,
-    reset: resetCreateDeal,
-    step,
-    isLoading: isCreating,
-    error: createError,
-  } = useCreateDeal();
   const { isOpen: marketOpen, countdownLabel: marketCountdown } =
     useMarketHours();
-
-  const handlePickSuggestion = (prompt: string) => {
-    setSelectedPrompt(prompt);
-    setState("configure");
-  };
-
-  const handleGenerateSuggestions = () => {
-    setSuggestionsRequested(true);
-  };
 
   const potNum = parseFloat(potAmount);
   const entryNum = parseFloat(entryCost);
   const netPot =
     potNum > 0 ? potNum * (1 - DEAL_CREATION_FEE_PERCENTAGE / 100) : 0;
-  const walletBalanceUnknown = balance === undefined;
-  const walletUnfunded = balance !== undefined && balance <= 0;
-  const insufficientBalance =
-    balance !== undefined && potNum > 0 && balance < potNum;
 
-  const blockingMessage = (() => {
-    if (createError) return createError;
-    if (!authenticated) return "Enter by email to create deals";
-    if (walletBalanceUnknown) return "Checking wallet funding status";
-    if (walletUnfunded) return "Fund your wallet before creating deals";
-    if (insufficientBalance) return "Insufficient balance to fund this pot";
-    return null;
-  })();
-
-  const handleSubmitDeal = async () => {
-    if (!selectedPrompt.trim() || isNaN(potNum) || isNaN(entryNum)) return;
-    setState("creating");
-    try {
-      const result = await createDeal(
-        selectedPrompt.trim(),
-        potNum,
-        entryNum,
-        headline.headline,
-        dealSeed?.seedId
-      );
-      onOpenChange(false);
-      router.push(
-        result?.convexDealId
-          ? `/?deal=${encodeURIComponent(result.convexDealId)}`
-          : "/"
-      );
-    } catch {
-      setState("configure");
-    }
-  };
-
-  const handleBack = () => {
-    if (openInConfigure) {
-      onOpenChange(false);
-      return;
-    }
-    setState("suggestions");
-    resetCreateDeal();
-    setPotAmount(MIN_POT_AMOUNT.toString());
-    setEntryCost(MIN_ENTRY_COST.toString());
-  };
+  const blockingMessage = !authenticated
+    ? "Enter by email to create deals"
+    : "On-chain deal creation is temporarily unavailable";
 
   const headerLabel = dealSeed ? "Wire seed deal" : "New deal";
-  const canSubmit =
-    authenticated &&
-    !!selectedPrompt.trim() &&
-    !isNaN(potNum) &&
-    potNum >= MIN_POT_AMOUNT &&
-    !isNaN(entryNum) &&
-    entryNum >= MIN_ENTRY_COST &&
-    !walletBalanceUnknown &&
-    !walletUnfunded &&
-    !insufficientBalance &&
-    marketOpen;
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -379,145 +283,110 @@ export function CreateDealDialog({
                   </div>
                 )}
 
-                {state === "suggestions" && (
+                {state === "suggestions" ? (
                   <DealSuggestionsPane
                     suggestionsRequested={suggestionsRequested}
                     suggestQuery={suggestQuery}
-                    onGenerateSuggestions={handleGenerateSuggestions}
-                    onPickSuggestion={handlePickSuggestion}
+                    onGenerateSuggestions={() => setSuggestionsRequested(true)}
+                    onPickSuggestion={(prompt) => {
+                      setSelectedPrompt(prompt);
+                      setState("configure");
+                    }}
                     marketOpen={marketOpen}
                     marketCountdown={marketCountdown}
                   />
-                )}
+                ) : null}
 
-                {(state === "configure" || state === "creating") && (
-                  <>
-                    <div className="border border-[var(--t-divider)] bg-[#070b09] p-4">
-                      <div className="mb-3 flex items-center justify-between gap-3 border-b border-[var(--t-divider)] pb-3">
-                        <h3 className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-                          Deal text
-                        </h3>
-                        <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-                          What traders will see
-                        </span>
-                      </div>
+                {state === "configure" || state === "creating" ? (
+                  <div className="grid gap-4">
+                    <label className="grid gap-2">
+                      <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
+                        Prompt
+                      </span>
                       <textarea
                         value={selectedPrompt}
                         onChange={(e) => setSelectedPrompt(e.target.value)}
-                        rows={3}
-                        disabled={isCreating}
-                        className="w-full border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 py-2 text-sm leading-relaxed text-[var(--t-text)] placeholder-[var(--t-muted)] focus:border-[var(--t-accent)] focus:outline-none disabled:opacity-50"
+                        rows={4}
+                        className="border border-[var(--t-divider)] bg-[#070b09] px-3 py-2 text-sm text-[var(--t-text)] outline-none focus:border-[var(--t-accent)]"
                       />
-                    </div>
-
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <label className="block border border-[var(--t-divider)] bg-[#070b09]/75 p-3">
-                        <span className="block text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+                    </label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="grid gap-2">
+                        <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
                           Pot (USDC)
                         </span>
                         <input
-                          type="number"
                           value={potAmount}
                           onChange={(e) => setPotAmount(e.target.value)}
-                          min={MIN_POT_AMOUNT}
-                          step="0.01"
-                          disabled={isCreating}
-                          className="mt-1 min-h-11 w-full bg-transparent text-2xl font-black uppercase tracking-wide text-[var(--t-green)] focus:outline-none disabled:opacity-50"
+                          className="border border-[var(--t-divider)] bg-[#070b09] px-3 py-2 text-sm text-[var(--t-text)] outline-none focus:border-[var(--t-accent)]"
                         />
                       </label>
-                      <label className="block border border-[var(--t-divider)] bg-[#070b09]/75 p-3">
-                        <span className="block text-[10px] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+                      <label className="grid gap-2">
+                        <span className="text-[10px] uppercase tracking-[0.2em] text-[var(--t-muted)]">
                           Entry (USDC)
                         </span>
                         <input
-                          type="number"
                           value={entryCost}
                           onChange={(e) => setEntryCost(e.target.value)}
-                          min={MIN_ENTRY_COST}
-                          step="0.01"
-                          disabled={isCreating}
-                          className="mt-1 min-h-11 w-full bg-transparent text-2xl font-black uppercase tracking-wide text-[var(--t-green)] focus:outline-none disabled:opacity-50"
+                          className="border border-[var(--t-divider)] bg-[#070b09] px-3 py-2 text-sm text-[var(--t-text)] outline-none focus:border-[var(--t-accent)]"
                         />
                       </label>
                     </div>
-
-                    <div className="grid gap-px border border-[var(--t-divider)] bg-[var(--t-divider)] text-[10px] uppercase tracking-[0.18em] sm:grid-cols-3">
+                    <div className="grid grid-cols-2 gap-px border border-[var(--t-divider)] bg-[var(--t-divider)]">
                       <DatumCell
-                        className="border-0 bg-[#070b09]/85"
-                        label={`${DEAL_CREATION_FEE_PERCENTAGE}% fee`}
-                        value={
-                          potNum > 0
-                            ? `$${((potNum * DEAL_CREATION_FEE_PERCENTAGE) / 100).toFixed(2)}`
-                            : "$0.00"
-                        }
-                      />
-                      <DatumCell
-                        className="border-0 bg-[#070b09]/85"
                         label="Net pot"
-                        value={`$${netPot.toFixed(2)}`}
-                        valueClassName="text-[var(--t-green)]"
+                        value={`$${Number.isFinite(netPot) ? netPot.toFixed(2) : "—"}`}
                       />
                       <DatumCell
-                        className="border-0 bg-[#070b09]/85"
-                        label="Your cash"
-                        value={
-                          balance !== undefined
-                            ? `$${balance.toFixed(2)}`
-                            : "..."
-                        }
-                        valueClassName={
-                          insufficientBalance
-                            ? "text-[var(--t-red)]"
-                            : "text-[var(--t-green)]"
+                        label="Min entry"
+                        value={`$${MIN_ENTRY_COST}`}
+                      />
+                    </div>
+                    <p className="text-xs uppercase tracking-[0.14em] text-[var(--t-amber)]">
+                      {blockingMessage}
+                    </p>
+                    <div className="flex items-center justify-between gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (openInConfigure) {
+                            onOpenChange(false);
+                            return;
+                          }
+                          setState("suggestions");
+                          setPotAmount(MIN_POT_AMOUNT.toString());
+                          setEntryCost(MIN_ENTRY_COST.toString());
+                        }}
+                        className="min-h-10 border border-[var(--t-divider)] px-3 text-xs uppercase tracking-[0.16em] text-[var(--t-muted)] hover:text-[var(--t-text)]"
+                      >
+                        Back
+                      </button>
+                      <MarketClosedButton
+                        isClosed={!marketOpen}
+                        countdownLabel={marketCountdown}
+                        enabledChildren={
+                          <button
+                            type="button"
+                            disabled
+                            className="min-h-10 border border-[var(--t-divider)] px-4 text-xs font-black uppercase tracking-[0.16em] text-[var(--t-muted)] opacity-50"
+                          >
+                            Create unavailable
+                          </button>
                         }
                       />
                     </div>
-
-                    {blockingMessage && (
-                      <div className="border border-[var(--t-red)]/30 bg-[var(--t-red)]/[0.06] px-3 py-2 text-[11px] uppercase tracking-[0.16em] text-[var(--t-red)]">
-                        {blockingMessage}
-                      </div>
-                    )}
-
-                    {isCreating && (
-                      <div className="border border-[var(--t-green)]/40 bg-[var(--t-green)]/[0.06] p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[10px] uppercase tracking-[0.18em] text-[var(--t-green)]">
-                            {STEP_LABELS[step] ?? "PROCESSING..."}
-                          </span>
-                          <span className="cursor-blink text-[var(--t-green)]">
-                            █
-                          </span>
-                        </div>
-                        <div className="mt-2 h-1 overflow-hidden bg-[var(--t-border)]">
-                          <div
-                            className="h-full bg-[var(--t-green)] transition-all duration-500"
-                            style={{ width: createDealProgressWidth(step) }}
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {!isCreating && (
-                      <div className="flex items-center justify-between gap-3 border-t border-[var(--t-border)]/80 pt-4">
-                        <button
-                          onClick={handleBack}
-                          className="min-h-10 px-2 text-xs uppercase tracking-[0.18em] text-[var(--t-muted)] transition-colors hover:text-[var(--t-text)] focus:text-[var(--t-accent)] focus:outline-none"
-                        >
-                          &larr; Back
-                        </button>
-                        <MarketClosedButton
-                          isClosed={!marketOpen}
-                          countdownLabel={marketCountdown}
-                          enabledChildren={<>Create deal &rarr;</>}
-                          onClick={handleSubmitDeal}
-                          disabled={!canSubmit}
-                          className="min-h-11 border border-[var(--t-accent)] bg-[var(--t-accent-soft)] px-4 py-2 text-xs font-black uppercase tracking-[0.18em] text-[var(--t-accent)] transition-colors hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-                        />
-                      </div>
-                    )}
-                  </>
-                )}
+                    {!Number.isFinite(potNum) ||
+                    potNum < MIN_POT_AMOUNT ||
+                    !Number.isFinite(entryNum) ||
+                    entryNum < MIN_ENTRY_COST ||
+                    !selectedPrompt.trim() ? (
+                      <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--t-muted)]">
+                        Fill prompt, pot (≥${MIN_POT_AMOUNT}), and entry (≥$
+                        {MIN_ENTRY_COST}).
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           </div>

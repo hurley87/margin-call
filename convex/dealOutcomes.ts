@@ -1,7 +1,6 @@
 import { internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { mapDisplayTiersByTraderId } from "./seatVault/publicDisplay";
 
 // ── Public queries ─────────────────────────────────────────────────────────
 
@@ -46,12 +45,6 @@ export const listByDeal = query({
       .order("desc")
       .collect();
 
-    const traderIds = outcomes
-      .map((outcome) => ctx.db.normalizeId("traders", outcome.traderId))
-      .filter((id): id is NonNullable<typeof id> => id !== null);
-
-    const tiers = await mapDisplayTiersByTraderId(ctx, traderIds);
-
     const outcomesWithTraderNames = outcomes.map(async (outcome) => {
       const traderId = ctx.db.normalizeId("traders", outcome.traderId);
       if (!traderId) {
@@ -66,7 +59,7 @@ export const listByDeal = query({
       return {
         ...outcome,
         traderName: trader?.name ?? outcome.traderId,
-        effectiveTier: tiers.get(String(traderId)) ?? "Gallery",
+        effectiveTier: "Gallery" as const,
       };
     });
 

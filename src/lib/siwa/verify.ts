@@ -1,10 +1,7 @@
 import "server-only";
-import { ROBINHOOD_TESTNET_CHAIN_ID } from "@/lib/network";
 
 import { createSIWANonce, parseSIWAMessage } from "@buildersgarden/siwa/siwa";
 import { recoverMessageAddress, getAddress } from "viem";
-import { makePublicClient } from "@/lib/contracts/client";
-import { IDENTITY_REGISTRY_ADDRESS } from "@/lib/contracts/escrow";
 import { createConvexNonceStore } from "@/lib/siwa/nonce-store";
 
 const nonceStore = createConvexNonceStore();
@@ -14,31 +11,31 @@ const domain =
   "localhost:3000";
 const MAX_SIWA_AGE_MS = 5 * 60 * 1000;
 
+/** Placeholder registry used until on-chain identity checks return. */
+const PLACEHOLDER_AGENT_REGISTRY =
+  "eip155:0:0x0000000000000000000000000000000000000000";
+
 /**
  * Create a SIWA nonce for an agent identity challenge.
+ * Simplified: no public-client / identity-registry check.
  */
 export async function createNonce(agentId: number, address: string) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const client = makePublicClient() as any;
   return createSIWANonce(
     {
       agentId,
       address,
-      agentRegistry: `eip155:${ROBINHOOD_TESTNET_CHAIN_ID}:${IDENTITY_REGISTRY_ADDRESS}`,
+      agentRegistry: PLACEHOLDER_AGENT_REGISTRY,
     },
-    client,
+    // createSIWANonce expects a client; stub with a no-op shape when registry
+    // checks are disabled.
+    {} as never,
     { nonceStore }
   );
 }
 
 /**
- * Verify a SIWA message + signature pair.
- *
- * The SIWA address is the smart account (agent identity / NFT owner).
- * The EOA produces the signature. We recover the EOA address and verify:
- * 1. The signature is valid (ecRecover)
- * 2. The recovered EOA is the authorized key for this agent (cdp_owner_address in DB)
- * 3. The smart account (SIWA address) matches cdp_wallet_address in DB
+ * Verify a SIWA message + signature pair (message/signature only).
+ * Identity-registry and chain binding checks removed with the contracts teardown.
  */
 export async function verifySIWARequest(
   message: string,
@@ -53,14 +50,12 @@ export async function verifySIWARequest(
   try {
     const fields = parseSIWAMessage(message);
 
-    // 1. Freshness check
     const issuedAtMs = Date.parse(fields.issuedAt);
     if (Number.isNaN(issuedAtMs) || Date.now() - issuedAtMs > MAX_SIWA_AGE_MS) {
       console.error("[SIWA verify] Message too old or invalid issuedAt");
       return { valid: false, error: "Message too old or invalid issuedAt" };
     }
 
-    // 2. Expiration / notBefore checks
     if (
       fields.expirationTime &&
       Date.now() > Date.parse(fields.expirationTime)
@@ -73,7 +68,6 @@ export async function verifySIWARequest(
       return { valid: false, error: "Message not yet valid" };
     }
 
-    // 3. Domain binding
     if (fields.domain !== domain) {
       console.error(
         "[SIWA verify] Domain mismatch:",
@@ -84,20 +78,6 @@ export async function verifySIWARequest(
       return { valid: false, error: "Domain mismatch" };
     }
 
-    // 4. Registry / chain binding
-    const registryParts = fields.agentRegistry.split(":");
-    if (
-      registryParts.length !== 3 ||
-      registryParts[0] !== "eip155" ||
-      Number(fields.chainId) !== ROBINHOOD_TESTNET_CHAIN_ID ||
-      Number(registryParts[1]) !== ROBINHOOD_TESTNET_CHAIN_ID ||
-      getAddress(registryParts[2]) !== getAddress(IDENTITY_REGISTRY_ADDRESS)
-    ) {
-      console.error("[SIWA verify] Agent registry or chain mismatch");
-      return { valid: false, error: "Agent registry or chain mismatch" };
-    }
-
-    // 5. Recover the actual EOA signer from the EIP-191 signature.
     let recoveredAddress: string;
     try {
       recoveredAddress = await recoverMessageAddress({
@@ -109,7 +89,6 @@ export async function verifySIWARequest(
       return { valid: false, error: "Failed to recover signer" };
     }
 
-    // 6. Nonce consumption
     const nonceOk = await nonceStore.consume(fields.nonce);
 
     if (!nonceOk) {

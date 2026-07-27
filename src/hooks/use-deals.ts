@@ -6,7 +6,7 @@ import { api } from "../../convex/_generated/api";
 import type { Id } from "../../convex/_generated/dataModel";
 import type { Doc } from "../../convex/_generated/dataModel";
 import { authFetch } from "@/lib/api";
-import { realTxHashOrNull } from "@/lib/contracts/tx-hash";
+import { realTxHashOrNull } from "@/lib/tx-hash";
 
 export interface Deal {
   id: string;

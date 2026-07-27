@@ -44,9 +44,6 @@ function createLimit(
 /** /api/agent/cycle — 1 request per 30 seconds per trader */
 export const agentCycleLimit = createLimit("rl:agent-cycle", 1, "30 s");
 
-/** /api/deal/enter — 10 requests per minute per wallet */
-export const dealEnterLimit = createLimit("rl:deal-enter", 10, "1 m");
-
 /** /api/prompt/suggest — 5 requests per minute per wallet */
 export const promptSuggestLimit = createLimit("rl:prompt-suggest", 5, "1 m");
 
@@ -55,14 +52,6 @@ export const deskLimit = createLimit("rl:desk", 30, "1 m");
 
 /** /api/trader/* — 30 requests per minute per wallet */
 export const traderLimit = createLimit("rl:trader", 30, "1 m");
-
-/**
- * /api/mcp/* — 60 requests per minute per client IP. Applied BEFORE
- * Bearer-key validation so that floods from malformed keys can't burn
- * CPU on hashing + DB lookups. The post-auth per-desk ceiling is the
- * existing `deskLimit` (30/min), applied with a `mcp:` identifier.
- */
-export const mcpIpLimit = createLimit("rl:mcp-ip", 60, "1 m");
 
 /** /api/siwa/nonce — 20 requests per minute per IP */
 export const siwaNonceLimit = createLimit("rl:siwa-nonce", 20, "1 m");
@@ -78,7 +67,7 @@ export const siwaNonceLimit = createLimit("rl:siwa-nonce", 20, "1 m");
  *
  * Usage in a route handler:
  * ```ts
- * const limited = await checkRateLimit(dealEnterLimit, walletAddress);
+ * const limited = await checkRateLimit(deskLimit, walletAddress);
  * if (limited) return limited;
  * ```
  */

@@ -14,7 +14,11 @@ import { isOwnDeskCreatedDeal } from "./lib/dealEntryEligibility";
 import { dealCreationCapFields } from "./lib/extractionCap";
 import { clampLimit } from "./lib/limits";
 import { assertTradingHoursWithCloseGrace } from "./lib/tradingHours";
-import { isMcpSubject } from "./mcp/subject";
+
+/** Desk subjects issued via the former MCP SIWE path. */
+function isAgentDeskSubject(subject: string | undefined | null): boolean {
+  return typeof subject === "string" && subject.startsWith("mcp:");
+}
 
 /** Lightweight enrichment for public deal reads: join creator desk subject to expose is_agent_desk flag (no DB write, mirrors leaderboard pattern). */
 async function enrichWithCreatorAgentStatus(
@@ -35,7 +39,7 @@ async function enrichWithCreatorAgentStatus(
   await Promise.all(
     deskIds.map(async (id) => {
       const dm = await ctx.db.get(id as Id<"deskManagers">);
-      const isAgent = isMcpSubject(dm?.subject);
+      const isAgent = isAgentDeskSubject(dm?.subject);
       isAgentMap.set(id, isAgent);
     })
   );
@@ -226,8 +230,10 @@ export const findByOnChainDealIdInternal = internalQuery({
 });
 
 /**
- * Public: record a user-created on-chain deal in Convex after verifying the
- * createDeal tx on-chain. Idempotent on `onChainDealId`.
+ * Public: record a user-created on-chain deal in Convex.
+ * On-chain tx verification (MCP dealCreatedVerify) was removed with the Floor
+ * teardown — callers supply the deal economics from the confirmed create tx.
+ * Idempotent on `onChainDealId`.
  */
 export const recordOnChainCreation = action({
   args: {
@@ -264,22 +270,13 @@ export const recordOnChainCreation = action({
       throw new Error("Fund your wallet before creating a deal");
     }
 
-    const verified = await ctx.runAction(
-      internal.mcp.dealCreatedVerify.verifyDealCreatedFromTx,
-      {
-        txHash: args.onChainTxHash,
-        onChainDealId: args.onChainDealId,
-        expectedCreator: dm.walletAddress,
-      }
-    );
-
     return await ctx.runMutation(internal.deals.recordOnChainCreationVerified, {
       deskManagerId: dm._id,
       onChainDealId: args.onChainDealId,
       onChainTxHash: args.onChainTxHash,
-      prompt: verified.prompt,
-      potUsdc: verified.potUsdc,
-      entryCostUsdc: verified.entryCostUsdc,
+      prompt: args.prompt,
+      potUsdc: args.potUsdc,
+      entryCostUsdc: args.entryCostUsdc,
       sourceHeadline: args.sourceHeadline,
       wireDealSeedId: args.wireDealSeedId,
     });

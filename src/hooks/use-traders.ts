@@ -5,7 +5,7 @@ import { useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import type { Doc, Id } from "../../convex/_generated/dataModel";
 import type { PublicPortraitTraits } from "@/lib/portrait-traits";
-import type { SeatTierName } from "@/lib/contracts/seatVault";
+import type { SeatTierName } from "@/lib/trader-cycle";
 
 type TraderReadModel = Pick<
   Doc<"traders">,

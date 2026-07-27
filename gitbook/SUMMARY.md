@@ -29,7 +29,6 @@
 
 ## Builders
 
-- [MCP Server](developers/mcp-server.md)
 - [Direct Contract Access](developers/direct-contract-access.md)
 
 ## More

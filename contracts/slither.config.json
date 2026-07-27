@@ -1,4 +1,0 @@
-{
-  "filter_paths": "lib|test|script",
-  "exclude": ["naming-convention", "solc-version", "pragma"]
-}

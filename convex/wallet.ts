@@ -10,9 +10,10 @@ import { buildTraderMetadataUrl } from "../src/lib/trader-metadata";
  *   CDP_API_KEY_ID        — Coinbase CDP API key ID
  *   CDP_API_KEY_SECRET    — Coinbase CDP API key secret (PEM)
  *   CDP_WALLET_SECRET     — Coinbase CDP wallet encryption secret
- *   IDENTITY_REGISTRY_ADDRESS — optional; if set must match canonical registry
+ *   IDENTITY_REGISTRY_ADDRESS — ERC-8004 identity registry (required)
  *   ROBINHOOD_TESTNET_RPC_URL or NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL — Floor RPC
  *   NEXT_PUBLIC_APP_URL   — public app URL used for ERC-721 metadata
+ *   CDP_NETWORK           — optional CDP network slug (default: base-sepolia)
  */
 
 // If a `creating` job hasn't progressed in this long, treat it as crashed and allow a retry.
@@ -99,21 +100,26 @@ export const createForTrader = internalAction({
       const cdpApiKeyId = requireEnv("CDP_API_KEY_ID");
       const cdpApiKeySecret = requireEnv("CDP_API_KEY_SECRET");
       const cdpWalletSecret = requireEnv("CDP_WALLET_SECRET");
-      const { IDENTITY_REGISTRY_ADDRESS: canonicalIdentityRegistry } =
-        await import("./lib/legacy");
-      const { resolveAddress } = await import("./lib/resolveAddress");
-      const { resolveActiveNetworkSlug } = await import("./lib/networks");
-      const identityRegistryAddress = resolveAddress(
-        [process.env.IDENTITY_REGISTRY_ADDRESS],
-        canonicalIdentityRegistry,
-        "IDENTITY_REGISTRY_ADDRESS",
-        "legacy identity registry (Floor TBA ships in #250)"
-      );
+      const identityRegistryAddress = requireEnv(
+        "IDENTITY_REGISTRY_ADDRESS"
+      ) as `0x${string}`;
       const appUrl = requireEnv("NEXT_PUBLIC_APP_URL");
-      const cdpNetwork = resolveActiveNetworkSlug() as "base-sepolia";
+      const cdpNetwork = (process.env.CDP_NETWORK?.trim() ||
+        "base-sepolia") as "base-sepolia";
+      const rpcUrl =
+        process.env.ROBINHOOD_TESTNET_RPC_URL?.trim() ||
+        process.env.NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL?.trim() ||
+        process.env.BASE_SEPOLIA_RPC_URL?.trim();
+      if (!rpcUrl) {
+        throw new Error(
+          "Missing RPC URL (ROBINHOOD_TESTNET_RPC_URL, NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL, or BASE_SEPOLIA_RPC_URL)"
+        );
+      }
 
       const { CdpClient } = await import("@coinbase/cdp-sdk");
-      const { decodeEventLog, encodeFunctionData } = await import("viem");
+      const { createPublicClient, decodeEventLog, encodeFunctionData, http } =
+        await import("viem");
+      const { baseSepolia } = await import("viem/chains");
 
       const cdp = new CdpClient({
         apiKeyId: cdpApiKeyId,
@@ -191,8 +197,10 @@ export const createForTrader = internalAction({
       let transferTxHash = "";
 
       // Parse Transfer event to get tokenId
-      const { getBaseSepoliaPublicClient } = await import("./mcp/deskByo");
-      const publicClient = await getBaseSepoliaPublicClient();
+      const publicClient = createPublicClient({
+        chain: baseSepolia,
+        transport: http(rpcUrl),
+      });
       const receipt = await publicClient.waitForTransactionReceipt({
         hash: mintReceipt.transactionHash as `0x${string}`,
       });

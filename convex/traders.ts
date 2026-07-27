@@ -26,8 +26,11 @@ import {
 import { walletStepValidator } from "./schema";
 import { TRADER_NAME_REGEX } from "../src/lib/trader-name";
 import { normalizeEmail } from "../src/lib/email";
-import { isMcpSubject } from "./mcp/subject";
-import { resolvePublicTraderTier } from "./seatVault/publicDisplay";
+
+/** Desk subjects issued via the former MCP SIWE path. */
+function isAgentDeskSubject(subject: string | undefined | null): boolean {
+  return typeof subject === "string" && subject.startsWith("mcp:");
+}
 
 // Vitest sets MC_SKIP_WALLET_SCHEDULE so any caller that would otherwise
 // enqueue wallet.createForTrader skips the scheduler. convex-test runs
@@ -116,9 +119,8 @@ async function toTraderReadModel(ctx: QueryCtx, trader: Doc<"traders">) {
     profileImageUrl: await resolveTraderProfileImageUrl(ctx, trader),
     traits: readPublicTraits(trader.imagePromptSource),
     rarity: humanizeRarity(trader.imageVariant),
-    /** SeatVault floor credential (DB-only read model) — drives cycle cadence. */
-    effectiveTier: (await resolvePublicTraderTier(ctx, trader._id))
-      .effectiveTier,
+    /** SeatVault torn down — always Gallery until Floor replacement. */
+    effectiveTier: "Gallery" as const,
     createdAt: trader.createdAt,
     updatedAt: trader.updatedAt,
   };
@@ -247,16 +249,15 @@ export const getPublicProfile = query({
 
     const basics = await publicTraderBasics(ctx, trader);
     const dm = await ctx.db.get(trader.deskManagerId);
-    const isAgentDesk = isMcpSubject(dm?.subject);
-    const publicTier = await resolvePublicTraderTier(ctx, traderId);
+    const isAgentDesk = isAgentDeskSubject(dm?.subject);
     return {
       ...basics,
       escrowBalanceUsdc: trader.escrowBalanceUsdc ?? 0,
       ownerAddress: dm?.walletAddress ?? null,
       isAgentDesk,
-      /** Public floor credential only — never staker/pending/unlock. */
-      effectiveTier: publicTier.effectiveTier,
-      seatSyncStatus: publicTier.syncStatus,
+      /** SeatVault torn down — always Gallery until Floor replacement. */
+      effectiveTier: "Gallery" as const,
+      seatSyncStatus: "ok" as const,
       recentActivity: recentActivity.map((entry) => ({
         activityType: entry.activityType,
         message: entry.message,
