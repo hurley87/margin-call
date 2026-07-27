@@ -33,7 +33,7 @@ A named tier with one stablecoin, one fixed Rip Price, published USD NAV bounds,
 _Avoid_: tier (as a standalone term), market
 
 **Eligible Set**:
-The Packs in a Pool that pass all objective checks (funding, asset rules, oracle freshness, NAV bounds, anti-spam) at a checkpoint and can therefore be selected. Uniform odds apply across this set only.
+The Packs in a Pool that pass all objective checks (funding, asset rules, oracle freshness, NAV bounds, anti-spam) at a checkpoint and can therefore be selected. Frozen at each window's opening boundary; mid-window checks can only remove a Pack, never add one. Uniform odds apply across this set only.
 _Avoid_: inventory, supply
 
 **Selection-Eligible vs Emission-Eligible**:
@@ -44,7 +44,7 @@ The 15% game-token allocation paid pro rata (NAV × eligible time) to emission-e
 _Avoid_: yield, rewards (reserve "rewards" for participation)
 
 **Participation Rewards**:
-The separate 15% game-token allocation shared among confirmed qualifying Rips per fixed epoch pot. Always below the disclosed game cost.
+The separate 15% game-token allocation shared among confirmed qualifying Rips per fixed epoch pot. Below the disclosed game cost for the transfer-locked Season; on mainnet, claims are identity-gated while play stays permissionless.
 _Avoid_: cashback, rebate
 
 **Game Token**:
@@ -62,6 +62,10 @@ _Avoid_: stock, equity, asset (unqualified)
 **Checkpoint**:
 A defined hourly-epoch boundary or Pack interaction (Rip, top-up, claim) where fresh oracle data re-evaluates eligibility. Stale or invalid data fails closed.
 _Avoid_: refresh, sync
+
+**Window Commitment**:
+The rule that participation and eligibility changes (Trader enable/pause/pool changes, Pack listings and top-ups) take effect at the next window boundary, so each window executes against a frozen state and reaction latency is never an edge. Delist is the exception: available anytime, at the cost of the current epoch's accrual.
+_Avoid_: lock-in, cooldown
 
 **Season**:
 The finite 15-day launch-emission period. V1 is exactly one Season (August 4–19, 2026): when it ends, emissions and selection stop, and redemption rights remain.
