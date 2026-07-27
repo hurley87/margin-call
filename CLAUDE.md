@@ -6,13 +6,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s Wall Street. Players (desk managers) fund and configure AI trader agents that autonomously enter deals. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates the outcome; the Wire narrative engine uses `gpt-5-mini`. See `docs/wall-street-agent-game.md` for the full game design spec.
 
-On-chain escrow, SeatVault, Floor packet tooling, and MCP desk treasury have been removed pending a rebuild. Treat the repo as a Next + Convex shell until new money/contracts land.
+On-chain escrow, SeatVault, Floor packet tooling, and MCP desk treasury were removed pending a rebuild. The Foundry workspace is back under `contracts/` (LazerForge-based) with MockUSD on Robinhood Chain testnet; PackCustody / RipEngine / GameToken land in later slices. See `contracts/README.md`.
 
 ## Commands
 
 - `pnpm dev` — start dev server (Next.js on localhost:3000)
 - `pnpm build` — production build
 - `pnpm lint` — run ESLint (flat config, Next.js core-web-vitals + TypeScript rules)
+- `pnpm install:forge-deps` — install forge-std / OpenZeppelin into `contracts/lib`
+- `pnpm test:contracts` / `pnpm test:contracts:ci` — Foundry suite
+- `pnpm deploy:mockusd` / `pnpm verify:mockusd` — Robinhood testnet deploy + Blockscout verify
 
 ## Tech Stack
 
@@ -20,6 +23,7 @@ On-chain escrow, SeatVault, Floor packet tooling, and MCP desk treasury have bee
 - **Styling:** Tailwind CSS v4 with `tw-animate-css`, `class-variance-authority`, `tailwind-merge`, `clsx`
 - **Data Fetching:** `convex/react` for game/dashboard reactive state; one-off REST calls use `authFetch` in hooks where no Convex query exists yet
 - **UI Components:** Base UI (`@base-ui/react`) + shadcn/ui pattern, Lucide icons
+- **Contracts:** Foundry (`contracts/`), Robinhood Chain testnet
 - **Package Manager:** pnpm
 - **Path alias:** `@/*` maps to `./src/*`
 
@@ -29,6 +33,7 @@ The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the 
 
 - **`src/app/`** — Next.js App Router pages + HTTP boundary under `src/app/api/` (SIWA and remaining helpers). Game CRUD lives in Convex functions, not REST.
 - **`convex/`** — Backend source of truth: schema, queries/mutations/actions, agent runtime (`convex/agent/`), Wire engine (`convex/wire/`), crons (`convex/crons.ts`), CDP wallet ops (`convex/wallet.ts`).
+- **`contracts/`** — Foundry workspace (MockUSD today; Pack economy contracts next). See `contracts/README.md` and `contracts/REPRODUCIBILITY.md`.
 - **`src/lib/`** — Shared client/server libraries: Privy auth, OpenAI client, SIWA helpers.
 - **`src/components/`** — React components organized by domain (dashboard, trader, deal, wire, shared).
 - **`src/hooks/`** — Convex (`convex/react`) hooks for game state (traders, deals, activity, approvals).
@@ -40,6 +45,7 @@ The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the 
 - **Agent Wallets:** Coinbase CDP smart accounts (`@coinbase/cdp-sdk`), minted server-side per trader where still wired.
 - **AI:** Deal selection and outcome narration use `gpt-4o-mini`; the Wire narrative engine uses `gpt-5-mini`. Outcome odds are computed mechanically (market mood + SEC heat); the LLM only narrates the pre-decided result.
 - **Agent Runtime:** Convex crons (`convex/crons.ts`) — `agent-scheduler` fires every 1 min → `internal.agent.scheduler.scheduler` fans out cycles. On-chain enter/settle paths are currently stubbed/fail-closed.
+- **Contracts:** Foundry CI on every PR; MockUSD is the protocol mock stablecoin for Desk Grants on Robinhood Chain testnet.
 
 ## Conventions
 
