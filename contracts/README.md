@@ -90,11 +90,10 @@ This is a **valueless test asset**. It has no USD backing and nothing about it c
 ### Explorer
 
 - Browser: https://explorer.testnet.chain.robinhood.com
-- **MockUSD (testnet):** [`0xfC9A4952A2d5c5ba6e2F968bAcBc65FE5EAdCF86`](https://explorer.testnet.chain.robinhood.com/address/0xfC9A4952A2d5c5ba6e2F968bAcBc65FE5EAdCF86)
+- **MockUSD (testnet, verified):** [`0xAA555fD042F33B5AF485171015AeAF11eD49EF3D`](https://explorer.testnet.chain.robinhood.com/address/0xAA555fD042F33B5AF485171015AeAF11eD49EF3D#code)
 - Deployment record: [`deployments/robinhood-testnet.mockusd.json`](./deployments/robinhood-testnet.mockusd.json)
-- Tx: [`0xa70484d5…`](https://explorer.testnet.chain.robinhood.com/tx/0xa70484d5cb5149dfdccebab48d7ace7ef8c724d32dee279af062734b0a583ea3)
-
-> Note: Blockscout may fail automatic source verification at `optimizer_runs = 99_999_999` (same ceiling Etherscan documents). The bytecode and on-chain name/symbol/metadata are the source of truth; `pnpm verify:mockusd` remains the verify entrypoint when the explorer accepts the settings.
+- Tx: [`0x9a2c19d5…`](https://explorer.testnet.chain.robinhood.com/tx/0x9a2c19d5e97a12eb86f7ec5dd3e74bcf30bd099d11a763d57f390fde2af7f4c2)
+- Verify after deploy: `pnpm verify:mockusd` (Blockscout; workspace uses `optimizer_runs = 1_000_000`).
 
 ## Layout
 

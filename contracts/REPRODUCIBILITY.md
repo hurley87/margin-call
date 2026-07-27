@@ -10,13 +10,13 @@ wholesale. Deviations are listed at the bottom of this file.
 
 ## Toolchain
 
-| Component         | Pin                        | Where                                                                                                        |
-| ----------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Foundry (forge)   | `v1.4.3`                   | [`.github/actions/setup-foundry/action.yml`](../.github/actions/setup-foundry/action.yml), local `foundryup` |
-| Solidity (`solc`) | `0.8.28`, auto-detect off  | [`foundry.toml`](foundry.toml) `solc_version`, `auto_detect_solc`                                            |
-| EVM target        | `cancun`                   | [`foundry.toml`](foundry.toml) `evm_version`                                                                 |
-| Optimizer         | enabled, `99_999_999` runs | [`foundry.toml`](foundry.toml)                                                                               |
-| Metadata          | stripped                   | [`foundry.toml`](foundry.toml) `bytecode_hash = "none"`, `cbor_metadata = false`                             |
+| Component         | Pin                       | Where                                                                                                        |
+| ----------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Foundry (forge)   | `v1.4.3`                  | [`.github/actions/setup-foundry/action.yml`](../.github/actions/setup-foundry/action.yml), local `foundryup` |
+| Solidity (`solc`) | `0.8.28`, auto-detect off | [`foundry.toml`](foundry.toml) `solc_version`, `auto_detect_solc`                                            |
+| EVM target        | `cancun`                  | [`foundry.toml`](foundry.toml) `evm_version`                                                                 |
+| Optimizer         | enabled, `1_000_000` runs | [`foundry.toml`](foundry.toml)                                                                               |
+| Metadata          | stripped                  | [`foundry.toml`](foundry.toml) `bytecode_hash = "none"`, `cbor_metadata = false`                             |
 
 ## Deterministic chain state
 
@@ -86,6 +86,10 @@ for every build.
 - **`evm_version = "cancun"`** rather than LazerForge's `prague`. Robinhood
   Chain testnet is an Arbitrum Nitro L2; Cancun is the pin this workspace
   targets.
+- **`optimizer_runs = 1_000_000`** rather than LazerForge's `99_999_999`.
+  Blockscout (Robinhood's explorer) fails source verification above the
+  ~10M recompile ceiling Etherscan documents; 1M keeps bytecode quality while
+  remaining verifiable on-chain.
 - **No `via_ir-out` pre-compile step.** LazerForge pre-compiles via-IR and
   deploys with `vm.getCode`. Contracts here fit without it, so via-IR is
   confined to the `gas` profile.

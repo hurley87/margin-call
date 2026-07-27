@@ -56,7 +56,7 @@ contract DeployMockUSD is Utils {
         // Build fingerprint — matches foundry.toml default profile pins.
         vm.serializeString(obj, "solc", "0.8.28");
         vm.serializeString(obj, "evmVersion", "cancun");
-        vm.serializeUint(obj, "optimizerRuns", 99_999_999);
+        vm.serializeUint(obj, "optimizerRuns", 1_000_000);
         vm.serializeString(obj, "bytecodeHash", "none");
         string memory finalJson = vm.serializeBool(obj, "cborMetadata", false);
 
