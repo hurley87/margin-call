@@ -548,7 +548,7 @@ export const cycle = internalAction({
       const mandate = (trader.mandate ?? {}) as Mandate;
 
       // Escrow balance RPC torn down — use Convex cache until Floor replacement.
-      let escrowBalanceUsdc = trader.escrowBalanceUsdc ?? 0;
+      const escrowBalanceUsdc = trader.escrowBalanceUsdc ?? 0;
 
       // Deal targeted by this cycle iteration. Populated by selectDeal when
       // the market is open, or by the recovery probe when we're after-hours
