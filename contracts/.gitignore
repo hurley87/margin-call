@@ -1,0 +1,8 @@
+# Foundry
+cache/
+out/
+broadcast/
+via_ir-out/
+
+# Dependencies (restore with: pnpm install:forge-deps)
+lib/

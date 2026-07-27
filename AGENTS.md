@@ -4,9 +4,9 @@
 
 ### Project overview
 
-Margin Call is a Next.js 16 (App Router) web app — an AI-powered PvP trading game on 1980s Wall Street. See `CLAUDE.md` for tech stack, commands, and architecture details. See `docs/wall-street-agent-game.md` for the full game design spec.
+Margin Call is a Next.js 16 (App Router) web app — an AI-powered PvP trading game on 1980s Wall Street. See `CLAUDE.md` for tech stack, commands, and architecture details. See `docs/prd-margin-call-token.md` for the Pack economy PRD.
 
-On-chain escrow, SeatVault, Floor packet tooling, and MCP desk treasury have been removed pending a rebuild. The current tree is a Next + Convex shell (Privy auth, desks/traders/deals/wire).
+The Foundry workspace lives under `contracts/` (LazerForge-based). MockUSD is deployed to Robinhood Chain testnet; PackCustody / RipEngine / GameToken follow in later slices. See `contracts/README.md`.
 
 ### Commands
 
@@ -16,6 +16,15 @@ Standard commands are in `package.json` scripts and documented in `CLAUDE.md`:
 - `pnpm build` — production build
 - `pnpm lint` — ESLint (flat config)
 - `pnpm test` — Vitest (unit tests)
+- `pnpm install:forge-deps` — install forge libs into `contracts/lib`
+- `pnpm test:contracts` / `pnpm test:contracts:ci` — Foundry suite
+- `pnpm deploy:mockusd` / `pnpm verify:mockusd` — Robinhood testnet deploy + verify
+
+### Contracts caveats
+
+- Foundry must be installed locally (`foundryup -i v1.4.3`) for `pnpm test:contracts` and deploy scripts.
+- `contracts/lib/` is gitignored — always run `pnpm install:forge-deps` after clone.
+- Deploy scripts require `ROBINHOOD_TESTNET_RPC_URL` and `DEPLOYER_PRIVATE_KEY` (or `OPERATOR_PRIVATE_KEY`). Never commit keys.
 
 ### Dev server caveats
 

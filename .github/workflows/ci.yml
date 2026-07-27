@@ -61,11 +61,31 @@ jobs:
   # Re-enable when pnpm supports the bulk advisory endpoint (or pin a working client).
   # Local scripts remain: `pnpm audit:prod` / `pnpm audit:all:gated`.
 
+  contracts:
+    name: Foundry (format, build, unit, fuzz, invariant)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: contracts
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-foundry
+
+      - name: Forge fmt
+        run: forge fmt --check
+
+      - name: Forge build
+        run: forge build --sizes
+
+      - name: Forge test
+        run: FOUNDRY_PROFILE=ci forge test
+
   # Push Convex functions on merge to main so the backend never lags the
   # Vercel frontend deploy. Runs only after checks pass.
   deploy-convex:
     name: Deploy Convex functions
-    needs: [checks, vitest]
+    needs: [checks, vitest, contracts]
     # Only on merge to main, and only when a deploy key is actually configured.
     # Without the secret `npx convex deploy` errors ("No CONVEX_DEPLOYMENT set"),
     # so the job is gated on it rather than painting every main commit red.

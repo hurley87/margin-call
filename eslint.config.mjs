@@ -15,6 +15,12 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Local agent worktrees can contain nested Next.js output; never lint them
     ".claude/**",
+    // Foundry deps (gitignored, installed via pnpm install:forge-deps) and artifacts
+    "contracts/lib/**",
+    "contracts/out/**",
+    "contracts/cache/**",
+    "contracts/broadcast/**",
+    "contracts/via_ir-out/**",
   ]),
 ]);
 
