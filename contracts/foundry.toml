@@ -1,0 +1,64 @@
+# Margin Call contract workspace.
+#
+# Conventions follow LazerForge (https://github.com/LazerTechnologies/LazerForge):
+# explicit compiler selection, deterministic chain state, metadata-free builds,
+# named profiles, CI fuzzing, gas analysis, and env-supplied RPC endpoints.
+# Deviations and their reasons are recorded in REPRODUCIBILITY.md.
+
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+remappings = [
+    "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "forge-std/=lib/forge-std/src/",
+]
+
+# Never let the toolchain pick a compiler for us.
+auto_detect_solc = false
+solc_version = "0.8.28"
+evm_version = "cancun"
+optimizer = true
+optimizer_runs = 99_999_999
+
+# Keep metadata out of the bytecode so builds are reproducible.
+bytecode_hash = "none"
+cbor_metadata = false
+
+# Robinhood Chain testnet (46630) head observed at 2026-07-26T00:10:29Z.
+# Tests run against a realistic, fixed chain state rather than block 1.
+block_number = 93_499_334
+block_timestamp = 1_785_024_629
+
+# Local development is fast; CI runs the larger campaigns.
+fuzz = { runs = 256 }
+invariant = { runs = 64, depth = 32 }
+
+# Deploy scripts write recorded addresses under deployments/.
+fs_permissions = [{ access = "read-write", path = "./deployments" }]
+
+# Complete non-fork suite.
+[profile.ci]
+fuzz = { runs = 512 }
+invariant = { runs = 128, depth = 32 }
+
+# Higher-run fuzz and invariant campaign.
+[profile.ci-fuzz]
+fuzz = { runs = 1024 }
+invariant = { runs = 256, depth = 64 }
+
+# Gas analysis and snapshots.
+[profile.gas]
+via_ir = true
+optimizer_runs = 1_000_000
+
+[fmt]
+line_length = 120
+tab_width = 4
+bracket_spacing = false
+int_types = "long"
+quote_style = "double"
+number_underscore = "preserve"
+
+[rpc_endpoints]
+robinhood_testnet = "${ROBINHOOD_TESTNET_RPC_URL}"

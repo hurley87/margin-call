@@ -1,0 +1,10 @@
+{
+  "forge-std": {
+    "repo": "foundry-rs/forge-std",
+    "tag": "v1.9.4"
+  },
+  "openzeppelin-contracts": {
+    "repo": "OpenZeppelin/openzeppelin-contracts",
+    "tag": "v5.2.0"
+  }
+}
