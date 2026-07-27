@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { zodResponseFormat } from "openai/helpers/zod";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
+import type { z } from "zod";
 
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -19,8 +20,7 @@ export class LLMError extends Error {
 
 export async function callModel<T>(
   messages: ChatCompletionMessageParam[],
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  schema: any,
+  schema: z.ZodType<T>,
   schemaName: string
 ): Promise<T> {
   try {
