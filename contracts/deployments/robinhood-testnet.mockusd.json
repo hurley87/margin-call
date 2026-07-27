@@ -1,0 +1,19 @@
+{
+  "address": "0xfC9A4952A2d5c5ba6e2F968bAcBc65FE5EAdCF86",
+  "admin": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "blockNumber": 94082433,
+  "bytecodeHash": "none",
+  "cborMetadata": false,
+  "chainId": 46630,
+  "decimals": 6,
+  "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "evmVersion": "cancun",
+  "name": "Margin Call Mock USD (Test Asset)",
+  "optimizerRuns": 99999999,
+  "solc": "0.8.28",
+  "symbol": "MOCKUSD",
+  "timestamp": 1785184489,
+  "version": 1,
+  "txHash": "0xa70484d5cb5149dfdccebab48d7ace7ef8c724d32dee279af062734b0a583ea3",
+  "deployedAt": "2026-07-27T20:34:55.007Z"
+}
