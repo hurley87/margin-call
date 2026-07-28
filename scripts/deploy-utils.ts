@@ -42,6 +42,11 @@ export function loadEnvLocal(): Record<string, string> {
     "MOCKUSD_MINTER",
     "MOCKUSD_ADDRESS",
     "NEXT_PUBLIC_MOCKUSD_ADDRESS",
+    "PACKCUSTODY_ADMIN",
+    "PACKCUSTODY_WHITELIST_ADMIN",
+    "PACKCUSTODY_WHITELIST",
+    "PACKCUSTODY_ADDRESS",
+    "NEXT_PUBLIC_PACKCUSTODY_ADDRESS",
     "ETHERSCAN_API_KEY",
   ]) {
     const value = process.env[key];
@@ -130,12 +135,22 @@ export function readLatestBroadcastCreate(opts: {
  * output. Uses execFileSync with an argv array so the private key is never
  * interpolated into a shell-parsed command string.
  */
+/**
+ * Robinhood Chain charges L1 calldata as extra gas, and for a contract deployment that
+ * component dominates the estimate and moves with the L1 base fee between estimation and
+ * execution. Forge's default 130% headroom is not enough: PackCustody's first attempt
+ * consumed its whole limit (4.1M of 4.4M gas was the L1 component) and reverted out of gas.
+ * Only gas actually used is billed, so a generous ceiling costs nothing.
+ */
+const GAS_ESTIMATE_MULTIPLIER = 400;
+
 export function runForgeDeploy(opts: {
   scriptTarget: string;
   rpcUrl: string;
   privateKey: string;
   addressLabel: string;
   env?: Record<string, string>;
+  gasEstimateMultiplier?: number;
 }): { address: string; output: string } {
   const output = execFileSync(
     "forge",
@@ -147,6 +162,8 @@ export function runForgeDeploy(opts: {
       "--private-key",
       opts.privateKey,
       "--broadcast",
+      "--gas-estimate-multiplier",
+      String(opts.gasEstimateMultiplier ?? GAS_ESTIMATE_MULTIPLIER),
       "-vv",
     ],
     {

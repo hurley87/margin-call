@@ -1,0 +1,25 @@
+{
+  "address": "0x413e82F990DE796CC279c180F711d720A7Ee7728",
+  "admin": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "blockNumber": 94393734,
+  "bytecodeHash": "none",
+  "cborMetadata": false,
+  "chainId": 46630,
+  "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "evmVersion": "cancun",
+  "name": "Margin Call Pack (Test Asset)",
+  "optimizerRuns": 1000000,
+  "solc": "0.8.28",
+  "symbol": "PACK",
+  "timestamp": 1785240970,
+  "version": 1,
+  "whitelist": [
+    "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
+    "0x71178BAc73cBeb415514eB542a8995b82669778d",
+    "0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93",
+    "0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0",
+    "0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E"
+  ],
+  "txHash": "0x6532824d0202d16b693a55fab1ff2bffa2a87f718037ca3930a3b0d89f11b9e6",
+  "deployedAt": "2026-07-28T12:16:16.371Z"
+}
