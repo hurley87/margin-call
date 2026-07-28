@@ -49,6 +49,10 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     /// @notice Emitted when an asset becomes depositable.
     event AssetWhitelisted(address indexed asset);
 
+    /// @notice Emitted when an asset stops being depositable.
+    /// @dev Baskets already holding the asset are unaffected and stay fully redeemable.
+    event AssetRemovedFromWhitelist(address indexed asset);
+
     error ZeroAddress();
     error EmptyWhitelist();
     error AlreadyWhitelisted(address asset);
@@ -105,6 +109,37 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
         _safeMint(msg.sender, tokenId);
 
         emit PackMinted(tokenId, msg.sender, assets, received);
+    }
+
+    /// @notice Allow an asset to be deposited into new and existing Packs.
+    function addAsset(address asset) external onlyRole(WHITELIST_ADMIN_ROLE) {
+        if (asset == address(0)) revert ZeroAddress();
+        if (isWhitelisted[asset]) revert AlreadyWhitelisted(asset);
+
+        isWhitelisted[asset] = true;
+        _whitelist.push(asset);
+
+        emit AssetWhitelisted(asset);
+    }
+
+    /// @notice Stop an asset from being deposited into any Pack.
+    /// @dev Entry control only. Packs already holding `asset` keep it in their recorded basket
+    ///      and release it in full on redeem and unwrap, so removal can never strand capital.
+    function removeAsset(address asset) external onlyRole(WHITELIST_ADMIN_ROLE) {
+        if (!isWhitelisted[asset]) revert AssetNotWhitelisted(asset);
+
+        isWhitelisted[asset] = false;
+
+        uint256 length = _whitelist.length;
+        for (uint256 i; i < length; ++i) {
+            if (_whitelist[i] == asset) {
+                _whitelist[i] = _whitelist[length - 1];
+                _whitelist.pop();
+                break;
+            }
+        }
+
+        emit AssetRemovedFromWhitelist(asset);
     }
 
     /// @notice The full recorded basket of a Pack, in raw token units.
