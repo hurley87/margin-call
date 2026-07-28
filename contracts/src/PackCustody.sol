@@ -41,10 +41,20 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
 
     mapping(uint256 tokenId => mapping(address asset => uint256 amount)) private _basketAmounts;
 
+    /// @dev Latched the first time a Pack leaves its creator. One way: a Pack that has been
+    ///      ripped or sold never rejoins the pool, so the lifecycle only ever moves forward.
+    mapping(uint256 tokenId => bool unlisted) private _unlisted;
+
     uint256 private _lastTokenId;
 
     /// @notice Emitted once per Pack, with the amounts actually received into custody.
     event PackMinted(uint256 indexed tokenId, address indexed creator, address[] assets, uint256[] amounts);
+
+    /// @notice Emitted when a creator adds assets to a listed Pack.
+    event PackToppedUp(uint256 indexed tokenId, address indexed creator, address[] assets, uint256[] amounts);
+
+    /// @notice Emitted the first time a Pack leaves its creator, retiring it from the pool.
+    event PackUnlisted(uint256 indexed tokenId);
 
     /// @notice Emitted when an asset becomes depositable.
     event AssetWhitelisted(address indexed asset);
@@ -62,6 +72,8 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     error DuplicateAsset(address asset);
     error ZeroAmount(address asset);
     error NoAssetsReceived(address asset);
+    error NotPackCreator(uint256 tokenId, address caller);
+    error PackNotListed(uint256 tokenId);
 
     /// @param admin Address granted DEFAULT_ADMIN_ROLE (can grant/revoke WHITELIST_ADMIN_ROLE).
     /// @param initialWhitelist Assets depositable at launch — the five approved Stock Tokens.
@@ -93,22 +105,43 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
         nonReentrant
         returns (uint256 tokenId)
     {
-        if (assets.length == 0) revert EmptyBasket();
-        if (assets.length != amounts.length) revert LengthMismatch();
+        _validateDeposit(assets, amounts);
 
         tokenId = ++_lastTokenId;
         creatorOf[tokenId] = msg.sender;
 
         uint256[] memory received = new uint256[](assets.length);
         for (uint256 i; i < assets.length; ++i) {
-            // The Pack is new, so any recorded amount can only come from this call.
-            if (_basketAmounts[tokenId][assets[i]] != 0) revert DuplicateAsset(assets[i]);
             received[i] = _deposit(tokenId, assets[i], amounts[i]);
         }
 
         _safeMint(msg.sender, tokenId);
 
         emit PackMinted(tokenId, msg.sender, assets, received);
+    }
+
+    /// @notice Add assets to a listed Pack. Additions only — nothing can be withdrawn here.
+    /// @dev Creator-only, and only while the Pack is still in the pool. A published NAV can
+    ///      therefore rise between checkpoints but can never be hollowed out.
+    /// @param tokenId The Pack to top up.
+    /// @param assets Distinct whitelisted assets to add, new to the basket or already in it.
+    /// @param amounts Raw token units to add, positionally matched to `assets`.
+    function topUp(uint256 tokenId, address[] calldata assets, uint256[] calldata amounts) external nonReentrant {
+        _validateDeposit(assets, amounts);
+        if (!isListed(tokenId)) revert PackNotListed(tokenId);
+        if (creatorOf[tokenId] != msg.sender) revert NotPackCreator(tokenId, msg.sender);
+
+        uint256[] memory received = new uint256[](assets.length);
+        for (uint256 i; i < assets.length; ++i) {
+            received[i] = _deposit(tokenId, assets[i], amounts[i]);
+        }
+
+        emit PackToppedUp(tokenId, msg.sender, assets, received);
+    }
+
+    /// @notice Whether a Pack is still held by its creator and can be topped up or delisted.
+    function isListed(uint256 tokenId) public view returns (bool) {
+        return _ownerOf(tokenId) != address(0) && !_unlisted[tokenId];
     }
 
     /// @notice Allow an asset to be deposited into new and existing Packs.
@@ -174,6 +207,29 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     /// @inheritdoc ERC721
     function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
+    }
+
+    /// @dev Latches the Pack out of the pool on its first move to a new holder. Mints, burns,
+    ///      and self-transfers are not departures.
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
+        from = super._update(to, tokenId, auth);
+
+        if (from != address(0) && to != address(0) && to != from && !_unlisted[tokenId]) {
+            _unlisted[tokenId] = true;
+            emit PackUnlisted(tokenId);
+        }
+    }
+
+    /// @dev Shared shape check for mint and top-up: non-empty, aligned, and free of duplicates.
+    function _validateDeposit(address[] calldata assets, uint256[] calldata amounts) internal pure {
+        if (assets.length == 0) revert EmptyBasket();
+        if (assets.length != amounts.length) revert LengthMismatch();
+
+        for (uint256 i; i < assets.length; ++i) {
+            for (uint256 j; j < i; ++j) {
+                if (assets[i] == assets[j]) revert DuplicateAsset(assets[i]);
+            }
+        }
     }
 
     /// @dev Pulls `amount` of `asset` into custody and records what actually arrived.
