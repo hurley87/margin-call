@@ -1,17 +1,26 @@
 # Margin Call: The Game Token and Pack Economy
 
-- **Status:** Draft for review
+- **Status:** Draft for review — Pack-economy sections superseded; see banner and [`spec-margin-call-pack-backing.md`](./spec-margin-call-pack-backing.md)
 - **Target:** Robinhood Chain testnet
 - **Version:** 0.5
 - **Date:** July 27, 2026
 
 Domain terms used here are defined in the repo glossary, [`CONTEXT.md`](../CONTEXT.md). Architectural decisions referenced as ADR-NNNN live in [`docs/adr/`](./adr/).
 
+> ⚠️ **Superseded in part (July 28, 2026).** The Pack **selection, backing, pricing, and rarity** model in this document has been redesigned. The canonical source for the Pack economy is now [`spec-margin-call-pack-backing.md`](./spec-margin-call-pack-backing.md). **Where this document and that spec disagree, the spec wins.** Specifically superseded here:
+>
+> - **Selection is no longer uniform.** It is weighted `1/B` by a new per-Pack **backing** pile — odds ∝ 1/backing.
+> - **Packs now carry a single-stock backing pile** separate from the deliverable basket. Backing sets selection odds, the rarity tier, and a standing-bid **floor** (`max(deliverableNAV, 0.85×backing)`).
+> - **Rarity tiers** (Common → Legendary) derive from backing USD value.
+> - **Two thresholds replace the single gate:** a `$22.50` selection floor / wash-guard **and** a `$25` emission gate.
+>
+> Still current from this document: the earn-only + transfer-locked `$BLOW` token, the `1B` / `150M`+`150M` / `700M` allocations, `$25` rip / `$22.50` proceeds, the 15-day Season, roles, and the safety framing.
+
 ## Product decision
 
 Margin Call V1 is a fixed-price Pack-ripping game operated through persistent Trader identities, run as exactly one 15-day Season on Robinhood Chain testnet. Packs are the immediate game object; Traders are the long game. V1 is a mainnet dress rehearsal: the full economic loop — custody, settlement, emissions, claims, and the disclosed trust model — runs as it would with real money, and the Season's end is the end of the V1 test.
 
-Creators permissionlessly fund auditable Packs of approved tokenized-stock ERC-20s. A Desk Manager funds a Trader with the configured USD stablecoin and assigns it to a named pool or tier. Every funded, eligible Trader may Rip exactly one Pack in each hourly window at that pool's fixed price. Selection is uniform across the eligible set: every eligible Pack has an equal chance regardless of oracle NAV, game-token balance, creator identity, or any other Pack attribute. In V1 the draw itself is executed by the House as a disclosed trusted operation — the eligible set and outcome are on-chain and auditable; the randomness is an operator promise, not a cryptographic proof (ADR-0001). Selection immediately completes the Rip and delivers the Pack to the Trader. There is no discretionary buy, hold-unripped, resell, or market-timing decision in V1.
+Creators permissionlessly fund auditable Packs of approved tokenized-stock ERC-20s. A Desk Manager funds a Trader with the configured USD stablecoin and assigns it to a named pool or tier. Every funded, eligible Trader may Rip exactly one Pack in each hourly window at that pool's fixed price. Selection is uniform across the eligible set: every eligible Pack has an equal chance regardless of oracle NAV, game-token balance, creator identity, or any other Pack attribute. **[Superseded — selection is now weighted `1/B` by a per-Pack backing pile; see the banner above and the spec.]** In V1 the draw itself is executed by the House as a disclosed trusted operation — the eligible set and outcome are on-chain and auditable; the randomness is an operator promise, not a cryptographic proof (ADR-0001). Selection immediately completes the Rip and delivers the Pack to the Trader. There is no discretionary buy, hold-unripped, resell, or market-timing decision in V1.
 
 Scripts and agents are first-class participants. Every Trader is automation by construction, the application interface is never a trust boundary, and every fairness property — the hourly window limit, the frozen eligible set, uniform odds, fixed reward pots — binds a terminal script and an app user identically. The defenses against bot capture are mechanical, not interface-based: participation and eligibility changes commit at window boundaries so latency is never an edge (ADR-0007), and the one place alignment cannot be enforced mechanically — Participation Rewards under a tradable token — is identity-gated at claim time on mainnet while play itself stays permissionless (ADR-0006).
 
@@ -70,7 +79,7 @@ Contracts are built on the [LazerForge](https://github.com/LazerTechnologies/Laz
 - The V1 unwrap or redemption fee is zero. The disclosed Rip fee is the only player-facing protocol fee.
 - NAV bounds and the emission gate are enforced with fresh oracle data at defined hourly-epoch boundaries and relevant Pack interactions, including Rip, top-up, and claim; the maximum protects pool risk rather than serving only as a listing-time check. A Pack outside either pool bound leaves the eligible selection set and stops creator emissions until a later checkpoint confirms that price movement or a permitted top-up has returned it within bounds; its redemption right remains intact. A Pack inside pool bounds but below the emission gate remains selectable and simply stops accruing.
 - Bound changes apply prospectively to new listings or a new pool version and never silently rewrite the bounds governing existing active Packs.
-- Selection within a pool is uniform: oracle NAV, game-token balance, creator identity, and all other Pack attributes have zero selection weight. Each window draws from the eligible set frozen at that window's opening boundary; mid-window checks can only remove a Pack fail-closed, never add one (ADR-0007).
+- Selection within a pool is uniform: oracle NAV, game-token balance, creator identity, and all other Pack attributes have zero selection weight. **[Superseded — now weighted `1/B` by backing; see the banner above.]** Each window draws from the eligible set frozen at that window's opening boundary; mid-window checks can only remove a Pack fail-closed, never add one (ADR-0007).
 - Each pool publishes live Pool Statistics — eligible Pack count, mean and median NAV, and the NAV distribution — so managers can judge a pool's expected value before and while their Traders participate. Reacting to Pool Statistics by pausing or enabling Traders is intended play; because changes commit at window boundaries, that game is played one window ahead rather than won by reaction latency (ADR-0007).
 - V1 may launch with one pool. Additional fixed-price pools are configuration expansions, not variable pricing within a pool.
 - The protocol validates funding and eligibility, enforces one Rip per Trader per hourly window on-chain, settles the fixed payment, and records finality exactly once.
