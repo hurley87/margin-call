@@ -56,6 +56,9 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     /// @notice Emitted the first time a Pack leaves its creator, retiring it from the pool.
     event PackUnlisted(uint256 indexed tokenId);
 
+    /// @notice Emitted when a creator delists a Pack and takes its full basket back.
+    event PackRedeemed(uint256 indexed tokenId, address indexed creator, address[] assets, uint256[] amounts);
+
     /// @notice Emitted when an asset becomes depositable.
     event AssetWhitelisted(address indexed asset);
 
@@ -139,6 +142,18 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
         emit PackToppedUp(tokenId, msg.sender, assets, received);
     }
 
+    /// @notice Delist a Pack and take its entire basket back, at no protocol fee.
+    /// @dev Creator-only while listed. Available at any moment — the exit right is never
+    ///      delayed — so creator capital can never be trapped. Burns the Pack.
+    function delistAndRedeem(uint256 tokenId) external nonReentrant {
+        if (!isListed(tokenId)) revert PackNotListed(tokenId);
+        if (creatorOf[tokenId] != msg.sender) revert NotPackCreator(tokenId, msg.sender);
+
+        (address[] memory assets, uint256[] memory amounts) = _release(tokenId, msg.sender);
+
+        emit PackRedeemed(tokenId, msg.sender, assets, amounts);
+    }
+
     /// @notice Whether a Pack is still held by its creator and can be topped up or delisted.
     function isListed(uint256 tokenId) public view returns (bool) {
         return _ownerOf(tokenId) != address(0) && !_unlisted[tokenId];
@@ -207,6 +222,32 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     /// @inheritdoc ERC721
     function supportsInterface(bytes4 interfaceId) public view override(ERC721, AccessControl) returns (bool) {
         return super.supportsInterface(interfaceId);
+    }
+
+    /// @dev Burns the Pack and pays its whole recorded basket to `to`, with no deduction of
+    ///      any kind. Accounting is cleared before any token moves, so a hostile asset that
+    ///      re-enters finds nothing left to release even before the guard rejects it.
+    function _release(uint256 tokenId, address to)
+        internal
+        returns (address[] memory assets, uint256[] memory amounts)
+    {
+        assets = _basketAssets[tokenId];
+        amounts = new uint256[](assets.length);
+
+        for (uint256 i; i < assets.length; ++i) {
+            amounts[i] = _basketAmounts[tokenId][assets[i]];
+            delete _basketAmounts[tokenId][assets[i]];
+        }
+
+        delete _basketAssets[tokenId];
+        delete creatorOf[tokenId];
+        delete _unlisted[tokenId];
+
+        _burn(tokenId);
+
+        for (uint256 i; i < assets.length; ++i) {
+            IERC20(assets[i]).safeTransfer(to, amounts[i]);
+        }
     }
 
     /// @dev Latches the Pack out of the pool on its first move to a new holder. Mints, burns,
