@@ -122,13 +122,82 @@ Writes `contracts/deployments/robinhood-testnet.packcustody.json` (address, admi
 - **MockUSD (testnet, verified):** [`0xAA555fD042F33B5AF485171015AeAF11eD49EF3D`](https://explorer.testnet.chain.robinhood.com/address/0xAA555fD042F33B5AF485171015AeAF11eD49EF3D#code)
 - Deployment record: [`deployments/robinhood-testnet.mockusd.json`](./deployments/robinhood-testnet.mockusd.json)
 - Tx: [`0x9a2c19d5…`](https://explorer.testnet.chain.robinhood.com/tx/0x9a2c19d5e97a12eb86f7ec5dd3e74bcf30bd099d11a763d57f390fde2af7f4c2)
-- Verify after deploy: `pnpm verify:mockusd` (Blockscout; workspace uses `optimizer_runs = 1_000_000`).
+- **PackCustody (testnet, verified):** [`0x413e82F990DE796CC279c180F711d720A7Ee7728`](https://explorer.testnet.chain.robinhood.com/address/0x413e82F990DE796CC279c180F711d720A7Ee7728#code)
+- Deployment record: [`deployments/robinhood-testnet.packcustody.json`](./deployments/robinhood-testnet.packcustody.json)
+- Tx: [`0x6532824d…`](https://explorer.testnet.chain.robinhood.com/tx/0x6532824d0202d16b693a55fab1ff2bffa2a87f718037ca3930a3b0d89f11b9e6)
+- Verify after deploy: `pnpm verify:mockusd` / `pnpm verify:packcustody` (Blockscout; workspace uses `optimizer_runs = 1_000_000`).
+
+> **Gas note.** Robinhood Chain bills L1 calldata as extra gas, and for a contract deployment
+> that component dominates and drifts with the L1 base fee. Forge's default 130% headroom is
+> not enough — the first PackCustody attempt burned its whole limit and reverted out of gas.
+> `runForgeDeploy` now passes `--gas-estimate-multiplier 400`; only gas actually used is billed.
+
+## Demo the Pack lifecycle with `cast`
+
+Everything below runs against the deployed contracts with tokens from the
+[Robinhood faucet](https://faucet.testnet.chain.robinhood.com) — no app required.
+
+```bash
+export RPC=https://rpc.testnet.chain.robinhood.com
+export PACKS=0x413e82F990DE796CC279c180F711d720A7Ee7728
+export AMZN=0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02
+export PLTR=0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0
+export KEY=0x…            # a faucet-funded creator
+export ME=$(cast wallet address --private-key $KEY)
+```
+
+Read the pool's entry rules:
+
+```bash
+cast call $PACKS "whitelistedAssets()(address[])" --rpc-url $RPC
+cast call $PACKS "isWhitelisted(address)(bool)" $AMZN --rpc-url $RPC   # true
+```
+
+Approve, then mint a fully funded Pack. Amounts are raw token units:
+
+```bash
+cast send $AMZN "approve(address,uint256)" $PACKS 1000000000000000000 --private-key $KEY --rpc-url $RPC
+cast send $PLTR "approve(address,uint256)" $PACKS 5000000 --private-key $KEY --rpc-url $RPC
+
+cast send $PACKS "mint(address[],uint256[])" "[$AMZN,$PLTR]" "[1000000000000000000,5000000]" \
+  --private-key $KEY --rpc-url $RPC
+
+export ID=$(cast call $PACKS "totalMinted()(uint256)" --rpc-url $RPC)
+cast call $PACKS "basketOf(uint256)((address,uint256)[])" $ID --rpc-url $RPC
+cast call $PACKS "isListed(uint256)(bool)" $ID --rpc-url $RPC        # true
+```
+
+Top it up (creator only, additions only):
+
+```bash
+cast send $AMZN "approve(address,uint256)" $PACKS 500000000000000000 --private-key $KEY --rpc-url $RPC
+cast send $PACKS "topUp(uint256,address[],uint256[])" $ID "[$AMZN]" "[500000000000000000]" \
+  --private-key $KEY --rpc-url $RPC
+cast call $PACKS "basketAmountOf(uint256,address)(uint256)" $ID $AMZN --rpc-url $RPC   # 1.5e18
+```
+
+Then take either exit. While the Pack is still yours, delist and redeem:
+
+```bash
+cast send $PACKS "delistAndRedeem(uint256)" $ID --private-key $KEY --rpc-url $RPC
+```
+
+Or transfer it — standing in for Rip settlement — and let the new holder unwrap:
+
+```bash
+cast send $PACKS "transferFrom(address,address,uint256)" $ME $BUYER $ID --private-key $KEY --rpc-url $RPC
+cast call $PACKS "isListed(uint256)(bool)" $ID --rpc-url $RPC        # false
+cast send $PACKS "unwrap(uint256)" $ID --private-key $BUYER_KEY --rpc-url $RPC
+```
+
+Both paths return the entire recorded basket and burn the Pack. Compare the token balances
+before and after: nothing is deducted on either path.
 
 ## Layout
 
 ```
 contracts/
-  src/            # Deployable contracts (MockUSD today; PackCustody et al. later)
+  src/            # Deployable contracts (MockUSD, PackCustody; RipEngine et al. later)
   test/           # Forge unit / fuzz / invariant suites
   script/         # Deploy scripts + LazerForge Utils
   deployments/    # Recorded, reproducible addresses (committed)
