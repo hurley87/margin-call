@@ -59,6 +59,19 @@ Protocol-deployed mock USD stablecoin for the Season:
 
 This is a **valueless test asset**. It has no USD backing and nothing about it carries over to mainnet.
 
+## PackCustody
+
+ERC-721 Packs backed by a recorded basket of whitelisted Stock Tokens held directly by the contract (issue [#275](https://github.com/hurley87/margin-call/issues/275)):
+
+- Name / symbol: `Margin Call Pack (Test Asset)` / `PACK`
+- `mint` deposits the whole basket in one transaction; a Pack can never exist unfunded
+- Custody accounting is raw token units, recorded from the balance actually received
+- `topUp` is creator-only and additions-only, while the Pack is still listed
+- `delistAndRedeem` (creator, while listed) and `unwrap` (holder, once transferred) both release the full basket at **zero protocol fee**
+- `WHITELIST_ADMIN_ROLE` governs deposits only — de-whitelisting an asset never blocks redemption
+
+Oracle NAV, eligibility, and Rip selection live in later contracts; custody knows nothing about them.
+
 ## Deploy (Robinhood Chain testnet)
 
 1. Fund a deployer with testnet ETH from the [Robinhood faucet](https://faucet.testnet.chain.robinhood.com).
@@ -86,6 +99,22 @@ This is a **valueless test asset**. It has no USD backing and nothing about it c
    ```bash
    pnpm verify:mockusd
    ```
+
+### PackCustody
+
+Same flow, with the whitelist defaulting to the five approved Stock Tokens from the PRD launch configuration:
+
+```bash
+# Optional overrides in .env.local:
+#   PACKCUSTODY_ADMIN=0x…            # defaults to deployer
+#   PACKCUSTODY_WHITELIST_ADMIN=0x…  # granted WHITELIST_ADMIN_ROLE when admin == deployer
+#   PACKCUSTODY_WHITELIST=0x…,0x…    # comma-separated; overrides the launch five
+
+pnpm deploy:packcustody
+pnpm verify:packcustody
+```
+
+Writes `contracts/deployments/robinhood-testnet.packcustody.json` (address, admin, whitelist, build fingerprint, tx hash) and patches `PACKCUSTODY_ADDRESS` / `NEXT_PUBLIC_PACKCUSTODY_ADDRESS` in `.env.local`.
 
 ### Explorer
 

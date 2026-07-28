@@ -42,6 +42,11 @@ export function loadEnvLocal(): Record<string, string> {
     "MOCKUSD_MINTER",
     "MOCKUSD_ADDRESS",
     "NEXT_PUBLIC_MOCKUSD_ADDRESS",
+    "PACKCUSTODY_ADMIN",
+    "PACKCUSTODY_WHITELIST_ADMIN",
+    "PACKCUSTODY_WHITELIST",
+    "PACKCUSTODY_ADDRESS",
+    "NEXT_PUBLIC_PACKCUSTODY_ADDRESS",
     "ETHERSCAN_API_KEY",
   ]) {
     const value = process.env[key];
