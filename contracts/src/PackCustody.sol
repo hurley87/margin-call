@@ -59,6 +59,9 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     /// @notice Emitted when a creator delists a Pack and takes its full basket back.
     event PackRedeemed(uint256 indexed tokenId, address indexed creator, address[] assets, uint256[] amounts);
 
+    /// @notice Emitted when a holder unwraps a Pack that has left its creator.
+    event PackUnwrapped(uint256 indexed tokenId, address indexed holder, address[] assets, uint256[] amounts);
+
     /// @notice Emitted when an asset becomes depositable.
     event AssetWhitelisted(address indexed asset);
 
@@ -76,7 +79,9 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     error ZeroAmount(address asset);
     error NoAssetsReceived(address asset);
     error NotPackCreator(uint256 tokenId, address caller);
+    error NotPackHolder(uint256 tokenId, address caller);
     error PackNotListed(uint256 tokenId);
+    error PackStillListed(uint256 tokenId);
 
     /// @param admin Address granted DEFAULT_ADMIN_ROLE (can grant/revoke WHITELIST_ADMIN_ROLE).
     /// @param initialWhitelist Assets depositable at launch — the five approved Stock Tokens.
@@ -152,6 +157,19 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
         (address[] memory assets, uint256[] memory amounts) = _release(tokenId, msg.sender);
 
         emit PackRedeemed(tokenId, msg.sender, assets, amounts);
+    }
+
+    /// @notice Take the entire basket out of a Pack that has left its creator, at no protocol
+    ///         fee. Available to whoever holds the Pack, however they came by it.
+    /// @dev Burns the Pack. The disclosed exit for a ripped or purchased Pack; the creator's
+    ///      equivalent while the Pack is still in the pool is `delistAndRedeem`.
+    function unwrap(uint256 tokenId) external nonReentrant {
+        if (_ownerOf(tokenId) != msg.sender) revert NotPackHolder(tokenId, msg.sender);
+        if (isListed(tokenId)) revert PackStillListed(tokenId);
+
+        (address[] memory assets, uint256[] memory amounts) = _release(tokenId, msg.sender);
+
+        emit PackUnwrapped(tokenId, msg.sender, assets, amounts);
     }
 
     /// @notice Whether a Pack is still held by its creator and can be topped up or delisted.
