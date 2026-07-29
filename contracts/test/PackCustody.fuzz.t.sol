@@ -112,9 +112,7 @@ contract PackCustodyFuzzTest is PackCustodyFixture {
         }
     }
 
-    function testFuzz_mintReleaseUnwrapMovesTheWholeBasketToTheRecipient(uint8 maskSeed, uint256 amountSeed)
-        public
-    {
+    function testFuzz_mintReleaseUnwrapMovesTheWholeBasketToTheRecipient(uint8 maskSeed, uint256 amountSeed) public {
         address ripEngine = makeAddr("ripEngine");
         bytes32 role = packs.RIP_ENGINE_ROLE();
         vm.prank(admin);

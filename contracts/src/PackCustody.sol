@@ -187,11 +187,7 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     ///      settles at most once because an already-unlisted Pack reverts `PackNotListed`.
     /// @param tokenId The listed Pack to hand to the Taker.
     /// @param recipient The account that receives the Pack (typically the Taker).
-    function releaseToRecipient(uint256 tokenId, address recipient)
-        external
-        onlyRole(RIP_ENGINE_ROLE)
-        nonReentrant
-    {
+    function releaseToRecipient(uint256 tokenId, address recipient) external onlyRole(RIP_ENGINE_ROLE) nonReentrant {
         if (recipient == address(0)) revert ZeroAddress();
         if (!isListed(tokenId)) revert PackNotListed(tokenId);
 

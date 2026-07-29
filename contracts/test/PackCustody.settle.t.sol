@@ -30,7 +30,9 @@ contract PackCustodySettleTest is PackCustodyFixture {
     function test_unauthorizedCallerReverts() public {
         bytes32 role = packs.RIP_ENGINE_ROLE();
 
-        vm.expectRevert(abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, role));
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, role)
+        );
         vm.prank(stranger);
         packs.releaseToRecipient(packId, buyer);
     }
