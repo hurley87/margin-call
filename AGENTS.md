@@ -4,9 +4,9 @@
 
 ### Project overview
 
-Margin Call is a Next.js 16 (App Router) web app — an AI-powered PvP trading game on 1980s Wall Street. See `CLAUDE.md` for tech stack, commands, and architecture details. See `docs/prd-margin-call-token.md` for the Pack economy PRD.
+Margin Call is a Next.js 16 (App Router) web app — a NAV-weighted Pack-rip game on Robinhood Chain. The agent-game UI/backend was torn down (#298); the app is currently a Privy connect shell plus SIWA/Convex auth scaffolding. See `CLAUDE.md` for tech stack and architecture. Design: `docs/prd-margin-call.md`; glossary: `CONTEXT.md`. Full V1 build: GitHub issue #297.
 
-The Foundry workspace lives under `contracts/` (LazerForge-based). MockUSD is deployed to Robinhood Chain testnet; PackCustody / RipEngine / GameToken follow in later slices. See `contracts/README.md`.
+The Foundry workspace lives under `contracts/` (LazerForge-based). MockUSD and PackCustody are on Robinhood Chain testnet; AssetRegistry / RipEngine / GameToken / Distributor follow in later slices. See `contracts/README.md`.
 
 ### Commands
 
@@ -28,17 +28,14 @@ Standard commands are in `package.json` scripts and documented in `CLAUDE.md`:
 
 ### Dev server caveats
 
-- Without `NEXT_PUBLIC_PRIVY_APP_ID`, `PrivyProvider` renders children without Privy/Wagmi/Convex wrappers; `usePrivy()` on the home page shows the unauthenticated state (CONNECT_WALLET screen).
+- Without `NEXT_PUBLIC_PRIVY_APP_ID`, `PrivyProvider` renders children without Privy/Wagmi/Convex wrappers; `usePrivy()` on the home page shows the unauthenticated landing (connect CTA).
 - Upstash Redis is optional; the rate limiter falls back to in-memory when env vars are missing.
 - Sentry source map uploads are disabled when `SENTRY_AUTH_TOKEN` is absent.
+- Convex schema is `siwaNonces` only after #298; reset the Convex deployment/data when pulling schema shrinks (no migration — DB is resettable).
 
 ### Build scripts (pnpm)
 
 pnpm v10 blocks postinstall/build scripts by default. Running `pnpm install` will show a warning about ignored build scripts (esbuild, sharp, @sentry/cli, etc.). For the current test suite and dev server these are not required — vitest 4.x uses its own native transform, not esbuild. If native module builds are needed in the future, add `pnpm.onlyBuiltDependencies` to `package.json`.
-
-### Pre-existing lint errors and test failures
-
-- `pnpm lint` exits 1 due to pre-existing issues in some hooks/components and unused-variable warnings (see ESLint output).
 
 ### Git hooks
 

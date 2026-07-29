@@ -2,10 +2,6 @@ import { Ratelimit } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { NextRequest, NextResponse } from "next/server";
 
-// ---------------------------------------------------------------------------
-// Redis client — uses Upstash in production, in-memory store for local dev
-// ---------------------------------------------------------------------------
-
 function createRedisOrMemory() {
   if (
     process.env.UPSTASH_REDIS_REST_URL &&
@@ -13,8 +9,6 @@ function createRedisOrMemory() {
   ) {
     return Redis.fromEnv();
   }
-  // No Upstash configured — fall back to ephemeral in-memory map.
-  // Fine for local dev; every cold start resets counters.
   return undefined;
 }
 
@@ -36,40 +30,13 @@ function createLimit(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Pre-configured rate limiters (sliding window)
-// Only instantiated when Upstash Redis is configured; null in local dev.
-// ---------------------------------------------------------------------------
-
-/** /api/agent/cycle — 1 request per 30 seconds per trader */
-export const agentCycleLimit = createLimit("rl:agent-cycle", 1, "30 s");
-
-/** /api/prompt/suggest — 5 requests per minute per wallet */
-export const promptSuggestLimit = createLimit("rl:prompt-suggest", 5, "1 m");
-
-/** /api/desk/* — 30 requests per minute per wallet */
-export const deskLimit = createLimit("rl:desk", 30, "1 m");
-
-/** /api/trader/* — 30 requests per minute per wallet */
-export const traderLimit = createLimit("rl:trader", 30, "1 m");
-
 /** /api/siwa/nonce — 20 requests per minute per IP */
 export const siwaNonceLimit = createLimit("rl:siwa-nonce", 20, "1 m");
-
-// ---------------------------------------------------------------------------
-// Helper: apply rate limit and return 429 if exceeded
-// ---------------------------------------------------------------------------
 
 /**
  * Check rate limit for a given limiter and identifier.
  * Returns `null` if the request is allowed, or a 429 NextResponse if limited.
  * Skips rate limiting when Redis is not configured (local dev) or limiter is null.
- *
- * Usage in a route handler:
- * ```ts
- * const limited = await checkRateLimit(deskLimit, walletAddress);
- * if (limited) return limited;
- * ```
  */
 export async function checkRateLimit(
   limiter: Ratelimit | null,
@@ -108,7 +75,6 @@ export function getClientIdentifier(
 ): string {
   if (walletAddress) return walletAddress.toLowerCase();
 
-  // Fall back to IP for unauthenticated routes
   const forwarded = request.headers.get("x-forwarded-for");
   const ip =
     forwarded?.split(",")[0]?.trim() ??

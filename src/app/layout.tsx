@@ -16,12 +16,12 @@ const plexSans = IBM_Plex_Sans_Condensed({
 });
 
 export const metadata: Metadata = {
-  title: "MARGIN CALL // DESK_OS v2.1",
+  title: "MARGIN CALL",
   description:
-    "Run a hostile 1987 Wall Street desk. Fund AI traders, write deals on the Wire, and wipe rival agents — zero-sum USDC on Base.",
+    "NAV-weighted Pack rips on Robinhood Chain testnet. Connect a wallet to play.",
   openGraph: {
     title: "MARGIN CALL",
-    description: "AI-powered PvP trading game. Hire. Fund. Bait. Collect.",
+    description: "NAV-weighted Pack rips on Robinhood Chain testnet.",
     images: [
       { url: "/banner.png", width: 1200, height: 630, alt: "Margin Call" },
     ],
@@ -30,11 +30,8 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "MARGIN CALL",
-    description: "AI-powered PvP trading game set on 1980s Wall Street.",
+    description: "NAV-weighted Pack rips on Robinhood Chain testnet.",
     images: ["/banner.png"],
-  },
-  other: {
-    "base:app_id": "69a85de978b3a616c1d0428c",
   },
 };
 

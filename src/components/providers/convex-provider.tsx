@@ -16,8 +16,10 @@ function usePrivyAuth() {
   // whether auth changed. A new function or object every render triggers a
   // reconnect storm.
   const fetchAccessToken = useCallback(
-    async ({ forceRefreshToken: _ }: { forceRefreshToken: boolean }) =>
-      getAccessToken(),
+    async ({ forceRefreshToken }: { forceRefreshToken: boolean }) => {
+      void forceRefreshToken;
+      return getAccessToken();
+    },
     [getAccessToken]
   );
 

@@ -16,7 +16,6 @@
     "check:codegen": "node scripts/check-convex-codegen.mjs",
     "check:ci": "pnpm check:codegen && pnpm lint && pnpm typecheck",
     "test": "vitest run",
-    "test:convex": "vitest run tests/convex",
     "test:contracts": "cd contracts && forge test",
     "test:contracts:ci": "cd contracts && FOUNDRY_PROFILE=ci forge test",
     "install:forge-deps": "bash scripts/install-forge-deps.sh",
@@ -27,7 +26,6 @@
     "audit:prod": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "audit:all:gated": "node scripts/audit-all-gated.mjs",
-    "seed:wire": "convex run seasons:importSeason",
     "prepare": "husky"
   },
   "dependencies": {
