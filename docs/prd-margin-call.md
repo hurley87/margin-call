@@ -73,6 +73,17 @@ rip_price      = harmonic_mean × (1 + surcharge)
 
 Harmonic mean ≈ $56 (vs $175 arithmetic). Rip price ≈ $56 × 1.10 ≈ **$62**. A ripper usually draws a ~$22 GME basket and hits the ~$307 TSLA jackpot ~6% of the time.
 
+**Price floor and bounds.** The Rip price is dynamic but bounded. The harmonic mean always lies between the smallest and largest eligible NAV, and every Pack's NAV is constrained to the Pool bounds, so the price is structurally clamped to `[minPackNav × (1 + surcharge), poolMax × (1 + surcharge)]`.
+
+The minimum-NAV floor **`minPackNav` is an owner-settable contract parameter and is load-bearing** — not an optional guard — because the harmonic mean is dominated by its smallest members. A single dust-NAV Pack would both crater the price for everyone _and_, via `1/NAV`, monopolize the draws (e.g. one `$0.50` Pack among five `$300` Packs drags the harmonic mean to ≈ `$3` and takes ~99% of draws). `minPackNav` is therefore the price floor **and** the dust / draw-monopolization guard in one number. A Pack whose fresh NAV falls below `minPackNav` leaves the eligible set (fail closed) until a checkpoint or top-up returns it. The floor is versioned, evented configuration applied prospectively via `setMinPackNav`, and never rewrites terms for existing active Packs.
+
+Two guards complete the picture:
+
+- **Empty or degenerate eligible set fails closed:** with zero eligible Packs the harmonic mean is undefined and no Rip executes.
+- **Explicit settlement clamp (belt-and-suspenders):** the settled price is clamped to `[minPackNav × (1 + surcharge), poolMax × (1 + surcharge)]`, so a stale or mispriced feed that slips a checkpoint can never price a Rip outside the published band.
+
+The floor is asymmetric by design: the downside (dust craters the price) is the real hazard; the upside is benign — an all-expensive pool just prices near `poolMax × (1 + surcharge)` with no jackpots, which the restock controller keeps the pool off.
+
 ## Game token: the restock controller
 
 The game token compensates Creators for providing inventory and, in doing so, steers the pool. Ticker is an open branding decision (candidates include `$RIP` / `$BLOW`); this document uses "the game token."
@@ -124,6 +135,7 @@ Contracts build on the [LazerForge](https://github.com/LazerTechnologies/LazerFo
 ### Pool and protocol
 
 - Each Pool has a stable public name, one configured USD stablecoin, a pricing rule (dynamic harmonic-mean + surcharge by default, or a fixed price), the approved Stock Token rules, fees, and published USD NAV bounds. NAV and bounds are USD; the Rip price and fees settle in the stablecoin.
+- The Pool's minimum NAV bound **`minPackNav` is an owner-settable contract floor** (`setMinPackNav`, evented, prospective). It is load-bearing: because the harmonic price is dominated by small NAVs, the floor sets the price floor and stops a dust Pack from monopolizing draws. A Pack below the floor leaves the eligible set fail-closed, and settlement clamps the price to `[minPackNav, poolMax] × (1 + surcharge)`.
 - Rip settlement: the Trader pays the current Rip price; the payment splits into a bounded protocol cut and a pro-rata acquisition-fee distribution across resting eligible Packs. The drawn Pack and its full basket transfer to the Trader and its emissions stop. Unwrap/redemption carries no protocol fee.
 - NAV bounds and freshness are enforced at hourly-epoch checkpoints and at every Rip, top-up, and claim; calculations normalize token and feed decimals and fail closed on invalid, paused, missing, or stale data. Bound and parameter changes (`alpha`, `surcharge`, targets, gain, fees, bounds) are versioned, evented configuration applied prospectively — they never silently rewrite terms governing existing active Packs.
 - Each Pool publishes live statistics — eligible count, harmonic-mean NAV, current Rip price, and the NAV distribution — so Desk Managers can judge expected value before and while their Traders participate.
@@ -133,17 +145,18 @@ Contracts build on the [LazerForge](https://github.com/LazerTechnologies/LazerFo
 
 Every game lever is versioned, evented configuration:
 
-| Lever                | Meaning                                                 | Illustrative default      |
-| -------------------- | ------------------------------------------------------- | ------------------------- |
-| `alpha`              | Selection curve `weight ∝ 1/NAV^alpha`                  | `1.0`                     |
-| `surcharge`          | House edge on the harmonic-mean Rip price               | `0.10`                    |
-| `emission_epoch`     | Game-token budget streamed to Creators per epoch        | published schedule        |
-| `convexity`          | Restock reward `∝ gap^convexity`                        | `2`                       |
-| controller `gain`    | Sensitivity of restock flow to yield differences        | `~8`                      |
-| `target_inventory_t` | Per-ticker inventory target — sets the desired draw mix | equal (→ 84/10/6 example) |
-| `B_min` / dust guard | Optional floor to cap any single Pack's draw weight     | versioned                 |
-| Asset status         | `addAsset` / `removeAsset` / freeze / delist            | per ticker                |
-| `staleAfter`         | Per-ticker oracle staleness bound (circuit breaker)     | per feed                  |
+| Lever                | Meaning                                                                                                                        | Illustrative default      |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
+| `alpha`              | Selection curve `weight ∝ 1/NAV^alpha`                                                                                         | `1.0`                     |
+| `surcharge`          | House edge on the harmonic-mean Rip price                                                                                      | `0.10`                    |
+| `emission_epoch`     | Game-token budget streamed to Creators per epoch                                                                               | published schedule        |
+| `convexity`          | Restock reward `∝ gap^convexity`                                                                                               | `2`                       |
+| controller `gain`    | Sensitivity of restock flow to yield differences                                                                               | `~8`                      |
+| `target_inventory_t` | Per-ticker inventory target — sets the desired draw mix                                                                        | equal (→ 84/10/6 example) |
+| `minPackNav`         | **Owner-set minimum Pack NAV** (`setMinPackNav`) — eligibility floor, price floor, and dust / draw-monopolization guard in one | required, `> 0`           |
+| `poolMax`            | Maximum Pack NAV — caps the upper price bound                                                                                  | versioned                 |
+| Asset status         | `addAsset` / `removeAsset` / freeze / delist                                                                                   | per ticker                |
+| `staleAfter`         | Per-ticker oracle staleness bound (circuit breaker)                                                                            | per feed                  |
 
 ## Safety and accounting invariants
 
@@ -153,6 +166,7 @@ Every game lever is versioned, evented configuration:
 - Each funded, eligible Trader completes at most one Rip per hourly window, enforced on-chain. Pause, insufficient balance, ineligibility, and ownership transfer fail closed.
 - Participation and eligibility state commits at window boundaries: Trader enable/pause/Pool changes and Pack listings/top-ups apply to the next window; mid-window checks remove Packs fail-closed but never add them.
 - Odds are exactly `weight_i / Σ weight_j` with `weight_i = SCALE / N_i^alpha` over the frozen eligible set; a frozen ticker contributes zero weight and zero price basket. In V1 the draw is a disclosed House operation; the eligible set, outcome, and settlements are on-chain and auditable.
+- The Rip price is bounded to `[minPackNav, poolMax] × (1 + surcharge)`. `minPackNav` (owner-set, `> 0`) is enforced as both the eligibility floor and the price floor: a Pack whose fresh NAV is below it is excluded fail-closed, an empty eligible set executes no Rip, and settlement clamps the price into the published band even if a feed slips a checkpoint.
 - Rip settlement conserves the full payment: a bounded protocol cut plus a pro-rata acquisition-fee distribution to resting eligible Packs, with the drawn Pack and its full basket transferring to the Trader.
 - Redemption releases a Pack's full recorded raw-token basket with zero protocol fee. Stale or unavailable oracle data makes NAV-dependent eligibility and pricing fail closed; oracle or scheduler failure cannot rewrite custody or permanently block the defined exit — including after the Season ends.
 - Game-token emission can never exceed its capped Season allocation, enforced in the token contract independently of any posted Claim Root. All entitlements are reproducible by third parties from confirmed records.
@@ -169,6 +183,7 @@ On Robinhood Chain testnet, independent participants can create and fund eligibl
 
 - an enabled Trader completes no more than one Rip per hourly window;
 - selection comes from the published eligible set with odds `∝ 1/NAV^alpha`, and the Rip price equals `harmonic_mean × (1 + surcharge)` over that set;
+- a Pack whose NAV is below `minPackNav` is excluded from selection, and the Rip price never settles below `minPackNav × (1 + surcharge)` nor above `poolMax × (1 + surcharge)`;
 - the drawn Pack and payment settle exactly once, with the fee split recorded;
 - emission accounting is reproducible from confirmed records and stays within the capped allocation;
 - freezing an asset removes it from odds and price and reroutes draws; unfreezing restores it;
@@ -186,7 +201,7 @@ On Robinhood Chain testnet, independent participants can create and fund eligibl
 ## Open decisions before implementation planning
 
 - **Settlement/fee split precision.** The pro-rata acquisition-fee distribution vs. any direct payment to the drawn Creator, and the exact protocol-cut fraction, are the least-pinned economics. The default here (emissions + fee-share as the Creator's return; no per-Pack sale payment) is what makes the controller direction correct and should be validated on the reference sim before contract constants are frozen.
-- **Dynamic vs. fixed Rip price for the launch Pool**, and whether a dust-backing floor (`B_min`) is needed for the chosen asset set.
+- **Dynamic vs. fixed Rip price for the launch Pool** (default dynamic). The `minPackNav` floor is required either way; its launch value for the chosen asset set is a tuning decision, not an on/off question.
 - **Controller tuning for the live asset set**: `target_inventory`, `gain`, `convexity`, and `emission_epoch` calibrated on the sim once the final whitelist and expected `lambda` are known.
 - **Game-token ticker and exact allocation split.**
 - **Oracle/TWAP window and `staleAfter` per feed**, and halt-detection wiring for the keeper that drives `setStatus(Frozen)`.

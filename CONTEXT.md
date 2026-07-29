@@ -13,7 +13,7 @@ The single, settled act of a Trader paying the Rip Price and receiving one Pack 
 _Avoid_: open, buy, pull
 
 **Rip Price**:
-The stablecoin price a Trader pays per Rip in a given Pool. By default dynamic: `harmonic_mean(eligible NAVs) × (1 + surcharge)` — the expected value of the draw plus the house edge. A fixed price is a valid Pool configuration.
+The stablecoin price a Trader pays per Rip in a given Pool. By default dynamic: `harmonic_mean(eligible NAVs) × (1 + surcharge)` — the expected value of the draw plus the house edge. Bounded to `[minPackNav, poolMax] × (1 + surcharge)`, where `minPackNav` is the owner-set NAV floor (`setMinPackNav`) that serves as both price floor and dust guard. A fixed price is a valid Pool configuration.
 _Avoid_: entry fee, ticket price
 
 **Trader**:
