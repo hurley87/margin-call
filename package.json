@@ -23,6 +23,7 @@
     "verify:mockusd": "tsx scripts/verify-mockusd.ts",
     "deploy:packcustody": "tsx scripts/deploy-packcustody.ts",
     "verify:packcustody": "tsx scripts/verify-packcustody.ts",
+    "deploy:asset-registry": "tsx scripts/deploy-asset-registry.ts",
     "audit:prod": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "audit:all:gated": "node scripts/audit-all-gated.mjs",
