@@ -112,6 +112,43 @@ contract PackCustodyFuzzTest is PackCustodyFixture {
         }
     }
 
+    function testFuzz_mintReleaseUnwrapMovesTheWholeBasketToTheRecipient(uint8 maskSeed, uint256 amountSeed)
+        public
+    {
+        address ripEngine = makeAddr("ripEngine");
+        bytes32 role = packs.RIP_ENGINE_ROLE();
+        vm.prank(admin);
+        packs.grantRole(role, ripEngine);
+
+        uint256[5] memory creatorStart = _balances(creator);
+        uint256[5] memory buyerStart = _balances(buyer);
+
+        (address[] memory assets, uint256[] memory amounts) = _maskedBasket(maskSeed, amountSeed);
+
+        vm.prank(creator);
+        uint256 tokenId = packs.mint(assets, amounts);
+
+        vm.prank(ripEngine);
+        packs.releaseToRecipient(tokenId, buyer);
+
+        assertFalse(packs.isListed(tokenId));
+        for (uint256 i; i < assets.length; ++i) {
+            assertEq(packs.basketAmountOf(tokenId, assets[i]), amounts[i]);
+        }
+
+        vm.prank(buyer);
+        packs.unwrap(tokenId);
+
+        for (uint256 i; i < 5; ++i) {
+            address asset = whitelist[i];
+            uint256 spent = creatorStart[i] - MockStockToken(asset).balanceOf(creator);
+            uint256 gained = MockStockToken(asset).balanceOf(buyer) - buyerStart[i];
+
+            assertEq(gained, spent);
+            assertEq(MockStockToken(asset).balanceOf(address(packs)), 0);
+        }
+    }
+
     function testFuzz_topUpsAccumulateAndRedeemReturnsTheTotal(
         uint8 mintMask,
         uint256 mintSeed,
@@ -199,6 +236,38 @@ contract PackCustodyFuzzTest is PackCustodyFixture {
         }
         for (uint256 i; i < 5; ++i) {
             assertGe(MockStockToken(whitelist[i]).balanceOf(otherCreator), otherStart[i]);
+        }
+    }
+
+    function testFuzz_releasingOnePackNeverDrawsOnAnothersBasket(uint8 maskSeed, uint256 amountSeed) public {
+        address ripEngine = makeAddr("ripEngine");
+        bytes32 role = packs.RIP_ENGINE_ROLE();
+        vm.prank(admin);
+        packs.grantRole(role, ripEngine);
+
+        (address[] memory assets, uint256[] memory amounts) = _maskedBasket(maskSeed, amountSeed);
+
+        vm.prank(creator);
+        uint256 first = packs.mint(assets, amounts);
+
+        vm.prank(otherCreator);
+        uint256 second = packs.mint(assets, amounts);
+
+        vm.prank(ripEngine);
+        packs.releaseToRecipient(first, buyer);
+
+        for (uint256 i; i < assets.length; ++i) {
+            assertEq(packs.basketAmountOf(first, assets[i]), amounts[i]);
+            assertEq(packs.basketAmountOf(second, assets[i]), amounts[i]);
+            assertEq(MockStockToken(assets[i]).balanceOf(address(packs)), amounts[i] * 2);
+        }
+
+        vm.prank(buyer);
+        packs.unwrap(first);
+
+        for (uint256 i; i < assets.length; ++i) {
+            assertEq(packs.basketAmountOf(second, assets[i]), amounts[i]);
+            assertEq(MockStockToken(assets[i]).balanceOf(address(packs)), amounts[i]);
         }
     }
 }

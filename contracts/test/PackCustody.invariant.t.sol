@@ -11,6 +11,7 @@ import {MockStockToken} from "./mocks/MockStockToken.sol";
 contract PackCustodyHandler is Test {
     PackCustody public immutable PACKS;
     address public immutable WHITELIST_ADMIN;
+    address public immutable RIP_ENGINE;
 
     address[] public assets;
     address[] public actors;
@@ -32,9 +33,10 @@ contract PackCustodyHandler is Test {
 
     uint256[] public terminatedPacks;
 
-    constructor(PackCustody packs_, address[] memory assets_, address whitelistAdmin_) {
+    constructor(PackCustody packs_, address[] memory assets_, address whitelistAdmin_, address ripEngine_) {
         PACKS = packs_;
         WHITELIST_ADMIN = whitelistAdmin_;
+        RIP_ENGINE = ripEngine_;
         assets = assets_;
 
         actors.push(makeAddr("handlerActor0"));
@@ -91,6 +93,21 @@ contract PackCustodyHandler is Test {
 
         vm.prank(owner);
         PACKS.transferFrom(owner, to, tokenId);
+    }
+
+    /// @dev RipEngine settlement path: moves a listed Pack without touching basket ERC-20s.
+    function releasePack(uint256 packSeed, uint256 recipientSeed) external {
+        if (livePacks.length == 0) return;
+        uint256 tokenId = livePacks[bound(packSeed, 0, livePacks.length - 1)];
+        if (!PACKS.isListed(tokenId)) return;
+
+        address recipient = _actor(recipientSeed);
+        if (recipient == PACKS.ownerOf(tokenId)) return;
+
+        vm.prank(RIP_ENGINE);
+        PACKS.releaseToRecipient(tokenId, recipient);
+
+        ghostSeenUnlisted[tokenId] = true;
     }
 
     function redeemPack(uint256 packSeed) external {
@@ -242,6 +259,7 @@ contract PackCustodyInvariantTest is StdInvariant, Test {
 
     address internal admin = makeAddr("admin");
     address internal whitelistAdmin = makeAddr("whitelistAdmin");
+    address internal ripEngine = makeAddr("ripEngine");
 
     address[] internal assets;
 
@@ -254,20 +272,22 @@ contract PackCustodyInvariantTest is StdInvariant, Test {
 
         packs = new PackCustody(admin, assets);
 
-        bytes32 role = packs.WHITELIST_ADMIN_ROLE();
-        vm.prank(admin);
-        packs.grantRole(role, whitelistAdmin);
+        vm.startPrank(admin);
+        packs.grantRole(packs.WHITELIST_ADMIN_ROLE(), whitelistAdmin);
+        packs.grantRole(packs.RIP_ENGINE_ROLE(), ripEngine);
+        vm.stopPrank();
 
-        handler = new PackCustodyHandler(packs, assets, whitelistAdmin);
+        handler = new PackCustodyHandler(packs, assets, whitelistAdmin, ripEngine);
 
-        bytes4[] memory selectors = new bytes4[](7);
+        bytes4[] memory selectors = new bytes4[](8);
         selectors[0] = PackCustodyHandler.mintPack.selector;
         selectors[1] = PackCustodyHandler.topUpPack.selector;
         selectors[2] = PackCustodyHandler.transferPack.selector;
-        selectors[3] = PackCustodyHandler.redeemPack.selector;
-        selectors[4] = PackCustodyHandler.unwrapPack.selector;
-        selectors[5] = PackCustodyHandler.churnWhitelist.selector;
-        selectors[6] = PackCustodyHandler.observeListing.selector;
+        selectors[3] = PackCustodyHandler.releasePack.selector;
+        selectors[4] = PackCustodyHandler.redeemPack.selector;
+        selectors[5] = PackCustodyHandler.unwrapPack.selector;
+        selectors[6] = PackCustodyHandler.churnWhitelist.selector;
+        selectors[7] = PackCustodyHandler.observeListing.selector;
 
         targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
