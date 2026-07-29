@@ -21,7 +21,7 @@ The asset set is **curated and owner-controlled** — only whitelisted, deep-liq
 ## Actors
 
 - **User** — anyone with a wallet. Rips Packs (Taker) and/or creates them (Maker). No intermediary identity, no automation, no manager. Ripped Packs land directly in the user's wallet as ERC-721s.
-- **Maker** — a user in the create role: funds a Pack with an approved stock basket and provides it as inventory. Earns the socialized Acquisition Fee (stablecoin) plus Creator Emissions (token) while the Pack rests. "Maker" is short for market maker; the surcharge is the maker's spread.
+- **Maker** — a user in the create role: funds a Pack with an approved stock basket and provides it as inventory. Earns the socialized Acquisition Fee (stablecoin) plus Maker Emissions (token) while the Pack rests. "Maker" is short for market maker; the surcharge is the maker's spread.
 - **Taker** — a user in the rip role. Pays the live Rip price, receives a randomly drawn Pack, earns a share of the participation pot. (The ripping action is a "Rip"; a Taker is the counterparty to a Maker.)
 - **House** — operator of selection/scheduling infrastructure, and in V1 the **seed Maker** that deposits and tops up Packs to hold the target composition. As operator it can affect liveness but can never alter custody it does not own, change price, odds, or block a holder's exit; as seed Maker it funds its own Packs like any user, with no privileged custody.
 
@@ -29,7 +29,7 @@ The asset set is **curated and owner-controlled** — only whitelisted, deep-liq
 
 1. A **Maker** creates and fully funds a Pack with an approved basket of tokenized-stock ERC-20s (USD NAV within `[minPackNav, poolMax]`). The protocol records the immutable basket accounting and publishes contents, oracle NAV, and redemption terms.
 2. The Pack rests in the **global pool**, eligible while it passes objective checks — approved assets, full funding, fresh oracle NAV within the band, non-frozen assets.
-3. While resting, the Maker accrues an **equal-rate share of the Acquisition Fee** (stablecoin) and **Creator Emissions** (token).
+3. While resting, the Maker accrues an **equal-rate share of the Acquisition Fee** (stablecoin) and **Maker Emissions** (token).
 4. A **Taker** rips **up to `maxBatchSize` Packs in one transaction**. The Rip price is computed **live** off the eligible set at transaction start: `rip_price = harmonic_mean × (1 + surcharge)`, paid per Pack. The protocol draws that many **distinct** Packs with probability `∝ 1/NAV^α` (without replacement).
 5. Each drawn Pack and its full basket transfer to the Taker's wallet; that Pack stops accruing. The Rip payment is split — a **protocol cut taken from the surcharge only** — and the remainder (the full base plus the rest of the surcharge) is socialized equally across the still-resting Packs.
 6. The Taker earns a share of the **daily participation pot** for confirmed Rips.
@@ -91,7 +91,7 @@ Conservation, per Rip: the Taker pays `rip_price` and receives a basket worth `N
 
 The game token compensates _steering_, not survival — Makers are already made whole in stablecoin. V1 ships the **plumbing** and defers the controller.
 
-- **Creator Emissions** — a capped, continuous stream to Makers, **equal per resting Pack per epoch** (epoch = 1 day) in V1. The gap-weighted **restock controller** (`∝ gap^convexity ÷ inventory`, with per-asset `target_inventory`, `gain ≈ 8`, `convexity = 2`) that steers composition is a **post-V1** mechanism — it has no economic pull while the token is transfer-locked and the House manages composition.
+- **Maker Emissions** — a capped, continuous stream to Makers, **equal per resting Pack per epoch** (epoch = 1 day) in V1. The gap-weighted **restock controller** (`∝ gap^convexity ÷ inventory`, with per-asset `target_inventory`, `gain ≈ 8`, `convexity = 2`) that steers composition is a **post-V1** mechanism — it has no economic pull while the token is transfer-locked and the House manages composition.
 - **Participation Rewards** — a **daily pot** split among that epoch's confirmed Rips, so a Taker sees tokens earned. Bounded by the pot; never an uncapped per-Rip mint.
 - **Plumbing** — both streams are computed off-chain from confirmed on-chain records by a published, reproducible algorithm and paid via per-epoch **merkle Claim Roots**; the token contract **hard-caps** each allocation independently of any posted root, so a bad root can never inflate supply.
 - **Posture** — fixed maximum supply; **transfer-locked and earn-only** at launch, behind a one-way, irreversible, time-delayed transfer-enable switch exercisable only as a separately approved post-V1 decision. The token carries no selection weight, cadence benefit, redemption right, staking yield, or revenue share. Total supply and the Maker/Taker allocation split are open.
@@ -122,7 +122,7 @@ Every lever is versioned, evented configuration:
 | `maxBatchSize`                                     | Max Packs a Taker may rip per transaction                     | `5`                  |
 | Asset status                                       | `addAsset` / `removeAsset` / freeze / delist                  | per ticker           |
 | `staleAfter`                                       | Per-ticker oracle staleness bound (circuit breaker)           | per feed             |
-| emission budgets                                   | Capped Creator-Emission stream + daily participation pot      | TBD                  |
+| emission budgets                                   | Capped Maker-Emission stream + daily participation pot        | TBD                  |
 | _post-V1_: `target_inventory`, `gain`, `convexity` | Restock-controller tuning (no V1 effect)                      | —                    |
 
 ## Safety and accounting invariants
@@ -149,7 +149,7 @@ On Robinhood Chain testnet, independent users can create and fund Packs, inspect
 - selection comes from the live eligible set with odds `∝ 1/NAV^alpha`, and `rip_price = harmonic_mean × (1 + surcharge)` over that set;
 - a Pack below `minPackNav` is excluded, and the Rip price never settles outside `[minPackNav, poolMax] × (1 + surcharge)`;
 - a Taker can rip up to `maxBatchSize` distinct Packs in one tx; each drawn Pack and payment settle exactly once with the fee split recorded, and the base is fully socialized to resting Packs;
-- Creator-emission and participation-pot accounting are reproducible from confirmed records and stay within their capped allocations;
+- Maker-emission and participation-pot accounting are reproducible from confirmed records and stay within their capped allocations;
 - freezing an asset removes it from odds and price and reroutes draws; unfreezing restores it;
 - insufficient funds and stale stock-oracle data fail closed; the peg is trusted at par with no depeg path;
 - holders can unwrap/redeem the full basket directly; redemption is always available.
@@ -164,7 +164,7 @@ On Robinhood Chain testnet, independent users can create and fund Packs, inspect
 
 ## Open decisions before implementation planning
 
-- **`protocolShareOfSurcharge`**, total token supply, and the Creator-Emission / Participation-pot allocation split.
+- **`protocolShareOfSurcharge`**, total token supply, and the Maker-Emission / Participation-pot allocation split.
 - **Emission epoch details** (daily assumed): integer-rounding and empty-epoch treatment.
 - **Batch pricing detail:** confirm snapshot-at-tx-start (vs. reprice per draw within a batch) for `maxBatchSize > 1`.
 - **Oracle/TWAP window and `staleAfter` per feed**, and the keeper wiring that drives `setStatus(Frozen)` on a real trading halt.
