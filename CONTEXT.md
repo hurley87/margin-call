@@ -1,6 +1,6 @@
 # Margin Call
 
-A fixed-price Pack-ripping game on Robinhood Chain: creators permissionlessly fund Packs of tokenized stocks, and Traders rip one Pack per hourly window at a fixed price, selected uniformly at random.
+A Pack-ripping game on Robinhood Chain with one global pool. Makers permissionlessly fund Packs of tokenized stocks; Takers rip Packs (up to a batch cap) at a price that tracks the expected value of the draw. Packs are drawn with probability inversely weighted by NAV. There are no windows, Seasons, or automated trader agents — a user acts directly as Maker and/or Taker.
 
 ## Language
 
@@ -9,50 +9,63 @@ A transferable ERC-721 backed by a recorded basket of approved Stock Tokens, hel
 _Avoid_: box, crate, bundle, loot box
 
 **Rip**:
-The single, settled act of a Trader paying the Rip Price and receiving one uniformly-selected eligible Pack. A Rip settles exactly once.
-_Avoid_: open, buy, pull, draw
+The single, settled act of a Taker paying the Rip Price and receiving one Pack drawn from the eligible set with odds inversely weighted by NAV (`weight ∝ 1/NAV^alpha`). A Taker may rip up to `maxBatchSize` Packs in one transaction. A Rip settles exactly once.
+_Avoid_: open, buy, pull
 
 **Rip Price**:
-The fixed stablecoin price a Trader pays per Rip in a given Pool. Initial configuration: $25.
+The stablecoin price a Taker pays per Rip. Dynamic, computed live at Rip time: `harmonic_mean(eligible NAVs) × (1 + surcharge)` — the expected value of the draw plus the maker–taker spread. Bounded to `[minPackNav, poolMax] × (1 + surcharge)`, where `minPackNav` is the owner-set NAV floor (`setMinPackNav`) that serves as both price floor and dust guard. Every Rip is −surcharge in expectation.
 _Avoid_: entry fee, ticket price
 
-**Trader**:
-A transferable ERC-721 identity that executes at most one Rip per hourly window in its assigned Pool; its budget and portfolio are protocol custody keyed to the token, so transfer carries both. In V1 it is clockwork automation, not an autonomous agent.
-_Avoid_: agent, bot
+**Maker**:
+A user in the create role: funds a Pack with an approved stock basket and provides it as inventory. Short for market maker — provides liquidity and earns the surcharge (the maker's spread) via the Acquisition Fee, plus Maker Emissions. Made whole in stablecoin regardless of what the Pack holds.
+_Avoid_: creator, supplier, issuer
 
-**Desk Manager**:
-The human owner of a Trader who funds, configures, enables, and pauses it. Makes every discretionary choice the Trader cannot.
-_Avoid_: player, user, owner
-
-**Creator**:
-Any participant who mints and fully funds a Pack. Permissionless; no allowlist.
-_Avoid_: supplier, issuer
+**Taker**:
+A user in the rip role: pays the Rip Price, receives a randomly drawn Pack, and earns a share of the Participation Rewards pot. The counterparty to a Maker; removes liquidity and pays the spread.
+_Avoid_: player, buyer, ripper (informal only)
 
 **Pool**:
-A named tier with one stablecoin, one fixed Rip Price, published USD NAV bounds, and approved Stock Token rules. Selection happens within one Pool.
-_Avoid_: tier (as a standalone term), market
+The single global set of eligible Packs. Selection and pricing operate over one pool; band, asset set, surcharge, and fees are global protocol config. Multiple pools are a possible post-V1 expansion.
+_Avoid_: tier, market
 
 **Eligible Set**:
-The Packs in a Pool that pass all objective checks (funding, asset rules, oracle freshness, NAV bounds, anti-spam) at a checkpoint and can therefore be selected. Frozen at each window's opening boundary; mid-window checks can only remove a Pack, never add one. Uniform odds apply across this set only.
+The Packs that pass all objective checks (funding, asset rules, oracle freshness, NAV within `[minPackNav, poolMax]`, non-frozen asset) at the moment of a Rip and can therefore be drawn. Draw odds are inversely weighted by NAV. A batch of up to `maxBatchSize` is priced off one snapshot at transaction start and drawn without replacement.
 _Avoid_: inventory, supply
 
-**Selection-Eligible vs Emission-Eligible**:
-Two distinct states. A Pack is selection-eligible while its NAV is within Pool bounds ($15–$100 initial). It is emission-eligible only while its NAV is at or above the Rip Price ($25 initial). A $18-NAV Pack can be ripped but accrues no creator emissions.
+**Asset Registry**:
+The owner-controlled whitelist of approved Stock Tokens. Per asset: token address, TWAP price feed, staleness bound, status (Active/Frozen/Delisting), and live inventory. The owner can add assets, remove them (only at zero inventory), and freeze them; a frozen asset leaves both the selection weight set and the price basket until unfrozen.
+_Avoid_: allowlist (as a standalone term)
 
-**Creator Emissions**:
-The 15% game-token allocation paid pro rata (NAV × eligible time) to emission-eligible Packs over the launch season. The explicit subsidy for stocking above-price outcomes; never a return promise.
-_Avoid_: yield, rewards (reserve "rewards" for participation)
+**Acquisition Fee**:
+The Rip payment (minus the protocol cut) socialized across all resting eligible Packs at an equal rate per Pack, rather than paid to the drawn Pack's Maker (settlement Model A). A Maker's make-whole return for providing inventory. Because a Pack's expected loss rate is constant across NAV at α=1, equal-rate fees make every Pack whole; a valuable Pack earns proportionally more only through its longer dwell time in the pool.
+_Avoid_: sale proceeds, payout
 
-**Participation Rewards**:
-The separate 15% game-token allocation shared among confirmed qualifying Rips per fixed epoch pot. Below the disclosed game cost for the transfer-locked Season; on mainnet, claims are identity-gated while play stays permissionless.
-_Avoid_: cashback, rebate
+**Surcharge**:
+The maker–taker spread added to the harmonic-mean base (`rip_price = harmonic_mean × (1 + surcharge)`). Paid by the Taker and split three ways — protocol / Crown / resting Makers (equal). All cuts come from the surcharge only; the base is never touched, so Makers are always made at least whole for any `protocolShareOfSurcharge + crownShareOfSurcharge ≤ 1`.
+_Avoid_: house edge (informal only), fee (unqualified)
+
+**Crown**:
+An owner-toggleable king-of-the-hill status carve-out. The **Crowned Maker** — the single Maker with the largest total resting Pack NAV — earns `crownShareOfSurcharge` of every Rip's surcharge on top of the equal split (`0.10` when enabled, ≈1% of the rip price, carved from the Maker share). The crown only changes hands when a challenger beats the standing leader's total NAV by ≥ `crownBeatMargin` (`0.10`), preventing crown-flicker. Funded from the surcharge only, so it never breaks make-whole. Off by default in early V1 (`crownEnabled = false`).
+_Avoid_: king, jackpot (reserve "jackpot" for a Taker drawing a high-NAV Pack)
+
+**Maker Emissions**:
+A game-token stream from the owner-funded Distributor to Makers for providing inventory, at an owner-settable rate (`makerRatePerEpoch`). Not the make-whole return — that is the stablecoin Acquisition Fee; emissions are an extra steering layer. Post-V1 they are gap-weighted (the restock controller: `∝ gap^convexity ÷ inventory`) to hold the draw distribution near the owner's target. In V1 the controller is deferred and emissions ship as a simple equal-per-resting-Pack-per-epoch dress-rehearsal, because composition is House-managed and the token is transfer-locked. Never a return promise.
+_Avoid_: yield, creator emissions
+
+**Participation Rewards** (Buyer Rebate):
+A game-token rebate to Takers: a fixed daily pot (`takerPotPerEpoch`) from the Distributor, split among the day's confirmed Rips pro-rata by the surcharge each Taker paid. Because the pot is fixed, a quieter epoch returns a larger rebate per Rip automatically (no activity metric needed); a per-Rip cap (`rebatePerRipCap`, `0.10` of the pot) prevents a dead-day scoop, and unspent tokens roll forward. Paid in game token, separate from the stablecoin surcharge flow, so it softens the Taker's −EV without touching Model A. Transfer-locked in V1; earned-only.
+_Avoid_: cashback
 
 **Game Token**:
-The fixed-supply (1B) ERC-20 earned through Creator Emissions and Participation Rewards. Transfer-locked at launch; carries no selection weight, cadence benefit, or redemption right.
+A fully pre-minted, fixed-supply ERC-20 (no ongoing emission-mint authority) earned through Maker Emissions and Participation Rewards, streamed from an owner-funded Distributor. Transfer-locked user↔user at launch (Distributor→claimant transfers exempt so earning works); carries no selection weight, cadence benefit, or redemption right. The gap-weighted restock controller is a post-V1 mechanism; V1 ships only the plumbing (funded Distributor + owner-settable rates + merkle claims). Ticker is an open branding decision.
 _Avoid_: points, currency
 
+**Distributor**:
+The contract the owner funds by transferring game tokens into it; it streams Maker Emissions and Participation Rewards at owner-settable rates, paying out only tokens it holds. Its balance is the hard cap on payouts — there is no mint path — so a bad Claim Root can misallocate within the balance but can never inflate supply.
+_Avoid_: minter, treasury (reserve "treasury" for the pre-mint holder)
+
 **NAV**:
-The USD value of a Pack's recorded basket computed from approved Chainlink feeds at a checkpoint. Display/eligibility input only — custody accounting is raw token units.
+The USD value of a Pack's recorded basket computed from approved TWAP feeds at a checkpoint. Display/eligibility/pricing input only — custody accounting is raw token units. The oracle values only the stock basket; USD constants and the stablecoin are par by definition (the peg is trusted).
 _Avoid_: price, value (unqualified)
 
 **Stock Token**:
@@ -60,29 +73,21 @@ A Robinhood-issued tokenized-stock ERC-20 on the approved whitelist, resolved fr
 _Avoid_: stock, equity, asset (unqualified)
 
 **Checkpoint**:
-A defined hourly-epoch boundary or Pack interaction (Rip, top-up, claim) where fresh oracle data re-evaluates eligibility. Stale or invalid data fails closed.
+A point where fresh oracle data re-evaluates a Pack's eligibility and NAV — every Rip, top-up, and claim, plus periodic re-checks. Stale or invalid stock-feed data fails closed.
 _Avoid_: refresh, sync
 
-**Window Commitment**:
-The rule that participation and eligibility changes (Trader enable/pause/pool changes, Pack listings and top-ups) take effect at the next window boundary, so each window executes against a frozen state and reaction latency is never an edge. Delist is the exception: available anytime, at the cost of the current epoch's accrual.
-_Avoid_: lock-in, cooldown
+**Claim Root**:
+The per-epoch merkle root of off-chain-computed emission and reward entitlements, posted on-chain and reproducible by anyone from confirmed records. Claims are paid against the Distributor's funded balance; because the Distributor holds a fixed balance and cannot mint, a bad root cannot inflate supply.
+_Avoid_: payout snapshot
 
-**Season**:
-The finite 15-day launch-emission period. V1 is exactly one Season (August 4–19, 2026): when it ends, emissions and selection stop, and redemption rights remain.
-_Avoid_: launch period, phase
-
-**Desk Grant**:
-The one-time $50 mock-stablecoin deposit a new account receives at desk creation, plus its rate-limited in-app refill. Testnet-only onboarding, not a game reward.
+**Starter Grant**:
+The one-time mock-stablecoin grant a new wallet receives so it can play, plus a rate-limited refill. Testnet-only onboarding, not a game reward.
 _Avoid_: airdrop, faucet (reserve "faucet" for Robinhood's official Stock Token faucet)
 
 **Pool Statistics**:
-The live published stats of a Pool's Eligible Set (Pack count, mean/median NAV, NAV distribution). The demand-side defense against floor-flooding — transparency instead of unenforceable supply caps.
+The live published stats of the pool's Eligible Set (Pack count, harmonic-mean NAV, current Rip price, NAV distribution) so users can judge expected value before ripping.
 _Avoid_: pool health, pool quality
 
-**Claim Root**:
-The per-epoch merkle root of off-chain-computed emission and reward entitlements, posted on-chain and reproducible by anyone from confirmed records.
-_Avoid_: payout snapshot
-
 **House**:
-The operator of selection and scheduling infrastructure. Can affect liveness; can never alter custody, price, odds, or block the disclosed exit.
+The operator of selection and scheduling infrastructure, and — in V1 — the seed Maker that deposits and tops up Packs to maintain the target composition. As operator it can affect liveness but can never alter custody it does not own, change price, odds, or block the disclosed exit; as seed Maker it funds its own Packs exactly like any other user, with no privileged custody.
 _Avoid_: admin, protocol (when meaning the operator)

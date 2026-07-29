@@ -1,3 +1,0 @@
-# Defer ERC-6551 token-bound accounts to V2
-
-The game vision describes Traders as on-chain agent accounts, so a reader will expect ERC-6551. V1 deliberately ships a plain ERC-721 Trader with protocol custody keyed by tokenId: the V1 Trader is clockwork automation that only holds a stablecoin budget and received Packs, so a token-bound account adds a registry, an account implementation, and House execution-permission plumbing without changing any player-visible behavior. Transfer still carries the portfolio (custody is keyed to the token), and pause-on-transfer is a flag instead of a signing-rights revocation. 6551 arrives with the autonomous-agent V2 that actually exercises it.

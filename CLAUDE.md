@@ -4,9 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Wall Street Agent Trading Game — an AI-powered PvP trading game set on 1980s Wall Street. Players (desk managers) fund and configure AI trader agents that autonomously enter deals. Deal odds are computed mechanically (market mood + SEC heat) and `gpt-4o-mini` narrates the outcome; the Wire narrative engine uses `gpt-5-mini`. See `docs/wall-street-agent-game.md` for the full game design spec.
+Margin Call is a **NAV-weighted Pack-rip game** on Robinhood Chain. One global pool; a single kind of participant — a **user** — who creates Packs of tokenized stocks (as a **Maker**) and/or rips them (as a **Taker**). Selection is inversely weighted by a Pack's USD NAV and each Rip is priced at the live expected value plus a maker–taker surcharge, so cheap Packs come up often and rich ones rarely (the jackpot). Makers are made whole by a socialized, equal-rate **Acquisition Fee** (stablecoin); a game token (**Maker Emissions** + a **Buyer-Rebate** participation pot) is a steering layer streamed from an owner-funded **Distributor**. Authoritative design: **`docs/prd-margin-call.md`** (v2.0); domain glossary: **`CONTEXT.md`** (use its vocabulary — Maker, Taker, Rip, Pack, Acquisition Fee, Surcharge, Crown, Distributor, House). Full V1 build spec: GitHub issue #297.
 
-On-chain escrow, SeatVault, Floor packet tooling, and MCP desk treasury were removed pending a rebuild. The Foundry workspace is back under `contracts/` (LazerForge-based) with MockUSD on Robinhood Chain testnet; PackCustody / RipEngine / GameToken land in later slices. See `contracts/README.md`.
+**Current implementation state — read before editing `src/` or `convex/`.** The app code still implements the _prior_ concept: a "Wall Street agent trading game" (desk managers, AI trader agents, deals, `gpt-4o-mini` outcome narration, the `gpt-5-mini` Wire engine). That code — `convex/agent/`, `convex/wire/`, `convex/deals.ts`, `convex/traders.ts`, and the matching `src/components` domains — is **legacy, being rebuilt toward the rip model above**. Treat the PRD/spec as the target, not the current game logic. On the contracts side, `contracts/` (LazerForge Foundry) has **MockUSD** and **PackCustody** built and tested; **AssetRegistry, RipEngine, GameToken, and the Distributor** land next per issue #297. See `contracts/README.md`.
 
 ## Commands
 
@@ -29,7 +29,7 @@ On-chain escrow, SeatVault, Floor packet tooling, and MCP desk treasury were rem
 
 ## Architecture
 
-The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the sole source of truth for game state.
+The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the sole source of truth for game state. _This section describes the current (legacy agent-game) backend; the rip rebuild will reshape the Convex schema/functions and add on-chain reads per `docs/prd-margin-call.md` and issue #297._
 
 - **`src/app/`** — Next.js App Router pages + HTTP boundary under `src/app/api/` (SIWA and remaining helpers). Game CRUD lives in Convex functions, not REST.
 - **`convex/`** — Backend source of truth: schema, queries/mutations/actions, agent runtime (`convex/agent/`), Wire engine (`convex/wire/`), crons (`convex/crons.ts`), CDP wallet ops (`convex/wallet.ts`).
@@ -43,8 +43,8 @@ The game runs on a Convex backend with a thin Next.js HTTP layer. Convex is the 
 - **Auth/Wallet:** Privy (email OTP, embedded EVM wallets).
 - **Database:** Convex (reactive database + scheduler/crons).
 - **Agent Wallets:** Coinbase CDP smart accounts (`@coinbase/cdp-sdk`), minted server-side per trader where still wired.
-- **AI:** Deal selection and outcome narration use `gpt-4o-mini`; the Wire narrative engine uses `gpt-5-mini`. Outcome odds are computed mechanically (market mood + SEC heat); the LLM only narrates the pre-decided result.
-- **Agent Runtime:** Convex crons (`convex/crons.ts`) — `agent-scheduler` fires every 1 min → `internal.agent.scheduler.scheduler` fans out cycles. On-chain enter/settle paths are currently stubbed/fail-closed.
+- **AI (legacy):** Deal selection and outcome narration use `gpt-4o-mini`; the Wire narrative engine uses `gpt-5-mini`. Outcome odds are computed mechanically (market mood + SEC heat); the LLM only narrates the pre-decided result. The rip model has no LLM in the core loop — selection/pricing are deterministic on-chain math — so this is legacy pending rebuild.
+- **Agent Runtime (legacy):** Convex crons (`convex/crons.ts`) — `agent-scheduler` fires every 1 min → `internal.agent.scheduler.scheduler` fans out cycles. On-chain enter/settle paths are stubbed/fail-closed. The rip model has no clockwork trader agents (users rip directly), so this runtime is legacy.
 - **Contracts:** Foundry CI on every PR; MockUSD is the protocol mock stablecoin for Desk Grants on Robinhood Chain testnet.
 
 ## Conventions
