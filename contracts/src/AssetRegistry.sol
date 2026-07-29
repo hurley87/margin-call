@@ -263,6 +263,53 @@ contract AssetRegistry is AccessControl {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // NAV — fail-closed consumed reads
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// @notice Decimal-normalized USD NAV of a Pack basket, in WAD ($1 = 1e18).
+    /// @dev Every leg must be in the price basket (Active or Delisting), with a fresh,
+    ///      valid, non-paused feed. Frozen / Unlisted / stale / invalid fail closed.
+    function navOf(address[] calldata tokens, uint256[] calldata amounts) external view returns (uint256 nav) {
+        uint256 length = tokens.length;
+        if (length == 0) revert EmptyBasket();
+        if (length != amounts.length) revert LengthMismatch();
+
+        for (uint256 i; i < length; ++i) {
+            address token = tokens[i];
+            uint256 amount = amounts[i];
+            if (amount == 0) revert ZeroAmount(token);
+
+            for (uint256 j; j < i; ++j) {
+                if (tokens[j] == token) revert DuplicateAsset(token);
+            }
+
+            nav += quote(token, amount);
+        }
+    }
+
+    /// @notice USD value of `amount` raw units of `token`, in WAD. Fail-closed.
+    function quote(address token, uint256 amount) public view returns (uint256) {
+        if (amount == 0) revert ZeroAmount(token);
+
+        Asset storage asset = _assets[token];
+        Status status = asset.status;
+        if (status == Status.Unlisted) revert AssetNotListed(token);
+        if (status == Status.Frozen) revert AssetNotInPriceBasket(token, status);
+
+        (uint256 price, uint256 updatedAt, bool paused, bool valid) = IPriceFeed(asset.feed).latestAnswer();
+        if (!valid) revert FeedInvalid(token);
+        if (paused) revert FeedPaused(token);
+        if (price == 0) revert FeedZeroPrice(token);
+        if (block.timestamp - updatedAt > asset.staleAfter) {
+            revert FeedStale(token, updatedAt, asset.staleAfter, block.timestamp);
+        }
+
+        uint8 feedDecimals = IPriceFeed(asset.feed).decimals();
+        // value_WAD = amount * price * 1e18 / (10^tokenDecimals * 10^feedDecimals)
+        return (amount * price * WAD) / (10 ** (uint256(asset.tokenDecimals) + uint256(feedDecimals)));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // Internals
     // ─────────────────────────────────────────────────────────────────────────
 
