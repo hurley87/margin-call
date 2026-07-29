@@ -1,6 +1,6 @@
 # Margin Call
 
-A fixed-price Pack-ripping game on Robinhood Chain: creators permissionlessly fund Packs of tokenized stocks, and Traders rip one Pack per hourly window at a fixed price, selected uniformly at random.
+A Pack-ripping game on Robinhood Chain: creators permissionlessly fund Packs of tokenized stocks, and Traders rip one Pack per hourly window. Packs are drawn with probability inversely weighted by NAV, and the Rip price tracks the expected value of the draw — the harmonic mean of the eligible set's NAVs plus a surcharge.
 
 ## Language
 
@@ -9,11 +9,11 @@ A transferable ERC-721 backed by a recorded basket of approved Stock Tokens, hel
 _Avoid_: box, crate, bundle, loot box
 
 **Rip**:
-The single, settled act of a Trader paying the Rip Price and receiving one uniformly-selected eligible Pack. A Rip settles exactly once.
-_Avoid_: open, buy, pull, draw
+The single, settled act of a Trader paying the Rip Price and receiving one Pack drawn from the eligible set with odds inversely weighted by NAV (`weight ∝ 1/NAV^alpha`). A Rip settles exactly once.
+_Avoid_: open, buy, pull
 
 **Rip Price**:
-The fixed stablecoin price a Trader pays per Rip in a given Pool. Initial configuration: $25.
+The stablecoin price a Trader pays per Rip in a given Pool. By default dynamic: `harmonic_mean(eligible NAVs) × (1 + surcharge)` — the expected value of the draw plus the house edge. A fixed price is a valid Pool configuration.
 _Avoid_: entry fee, ticket price
 
 **Trader**:
@@ -29,26 +29,23 @@ Any participant who mints and fully funds a Pack. Permissionless; no allowlist.
 _Avoid_: supplier, issuer
 
 **Pool**:
-A named tier with one stablecoin, one fixed Rip Price, published USD NAV bounds, and approved Stock Token rules. Selection happens within one Pool.
+A named tier with one stablecoin, a pricing rule (dynamic harmonic-mean + surcharge by default, or fixed), published USD NAV bounds, and approved Stock Token rules. Selection happens within one Pool.
 _Avoid_: tier (as a standalone term), market
 
 **Eligible Set**:
-The Packs in a Pool that pass all objective checks (funding, asset rules, oracle freshness, NAV bounds, anti-spam) at a checkpoint and can therefore be selected. Frozen at each window's opening boundary; mid-window checks can only remove a Pack, never add one. Uniform odds apply across this set only.
+The Packs in a Pool that pass all objective checks (funding, asset rules, oracle freshness, NAV bounds, non-frozen asset) at a checkpoint and can therefore be selected. Frozen at each window's opening boundary; mid-window checks can only remove a Pack, never add one. Draw odds across this set are inversely weighted by NAV (`weight ∝ 1/NAV^alpha`).
 _Avoid_: inventory, supply
 
-**Selection-Eligible vs Emission-Eligible**:
-Two distinct states. A Pack is selection-eligible while its NAV is within Pool bounds ($15–$100 initial). It is emission-eligible only while its NAV is at or above the Rip Price ($25 initial). A $18-NAV Pack can be ripped but accrues no creator emissions.
+**Asset Registry**:
+The owner-controlled whitelist of approved Stock Tokens. Per asset: token address, TWAP price feed, staleness bound, status (Active/Frozen/Delisting), and live inventory. The owner can add assets, remove them (only at zero inventory), and freeze them; a frozen asset leaves both the selection weight set and the price basket until unfrozen.
+_Avoid_: allowlist (as a standalone term)
 
 **Creator Emissions**:
-The 15% game-token allocation paid pro rata (NAV × eligible time) to emission-eligible Packs over the launch season. The explicit subsidy for stocking above-price outcomes; never a return promise.
-_Avoid_: yield, rewards (reserve "rewards" for participation)
-
-**Participation Rewards**:
-The separate 15% game-token allocation shared among confirmed qualifying Rips per fixed epoch pot. Below the disclosed game cost for the transfer-locked Season; on mainnet, claims are identity-gated while play stays permissionless.
-_Avoid_: cashback, rebate
+The game-token allocation streamed to Creators for providing inventory, shaped as a restock controller: each epoch's budget is weighted toward the assets the pool is depleting (`∝ gap^convexity`, then `÷ inventory`), so replenishment holds the draw distribution near its owner-set target. A Creator's return, alongside a pro-rata share of acquisition fees; never a return promise.
+_Avoid_: yield
 
 **Game Token**:
-The fixed-supply (1B) ERC-20 earned through Creator Emissions and Participation Rewards. Transfer-locked at launch; carries no selection weight, cadence benefit, or redemption right.
+The fixed-supply ERC-20 earned through Creator Emissions (the restock controller). Transfer-locked at launch; carries no selection weight, cadence benefit, or redemption right. Ticker is an open branding decision.
 _Avoid_: points, currency
 
 **NAV**:
