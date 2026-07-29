@@ -45,16 +45,20 @@ The maker–taker spread added to the harmonic-mean base (`rip_price = harmonic_
 _Avoid_: house edge (informal only), fee (unqualified)
 
 **Maker Emissions**:
-A capped game-token allocation streamed to Makers for providing inventory. Not the make-whole return — that is the stablecoin Acquisition Fee; emissions are an extra steering layer. Post-V1 they are gap-weighted (the restock controller: `∝ gap^convexity ÷ inventory`) to hold the draw distribution near the owner's target. In V1 the controller is deferred and emissions ship as a simple equal-per-resting-Pack-per-epoch dress-rehearsal, because composition is House-managed and the token is transfer-locked. Never a return promise.
+A game-token stream from the owner-funded Distributor to Makers for providing inventory, at an owner-settable rate (`makerRatePerEpoch`). Not the make-whole return — that is the stablecoin Acquisition Fee; emissions are an extra steering layer. Post-V1 they are gap-weighted (the restock controller: `∝ gap^convexity ÷ inventory`) to hold the draw distribution near the owner's target. In V1 the controller is deferred and emissions ship as a simple equal-per-resting-Pack-per-epoch dress-rehearsal, because composition is House-managed and the token is transfer-locked. Never a return promise.
 _Avoid_: yield, creator emissions
 
 **Participation Rewards**:
-A game-token allocation for Takers: a daily pot split among that epoch's confirmed Rips, so a Taker sees tokens earned. Bounded by the pot (never an uncapped per-Rip mint). Transfer-locked in V1; earned-only.
+A game-token stream for Takers: an owner-settable daily pot (`takerPotPerEpoch`) from the Distributor, split among that epoch's confirmed Rips, so a Taker sees tokens earned. Bounded by the pot and the Distributor's balance. Transfer-locked in V1; earned-only.
 _Avoid_: cashback, rebate
 
 **Game Token**:
-The fixed-supply ERC-20 earned through Maker Emissions and Participation Rewards. Transfer-locked at launch; carries no selection weight, cadence benefit, or redemption right. The gap-weighted restock controller that steers composition via emissions is a post-V1 mechanism; V1 ships only the emissions plumbing (continuous capped stream + merkle claims + capped mint). Ticker is an open branding decision.
+A fully pre-minted, fixed-supply ERC-20 (no ongoing emission-mint authority) earned through Maker Emissions and Participation Rewards, streamed from an owner-funded Distributor. Transfer-locked user↔user at launch (Distributor→claimant transfers exempt so earning works); carries no selection weight, cadence benefit, or redemption right. The gap-weighted restock controller is a post-V1 mechanism; V1 ships only the plumbing (funded Distributor + owner-settable rates + merkle claims). Ticker is an open branding decision.
 _Avoid_: points, currency
+
+**Distributor**:
+The contract the owner funds by transferring game tokens into it; it streams Maker Emissions and Participation Rewards at owner-settable rates, paying out only tokens it holds. Its balance is the hard cap on payouts — there is no mint path — so a bad Claim Root can misallocate within the balance but can never inflate supply.
+_Avoid_: minter, treasury (reserve "treasury" for the pre-mint holder)
 
 **NAV**:
 The USD value of a Pack's recorded basket computed from approved TWAP feeds at a checkpoint. Display/eligibility/pricing input only — custody accounting is raw token units. The oracle values only the stock basket; USD constants and the stablecoin are par by definition (the peg is trusted).
@@ -69,7 +73,7 @@ A point where fresh oracle data re-evaluates a Pack's eligibility and NAV — ev
 _Avoid_: refresh, sync
 
 **Claim Root**:
-The per-epoch merkle root of off-chain-computed emission and reward entitlements, posted on-chain and reproducible by anyone from confirmed records. The token contract hard-caps each allocation independently of any posted root.
+The per-epoch merkle root of off-chain-computed emission and reward entitlements, posted on-chain and reproducible by anyone from confirmed records. Claims are paid against the Distributor's funded balance; because the Distributor holds a fixed balance and cannot mint, a bad root cannot inflate supply.
 _Avoid_: payout snapshot
 
 **Starter Grant**:

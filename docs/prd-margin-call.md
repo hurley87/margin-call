@@ -91,10 +91,14 @@ Conservation, per Rip: the Taker pays `rip_price` and receives a basket worth `N
 
 The game token compensates _steering_, not survival — Makers are already made whole in stablecoin. V1 ships the **plumbing** and defers the controller.
 
-- **Maker Emissions** — a capped, continuous stream to Makers, **equal per resting Pack per epoch** (epoch = 1 day) in V1. The gap-weighted **restock controller** (`∝ gap^convexity ÷ inventory`, with per-asset `target_inventory`, `gain ≈ 8`, `convexity = 2`) that steers composition is a **post-V1** mechanism — it has no economic pull while the token is transfer-locked and the House manages composition.
-- **Participation Rewards** — a **daily pot** split among that epoch's confirmed Rips, so a Taker sees tokens earned. Bounded by the pot; never an uncapped per-Rip mint.
-- **Plumbing** — both streams are computed off-chain from confirmed on-chain records by a published, reproducible algorithm and paid via per-epoch **merkle Claim Roots**; the token contract **hard-caps** each allocation independently of any posted root, so a bad root can never inflate supply.
-- **Posture** — fixed maximum supply; **transfer-locked and earn-only** at launch, behind a one-way, irreversible, time-delayed transfer-enable switch exercisable only as a separately approved post-V1 decision. The token carries no selection weight, cadence benefit, redemption right, staking yield, or revenue share. Total supply and the Maker/Taker allocation split are open.
+**Emission is a funded Distributor, not a mint.** The GameToken is a plain fixed-supply ERC-20, **fully minted at deploy to the treasury — there is no ongoing emission-mint authority.** The owner **funds a Distributor contract by transferring tokens into it** and sets the stream rates on-chain; it pays out only tokens it holds. This makes **the Distributor's balance the hard cap by construction**: a bad Claim Root can misallocate _within_ the funded balance but can never inflate supply, because there is no mint path to inflate.
+
+- **Maker Emissions** — a continuous stream from the Distributor to Makers, **equal per resting Pack per epoch** (epoch = 1 day) in V1, at an **owner-settable rate** (`makerRatePerEpoch`). The gap-weighted **restock controller** (`∝ gap^convexity ÷ inventory`, per-asset `target_inventory`, `gain ≈ 8`, `convexity = 2`) that steers composition is a **post-V1** mechanism — no economic pull while the token is transfer-locked and the House manages composition.
+- **Participation Rewards** — an **owner-settable daily pot** (`takerPotPerEpoch`) from the Distributor, split among that epoch's confirmed Rips, so a Taker sees tokens earned. Bounded by the pot and the Distributor balance.
+- **Claims** — both streams are computed off-chain from confirmed on-chain records by a published, reproducible algorithm and claimed against the Distributor's held balance via per-epoch **merkle Claim Roots**; anyone can recompute any epoch.
+- **Posture** — fixed maximum supply, all minted at deploy. **Transfer-locked user↔user at launch** (Distributor→claimant transfers are exempt so earning works), behind a one-way, irreversible, time-delayed transfer-enable switch exercisable only as a separately approved post-V1 decision. The token carries no selection weight, cadence benefit, redemption right, staking yield, or revenue share.
+
+**Recommended V1 funding (starting points, all owner-adjustable):** `1,000,000,000` max supply; fund the Distributor with **~30% (≈300M)** for V1, reserving the rest for the post-V1 controller and future use; weight the split **~60/40 toward Takers** (the token is a Taker's only upside since Rips are −EV, whereas Makers are already made whole by fees and, in V1, House-seeded). Set `makerRatePerEpoch` / `takerPotPerEpoch` so the funded balance streams over the intended test horizon; adjust or top up by transfer as activity dictates.
 
 ## Asset Registry — owner-controlled, curated
 
@@ -112,18 +116,18 @@ The oracle values only the **volatile side — the tokenized stocks** — to com
 
 Every lever is versioned, evented configuration:
 
-| Lever                                              | Meaning                                                       | Illustrative default |
-| -------------------------------------------------- | ------------------------------------------------------------- | -------------------- |
-| `alpha`                                            | Selection curve `weight ∝ 1/NAV^alpha`                        | `1.0`                |
-| `surcharge`                                        | Maker–taker spread on the harmonic-mean Rip price             | `0.10`               |
-| `protocolShareOfSurcharge`                         | Fraction of the surcharge the protocol keeps (`[0,1]`)        | TBD                  |
-| `minPackNav`                                       | **Min Pack NAV** — eligibility floor, price floor, dust guard | `$20`, required `>0` |
-| `poolMax`                                          | Max Pack NAV — caps the upper price bound / jackpot multiple  | `$300`               |
-| `maxBatchSize`                                     | Max Packs a Taker may rip per transaction                     | `5`                  |
-| Asset status                                       | `addAsset` / `removeAsset` / freeze / delist                  | per ticker           |
-| `staleAfter`                                       | Per-ticker oracle staleness bound (circuit breaker)           | per feed             |
-| emission budgets                                   | Capped Maker-Emission stream + daily participation pot        | TBD                  |
-| _post-V1_: `target_inventory`, `gain`, `convexity` | Restock-controller tuning (no V1 effect)                      | —                    |
+| Lever                                              | Meaning                                                                    | Illustrative default |
+| -------------------------------------------------- | -------------------------------------------------------------------------- | -------------------- |
+| `alpha`                                            | Selection curve `weight ∝ 1/NAV^alpha`                                     | `1.0`                |
+| `surcharge`                                        | Maker–taker spread on the harmonic-mean Rip price                          | `0.10`               |
+| `protocolShareOfSurcharge`                         | Fraction of the surcharge the protocol keeps (`[0,1]`)                     | TBD                  |
+| `minPackNav`                                       | **Min Pack NAV** — eligibility floor, price floor, dust guard              | `$20`, required `>0` |
+| `poolMax`                                          | Max Pack NAV — caps the upper price bound / jackpot multiple               | `$300`               |
+| `maxBatchSize`                                     | Max Packs a Taker may rip per transaction                                  | `5`                  |
+| Asset status                                       | `addAsset` / `removeAsset` / freeze / delist                               | per ticker           |
+| `staleAfter`                                       | Per-ticker oracle staleness bound (circuit breaker)                        | per feed             |
+| `makerRatePerEpoch` / `takerPotPerEpoch`           | Distributor stream rates, owner-settable; funded by transferring tokens in | TBD                  |
+| _post-V1_: `target_inventory`, `gain`, `convexity` | Restock-controller tuning (no V1 effect)                                   | —                    |
 
 ## Safety and accounting invariants
 
@@ -134,7 +138,7 @@ Every lever is versioned, evented configuration:
 - The Rip price is bounded to `[minPackNav, poolMax] × (1 + surcharge)`; a below-floor Pack is excluded fail-closed, an empty eligible set executes no Rip, and settlement clamps into the band.
 - Settlement conserves the full payment: `protocol_cut` from the surcharge only, remainder socialized equally across resting Packs; the drawn Pack and its full basket transfer to the Taker.
 - Redemption releases a Pack's full recorded raw-token basket with zero protocol fee. Stale/invalid stock-oracle data fails NAV-dependent eligibility and pricing closed; oracle or scheduler failure cannot rewrite custody or block the defined exit.
-- Game-token emission can never exceed its capped allocation, enforced in the token contract independently of any posted Claim Root; all entitlements are reproducible from confirmed records.
+- Game-token payouts can never exceed the Distributor's funded balance — it pays only tokens it holds and there is no emission-mint authority, so a bad Claim Root can misallocate within that balance but can never inflate supply. All entitlements are reproducible from confirmed records.
 - Ordinary external token transfers fail closed until the one-way, irreversible, time-delayed, evented transfer-enable switch is exercised (post-V1 only).
 - The stablecoin peg is trusted at par; no depeg check. Testnet assets and the game token are visibly labelled valueless test assets. V1 makes no mainnet, yield, appreciation, or guaranteed-profit claim.
 
@@ -164,7 +168,7 @@ On Robinhood Chain testnet, independent users can create and fund Packs, inspect
 
 ## Open decisions before implementation planning
 
-- **`protocolShareOfSurcharge`**, total token supply, and the Maker-Emission / Participation-pot allocation split.
+- **`protocolShareOfSurcharge`** (revenue-vs-Maker-margin dial). Token supply/funding have recommended starting points (1B supply, ~30% funded to the Distributor, ~60/40 Taker-weighted); still open are the exact `makerRatePerEpoch` / `takerPotPerEpoch` and the intended stream horizon.
 - **Emission epoch details** (daily assumed): integer-rounding and empty-epoch treatment.
 - **Batch pricing detail:** confirm snapshot-at-tx-start (vs. reprice per draw within a batch) for `maxBatchSize > 1`.
 - **Oracle/TWAP window and `staleAfter` per feed**, and the keeper wiring that drives `setStatus(Frozen)` on a real trading halt.
