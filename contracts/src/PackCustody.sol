@@ -59,11 +59,6 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     /// @notice Emitted the first time a Pack leaves its creator, retiring it from the pool.
     event PackUnlisted(uint256 indexed tokenId);
 
-    /// @notice Emitted when RipEngine settles a listed Pack to a recipient.
-    /// @dev Basket ERC-20s stay in custody; only ownership moves. The transfer also emits
-    ///      `PackUnlisted` via `_update`.
-    event PackReleased(uint256 indexed tokenId, address indexed from, address indexed to);
-
     /// @notice Emitted when a creator delists a Pack and takes its full basket back.
     event PackRedeemed(uint256 indexed tokenId, address indexed creator, address[] assets, uint256[] amounts);
 
@@ -90,6 +85,7 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     error NotPackHolder(uint256 tokenId, address caller);
     error PackNotListed(uint256 tokenId);
     error PackStillListed(uint256 tokenId);
+    error SelfRelease(uint256 tokenId);
 
     /// @param admin Address granted DEFAULT_ADMIN_ROLE (can grant/revoke WHITELIST_ADMIN_ROLE
     ///        and RIP_ENGINE_ROLE).
@@ -185,16 +181,17 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     /// @dev Privileged transfer: no ERC-721 approval required. Basket accounting and ERC-20
     ///      balances stay in custody; the one-way unlisted latch fires via `_update`. A Pack
     ///      settles at most once because an already-unlisted Pack reverts `PackNotListed`.
+    ///      Self-release is rejected so the latch cannot be skipped.
     /// @param tokenId The listed Pack to hand to the Taker.
     /// @param recipient The account that receives the Pack (typically the Taker).
-    function releaseToRecipient(uint256 tokenId, address recipient) external onlyRole(RIP_ENGINE_ROLE) nonReentrant {
+    function releaseToRecipient(uint256 tokenId, address recipient) external onlyRole(RIP_ENGINE_ROLE) {
         if (recipient == address(0)) revert ZeroAddress();
         if (!isListed(tokenId)) revert PackNotListed(tokenId);
 
         address from = ownerOf(tokenId);
-        _safeTransfer(from, recipient, tokenId, "");
+        if (recipient == from) revert SelfRelease(tokenId);
 
-        emit PackReleased(tokenId, from, recipient);
+        _transfer(from, recipient, tokenId);
     }
 
     /// @notice Whether a Pack is still held by its creator and can be topped up or delisted.

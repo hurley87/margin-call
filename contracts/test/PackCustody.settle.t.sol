@@ -9,20 +9,15 @@ import {PackCustodyFixture} from "./helpers/PackCustodyFixture.sol";
 /// @notice Role-gated settlement: RipEngine hands a listed Pack to a recipient without moving
 ///         basket ERC-20s — ownership + the one-way unlisted latch only.
 contract PackCustodySettleTest is PackCustodyFixture {
+    event Transfer(address indexed from, address indexed to, uint256 indexed tokenId);
     event PackUnlisted(uint256 indexed tokenId);
-    event PackReleased(uint256 indexed tokenId, address indexed from, address indexed to);
-
-    address internal ripEngine = makeAddr("ripEngine");
 
     uint256 internal packId;
 
     function setUp() public override {
         super.setUp();
+        _grantRipEngine();
         packId = _mintDefaultPack(creator);
-
-        bytes32 role = packs.RIP_ENGINE_ROLE();
-        vm.prank(admin);
-        packs.grantRole(role, ripEngine);
     }
 
     // ========== Authorization ==========
@@ -68,8 +63,9 @@ contract PackCustodySettleTest is PackCustodyFixture {
         packs.releaseToRecipient(listedPack, buyer);
     }
 
-    function test_ripEngineRoleIsNotGrantedAtConstruction() public view {
-        assertFalse(packs.hasRole(packs.RIP_ENGINE_ROLE(), admin));
+    function test_ripEngineRoleIsNotGrantedAtConstruction() public {
+        PackCustody fresh = new PackCustody(admin, whitelist);
+        assertFalse(fresh.hasRole(fresh.RIP_ENGINE_ROLE(), admin));
     }
 
     // ========== Happy path ==========
@@ -96,11 +92,11 @@ contract PackCustodySettleTest is PackCustodyFixture {
         assertEq(amzn.balanceOf(buyer), buyerAmzn);
     }
 
-    function test_releaseEmitsPackUnlistedAndPackReleased() public {
+    function test_releaseEmitsTransferAndPackUnlisted() public {
+        vm.expectEmit(true, true, true, true, address(packs));
+        emit Transfer(creator, buyer, packId);
         vm.expectEmit(true, false, false, true, address(packs));
         emit PackUnlisted(packId);
-        vm.expectEmit(true, true, true, true, address(packs));
-        emit PackReleased(packId, creator, buyer);
 
         vm.prank(ripEngine);
         packs.releaseToRecipient(packId, buyer);
@@ -132,6 +128,12 @@ contract PackCustodySettleTest is PackCustodyFixture {
         vm.expectRevert(PackCustody.ZeroAddress.selector);
         vm.prank(ripEngine);
         packs.releaseToRecipient(packId, address(0));
+    }
+
+    function test_selfReleaseReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(PackCustody.SelfRelease.selector, packId));
+        vm.prank(ripEngine);
+        packs.releaseToRecipient(packId, creator);
     }
 
     function test_unknownTokenIdReverts() public {

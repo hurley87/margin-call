@@ -95,10 +95,7 @@ contract PackCustodyLifecycleTest is PackCustodyFixture {
     // ========== mint -> top-up -> role-gated release -> unwrap ==========
 
     function test_lifecycleMintTopUpReleaseUnwrap() public {
-        address ripEngine = makeAddr("ripEngine");
-        bytes32 role = packs.RIP_ENGINE_ROLE();
-        vm.prank(admin);
-        packs.grantRole(role, ripEngine);
+        _grantRipEngine();
 
         uint256 creatorAmznStart = amzn.balanceOf(creator);
         uint256 buyerAmznStart = amzn.balanceOf(buyer);
