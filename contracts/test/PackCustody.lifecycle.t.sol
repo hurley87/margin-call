@@ -66,7 +66,7 @@ contract PackCustodyLifecycleTest is PackCustodyFixture {
         vm.prank(creator);
         uint256 tokenId = packs.mint(assets, amounts);
 
-        // Settlement moves the Pack to its new holder; the basket follows the token.
+        // Manual transfer still stands in for secondary sales; the basket follows the token.
         vm.prank(creator);
         packs.transferFrom(creator, buyer, tokenId);
 
@@ -87,6 +87,49 @@ contract PackCustodyLifecycleTest is PackCustodyFixture {
         assertEq(pltr.balanceOf(buyer), buyerPltrStart + 7e6);
 
         assertEq(amzn.balanceOf(address(packs)), 0);
+        assertEq(packs.basketOf(tokenId).length, 0);
+        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, tokenId));
+        packs.ownerOf(tokenId);
+    }
+
+    // ========== mint -> top-up -> role-gated release -> unwrap ==========
+
+    function test_lifecycleMintTopUpReleaseUnwrap() public {
+        _grantRipEngine();
+
+        uint256 creatorAmznStart = amzn.balanceOf(creator);
+        uint256 buyerAmznStart = amzn.balanceOf(buyer);
+        uint256 buyerTslaStart = tsla.balanceOf(buyer);
+
+        (address[] memory assets, uint256[] memory amounts) = _defaultBasket();
+        vm.prank(creator);
+        uint256 tokenId = packs.mint(assets, amounts);
+
+        (address[] memory addAssets, uint256[] memory addAmounts) = _pair(address(amzn), 4e18, address(tsla), 9e18);
+        vm.prank(creator);
+        packs.topUp(tokenId, addAssets, addAmounts);
+
+        assertEq(packs.basketAmountOf(tokenId, address(amzn)), 6e18);
+        assertEq(packs.basketAmountOf(tokenId, address(tsla)), 9e18);
+        assertTrue(packs.isListed(tokenId));
+
+        vm.prank(ripEngine);
+        packs.releaseToRecipient(tokenId, buyer);
+
+        assertEq(packs.ownerOf(tokenId), buyer);
+        assertFalse(packs.isListed(tokenId));
+        assertEq(packs.basketAmountOf(tokenId, address(amzn)), 6e18);
+        assertEq(packs.basketAmountOf(tokenId, address(tsla)), 9e18);
+        assertEq(amzn.balanceOf(creator), creatorAmznStart - 6e18);
+        assertEq(amzn.balanceOf(buyer), buyerAmznStart);
+
+        vm.prank(buyer);
+        packs.unwrap(tokenId);
+
+        assertEq(amzn.balanceOf(buyer), buyerAmznStart + 6e18);
+        assertEq(tsla.balanceOf(buyer), buyerTslaStart + 9e18);
+        assertEq(amzn.balanceOf(address(packs)), 0);
+        assertEq(tsla.balanceOf(address(packs)), 0);
         assertEq(packs.basketOf(tokenId).length, 0);
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, tokenId));
         packs.ownerOf(tokenId);

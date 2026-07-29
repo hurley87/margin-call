@@ -26,6 +26,7 @@ abstract contract PackCustodyFixture is Test {
     address internal otherCreator = makeAddr("otherCreator");
     address internal buyer = makeAddr("buyer");
     address internal stranger = makeAddr("stranger");
+    address internal ripEngine = makeAddr("ripEngine");
 
     function setUp() public virtual {
         // Mixed decimals mirror the real Stock Token spread rather than assuming 18 everywhere.
@@ -48,6 +49,13 @@ abstract contract PackCustodyFixture is Test {
         _fundActor(otherCreator);
         _fundActor(buyer);
         _fundActor(stranger);
+    }
+
+    /// @dev Grants `RIP_ENGINE_ROLE` to `ripEngine`. Role is not granted at construction.
+    function _grantRipEngine() internal {
+        bytes32 role = packs.RIP_ENGINE_ROLE();
+        vm.prank(admin);
+        packs.grantRole(role, ripEngine);
     }
 
     /// @dev Mints a generous balance of every token to `who` and approves custody for all of them.

@@ -201,4 +201,33 @@ contract PackCustodyFuzzTest is PackCustodyFixture {
             assertGe(MockStockToken(whitelist[i]).balanceOf(otherCreator), otherStart[i]);
         }
     }
+
+    function testFuzz_releasingOnePackNeverDrawsOnAnothersBasket(uint8 maskSeed, uint256 amountSeed) public {
+        _grantRipEngine();
+
+        (address[] memory assets, uint256[] memory amounts) = _maskedBasket(maskSeed, amountSeed);
+
+        vm.prank(creator);
+        uint256 first = packs.mint(assets, amounts);
+
+        vm.prank(otherCreator);
+        uint256 second = packs.mint(assets, amounts);
+
+        vm.prank(ripEngine);
+        packs.releaseToRecipient(first, buyer);
+
+        for (uint256 i; i < assets.length; ++i) {
+            assertEq(packs.basketAmountOf(first, assets[i]), amounts[i]);
+            assertEq(packs.basketAmountOf(second, assets[i]), amounts[i]);
+            assertEq(MockStockToken(assets[i]).balanceOf(address(packs)), amounts[i] * 2);
+        }
+
+        vm.prank(buyer);
+        packs.unwrap(first);
+
+        for (uint256 i; i < assets.length; ++i) {
+            assertEq(packs.basketAmountOf(second, assets[i]), amounts[i]);
+            assertEq(MockStockToken(assets[i]).balanceOf(address(packs)), amounts[i]);
+        }
+    }
 }

@@ -25,6 +25,9 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     /// @notice Role permitted to change which assets may be deposited.
     bytes32 public constant WHITELIST_ADMIN_ROLE = keccak256("WHITELIST_ADMIN_ROLE");
 
+    /// @notice Role permitted to settle a listed Pack to a recipient (RipEngine).
+    bytes32 public constant RIP_ENGINE_ROLE = keccak256("RIP_ENGINE_ROLE");
+
     /// @notice Whether an asset may be deposited into a Pack.
     /// @dev Entry control only. Assets already recorded in a basket stay redeemable whatever
     ///      this says later, so de-whitelisting can never strand a creator's capital.
@@ -82,8 +85,10 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
     error NotPackHolder(uint256 tokenId, address caller);
     error PackNotListed(uint256 tokenId);
     error PackStillListed(uint256 tokenId);
+    error SelfRelease(uint256 tokenId);
 
-    /// @param admin Address granted DEFAULT_ADMIN_ROLE (can grant/revoke WHITELIST_ADMIN_ROLE).
+    /// @param admin Address granted DEFAULT_ADMIN_ROLE (can grant/revoke WHITELIST_ADMIN_ROLE
+    ///        and RIP_ENGINE_ROLE).
     /// @param initialWhitelist Assets depositable at launch — the five approved Stock Tokens.
     constructor(address admin, address[] memory initialWhitelist) ERC721("Margin Call Pack (Test Asset)", "PACK") {
         if (admin == address(0)) revert ZeroAddress();
@@ -170,6 +175,23 @@ contract PackCustody is ERC721, AccessControl, ReentrancyGuard {
         (address[] memory assets, uint256[] memory amounts) = _release(tokenId, msg.sender);
 
         emit PackUnwrapped(tokenId, msg.sender, assets, amounts);
+    }
+
+    /// @notice Settle a listed Pack to `recipient` in one call (RipEngine settlement primitive).
+    /// @dev Privileged transfer: no ERC-721 approval required. Basket accounting and ERC-20
+    ///      balances stay in custody; the one-way unlisted latch fires via `_update`. A Pack
+    ///      settles at most once because an already-unlisted Pack reverts `PackNotListed`.
+    ///      Self-release is rejected so the latch cannot be skipped.
+    /// @param tokenId The listed Pack to hand to the Taker.
+    /// @param recipient The account that receives the Pack (typically the Taker).
+    function releaseToRecipient(uint256 tokenId, address recipient) external onlyRole(RIP_ENGINE_ROLE) {
+        if (recipient == address(0)) revert ZeroAddress();
+        if (!isListed(tokenId)) revert PackNotListed(tokenId);
+
+        address from = ownerOf(tokenId);
+        if (recipient == from) revert SelfRelease(tokenId);
+
+        _transfer(from, recipient, tokenId);
     }
 
     /// @notice Whether a Pack is still held by its creator and can be topped up or delisted.
