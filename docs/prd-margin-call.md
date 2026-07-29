@@ -1,49 +1,44 @@
 # Margin Call: NAV-Weighted Pack Rip
 
 - **Status:** Draft for review
-- **Version:** 1.0
+- **Version:** 2.0
 - **Target:** Robinhood Chain testnet
 - **Date:** July 29, 2026
-- **Supersedes:** the uniform-odds token PRD (`prd-margin-call-token.md`, v0.5) and the dual-pile Pack-backing spec (`spec-margin-call-pack-backing.md`), both removed. The custody, whitelist, additions-only, and zero-fee-exit invariants from those documents carry forward; their selection, pricing, and backing models do not. The seven ADRs previously in `docs/adr/` are removed and the decisions still in force are folded into this document.
+- **Supersedes:** v1.0 of this document. v2.0 collapses the inherited "AI trader agent" apparatus — clockwork Traders, Desk Managers, hourly windows, Seasons, and multi-Pool tiers are all removed — and pins the economic model (settlement, fees, price floor) through a design interview. The custody, curated-whitelist, additions-only, zero-fee-exit, and trusted-peg invariants carry forward. `CLAUDE.md` still describes the older agent concept and is a downstream doc to reconcile.
 
-Domain terms are defined in the repo glossary, [`CONTEXT.md`](../CONTEXT.md), which is being reconciled to this model in the same change.
+Domain terms are defined in the repo glossary, [`CONTEXT.md`](../CONTEXT.md), maintained alongside this document.
 
 ## Product decision
 
-Margin Call is a Pack-ripping game where the **value inside a Pack is the only thing the game reads**. A Creator deposits a basket of approved tokenized-stock ERC-20s into a Pack; the Pack's USD NAV drives how often it is drawn, what a Rip costs, and how the game token is emitted. There is no separate ETH or single-stock "backing" pile — the earlier design paired every deposit with committed collateral, and this version removes it. Collapsing value and collateral into one number (NAV) closes the gap that let Creators deposit thin Packs: contents now set both the odds and the price.
+Margin Call is a Pack-ripping game with **one global pool** and **one kind of participant — a user**, who can act as a **Maker** (create Packs) or a **Taker** (rip Packs), or both. The value inside a Pack is the only thing the game reads: a Maker deposits a basket of approved tokenized-stock ERC-20s, and the Pack's USD NAV drives how often it is drawn, what a Rip costs, and how the game token is emitted. There is no ETH or separate "backing" pile — collapsing value and collateral into one number (NAV) is what lets contents set both the odds and the price.
 
-Selection is **inversely weighted by NAV**: lightly-valued Packs are drawn often, richly-valued Packs are drawn rarely. A Rip costs the **expected value of the draw** — the harmonic mean of the eligible Packs' NAVs, plus a fixed surcharge — so the price tracks what a ripper actually receives on average and the game is a fair gamble minus a disclosed house edge. The draw itself is a disclosed trusted House operation in V1: the eligible set, the outcome, and every settlement are on-chain and auditable, but the randomness is an operator promise, not a cryptographic proof. Verifiable randomness replaces the House draw on any mainnet deployment when available on Robinhood Chain.
+**Selection is inversely weighted by NAV** (`weight ∝ 1/NAV^α`): cheap Packs are drawn often, rich Packs rarely. **A Rip costs the expected value of the draw** — the harmonic mean of the eligible Packs' NAVs, plus a surcharge — computed **live at the moment of the Rip**. Because the harmonic mean _is_ the expected NAV of the inverse-NAV draw, a Rip is a fair bet minus the surcharge: **every Rip is −surcharge in expectation**, always. That single fact removes the need for windows, cooldowns, and rip-rate limits — there is no transient positive-EV state to snipe, and a bot that rips forever simply burns the rake.
 
-Depositing is an inventory-provider role, not a per-Pack sale. When a Pack is drawn its basket transfers to the ripping Trader; the Creator's return is the game-token emissions they earn while inventory rests, plus a pro-rata share of acquisition fees — **not** a direct payment for the drawn Pack. This is what lets the game token do real work: emissions are shaped as a **restock controller** that steers which assets get replenished, holding the pool's composition — and therefore the draw distribution — near an owner-set target. Rips are disclosed negative-expected-value entertainment; the product makes no promise that the token appreciates or that any participant profits.
+This is a **maker–taker market**. Takers remove liquidity (rip a Pack out of the pool) and pay the surcharge; **Makers provide liquidity and earn it.** The full Rip payment is socialized across the resting Packs at an **equal rate per Pack** (settlement Model A), so a Maker is made whole in real stablecoin regardless of what their Pack holds — no adverse selection, and no dependence on the token's value. The game token is a _steering_ layer, not the Maker's paycheck.
 
-The asset set is **curated and owner-controlled**. Only whitelisted, liquid tickers can be deposited, which is the single highest-leverage defense against oracle manipulation: moving the real market price of a deep-liquidity name enough to game a Pack costs far more than any Pack is worth. The contract owner can add assets, remove assets, and freeze an asset (for a trading halt or a stale feed); a frozen asset drops out of both the selection weight set and the price basket until unfrozen.
+The asset set is **curated and owner-controlled** — only whitelisted, deep-liquidity tickers can be deposited, which makes oracle manipulation uneconomic. The draw is a disclosed trusted House operation in V1 (auditable eligible set and outcome; randomness is an operator promise, replaced by verifiable randomness on any mainnet deployment). Rips are disclosed negative-expected-value entertainment; the product makes no promise that the token appreciates or that anyone profits.
 
-## Why this shape (design rationale)
+## Actors
 
-Three properties of the mechanics were validated by simulation (`contracts/sim/` — see "Reference simulation"):
+- **User** — anyone with a wallet. Rips Packs (Taker) and/or creates them (Maker). No intermediary identity, no automation, no manager. Ripped Packs land directly in the user's wallet as ERC-721s.
+- **Maker** — a user in the create role: funds a Pack with an approved stock basket and provides it as inventory. Earns the socialized Acquisition Fee (stablecoin) plus Creator Emissions (token) while the Pack rests. "Maker" is short for market maker; the surcharge is the maker's spread.
+- **Taker** — a user in the rip role. Pays the live Rip price, receives a randomly drawn Pack, earns a share of the participation pot. (The ripping action is a "Rip"; a Taker is the counterparty to a Maker.)
+- **House** — operator of selection/scheduling infrastructure, and in V1 the **seed Maker** that deposits and tops up Packs to hold the target composition. As operator it can affect liveness but can never alter custody it does not own, change price, odds, or block a holder's exit; as seed Maker it funds its own Packs like any user, with no privileged custody.
 
-1. **Inverse-NAV selection + harmonic-mean pricing is EV-fair by construction.** The harmonic mean of the eligible NAVs _is_ the expected value of the inverse-NAV-weighted draw, so a Rip priced at `harmonic_mean × (1 + surcharge)` is a fair bet plus the surcharge as the only edge. With an illustrative pool of GME (≈$22), NVDA (≈$197), TSLA (≈$307) at equal inventory, a ripper usually draws the cheap name and occasionally hits the expensive one — a legible jackpot curve that falls straight out of the price spread.
+## Game loop
 
-2. **Without steering, the pool drifts.** Because cheap Packs are drawn ~14× more often than expensive ones, uncontrolled inventory bleeds its cheap assets, the harmonic mean climbs, and the game degrades into "pay a lot, usually get the expensive name." The cheap-and-frequent character that makes it fun decays away.
-
-3. **Token emission arrests the drift.** Routing deposit emissions toward the depletion gap — paying the most to restock whatever the pool is bleeding — holds the draw distribution at its target across the season. The controller is robust: a wide range of gains all hold the target, so this is a parameter to set sensibly, not a knob to balance on a knife-edge.
-
-## V1 game loop
-
-1. A Creator mints and fully funds a Pack with an approved basket of tokenized-stock ERC-20s. The protocol records the immutable basket accounting and publishes contents, oracle NAV, and redemption terms.
-2. The Pack enters a named Pool and stays selection-eligible while it satisfies objective asset, funding, oracle-freshness, and Pool NAV-bound rules at each checkpoint.
-3. A Desk Manager funds a Trader with the configured USD stablecoin, reviews the Pool's published statistics (eligible count, NAV distribution, current Rip price, harmonic-mean NAV), chooses one eligible Pool, and enables the Trader's schedule.
-4. Once per hourly window, an enabled and funded Trader may pay exactly one Rip price. It cannot Rip more often, exceed its balance, or choose among eligible Packs.
-5. At the window boundary the eligible set is frozen. The protocol draws one Pack with probability proportional to `1 / NAV^α`, using fresh oracle NAV. The draw immediately completes the Rip: the Pack and its full recorded basket transfer to the Trader, and the payment settles.
-6. The Rip payment is split into a bounded protocol cut and a pro-rata acquisition-fee distribution across the resting eligible Packs. The drawn Pack stops earning emissions; other Creators' resting Packs continue to accrue.
-7. Game-token emissions stream to Creators each epoch, weighted by the restock controller so replenishment flows to the assets the pool is depleting. Entitlements are computed off-chain from confirmed on-chain records by a published, reproducible algorithm and paid through per-epoch merkle Claim Roots posted on-chain.
-8. When the Season ends, selection and emissions stop. Unripped Packs remain redeemable by their Creators, ripped Packs remain redeemable by their holders, and earned claims remain open.
-
-If a Trader is unfunded, paused, ineligible, or the Pool cannot safely execute, it does nothing that window. Missed windows do not accumulate and cannot be replayed as a burst.
+1. A **Maker** creates and fully funds a Pack with an approved basket of tokenized-stock ERC-20s (USD NAV within `[minPackNav, poolMax]`). The protocol records the immutable basket accounting and publishes contents, oracle NAV, and redemption terms.
+2. The Pack rests in the **global pool**, eligible while it passes objective checks — approved assets, full funding, fresh oracle NAV within the band, non-frozen assets.
+3. While resting, the Maker accrues an **equal-rate share of the Acquisition Fee** (stablecoin) and **Creator Emissions** (token).
+4. A **Taker** rips **up to `maxBatchSize` Packs in one transaction**. The Rip price is computed **live** off the eligible set at transaction start: `rip_price = harmonic_mean × (1 + surcharge)`, paid per Pack. The protocol draws that many **distinct** Packs with probability `∝ 1/NAV^α` (without replacement).
+5. Each drawn Pack and its full basket transfer to the Taker's wallet; that Pack stops accruing. The Rip payment is split — a **protocol cut taken from the surcharge only** — and the remainder (the full base plus the rest of the surcharge) is socialized equally across the still-resting Packs.
+6. The Taker earns a share of the **daily participation pot** for confirmed Rips.
+7. The Taker holds each Pack as an ERC-721 and can **unwrap or redeem** the full recorded basket at any time, with zero protocol fee.
+8. Emissions accrue **continuously** (hard-capped), claimable at any time via per-epoch merkle Claim Roots. There is no Season; the game runs open-ended, and redemption is always available.
 
 ## Selection and pricing
 
-Let the eligible set (frozen at the window boundary) be Packs `1..n` with fresh USD NAVs `N_i`.
+Let the eligible set at the moment of a Rip be Packs `1..n` with fresh USD NAVs `N_i`.
 
 **Selection weight and odds**
 
@@ -52,16 +47,16 @@ weight_i = SCALE / N_i^alpha          // SCALE a fixed large constant, e.g. 1e36
 odds_i   = weight_i / Σ_j weight_j
 ```
 
-`alpha` is the selection curve (default `1.0` — straight inverse NAV). `alpha > 1` favors cheap Packs harder; `alpha = 0` is uniform. Odds are recomputed each window over the frozen set. Frozen assets and Packs failing any checkpoint are excluded from both the numerator and the denominator.
+`alpha` (default `1.0` — straight inverse NAV) is the selection curve; `alpha > 1` favors cheap Packs harder, `alpha = 0` is uniform. Frozen assets and Packs failing any check are excluded from both numerator and denominator.
 
-**Rip price (dynamic)**
+**Rip price (dynamic, live)**
 
 ```
 harmonic_mean = (Σ_i N_i) / (Σ_i 1/N_i)      // over eligible Packs
-rip_price      = harmonic_mean × (1 + surcharge)
+rip_price     = harmonic_mean × (1 + surcharge)
 ```
 
-`surcharge` is the house edge (default `10%`). Because `harmonic_mean` equals the expected NAV of the inverse-NAV-weighted draw, `rip_price` is the fair EV plus the edge. A fixed-price Pool remains a valid configuration (set a constant `rip_price`), but the default V1 Pool prices dynamically.
+`surcharge` (default `10%`) is the maker–taker spread. Pricing is evaluated live at Rip time; a batch of up to `maxBatchSize` Packs is priced off a single snapshot at transaction start and drawn without replacement. There are no windows.
 
 **Worked example** (illustrative live prices; equal inventory)
 
@@ -71,143 +66,111 @@ rip_price      = harmonic_mean × (1 + surcharge)
 | NVDA   | $196.74 | 0.0051         | ~10%       |
 | TSLA   | $307.35 | 0.0033         | ~6%        |
 
-Harmonic mean ≈ $56 (vs $175 arithmetic). Rip price ≈ $56 × 1.10 ≈ **$62**. A ripper usually draws a ~$22 GME basket and hits the ~$307 TSLA jackpot ~6% of the time.
+Harmonic mean ≈ $56 (vs $175 arithmetic). Rip price ≈ **$62**. A Taker usually draws a ~$22 GME basket and hits the ~$307 TSLA jackpot ~6% of the time.
 
-**Price floor and bounds.** The Rip price is dynamic but bounded. The harmonic mean always lies between the smallest and largest eligible NAV, and every Pack's NAV is constrained to the Pool bounds, so the price is structurally clamped to `[minPackNav × (1 + surcharge), poolMax × (1 + surcharge)]`.
+**Price floor and bounds.** The harmonic mean always lies between the smallest and largest eligible NAV, and NAV is constrained to the band, so the price is structurally clamped to `[minPackNav, poolMax] × (1 + surcharge)`. The floor **`minPackNav` is an owner-settable contract parameter and is load-bearing**, because the harmonic mean is dominated by its smallest members: one dust-NAV Pack would both crater the price and, via `1/NAV`, monopolize the draws. `minPackNav` is the price floor **and** the dust / draw-monopolization guard in one number. A Pack whose fresh NAV falls below it leaves the eligible set fail-closed; an **empty eligible set executes no Rip**; and settlement clamps the price into `[minPackNav, poolMax] × (1 + surcharge)` even if a feed slips. The launch band is **$20 → $300** (~$22 Rips, up to ~14× jackpots).
 
-The minimum-NAV floor **`minPackNav` is an owner-settable contract parameter and is load-bearing** — not an optional guard — because the harmonic mean is dominated by its smallest members. A single dust-NAV Pack would both crater the price for everyone _and_, via `1/NAV`, monopolize the draws (e.g. one `$0.50` Pack among five `$300` Packs drags the harmonic mean to ≈ `$3` and takes ~99% of draws). `minPackNav` is therefore the price floor **and** the dust / draw-monopolization guard in one number. A Pack whose fresh NAV falls below `minPackNav` leaves the eligible set (fail closed) until a checkpoint or top-up returns it. The floor is versioned, evented configuration applied prospectively via `setMinPackNav`, and never rewrites terms for existing active Packs.
+## Settlement (Model A) and the maker–taker spread
 
-Two guards complete the picture:
-
-- **Empty or degenerate eligible set fails closed:** with zero eligible Packs the harmonic mean is undefined and no Rip executes.
-- **Explicit settlement clamp (belt-and-suspenders):** the settled price is clamped to `[minPackNav × (1 + surcharge), poolMax × (1 + surcharge)]`, so a stale or mispriced feed that slips a checkpoint can never price a Rip outside the published band.
-
-The floor is asymmetric by design: the downside (dust craters the price) is the real hazard; the upside is benign — an all-expensive pool just prices near `poolMax × (1 + surcharge)` with no jackpots, which the restock controller keeps the pool off.
-
-## Game token: the restock controller
-
-The game token compensates Creators for providing inventory and, in doing so, steers the pool. Ticker is an open branding decision (candidates include `$RIP` / `$BLOW`); this document uses "the game token."
-
-**Emission shape.** Each epoch a fixed, published budget of tokens is emitted to Creators. The budget is split across whitelisted tickers by the depletion gap, then per-Pack within a ticker by inverse inventory:
+When a Pack is drawn, its basket goes to the Taker and the Maker receives **no special payout**. Instead the full Rip payment is socialized:
 
 ```
-gap_t          = max(1, target_inventory_t − inventory_t) ^ convexity
-ticker_share_t = emission_epoch × gap_t / Σ_u gap_u
-reward_per_pack(t) = ticker_share_t / inventory_t
+surcharge_$      = rip_price − harmonic_mean
+protocol_cut     = surcharge_$ × protocolShareOfSurcharge      // cut comes from the surcharge ONLY
+to_makers        = rip_price − protocol_cut                    // base + remaining surcharge
 ```
 
-Defaults from the reference simulation: `convexity = 2`, and depositor capital chases the highest per-dollar yield with a controller **gain ≈ 8** (the sensitivity of restock flow to yield differences). `target_inventory_t` is owner configuration and sets the desired draw distribution (equal inventories reproduce the 84/10/6 example). The equilibrium lives in inventory **ratios**, not absolute levels: the controller's only job is holding the tickers in proportion.
+`to_makers` is distributed **equally per resting Pack** (the Acquisition Fee). Two properties fall out:
 
-**Direction matters.** Emission must scale with draw-out pressure — pay the most to restock the _depleting_ (cheap, high-churn) asset. A value-proportional or `√(value)` shape (as in prior designs) rewards the expensive, slow-draining asset and _accelerates_ drift; the reference sim shows the target draw share decaying instead of holding.
+- **Make-whole by construction.** A Pack's expected loss rate is `draw-weight × NAV ∝ N^(1−α)`, which at `α = 1` is _constant for every Pack_. So equal-rate fees make every Pack whole regardless of NAV. A valuable Pack earns proportionally more only through **dwell time** — it's drawn rarely, so it rests ~`∝ NAV` longer and collects the equal rate that many more times. Lifetime earnings come out `∝ NAV` automatically; paying a higher _rate_ by NAV would make it `∝ NAV²` and flood the pool with expensive Packs. (If `α ≠ 1`, generalize the fee weight to `∝ N^(1−α)`.)
+- **The base is never touched by the cut.** Because the protocol cut comes only from the surcharge, Makers always get at least the full harmonic-mean base back. At `protocolShareOfSurcharge = 0` Makers keep the whole spread; at `1.0` the protocol takes the whole spread and Makers are still exactly whole.
 
-**Supply, caps, and claims.** The token has a fixed maximum supply with a bounded Season allocation for emissions; the token contract hard-caps the allocation independently of any posted Claim Root, so an incorrect root can never inflate supply. Emission and reward accounting is reproducible by anyone from confirmed on-chain records under the published algorithm. At launch the token is earned-only and transfer-locked for the entire Season, behind a one-way, irreversible, time-delayed transfer-enable switch exercisable only as a separately approved post-V1 decision. The token carries no selection weight, no cadence benefit, no redemption right, and no staking yield or revenue share.
+Conservation, per Rip: the Taker pays `rip_price` and receives a basket worth `N_drawn` (E = `harmonic_mean`, so Taker E = `−surcharge`); the protocol earns `protocol_cut`; resting Makers collectively earn `to_makers`, which exceeds the `harmonic_mean` of basket value leaving the pool by the Makers' share of the surcharge.
 
-## Architecture and roles
+## Game token (V1: plumbing only)
 
-Contracts build on the [LazerForge](https://github.com/LazerTechnologies/LazerForge) Foundry template in `contracts/`.
+The game token compensates _steering_, not survival — Makers are already made whole in stablecoin. V1 ships the **plumbing** and defers the controller.
 
-### Pack — the immediate object
+- **Creator Emissions** — a capped, continuous stream to Makers, **equal per resting Pack per epoch** (epoch = 1 day) in V1. The gap-weighted **restock controller** (`∝ gap^convexity ÷ inventory`, with per-asset `target_inventory`, `gain ≈ 8`, `convexity = 2`) that steers composition is a **post-V1** mechanism — it has no economic pull while the token is transfer-locked and the House manages composition.
+- **Participation Rewards** — a **daily pot** split among that epoch's confirmed Rips, so a Taker sees tokens earned. Bounded by the pot; never an uncapped per-Rip mint.
+- **Plumbing** — both streams are computed off-chain from confirmed on-chain records by a published, reproducible algorithm and paid via per-epoch **merkle Claim Roots**; the token contract **hard-caps** each allocation independently of any posted root, so a bad root can never inflate supply.
+- **Posture** — fixed maximum supply; **transfer-locked and earn-only** at launch, behind a one-way, irreversible, time-delayed transfer-enable switch exercisable only as a separately approved post-V1 decision. The token carries no selection weight, cadence benefit, redemption right, staking yield, or revenue share. Total supply and the Maker/Taker allocation split are open.
 
-- A transferable ERC-721 backed by a single recorded basket of approved tokenized-stock ERC-20s, held in protocol custody. There is no separate backing pile.
-- Transferring the Pack transfers the right to its recorded basket. The current holder can unwrap or redeem the full recorded basket with no protocol deduction.
-- Top-ups are additions only: the Creator, and only the Creator, may add whitelisted Stock Tokens to an unripped Pack; each top-up triggers a checkpoint effective at the next window boundary. There are no partial withdrawals — assets leave a Pack only via full delist-and-redeem or the holder's post-Rip unwrap. Published NAV can rise between checkpoints but can never be hollowed out.
-- Contents and NAV are public before selection and after transfer. Custody accounting uses raw token units; displayed NAV never replaces the recorded basket.
+## Asset Registry — owner-controlled, curated
 
-### Asset Registry — owner-controlled, curated
+- The owner maintains the whitelist. Per asset: token address, a price feed (TWAP source, per Robinhood Chain oracle guidance), a staleness bound, a status, and live inventory.
+- **Status enum:** `Active`, `Frozen` (manual halt for a trading halt), `Delisting` (deposits closed; existing Packs remain drawable so inventory drains), `Unlisted`.
+- **`addAsset`** registers a ticker + feed + staleness bound; **`setStatus`** freezes/unfreezes or begins a delist; **`removeAsset`** succeeds only at zero inventory (drain-then-delete).
+- **Freeze semantics:** a frozen asset drops out of the selection weight set **and** the harmonic-mean price basket; deposits and Rips against it are blocked, but unwrap (reclaiming one's own basket) stays open. It rejoins both sets on unfreeze.
+- **Oracle staleness is an always-on circuit breaker** independent of status: deposit and settlement both require `now − updatedAt ≤ staleAfter`, failing closed on a feed gap.
 
-- The owner maintains the whitelist. Per asset: the token address, a price feed (a TWAP source, following Robinhood Chain's oracle guidance), a staleness bound, a status, and live inventory.
-- **Status enum:** `Active` (normal), `Frozen` (manual halt — owner or keeper, for a trading halt), `Delisting` (deposits closed; existing Packs remain drawable so inventory drains), `Unlisted`.
-- **`addAsset`** registers a new ticker with its feed and staleness bound. **`setStatus`** freezes/unfreezes or begins a delist. **`removeAsset`** succeeds only at zero inventory — removal is a drain-then-delete, never a hard delete that would strand assets.
-- **Freeze semantics:** a frozen asset drops out of the selection weight set **and** the harmonic-mean price basket. Deposits and Rips against it are blocked; unwrap (reclaiming one's own basket) stays open because it is not price-dependent. On unfreeze it rejoins both sets.
-- **Oracle staleness is an always-on circuit breaker** independent of status: deposit and settlement both require `now − updatedAt ≤ staleAfter`, so a feed gap fails closed even without a manual freeze.
+## Oracle and peg
 
-### Trader — the persistent desk
-
-- A transferable ERC-721 identity. Its stablecoin budget and received Packs are protocol custody keyed to the token, so transferring the Trader carries its portfolio and public history. V1 ships without ERC-6551 token-bound accounts; they arrive with the autonomous-agent V2.
-- In V1 the Trader is clockwork automation: its only scheduled choice — made by the Desk Manager — is to Rip one Pack from one named Pool when the window opens and hard eligibility checks pass. It cannot change its own Pool, cadence, budget, or permissions.
-- Enable, pause, and Pool changes take effect at the next window boundary; a Trader committed at a boundary completes that window's Rip, so a pause bounds further exposure to at most one Rip price. Ownership changes leave the Trader paused until the new owner re-enables it.
-
-### Creator — permissionless inventory supply
-
-- Any participant may create and fully fund as many Packs as they can support; no allowlist, no per-Creator caps. Eligibility follows objective published rules for approved assets, complete funding, oracle freshness, and public contents/NAV.
-- A Creator's return is game-token emissions earned while inventory rests, plus a pro-rata share of acquisition fees — never a direct payment for a drawn Pack. Copy must disclose that a drawn Pack's basket is forfeit to the ripper and must not describe emissions or token price as a return promise.
-
-### Pool and protocol
-
-- Each Pool has a stable public name, one configured USD stablecoin, a pricing rule (dynamic harmonic-mean + surcharge by default, or a fixed price), the approved Stock Token rules, fees, and published USD NAV bounds. NAV and bounds are USD; the Rip price and fees settle in the stablecoin.
-- The Pool's minimum NAV bound **`minPackNav` is an owner-settable contract floor** (`setMinPackNav`, evented, prospective). It is load-bearing: because the harmonic price is dominated by small NAVs, the floor sets the price floor and stops a dust Pack from monopolizing draws. A Pack below the floor leaves the eligible set fail-closed, and settlement clamps the price to `[minPackNav, poolMax] × (1 + surcharge)`.
-- Rip settlement: the Trader pays the current Rip price; the payment splits into a bounded protocol cut and a pro-rata acquisition-fee distribution across resting eligible Packs. The drawn Pack and its full basket transfer to the Trader and its emissions stop. Unwrap/redemption carries no protocol fee.
-- NAV bounds and freshness are enforced at hourly-epoch checkpoints and at every Rip, top-up, and claim; calculations normalize token and feed decimals and fail closed on invalid, paused, missing, or stale data. Bound and parameter changes (`alpha`, `surcharge`, targets, gain, fees, bounds) are versioned, evented configuration applied prospectively — they never silently rewrite terms governing existing active Packs.
-- Each Pool publishes live statistics — eligible count, harmonic-mean NAV, current Rip price, and the NAV distribution — so Desk Managers can judge expected value before and while their Traders participate.
-- The House operates selection and scheduling and executes the V1 draw. It can affect liveness and, because the draw is trusted, V1 discloses that selection fairness rests on the House. The House cannot create an unfunded Pack, alter a drawn basket, charge a different price, reuse a Rip, bypass the on-chain per-window limit, mint outside the capped allocation, or block a holder's disclosed exit.
+The oracle values only the **volatile side — the tokenized stocks** — to compute a Pack's NAV. **The stablecoin peg is trusted at par (1 token = $1):** no feed is read for the stablecoin leg and no depeg check is performed. All USD-denominated constants (`minPackNav`, `poolMax`, fees) and the stablecoin leg are par by definition. The only fail-closed trust dependency is a stale or invalid stock feed.
 
 ## Owner control panel
 
-Every game lever is versioned, evented configuration:
+Every lever is versioned, evented configuration:
 
-| Lever                | Meaning                                                                                                                        | Illustrative default      |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------- |
-| `alpha`              | Selection curve `weight ∝ 1/NAV^alpha`                                                                                         | `1.0`                     |
-| `surcharge`          | House edge on the harmonic-mean Rip price                                                                                      | `0.10`                    |
-| `emission_epoch`     | Game-token budget streamed to Creators per epoch                                                                               | published schedule        |
-| `convexity`          | Restock reward `∝ gap^convexity`                                                                                               | `2`                       |
-| controller `gain`    | Sensitivity of restock flow to yield differences                                                                               | `~8`                      |
-| `target_inventory_t` | Per-ticker inventory target — sets the desired draw mix                                                                        | equal (→ 84/10/6 example) |
-| `minPackNav`         | **Owner-set minimum Pack NAV** (`setMinPackNav`) — eligibility floor, price floor, and dust / draw-monopolization guard in one | required, `> 0`           |
-| `poolMax`            | Maximum Pack NAV — caps the upper price bound                                                                                  | versioned                 |
-| Asset status         | `addAsset` / `removeAsset` / freeze / delist                                                                                   | per ticker                |
-| `staleAfter`         | Per-ticker oracle staleness bound (circuit breaker)                                                                            | per feed                  |
+| Lever                                              | Meaning                                                       | Illustrative default |
+| -------------------------------------------------- | ------------------------------------------------------------- | -------------------- |
+| `alpha`                                            | Selection curve `weight ∝ 1/NAV^alpha`                        | `1.0`                |
+| `surcharge`                                        | Maker–taker spread on the harmonic-mean Rip price             | `0.10`               |
+| `protocolShareOfSurcharge`                         | Fraction of the surcharge the protocol keeps (`[0,1]`)        | TBD                  |
+| `minPackNav`                                       | **Min Pack NAV** — eligibility floor, price floor, dust guard | `$20`, required `>0` |
+| `poolMax`                                          | Max Pack NAV — caps the upper price bound / jackpot multiple  | `$300`               |
+| `maxBatchSize`                                     | Max Packs a Taker may rip per transaction                     | `5`                  |
+| Asset status                                       | `addAsset` / `removeAsset` / freeze / delist                  | per ticker           |
+| `staleAfter`                                       | Per-ticker oracle staleness bound (circuit breaker)           | per feed             |
+| emission budgets                                   | Capped Creator-Emission stream + daily participation pot      | TBD                  |
+| _post-V1_: `target_inventory`, `gain`, `convexity` | Restock-controller tuning (no V1 effect)                      | —                    |
 
 ## Safety and accounting invariants
 
-- Every active Pack is fully backed by its recorded raw-token basket; fee and protocol-owned assets are never counted as Pack backing.
-- Pack baskets only grow before a Rip: top-ups are Creator-only additions with an immediate checkpoint; no path removes assets except full delist-and-redeem or the holder's post-Rip unwrap.
-- A Pack is drawn at most once and its Rip settles at most once. Failure and retry paths reconcile the same intent and never create a second Rip.
-- Each funded, eligible Trader completes at most one Rip per hourly window, enforced on-chain. Pause, insufficient balance, ineligibility, and ownership transfer fail closed.
-- Participation and eligibility state commits at window boundaries: Trader enable/pause/Pool changes and Pack listings/top-ups apply to the next window; mid-window checks remove Packs fail-closed but never add them.
-- Odds are exactly `weight_i / Σ weight_j` with `weight_i = SCALE / N_i^alpha` over the frozen eligible set; a frozen ticker contributes zero weight and zero price basket. In V1 the draw is a disclosed House operation; the eligible set, outcome, and settlements are on-chain and auditable.
-- The Rip price is bounded to `[minPackNav, poolMax] × (1 + surcharge)`. `minPackNav` (owner-set, `> 0`) is enforced as both the eligibility floor and the price floor: a Pack whose fresh NAV is below it is excluded fail-closed, an empty eligible set executes no Rip, and settlement clamps the price into the published band even if a feed slips a checkpoint.
-- Rip settlement conserves the full payment: a bounded protocol cut plus a pro-rata acquisition-fee distribution to resting eligible Packs, with the drawn Pack and its full basket transferring to the Trader.
-- Redemption releases a Pack's full recorded raw-token basket with zero protocol fee. Stale or unavailable oracle data makes NAV-dependent eligibility and pricing fail closed; oracle or scheduler failure cannot rewrite custody or permanently block the defined exit — including after the Season ends.
-- Game-token emission can never exceed its capped Season allocation, enforced in the token contract independently of any posted Claim Root. All entitlements are reproducible by third parties from confirmed records.
-- Ordinary external token transfers fail closed for the entire Season; the transfer-enable switch is one-way, irreversible, time-delayed, evented, and exercisable only post-V1.
-- Testnet assets and the game token are visibly labelled valueless test assets. V1 makes no mainnet, yield, appreciation, or guaranteed-profit claim.
+- Every active Pack is fully backed by its recorded raw-token basket; fee and protocol-owned assets are never counted as backing.
+- Pack baskets only grow before a Rip: top-ups are Maker-only additions; no path removes assets except full delist-and-redeem or the holder's post-Rip unwrap.
+- A Pack is drawn at most once and its Rip settles at most once; failure/retry paths reconcile the same intent.
+- Odds are exactly `weight_i / Σ weight_j` with `weight_i = SCALE / N_i^alpha` over the eligible set at Rip time; a frozen ticker contributes zero weight and zero price basket. A batch of up to `maxBatchSize` is priced off one snapshot and drawn without replacement. In V1 the draw is a disclosed House operation; eligible set, outcome, and settlements are on-chain and auditable.
+- The Rip price is bounded to `[minPackNav, poolMax] × (1 + surcharge)`; a below-floor Pack is excluded fail-closed, an empty eligible set executes no Rip, and settlement clamps into the band.
+- Settlement conserves the full payment: `protocol_cut` from the surcharge only, remainder socialized equally across resting Packs; the drawn Pack and its full basket transfer to the Taker.
+- Redemption releases a Pack's full recorded raw-token basket with zero protocol fee. Stale/invalid stock-oracle data fails NAV-dependent eligibility and pricing closed; oracle or scheduler failure cannot rewrite custody or block the defined exit.
+- Game-token emission can never exceed its capped allocation, enforced in the token contract independently of any posted Claim Root; all entitlements are reproducible from confirmed records.
+- Ordinary external token transfers fail closed until the one-way, irreversible, time-delayed, evented transfer-enable switch is exercised (post-V1 only).
+- The stablecoin peg is trusted at par; no depeg check. Testnet assets and the game token are visibly labelled valueless test assets. V1 makes no mainnet, yield, appreciation, or guaranteed-profit claim.
 
 ## Reference simulation
 
-`contracts/sim/stockrip-sim.js` (no dependencies; `node stockrip-sim.js`) models the pool as inventory dynamics: outflow `∝ 1/NAV` per draw, inflow from emission-driven restocking, with owner levers (`lambda`, `surcharge`, `alpha`, `emission`, `gain`, `convexity`, per-ticker targets, freeze) exposed at the top. It demonstrates the drift under neutral rewards, the restock controller holding the target draw share, and the freeze rerouting draws and repricing the pool. Re-run after changing the asset set or lambda before committing `RipEngine` constants.
+`contracts/sim/stockrip-sim.js` (no dependencies; `node contracts/sim/stockrip-sim.js`) models the pool as inventory dynamics — outflow `∝ 1/NAV` per draw, inflow from emission-driven restocking — with owner levers exposed at the top. It demonstrates composition drift under neutral rewards, the post-V1 restock controller holding a target draw share, and a freeze rerouting draws and repricing. Re-run after changing the asset set before committing `RipEngine` constants.
 
 ## V1 acceptance path
 
-On Robinhood Chain testnet, independent participants can create and fund eligible Packs, inspect backing and NAV, review Pool statistics, create/fund Traders, and observe without hidden operator edits:
+On Robinhood Chain testnet, independent users can create and fund Packs, inspect backing and NAV, rip Packs, and observe without hidden operator edits:
 
-- an enabled Trader completes no more than one Rip per hourly window;
-- selection comes from the published eligible set with odds `∝ 1/NAV^alpha`, and the Rip price equals `harmonic_mean × (1 + surcharge)` over that set;
-- a Pack whose NAV is below `minPackNav` is excluded from selection, and the Rip price never settles below `minPackNav × (1 + surcharge)` nor above `poolMax × (1 + surcharge)`;
-- the drawn Pack and payment settle exactly once, with the fee split recorded;
-- emission accounting is reproducible from confirmed records and stays within the capped allocation;
+- selection comes from the live eligible set with odds `∝ 1/NAV^alpha`, and `rip_price = harmonic_mean × (1 + surcharge)` over that set;
+- a Pack below `minPackNav` is excluded, and the Rip price never settles outside `[minPackNav, poolMax] × (1 + surcharge)`;
+- a Taker can rip up to `maxBatchSize` distinct Packs in one tx; each drawn Pack and payment settle exactly once with the fee split recorded, and the base is fully socialized to resting Packs;
+- Creator-emission and participation-pot accounting are reproducible from confirmed records and stay within their capped allocations;
 - freezing an asset removes it from odds and price and reroutes draws; unfreezing restores it;
-- pause, insufficient funds, stale oracle data, and ownership transfer fail closed;
-- holders can exercise transfer and redemption directly in the app; and
-- when the Season ends, selection and emissions stop while redemption and claims remain open.
+- insufficient funds and stale stock-oracle data fail closed; the peg is trusted at par with no depeg path;
+- holders can unwrap/redeem the full basket directly; redemption is always available.
 
 ## V1 launch configuration
 
-- **Season:** one finite Season on Robinhood Chain testnet. Start date and exact epoch timestamps are open configuration.
-- **Stablecoin:** the protocol deploys its own mock USD stablecoin (MockUSD, already in `contracts/`), visibly labelled valueless. The mainnet stablecoin (USDG) is verified fresh only at a separately approved mainnet deployment. **The stablecoin peg is trusted at par (1 token = $1): the protocol reads no feed for the stablecoin leg and performs no depeg or peg-sanity check.** The oracle values only the tokenized-stock basket; all USD-denominated constants (`minPackNav`, `poolMax`, fees) and the stablecoin leg are par by definition.
-- **Approved Stock Token whitelist (illustrative, owner-configurable):** GME, NVDA, TSLA — a small, deep-liquidity set chosen so oracle manipulation is uneconomic and the NAV spread produces a legible jackpot curve. Canonical addresses resolve from Robinhood's [Token Contracts](https://docs.robinhood.com/chain/contracts/) registry; feeds follow the [oracle guidance](https://docs.robinhood.com/chain/oracles-and-price-feeds/). Where canonical testnet coverage is missing, clearly labelled Test Assets and controlled feed doubles validate the same accounting and failure semantics.
-- **Desk Grant:** every new account receives a one-time mock-stablecoin deposit at desk creation plus a rate-limited in-app refill (versioned configuration).
+- **No Season.** The game runs open-ended; emissions are a continuous capped stream. "When to evaluate / go mainnet" is an off-chain decision.
+- **Stablecoin:** the protocol's own mock USD stablecoin (MockUSD, in `contracts/`), visibly labelled valueless; peg trusted at par. Mainnet stablecoin (USDG) is verified fresh only at a separately approved mainnet deployment.
+- **Approved Stock Token whitelist (owner-configurable):** **GME, NVDA, TSLA** — a small, deep-liquidity set so oracle manipulation is uneconomic and the NAV spread yields a legible jackpot curve. Canonical addresses resolve from Robinhood's [Token Contracts](https://docs.robinhood.com/chain/contracts/) registry; feeds follow the [oracle guidance](https://docs.robinhood.com/chain/oracles-and-price-feeds/). Missing testnet coverage is covered by labelled Test Assets + controlled feed doubles.
+- **Starter Grant:** a new wallet receives a one-time mock-stablecoin grant to play, plus a rate-limited refill (versioned configuration).
+- **House seeding:** the House seeds and tops up Packs to hold the target composition and guarantee the spread while permissionless Maker supply builds.
 
 ## Open decisions before implementation planning
 
-- **Settlement/fee split precision.** The pro-rata acquisition-fee distribution vs. any direct payment to the drawn Creator, and the exact protocol-cut fraction, are the least-pinned economics. The default here (emissions + fee-share as the Creator's return; no per-Pack sale payment) is what makes the controller direction correct and should be validated on the reference sim before contract constants are frozen.
-- **Dynamic vs. fixed Rip price for the launch Pool** (default dynamic). The `minPackNav` floor is required either way; its launch value for the chosen asset set is a tuning decision, not an on/off question.
-- **Controller tuning for the live asset set**: `target_inventory`, `gain`, `convexity`, and `emission_epoch` calibrated on the sim once the final whitelist and expected `lambda` are known.
-- **Game-token ticker and exact allocation split.**
-- **Oracle/TWAP window and `staleAfter` per feed**, and halt-detection wiring for the keeper that drives `setStatus(Frozen)`.
-- **Season start date and epoch timestamps**; integer-rounding and empty-epoch treatment for emissions.
-- Regulatory and consumer-protection review is waived by the owner for the testnet Season and remains a gate for any mainnet decision.
+- **`protocolShareOfSurcharge`**, total token supply, and the Creator-Emission / Participation-pot allocation split.
+- **Emission epoch details** (daily assumed): integer-rounding and empty-epoch treatment.
+- **Batch pricing detail:** confirm snapshot-at-tx-start (vs. reprice per draw within a batch) for `maxBatchSize > 1`.
+- **Oracle/TWAP window and `staleAfter` per feed**, and the keeper wiring that drives `setStatus(Frozen)` on a real trading halt.
+- **`CLAUDE.md` reconciliation** — it still describes the AI-agent trading game; update it to the Maker/Taker rip model.
+- Regulatory and consumer-protection review is waived by the owner for testnet and remains a gate for any mainnet decision.
 
 ## Relationship to mainnet
 
-Mainnet remains outside V1. If separately approved, it is a fresh deployment of the same reviewed contract logic with separately verified production configuration (canonical addresses, USDG, feed map and freshness limits, whitelist, fees, roles) plus the waived regulatory review. No testnet Pack, Trader, token, or other state migrates. Mainnet also revisits the V1 trust decisions: verifiable randomness replaces the House draw when available, and any transferable-token reward path is identity-gated at claim time while play itself stays permissionless.
+Mainnet remains outside V1. If separately approved, it is a fresh deployment of the same reviewed contract logic with separately verified production configuration (canonical addresses, USDG, feed map and freshness limits, whitelist, fees, roles) plus the waived regulatory review. No testnet state migrates. Mainnet also revisits the V1 trust decisions: verifiable randomness replaces the House draw when available, and any transferable-token reward path is identity-gated at claim time while play stays permissionless.
