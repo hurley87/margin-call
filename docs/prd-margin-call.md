@@ -194,7 +194,7 @@ On Robinhood Chain testnet, independent participants can create and fund eligibl
 ## V1 launch configuration
 
 - **Season:** one finite Season on Robinhood Chain testnet. Start date and exact epoch timestamps are open configuration.
-- **Stablecoin:** the protocol deploys its own mock USD stablecoin (MockUSD, already in `contracts/`), visibly labelled valueless. The mainnet stablecoin (USDG) is verified fresh only at a separately approved mainnet deployment.
+- **Stablecoin:** the protocol deploys its own mock USD stablecoin (MockUSD, already in `contracts/`), visibly labelled valueless. The mainnet stablecoin (USDG) is verified fresh only at a separately approved mainnet deployment. **The stablecoin peg is trusted at par (1 token = $1): the protocol reads no feed for the stablecoin leg and performs no depeg or peg-sanity check.** The oracle values only the tokenized-stock basket; all USD-denominated constants (`minPackNav`, `poolMax`, fees) and the stablecoin leg are par by definition.
 - **Approved Stock Token whitelist (illustrative, owner-configurable):** GME, NVDA, TSLA — a small, deep-liquidity set chosen so oracle manipulation is uneconomic and the NAV spread produces a legible jackpot curve. Canonical addresses resolve from Robinhood's [Token Contracts](https://docs.robinhood.com/chain/contracts/) registry; feeds follow the [oracle guidance](https://docs.robinhood.com/chain/oracles-and-price-feeds/). Where canonical testnet coverage is missing, clearly labelled Test Assets and controlled feed doubles validate the same accounting and failure semantics.
 - **Desk Grant:** every new account receives a one-time mock-stablecoin deposit at desk creation plus a rate-limited in-app refill (versioned configuration).
 
