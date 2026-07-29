@@ -169,7 +169,7 @@ On Robinhood Chain testnet, independent users can create and fund Packs, inspect
 
 - **No Season.** The game runs open-ended; emissions are a continuous capped stream. "When to evaluate / go mainnet" is an off-chain decision.
 - **Stablecoin:** the protocol's own mock USD stablecoin (MockUSD, in `contracts/`), visibly labelled valueless; peg trusted at par. Mainnet stablecoin (USDG) is verified fresh only at a separately approved mainnet deployment.
-- **Approved Stock Token whitelist (owner-configurable):** **GME, NVDA, TSLA** — a small, deep-liquidity set so oracle manipulation is uneconomic and the NAV spread yields a legible jackpot curve. Canonical addresses resolve from Robinhood's [Token Contracts](https://docs.robinhood.com/chain/contracts/) registry; feeds follow the [oracle guidance](https://docs.robinhood.com/chain/oracles-and-price-feeds/). Missing testnet coverage is covered by labelled Test Assets + controlled feed doubles.
+- **Approved Stock Token whitelist (owner-configurable):** **AMZN, AMD, NFLX, PLTR, TSLA** on Robinhood Chain testnet — addresses in [`contracts/deployments/robinhood-testnet.stock-tokens.json`](../contracts/deployments/robinhood-testnet.stock-tokens.json). Owner can retune the set via AssetRegistry. Canonical mainnet addresses resolve from Robinhood's [Token Contracts](https://docs.robinhood.com/chain/contracts/) registry; feeds follow the [oracle guidance](https://docs.robinhood.com/chain/oracles-and-price-feeds/). Missing coverage is covered by labelled Test Assets + `MockPriceFeed` doubles. _(The GME / NVDA / TSLA table above remains an odds illustration only.)_
 - **Starter Grant:** a new wallet receives a one-time mock-stablecoin grant to play, plus a rate-limited refill (versioned configuration).
 - **House seeding:** the House seeds and tops up Packs to hold the target composition and guarantee the spread while permissionless Maker supply builds.
 
@@ -179,7 +179,7 @@ On Robinhood Chain testnet, independent users can create and fund Packs, inspect
 - **Emission epoch details** (daily assumed): integer-rounding and empty-epoch treatment.
 - **Batch pricing detail:** confirm snapshot-at-tx-start (vs. reprice per draw within a batch) for `maxBatchSize > 1`.
 - **Oracle/TWAP window and `staleAfter` per feed**, and the keeper wiring that drives `setStatus(Frozen)` on a real trading halt.
-- **`CLAUDE.md` reconciliation** — it still describes the AI-agent trading game; update it to the Maker/Taker rip model.
+- **`CLAUDE.md` reconciliation** — keep in sync with the Maker/Taker rip model and current contract surface.
 - Regulatory and consumer-protection review is waived by the owner for testnet and remains a gate for any mainnet decision.
 
 ## Relationship to mainnet

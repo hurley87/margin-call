@@ -72,7 +72,20 @@ ERC-721 Packs backed by a recorded basket of whitelisted Stock Tokens held direc
 - `WHITELIST_ADMIN_ROLE` governs deposits only — de-whitelisting an asset never blocks redemption
 - Neither `WHITELIST_ADMIN_ROLE` nor `RIP_ENGINE_ROLE` is granted at construction; `DEFAULT_ADMIN_ROLE` grants them after deploy (RipEngine will receive `RIP_ENGINE_ROLE` when that contract lands)
 
-Oracle NAV, eligibility, and Rip selection live in later contracts; custody knows nothing about them.
+Oracle NAV, eligibility, and Rip selection live in AssetRegistry (and later RipEngine); custody knows nothing about them.
+
+## AssetRegistry + MockPriceFeed
+
+Owner-curated Stock Token whitelist, pool levers, and fail-closed Pack NAV (issue [#300](https://github.com/hurley87/margin-call/issues/300)):
+
+- Per asset: token address, `IPriceFeed`, `staleAfter`, status (`Active` / `Frozen` / `Delisting`), live inventory
+- `addAsset` / `setStatus` / `removeAsset` (zero inventory only); inventory adjusted via `INVENTORY_ROLE` (for RipEngine later)
+- Owner setters for `minPackNav`, `poolMax`, `alpha`, `surcharge`, `protocolShareOfSurcharge`, `maxBatchSize`, and crown params — evented and prospective
+- `navOf` / `quote` return WAD USD (`$1 = 1e18`); every consumed feed read requires fresh, valid, non-paused data or reverts
+- Frozen assets are excluded from deposits and the price basket; Delisting blocks deposits but keeps resting Packs in the basket so inventory can drain
+- `MockPriceFeed` (`src/mocks/`) is the testnet / Foundry substitution point until real Robinhood feeds are wired (#310)
+
+Canonical Stock Token map: [`deployments/robinhood-testnet.stock-tokens.json`](./deployments/robinhood-testnet.stock-tokens.json).
 
 ## Deploy (Robinhood Chain testnet)
 
@@ -117,6 +130,20 @@ pnpm verify:packcustody
 ```
 
 Writes `contracts/deployments/robinhood-testnet.packcustody.json` (address, admin, whitelist, build fingerprint, tx hash) and patches `PACKCUSTODY_ADDRESS` / `NEXT_PUBLIC_PACKCUSTODY_ADDRESS` in `.env.local`.
+
+### AssetRegistry
+
+```bash
+# Optional overrides in .env.local:
+#   ASSETREGISTRY_ADMIN=0x…          # defaults to deployer
+#   ASSETREGISTRY_INVENTORY=0x…      # granted INVENTORY_ROLE when admin == deployer
+#   ASSETREGISTRY_STALE_AFTER=3600   # seconds; default 3600
+#   ASSETREGISTRY_SEED_FEEDS=true    # deploy MockPriceFeeds + addAsset for the launch five
+
+pnpm deploy:asset-registry
+```
+
+Writes `contracts/deployments/robinhood-testnet.asset-registry.json` and patches `ASSETREGISTRY_ADDRESS` / `NEXT_PUBLIC_ASSETREGISTRY_ADDRESS`. Testnet deploy + Blockscout verify of the full V1 set is tracked in [#310](https://github.com/hurley87/margin-call/issues/310).
 
 ### Explorer
 
