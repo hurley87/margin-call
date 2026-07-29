@@ -41,16 +41,20 @@ The Rip payment (minus the protocol cut) socialized across all resting eligible 
 _Avoid_: sale proceeds, payout
 
 **Surcharge**:
-The maker–taker spread added to the harmonic-mean base (`rip_price = harmonic_mean × (1 + surcharge)`). Paid by the Taker, split between the protocol (a configurable share of the surcharge only) and resting Makers. The base is never touched by the protocol cut, so Makers are always made at least whole.
+The maker–taker spread added to the harmonic-mean base (`rip_price = harmonic_mean × (1 + surcharge)`). Paid by the Taker and split three ways — protocol / Crown / resting Makers (equal). All cuts come from the surcharge only; the base is never touched, so Makers are always made at least whole for any `protocolShareOfSurcharge + crownShareOfSurcharge ≤ 1`.
 _Avoid_: house edge (informal only), fee (unqualified)
+
+**Crown**:
+An owner-toggleable king-of-the-hill status carve-out. The **Crowned Maker** — the single Maker with the largest total resting Pack NAV — earns `crownShareOfSurcharge` of every Rip's surcharge on top of the equal split. The crown only changes hands when a challenger beats the standing leader's total NAV by ≥ `crownBeatMargin` (default 10%), preventing crown-flicker. Funded from the surcharge only, so it never breaks make-whole. Off by default in early V1.
+_Avoid_: king, jackpot (reserve "jackpot" for a Taker drawing a high-NAV Pack)
 
 **Maker Emissions**:
 A game-token stream from the owner-funded Distributor to Makers for providing inventory, at an owner-settable rate (`makerRatePerEpoch`). Not the make-whole return — that is the stablecoin Acquisition Fee; emissions are an extra steering layer. Post-V1 they are gap-weighted (the restock controller: `∝ gap^convexity ÷ inventory`) to hold the draw distribution near the owner's target. In V1 the controller is deferred and emissions ship as a simple equal-per-resting-Pack-per-epoch dress-rehearsal, because composition is House-managed and the token is transfer-locked. Never a return promise.
 _Avoid_: yield, creator emissions
 
-**Participation Rewards**:
-A game-token stream for Takers: an owner-settable daily pot (`takerPotPerEpoch`) from the Distributor, split among that epoch's confirmed Rips, so a Taker sees tokens earned. Bounded by the pot and the Distributor's balance. Transfer-locked in V1; earned-only.
-_Avoid_: cashback, rebate
+**Participation Rewards** (Buyer Rebate):
+A game-token rebate to Takers from the Distributor, sized to the surcharge each Taker paid and scaled inversely to pool activity (quieter pool → larger rebate) to smooth demand. Paid in game token, separate from the stablecoin surcharge flow, so it softens the Taker's −EV without touching Model A. Bounded by the owner-set per-epoch budget (`takerPotPerEpoch`) and the Distributor's balance. Transfer-locked in V1; earned-only.
+_Avoid_: cashback
 
 **Game Token**:
 A fully pre-minted, fixed-supply ERC-20 (no ongoing emission-mint authority) earned through Maker Emissions and Participation Rewards, streamed from an owner-funded Distributor. Transfer-locked user↔user at launch (Distributor→claimant transfers exempt so earning works); carries no selection weight, cadence benefit, or redemption right. The gap-weighted restock controller is a post-V1 mechanism; V1 ships only the plumbing (funded Distributor + owner-settable rates + merkle claims). Ticker is an open branding decision.
