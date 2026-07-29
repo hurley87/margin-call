@@ -129,6 +129,18 @@ Writes `contracts/deployments/robinhood-testnet.packcustody.json` (address, admi
 - Tx: [`0x6532824d…`](https://explorer.testnet.chain.robinhood.com/tx/0x6532824d0202d16b693a55fab1ff2bffa2a87f718037ca3930a3b0d89f11b9e6)
 - Verify after deploy: `pnpm verify:mockusd` / `pnpm verify:packcustody` (Blockscout; workspace uses `optimizer_runs = 1_000_000`).
 
+### Stock Tokens (Robinhood testnet)
+
+Canonical symbol → address map: [`deployments/robinhood-testnet.stock-tokens.json`](./deployments/robinhood-testnet.stock-tokens.json). Same five addresses seed PackCustody's constructor whitelist (`DeployPackCustody.launchWhitelist()`).
+
+| Symbol | Address                                                                                                              | Decimals |
+| ------ | -------------------------------------------------------------------------------------------------------------------- | -------- |
+| AMZN   | [`0x5884aD2f…E02`](https://explorer.testnet.chain.robinhood.com/address/0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02)  | 18       |
+| AMD    | [`0x71178BAc…78d`](https://explorer.testnet.chain.robinhood.com/address/0x71178BAc73cBeb415514eB542a8995b82669778d)  | 18       |
+| NFLX   | [`0x3b8262A6…C93`](https://explorer.testnet.chain.robinhood.com/address/0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93)  | 18       |
+| PLTR   | [`0x1FBE1a0e…98d0`](https://explorer.testnet.chain.robinhood.com/address/0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0) | 18       |
+| TSLA   | [`0xC9f9c869…Bd4E`](https://explorer.testnet.chain.robinhood.com/address/0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E) | 18       |
+
 > **Gas note.** Robinhood Chain bills L1 calldata as extra gas, and for a contract deployment
 > that component dominates and drifts with the L1 base fee. Forge's default 130% headroom is
 > not enough — the first PackCustody attempt burned its whole limit and reverted out of gas.
@@ -142,8 +154,12 @@ Everything below runs against the deployed contracts with tokens from the
 ```bash
 export RPC=https://rpc.testnet.chain.robinhood.com
 export PACKS=0x413e82F990DE796CC279c180F711d720A7Ee7728
+# From deployments/robinhood-testnet.stock-tokens.json:
 export AMZN=0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02
+export AMD=0x71178BAc73cBeb415514eB542a8995b82669778d
+export NFLX=0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93
 export PLTR=0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0
+export TSLA=0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E
 export KEY=0x…            # a faucet-funded creator
 export ME=$(cast wallet address --private-key $KEY)
 ```

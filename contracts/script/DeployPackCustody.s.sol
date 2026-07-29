@@ -45,8 +45,9 @@ contract DeployPackCustody is Utils {
         _writeRecord(address(custody), deployer, admin, whitelistAdmin, assets);
     }
 
-    /// @notice The five approved testnet Stock Tokens from the PRD launch configuration.
-    /// @dev Public so the verify tooling can re-derive the constructor arguments.
+    /// @notice The five approved testnet Stock Tokens from the V1 launch configuration.
+    /// @dev Keep in sync with `deployments/robinhood-testnet.stock-tokens.json` (symbol map).
+    ///      Public so the verify tooling can re-derive the constructor arguments.
     function launchWhitelist() public pure returns (address[] memory assets) {
         assets = new address[](5);
         assets[0] = 0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02; // AMZN
