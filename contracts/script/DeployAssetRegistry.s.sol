@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {console2} from "forge-std/console2.sol";
 import {AssetRegistry} from "../src/AssetRegistry.sol";
 import {MockPriceFeed} from "../src/mocks/MockPriceFeed.sol";
+import {LaunchTokens} from "./LaunchTokens.sol";
 import {Utils} from "./utils/Utils.sol";
 
 /// @notice Deploy AssetRegistry, seed the five launch Stock Tokens with MockPriceFeeds.
@@ -12,7 +13,8 @@ import {Utils} from "./utils/Utils.sol";
 ///        ASSETREGISTRY_INVENTORY     — optional; granted INVENTORY_ROLE when admin == deployer
 ///        ASSETREGISTRY_STALE_AFTER   — optional; seconds, default 3600
 ///        ASSETREGISTRY_SEED_FEEDS    — optional; "true" (default) deploys MockPriceFeeds + addAsset
-///      Stock token addresses match `deployments/robinhood-testnet.stock-tokens.json`.
+///      Stock token addresses come from `LaunchTokens` (JSON mirror:
+///      `deployments/robinhood-testnet.stock-tokens.json`).
 contract DeployAssetRegistry is Utils {
     uint256 internal constant ROBINHOOD_TESTNET_CHAIN_ID = 46_630;
     uint8 internal constant FEED_DECIMALS = 8;
@@ -25,9 +27,9 @@ contract DeployAssetRegistry is Utils {
         uint64 staleAfter = uint64(vm.envOr("ASSETREGISTRY_STALE_AFTER", uint256(3_600)));
         bool seedFeeds = vm.envOr("ASSETREGISTRY_SEED_FEEDS", true);
 
-        address[] memory tokens = launchTokens();
-        string[] memory symbols = launchSymbols();
-        uint256[] memory prices = launchPrices8();
+        address[] memory tokens = LaunchTokens.tokens();
+        string[] memory symbols = LaunchTokens.symbols();
+        uint256[] memory prices = LaunchTokens.seedPrices8();
 
         vm.startBroadcast(deployerKey);
         AssetRegistry registry = new AssetRegistry(admin);
@@ -62,35 +64,6 @@ contract DeployAssetRegistry is Utils {
         }
 
         _writeRecord(address(registry), deployer, admin, inventory, tokens, feeds, symbols, staleAfter, seedFeeds);
-    }
-
-    /// @notice Same five addresses as PackCustody `launchWhitelist` / stock-tokens.json.
-    function launchTokens() public pure returns (address[] memory tokens) {
-        tokens = new address[](5);
-        tokens[0] = 0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02; // AMZN
-        tokens[1] = 0x71178BAc73cBeb415514eB542a8995b82669778d; // AMD
-        tokens[2] = 0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93; // NFLX
-        tokens[3] = 0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0; // PLTR
-        tokens[4] = 0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E; // TSLA
-    }
-
-    function launchSymbols() public pure returns (string[] memory symbols) {
-        symbols = new string[](5);
-        symbols[0] = "AMZN";
-        symbols[1] = "AMD";
-        symbols[2] = "NFLX";
-        symbols[3] = "PLTR";
-        symbols[4] = "TSLA";
-    }
-
-    /// @notice Illustrative 8-decimal USD prices for MockPriceFeed seeding (admin can retune).
-    function launchPrices8() public pure returns (uint256[] memory prices) {
-        prices = new uint256[](5);
-        prices[0] = 185e8; // AMZN
-        prices[1] = 160e8; // AMD
-        prices[2] = 700e8; // NFLX
-        prices[3] = 40e8; // PLTR
-        prices[4] = 250e8; // TSLA
     }
 
     function _writeRecord(

@@ -2,7 +2,7 @@
   "version": 1,
   "chainId": 46630,
   "network": "robinhood-testnet",
-  "note": "Approved Stock Tokens for Margin Call V1. Addresses match PackCustody launchWhitelist() and PackCustody testnet whitelist. Canonical map for AssetRegistry seeding and app config.",
+  "note": "Human/app mirror of contracts/script/LaunchTokens.sol (Solidity source of truth for deploy scripts). Addresses match PackCustody testnet whitelist and AssetRegistry seed set.",
   "tokens": [
     {
       "symbol": "AMZN",

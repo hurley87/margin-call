@@ -158,7 +158,7 @@ Writes `contracts/deployments/robinhood-testnet.asset-registry.json` and patches
 
 ### Stock Tokens (Robinhood testnet)
 
-Canonical symbol → address map: [`deployments/robinhood-testnet.stock-tokens.json`](./deployments/robinhood-testnet.stock-tokens.json). Same five addresses seed PackCustody's constructor whitelist (`DeployPackCustody.launchWhitelist()`).
+Canonical symbol → address map: [`deployments/robinhood-testnet.stock-tokens.json`](./deployments/robinhood-testnet.stock-tokens.json) (human/app mirror of [`script/LaunchTokens.sol`](./script/LaunchTokens.sol)). Both PackCustody and AssetRegistry deploy scripts import that library.
 
 | Symbol | Address                                                                                                              | Decimals |
 | ------ | -------------------------------------------------------------------------------------------------------------------- | -------- |
