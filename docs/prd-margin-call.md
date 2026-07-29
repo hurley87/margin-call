@@ -139,7 +139,7 @@ Every lever is versioned, evented configuration:
 - Settlement conserves the full payment: `protocol_cut` from the surcharge only, remainder socialized equally across resting Packs; the drawn Pack and its full basket transfer to the Taker.
 - Redemption releases a Pack's full recorded raw-token basket with zero protocol fee. Stale/invalid stock-oracle data fails NAV-dependent eligibility and pricing closed; oracle or scheduler failure cannot rewrite custody or block the defined exit.
 - Game-token payouts can never exceed the Distributor's funded balance — it pays only tokens it holds and there is no emission-mint authority, so a bad Claim Root can misallocate within that balance but can never inflate supply. All entitlements are reproducible from confirmed records.
-- Ordinary external token transfers fail closed until the one-way, irreversible, time-delayed, evented transfer-enable switch is exercised (post-V1 only).
+- The transfer-lock applies to the **GameToken only**: user↔user GameToken transfers fail closed (Distributor→claimant claims exempt) until the one-way, irreversible, time-delayed, evented transfer-enable switch is exercised (post-V1 only). Stock Tokens, the stablecoin, and Packs are freely transferable and redeemable throughout.
 - The stablecoin peg is trusted at par; no depeg check. Testnet assets and the game token are visibly labelled valueless test assets. V1 makes no mainnet, yield, appreciation, or guaranteed-profit claim.
 
 ## Reference simulation
