@@ -61,14 +61,16 @@ This is a **valueless test asset**. It has no USD backing and nothing about it c
 
 ## PackCustody
 
-ERC-721 Packs backed by a recorded basket of whitelisted Stock Tokens held directly by the contract (issue [#275](https://github.com/hurley87/margin-call/issues/275)):
+ERC-721 Packs backed by a recorded basket of whitelisted Stock Tokens held directly by the contract (issues [#275](https://github.com/hurley87/margin-call/issues/275), [#299](https://github.com/hurley87/margin-call/issues/299)):
 
 - Name / symbol: `Margin Call Pack (Test Asset)` / `PACK`
 - `mint` deposits the whole basket in one transaction; a Pack can never exist unfunded
 - Custody accounting is raw token units, recorded from the balance actually received
 - `topUp` is creator-only and additions-only, while the Pack is still listed
 - `delistAndRedeem` (creator, while listed) and `unwrap` (holder, once transferred) both release the full basket at **zero protocol fee**
+- `releaseToRecipient` is `RIP_ENGINE_ROLE`-gated: moves a listed Pack to a recipient in one call without ERC-721 approval; basket ERC-20s stay in custody and the one-way unlisted latch fires on transfer (Rip settlement primitive — a Pack settles at most once)
 - `WHITELIST_ADMIN_ROLE` governs deposits only — de-whitelisting an asset never blocks redemption
+- Neither `WHITELIST_ADMIN_ROLE` nor `RIP_ENGINE_ROLE` is granted at construction; `DEFAULT_ADMIN_ROLE` grants them after deploy (RipEngine will receive `RIP_ENGINE_ROLE` when that contract lands)
 
 Oracle NAV, eligibility, and Rip selection live in later contracts; custody knows nothing about them.
 
@@ -182,7 +184,7 @@ Then take either exit. While the Pack is still yours, delist and redeem:
 cast send $PACKS "delistAndRedeem(uint256)" $ID --private-key $KEY --rpc-url $RPC
 ```
 
-Or transfer it — standing in for Rip settlement — and let the new holder unwrap:
+Or transfer it for a secondary sale / manual handoff, then let the new holder unwrap:
 
 ```bash
 cast send $PACKS "transferFrom(address,address,uint256)" $ME $BUYER $ID --private-key $KEY --rpc-url $RPC
@@ -190,7 +192,17 @@ cast call $PACKS "isListed(uint256)(bool)" $ID --rpc-url $RPC        # false
 cast send $PACKS "unwrap(uint256)" $ID --private-key $BUYER_KEY --rpc-url $RPC
 ```
 
-Both paths return the entire recorded basket and burn the Pack. Compare the token balances
+Rip settlement will use the role-gated primitive instead of a plain transfer (requires an
+account with `RIP_ENGINE_ROLE`):
+
+```bash
+# After admin has granted RIP_ENGINE_ROLE to $ENGINE:
+cast send $PACKS "releaseToRecipient(uint256,address)" $ID $BUYER --private-key $ENGINE_KEY --rpc-url $RPC
+cast call $PACKS "isListed(uint256)(bool)" $ID --rpc-url $RPC        # false
+cast send $PACKS "unwrap(uint256)" $ID --private-key $BUYER_KEY --rpc-url $RPC
+```
+
+Both exit paths return the entire recorded basket and burn the Pack. Compare the token balances
 before and after: nothing is deducted on either path.
 
 ## Layout
