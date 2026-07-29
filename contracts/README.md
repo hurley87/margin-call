@@ -72,7 +72,20 @@ ERC-721 Packs backed by a recorded basket of whitelisted Stock Tokens held direc
 - `WHITELIST_ADMIN_ROLE` governs deposits only — de-whitelisting an asset never blocks redemption
 - Neither `WHITELIST_ADMIN_ROLE` nor `RIP_ENGINE_ROLE` is granted at construction; `DEFAULT_ADMIN_ROLE` grants them after deploy (RipEngine will receive `RIP_ENGINE_ROLE` when that contract lands)
 
-Oracle NAV, eligibility, and Rip selection live in later contracts; custody knows nothing about them.
+Oracle NAV, eligibility, and Rip selection live in AssetRegistry (and later RipEngine); custody knows nothing about them.
+
+## AssetRegistry + MockPriceFeed
+
+Owner-curated Stock Token whitelist, pool levers, and fail-closed Pack NAV (issue [#300](https://github.com/hurley87/margin-call/issues/300)):
+
+- Per asset: token address, `IPriceFeed`, `staleAfter`, status (`Active` / `Frozen` / `Delisting`), live inventory
+- `addAsset` / `setStatus` / `removeAsset` (zero inventory only); inventory adjusted via `INVENTORY_ROLE` (for RipEngine later)
+- Owner setters for `minPackNav`, `poolMax`, `alpha`, `surcharge`, `protocolShareOfSurcharge`, `maxBatchSize`, and crown params — evented and prospective
+- `navOf` / `quote` return WAD USD (`$1 = 1e18`); every consumed feed read requires fresh, valid, non-paused data or reverts
+- Frozen assets are excluded from deposits and the price basket; Delisting blocks deposits but keeps resting Packs in the basket so inventory can drain
+- `MockPriceFeed` (`src/mocks/`) is the testnet / Foundry substitution point until real Robinhood feeds are wired (#310)
+
+Canonical Stock Token map: [`deployments/robinhood-testnet.stock-tokens.json`](./deployments/robinhood-testnet.stock-tokens.json).
 
 ## Deploy (Robinhood Chain testnet)
 
@@ -118,6 +131,20 @@ pnpm verify:packcustody
 
 Writes `contracts/deployments/robinhood-testnet.packcustody.json` (address, admin, whitelist, build fingerprint, tx hash) and patches `PACKCUSTODY_ADDRESS` / `NEXT_PUBLIC_PACKCUSTODY_ADDRESS` in `.env.local`.
 
+### AssetRegistry
+
+```bash
+# Optional overrides in .env.local:
+#   ASSETREGISTRY_ADMIN=0x…          # defaults to deployer
+#   ASSETREGISTRY_INVENTORY=0x…      # granted INVENTORY_ROLE when admin == deployer
+#   ASSETREGISTRY_STALE_AFTER=3600   # seconds; default 3600
+#   ASSETREGISTRY_SEED_FEEDS=true    # deploy MockPriceFeeds + addAsset for the launch five
+
+pnpm deploy:asset-registry
+```
+
+Writes `contracts/deployments/robinhood-testnet.asset-registry.json` and patches `ASSETREGISTRY_ADDRESS` / `NEXT_PUBLIC_ASSETREGISTRY_ADDRESS`. Testnet deploy + Blockscout verify of the full V1 set is tracked in [#310](https://github.com/hurley87/margin-call/issues/310).
+
 ### Explorer
 
 - Browser: https://explorer.testnet.chain.robinhood.com
@@ -128,6 +155,18 @@ Writes `contracts/deployments/robinhood-testnet.packcustody.json` (address, admi
 - Deployment record: [`deployments/robinhood-testnet.packcustody.json`](./deployments/robinhood-testnet.packcustody.json)
 - Tx: [`0x6532824d…`](https://explorer.testnet.chain.robinhood.com/tx/0x6532824d0202d16b693a55fab1ff2bffa2a87f718037ca3930a3b0d89f11b9e6)
 - Verify after deploy: `pnpm verify:mockusd` / `pnpm verify:packcustody` (Blockscout; workspace uses `optimizer_runs = 1_000_000`).
+
+### Stock Tokens (Robinhood testnet)
+
+Canonical symbol → address map: [`deployments/robinhood-testnet.stock-tokens.json`](./deployments/robinhood-testnet.stock-tokens.json) (human/app mirror of [`script/LaunchTokens.sol`](./script/LaunchTokens.sol)). Both PackCustody and AssetRegistry deploy scripts import that library.
+
+| Symbol | Address                                                                                                              | Decimals |
+| ------ | -------------------------------------------------------------------------------------------------------------------- | -------- |
+| AMZN   | [`0x5884aD2f…E02`](https://explorer.testnet.chain.robinhood.com/address/0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02)  | 18       |
+| AMD    | [`0x71178BAc…78d`](https://explorer.testnet.chain.robinhood.com/address/0x71178BAc73cBeb415514eB542a8995b82669778d)  | 18       |
+| NFLX   | [`0x3b8262A6…C93`](https://explorer.testnet.chain.robinhood.com/address/0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93)  | 18       |
+| PLTR   | [`0x1FBE1a0e…98d0`](https://explorer.testnet.chain.robinhood.com/address/0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0) | 18       |
+| TSLA   | [`0xC9f9c869…Bd4E`](https://explorer.testnet.chain.robinhood.com/address/0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E) | 18       |
 
 > **Gas note.** Robinhood Chain bills L1 calldata as extra gas, and for a contract deployment
 > that component dominates and drifts with the L1 base fee. Forge's default 130% headroom is
@@ -142,8 +181,12 @@ Everything below runs against the deployed contracts with tokens from the
 ```bash
 export RPC=https://rpc.testnet.chain.robinhood.com
 export PACKS=0x413e82F990DE796CC279c180F711d720A7Ee7728
+# From deployments/robinhood-testnet.stock-tokens.json:
 export AMZN=0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02
+export AMD=0x71178BAc73cBeb415514eB542a8995b82669778d
+export NFLX=0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93
 export PLTR=0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0
+export TSLA=0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E
 export KEY=0x…            # a faucet-funded creator
 export ME=$(cast wallet address --private-key $KEY)
 ```

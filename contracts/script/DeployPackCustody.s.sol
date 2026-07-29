@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {console2} from "forge-std/console2.sol";
 import {PackCustody} from "../src/PackCustody.sol";
+import {LaunchTokens} from "./LaunchTokens.sol";
 import {Utils} from "./utils/Utils.sol";
 
 /// @notice Deploy PackCustody to Robinhood Chain testnet and record the address.
@@ -11,8 +12,8 @@ import {Utils} from "./utils/Utils.sol";
 ///        PACKCUSTODY_ADMIN           — optional; defaults to the deployer
 ///        PACKCUSTODY_WHITELIST_ADMIN — optional; granted WHITELIST_ADMIN_ROLE when
 ///                                      admin == deployer
-///        PACKCUSTODY_WHITELIST       — optional; comma-separated assets, defaults to the
-///                                      five approved Stock Tokens below
+///        PACKCUSTODY_WHITELIST       — optional; comma-separated assets, defaults to
+///                                      `LaunchTokens.tokens()`
 contract DeployPackCustody is Utils {
     uint256 internal constant ROBINHOOD_TESTNET_CHAIN_ID = 46_630;
 
@@ -21,7 +22,7 @@ contract DeployPackCustody is Utils {
         address deployer = vm.addr(deployerKey);
         address admin = vm.envOr("PACKCUSTODY_ADMIN", deployer);
         address whitelistAdmin = vm.envOr("PACKCUSTODY_WHITELIST_ADMIN", address(0));
-        address[] memory assets = vm.envOr("PACKCUSTODY_WHITELIST", ",", launchWhitelist());
+        address[] memory assets = vm.envOr("PACKCUSTODY_WHITELIST", ",", LaunchTokens.tokens());
 
         vm.startBroadcast(deployerKey);
         PackCustody custody = new PackCustody(admin, assets);
@@ -45,15 +46,9 @@ contract DeployPackCustody is Utils {
         _writeRecord(address(custody), deployer, admin, whitelistAdmin, assets);
     }
 
-    /// @notice The five approved testnet Stock Tokens from the PRD launch configuration.
-    /// @dev Public so the verify tooling can re-derive the constructor arguments.
-    function launchWhitelist() public pure returns (address[] memory assets) {
-        assets = new address[](5);
-        assets[0] = 0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02; // AMZN
-        assets[1] = 0x71178BAc73cBeb415514eB542a8995b82669778d; // AMD
-        assets[2] = 0x3b8262A63d25f0477c4DDE23F83cfe22Cb768C93; // NFLX
-        assets[3] = 0x1FBE1a0e43594b3455993B5dE5Fd0A7A266298d0; // PLTR
-        assets[4] = 0xC9f9c86933092BbbfFF3CCb4b105A4A94bf3Bd4E; // TSLA
+    /// @notice Re-export for verify tooling that previously called `launchWhitelist()`.
+    function launchWhitelist() public pure returns (address[] memory) {
+        return LaunchTokens.tokens();
     }
 
     function _writeRecord(
