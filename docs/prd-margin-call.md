@@ -89,7 +89,7 @@ to_makers     = rip_price − protocol_cut − crown_cut          // base + rema
 
 Conservation, per Rip: the Taker pays `rip_price` and receives a basket worth `N_drawn` (E = `harmonic_mean`, so Taker E = `−surcharge`); the protocol earns `protocol_cut`, the Crowned Maker earns `crown_cut`, and resting Makers collectively earn `to_makers`, which exceeds the `harmonic_mean` of basket value leaving the pool by the Makers' remaining share of the surcharge.
 
-**The Crown (owner-toggleable).** An optional king-of-the-hill status carve-out for suppliers, since Model A otherwise leaves Makers indifferent to size. The **Crowned Maker** — the single Maker with the largest **total resting Pack NAV** (summed across their Packs, since `poolMax` caps any one Pack) — receives `crown_cut` on every Rip, on top of their equal share. To **take the crown you must beat the standing leader's total by ≥ `crownBeatMargin` (default 10%)**, which prevents crown-flicker gas wars. The crown mildly incentivizes whale concentration, so keep `crownShareOfSurcharge` small (≤1%); it is off by default until real Maker supply exists.
+**The Crown (owner-toggleable).** An optional king-of-the-hill status carve-out for suppliers, since Model A otherwise leaves Makers indifferent to size. The **Crowned Maker** — the single Maker with the largest **total resting Pack NAV** (summed across their Packs, since `poolMax` caps any one Pack) — receives `crown_cut` on every Rip, on top of their equal share. To **take the crown you must beat the standing leader's total by ≥ `crownBeatMargin` (default 10%)**, which prevents crown-flicker gas wars. The crown mildly incentivizes whale concentration, so it is **off by default** (`crownEnabled = false`) until real Maker supply exists; when enabled, `crownShareOfSurcharge = 0.10` of the surcharge (≈1% of the rip price, matching StockRip's "extra 1%"), carved from the Maker share so the split moves 25/0/75 → 25/10/65 with protocol unchanged.
 
 ## Game token (V1: plumbing only)
 
@@ -98,7 +98,7 @@ The game token compensates _steering_, not survival — Makers are already made 
 **Emission is a funded Distributor, not a mint.** The GameToken is a plain fixed-supply ERC-20, **fully minted at deploy to the treasury — there is no ongoing emission-mint authority.** The owner **funds a Distributor contract by transferring tokens into it** and sets the stream rates on-chain; it pays out only tokens it holds. This makes **the Distributor's balance the hard cap by construction**: a bad Claim Root can misallocate _within_ the funded balance but can never inflate supply, because there is no mint path to inflate.
 
 - **Maker Emissions** — a continuous stream from the Distributor to Makers, **equal per resting Pack per epoch** (epoch = 1 day) in V1, at an **owner-settable rate** (`makerRatePerEpoch`). The gap-weighted **restock controller** (`∝ gap^convexity ÷ inventory`, per-asset `target_inventory`, `gain ≈ 8`, `convexity = 2`) that steers composition is a **post-V1** mechanism — no economic pull while the token is transfer-locked and the House manages composition.
-- **Participation Rewards (Buyer Rebate shape)** — a token rebate to Takers from the Distributor, sized to **the surcharge each Taker paid** and scaled **inversely to pool activity** (the quieter the pool, the larger the rebate) to smooth demand. Paid in game token, entirely separate from the stablecoin surcharge flow, so Model A is untouched — the stablecoin surcharge still splits protocol/Crown/Makers; the rebate is a _separate_ token incentive that softens the Taker's −EV. Bounded by the owner-set budget (`takerPotPerEpoch` acts as the per-epoch cap) and the Distributor balance.
+- **Participation Rewards (Buyer Rebate shape)** — a **fixed daily token pot** (`takerPotPerEpoch`) split among the day's Rips **pro-rata by the surcharge each Taker paid**. Because the pot is fixed, a quieter epoch (fewer Rips) automatically returns a larger rebate per Rip — the "quieter pool → bigger rebate" property emerges for free, no activity metric needed. A per-Rip cap (`rebatePerRipCap`, default 10% of the pot) stops a single dead-day Rip from scooping the pot; unspent tokens roll forward. Paid in game token, entirely separate from the stablecoin surcharge flow, so Model A is untouched (the surcharge still splits protocol/Crown/Makers); the rebate simply softens the Taker's −EV in token.
 - **Claims** — both streams are computed off-chain from confirmed on-chain records by a published, reproducible algorithm and claimed against the Distributor's held balance via per-epoch **merkle Claim Roots**; anyone can recompute any epoch.
 - **Posture** — fixed maximum supply, all minted at deploy. **Transfer-locked user↔user at launch** (Distributor→claimant transfers are exempt so earning works), behind a one-way, irreversible, time-delayed transfer-enable switch exercisable only as a separately approved post-V1 decision. The token carries no selection weight, cadence benefit, redemption right, staking yield, or revenue share.
 
@@ -120,21 +120,21 @@ The oracle values only the **volatile side — the tokenized stocks** — to com
 
 Every lever is versioned, evented configuration:
 
-| Lever                                              | Meaning                                                                                  | Illustrative default     |
-| -------------------------------------------------- | ---------------------------------------------------------------------------------------- | ------------------------ |
-| `alpha`                                            | Selection curve `weight ∝ 1/NAV^alpha`                                                   | `1.0`                    |
-| `surcharge`                                        | Maker–taker spread on the harmonic-mean Rip price                                        | `0.10`                   |
-| `protocolShareOfSurcharge`                         | Fraction of the surcharge the protocol keeps (`[0,1]`)                                   | TBD                      |
-| `crownShareOfSurcharge` / `crownEnabled`           | Fraction of the surcharge paid to the Crowned Maker; toggle                              | `≤0.01`, off in early V1 |
-| `crownBeatMargin`                                  | % a challenger must beat the standing leader's total NAV by to take the crown            | `0.10`                   |
-| `takerRebateCurve`                                 | Buyer-Rebate shaping: rebate ∝ surcharge paid, inverse to pool activity (baseline + max) | TBD                      |
-| `minPackNav`                                       | **Min Pack NAV** — eligibility floor, price floor, dust guard                            | `$20`, required `>0`     |
-| `poolMax`                                          | Max Pack NAV — caps the upper price bound / jackpot multiple                             | `$300`                   |
-| `maxBatchSize`                                     | Max Packs a Taker may rip per transaction                                                | `5`                      |
-| Asset status                                       | `addAsset` / `removeAsset` / freeze / delist                                             | per ticker               |
-| `staleAfter`                                       | Per-ticker oracle staleness bound (circuit breaker)                                      | per feed                 |
-| `makerRatePerEpoch` / `takerPotPerEpoch`           | Distributor stream rates, owner-settable; funded by transferring tokens in               | TBD                      |
-| _post-V1_: `target_inventory`, `gain`, `convexity` | Restock-controller tuning (no V1 effect)                                                 | —                        |
+| Lever                                              | Meaning                                                                                                                                | Illustrative default                             |
+| -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `alpha`                                            | Selection curve `weight ∝ 1/NAV^alpha`                                                                                                 | `1.0`                                            |
+| `surcharge`                                        | Maker–taker spread on the harmonic-mean Rip price                                                                                      | `0.10`                                           |
+| `protocolShareOfSurcharge`                         | Fraction of the surcharge the protocol keeps                                                                                           | `0.25`                                           |
+| `crownShareOfSurcharge` / `crownEnabled`           | Fraction of the surcharge to the Crowned Maker (from the Maker share); toggle                                                          | `0.10` when on; `crownEnabled=false` in early V1 |
+| `crownBeatMargin`                                  | % a challenger must beat the standing leader total NAV by to take the crown                                                            | `0.10`                                           |
+| `rebatePerRipCap`                                  | Buyer-Rebate per-Rip cap as a share of the daily `takerPotPerEpoch` pot (pot splits pro-rata by surcharge paid; unspent rolls forward) | `0.10`                                           |
+| `minPackNav`                                       | **Min Pack NAV** — eligibility floor, price floor, dust guard                                                                          | `$20`, required `>0`                             |
+| `poolMax`                                          | Max Pack NAV — caps the upper price bound / jackpot multiple                                                                           | `$300`                                           |
+| `maxBatchSize`                                     | Max Packs a Taker may rip per transaction                                                                                              | `5`                                              |
+| Asset status                                       | `addAsset` / `removeAsset` / freeze / delist                                                                                           | per ticker                                       |
+| `staleAfter`                                       | Per-ticker oracle staleness bound (circuit breaker)                                                                                    | per feed                                         |
+| `makerRatePerEpoch` / `takerPotPerEpoch`           | Distributor stream rates, owner-settable; funded by transferring tokens in                                                             | TBD                                              |
+| _post-V1_: `target_inventory`, `gain`, `convexity` | Restock-controller tuning (no V1 effect)                                                                                               | —                                                |
 
 ## Safety and accounting invariants
 
@@ -175,9 +175,7 @@ On Robinhood Chain testnet, independent users can create and fund Packs, inspect
 
 ## Open decisions before implementation planning
 
-- **Surcharge split** — exact `protocolShareOfSurcharge` and `crownShareOfSurcharge` (≤1% suggested, crown off until real Maker supply), and `crownBeatMargin` (10% suggested).
-- **Buyer-Rebate curve** — how the token rebate scales with surcharge paid and inversely with pool activity (baseline, max, activity metric).
-- Token supply/funding have recommended starting points (1B supply, ~30% funded to the Distributor, ~60/40 Taker-weighted); still open are the exact `makerRatePerEpoch` / `takerPotPerEpoch` and the intended stream horizon.
+- Token supply/funding have recommended starting points (1B supply, ~30% funded to the Distributor, ~60/40 Taker-weighted); still open are the exact `makerRatePerEpoch` / `takerPotPerEpoch` and the intended stream horizon. _(Surcharge split, Crown values, and the Buyer-Rebate shape are now pinned — see the owner control panel.)_
 - **Emission epoch details** (daily assumed): integer-rounding and empty-epoch treatment.
 - **Batch pricing detail:** confirm snapshot-at-tx-start (vs. reprice per draw within a batch) for `maxBatchSize > 1`.
 - **Oracle/TWAP window and `staleAfter` per feed**, and the keeper wiring that drives `setStatus(Frozen)` on a real trading halt.

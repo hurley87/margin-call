@@ -45,7 +45,7 @@ The maker–taker spread added to the harmonic-mean base (`rip_price = harmonic_
 _Avoid_: house edge (informal only), fee (unqualified)
 
 **Crown**:
-An owner-toggleable king-of-the-hill status carve-out. The **Crowned Maker** — the single Maker with the largest total resting Pack NAV — earns `crownShareOfSurcharge` of every Rip's surcharge on top of the equal split. The crown only changes hands when a challenger beats the standing leader's total NAV by ≥ `crownBeatMargin` (default 10%), preventing crown-flicker. Funded from the surcharge only, so it never breaks make-whole. Off by default in early V1.
+An owner-toggleable king-of-the-hill status carve-out. The **Crowned Maker** — the single Maker with the largest total resting Pack NAV — earns `crownShareOfSurcharge` of every Rip's surcharge on top of the equal split (`0.10` when enabled, ≈1% of the rip price, carved from the Maker share). The crown only changes hands when a challenger beats the standing leader's total NAV by ≥ `crownBeatMargin` (`0.10`), preventing crown-flicker. Funded from the surcharge only, so it never breaks make-whole. Off by default in early V1 (`crownEnabled = false`).
 _Avoid_: king, jackpot (reserve "jackpot" for a Taker drawing a high-NAV Pack)
 
 **Maker Emissions**:
@@ -53,7 +53,7 @@ A game-token stream from the owner-funded Distributor to Makers for providing in
 _Avoid_: yield, creator emissions
 
 **Participation Rewards** (Buyer Rebate):
-A game-token rebate to Takers from the Distributor, sized to the surcharge each Taker paid and scaled inversely to pool activity (quieter pool → larger rebate) to smooth demand. Paid in game token, separate from the stablecoin surcharge flow, so it softens the Taker's −EV without touching Model A. Bounded by the owner-set per-epoch budget (`takerPotPerEpoch`) and the Distributor's balance. Transfer-locked in V1; earned-only.
+A game-token rebate to Takers: a fixed daily pot (`takerPotPerEpoch`) from the Distributor, split among the day's confirmed Rips pro-rata by the surcharge each Taker paid. Because the pot is fixed, a quieter epoch returns a larger rebate per Rip automatically (no activity metric needed); a per-Rip cap (`rebatePerRipCap`, `0.10` of the pot) prevents a dead-day scoop, and unspent tokens roll forward. Paid in game token, separate from the stablecoin surcharge flow, so it softens the Taker's −EV without touching Model A. Transfer-locked in V1; earned-only.
 _Avoid_: cashback
 
 **Game Token**:
