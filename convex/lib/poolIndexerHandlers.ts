@@ -20,11 +20,45 @@ import { stockSymbolForAddress } from "./stockTokens";
 
 export const MAX_BLOCK_SPAN = 2_000n;
 
+/** Max resting packs refreshed per cron tick (batched on-chain reads). */
+export const RESTING_REFRESH_LIMIT = 50;
+
 type BasketEntry = {
   asset: string;
   amount: string;
   symbol: string | null;
 };
+
+/** Normalize a raw on-chain basket (asset/amount tuples) into `BasketEntry[]`. */
+function normalizeBasket(
+  raw: readonly { asset: `0x${string}`; amount: bigint }[]
+): BasketEntry[] {
+  return raw.map((entry) => ({
+    asset: entry.asset.toLowerCase(),
+    amount: entry.amount.toString(),
+    symbol: stockSymbolForAddress(entry.asset),
+  }));
+}
+
+/** Mutation args for a resting-pack upsert (shared by event + cron paths). */
+function restingUpsertArgs(args: {
+  tokenId: bigint;
+  maker: string;
+  basket: BasketEntry[];
+  navUsdWad: string | null;
+  eligible: boolean;
+  now: number;
+}) {
+  return {
+    tokenId: Number(args.tokenId),
+    maker: args.maker.toLowerCase(),
+    basket: args.basket,
+    navUsdWad: args.navUsdWad,
+    status: "resting" as const,
+    eligible: args.eligible,
+    updatedAt: args.now,
+  };
+}
 
 /**
  * True when viem reports a contract revert (as opposed to RPC/transport failure).
@@ -65,11 +99,7 @@ export async function readBasket(
     functionName: "basketOf",
     args: [tokenId],
   });
-  return basket.map((entry) => ({
-    asset: entry.asset.toLowerCase(),
-    amount: entry.amount.toString(),
-    symbol: stockSymbolForAddress(entry.asset),
-  }));
+  return normalizeBasket(basket);
 }
 
 /**
@@ -95,6 +125,84 @@ export async function readNavOfPack(
   }
 }
 
+export type RestingPackMeta = {
+  tokenId: bigint;
+  maker: `0x${string}`;
+  basket: BasketEntry[];
+  navUsdWad: string | null;
+};
+
+/**
+ * Batch-read creator + basket (+ NAV when not already known) for resting packs
+ * via Multicall3. The identity and NAV reads are independent, so they fire
+ * together in a single round-trip (both aggregate3 calls also batch on the wire).
+ */
+export async function readRestingPackMetas(
+  client: PublicClient,
+  packCustody: `0x${string}`,
+  ripEngine: `0x${string}`,
+  tokenIds: readonly bigint[],
+  navByTokenId: ReadonlyMap<number, string>
+): Promise<RestingPackMeta[]> {
+  if (tokenIds.length === 0) return [];
+
+  const identityContracts = tokenIds.flatMap((tokenId) => [
+    {
+      address: packCustody,
+      abi: packCustodyAbi,
+      functionName: "creatorOf" as const,
+      args: [tokenId] as const,
+    },
+    {
+      address: packCustody,
+      abi: packCustodyAbi,
+      functionName: "basketOf" as const,
+      args: [tokenId] as const,
+    },
+  ]);
+
+  // Seed NAVs from the eligible snapshot; only the misses need an on-chain read.
+  const navByIndex = tokenIds.map(
+    (tokenId) => navByTokenId.get(Number(tokenId)) ?? null
+  );
+  const needsNavIndexes = navByIndex.flatMap((nav, i) =>
+    nav === null ? [i] : []
+  );
+
+  const [identityResults, navResults] = await Promise.all([
+    client.multicall({ contracts: identityContracts, allowFailure: false }),
+    needsNavIndexes.length > 0
+      ? client.multicall({
+          contracts: needsNavIndexes.map((i) => ({
+            address: ripEngine,
+            abi: ripEngineAbi,
+            functionName: "navOfPack" as const,
+            args: [tokenIds[i]!] as const,
+          })),
+          allowFailure: true,
+        })
+      : Promise.resolve<never[]>([]),
+  ]);
+
+  needsNavIndexes.forEach((packIndex, j) => {
+    const result = navResults[j]!;
+    navByIndex[packIndex] =
+      result.status === "success" ? result.result.toString() : null;
+  });
+
+  return tokenIds.map((tokenId, i) => ({
+    tokenId,
+    maker: identityResults[i * 2] as `0x${string}`,
+    basket: normalizeBasket(
+      identityResults[i * 2 + 1] as readonly {
+        asset: `0x${string}`;
+        amount: bigint;
+      }[]
+    ),
+    navUsdWad: navByIndex[i],
+  }));
+}
+
 export async function upsertRestingPack(
   ctx: ActionCtx,
   client: PublicClient,
@@ -111,15 +219,50 @@ export async function upsertRestingPack(
     knownNavWad !== undefined
       ? knownNavWad
       : await readNavOfPack(client, ripEngine, tokenId);
-  await ctx.runMutation(internal.poolIndexer.upsertPack, {
-    tokenId: Number(tokenId),
-    maker: maker.toLowerCase(),
-    basket,
-    navUsdWad,
-    status: "resting",
-    eligible,
-    updatedAt: now,
-  });
+  await ctx.runMutation(
+    internal.poolIndexer.upsertPack,
+    restingUpsertArgs({ tokenId, maker, basket, navUsdWad, eligible, now })
+  );
+}
+
+/**
+ * Refresh up to `limit` resting packs with batched on-chain reads, then
+ * parallel Convex upserts.
+ */
+export async function refreshRestingPacks(
+  ctx: ActionCtx,
+  client: PublicClient,
+  packCustody: `0x${string}`,
+  ripEngine: `0x${string}`,
+  restingIds: readonly bigint[],
+  eligibleSet: ReadonlySet<number>,
+  now: number,
+  navByTokenId: ReadonlyMap<number, string>,
+  limit = RESTING_REFRESH_LIMIT
+): Promise<void> {
+  const tokenIds = restingIds.slice(0, limit);
+  const metas = await readRestingPackMetas(
+    client,
+    packCustody,
+    ripEngine,
+    tokenIds,
+    navByTokenId
+  );
+  await Promise.all(
+    metas.map((meta) =>
+      ctx.runMutation(
+        internal.poolIndexer.upsertPack,
+        restingUpsertArgs({
+          tokenId: meta.tokenId,
+          maker: meta.maker,
+          basket: meta.basket,
+          navUsdWad: meta.navUsdWad,
+          eligible: eligibleSet.has(Number(meta.tokenId)),
+          now,
+        })
+      )
+    )
+  );
 }
 
 /**

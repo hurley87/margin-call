@@ -9,18 +9,14 @@ import { parseAbiItem } from "viem";
 
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-import {
-  assetRegistryAbi,
-  packCustodyAbi,
-  ripEngineAbi,
-} from "./lib/chain/abis";
+import { assetRegistryAbi, ripEngineAbi } from "./lib/chain/abis";
 import { requireIndexerAddresses } from "./lib/chain/addresses";
 import { createChainPublicClient } from "./lib/chain/clients";
 import {
   applyPackUnlisted,
   applyRipEngineLog,
+  refreshRestingPacks,
   scanLogs,
-  upsertRestingPack,
 } from "./lib/poolIndexerHandlers";
 import {
   buildNavDistribution,
@@ -138,34 +134,23 @@ export const syncPoolFromChain = internalAction({
 
     // Reuse the NAVs eligibleSnapshot already returned (indexed alongside
     // tokenIds) so the per-pack refresh doesn't re-read navOfPack for eligible
-    // packs every cron tick.
+    // packs every cron tick. creatorOf + basketOf are batched via Multicall3.
     const navByTokenId = new Map<number, string>();
     for (let i = 0; i < eligibleCount; i++) {
       navByTokenId.set(Number(tokenIds[i]), navs[i]!.toString());
     }
     const eligibleSet = new Set(navByTokenId.keys());
 
-    const refreshLimit = Math.min(restingIds.length, 50);
-    for (let i = 0; i < refreshLimit; i++) {
-      const tokenId = restingIds[i]!;
-      const maker = await client.readContract({
-        address: addresses.packCustody,
-        abi: packCustodyAbi,
-        functionName: "creatorOf",
-        args: [tokenId],
-      });
-      await upsertRestingPack(
-        ctx,
-        client,
-        addresses.packCustody,
-        addresses.ripEngine,
-        tokenId,
-        maker,
-        eligibleSet.has(Number(tokenId)),
-        now,
-        navByTokenId.get(Number(tokenId))
-      );
-    }
+    await refreshRestingPacks(
+      ctx,
+      client,
+      addresses.packCustody,
+      addresses.ripEngine,
+      restingIds,
+      eligibleSet,
+      now,
+      navByTokenId
+    );
 
     await ctx.runMutation(internal.poolIndexer.writeSnapshot, {
       eligibleCount,

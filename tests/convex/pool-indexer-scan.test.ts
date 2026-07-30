@@ -15,6 +15,8 @@ import {
   isContractCallRevert,
   MAX_BLOCK_SPAN,
   readNavOfPack,
+  readRestingPackMetas,
+  refreshRestingPacks,
   scanLogs,
   tryDecodeEventLog,
 } from "../../convex/lib/poolIndexerHandlers";
@@ -68,6 +70,10 @@ function makeClient(overrides?: {
   logs?: Log[];
   getLogs?: () => Promise<Log[]>;
   readContract?: (args: { functionName: string }) => Promise<unknown>;
+  multicall?: (args: {
+    contracts: readonly { functionName: string; args?: readonly unknown[] }[];
+    allowFailure?: boolean;
+  }) => Promise<unknown>;
 }): PublicClient {
   return {
     getLogs: overrides?.getLogs ?? (async () => overrides?.logs ?? []),
@@ -75,6 +81,11 @@ function makeClient(overrides?: {
       overrides?.readContract ??
       (async () => {
         throw new Error("unexpected readContract");
+      }),
+    multicall:
+      overrides?.multicall ??
+      (async () => {
+        throw new Error("unexpected multicall");
       }),
   } as unknown as PublicClient;
 }
@@ -278,5 +289,176 @@ describe("tryDecodeEventLog", () => {
     if (decoded?.eventName === "PackEntered") {
       expect(decoded.args.tokenId).toBe(9n);
     }
+  });
+});
+
+describe("readRestingPackMetas", () => {
+  it("batches creatorOf + basketOf and reuses known NAV", async () => {
+    const multicall = vi.fn(
+      async (args: {
+        contracts: readonly { functionName: string }[];
+        allowFailure?: boolean;
+      }) => {
+        expect(args.allowFailure).toBe(false);
+        expect(args.contracts.map((c) => c.functionName)).toEqual([
+          "creatorOf",
+          "basketOf",
+          "creatorOf",
+          "basketOf",
+        ]);
+        return [
+          ZERO_ADDR,
+          [{ asset: ZERO_ADDR, amount: 1n }],
+          "0x0000000000000000000000000000000000000002",
+          [{ asset: ZERO_ADDR, amount: 2n }],
+        ];
+      }
+    );
+    const client = makeClient({ multicall });
+    const knownNav = "1000000000000000000";
+    const metas = await readRestingPackMetas(
+      client,
+      PACK,
+      RIP,
+      [1n, 2n],
+      new Map([
+        [1, knownNav],
+        [2, "2000000000000000000"],
+      ])
+    );
+
+    expect(multicall).toHaveBeenCalledTimes(1);
+    expect(metas).toHaveLength(2);
+    expect(metas[0]).toMatchObject({
+      tokenId: 1n,
+      maker: ZERO_ADDR,
+      navUsdWad: knownNav,
+    });
+    expect(metas[0]!.basket[0]).toMatchObject({
+      asset: ZERO_ADDR,
+      amount: "1",
+    });
+    expect(metas[1]!.navUsdWad).toBe("2000000000000000000");
+  });
+
+  it("multicalls navOfPack only for packs without known NAV", async () => {
+    const multicall = vi.fn(
+      async (args: {
+        contracts: readonly {
+          functionName: string;
+          args?: readonly unknown[];
+        }[];
+        allowFailure?: boolean;
+      }) => {
+        if (args.allowFailure === false) {
+          return [
+            ZERO_ADDR,
+            [{ asset: ZERO_ADDR, amount: 1n }],
+            ZERO_ADDR,
+            [{ asset: ZERO_ADDR, amount: 3n }],
+          ];
+        }
+        expect(args.allowFailure).toBe(true);
+        expect(args.contracts).toHaveLength(1);
+        expect(args.contracts[0]).toMatchObject({
+          functionName: "navOfPack",
+          args: [3n],
+        });
+        return [{ status: "success", result: 42n * 10n ** 18n }];
+      }
+    );
+    const client = makeClient({ multicall });
+    const metas = await readRestingPackMetas(
+      client,
+      PACK,
+      RIP,
+      [1n, 3n],
+      new Map([[1, "111"]])
+    );
+
+    expect(multicall).toHaveBeenCalledTimes(2);
+    expect(metas[0]!.navUsdWad).toBe("111");
+    expect(metas[1]!.navUsdWad).toBe((42n * 10n ** 18n).toString());
+  });
+
+  it("maps navOfPack failure to null", async () => {
+    const client = makeClient({
+      multicall: async (args) => {
+        if (args.allowFailure === false) {
+          return [ZERO_ADDR, [{ asset: ZERO_ADDR, amount: 1n }]];
+        }
+        return [{ status: "failure", error: new Error("revert") }];
+      },
+    });
+    const metas = await readRestingPackMetas(
+      client,
+      PACK,
+      RIP,
+      [9n],
+      new Map()
+    );
+    expect(metas[0]!.navUsdWad).toBeNull();
+  });
+
+  it("returns empty for no token ids without calling multicall", async () => {
+    const multicall = vi.fn();
+    const client = makeClient({ multicall });
+    await expect(
+      readRestingPackMetas(client, PACK, RIP, [], new Map())
+    ).resolves.toEqual([]);
+    expect(multicall).not.toHaveBeenCalled();
+  });
+});
+
+describe("refreshRestingPacks", () => {
+  it("caps refresh at the limit and upserts in parallel", async () => {
+    const upserted: number[] = [];
+    const ctx = makeCtx({
+      onUpsertPack: async () => {
+        // Capture via mutation dispatch below.
+      },
+    });
+    const runMutation = ctx.runMutation as ReturnType<typeof vi.fn>;
+    runMutation.mockImplementation(async (_ref: unknown, args: unknown) => {
+      if (
+        args &&
+        typeof args === "object" &&
+        "tokenId" in args &&
+        "status" in args
+      ) {
+        upserted.push((args as { tokenId: number }).tokenId);
+      }
+      return null;
+    });
+
+    const client = makeClient({
+      multicall: async (args) => {
+        if (args.allowFailure === false) {
+          return args.contracts.map((c) =>
+            c.functionName === "creatorOf"
+              ? ZERO_ADDR
+              : [{ asset: ZERO_ADDR, amount: 1n }]
+          );
+        }
+        return args.contracts.map(() => ({
+          status: "success",
+          result: 1n,
+        }));
+      },
+    });
+
+    await refreshRestingPacks(
+      ctx,
+      client,
+      PACK,
+      RIP,
+      [1n, 2n, 3n],
+      new Set([1]),
+      1_700_000_000_000,
+      new Map([[1, "100"]]),
+      2
+    );
+
+    expect(upserted).toEqual([1, 2]);
   });
 });

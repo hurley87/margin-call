@@ -19,11 +19,16 @@ export function getRobinhoodRpcUrl(): string {
   );
 }
 
-/** Shared viem public client for Robinhood Chain testnet reads. */
+/**
+ * Shared viem public client for Robinhood Chain testnet reads.
+ * Batched reads go through explicit Multicall3 (`client.multicall`, using the
+ * canonical address wired on `PAYMENT_CHAIN`); the http transport also batches
+ * concurrent JSON-RPC calls on the wire (#322).
+ */
 export function createRobinhoodPublicClient(): PublicClient {
   return createPublicClient({
     chain: PAYMENT_CHAIN,
-    transport: http(getRobinhoodRpcUrl()),
+    transport: http(getRobinhoodRpcUrl(), { batch: true }),
   });
 }
 
