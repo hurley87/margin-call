@@ -10,6 +10,10 @@ export const PAYMENT_PUBLIC_RPC_URL =
 export const PAYMENT_EXPLORER_URL =
   "https://explorer.testnet.chain.robinhood.com" as const;
 
+/** Canonical Multicall3 — verified present on Robinhood Chain testnet (#322). */
+export const MULTICALL3_ADDRESS =
+  "0xcA11bde05977b3631167028862be2a173976CA11" as const;
+
 export const PAYMENT_CHAIN = defineChain({
   id: PAYMENT_CHAIN_ID,
   name: PAYMENT_CHAIN_NAME,
@@ -28,6 +32,11 @@ export const PAYMENT_CHAIN = defineChain({
       name: "Robinhood Explorer",
       url: PAYMENT_EXPLORER_URL,
       apiUrl: `${PAYMENT_EXPLORER_URL}/api/`,
+    },
+  },
+  contracts: {
+    multicall3: {
+      address: MULTICALL3_ADDRESS,
     },
   },
   testnet: true,

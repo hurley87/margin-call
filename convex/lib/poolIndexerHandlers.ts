@@ -95,6 +95,95 @@ export async function readNavOfPack(
   }
 }
 
+export type RestingPackMeta = {
+  tokenId: bigint;
+  maker: `0x${string}`;
+  basket: BasketEntry[];
+  navUsdWad: string | null;
+};
+
+/**
+ * Batch-read creator + basket (+ NAV when not already known) for resting packs
+ * via Multicall3 — two round-trips max instead of ~2–3 sequential RPCs per pack.
+ */
+export async function readRestingPackMetas(
+  client: PublicClient,
+  packCustody: `0x${string}`,
+  ripEngine: `0x${string}`,
+  tokenIds: readonly bigint[],
+  navByTokenId: ReadonlyMap<number, string>
+): Promise<RestingPackMeta[]> {
+  if (tokenIds.length === 0) return [];
+
+  const identityContracts = tokenIds.flatMap((tokenId) => [
+    {
+      address: packCustody,
+      abi: packCustodyAbi,
+      functionName: "creatorOf" as const,
+      args: [tokenId] as const,
+    },
+    {
+      address: packCustody,
+      abi: packCustodyAbi,
+      functionName: "basketOf" as const,
+      args: [tokenId] as const,
+    },
+  ]);
+
+  const identityResults = await client.multicall({
+    contracts: identityContracts,
+    allowFailure: false,
+  });
+
+  const needsNavIndexes: number[] = [];
+  for (let i = 0; i < tokenIds.length; i++) {
+    if (!navByTokenId.has(Number(tokenIds[i]!))) {
+      needsNavIndexes.push(i);
+    }
+  }
+
+  const fetchedNav = new Map<number, string | null>();
+  if (needsNavIndexes.length > 0) {
+    const navResults = await client.multicall({
+      contracts: needsNavIndexes.map((i) => ({
+        address: ripEngine,
+        abi: ripEngineAbi,
+        functionName: "navOfPack" as const,
+        args: [tokenIds[i]!] as const,
+      })),
+      allowFailure: true,
+    });
+    for (let j = 0; j < needsNavIndexes.length; j++) {
+      const packIndex = needsNavIndexes[j]!;
+      const result = navResults[j]!;
+      fetchedNav.set(
+        packIndex,
+        result.status === "success" ? result.result.toString() : null
+      );
+    }
+  }
+
+  return tokenIds.map((tokenId, i) => {
+    const maker = identityResults[i * 2] as `0x${string}`;
+    const basketRaw = identityResults[i * 2 + 1] as readonly {
+      asset: `0x${string}`;
+      amount: bigint;
+    }[];
+    const knownNav = navByTokenId.get(Number(tokenId));
+    return {
+      tokenId,
+      maker,
+      basket: basketRaw.map((entry) => ({
+        asset: entry.asset.toLowerCase(),
+        amount: entry.amount.toString(),
+        symbol: stockSymbolForAddress(entry.asset),
+      })),
+      navUsdWad:
+        knownNav !== undefined ? knownNav : (fetchedNav.get(i) ?? null),
+    };
+  });
+}
+
 export async function upsertRestingPack(
   ctx: ActionCtx,
   client: PublicClient,
@@ -120,6 +209,44 @@ export async function upsertRestingPack(
     eligible,
     updatedAt: now,
   });
+}
+
+/**
+ * Refresh up to `limit` resting packs with batched on-chain reads, then
+ * parallel Convex upserts.
+ */
+export async function refreshRestingPacks(
+  ctx: ActionCtx,
+  client: PublicClient,
+  packCustody: `0x${string}`,
+  ripEngine: `0x${string}`,
+  restingIds: readonly bigint[],
+  eligibleSet: ReadonlySet<number>,
+  now: number,
+  navByTokenId: ReadonlyMap<number, string>,
+  limit = 50
+): Promise<void> {
+  const tokenIds = restingIds.slice(0, limit);
+  const metas = await readRestingPackMetas(
+    client,
+    packCustody,
+    ripEngine,
+    tokenIds,
+    navByTokenId
+  );
+  await Promise.all(
+    metas.map((meta) =>
+      ctx.runMutation(internal.poolIndexer.upsertPack, {
+        tokenId: Number(meta.tokenId),
+        maker: meta.maker.toLowerCase(),
+        basket: meta.basket,
+        navUsdWad: meta.navUsdWad,
+        status: "resting" as const,
+        eligible: eligibleSet.has(Number(meta.tokenId)),
+        updatedAt: now,
+      })
+    )
+  );
 }
 
 /**
