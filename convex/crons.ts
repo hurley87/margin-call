@@ -15,4 +15,12 @@ crons.hourly(
   {}
 );
 
+/** Index RipEngine / PackCustody pool state every minute. */
+crons.interval(
+  "sync pool from chain",
+  { minutes: 1 },
+  internal.poolIndexerActions.syncPoolFromChain,
+  {}
+);
+
 export default crons;

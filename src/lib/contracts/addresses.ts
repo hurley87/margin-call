@@ -1,8 +1,8 @@
 /**
  * V1 Pack-rip contract addresses for Robinhood Chain testnet.
  *
- * Populated by deploy scripts into `.env.local` (`NEXT_PUBLIC_*`). Convex indexers
- * should mirror the same values via `npx convex env set <KEY> <addr>` when #305 lands.
+ * Populated by deploy scripts into `.env.local` (`NEXT_PUBLIC_*`). Convex actions
+ * mirror the same values via `npx convex env set <KEY> <addr>` (see `.env.example`).
  */
 import { PAYMENT_CHAIN_SLUG } from "@/lib/privy/config";
 

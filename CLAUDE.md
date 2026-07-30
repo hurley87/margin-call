@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Margin Call is a **NAV-weighted Pack-rip game** on Robinhood Chain. One global pool; a single kind of participant — a **user** — who creates Packs of tokenized stocks (as a **Maker**) and/or rips them (as a **Taker**). Selection is inversely weighted by a Pack's USD NAV and each Rip is priced at the live expected value plus a maker–taker surcharge, so cheap Packs come up often and rich ones rarely (the jackpot). Makers are made whole by a socialized, equal-rate **Acquisition Fee** (stablecoin); a game token (**Maker Emissions** + **Participation Rewards**) is a steering layer streamed from an owner-funded **Distributor**. Authoritative design: **`docs/prd-margin-call.md`** (v2.0); domain glossary: **`CONTEXT.md`** (use its vocabulary — Maker, Taker, Rip, Pack, Acquisition Fee, Surcharge, Crown, Distributor, House). Full V1 build spec: GitHub issue #297.
 
-**Current implementation state — read before editing `src/` or `convex/`.** The legacy Wall Street agent-game (desk managers, AI traders, deals, Wire) was removed in #298. The app is an **auth shell**: Privy email OTP + embedded wallet on a minimal landing page, SIWA scaffolding, and Convex with only `siwaNonces` (+ `me` identity query). Pack-rip UI and game Convex modules land next per #297. On the contracts side, `contracts/` (LazerForge Foundry) has **MockUSD**, **PackCustody**, **AssetRegistry**, **MockPriceFeed**, **RipEngine** (selection + live pricing + Model-A settlement + Acquisition Fees + the Crown), **GameToken**, and the **Distributor** (on-chain Maker Emissions + equal-per-Rip Participation Rewards) built and tested; the app claim flow lands next per issue #297. Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
+**Current implementation state — read before editing `src/` or `convex/`.** The legacy Wall Street agent-game was removed in #298. V1 contracts are **deployed and verified on Robinhood testnet** (#310). The app shell (#305) is Privy connect + **Starter Grant** (MockUSD mint) + **Browse Pool** (Convex-indexed RipEngine/PackCustody state). Maker/Taker write flows and claims land next (#306–#308). Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
+
+**Convex env for #305** (after `npx convex env set`): `MOCKUSD_ADDRESS`, `PACKCUSTODY_ADDRESS`, `ASSETREGISTRY_ADDRESS`, `RIPENGINE_ADDRESS`, `ROBINHOOD_TESTNET_RPC_URL`, `STARTER_GRANT_MINTER_PRIVATE_KEY` (wallet must hold MockUSD `MINTER_ROLE`). Mirror `NEXT_PUBLIC_*` contract addresses in `.env.local` for the client.
 
 ## Commands
 
@@ -35,20 +37,20 @@ Margin Call is a **NAV-weighted Pack-rip game** on Robinhood Chain. One global p
 
 ## Architecture
 
-Convex holds auth scaffolding; the rip rebuild will add on-chain reads and game state per `docs/prd-margin-call.md` and issue #297.
+Convex indexes on-chain pool state and issues Starter Grants; Maker/Taker txs remain user-signed on-chain (#306+).
 
-- **`src/app/`** — App Router pages + SIWA nonce route under `src/app/api/siwa/`. Home is a minimal Privy connect shell.
-- **`convex/`** — `auth.config.ts`, `me.ts`, `siwaNonces.ts`, empty `http.ts`, schema (`siwaNonces` only), crons (SIWA nonce purge only).
+- **`src/app/`** — App Router pages + SIWA nonce route under `src/app/api/siwa/`. Home: Privy land → connected shell with grant + Browse Pool.
+- **`convex/`** — auth, `siwaNonces`, `starterGrants` / mint actions, pool index (`pool`, `poolIndexer*`), crons (nonce purge + pool sync).
 - **`contracts/`** — Foundry workspace (MockUSD + PackCustody + AssetRegistry / MockPriceFeed + RipEngine + GameToken + Distributor). See `contracts/README.md` and `contracts/REPRODUCIBILITY.md`.
-- **`src/lib/`** — Privy, SIWA, Convex server client, rate-limit, utils.
-- **`src/components/`** — Providers (Privy/Wagmi/Convex), landing shell, UI primitives.
+- **`src/lib/`** — Privy, SIWA, contracts ABIs/clients, grants policy, pool helpers, Convex server client, rate-limit, utils.
+- **`src/components/`** — Providers, landing, grants panel, Browse Pool, UI primitives.
 - **`src/hooks/`** — Network guard helpers (`use-base-network`).
 
 ### Key integrations:
 
 - **Auth/Wallet:** Privy (email OTP, embedded EVM wallets on Robinhood testnet).
-- **Database:** Convex (SIWA nonces + identity query today; game tables return with #297).
-- **Contracts:** Foundry CI on every PR; MockUSD is the protocol mock stablecoin; AssetRegistry holds the Stock Token whitelist + NAV on Robinhood Chain testnet.
+- **Database:** Convex (SIWA nonces, Starter Grants, packs + poolSnapshots).
+- **Contracts:** Live on Robinhood testnet; addresses in `contracts/deployments/` and `src/lib/contracts/addresses.ts`.
 
 ## Conventions
 
