@@ -45,7 +45,10 @@ contract DeployRipEngine is Utils {
         RipEngine engine = new RipEngine(admin, packs, registry, stablecoin, address(randomness));
 
         if (grantRole) {
-            require(admin == deployer, "DeployRipEngine: deployer must be admin to grant RIP_ENGINE_ROLE");
+            require(
+                PackCustody(packs).hasRole(bytes32(0), deployer),
+                "DeployRipEngine: deployer must hold PackCustody DEFAULT_ADMIN_ROLE to grant RIP_ENGINE_ROLE"
+            );
             PackCustody(packs).grantRole(keccak256("RIP_ENGINE_ROLE"), address(engine));
         }
         vm.stopBroadcast();

@@ -15,6 +15,7 @@ import {RipMath} from "./libraries/RipMath.sol";
 /// @title RipEngine
 /// @notice NAV-weighted Pack selection, live Rip pricing, Model-A settlement, Acquisition Fees.
 /// @dev Pool membership is explicit (`enterPool` / `exitPool`) — PackCustody has no enumeration.
+///      Unlisted Packs are purged before fee socialization so ghosts cannot dilute the rate.
 ///      Crown carve-out is a documented seam for #302; V1 leaves `crownShareOfSurcharge` unused.
 contract RipEngine is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -31,10 +32,7 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     /// @notice Maker recorded at enrollment (custody clears `creatorOf` on burn).
     mapping(uint256 tokenId => address maker) public makerOf;
 
-    /// @notice True while the Pack is in the resting set.
-    mapping(uint256 tokenId => bool resting) public isResting;
-
-    /// @dev Dense resting set for O(1) swap-and-pop removal.
+    /// @dev Dense resting set for O(1) swap-and-pop removal. Membership ↔ `_restingIndex[id] != 0`.
     uint256[] private _resting;
     mapping(uint256 tokenId => uint256 indexPlusOne) private _restingIndex;
 
@@ -81,13 +79,31 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     error PackNotListed(uint256 tokenId);
     error PackAlreadyResting(uint256 tokenId);
     error PackNotResting(uint256 tokenId);
-    error PackStillListed(uint256 tokenId);
     error EmptyEligibleSet();
     error DegenerateEligibleSet(uint256 eligible, uint256 count);
     error CountOutOfRange(uint256 count, uint256 maxBatchSize);
     error SlippageExceeded(uint256 totalPaid, uint256 maxTotalPayment);
     error NothingToClaim();
     error ZeroAmount();
+
+    /// @dev Eligible snapshot + priced batch totals.
+    struct Eligible {
+        uint256[] tokenIds;
+        uint256[] navs;
+        uint256 count;
+    }
+
+    /// @dev Per-unit and batch totals in stablecoin units (plus WAD unit price for events).
+    struct RipQuote {
+        uint256 unitPriceWad;
+        uint256 hm;
+        uint256 unitStable;
+        uint256 totalPaid;
+        uint256 protocolCutUnit;
+        uint256 toMakersUnit;
+        uint256 protocolCutTotal;
+        uint256 toMakersTotal;
+    }
 
     /// @param admin DEFAULT_ADMIN_ROLE holder.
     /// @param packs_ PackCustody (must later grant this contract `RIP_ENGINE_ROLE`).
@@ -114,14 +130,20 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     // Pool enrollment
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// @notice True while the Pack is in the resting set.
+    function isResting(uint256 tokenId) public view returns (bool) {
+        return _restingIndex[tokenId] != 0;
+    }
+
     /// @notice Enroll a listed Pack into the resting set. Maker-only.
-    /// @dev Snapshots `makerOf` and the fee checkpoint. Does not require NAV eligibility —
-    ///      undrawable Packs still accrue the equal-rate Acquisition Fee while enrolled.
+    /// @dev Snapshots `makerOf` and the fee checkpoint. Listed Packs accrue the equal-rate
+    ///      Acquisition Fee while enrolled (including temporarily undrawable / out-of-band).
+    ///      Unlisted Packs are purged before socialization and never accrue.
     function enterPool(uint256 tokenId) external nonReentrant {
         if (!packs.isListed(tokenId)) revert PackNotListed(tokenId);
         address creator = packs.creatorOf(tokenId);
         if (msg.sender != creator) revert NotPackCreator(tokenId, msg.sender);
-        if (isResting[tokenId]) revert PackAlreadyResting(tokenId);
+        if (isResting(tokenId)) revert PackAlreadyResting(tokenId);
 
         makerOf[tokenId] = creator;
         feeCheckpoint[tokenId] = accFeePerPack;
@@ -131,28 +153,17 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     }
 
     /// @notice Remove a Pack from the resting set.
-    /// @dev Maker may exit while listed. Anyone may exit once the Pack is no longer listed
-    ///      (ripped / transferred / redeemed) so the set cannot retain ghosts.
+    /// @dev Maker may exit while listed. Anyone may exit once unlisted (ripped / transferred /
+    ///      redeemed). Crystallizes pending fees into `claimableFees` then clears enrollment.
     function exitPool(uint256 tokenId) external nonReentrant {
-        if (!isResting[tokenId]) revert PackNotResting(tokenId);
+        if (!isResting(tokenId)) revert PackNotResting(tokenId);
 
         address maker = makerOf[tokenId];
-        bool listed = packs.isListed(tokenId);
-        if (listed) {
-            if (msg.sender != maker) revert NotPackCreator(tokenId, msg.sender);
+        if (packs.isListed(tokenId) && msg.sender != maker) {
+            revert NotPackCreator(tokenId, msg.sender);
         }
 
-        _crystallize(tokenId);
-        _removeResting(tokenId);
-        // Keep makerOf so a later claimFees on a still-listed exit path retains identity;
-        // cleared only when we want — leave for claim path. Actually after exit while listed,
-        // maker may re-enter. Clear makerOf only if not listed? If listed and maker exits,
-        // they can re-enter which overwrites makerOf. If unlisted, makerOf stays for claims.
-        if (listed) {
-            delete makerOf[tokenId];
-            delete feeCheckpoint[tokenId];
-        }
-
+        _leavePool(tokenId);
         emit PackExited(tokenId, maker);
     }
 
@@ -167,12 +178,117 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     }
 
     /// @notice Eligible Packs and their NAVs at the current block (fail-closed per Pack).
-    /// @dev A Pack drops out when not listed, navOf reverts (frozen/stale/invalid), or out of band.
+    /// @dev Drops Packs that are not listed, fail nav (frozen/stale/invalid), or are out of band.
     function eligibleSnapshot()
         public
         view
         returns (uint256[] memory tokenIds, uint256[] memory navs, uint256 eligibleCount)
     {
+        Eligible memory e = _eligible();
+        return (e.tokenIds, e.navs, e.count);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Live pricing + Rip
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// @notice Quote a batch Rip off a single eligible snapshot.
+    function quoteRip(uint256 count)
+        public
+        view
+        returns (uint256 eligible, uint256 hm, uint256 unitPrice, uint256 totalPayment)
+    {
+        (Eligible memory e, RipQuote memory q) = _quote(count);
+        return (e.count, q.hm, q.unitPriceWad, q.totalPaid);
+    }
+
+    /// @notice Rip `count` distinct Packs. Priced off one snapshot; settles Model A.
+    /// @param count Packs to draw (1..maxBatchSize); requires eligibleCount > count.
+    /// @param maxTotalPayment Slippage bound in stablecoin units (live pricing).
+    /// @return tokenIds Drawn Pack ids, now held by the Taker.
+    function rip(uint256 count, uint256 maxTotalPayment) external nonReentrant returns (uint256[] memory tokenIds) {
+        // Drop unlisted ghosts before selection and fee socialization.
+        _purgeUnlisted();
+
+        (Eligible memory e, RipQuote memory q) = _quote(count);
+        if (q.totalPaid > maxTotalPayment) revert SlippageExceeded(q.totalPaid, maxTotalPayment);
+
+        stablecoin.safeTransferFrom(msg.sender, address(this), q.totalPaid);
+        protocolAccrued += q.protocolCutTotal;
+
+        tokenIds = _settleDraws(e, count, q);
+        _socialize(q.toMakersTotal);
+
+        emit RipSettled(msg.sender, count, q.unitPriceWad, q.totalPaid, q.protocolCutTotal, q.toMakersTotal);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Acquisition Fee claims + protocol withdrawal
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// @notice Pending Acquisition Fee for a resting Pack (stablecoin units), including uncrystallized.
+    function pendingOf(uint256 tokenId) public view returns (uint256) {
+        if (!isResting(tokenId)) return 0;
+        return accFeePerPack - feeCheckpoint[tokenId];
+    }
+
+    /// @notice Crystallize optional Pack ids owned by the caller, then withdraw all claimable fees.
+    /// @param tokenIds Resting Packs to crystallize first; empty withdraws already-crystallized only.
+    function claim(uint256[] calldata tokenIds) external nonReentrant returns (uint256 amount) {
+        for (uint256 i; i < tokenIds.length; ++i) {
+            uint256 tokenId = tokenIds[i];
+            if (!isResting(tokenId)) continue;
+            if (makerOf[tokenId] != msg.sender) continue;
+            _crystallize(tokenId);
+        }
+        amount = _withdrawClaimable(msg.sender);
+    }
+
+    /// @notice Admin withdraws accrued protocol cut.
+    function withdrawProtocolFees(address to) external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256 amount) {
+        if (to == address(0)) revert ZeroAddress();
+        amount = protocolAccrued;
+        if (amount == 0) revert ZeroAmount();
+        protocolAccrued = 0;
+        stablecoin.safeTransfer(to, amount);
+        emit ProtocolFeesWithdrawn(to, amount);
+    }
+
+    /// @notice Swap the randomness source (prospective).
+    function setRandomness(address randomness_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (randomness_ == address(0)) revert ZeroAddress();
+        randomness = IRandomnessSource(randomness_);
+        emit RandomnessUpdated(randomness_);
+    }
+
+    /// @notice Sum USD NAV of a Pack via registry quotes (no basket reshape). Fail-closed.
+    /// @dev External so `_tryNav` can wrap it in try/catch.
+    function navOfPack(uint256 tokenId) external view returns (uint256 nav) {
+        PackCustody.BasketEntry[] memory basket = packs.basketOf(tokenId);
+        uint256 length = basket.length;
+        if (length == 0) revert AssetRegistry.EmptyBasket();
+        for (uint256 i; i < length; ++i) {
+            nav += registry.quote(basket[i].asset, basket[i].amount);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Internals — quote / settle
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function _quote(uint256 count) internal view returns (Eligible memory e, RipQuote memory q) {
+        if (count == 0 || count > registry.maxBatchSize()) {
+            revert CountOutOfRange(count, registry.maxBatchSize());
+        }
+
+        e = _eligible();
+        if (e.count == 0) revert EmptyEligibleSet();
+        if (e.count <= count) revert DegenerateEligibleSet(e.count, count);
+
+        q = _priceRip(e.navs, count);
+    }
+
+    function _eligible() internal view returns (Eligible memory e) {
         uint256 n = _resting.length;
         uint256[] memory idsBuf = new uint256[](n);
         uint256[] memory navBuf = new uint256[](n);
@@ -193,95 +309,19 @@ contract RipEngine is AccessControl, ReentrancyGuard {
             }
         }
 
-        tokenIds = new uint256[](count);
-        navs = new uint256[](count);
+        e.tokenIds = new uint256[](count);
+        e.navs = new uint256[](count);
         for (uint256 i; i < count; ++i) {
-            tokenIds[i] = idsBuf[i];
-            navs[i] = navBuf[i];
+            e.tokenIds[i] = idsBuf[i];
+            e.navs[i] = navBuf[i];
         }
-        eligibleCount = count;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Live pricing
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /// @notice Quote a batch Rip off a single eligible snapshot.
-    /// @return eligible Number of Packs in the price/selection set.
-    /// @return hm Harmonic mean of eligible NAVs (WAD USD).
-    /// @return unitPrice Clamped per-Pack Rip price (WAD USD).
-    /// @return totalPayment Total stablecoin units the Taker would pay (`count * unitStable`).
-    function quoteRip(uint256 count)
-        public
-        view
-        returns (uint256 eligible, uint256 hm, uint256 unitPrice, uint256 totalPayment)
-    {
-        if (count == 0 || count > registry.maxBatchSize()) {
-            revert CountOutOfRange(count, registry.maxBatchSize());
-        }
-
-        (, uint256[] memory navs, uint256 eligibleCount) = eligibleSnapshot();
-        if (eligibleCount == 0) revert EmptyEligibleSet();
-        if (eligibleCount <= count) revert DegenerateEligibleSet(eligibleCount, count);
-
-        hm = RipMath.harmonicMean(navs);
-        unitPrice = RipMath.clampUnitPrice(hm, registry.surcharge(), registry.minPackNav(), registry.poolMax());
-        totalPayment = _wadToStable(unitPrice) * count;
-        eligible = eligibleCount;
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // Rip — Model A settlement
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /// @dev Per-unit and batch totals in stablecoin units (plus WAD unit price for events).
-    struct RipQuote {
-        uint256 unitPriceWad;
-        uint256 unitStable;
-        uint256 totalPaid;
-        uint256 protocolCutUnit;
-        uint256 toMakersUnit;
-        uint256 protocolCutTotal;
-        uint256 toMakersTotal;
-    }
-
-    /// @notice Rip `count` distinct Packs. Priced off one snapshot; settles Model A.
-    /// @param count Packs to draw (1..maxBatchSize); requires eligibleCount > count.
-    /// @param maxTotalPayment Slippage bound in stablecoin units (live pricing).
-    /// @return tokenIds Drawn Pack ids, now held by the Taker.
-    function rip(uint256 count, uint256 maxTotalPayment) external nonReentrant returns (uint256[] memory tokenIds) {
-        if (count == 0 || count > registry.maxBatchSize()) {
-            revert CountOutOfRange(count, registry.maxBatchSize());
-        }
-
-        (uint256[] memory eligibleIds, uint256[] memory navs, uint256 eligibleCount) = eligibleSnapshot();
-        if (eligibleCount == 0) revert EmptyEligibleSet();
-        if (eligibleCount <= count) revert DegenerateEligibleSet(eligibleCount, count);
-
-        RipQuote memory q = _priceRip(navs, count);
-        if (q.totalPaid > maxTotalPayment) revert SlippageExceeded(q.totalPaid, maxTotalPayment);
-
-        stablecoin.safeTransferFrom(msg.sender, address(this), q.totalPaid);
-        protocolAccrued += q.protocolCutTotal;
-
-        tokenIds = _settleDraws(eligibleIds, navs, count, q);
-
-        // Socialize to_makers equally across Packs still enrolled.
-        // Guaranteed remaining > 0 by eligibleCount > count (see DegenerateEligibleSet).
-        uint256 distributable = q.toMakersTotal + feeDust;
-        uint256 perPack = distributable / _resting.length;
-        feeDust = distributable % _resting.length;
-        if (perPack > 0) {
-            accFeePerPack += perPack;
-        }
-
-        emit RipSettled(msg.sender, count, q.unitPriceWad, q.totalPaid, q.protocolCutTotal, q.toMakersTotal);
+        e.count = count;
     }
 
     function _priceRip(uint256[] memory navs, uint256 count) internal view returns (RipQuote memory q) {
         uint256 surcharge = registry.surcharge();
-        q.unitPriceWad =
-            RipMath.clampUnitPrice(RipMath.harmonicMean(navs), surcharge, registry.minPackNav(), registry.poolMax());
+        q.hm = RipMath.harmonicMean(navs);
+        q.unitPriceWad = RipMath.clampUnitPrice(q.hm, surcharge, registry.minPackNav(), registry.poolMax());
         q.unitStable = _wadToStable(q.unitPriceWad);
         q.totalPaid = q.unitStable * count;
 
@@ -295,99 +335,80 @@ contract RipEngine is AccessControl, ReentrancyGuard {
         q.toMakersTotal = q.toMakersUnit * count;
     }
 
-    function _settleDraws(uint256[] memory eligibleIds, uint256[] memory navs, uint256 count, RipQuote memory q)
+    function _settleDraws(Eligible memory e, uint256 count, RipQuote memory q)
         internal
         returns (uint256[] memory tokenIds)
     {
-        uint256[] memory weights = new uint256[](eligibleIds.length);
+        uint256[] memory weights = new uint256[](e.count);
         {
             uint256 alpha = registry.alpha();
-            for (uint256 i; i < eligibleIds.length; ++i) {
-                weights[i] = RipMath.weightOf(navs[i], alpha);
+            for (uint256 i; i < e.count; ++i) {
+                weights[i] = RipMath.weightOf(e.navs[i], alpha);
             }
         }
 
         uint256[] memory drawnIdx;
         {
-            uint256 seed =
-                randomness.nextSeed(keccak256(abi.encode(count, eligibleIds.length, _resting.length, msg.sender)));
+            uint256 seed = randomness.nextSeed(keccak256(abi.encode(count, e.count, _resting.length, msg.sender)));
             drawnIdx = RipMath.drawDistinct(weights, seed, count);
         }
 
         tokenIds = new uint256[](count);
         for (uint256 k; k < count; ++k) {
             uint256 idx = drawnIdx[k];
-            tokenIds[k] = eligibleIds[idx];
-            _finalizeDrawnPack(eligibleIds[idx], msg.sender, navs[idx], q);
+            uint256 tokenId = e.tokenIds[idx];
+            tokenIds[k] = tokenId;
+            _finalizeDrawnPack(tokenId, msg.sender, e.navs[idx], q);
         }
     }
 
     function _finalizeDrawnPack(uint256 tokenId, address taker, uint256 nav, RipQuote memory q) internal {
         address maker = makerOf[tokenId];
-        _crystallize(tokenId);
-        _removeResting(tokenId);
-        delete feeCheckpoint[tokenId];
+        _leavePool(tokenId);
         packs.releaseToRecipient(tokenId, taker);
         emit PackRipped(tokenId, taker, maker, nav, q.unitPriceWad, q.protocolCutUnit, q.toMakersUnit);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Acquisition Fee claims + protocol withdrawal
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /// @notice Pending Acquisition Fee for a resting Pack (stablecoin units), including uncrystallized.
-    function pendingOf(uint256 tokenId) public view returns (uint256) {
-        if (!isResting[tokenId]) return 0;
-        return accFeePerPack - feeCheckpoint[tokenId];
-    }
-
-    /// @notice Crystallize fees for the given resting Packs into `claimableFees[maker]` and withdraw all.
-    function claimFees(uint256[] calldata tokenIds) external nonReentrant returns (uint256 amount) {
-        for (uint256 i; i < tokenIds.length; ++i) {
-            uint256 tokenId = tokenIds[i];
-            if (!isResting[tokenId]) continue;
-            if (makerOf[tokenId] != msg.sender) continue;
-            _crystallize(tokenId);
+    function _socialize(uint256 toMakersTotal) internal {
+        // Guaranteed remaining > 0 by eligibleCount > count after purge + draws.
+        uint256 remaining = _resting.length;
+        uint256 distributable = toMakersTotal + feeDust;
+        uint256 perPack = distributable / remaining;
+        feeDust = distributable % remaining;
+        if (perPack > 0) {
+            accFeePerPack += perPack;
         }
-        amount = claimableFees[msg.sender];
-        if (amount == 0) revert NothingToClaim();
-        claimableFees[msg.sender] = 0;
-        stablecoin.safeTransfer(msg.sender, amount);
-        emit FeesClaimed(msg.sender, amount);
-    }
-
-    /// @notice Withdraw already-crystallized Acquisition Fees (no Pack ids needed).
-    function claim() external nonReentrant returns (uint256 amount) {
-        amount = claimableFees[msg.sender];
-        if (amount == 0) revert NothingToClaim();
-        claimableFees[msg.sender] = 0;
-        stablecoin.safeTransfer(msg.sender, amount);
-        emit FeesClaimed(msg.sender, amount);
-    }
-
-    /// @notice Admin withdraws accrued protocol cut.
-    function withdrawProtocolFees(address to) external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256 amount) {
-        if (to == address(0)) revert ZeroAddress();
-        amount = protocolAccrued;
-        if (amount == 0) revert ZeroAmount();
-        protocolAccrued = 0;
-        stablecoin.safeTransfer(to, amount);
-        emit ProtocolFeesWithdrawn(to, amount);
-    }
-
-    /// @notice Swap the randomness source (prospective).
-    function setRandomness(address randomness_) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (randomness_ == address(0)) revert ZeroAddress();
-        randomness = IRandomnessSource(randomness_);
-        emit RandomnessUpdated(randomness_);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Internals
+    // Internals — pool membership
     // ─────────────────────────────────────────────────────────────────────────
+
+    /// @dev Crystallize, remove from resting set, clear enrollment storage.
+    function _leavePool(uint256 tokenId) internal {
+        _crystallize(tokenId);
+        _removeResting(tokenId);
+        delete makerOf[tokenId];
+        delete feeCheckpoint[tokenId];
+    }
+
+    /// @dev Remove unlisted Packs from the resting set (descending so swap-pop is safe).
+    function _purgeUnlisted() internal {
+        uint256 i = _resting.length;
+        while (i > 0) {
+            unchecked {
+                --i;
+            }
+            uint256 tokenId = _resting[i];
+            if (!packs.isListed(tokenId)) {
+                address maker = makerOf[tokenId];
+                _leavePool(tokenId);
+                emit PackExited(tokenId, maker);
+            }
+        }
+    }
 
     function _addResting(uint256 tokenId) internal {
-        isResting[tokenId] = true;
         _resting.push(tokenId);
         _restingIndex[tokenId] = _resting.length; // 1-based
     }
@@ -405,10 +426,8 @@ contract RipEngine is AccessControl, ReentrancyGuard {
 
         _resting.pop();
         delete _restingIndex[tokenId];
-        isResting[tokenId] = false;
     }
 
-    /// @dev Credit uncrystallized fee to the Maker and bump the checkpoint.
     function _crystallize(uint256 tokenId) internal {
         uint256 pending = accFeePerPack - feeCheckpoint[tokenId];
         if (pending > 0) {
@@ -417,26 +436,22 @@ contract RipEngine is AccessControl, ReentrancyGuard {
         }
     }
 
+    function _withdrawClaimable(address maker) internal returns (uint256 amount) {
+        amount = claimableFees[maker];
+        if (amount == 0) revert NothingToClaim();
+        claimableFees[maker] = 0;
+        stablecoin.safeTransfer(maker, amount);
+        emit FeesClaimed(maker, amount);
+    }
+
     function _tryNav(uint256 tokenId) internal view returns (bool ok, uint256 nav) {
-        PackCustody.BasketEntry[] memory basket = packs.basketOf(tokenId);
-        uint256 length = basket.length;
-        if (length == 0) return (false, 0);
-
-        address[] memory tokens = new address[](length);
-        uint256[] memory amounts = new uint256[](length);
-        for (uint256 i; i < length; ++i) {
-            tokens[i] = basket[i].asset;
-            amounts[i] = basket[i].amount;
-        }
-
-        try registry.navOf(tokens, amounts) returns (uint256 value) {
+        try this.navOfPack(tokenId) returns (uint256 value) {
             return (true, value);
         } catch {
             return (false, 0);
         }
     }
 
-    /// @dev Convert WAD USD to stablecoin units (peg trusted at par).
     function _wadToStable(uint256 wad) internal view returns (uint256) {
         return (wad * (10 ** uint256(stableDecimals))) / WAD;
     }

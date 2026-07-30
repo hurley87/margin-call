@@ -2,47 +2,48 @@
 pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
-import {StdInvariant} from "forge-std/StdInvariant.sol";
-import {AssetRegistry} from "../src/AssetRegistry.sol";
-import {MockUSD} from "../src/MockUSD.sol";
+import {MockStockToken} from "./mocks/MockStockToken.sol";
 import {PackCustody} from "../src/PackCustody.sol";
 import {RipEngine} from "../src/RipEngine.sol";
-import {MockPriceFeed} from "../src/mocks/MockPriceFeed.sol";
-import {MockRandomness} from "../src/mocks/MockRandomness.sol";
-import {MockStockToken} from "./mocks/MockStockToken.sol";
+import {MockUSD} from "../src/MockUSD.sol";
+import {RipEngineFixture} from "./helpers/RipEngineFixture.sol";
 
-/// @notice Drives enroll / rip / claim through the public ABI and tracks fee ghosts.
+/// @notice Drives enroll / rip / claim / withdraw against the shared fixture stack.
 contract RipEngineHandler is Test {
     uint256 internal constant WAD = 1e18;
 
-    RipEngine public immutable ENGINE;
-    PackCustody public immutable PACKS;
-    MockUSD public immutable USD;
-    address public immutable ADMIN;
-
-    address[] public makers;
+    RipEngine public engine;
+    PackCustody public packs;
+    MockUSD public usd;
+    address public admin;
     address public taker;
+    address[] public makers;
 
     uint256 public ghostPaidIn;
     uint256 public ghostClaimedOut;
     uint256 public ghostProtocolOut;
-    mapping(uint256 tokenId => bool everResting) public ghostEverResting;
     mapping(uint256 tokenId => bool everSettled) public ghostEverSettled;
 
-    constructor(RipEngine engine_, PackCustody packs_, MockUSD usd_, address admin_, address taker_) {
-        ENGINE = engine_;
-        PACKS = packs_;
-        USD = usd_;
-        ADMIN = admin_;
+    function configure(
+        RipEngine engine_,
+        PackCustody packs_,
+        MockUSD usd_,
+        address admin_,
+        address taker_,
+        address[] memory makers_
+    ) external {
+        engine = engine_;
+        packs = packs_;
+        usd = usd_;
+        admin = admin_;
         taker = taker_;
-
-        makers.push(makeAddr("invMaker0"));
-        makers.push(makeAddr("invMaker1"));
-        makers.push(makeAddr("invMaker2"));
+        for (uint256 i; i < makers_.length; ++i) {
+            makers.push(makers_[i]);
+        }
     }
 
     function enroll(uint256 makerSeed, uint256 navSeed) external {
-        address maker = makers[bound(makerSeed, 0, makers.length - 1)];
+        address who = makers[bound(makerSeed, 0, makers.length - 1)];
         uint256 nav = bound(navSeed, 20 * WAD, 300 * WAD);
         nav = (nav / WAD) * WAD;
         if (nav < 20 * WAD) nav = 20 * WAD;
@@ -51,158 +52,112 @@ contract RipEngineHandler is Test {
         uint256 amount = nav / 100;
         if (amount == 0) return;
 
-        MockStockToken amzn = MockStockToken(PACKS.whitelistedAssets()[0]);
-        if (amzn.balanceOf(maker) < amount) {
-            amzn.mint(maker, amount * 10);
-            vm.prank(maker);
-            amzn.approve(address(PACKS), type(uint256).max);
+        MockStockToken token = MockStockToken(packs.whitelistedAssets()[0]);
+        if (token.balanceOf(who) < amount) {
+            token.mint(who, amount * 10);
+            vm.prank(who);
+            token.approve(address(packs), type(uint256).max);
         }
 
         address[] memory assets = new address[](1);
         uint256[] memory amounts = new uint256[](1);
-        assets[0] = address(amzn);
+        assets[0] = address(token);
         amounts[0] = amount;
 
-        vm.prank(maker);
-        uint256 tokenId = PACKS.mint(assets, amounts);
-        vm.prank(maker);
-        ENGINE.enterPool(tokenId);
-
-        ghostEverResting[tokenId] = true;
+        vm.prank(who);
+        uint256 tokenId = packs.mint(assets, amounts);
+        vm.prank(who);
+        engine.enterPool(tokenId);
     }
 
     function rip(uint256 countSeed, uint256) external {
-        uint256 resting = ENGINE.restingCount();
-        if (resting < 2) return;
-
-        (,, uint256 eligible) = ENGINE.eligibleSnapshot();
+        if (engine.restingCount() < 2) return;
+        (,, uint256 eligible) = engine.eligibleSnapshot();
         if (eligible < 2) return;
 
         uint256 maxCount = eligible - 1;
         if (maxCount > 5) maxCount = 5;
         uint256 count = bound(countSeed, 1, maxCount);
 
-        try ENGINE.quoteRip(count) returns (uint256, uint256, uint256, uint256 totalPayment) {
-            if (USD.balanceOf(taker) < totalPayment) {
-                vm.prank(ADMIN);
-                USD.mint(taker, totalPayment * 10);
+        try engine.quoteRip(count) returns (uint256, uint256, uint256, uint256 totalPayment) {
+            if (usd.balanceOf(taker) < totalPayment) {
+                vm.prank(admin);
+                usd.mint(taker, totalPayment * 10);
             }
             vm.prank(taker);
-            USD.approve(address(ENGINE), type(uint256).max);
+            usd.approve(address(engine), type(uint256).max);
 
             vm.prank(taker);
-            uint256[] memory drawn = ENGINE.rip(count, totalPayment);
+            uint256[] memory drawn = engine.rip(count, totalPayment);
             ghostPaidIn += totalPayment;
             for (uint256 i; i < drawn.length; ++i) {
                 assertFalse(ghostEverSettled[drawn[i]]);
                 ghostEverSettled[drawn[i]] = true;
-                assertFalse(ENGINE.isResting(drawn[i]));
+                assertFalse(engine.isResting(drawn[i]));
             }
         } catch {}
     }
 
     function claim(uint256 makerSeed) external {
-        address maker = makers[bound(makerSeed, 0, makers.length - 1)];
-        uint256[] memory resting = ENGINE.restingPackIds();
-        if (resting.length == 0 && ENGINE.claimableFees(maker) == 0) return;
+        address who = makers[bound(makerSeed, 0, makers.length - 1)];
+        uint256[] memory resting = engine.restingPackIds();
+        if (resting.length == 0 && engine.claimableFees(who) == 0) return;
 
-        uint256 before = USD.balanceOf(maker);
-        vm.prank(maker);
-        try ENGINE.claimFees(resting) {
-            ghostClaimedOut += USD.balanceOf(maker) - before;
+        uint256 before = usd.balanceOf(who);
+        vm.prank(who);
+        try engine.claim(resting) {
+            ghostClaimedOut += usd.balanceOf(who) - before;
         } catch {
-            vm.prank(maker);
-            try ENGINE.claim() returns (uint256 amt) {
+            uint256[] memory none = new uint256[](0);
+            vm.prank(who);
+            try engine.claim(none) returns (uint256 amt) {
                 ghostClaimedOut += amt;
             } catch {}
         }
     }
 
     function withdrawProtocol() external {
-        uint256 accrued = ENGINE.protocolAccrued();
+        uint256 accrued = engine.protocolAccrued();
         if (accrued == 0) return;
         address treasury = makeAddr("invTreasury");
-        uint256 before = USD.balanceOf(treasury);
-        vm.prank(ADMIN);
-        try ENGINE.withdrawProtocolFees(treasury) {
-            ghostProtocolOut += USD.balanceOf(treasury) - before;
+        uint256 before = usd.balanceOf(treasury);
+        vm.prank(admin);
+        try engine.withdrawProtocolFees(treasury) {
+            ghostProtocolOut += usd.balanceOf(treasury) - before;
         } catch {}
     }
 }
 
-contract RipEngineInvariantTest is StdInvariant, Test {
-    uint8 internal constant FEED_DECIMALS = 8;
-    uint64 internal constant STALE_AFTER = 1 hours;
-
+/// @notice Invariants compose `RipEngineFixture` instead of redeploying the stack.
+contract RipEngineInvariantTest is Test, RipEngineFixture {
     RipEngineHandler internal handler;
-    RipEngine internal engine;
-    PackCustody internal packs;
-    MockUSD internal usd;
+    address internal maker3;
 
-    address internal admin = makeAddr("admin");
-    address internal taker = makeAddr("taker");
-    address internal maker0 = makeAddr("invMaker0");
-    address internal maker1 = makeAddr("invMaker1");
-    address internal maker2 = makeAddr("invMaker2");
+    function setUp() public override {
+        super.setUp();
+        maker3 = makeAddr("invMaker2");
+        _fundMaker(maker3);
 
-    function setUp() public {
-        MockStockToken amzn = new MockStockToken("Amazon", "tAMZN", 18);
-        MockStockToken amd = new MockStockToken("AMD", "tAMD", 18);
-        MockStockToken nflx = new MockStockToken("NFLX", "tNFLX", 8);
-        MockStockToken pltr = new MockStockToken("PLTR", "tPLTR", 6);
-        MockStockToken tsla = new MockStockToken("TSLA", "tTSLA", 18);
+        address[] memory makers_ = new address[](3);
+        makers_[0] = maker;
+        makers_[1] = maker2;
+        makers_[2] = maker3;
 
-        address[] memory whitelist = new address[](5);
-        whitelist[0] = address(amzn);
-        whitelist[1] = address(amd);
-        whitelist[2] = address(nflx);
-        whitelist[3] = address(pltr);
-        whitelist[4] = address(tsla);
+        handler = new RipEngineHandler();
+        handler.configure(engine, packs, usd, admin, taker, makers_);
 
-        packs = new PackCustody(admin, whitelist);
-        AssetRegistry registry = new AssetRegistry(admin);
-        usd = new MockUSD(admin);
-        MockRandomness randomness = new MockRandomness(admin, 1);
-
-        MockPriceFeed amznFeed = new MockPriceFeed(admin, FEED_DECIMALS, 100e8);
-        MockPriceFeed amdFeed = new MockPriceFeed(admin, FEED_DECIMALS, 50e8);
-        MockPriceFeed nflxFeed = new MockPriceFeed(admin, FEED_DECIMALS, 200e8);
-        MockPriceFeed pltrFeed = new MockPriceFeed(admin, FEED_DECIMALS, 25e8);
-        MockPriceFeed tslaFeed = new MockPriceFeed(admin, FEED_DECIMALS, 300e8);
-
-        vm.startPrank(admin);
-        registry.addAsset(address(amzn), address(amznFeed), STALE_AFTER);
-        registry.addAsset(address(amd), address(amdFeed), STALE_AFTER);
-        registry.addAsset(address(nflx), address(nflxFeed), STALE_AFTER);
-        registry.addAsset(address(pltr), address(pltrFeed), STALE_AFTER);
-        registry.addAsset(address(tsla), address(tslaFeed), STALE_AFTER);
-        usd.grantRole(usd.MINTER_ROLE(), admin);
-        vm.stopPrank();
-
-        engine = new RipEngine(admin, address(packs), address(registry), address(usd), address(randomness));
-        bytes32 ripRole = packs.RIP_ENGINE_ROLE();
-        vm.prank(admin);
-        packs.grantRole(ripRole, address(engine));
-
-        address[3] memory makerAddrs = [maker0, maker1, maker2];
-        for (uint256 i; i < makerAddrs.length; ++i) {
-            amzn.mint(makerAddrs[i], 1_000_000e18);
-            vm.prank(makerAddrs[i]);
-            amzn.approve(address(packs), type(uint256).max);
-        }
-        vm.prank(admin);
-        usd.mint(taker, 10_000_000e6);
-        vm.prank(taker);
-        usd.approve(address(engine), type(uint256).max);
-
-        handler = new RipEngineHandler(engine, packs, usd, admin, taker);
+        bytes4[] memory selectors = new bytes4[](4);
+        selectors[0] = RipEngineHandler.enroll.selector;
+        selectors[1] = RipEngineHandler.rip.selector;
+        selectors[2] = RipEngineHandler.claim.selector;
+        selectors[3] = RipEngineHandler.withdrawProtocol.selector;
+        targetSelector(FuzzSelector({addr: address(handler), selectors: selectors}));
         targetContract(address(handler));
     }
 
-    /// @notice Engine stablecoin balance covers unclaimed maker fees + protocol.
     function invariant_solvency() public view {
         uint256 balance = usd.balanceOf(address(engine));
-        uint256 claimable = engine.claimableFees(maker0) + engine.claimableFees(maker1) + engine.claimableFees(maker2);
+        uint256 claimable = engine.claimableFees(maker) + engine.claimableFees(maker2) + engine.claimableFees(maker3);
 
         uint256[] memory resting = engine.restingPackIds();
         uint256 pending;
@@ -213,13 +168,11 @@ contract RipEngineInvariantTest is StdInvariant, Test {
         assertGe(balance, claimable + pending + engine.protocolAccrued());
     }
 
-    /// @notice Payments in equal remaining balance + claims + protocol withdrawals.
     function invariant_conservation() public view {
         uint256 balance = usd.balanceOf(address(engine));
         assertEq(handler.ghostPaidIn(), balance + handler.ghostClaimedOut() + handler.ghostProtocolOut());
     }
 
-    /// @notice No Pack is enrolled twice.
     function invariant_noDoubleEnrollment() public view {
         uint256[] memory ids = engine.restingPackIds();
         assertEq(ids.length, engine.restingCount());
@@ -231,7 +184,6 @@ contract RipEngineInvariantTest is StdInvariant, Test {
         }
     }
 
-    /// @notice A settled Pack never returns to the resting set.
     function invariant_settleOnce() public view {
         uint256[] memory ids = engine.restingPackIds();
         for (uint256 i; i < ids.length; ++i) {

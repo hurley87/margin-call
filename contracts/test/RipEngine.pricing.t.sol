@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Test} from "forge-std/Test.sol";
 import {RipEngine} from "../src/RipEngine.sol";
 import {RipMath} from "../src/libraries/RipMath.sol";
 import {RipEngineFixture} from "./helpers/RipEngineFixture.sol";
 
-contract RipEnginePricingTest is RipEngineFixture {
+contract RipEnginePricingTest is Test, RipEngineFixture {
     function test_quoteRip_pricesOffSingleSnapshot() public {
         _enrollPack(maker, 22 * WAD);
         _enrollPack(maker, 100 * WAD);

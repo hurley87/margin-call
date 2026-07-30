@@ -97,9 +97,10 @@ NAV-weighted Pack selection, live Rip pricing, Model-A settlement, and Acquisiti
 - Distinct draws without replacement, weights `∝ 1/NAV^alpha` (whole-number alpha only); entropy via injectable `IRandomnessSource` (`MockRandomness` in V1)
 - Protocol cut from the surcharge only; remainder socialized equally per resting Pack via a fee-per-Pack index (make-whole at `alpha = 1`)
 - Requires `eligibleCount > count` so socialization has a non-empty destination set
-- Maker `claimFees` / `claim`; admin `withdrawProtocolFees`
+- Maker `claim(tokenIds)` (empty = crystallized only); admin `withdrawProtocolFees`
+- Unlisted Packs are purged at the start of every `rip` so ghosts cannot dilute fee socialization
 - Crown carve-out is a documented seam for [#302](https://github.com/hurley87/margin-call/issues/302) — unused in V1 while `crownEnabled = false`
-- Equal-rate fee accrual follows enrollment (not per-rip eligibility); a Pack with a temporarily stale feed keeps accruing while undrawable
+- Equal-rate fee accrual follows enrollment for listed Packs (not per-rip eligibility); a Pack with a temporarily stale feed keeps accruing while undrawable
 
 ## Deploy (Robinhood Chain testnet)
 

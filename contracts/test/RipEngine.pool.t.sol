@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Test} from "forge-std/Test.sol";
 import {AssetRegistry} from "../src/AssetRegistry.sol";
 import {RipEngine} from "../src/RipEngine.sol";
 import {RipEngineFixture} from "./helpers/RipEngineFixture.sol";
 
-contract RipEnginePoolTest is RipEngineFixture {
+contract RipEnginePoolTest is Test, RipEngineFixture {
     function test_enterPool_enrollsListedPack() public {
         uint256 id = _mintPackAtNav(maker, 25 * WAD);
         vm.prank(maker);

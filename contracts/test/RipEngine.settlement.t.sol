@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
+import {Test} from "forge-std/Test.sol";
 import {RipEngine} from "../src/RipEngine.sol";
 import {RipEngineFixture} from "./helpers/RipEngineFixture.sol";
 
-contract RipEngineSettlementTest is RipEngineFixture {
+contract RipEngineSettlementTest is Test, RipEngineFixture {
     event PackRipped(
         uint256 indexed tokenId,
         address indexed taker,
