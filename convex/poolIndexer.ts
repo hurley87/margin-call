@@ -1,0 +1,119 @@
+import { v } from "convex/values";
+
+import { internalMutation, internalQuery } from "./_generated/server";
+
+const basketEntry = v.object({
+  asset: v.string(),
+  amount: v.string(),
+  symbol: v.union(v.string(), v.null()),
+});
+
+const navBucket = v.object({
+  minUsd: v.number(),
+  maxUsd: v.union(v.number(), v.null()),
+  count: v.number(),
+});
+
+export const getCursor = internalQuery({
+  args: { key: v.string() },
+  returns: v.union(v.number(), v.null()),
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("chainCursors")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .unique();
+    return row?.blockNumber ?? null;
+  },
+});
+
+export const setCursor = internalMutation({
+  args: { key: v.string(), blockNumber: v.number() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("chainCursors")
+      .withIndex("by_key", (q) => q.eq("key", args.key))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, { blockNumber: args.blockNumber });
+    } else {
+      await ctx.db.insert("chainCursors", {
+        key: args.key,
+        blockNumber: args.blockNumber,
+      });
+    }
+    return null;
+  },
+});
+
+export const upsertPack = internalMutation({
+  args: {
+    tokenId: v.number(),
+    maker: v.string(),
+    basket: v.array(basketEntry),
+    navUsdWad: v.union(v.string(), v.null()),
+    status: v.union(
+      v.literal("resting"),
+      v.literal("ripped"),
+      v.literal("unlisted")
+    ),
+    eligible: v.boolean(),
+    updatedAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("packs")
+      .withIndex("by_tokenId", (q) => q.eq("tokenId", args.tokenId))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        maker: args.maker,
+        basket: args.basket,
+        navUsdWad: args.navUsdWad,
+        status: args.status,
+        eligible: args.eligible,
+        updatedAt: args.updatedAt,
+      });
+    } else {
+      await ctx.db.insert("packs", args);
+    }
+    return null;
+  },
+});
+
+export const writeSnapshot = internalMutation({
+  args: {
+    eligibleCount: v.number(),
+    restingCount: v.number(),
+    harmonicMeanNavWad: v.union(v.string(), v.null()),
+    ripUnitPriceWad: v.union(v.string(), v.null()),
+    navDistribution: v.array(navBucket),
+    blockNumber: v.number(),
+    updatedAt: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("poolSnapshots")
+      .withIndex("by_key", (q) => q.eq("key", "latest"))
+      .unique();
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        eligibleCount: args.eligibleCount,
+        restingCount: args.restingCount,
+        harmonicMeanNavWad: args.harmonicMeanNavWad,
+        ripUnitPriceWad: args.ripUnitPriceWad,
+        navDistribution: args.navDistribution,
+        blockNumber: args.blockNumber,
+        updatedAt: args.updatedAt,
+      });
+    } else {
+      await ctx.db.insert("poolSnapshots", {
+        key: "latest",
+        ...args,
+      });
+    }
+    return null;
+  },
+});
