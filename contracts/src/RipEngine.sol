@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {AssetRegistry} from "./AssetRegistry.sol";
 import {PackCustody} from "./PackCustody.sol";
@@ -267,10 +268,15 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     /// @notice Total resting NAV (WAD USD) a challenger must reach to take the Crown.
     /// @dev `reigning × (1 + crownBeatMargin)`, and always at least one wei above the reigning
     ///      total so a `crownBeatMargin` of zero still cannot flicker the Crown on a tie.
+    ///      Must never revert: this sits on `_leavePool`'s path, so an arithmetic failure here
+    ///      would block exits, purges, and draws for everyone. `poolMax` bounds eligibility but
+    ///      not enrollment, so a resting total is unbounded — `mulDiv` keeps the 512-bit
+    ///      intermediate (its result is bounded by `reigningNav` because the registry caps
+    ///      `crownBeatMargin` at `WAD`) and the sum saturates instead of overflowing.
     function crownThreshold() public view returns (uint256) {
         uint256 reigningNav = restingNavOf[crownedMaker];
-        uint256 margined = reigningNav + (reigningNav * registry.crownBeatMargin()) / WAD;
-        return margined > reigningNav ? margined : reigningNav + 1;
+        uint256 threshold = _saturatingAdd(reigningNav, Math.mulDiv(reigningNav, registry.crownBeatMargin(), WAD));
+        return threshold > reigningNav ? threshold : _saturatingAdd(reigningNav, 1);
     }
 
     /// @notice Re-read a resting Pack's NAV into its Maker's Crown total, then re-run the
@@ -530,12 +536,14 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     ///      resting Packs, because `makerOf` is fixed for the whole enrollment.
     function _checkpointNav(uint256 tokenId, address maker, uint256 nav) internal {
         uint256 previous = navCheckpoint[tokenId];
+        // Emitted only on a change, so the log is a reliable record of Crown-total movement: an
+        // enrollment whose NAV was unreadable is a `PackEntered` with no checkpoint alongside it.
         if (nav != previous) {
             navCheckpoint[tokenId] = nav;
             restingNavOf[maker] = restingNavOf[maker] + nav - previous;
+            emit PackNavCheckpointed(tokenId, maker, previous, nav);
         }
 
-        emit PackNavCheckpointed(tokenId, maker, previous, nav);
         _recomputeCrown(maker);
     }
 
@@ -573,11 +581,24 @@ contract RipEngine is AccessControl, ReentrancyGuard {
         if (challenger == address(0) || challenger == reigning) return false;
 
         uint256 challengerNav = restingNavOf[challenger];
-        if (challengerNav == 0 || challengerNav < crownThreshold()) return false;
+        uint256 reigningNav = restingNavOf[reigning];
+        // The threshold always sits above the reigning total, so a challenger who has not even
+        // drawn level loses without the `crownBeatMargin` read. Every departure runs a losing
+        // challenge, so this is the hot path.
+        if (challengerNav == 0 || challengerNav <= reigningNav) return false;
+        if (challengerNav < crownThreshold()) return false;
 
         crownedMaker = challenger;
-        emit CrownTaken(challenger, reigning, challengerNav, restingNavOf[reigning]);
+        emit CrownTaken(challenger, reigning, challengerNav, reigningNav);
         return true;
+    }
+
+    /// @dev `a + b` clamped to `type(uint256).max` rather than reverting.
+    function _saturatingAdd(uint256 a, uint256 b) private pure returns (uint256 sum) {
+        unchecked {
+            sum = a + b;
+            if (sum < a) sum = type(uint256).max;
+        }
     }
 
     function _crystallize(uint256 tokenId) internal {

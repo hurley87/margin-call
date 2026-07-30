@@ -1,15 +1,38 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Test} from "forge-std/Test.sol";
+import {StdStorage, Test, Vm, stdStorage} from "forge-std/Test.sol";
 import {RipEngine} from "../src/RipEngine.sol";
 import {RipEngineFixture} from "./helpers/RipEngineFixture.sol";
 
 contract RipEngineCrownTest is Test, RipEngineFixture {
+    using stdStorage for StdStorage;
+
+    StdStorage private crownStore;
+
     event PackNavCheckpointed(uint256 indexed tokenId, address indexed maker, uint256 previousNav, uint256 nav);
     event CrownTaken(address indexed maker, address indexed previousMaker, uint256 nav, uint256 previousNav);
     event CrownVacated(address indexed maker);
     event CrownPaid(address indexed maker, uint256 amount);
+    event PackRipped(
+        uint256 indexed tokenId,
+        address indexed taker,
+        address indexed maker,
+        uint256 nav,
+        uint256 unitPrice,
+        uint256 protocolCut,
+        uint256 crownCut,
+        uint256 toMakers
+    );
+    event RipSettled(
+        address indexed taker,
+        uint256 count,
+        uint256 unitPrice,
+        uint256 totalPaid,
+        uint256 protocolCut,
+        uint256 crownCut,
+        uint256 toMakers
+    );
 
     /// @dev Per-unit settlement split, recomputed in the test rather than read from the engine.
     struct Split {
@@ -220,6 +243,72 @@ contract RipEngineCrownTest is Test, RipEngineFixture {
         assertEq(engine.claimableFees(engine.crownPayee()), s.crownCut);
         assertEq(s.totalPaid, s.protocolCut + s.crownCut + s.toMakers);
         assertEq(usd.balanceOf(address(engine)), s.totalPaid);
+    }
+
+    /// @dev Asserts the per-unit split carried by one `PackRipped`.
+    function _assertPackRipped(bytes memory data, uint256 unitPriceWad, Split memory s) internal view {
+        (uint256 nav, uint256 unitPrice, uint256 protocolCut, uint256 crownCut, uint256 toMakers) =
+            abi.decode(data, (uint256, uint256, uint256, uint256, uint256));
+
+        assertTrue(registry.isNavInBand(nav));
+        assertEq(unitPrice, unitPriceWad);
+        assertEq(protocolCut, s.protocolCut);
+        assertEq(crownCut, s.crownCut);
+        assertEq(protocolCut + crownCut + toMakers, s.unitStable);
+    }
+
+    /// @dev Asserts the batch split carried by `RipSettled`.
+    function _assertRipSettled(bytes memory data, uint256 unitPriceWad, Split memory s, uint256 count) internal pure {
+        (
+            uint256 loggedCount,
+            uint256 unitPrice,
+            uint256 totalPaid,
+            uint256 protocolCut,
+            uint256 crownCut,
+            uint256 toMakers
+        ) = abi.decode(data, (uint256, uint256, uint256, uint256, uint256, uint256));
+
+        assertEq(loggedCount, count);
+        assertEq(unitPrice, unitPriceWad);
+        assertEq(totalPaid, s.totalPaid);
+        assertEq(protocolCut, s.protocolCut * count);
+        assertEq(crownCut, s.crownCut * count);
+        assertEq(protocolCut + crownCut + toMakers, s.totalPaid);
+    }
+
+    function test_crown_settlementEventsCarryTheCrownCut() public {
+        _enrollPackOf(maker, amzn, amznFeed, 50 * WAD);
+        _enrollPackOf(maker, amzn, amznFeed, 50 * WAD);
+        _enrollPackOf(maker2, amd, amdFeed, 90 * WAD);
+        _enableCrown();
+
+        (,, uint256 unitPriceWad,) = engine.quoteRip(2);
+        Split memory s = _split(2, true);
+        assertGt(s.crownCut, 0);
+
+        // The full split has to reconcile from the logs alone: per-unit on `PackRipped`, batch
+        // totals on `RipSettled`.
+        vm.recordLogs();
+        vm.prank(taker);
+        uint256[] memory drawn = engine.rip(2, s.totalPaid);
+
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 ripped;
+        uint256 settled;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(engine)) continue;
+
+            if (logs[i].topics[0] == PackRipped.selector) {
+                _assertPackRipped(logs[i].data, unitPriceWad, s);
+                ++ripped;
+            } else if (logs[i].topics[0] == RipSettled.selector) {
+                _assertRipSettled(logs[i].data, unitPriceWad, s, 2);
+                ++settled;
+            }
+        }
+
+        assertEq(ripped, drawn.length);
+        assertEq(settled, 1);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -499,6 +588,66 @@ contract RipEngineCrownTest is Test, RipEngineFixture {
         vm.prank(admin);
         amznFeed.setPaused(false);
         assertEq(engine.syncPackNav(id), 100 * WAD);
+        assertEq(engine.crownedMaker(), maker);
+    }
+
+    /// @dev `poolMax` bounds eligibility, not enrollment, so a resting total is unbounded. An
+    ///      extreme leader must not be able to revert the challenge path and brick the pool.
+    function test_crown_extremeLeaderTotalKeepsThePoolLive() public {
+        _enrollPackOf(maker2, amd, amdFeed, 50 * WAD);
+        _enrollPackOf(maker2, amzn, amznFeed, 50 * WAD);
+
+        // Sized so `AssetRegistry.quote` still fits in 256 bits while the resting total lands far
+        // above `type(uint256).max / crownBeatMargin`.
+        uint256 amount = 1e48;
+        nflx.mint(maker, amount);
+        vm.prank(maker);
+        nflx.approve(address(packs), type(uint256).max);
+
+        address[] memory assets = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+        assets[0] = address(nflx);
+        amounts[0] = amount;
+        vm.prank(maker);
+        uint256 whalePack = packs.mint(assets, amounts);
+        vm.prank(maker);
+        engine.enterPool(whalePack);
+
+        uint256 whaleNav = engine.restingNavOf(maker);
+        assertEq(engine.crownedMaker(), maker);
+        assertGt(whaleNav, type(uint256).max / registry.crownBeatMargin());
+        assertEq(engine.crownThreshold(), whaleNav + whaleNav / 10);
+
+        // Every other Maker's pool operation runs `_challenge` against that total.
+        uint256 victim = _mintPackOf(maker2, amd, amdFeed, 40 * WAD);
+        vm.prank(maker2);
+        engine.enterPool(victim);
+        vm.prank(maker2);
+        engine.exitPool(victim);
+
+        (,,, uint256 pay) = engine.quoteRip(1);
+        vm.prank(taker);
+        engine.rip(1, pay);
+
+        // The whale is out of band, so it never priced or drew, and it still holds the Crown.
+        assertTrue(engine.isResting(whalePack));
+        assertEq(engine.crownedMaker(), maker);
+    }
+
+    function test_crownThreshold_saturatesInsteadOfReverting() public {
+        _enrollPackOf(maker, amzn, amznFeed, 50 * WAD);
+
+        // Poke the reigning total to the arithmetic ceiling — deliberately inconsistent with the
+        // Pack checkpoints, since no basket can reach it, but it is the branch that must not
+        // revert.
+        crownStore.target(address(engine)).sig("restingNavOf(address)").with_key(maker).checked_write(type(uint256).max);
+        assertEq(engine.restingNavOf(maker), type(uint256).max);
+
+        assertEq(engine.crownThreshold(), type(uint256).max);
+
+        // Unreachable threshold means the Crown cannot be taken — never that a call reverts.
+        _enrollPackOf(maker2, amd, amdFeed, 50 * WAD);
+        assertFalse(engine.challengeCrown(maker2));
         assertEq(engine.crownedMaker(), maker);
     }
 
