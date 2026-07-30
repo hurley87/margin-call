@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  transpilePackages: ["@margin-call/shared"],
   async headers() {
     return [
       {

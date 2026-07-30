@@ -13,6 +13,7 @@ export default defineConfig({
     include: [
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
+      "packages/shared/**/*.test.ts",
       "tests/convex/**/*.test.ts",
     ],
     exclude: ["**/node_modules/**"],
@@ -20,6 +21,10 @@ export default defineConfig({
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
+      "@margin-call/shared": path.resolve(
+        __dirname,
+        "./packages/shared/src/index.ts"
+      ),
     },
   },
 });

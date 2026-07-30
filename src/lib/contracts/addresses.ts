@@ -4,9 +4,7 @@
  * Populated by deploy scripts into `.env.local` (`NEXT_PUBLIC_*`). Convex actions
  * mirror the same values via `npx convex env set <KEY> <addr>` (see `.env.example`).
  */
-import { PAYMENT_CHAIN_SLUG } from "@/lib/privy/config";
-
-const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
+import { PAYMENT_CHAIN_SLUG, parseAddress } from "@margin-call/shared";
 
 export type ContractAddresses = {
   mockUsd: `0x${string}`;
@@ -18,15 +16,14 @@ export type ContractAddresses = {
 };
 
 function readAddress(envKey: string): `0x${string}` | undefined {
-  const value = process.env[envKey]?.trim();
-  if (!value) return undefined;
-  if (!ADDRESS_RE.test(value)) {
+  try {
+    return parseAddress(process.env[envKey]);
+  } catch {
     throw new Error(`${envKey} must be a 0x-prefixed 20-byte address`);
   }
-  return value as `0x${string}`;
 }
 
-function requireAddress(envKey: string): `0x${string}` {
+function requirePublicAddress(envKey: string): `0x${string}` {
   const address = readAddress(envKey);
   if (!address) {
     throw new Error(
@@ -51,12 +48,12 @@ export function getContractAddresses(): ContractAddresses | null {
   }
 
   return {
-    mockUsd: requireAddress("NEXT_PUBLIC_MOCKUSD_ADDRESS"),
-    packCustody: requireAddress("NEXT_PUBLIC_PACKCUSTODY_ADDRESS"),
-    assetRegistry: requireAddress("NEXT_PUBLIC_ASSETREGISTRY_ADDRESS"),
-    ripEngine: requireAddress("NEXT_PUBLIC_RIPENGINE_ADDRESS"),
-    gameToken: requireAddress("NEXT_PUBLIC_GAMETOKEN_ADDRESS"),
-    distributor: requireAddress("NEXT_PUBLIC_DISTRIBUTOR_ADDRESS"),
+    mockUsd: requirePublicAddress("NEXT_PUBLIC_MOCKUSD_ADDRESS"),
+    packCustody: requirePublicAddress("NEXT_PUBLIC_PACKCUSTODY_ADDRESS"),
+    assetRegistry: requirePublicAddress("NEXT_PUBLIC_ASSETREGISTRY_ADDRESS"),
+    ripEngine: requirePublicAddress("NEXT_PUBLIC_RIPENGINE_ADDRESS"),
+    gameToken: requirePublicAddress("NEXT_PUBLIC_GAMETOKEN_ADDRESS"),
+    distributor: requirePublicAddress("NEXT_PUBLIC_DISTRIBUTOR_ADDRESS"),
   };
 }
 
@@ -69,4 +66,13 @@ export function requireContractAddresses(): ContractAddresses {
     );
   }
   return addresses;
+}
+
+/** Read a single optional public MockUSD address (UI balance reads). */
+export function getMockUsdAddress(): `0x${string}` | undefined {
+  try {
+    return parseAddress(process.env.NEXT_PUBLIC_MOCKUSD_ADDRESS);
+  } catch {
+    return undefined;
+  }
 }

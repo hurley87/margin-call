@@ -39,10 +39,11 @@ Margin Call is a **NAV-weighted Pack-rip game** on Robinhood Chain. One global p
 
 Convex indexes on-chain pool state and issues Starter Grants; Maker/Taker txs remain user-signed on-chain (#306+).
 
+- **`packages/shared/`** (`@margin-call/shared`) — Framework-neutral ABIs, chain constants, clients, stock tokens, deploy blocks, NAV math, and Starter Grant policy. Imported by both Next (`src/`) and Convex so there is one source of truth (#320).
 - **`src/app/`** — App Router pages + SIWA nonce route under `src/app/api/siwa/`. Home: Privy land → connected shell with grant + Browse Pool.
-- **`convex/`** — auth, `siwaNonces`, `starterGrants` / mint actions, pool index (`pool`, `poolIndexer*`), crons (nonce purge + pool sync).
+- **`convex/`** — auth, `siwaNonces`, `starterGrants` / mint actions, pool index (`pool`, `poolIndexer*`), crons (nonce purge + pool sync). Thin `convex/lib/*` re-exports + env adapters over `@margin-call/shared`.
 - **`contracts/`** — Foundry workspace (MockUSD + PackCustody + AssetRegistry / MockPriceFeed + RipEngine + GameToken + Distributor). See `contracts/README.md` and `contracts/REPRODUCIBILITY.md`.
-- **`src/lib/`** — Privy, SIWA, contracts ABIs/clients, grants policy, pool helpers, Convex server client, rate-limit, utils.
+- **`src/lib/`** — Privy UI config, SIWA, env-specific address resolvers, re-exports from shared, Convex server client, rate-limit, utils.
 - **`src/components/`** — Providers, landing, grants panel, Browse Pool, UI primitives.
 - **`src/hooks/`** — Network guard helpers (`use-base-network`).
 
@@ -50,7 +51,7 @@ Convex indexes on-chain pool state and issues Starter Grants; Maker/Taker txs re
 
 - **Auth/Wallet:** Privy (email OTP, embedded EVM wallets on Robinhood testnet).
 - **Database:** Convex (SIWA nonces, Starter Grants, packs + poolSnapshots).
-- **Contracts:** Live on Robinhood testnet; addresses in `contracts/deployments/` and `src/lib/contracts/addresses.ts`.
+- **Contracts:** Live on Robinhood testnet; addresses in `contracts/deployments/` and `src/lib/contracts/addresses.ts` (shared ABIs/chain in `@margin-call/shared`).
 
 ## Conventions
 
