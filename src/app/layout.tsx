@@ -16,6 +16,9 @@ const plexSans = IBM_Plex_Sans_Condensed({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(
+    process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
+  ),
   title: "MARGIN CALL",
   description:
     "NAV-weighted Pack rips on Robinhood Chain testnet. Connect a wallet to play.",
