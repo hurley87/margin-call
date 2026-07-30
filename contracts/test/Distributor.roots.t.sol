@@ -191,6 +191,106 @@ contract DistributorRootsTest is Test, DistributorFixture {
         distributor.postClaimRoot(0, OTHER_ROOT, 700e18);
     }
 
+    // ========== Raising an under-declared total ==========
+
+    function test_increaseClaimTotalRaisesTheCeiling() public {
+        _endEpoch(0);
+        vm.prank(admin);
+        distributor.postClaimRoot(0, ROOT, 500e18);
+
+        vm.expectEmit(true, false, false, true, address(distributor));
+        emit Distributor.ClaimTotalIncreased(0, 500e18, 900e18);
+        vm.prank(admin);
+        distributor.increaseClaimTotal(0, 900e18);
+
+        assertEq(distributor.claimTotalOf(0), 900e18);
+        assertEq(distributor.claimRootOf(0), ROOT, "root must be untouched");
+    }
+
+    function test_increaseClaimTotalRejectsLoweringOrNoOp() public {
+        _endEpoch(0);
+        vm.prank(admin);
+        distributor.postClaimRoot(0, ROOT, 500e18);
+
+        vm.expectRevert(abi.encodeWithSelector(Distributor.ClaimTotalNotIncreased.selector, 0, 400e18, 500e18));
+        vm.prank(admin);
+        distributor.increaseClaimTotal(0, 400e18);
+
+        vm.expectRevert(abi.encodeWithSelector(Distributor.ClaimTotalNotIncreased.selector, 0, 500e18, 500e18));
+        vm.prank(admin);
+        distributor.increaseClaimTotal(0, 500e18);
+    }
+
+    function test_increaseClaimTotalRequiresAPostedRoot() public {
+        vm.expectRevert(abi.encodeWithSelector(Distributor.ClaimRootNotPosted.selector, 0));
+        vm.prank(admin);
+        distributor.increaseClaimTotal(0, 500e18);
+    }
+
+    function test_increaseClaimTotalRequiresAdmin() public {
+        _endEpoch(0);
+        vm.prank(admin);
+        distributor.postClaimRoot(0, ROOT, 500e18);
+
+        bytes32 role = distributor.DEFAULT_ADMIN_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, stranger, role)
+        );
+        vm.prank(stranger);
+        distributor.increaseClaimTotal(0, 900e18);
+    }
+
+    /// @dev The failure this lever exists for: a total posted below the sum the root commits to.
+    ///      The first claim freezes the root, so without a way to raise the ceiling every later
+    ///      claimant would be stranded permanently.
+    function test_underDeclaredTotalIsRecoverableAfterClaimsBegin() public {
+        Entitlement[] memory list = _entitlements(Entitlement(maker, 100e18, 0), Entitlement(taker, 100e18, 0));
+        _endEpoch(0);
+        bytes32 root = _rootOf(0, list);
+        Distributor.ClaimInput memory first = _claimInput(0, list, 0);
+        Distributor.ClaimInput memory second = _claimInput(0, list, 1);
+
+        // Root commits to 200e18; the admin fat-fingers the declared total as 150e18.
+        vm.prank(admin);
+        distributor.postClaimRoot(0, root, 150e18);
+
+        distributor.claim(maker, first);
+
+        vm.expectRevert(abi.encodeWithSelector(Distributor.EpochTotalExceeded.selector, 0, 200e18, 150e18));
+        distributor.claim(taker, second);
+
+        // The root is frozen by now, so re-posting cannot fix it...
+        vm.expectRevert(abi.encodeWithSelector(Distributor.ClaimRootFrozen.selector, 0, 1));
+        vm.prank(admin);
+        distributor.postClaimRoot(0, root, 200e18);
+
+        // ...but raising the ceiling can, without touching who is owed what.
+        vm.prank(admin);
+        distributor.increaseClaimTotal(0, 200e18);
+
+        distributor.claim(taker, second);
+        assertEq(token.balanceOf(taker), 100e18);
+        assertEq(distributor.claimedTotalOf(0), 200e18);
+        assertEq(distributor.unclaimedOf(0), 0);
+    }
+
+    function test_raisingTheCeilingCannotCreateEntitlements() public {
+        Entitlement[] memory list = _entitlements(Entitlement(maker, 10e18, 0), Entitlement(taker, 5e18, 0));
+        _postEpoch(0, list);
+        Distributor.ClaimInput memory input = _claimInput(0, list, 0);
+
+        vm.prank(admin);
+        distributor.increaseClaimTotal(0, 1_000_000e18);
+
+        // The root still decides everything: an unlisted account gains nothing from the headroom.
+        vm.expectRevert(abi.encodeWithSelector(Distributor.InvalidProof.selector, 0, stranger));
+        distributor.claim(stranger, input);
+
+        // And a listed one is still paid exactly its leaf.
+        distributor.claim(maker, input);
+        assertEq(token.balanceOf(maker), 10e18);
+    }
+
     function test_rootsAreIndependentPerEpoch() public {
         _endEpoch(1);
 

@@ -3,6 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {Distributor} from "../src/Distributor.sol";
+import {GameToken} from "../src/GameToken.sol";
 import {DistributorFixture} from "./helpers/DistributorFixture.sol";
 import {MerkleTreeLib} from "./helpers/MerkleTreeLib.sol";
 import {MockStockToken} from "./mocks/MockStockToken.sol";
@@ -309,6 +310,33 @@ contract DistributorClaimsTest is Test, DistributorFixture {
 
         assertEq(token.balanceOf(maker), oversized);
         assertEq(distributor.fundedBalance(), 0);
+    }
+
+    /// @dev The Distributor can only pay because GameToken exempts it from the transfer lock.
+    ///      Losing that grant leaves it holding funds it cannot move, and every claim fails closed
+    ///      rather than booking a payout that never lands.
+    function test_claimsFailClosedWithoutTheDistributorRole() public {
+        Entitlement[] memory list = _entitlements(Entitlement(maker, 10e18, 0), Entitlement(taker, 0, 5e18));
+        _postEpoch(0, list);
+        Distributor.ClaimInput memory input = _claimInput(0, list, 0);
+
+        bytes32 role = token.DISTRIBUTOR_ROLE();
+        vm.prank(admin);
+        token.revokeRole(role, address(distributor));
+
+        vm.expectRevert(abi.encodeWithSelector(GameToken.TransfersLocked.selector, address(distributor), maker));
+        distributor.claim(maker, input);
+
+        assertEq(distributor.fundedBalance(), FUNDED);
+        assertEq(distributor.totalClaimed(), 0);
+        assertFalse(distributor.hasClaimed(0, maker));
+
+        // Restoring the grant makes the untouched entitlement claimable again.
+        vm.prank(admin);
+        token.grantRole(role, address(distributor));
+
+        distributor.claim(maker, input);
+        assertEq(token.balanceOf(maker), 10e18);
     }
 
     function test_replacedRootInvalidatesTheOldProof() public {

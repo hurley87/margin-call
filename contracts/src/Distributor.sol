@@ -19,6 +19,10 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 ///      by the live balance. A wrong root can therefore misallocate inside the funded balance but
 ///      can never inflate supply or overdraw the contract.
 ///
+///      Epochs are anchored to `epochZeroStart` (the deploy timestamp), *not* to UTC midnight.
+///      Off-chain entitlement builders must bucket records with `epochStart` / `currentEpoch`
+///      rather than calendar dates, or every epoch will be mis-attributed.
+///
 ///      Canonical leaf (the only thing this contract fixes about tree construction):
 ///      `keccak256(bytes.concat(keccak256(abi.encode(epoch, account, makerAmount, takerAmount))))`
 ///      — see `leafOf`. Any merkle tree built with commutative sorted-pair keccak256 over those
@@ -79,6 +83,7 @@ contract Distributor is AccessControl, ReentrancyGuard {
     event RebatePerRipCapSet(uint256 rebatePerRipCap);
     event ClaimRootPosted(uint256 indexed epoch, bytes32 root, uint256 total);
     event ClaimRootReplaced(uint256 indexed epoch, bytes32 previousRoot, bytes32 root, uint256 total);
+    event ClaimTotalIncreased(uint256 indexed epoch, uint256 previousTotal, uint256 total);
     event Claimed(
         uint256 indexed epoch, address indexed account, uint256 makerAmount, uint256 takerAmount, uint256 amount
     );
@@ -91,6 +96,7 @@ contract Distributor is AccessControl, ReentrancyGuard {
     error EpochNotEnded(uint256 epoch, uint256 currentEpoch);
     error ClaimRootFrozen(uint256 epoch, uint256 claimCount);
     error ClaimRootNotPosted(uint256 epoch);
+    error ClaimTotalNotIncreased(uint256 epoch, uint256 newTotal, uint256 currentTotal);
     error AlreadyClaimed(uint256 epoch, address account);
     error InvalidProof(uint256 epoch, address account);
     error EpochTotalExceeded(uint256 epoch, uint256 wouldBeClaimed, uint256 declaredTotal);
@@ -164,6 +170,22 @@ contract Distributor is AccessControl, ReentrancyGuard {
         }
     }
 
+    /// @notice Raise an epoch's payout ceiling, leaving its root untouched.
+    /// @dev The recovery path for a `total` posted below the sum the root commits to. Without it
+    ///      the first claim freezes the root and every later claimant is stranded for good.
+    ///      Raise-only and root-preserving, so it can neither invalidate a booked claim nor invent
+    ///      an entitlement — the root still decides who is owed what, and the balance still caps
+    ///      what leaves. Lowering is deliberately impossible: it could strand a valid claimant.
+    function increaseClaimTotal(uint256 epoch, uint256 newTotal) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (claimRootOf[epoch] == bytes32(0)) revert ClaimRootNotPosted(epoch);
+
+        uint256 previousTotal = claimTotalOf[epoch];
+        if (newTotal <= previousTotal) revert ClaimTotalNotIncreased(epoch, newTotal, previousTotal);
+
+        claimTotalOf[epoch] = newTotal;
+        emit ClaimTotalIncreased(epoch, previousTotal, newTotal);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Claims
     // ─────────────────────────────────────────────────────────────────────────
@@ -200,12 +222,12 @@ contract Distributor is AccessControl, ReentrancyGuard {
         return keccak256(bytes.concat(keccak256(abi.encode(epoch, account, makerAmount, takerAmount))));
     }
 
-    /// @notice Epoch index containing the current block.
+    /// @notice Epoch index containing the current block, counted from `epochZeroStart`.
     function currentEpoch() public view returns (uint256) {
         return (block.timestamp - epochZeroStart) / EPOCH_DURATION;
     }
 
-    /// @notice Timestamp at which `epoch` begins.
+    /// @notice Timestamp at which `epoch` begins. Anchored to deploy time, not to UTC midnight.
     function epochStart(uint256 epoch) public view returns (uint256) {
         return epochZeroStart + epoch * EPOCH_DURATION;
     }
@@ -227,7 +249,7 @@ contract Distributor is AccessControl, ReentrancyGuard {
     /// @notice Recover tokens sent here by mistake.
     /// @dev The GameToken is explicitly excluded: claimants rely on the funded balance, and unspent
     ///      Participation Rewards roll forward rather than returning to the treasury.
-    function sweep(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) {
+    function sweep(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
         if (token == address(gameToken)) revert CannotSweepGameToken();
         if (token == address(0) || to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
