@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Margin Call is a **NAV-weighted Pack-rip game** on Robinhood Chain. One global pool; a single kind of participant — a **user** — who creates Packs of tokenized stocks (as a **Maker**) and/or rips them (as a **Taker**). Selection is inversely weighted by a Pack's USD NAV and each Rip is priced at the live expected value plus a maker–taker surcharge, so cheap Packs come up often and rich ones rarely (the jackpot). Makers are made whole by a socialized, equal-rate **Acquisition Fee** (stablecoin); a game token (**Maker Emissions** + a **Buyer-Rebate** participation pot) is a steering layer streamed from an owner-funded **Distributor**. Authoritative design: **`docs/prd-margin-call.md`** (v2.0); domain glossary: **`CONTEXT.md`** (use its vocabulary — Maker, Taker, Rip, Pack, Acquisition Fee, Surcharge, Crown, Distributor, House). Full V1 build spec: GitHub issue #297.
 
-**Current implementation state — read before editing `src/` or `convex/`.** The legacy Wall Street agent-game (desk managers, AI traders, deals, Wire) was removed in #298. The app is an **auth shell**: Privy email OTP + embedded wallet on a minimal landing page, SIWA scaffolding, and Convex with only `siwaNonces` (+ `me` identity query). Pack-rip UI and game Convex modules land next per #297. On the contracts side, `contracts/` (LazerForge Foundry) has **MockUSD**, **PackCustody**, **AssetRegistry**, **MockPriceFeed**, and **RipEngine** (selection + live pricing + Model-A settlement + Acquisition Fees + the Crown) built and tested; **GameToken and the Distributor** land next per issue #297. Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
+**Current implementation state — read before editing `src/` or `convex/`.** The legacy Wall Street agent-game (desk managers, AI traders, deals, Wire) was removed in #298. The app is an **auth shell**: Privy email OTP + embedded wallet on a minimal landing page, SIWA scaffolding, and Convex with only `siwaNonces` (+ `me` identity query). Pack-rip UI and game Convex modules land next per #297. On the contracts side, `contracts/` (LazerForge Foundry) has **MockUSD**, **PackCustody**, **AssetRegistry**, **MockPriceFeed**, **RipEngine** (selection + live pricing + Model-A settlement + Acquisition Fees + the Crown), **GameToken**, and the **Distributor** (merkle Claim Roots) built and tested; the off-chain entitlement builder and app claim flow land next per issue #297. Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
 
 ## Commands
 
@@ -20,6 +20,8 @@ Margin Call is a **NAV-weighted Pack-rip game** on Robinhood Chain. One global p
 - `pnpm deploy:packcustody` / `pnpm verify:packcustody` — PackCustody deploy + verify
 - `pnpm deploy:asset-registry` — AssetRegistry + MockPriceFeed seed (testnet verify in #310)
 - `pnpm deploy:rip-engine` — RipEngine + MockRandomness (requires PackCustody / AssetRegistry / MockUSD addresses)
+- `pnpm deploy:game-token` — GameToken (fixed supply minted to the treasury)
+- `pnpm deploy:distributor` — Distributor + GameToken `DISTRIBUTOR_ROLE` grant (requires GameToken address)
 
 ## Tech Stack
 
@@ -37,7 +39,7 @@ Convex holds auth scaffolding; the rip rebuild will add on-chain reads and game 
 
 - **`src/app/`** — App Router pages + SIWA nonce route under `src/app/api/siwa/`. Home is a minimal Privy connect shell.
 - **`convex/`** — `auth.config.ts`, `me.ts`, `siwaNonces.ts`, empty `http.ts`, schema (`siwaNonces` only), crons (SIWA nonce purge only).
-- **`contracts/`** — Foundry workspace (MockUSD + PackCustody + AssetRegistry / MockPriceFeed + RipEngine today; GameToken + Distributor next). See `contracts/README.md` and `contracts/REPRODUCIBILITY.md`.
+- **`contracts/`** — Foundry workspace (MockUSD + PackCustody + AssetRegistry / MockPriceFeed + RipEngine + GameToken + Distributor). See `contracts/README.md` and `contracts/REPRODUCIBILITY.md`.
 - **`src/lib/`** — Privy, SIWA, Convex server client, rate-limit, utils.
 - **`src/components/`** — Providers (Privy/Wagmi/Convex), landing shell, UI primitives.
 - **`src/hooks/`** — Network guard helpers (`use-base-network`).
