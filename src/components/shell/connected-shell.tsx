@@ -1,6 +1,7 @@
 "use client";
 
 import { StarterGrantPanel } from "@/components/grants/starter-grant-panel";
+import { MyPacksDashboard } from "@/components/maker/my-packs-dashboard";
 import { BrowsePool } from "@/components/pool/browse-pool";
 import { GameButton } from "@/components/ui/game-button";
 import { formatShortAddress } from "@/lib/utils";
@@ -11,7 +12,7 @@ type Props = {
 };
 
 /**
- * Post-auth shell: wallet + Starter Grant + Browse Pool.
+ * Post-auth shell: wallet + Starter Grant + Maker dashboard + Browse Pool.
  */
 export function ConnectedShell({ address, onLogout }: Props) {
   const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
@@ -52,7 +53,10 @@ export function ConnectedShell({ address, onLogout }: Props) {
         ) : null}
 
         {convexConfigured ? (
-          <BrowsePool />
+          <>
+            <MyPacksDashboard walletAddress={address} />
+            <BrowsePool />
+          </>
         ) : (
           <p className="mt-10 text-sm text-[var(--t-muted)]">
             Convex is not configured — pool browse unavailable.

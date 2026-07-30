@@ -53,7 +53,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_tokenId", ["tokenId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_maker_and_status", ["maker", "status"]),
 
   poolSnapshots: defineTable({
     key: v.literal("latest"),

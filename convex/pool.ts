@@ -1,7 +1,11 @@
-import { paginationOptsValidator } from "convex/server";
+import {
+  paginationOptsValidator,
+  paginationResultValidator,
+} from "convex/server";
 import { v } from "convex/values";
 
 import { query } from "./_generated/server";
+import { normalizeWalletAddress } from "./lib/chain/walletAddress";
 
 const navBucketValidator = v.object({
   minUsd: v.number(),
@@ -13,6 +17,22 @@ const basketEntryValidator = v.object({
   asset: v.string(),
   amount: v.string(),
   symbol: v.union(v.string(), v.null()),
+});
+
+const packStatusValidator = v.union(
+  v.literal("resting"),
+  v.literal("ripped"),
+  v.literal("unlisted")
+);
+
+const indexedPackValidator = v.object({
+  tokenId: v.number(),
+  maker: v.string(),
+  basket: v.array(basketEntryValidator),
+  navUsdWad: v.union(v.string(), v.null()),
+  status: packStatusValidator,
+  eligible: v.boolean(),
+  updatedAt: v.number(),
 });
 
 const emptySnapshot = {
@@ -106,6 +126,44 @@ export const listPacks = query({
       })),
       isDone: result.isDone,
       continueCursor: result.continueCursor,
+    };
+  },
+});
+
+/** Public, paginated Pack history for a normalized Maker wallet. */
+export const listPacksByMaker = query({
+  args: {
+    paginationOpts: paginationOptsValidator,
+    maker: v.string(),
+    status: v.optional(packStatusValidator),
+  },
+  returns: paginationResultValidator(indexedPackValidator),
+  handler: async (ctx, args) => {
+    // Pack ownership here is public indexed chain data. The wallet argument is
+    // a lookup key, not an authorization claim about the caller.
+    const maker = normalizeWalletAddress(args.maker);
+    const packs = args.status
+      ? ctx.db
+          .query("packs")
+          .withIndex("by_maker_and_status", (q) =>
+            q.eq("maker", maker).eq("status", args.status!)
+          )
+      : ctx.db
+          .query("packs")
+          .withIndex("by_maker_and_status", (q) => q.eq("maker", maker));
+
+    const result = await packs.order("desc").paginate(args.paginationOpts);
+    return {
+      ...result,
+      page: result.page.map((pack) => ({
+        tokenId: pack.tokenId,
+        maker: pack.maker,
+        basket: pack.basket,
+        navUsdWad: pack.navUsdWad,
+        status: pack.status,
+        eligible: pack.eligible,
+        updatedAt: pack.updatedAt,
+      })),
     };
   },
 });

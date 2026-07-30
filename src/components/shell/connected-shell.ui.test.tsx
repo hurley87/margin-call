@@ -5,6 +5,12 @@ vi.mock("@/components/grants/starter-grant-panel", () => ({
   StarterGrantPanel: () => <div>Starter Grant panel</div>,
 }));
 
+vi.mock("@/components/maker/my-packs-dashboard", () => ({
+  MyPacksDashboard: ({ walletAddress }: { walletAddress: string | null }) => (
+    <div>My Packs for {walletAddress}</div>
+  ),
+}));
+
 vi.mock("@/components/pool/browse-pool", () => ({
   BrowsePool: () => (
     <div>
@@ -29,6 +35,8 @@ describe("ConnectedShell", () => {
     expect(html).toContain("Margin Call");
     expect(html).toContain("0x1234");
     expect(html).toContain("Starter Grant panel");
+    expect(html).toContain("My Packs for");
+    expect(html).toContain("0x1234567890abcdef1234567890abcdef12345678");
     expect(html).toContain("Pool Statistics");
     expect(html).toContain("[LOG OUT]");
     vi.unstubAllEnvs();
