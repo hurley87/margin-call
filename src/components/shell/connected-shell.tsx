@@ -3,10 +3,7 @@
 import { StarterGrantPanel } from "@/components/grants/starter-grant-panel";
 import { BrowsePool } from "@/components/pool/browse-pool";
 import { GameButton } from "@/components/ui/game-button";
-
-function shortAddress(address: string): string {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
-}
+import { formatShortAddress } from "@/lib/utils";
 
 type Props = {
   address: string | null;
@@ -41,7 +38,7 @@ export function ConnectedShell({ address, onLogout }: Props) {
             </h1>
             <p className="mt-4 text-base leading-7 text-[var(--t-text)]/92">
               {address
-                ? `Wallet ${shortAddress(address)}`
+                ? `Wallet ${formatShortAddress(address)}`
                 : "Wallet provisioning…"}
             </p>
           </div>

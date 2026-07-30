@@ -46,10 +46,17 @@ export function StarterGrantPanel({ walletAddress }: Props) {
     query: { enabled: Boolean(mockUsd && walletAddress) },
   });
 
+  const countingDown =
+    status?.hasGrant === true &&
+    status.refillAvailableAt !== null &&
+    now < status.refillAvailableAt;
+
+  // Only tick while a refill countdown is live; stop once it's ready.
   useEffect(() => {
+    if (!countingDown) return;
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, []);
+  }, [countingDown]);
 
   const needsGrant = status != null && !status.hasGrant;
 

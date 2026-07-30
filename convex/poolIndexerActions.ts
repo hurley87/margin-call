@@ -1,7 +1,7 @@
 "use node";
 
 import { v } from "convex/values";
-import { decodeEventLog, parseAbiItem, type Log } from "viem";
+import { decodeEventLog, parseAbiItem, type AbiEvent, type Log } from "viem";
 
 import { internal } from "./_generated/api";
 import { type ActionCtx, internalAction } from "./_generated/server";
@@ -70,20 +70,25 @@ async function upsertRestingPack(
   tokenId: bigint,
   maker: string,
   eligible: boolean,
-  now: number
+  now: number,
+  knownNavWad?: string
 ): Promise<void> {
   const basket = await readBasket(client, packCustody, tokenId);
-  let navUsdWad: string | null = null;
-  try {
-    const nav = await client.readContract({
-      address: ripEngine,
-      abi: ripEngineAbi,
-      functionName: "navOfPack",
-      args: [tokenId],
-    });
-    navUsdWad = nav.toString();
-  } catch {
-    navUsdWad = null;
+  let navUsdWad: string | null = knownNavWad ?? null;
+  // Only hit the chain when the caller didn't already have this pack's NAV
+  // (e.g. from eligibleSnapshot).
+  if (navUsdWad === null) {
+    try {
+      const nav = await client.readContract({
+        address: ripEngine,
+        abi: ripEngineAbi,
+        functionName: "navOfPack",
+        args: [tokenId],
+      });
+      navUsdWad = nav.toString();
+    } catch {
+      navUsdWad = null;
+    }
   }
   await ctx.runMutation(internal.poolIndexer.upsertPack, {
     tokenId: Number(tokenId),
@@ -94,6 +99,47 @@ async function upsertRestingPack(
     eligible,
     updatedAt: now,
   });
+}
+
+/**
+ * Scan a contract's logs from its persisted cursor (or `fallbackBlock`) up to
+ * `latest`, in `MAX_BLOCK_SPAN` chunks, applying each log and advancing the
+ * cursor per chunk.
+ */
+async function scanLogs(
+  ctx: ActionCtx,
+  client: PublicClient,
+  opts: {
+    key: string;
+    address: `0x${string}`;
+    events: AbiEvent[];
+    fallbackBlock: bigint;
+    latest: bigint;
+    apply: (log: Log) => Promise<void>;
+  }
+): Promise<void> {
+  const cursor =
+    (await ctx.runQuery(internal.poolIndexer.getCursor, { key: opts.key })) ??
+    Number(opts.fallbackBlock);
+  let from = BigInt(cursor);
+  while (from <= opts.latest) {
+    const to =
+      from + MAX_BLOCK_SPAN > opts.latest ? opts.latest : from + MAX_BLOCK_SPAN;
+    const logs = await client.getLogs({
+      address: opts.address,
+      events: opts.events,
+      fromBlock: from,
+      toBlock: to,
+    });
+    for (const log of logs) {
+      await opts.apply(log);
+    }
+    await ctx.runMutation(internal.poolIndexer.setCursor, {
+      key: opts.key,
+      blockNumber: Number(to),
+    });
+    from = to + 1n;
+  }
 }
 
 /**
@@ -126,54 +172,25 @@ export const syncPoolFromChain = internalAction({
     const now = Date.now();
 
     // RipEngine membership / settlement logs
-    const ripCursor =
-      (await ctx.runQuery(internal.poolIndexer.getCursor, {
-        key: "ripEngine",
-      })) ?? Number(RIPENGINE_DEPLOY_BLOCK);
-    let from = BigInt(ripCursor);
-    while (from <= latest) {
-      const to =
-        from + MAX_BLOCK_SPAN > latest ? latest : from + MAX_BLOCK_SPAN;
-      const logs = await client.getLogs({
-        address: addresses.ripEngine,
-        events: [packEnteredEvent, packExitedEvent, packRippedEvent],
-        fromBlock: from,
-        toBlock: to,
-      });
-      for (const log of logs) {
-        await applyRipEngineLog(ctx, client, addresses, log, now);
-      }
-      await ctx.runMutation(internal.poolIndexer.setCursor, {
-        key: "ripEngine",
-        blockNumber: Number(to),
-      });
-      from = to + 1n;
-    }
+    await scanLogs(ctx, client, {
+      key: "ripEngine",
+      address: addresses.ripEngine,
+      events: [packEnteredEvent, packExitedEvent, packRippedEvent],
+      fallbackBlock: RIPENGINE_DEPLOY_BLOCK,
+      latest,
+      apply: (log) => applyRipEngineLog(ctx, client, addresses, log, now),
+    });
 
     // PackCustody unlist logs (delist-and-redeem / transfer-out)
-    const custodyCursor =
-      (await ctx.runQuery(internal.poolIndexer.getCursor, {
-        key: "packCustody",
-      })) ?? Number(PACKCUSTODY_DEPLOY_BLOCK);
-    from = BigInt(custodyCursor);
-    while (from <= latest) {
-      const to =
-        from + MAX_BLOCK_SPAN > latest ? latest : from + MAX_BLOCK_SPAN;
-      const logs = await client.getLogs({
-        address: addresses.packCustody,
-        events: [packUnlistedEvent],
-        fromBlock: from,
-        toBlock: to,
-      });
-      for (const log of logs) {
-        await applyPackUnlisted(ctx, client, addresses.packCustody, log, now);
-      }
-      await ctx.runMutation(internal.poolIndexer.setCursor, {
-        key: "packCustody",
-        blockNumber: Number(to),
-      });
-      from = to + 1n;
-    }
+    await scanLogs(ctx, client, {
+      key: "packCustody",
+      address: addresses.packCustody,
+      events: [packUnlistedEvent],
+      fallbackBlock: PACKCUSTODY_DEPLOY_BLOCK,
+      latest,
+      apply: (log) =>
+        applyPackUnlisted(ctx, client, addresses.packCustody, log, now),
+    });
 
     // Live eligible snapshot + quote
     const [tokenIds, navs, eligibleCountRaw] = await client.readContract({
@@ -220,9 +237,14 @@ export const syncPoolFromChain = internalAction({
       ripUnitPriceWad = unitPriceFromHm(harmonicMeanNavWad, surcharge);
     }
 
-    const eligibleSet = new Set(
-      tokenIds.slice(0, eligibleCount).map((id) => Number(id))
-    );
+    // Reuse the NAVs eligibleSnapshot already returned (indexed alongside
+    // tokenIds) so the per-pack refresh doesn't re-read navOfPack for eligible
+    // packs every cron tick.
+    const navByTokenId = new Map<number, string>();
+    for (let i = 0; i < eligibleCount; i++) {
+      navByTokenId.set(Number(tokenIds[i]), navs[i]!.toString());
+    }
+    const eligibleSet = new Set(navByTokenId.keys());
 
     const refreshLimit = Math.min(restingIds.length, 50);
     for (let i = 0; i < refreshLimit; i++) {
@@ -241,7 +263,8 @@ export const syncPoolFromChain = internalAction({
         tokenId,
         maker,
         eligibleSet.has(Number(tokenId)),
-        now
+        now,
+        navByTokenId.get(Number(tokenId))
       );
     }
 

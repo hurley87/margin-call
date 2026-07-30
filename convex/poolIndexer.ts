@@ -67,14 +67,7 @@ export const upsertPack = internalMutation({
       .withIndex("by_tokenId", (q) => q.eq("tokenId", args.tokenId))
       .unique();
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        maker: args.maker,
-        basket: args.basket,
-        navUsdWad: args.navUsdWad,
-        status: args.status,
-        eligible: args.eligible,
-        updatedAt: args.updatedAt,
-      });
+      await ctx.db.patch(existing._id, args);
     } else {
       await ctx.db.insert("packs", args);
     }
@@ -99,15 +92,7 @@ export const writeSnapshot = internalMutation({
       .withIndex("by_key", (q) => q.eq("key", "latest"))
       .unique();
     if (existing) {
-      await ctx.db.patch(existing._id, {
-        eligibleCount: args.eligibleCount,
-        restingCount: args.restingCount,
-        harmonicMeanNavWad: args.harmonicMeanNavWad,
-        ripUnitPriceWad: args.ripUnitPriceWad,
-        navDistribution: args.navDistribution,
-        blockNumber: args.blockNumber,
-        updatedAt: args.updatedAt,
-      });
+      await ctx.db.patch(existing._id, args);
     } else {
       await ctx.db.insert("poolSnapshots", {
         key: "latest",

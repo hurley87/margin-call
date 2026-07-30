@@ -4,14 +4,11 @@ import { usePaginatedQuery, useQuery } from "convex/react";
 
 import { api } from "../../../convex/_generated/api";
 import { formatWadUsd } from "@/lib/pool/nav-distribution";
+import { formatShortAddress } from "@/lib/utils";
 
 function formatBucketLabel(minUsd: number, maxUsd: number | null): string {
   if (maxUsd === null) return `$${minUsd}+`;
   return `$${minUsd}–$${maxUsd}`;
-}
-
-function shortAddr(address: string): string {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }
 
 export function BrowsePool() {
@@ -126,7 +123,7 @@ export function BrowsePool() {
           <ul className="mt-3 divide-y divide-[var(--t-divider)]/40">
             {packs.map((pack) => {
               const tickers = pack.basket
-                .map((b) => b.symbol ?? shortAddr(b.asset))
+                .map((b) => b.symbol ?? formatShortAddress(b.asset))
                 .join(" · ");
               return (
                 <li key={pack.tokenId} className="py-3">
@@ -148,7 +145,8 @@ export function BrowsePool() {
                     </span>
                   </div>
                   <p className="mt-1 text-xs text-[var(--t-muted)]">
-                    {tickers || "Empty basket"} · maker {shortAddr(pack.maker)}
+                    {tickers || "Empty basket"} · maker{" "}
+                    {formatShortAddress(pack.maker)}
                   </p>
                 </li>
               );
