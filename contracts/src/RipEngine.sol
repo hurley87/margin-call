@@ -10,6 +10,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {AssetRegistry} from "./AssetRegistry.sol";
 import {PackCustody} from "./PackCustody.sol";
+import {IDistributor} from "./interfaces/IDistributor.sol";
 import {IRandomnessSource} from "./interfaces/IRandomnessSource.sol";
 import {RipMath} from "./libraries/RipMath.sol";
 
@@ -33,6 +34,9 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     uint8 public immutable stableDecimals;
 
     IRandomnessSource public randomness;
+
+    /// @notice Sole Distributor for Maker Emissions / Participation Rewards. Set exactly once.
+    IDistributor public distributor;
 
     /// @notice Maker recorded at enrollment (custody clears `creatorOf` on burn).
     mapping(uint256 tokenId => address maker) public makerOf;
@@ -89,12 +93,14 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     event FeesClaimed(address indexed maker, uint256 amount);
     event ProtocolFeesWithdrawn(address indexed to, uint256 amount);
     event RandomnessUpdated(address indexed randomness);
+    event DistributorSet(address indexed distributor);
     event PackNavCheckpointed(uint256 indexed tokenId, address indexed maker, uint256 previousNav, uint256 nav);
     event CrownTaken(address indexed maker, address indexed previousMaker, uint256 nav, uint256 previousNav);
     event CrownVacated(address indexed maker);
     event CrownPaid(address indexed maker, uint256 amount);
 
     error ZeroAddress();
+    error DistributorAlreadySet();
     error NotPackCreator(uint256 tokenId, address caller);
     error PackNotListed(uint256 tokenId);
     error PackAlreadyResting(uint256 tokenId);
@@ -179,6 +185,11 @@ contract RipEngine is AccessControl, ReentrancyGuard {
 
         (, uint256 nav) = _tryNav(tokenId);
         _checkpointNav(tokenId, creator, nav);
+
+        IDistributor rewards = distributor;
+        if (address(rewards) != address(0)) {
+            rewards.onPackEntered(tokenId, creator);
+        }
     }
 
     /// @notice Remove a Pack from the resting set.
@@ -250,6 +261,11 @@ contract RipEngine is AccessControl, ReentrancyGuard {
 
         tokenIds = _settleDraws(e, count, q);
         _socialize(q.toMakersTotal);
+
+        IDistributor rewards = distributor;
+        if (address(rewards) != address(0)) {
+            rewards.onRip(msg.sender, count);
+        }
 
         emit RipSettled(
             msg.sender, count, q.unitPriceWad, q.totalPaid, q.protocolCutTotal, q.crownCutTotal, q.toMakersTotal
@@ -340,6 +356,14 @@ contract RipEngine is AccessControl, ReentrancyGuard {
         if (randomness_ == address(0)) revert ZeroAddress();
         randomness = IRandomnessSource(randomness_);
         emit RandomnessUpdated(randomness_);
+    }
+
+    /// @notice Bind the sole Distributor for emissions / rewards. One-shot; there is no unset.
+    function setDistributor(address distributor_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (distributor_ == address(0)) revert ZeroAddress();
+        if (address(distributor) != address(0)) revert DistributorAlreadySet();
+        distributor = IDistributor(distributor_);
+        emit DistributorSet(distributor_);
     }
 
     /// @notice Sum USD NAV of a Pack via registry quotes (no basket reshape). Fail-closed.
@@ -481,7 +505,8 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /// @dev Crystallize, drop the Pack's NAV out of Crown totals, remove from resting set,
-    ///      clear enrollment storage. Covers every departure: exit, purge, and draw-out.
+    ///      clear enrollment storage, and checkpoint Maker Emissions. Covers every departure:
+    ///      exit, purge, and draw-out.
     function _leavePool(uint256 tokenId) internal {
         address maker = makerOf[tokenId];
         _crystallize(tokenId);
@@ -489,6 +514,11 @@ contract RipEngine is AccessControl, ReentrancyGuard {
         _removeResting(tokenId);
         delete makerOf[tokenId];
         delete feeCheckpoint[tokenId];
+
+        IDistributor rewards = distributor;
+        if (address(rewards) != address(0)) {
+            rewards.onPackExited(tokenId);
+        }
     }
 
     /// @dev Remove unlisted Packs from the resting set (descending so swap-pop is safe).
