@@ -49,19 +49,19 @@ An owner-toggleable king-of-the-hill status carve-out. The **Crowned Maker** —
 _Avoid_: king, jackpot (reserve "jackpot" for a Taker drawing a high-NAV Pack)
 
 **Maker Emissions**:
-A game-token stream from the owner-funded Distributor to Makers for providing inventory, at an owner-settable rate (`makerRatePerEpoch`). Not the make-whole return — that is the stablecoin Acquisition Fee; emissions are an extra steering layer. Post-V1 they are gap-weighted (the restock controller: `∝ gap^convexity ÷ inventory`) to hold the draw distribution near the owner's target. In V1 the controller is deferred and emissions ship as a simple equal-per-resting-Pack-per-epoch dress-rehearsal, because composition is House-managed and the token is transfer-locked. Never a return promise.
+A continuous on-chain game-token stream from the owner-funded Distributor to Makers for providing inventory, at an owner-settable rate (`makerRatePerEpoch`). Accrues equal per resting Pack via a RipEngine-checkpointed accumulator; claimable at any time. Not the make-whole return — that is the stablecoin Acquisition Fee; emissions are an extra steering layer. Post-V1 they are gap-weighted (the restock controller: `∝ gap^convexity ÷ inventory`) to hold the draw distribution near the owner's target. In V1 the controller is deferred and emissions ship as a simple equal-per-resting-Pack dress-rehearsal, because composition is House-managed and the token is transfer-locked. Never a return promise.
 _Avoid_: yield, creator emissions
 
-**Participation Rewards** (Buyer Rebate):
-A game-token rebate to Takers: a fixed daily pot (`takerPotPerEpoch`) from the Distributor, split among the day's confirmed Rips pro-rata by the surcharge each Taker paid. Because the pot is fixed, a quieter epoch returns a larger rebate per Rip automatically (no activity metric needed); a per-Rip cap (`rebatePerRipCap`, `0.10` of the pot) prevents a dead-day scoop, and unspent tokens roll forward. Paid in game token, separate from the stablecoin surcharge flow, so it softens the Taker's −EV without touching Model A. Transfer-locked in V1; earned-only.
-_Avoid_: cashback
+**Participation Rewards**:
+A game-token rebate to Takers: a fixed daily pot (`takerPotPerEpoch`) from the Distributor, split equally across successfully ripped Packs in that closed epoch (a batch of `count` counts as `count` Rips). Because the pot is fixed, a quieter epoch returns a larger rebate per Rip automatically (no activity metric needed). No per-Rip cap and no rollover — an empty epoch creates no liability, and floor-division dust stays in the funded balance. Paid in game token, separate from the stablecoin surcharge flow, so it softens the Taker's −EV without touching Model A. Transfer-locked in V1; earned-only; claimable once the epoch has closed.
+_Avoid_: cashback, Buyer Rebate (superseded label)
 
 **Game Token**:
-A fully pre-minted, fixed-supply ERC-20 (no ongoing emission-mint authority) earned through Maker Emissions and Participation Rewards, streamed from an owner-funded Distributor. Transfer-locked user↔user at launch (Distributor→claimant transfers exempt so earning works); carries no selection weight, cadence benefit, or redemption right. The gap-weighted restock controller is a post-V1 mechanism; V1 ships only the plumbing (funded Distributor + owner-settable rates + merkle claims). Ticker is an open branding decision.
+A fully pre-minted, fixed-supply ERC-20 (no ongoing emission-mint authority) earned through Maker Emissions and Participation Rewards, streamed from an owner-funded Distributor. Transfer-locked user↔user at launch (Distributor→claimant transfers exempt so earning works); carries no selection weight, cadence benefit, or redemption right. The gap-weighted restock controller is a post-V1 mechanism; V1 ships the plumbing (funded Distributor + owner-settable rates + fully on-chain claims). Ticker is an open branding decision.
 _Avoid_: points, currency
 
 **Distributor**:
-The contract the owner funds by transferring game tokens into it; it streams Maker Emissions and Participation Rewards at owner-settable rates, paying out only tokens it holds. Its balance is the hard cap on payouts — there is no mint path — so a bad Claim Root can misallocate within the balance but can never inflate supply.
+The contract the owner funds by transferring game tokens into it; it streams Maker Emissions (continuous on-chain accrual) and Participation Rewards (equal-per-successful-Rip closed-epoch pots) at owner-settable rates, paying out only tokens it holds. Its balance is the hard cap on payouts — there is no mint path — so underfunding reverts a claim without consuming it and can never inflate supply.
 _Avoid_: minter, treasury (reserve "treasury" for the pre-mint holder)
 
 **NAV**:
@@ -75,10 +75,6 @@ _Avoid_: stock, equity, asset (unqualified)
 **Checkpoint**:
 A point where fresh oracle data re-evaluates a Pack's eligibility and NAV — every Rip, top-up, and claim, plus periodic re-checks. Stale or invalid stock-feed data fails closed.
 _Avoid_: refresh, sync
-
-**Claim Root**:
-The per-epoch merkle root of off-chain-computed emission and reward entitlements, posted on-chain and reproducible by anyone from confirmed records. Claims are paid against the Distributor's funded balance; because the Distributor holds a fixed balance and cannot mint, a bad root cannot inflate supply.
-_Avoid_: payout snapshot
 
 **Starter Grant**:
 The one-time mock-stablecoin grant a new wallet receives so it can play, plus a rate-limited refill. Testnet-only onboarding, not a game reward.

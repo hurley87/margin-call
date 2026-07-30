@@ -4,35 +4,26 @@ pragma solidity ^0.8.20;
 import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /// @title Distributor
-/// @notice Pays Maker Emissions and Participation Rewards against per-epoch merkle Claim Roots.
+/// @notice Pays Maker Emissions and Participation Rewards from a funded GameToken balance.
 /// @dev Funded purely by transferring GameToken in — there is no mint path anywhere, so the held
-///      balance is the hard cap on payouts by construction. Entitlements are computed off-chain
-///      from confirmed on-chain records and committed as one root per finished epoch; the published
-///      rates below are the inputs to that computation, not an on-chain accrual.
+///      balance is the hard cap on payouts by construction.
 ///
-///      Three independent bounds keep a bad root harmless: an account claims at most once per
-///      epoch, an epoch pays out at most its declared `claimTotalOf`, and every payout is capped
-///      by the live balance. A wrong root can therefore misallocate inside the funded balance but
-///      can never inflate supply or overdraw the contract.
+///      Maker Emissions accrue continuously, equal per resting Pack, at `makerRatePerEpoch`
+///      tokens per Pack per `EPOCH_DURATION`. RipEngine checkpoints accrual on enter / exit / Rip;
+///      Makers claim at any time.
+///
+///      Participation Rewards are a fixed daily pot (`takerPotPerEpoch`) split equally across
+///      successfully ripped Packs in a closed epoch. A batch of `count` contributes `count` Rips.
+///      The pot for an epoch freezes to the live `takerPotPerEpoch` on that epoch's first Rip;
+///      later setpoint changes do not reprice a frozen epoch. Empty epochs create no liability;
+///      floor-division dust stays in the funded balance.
 ///
 ///      Epochs are anchored to `epochZeroStart` (the deploy timestamp), *not* to UTC midnight.
-///      Off-chain entitlement builders must bucket records with `epochStart` / `currentEpoch`
-///      rather than calendar dates, or every epoch will be mis-attributed.
-///
-///      Canonical leaf (the only thing this contract fixes about tree construction):
-///      `keccak256(bytes.concat(keccak256(abi.encode(epoch, account, makerAmount, takerAmount))))`
-///      — see `leafOf`. Any merkle tree built with commutative sorted-pair keccak256 over those
-///      leaves verifies here, including OpenZeppelin's `StandardMerkleTree` with the leaf encoding
-///      `["uint256", "address", "uint256", "uint256"]`.
 contract Distributor is AccessControl, ReentrancyGuard {
     using SafeERC20 for IERC20;
-
-    /// @notice WAD scale for share levers (`rebatePerRipCap`).
-    uint256 public constant WAD = 1e18;
 
     /// @notice Epoch length. One day, per the PRD emission schedule.
     uint256 public constant EPOCH_DURATION = 1 days;
@@ -43,68 +34,72 @@ contract Distributor is AccessControl, ReentrancyGuard {
     /// @notice Timestamp at which epoch 0 began (deploy time).
     uint256 public immutable epochZeroStart;
 
-    /// @notice Maker Emissions rate: token per resting Pack per epoch. Published for off-chain use.
+    /// @notice Sole RipEngine allowed to mutate Pack / Rip accounting. Set exactly once.
+    address public ripEngine;
+
+    /// @notice Maker Emissions rate: tokens per resting Pack per epoch.
     uint256 public makerRatePerEpoch;
 
-    /// @notice Participation Rewards pot: fixed token amount per epoch, split pro-rata by surcharge paid.
+    /// @notice Participation Rewards pot snapped into `potOf[epoch]` on that epoch's first Rip.
     uint256 public takerPotPerEpoch;
 
-    /// @notice Per-Rip ceiling on the Participation Rewards pot, as a WAD share of `takerPotPerEpoch`.
-    uint256 public rebatePerRipCap;
+    /// @notice Accumulated Maker Emissions per Pack (token units), advanced continuously.
+    uint256 public accTokenPerPack;
 
-    /// @notice Claim Root committed for an epoch; zero until posted.
-    mapping(uint256 epoch => bytes32 root) public claimRootOf;
+    /// @notice Fractional remainder of Maker accrual not yet rolled into `accTokenPerPack`.
+    uint256 public emissionRemainder;
 
-    /// @notice Sum of all entitlements the posted root commits to, for an epoch.
-    mapping(uint256 epoch => uint256 total) public claimTotalOf;
+    /// @notice Last timestamp incorporated into Maker accrual.
+    uint256 public lastEmissionUpdate;
 
-    /// @notice Amount actually claimed so far, for an epoch.
-    mapping(uint256 epoch => uint256 claimed) public claimedTotalOf;
+    /// @notice Maker recorded for a Pack while it is enrolled for emissions.
+    mapping(uint256 tokenId => address maker) public emissionMakerOf;
 
-    /// @notice Number of accounts that have claimed, for an epoch. Freezes the root once non-zero.
-    mapping(uint256 epoch => uint256 count) public claimCountOf;
+    /// @notice Accrual checkpoint for an enrolled Pack (`accTokenPerPack` at join / last crystallize).
+    mapping(uint256 tokenId => uint256 debt) public emissionDebtOf;
 
-    /// @notice Whether `account` has already claimed `epoch`.
+    /// @notice Crystallized Maker Emissions awaiting withdrawal, keyed by Maker.
+    mapping(address maker => uint256 amount) public makerCredit;
+
+    /// @notice Pot frozen for an epoch on its first Rip (`takerPotPerEpoch` at that moment).
+    mapping(uint256 epoch => uint256 pot) public potOf;
+
+    /// @notice Successfully ripped Packs recorded in an epoch.
+    mapping(uint256 epoch => uint256 count) public ripCountOf;
+
+    /// @notice Successfully ripped Packs recorded for an account in an epoch.
+    mapping(uint256 epoch => mapping(address account => uint256 count)) public accountRipCountOf;
+
+    /// @notice Whether `account` has already claimed Taker rewards for `epoch`.
     mapping(uint256 epoch => mapping(address account => bool)) public hasClaimed;
 
-    /// @notice Lifetime tokens paid out across all epochs.
+    /// @notice Lifetime tokens paid out across Maker and Taker claims.
     uint256 public totalClaimed;
 
-    /// @dev One epoch's entitlement for one account, plus its inclusion proof.
-    struct ClaimInput {
-        uint256 epoch;
-        uint256 makerAmount;
-        uint256 takerAmount;
-        bytes32[] proof;
-    }
-
+    event RipEngineSet(address indexed ripEngine);
     event MakerRatePerEpochSet(uint256 makerRatePerEpoch);
     event TakerPotPerEpochSet(uint256 takerPotPerEpoch);
-    event RebatePerRipCapSet(uint256 rebatePerRipCap);
-    event ClaimRootPosted(uint256 indexed epoch, bytes32 root, uint256 total);
-    event ClaimRootReplaced(uint256 indexed epoch, bytes32 previousRoot, bytes32 root, uint256 total);
-    event ClaimTotalIncreased(uint256 indexed epoch, uint256 previousTotal, uint256 total);
-    event Claimed(
-        uint256 indexed epoch, address indexed account, uint256 makerAmount, uint256 takerAmount, uint256 amount
-    );
+    event PackEmissionEntered(uint256 indexed tokenId, address indexed maker);
+    event PackEmissionExited(uint256 indexed tokenId, address indexed maker, uint256 accrued);
+    event RipRecorded(uint256 indexed epoch, address indexed taker, uint256 count, uint256 epochRipCount);
+    event MakerTokensClaimed(address indexed account, uint256 amount);
+    event TakerTokensClaimed(address indexed account, uint256 indexed epoch, uint256 amount);
     event Swept(address indexed token, address indexed to, uint256 amount);
 
     error ZeroAddress();
     error ZeroAmount();
-    error ZeroRoot();
-    error RatioTooHigh(uint256 value);
-    error EpochNotEnded(uint256 epoch, uint256 currentEpoch);
-    error ClaimRootFrozen(uint256 epoch, uint256 claimCount);
-    error ClaimRootNotPosted(uint256 epoch);
-    error ClaimTotalNotIncreased(uint256 epoch, uint256 newTotal, uint256 currentTotal);
+    error RipEngineAlreadySet();
+    error OnlyRipEngine();
+    error PackAlreadyEnrolled(uint256 tokenId);
+    error PackNotEnrolled(uint256 tokenId);
+    error EpochNotClosed(uint256 epoch, uint256 currentEpoch);
     error AlreadyClaimed(uint256 epoch, address account);
-    error InvalidProof(uint256 epoch, address account);
-    error EpochTotalExceeded(uint256 epoch, uint256 wouldBeClaimed, uint256 declaredTotal);
+    error NothingToClaim();
     error InsufficientFunds(uint256 amount, uint256 available);
     error CannotSweepGameToken();
     error EmptyClaimBatch();
 
-    /// @param admin DEFAULT_ADMIN_ROLE holder (rate setters, Claim Root posting).
+    /// @param admin DEFAULT_ADMIN_ROLE holder (rate setters, RipEngine binding).
     /// @param gameToken_ Reward token; must grant this contract `GameToken.DISTRIBUTOR_ROLE` to pay out.
     constructor(address admin, address gameToken_) {
         if (admin == address(0) || gameToken_ == address(0)) revert ZeroAddress();
@@ -112,115 +107,156 @@ contract Distributor is AccessControl, ReentrancyGuard {
         _grantRole(DEFAULT_ADMIN_ROLE, admin);
         gameToken = IERC20(gameToken_);
         epochZeroStart = block.timestamp;
-
-        // PRD launch default; rates start at zero and are set once a funding horizon is chosen.
-        rebatePerRipCap = WAD / 10; // 0.10
+        lastEmissionUpdate = block.timestamp;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Owner rate setters (evented, prospective — inputs to the off-chain algorithm)
+    // Wiring
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// @notice Bind the sole RipEngine. One-shot; there is no unset.
+    function setRipEngine(address ripEngine_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (ripEngine_ == address(0)) revert ZeroAddress();
+        if (ripEngine != address(0)) revert RipEngineAlreadySet();
+        ripEngine = ripEngine_;
+        emit RipEngineSet(ripEngine_);
+    }
+
+    modifier onlyRipEngine() {
+        if (msg.sender != ripEngine) revert OnlyRipEngine();
+        _;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Owner rate setters (evented, prospective)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// @notice Set Maker Emissions per Pack per epoch. Takes effect from the next second after accrual is checkpointed.
     function setMakerRatePerEpoch(uint256 newRate) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        _advanceMaker();
         makerRatePerEpoch = newRate;
         emit MakerRatePerEpochSet(newRate);
     }
 
+    /// @notice Set the Participation Rewards pot. Snapshotted into an epoch on that epoch's first Rip.
     function setTakerPotPerEpoch(uint256 newPot) external onlyRole(DEFAULT_ADMIN_ROLE) {
         takerPotPerEpoch = newPot;
         emit TakerPotPerEpochSet(newPot);
     }
 
-    function setRebatePerRipCap(uint256 newCap) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (newCap > WAD) revert RatioTooHigh(newCap);
-        rebatePerRipCap = newCap;
-        emit RebatePerRipCapSet(newCap);
+    // ─────────────────────────────────────────────────────────────────────────
+    // RipEngine callbacks
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /// @notice Enroll a Pack for Maker Emissions. RipEngine-only.
+    function onPackEntered(uint256 tokenId, address maker) external onlyRipEngine {
+        if (maker == address(0)) revert ZeroAddress();
+        if (emissionMakerOf[tokenId] != address(0)) revert PackAlreadyEnrolled(tokenId);
+
+        _advanceMaker();
+        emissionMakerOf[tokenId] = maker;
+        emissionDebtOf[tokenId] = accTokenPerPack;
+        emit PackEmissionEntered(tokenId, maker);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Claim Roots
-    // ─────────────────────────────────────────────────────────────────────────
+    /// @notice Crystallize and drop a Pack from Maker Emissions. RipEngine-only.
+    /// @dev Covers every departure: manual exit, purge, and draw-out. Reverts if the Pack was
+    ///      never enrolled — every resting Pack must have entered through `onPackEntered`.
+    function onPackExited(uint256 tokenId) external onlyRipEngine {
+        address maker = emissionMakerOf[tokenId];
+        if (maker == address(0)) revert PackNotEnrolled(tokenId);
 
-    /// @notice Commit the entitlement root for a finished epoch.
-    /// @dev Replaceable while nobody has claimed the epoch (so a mis-posted root is fixable), then
-    ///      frozen for good. `total` is the sum the root commits to and doubles as the epoch's
-    ///      payout ceiling — it is not checked against the balance here, because the Distributor
-    ///      may be topped up between posting and claiming.
-    /// @param epoch Epoch index; must already be over.
-    /// @param root Merkle root over canonical leaves (see `leafOf`).
-    /// @param total Sum of every entitlement the root commits to.
-    function postClaimRoot(uint256 epoch, bytes32 root, uint256 total) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (root == bytes32(0)) revert ZeroRoot();
-        if (total == 0) revert ZeroAmount();
-
-        uint256 current = currentEpoch();
-        if (epoch >= current) revert EpochNotEnded(epoch, current);
-
-        uint256 claims = claimCountOf[epoch];
-        if (claims != 0) revert ClaimRootFrozen(epoch, claims);
-
-        bytes32 previousRoot = claimRootOf[epoch];
-        claimRootOf[epoch] = root;
-        claimTotalOf[epoch] = total;
-
-        if (previousRoot == bytes32(0)) {
-            emit ClaimRootPosted(epoch, root, total);
-        } else {
-            emit ClaimRootReplaced(epoch, previousRoot, root, total);
+        _advanceMaker();
+        uint256 accrued = accTokenPerPack - emissionDebtOf[tokenId];
+        if (accrued != 0) {
+            makerCredit[maker] += accrued;
         }
+
+        delete emissionMakerOf[tokenId];
+        delete emissionDebtOf[tokenId];
+        emit PackEmissionExited(tokenId, maker, accrued);
     }
 
-    /// @notice Raise an epoch's payout ceiling, leaving its root untouched.
-    /// @dev The recovery path for a `total` posted below the sum the root commits to. Without it
-    ///      the first claim freezes the root and every later claimant is stranded for good.
-    ///      Raise-only and root-preserving, so it can neither invalidate a booked claim nor invent
-    ///      an entitlement — the root still decides who is owed what, and the balance still caps
-    ///      what leaves. Lowering is deliberately impossible: it could strand a valid claimant.
-    function increaseClaimTotal(uint256 epoch, uint256 newTotal) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        if (claimRootOf[epoch] == bytes32(0)) revert ClaimRootNotPosted(epoch);
+    /// @notice Record a successful Rip batch for Participation Rewards. RipEngine-only.
+    /// @param taker Account that receives the epoch share.
+    /// @param count Packs ripped in the batch (`>= 1`).
+    function onRip(address taker, uint256 count) external onlyRipEngine {
+        if (taker == address(0)) revert ZeroAddress();
+        if (count == 0) revert ZeroAmount();
 
-        uint256 previousTotal = claimTotalOf[epoch];
-        if (newTotal <= previousTotal) revert ClaimTotalNotIncreased(epoch, newTotal, previousTotal);
+        uint256 epoch = currentEpoch();
+        if (ripCountOf[epoch] == 0) {
+            potOf[epoch] = takerPotPerEpoch;
+        }
 
-        claimTotalOf[epoch] = newTotal;
-        emit ClaimTotalIncreased(epoch, previousTotal, newTotal);
+        ripCountOf[epoch] += count;
+        accountRipCountOf[epoch][taker] += count;
+        emit RipRecorded(epoch, taker, count, ripCountOf[epoch]);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Claims
     // ─────────────────────────────────────────────────────────────────────────
 
-    /// @notice Claim one epoch's entitlement for `account`. Anyone may submit; funds go to `account`.
-    /// @return amount Tokens transferred (`makerAmount + takerAmount`).
-    function claim(address account, ClaimInput calldata input) external nonReentrant returns (uint256 amount) {
-        amount = _recordClaim(account, input);
+    /// @notice Crystallize optional Pack ids, then withdraw all Maker credit for `account`.
+    /// @dev Anyone may submit; funds go to `account`. Underfunding reverts without consuming credit.
+    /// @param tokenIds Resting Packs to crystallize first; empty withdraws already-crystallized only.
+    function claimMaker(address account, uint256[] calldata tokenIds) external nonReentrant returns (uint256 amount) {
+        if (account == address(0)) revert ZeroAddress();
+
+        _advanceMaker();
+        for (uint256 i; i < tokenIds.length; ++i) {
+            uint256 tokenId = tokenIds[i];
+            if (emissionMakerOf[tokenId] != account) continue;
+            uint256 pending = accTokenPerPack - emissionDebtOf[tokenId];
+            if (pending == 0) continue;
+            emissionDebtOf[tokenId] = accTokenPerPack;
+            makerCredit[account] += pending;
+        }
+
+        amount = makerCredit[account];
+        if (amount == 0) revert NothingToClaim();
+        makerCredit[account] = 0;
         _payout(account, amount);
+        emit MakerTokensClaimed(account, amount);
     }
 
-    /// @notice Claim several epochs for `account` in one transaction and one transfer.
-    /// @return amount Total tokens transferred across the batch.
-    function claimBatch(address account, ClaimInput[] calldata inputs) external nonReentrant returns (uint256 amount) {
-        uint256 length = inputs.length;
+    /// @notice Claim Participation Rewards for one or more closed epochs.
+    /// @dev Anyone may submit; funds go to `account`. Underfunding reverts without consuming claims.
+    function claimTaker(address account, uint256[] calldata epochs) external nonReentrant returns (uint256 amount) {
+        if (account == address(0)) revert ZeroAddress();
+        uint256 length = epochs.length;
         if (length == 0) revert EmptyClaimBatch();
 
+        uint256 current = currentEpoch();
+        uint256 claimedEpochs;
         for (uint256 i; i < length; ++i) {
-            amount += _recordClaim(account, inputs[i]);
+            uint256 epoch = epochs[i];
+            if (epoch >= current) revert EpochNotClosed(epoch, current);
+            if (hasClaimed[epoch][account]) revert AlreadyClaimed(epoch, account);
+
+            uint256 mine = accountRipCountOf[epoch][account];
+            if (mine == 0) continue;
+
+            hasClaimed[epoch][account] = true;
+            unchecked {
+                ++claimedEpochs;
+            }
+
+            uint256 share = (potOf[epoch] * mine) / ripCountOf[epoch];
+            if (share == 0) continue;
+
+            amount += share;
+            emit TakerTokensClaimed(account, epoch, share);
         }
-        _payout(account, amount);
+
+        if (claimedEpochs == 0) revert NothingToClaim();
+        if (amount != 0) _payout(account, amount);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Views
     // ─────────────────────────────────────────────────────────────────────────
-
-    /// @notice Canonical claim leaf. Double-hashed so no leaf can collide with an internal node.
-    function leafOf(uint256 epoch, address account, uint256 makerAmount, uint256 takerAmount)
-        public
-        pure
-        returns (bytes32)
-    {
-        return keccak256(bytes.concat(keccak256(abi.encode(epoch, account, makerAmount, takerAmount))));
-    }
 
     /// @notice Epoch index containing the current block, counted from `epochZeroStart`.
     function currentEpoch() public view returns (uint256) {
@@ -237,9 +273,31 @@ contract Distributor is AccessControl, ReentrancyGuard {
         return gameToken.balanceOf(address(this));
     }
 
-    /// @notice Amount of `epoch` that the posted root still leaves unclaimed.
-    function unclaimedOf(uint256 epoch) external view returns (uint256) {
-        return claimTotalOf[epoch] - claimedTotalOf[epoch];
+    /// @notice Uncrystallized Maker Emissions for an enrolled Pack.
+    function pendingMakerOf(uint256 tokenId) external view returns (uint256) {
+        if (emissionMakerOf[tokenId] == address(0)) return 0;
+        return _accTokenPerPackAt(block.timestamp) - emissionDebtOf[tokenId];
+    }
+
+    /// @notice Claimable Maker Emissions for `account`, including optional uncrystallized Packs.
+    function claimableMakerOf(address account, uint256[] calldata tokenIds) external view returns (uint256 amount) {
+        amount = makerCredit[account];
+        uint256 acc = _accTokenPerPackAt(block.timestamp);
+        for (uint256 i; i < tokenIds.length; ++i) {
+            uint256 tokenId = tokenIds[i];
+            if (emissionMakerOf[tokenId] != account) continue;
+            amount += acc - emissionDebtOf[tokenId];
+        }
+    }
+
+    /// @notice Claimable Participation Rewards for `account` in a closed epoch; 0 if open / already claimed / none.
+    function claimableTakerOf(address account, uint256 epoch) external view returns (uint256) {
+        if (epoch >= currentEpoch()) return 0;
+        if (hasClaimed[epoch][account]) return 0;
+        uint256 mine = accountRipCountOf[epoch][account];
+        uint256 total = ripCountOf[epoch];
+        if (mine == 0 || total == 0) return 0;
+        return (potOf[epoch] * mine) / total;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -247,8 +305,7 @@ contract Distributor is AccessControl, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /// @notice Recover tokens sent here by mistake.
-    /// @dev The GameToken is explicitly excluded: claimants rely on the funded balance, and unspent
-    ///      Participation Rewards roll forward rather than returning to the treasury.
+    /// @dev The GameToken is explicitly excluded: claimants rely on the funded balance.
     function sweep(address token, address to, uint256 amount) external onlyRole(DEFAULT_ADMIN_ROLE) nonReentrant {
         if (token == address(gameToken)) revert CannotSweepGameToken();
         if (token == address(0) || to == address(0)) revert ZeroAddress();
@@ -262,35 +319,40 @@ contract Distributor is AccessControl, ReentrancyGuard {
     // Internals
     // ─────────────────────────────────────────────────────────────────────────
 
-    /// @dev Verify and book one epoch's claim. All state is written before any transfer.
-    function _recordClaim(address account, ClaimInput calldata input) internal returns (uint256 amount) {
-        uint256 epoch = input.epoch;
-        bytes32 root = claimRootOf[epoch];
-        if (root == bytes32(0)) revert ClaimRootNotPosted(epoch);
-        if (hasClaimed[epoch][account]) revert AlreadyClaimed(epoch, account);
+    /// @dev Roll Maker accrual forward to `block.timestamp`.
+    function _advanceMaker() internal {
+        uint256 now_ = block.timestamp;
+        uint256 last = lastEmissionUpdate;
+        if (now_ <= last) return;
 
-        amount = input.makerAmount + input.takerAmount;
-        if (amount == 0) revert ZeroAmount();
-
-        bytes32 leaf = leafOf(epoch, account, input.makerAmount, input.takerAmount);
-        if (!MerkleProof.verifyCalldata(input.proof, root, leaf)) revert InvalidProof(epoch, account);
-
-        uint256 wouldBeClaimed = claimedTotalOf[epoch] + amount;
-        uint256 declaredTotal = claimTotalOf[epoch];
-        if (wouldBeClaimed > declaredTotal) revert EpochTotalExceeded(epoch, wouldBeClaimed, declaredTotal);
-
-        hasClaimed[epoch][account] = true;
-        claimedTotalOf[epoch] = wouldBeClaimed;
-        claimCountOf[epoch] += 1;
-        totalClaimed += amount;
-
-        emit Claimed(epoch, account, input.makerAmount, input.takerAmount, amount);
+        uint256 rate = makerRatePerEpoch;
+        if (rate != 0) {
+            uint256 scaled = (now_ - last) * rate + emissionRemainder;
+            accTokenPerPack += scaled / EPOCH_DURATION;
+            emissionRemainder = scaled % EPOCH_DURATION;
+        }
+        lastEmissionUpdate = now_;
     }
 
-    /// @dev Pay from the held balance only — the balance, not a rate or a root, is the hard cap.
+    /// @dev View counterpart of `_advanceMaker` without writing state.
+    function _accTokenPerPackAt(uint256 timestamp) internal view returns (uint256) {
+        uint256 last = lastEmissionUpdate;
+        if (timestamp <= last) return accTokenPerPack;
+
+        uint256 rate = makerRatePerEpoch;
+        if (rate == 0) return accTokenPerPack;
+
+        uint256 scaled = (timestamp - last) * rate + emissionRemainder;
+        return accTokenPerPack + scaled / EPOCH_DURATION;
+    }
+
+    /// @dev Pay from the held balance only — the balance, not a rate, is the hard cap.
+    ///      State that authorizes the payout must already have been consumed by the caller so a
+    ///      revert here leaves the entitlement claimable after a top-up.
     function _payout(address account, uint256 amount) internal {
         uint256 available = fundedBalance();
         if (amount > available) revert InsufficientFunds(amount, available);
+        totalClaimed += amount;
         gameToken.safeTransfer(account, amount);
     }
 }

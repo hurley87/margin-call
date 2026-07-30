@@ -13,6 +13,8 @@
  *   DISTRIBUTOR_FUND        — 18-decimal units transferred from the deployer after the grant
  *   DISTRIBUTOR_MAKER_RATE  — `makerRatePerEpoch`
  *   DISTRIBUTOR_TAKER_POT   — `takerPotPerEpoch`
+ *   DISTRIBUTOR_RIP_ENGINE  — binds Distributor↔RipEngine (defaults to RIPENGINE_ADDRESS)
+ *   DISTRIBUTOR_WIRE_RIPENGINE — "true"/"false"; default true when a RipEngine address is set
  *
  * Usage: pnpm deploy:distributor
  *
@@ -59,6 +61,9 @@ function main() {
     "DISTRIBUTOR_FUND",
     "DISTRIBUTOR_MAKER_RATE",
     "DISTRIBUTOR_TAKER_POT",
+    "DISTRIBUTOR_RIP_ENGINE",
+    "DISTRIBUTOR_WIRE_RIPENGINE",
+    "RIPENGINE_ADDRESS",
   ]) {
     if (env[key]) {
       forgeEnv[key] = env[key];

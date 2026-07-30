@@ -4,9 +4,11 @@ pragma solidity ^0.8.20;
 import {console2} from "forge-std/console2.sol";
 import {Distributor} from "../src/Distributor.sol";
 import {GameToken} from "../src/GameToken.sol";
+import {RipEngine} from "../src/RipEngine.sol";
 import {Utils} from "./utils/Utils.sol";
 
-/// @notice Deploy Distributor, exempt it from the GameToken transfer lock, and optionally fund it.
+/// @notice Deploy Distributor, exempt it from the GameToken transfer lock, optionally fund it,
+///         and mutually wire it to RipEngine when an address is provided.
 /// @dev Signing: set DEPLOYER_PRIVATE_KEY. Env:
 ///        GAMETOKEN_ADDRESS / DISTRIBUTOR_GAME_TOKEN — required GameToken
 ///        DISTRIBUTOR_ADMIN       — optional; defaults to deployer
@@ -18,6 +20,8 @@ import {Utils} from "./utils/Utils.sol";
 ///                                  only sender the transfer lock lets fund a role holder)
 ///        DISTRIBUTOR_MAKER_RATE  — optional; `makerRatePerEpoch`, set when admin == deployer
 ///        DISTRIBUTOR_TAKER_POT   — optional; `takerPotPerEpoch`, set when admin == deployer
+///        DISTRIBUTOR_RIP_ENGINE / RIPENGINE_ADDRESS — optional; binds Distributor ↔ RipEngine
+///        DISTRIBUTOR_WIRE_RIPENGINE — optional; "true" (default) when a RipEngine address is set
 contract DeployDistributor is Utils {
     uint256 internal constant ROBINHOOD_TESTNET_CHAIN_ID = 46_630;
 
@@ -27,7 +31,9 @@ contract DeployDistributor is Utils {
         address gameToken;
         address deployer;
         address admin;
+        address ripEngine;
         bool grantedRole;
+        bool wiredRipEngine;
         uint256 funded;
         uint256 makerRate;
         uint256 takerPot;
@@ -47,6 +53,12 @@ contract DeployDistributor is Utils {
         uint256 fund = vm.envOr("DISTRIBUTOR_FUND", uint256(0));
         uint256 makerRate = vm.envOr("DISTRIBUTOR_MAKER_RATE", uint256(0));
         uint256 takerPot = vm.envOr("DISTRIBUTOR_TAKER_POT", uint256(0));
+
+        address ripEngine = vm.envOr("DISTRIBUTOR_RIP_ENGINE", address(0));
+        if (ripEngine == address(0)) {
+            ripEngine = vm.envOr("RIPENGINE_ADDRESS", address(0));
+        }
+        bool wireRipEngine = vm.envOr("DISTRIBUTOR_WIRE_RIPENGINE", true) && ripEngine != address(0);
 
         vm.startBroadcast(deployerKey);
         Distributor distributor = new Distributor(admin, gameToken);
@@ -79,6 +91,12 @@ contract DeployDistributor is Utils {
             if (makerRate != 0) distributor.setMakerRatePerEpoch(makerRate);
             if (takerPot != 0) distributor.setTakerPotPerEpoch(takerPot);
         }
+
+        if (wireRipEngine) {
+            require(admin == deployer, "DeployDistributor: deployer must be admin to bind RipEngine");
+            distributor.setRipEngine(ripEngine);
+            RipEngine(ripEngine).setDistributor(address(distributor));
+        }
         vm.stopBroadcast();
 
         console2.log("Distributor deployed at:", address(distributor));
@@ -88,7 +106,8 @@ contract DeployDistributor is Utils {
         console2.log("Funded balance:", distributor.fundedBalance());
         console2.log("makerRatePerEpoch:", distributor.makerRatePerEpoch());
         console2.log("takerPotPerEpoch:", distributor.takerPotPerEpoch());
-        console2.log("rebatePerRipCap:", distributor.rebatePerRipCap());
+        console2.log("RipEngine:", ripEngine);
+        console2.log("Wired RipEngine:", wireRipEngine);
 
         _writeRecord(
             Record({
@@ -96,7 +115,9 @@ contract DeployDistributor is Utils {
                 gameToken: gameToken,
                 deployer: deployer,
                 admin: admin,
+                ripEngine: ripEngine,
                 grantedRole: grantRole,
+                wiredRipEngine: wireRipEngine,
                 funded: distributor.fundedBalance(),
                 makerRate: distributor.makerRatePerEpoch(),
                 takerPot: distributor.takerPotPerEpoch()
@@ -106,13 +127,15 @@ contract DeployDistributor is Utils {
 
     function _writeRecord(Record memory record) internal {
         string memory obj = "distributor";
-        vm.serializeUint(obj, "version", 1);
+        vm.serializeUint(obj, "version", 2);
         vm.serializeUint(obj, "chainId", block.chainid);
         vm.serializeAddress(obj, "address", record.distributor);
         vm.serializeAddress(obj, "gameToken", record.gameToken);
         vm.serializeAddress(obj, "deployer", record.deployer);
         vm.serializeAddress(obj, "admin", record.admin);
+        vm.serializeAddress(obj, "ripEngine", record.ripEngine);
         vm.serializeBool(obj, "grantedDistributorRole", record.grantedRole);
+        vm.serializeBool(obj, "wiredRipEngine", record.wiredRipEngine);
         vm.serializeUint(obj, "fundedBalance", record.funded);
         vm.serializeUint(obj, "makerRatePerEpoch", record.makerRate);
         vm.serializeUint(obj, "takerPotPerEpoch", record.takerPot);
