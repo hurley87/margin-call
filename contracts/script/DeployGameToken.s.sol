@@ -17,12 +17,17 @@ contract DeployGameToken is Utils {
     uint256 internal constant ROBINHOOD_TESTNET_CHAIN_ID = 46_630;
     uint256 internal constant DEFAULT_SUPPLY = 1_000_000_000e18;
 
+    /// @dev One whole token. Anything smaller is almost certainly a token count typed as if it
+    ///      were wei, and with no mint authority that mistake is only fixable by redeploying.
+    uint256 internal constant MIN_SUPPLY = 1e18;
+
     function run() external {
         uint256 deployerKey = vm.envUint("DEPLOYER_PRIVATE_KEY");
         address deployer = vm.addr(deployerKey);
         address admin = vm.envOr("GAMETOKEN_ADMIN", deployer);
         address treasury = vm.envOr("GAMETOKEN_TREASURY", deployer);
         uint256 supply = vm.envOr("GAMETOKEN_SUPPLY", DEFAULT_SUPPLY);
+        require(supply >= MIN_SUPPLY, "DeployGameToken: GAMETOKEN_SUPPLY is in 18-decimal units, not whole tokens");
 
         vm.startBroadcast(deployerKey);
         GameToken token = new GameToken(admin, treasury, supply);

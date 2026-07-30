@@ -13,7 +13,9 @@ import {Utils} from "./utils/Utils.sol";
 ///        DISTRIBUTOR_GRANT_ROLE  — optional; "true" (default) grants GameToken DISTRIBUTOR_ROLE
 ///                                  when the deployer is the token admin
 ///        DISTRIBUTOR_FUND        — optional; 18-decimal units transferred from the deployer's
-///                                  balance after the role is granted (funding is a plain transfer)
+///                                  balance after the role is granted (funding is a plain transfer;
+///                                  the deployer must be the GameToken treasury, since that is the
+///                                  only sender the transfer lock lets fund a role holder)
 ///        DISTRIBUTOR_MAKER_RATE  — optional; `makerRatePerEpoch`, set when admin == deployer
 ///        DISTRIBUTOR_TAKER_POT   — optional; `takerPotPerEpoch`, set when admin == deployer
 contract DeployDistributor is Utils {
@@ -59,6 +61,10 @@ contract DeployDistributor is Utils {
 
         if (fund != 0) {
             require(grantRole, "DeployDistributor: grant DISTRIBUTOR_ROLE before funding or the transfer fails closed");
+            require(
+                GameToken(gameToken).treasury() == deployer,
+                "DeployDistributor: only the GameToken treasury may fund while transfers are locked"
+            );
             require(
                 GameToken(gameToken).balanceOf(deployer) >= fund,
                 "DeployDistributor: deployer balance below DISTRIBUTOR_FUND"
