@@ -122,6 +122,51 @@ abstract contract RipEngineFixture {
         tokenId = packs.mint(assets, amounts);
     }
 
+    /// @dev Raw units of `token` worth `navWad` USD at the feed's current price.
+    function _amountForNav(MockStockToken token, MockPriceFeed feed, uint256 navWad) internal view returns (uint256) {
+        (uint256 price,,,) = feed.latestAnswer();
+        return (navWad * (10 ** (uint256(token.decimals()) + FEED_DECIMALS))) / (price * WAD);
+    }
+
+    /// @dev A single-asset Pack on `token`, so tests can move one Maker's NAV independently.
+    function _mintPackOf(address who, MockStockToken token, MockPriceFeed feed, uint256 navWad)
+        internal
+        returns (uint256 tokenId)
+    {
+        address[] memory assets = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+        assets[0] = address(token);
+        amounts[0] = _amountForNav(token, feed, navWad);
+        _vm.prank(who);
+        tokenId = packs.mint(assets, amounts);
+    }
+
+    function _enrollPackOf(address who, MockStockToken token, MockPriceFeed feed, uint256 navWad)
+        internal
+        returns (uint256 tokenId)
+    {
+        tokenId = _mintPackOf(who, token, feed, navWad);
+        _vm.prank(who);
+        engine.enterPool(tokenId);
+    }
+
+    /// @dev Add `navWad` of `token` to an existing Pack (creator-only, additions only).
+    function _topUpPackBy(address who, uint256 tokenId, MockStockToken token, MockPriceFeed feed, uint256 navWad)
+        internal
+    {
+        address[] memory assets = new address[](1);
+        uint256[] memory amounts = new uint256[](1);
+        assets[0] = address(token);
+        amounts[0] = _amountForNav(token, feed, navWad);
+        _vm.prank(who);
+        packs.topUp(tokenId, assets, amounts);
+    }
+
+    function _enableCrown() internal {
+        _vm.prank(admin);
+        registry.setCrownEnabled(true);
+    }
+
     function _enrollPack(address who, uint256 navWad) internal returns (uint256 tokenId) {
         tokenId = _mintPackAtNav(who, navWad);
         _vm.prank(who);
