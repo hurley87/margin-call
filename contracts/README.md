@@ -70,22 +70,36 @@ ERC-721 Packs backed by a recorded basket of whitelisted Stock Tokens held direc
 - `delistAndRedeem` (creator, while listed) and `unwrap` (holder, once transferred) both release the full basket at **zero protocol fee**
 - `releaseToRecipient` is `RIP_ENGINE_ROLE`-gated: moves a listed Pack to a recipient in one call without ERC-721 approval; basket ERC-20s stay in custody and the one-way unlisted latch fires on transfer (Rip settlement primitive — a Pack settles at most once)
 - `WHITELIST_ADMIN_ROLE` governs deposits only — de-whitelisting an asset never blocks redemption
-- Neither `WHITELIST_ADMIN_ROLE` nor `RIP_ENGINE_ROLE` is granted at construction; `DEFAULT_ADMIN_ROLE` grants them after deploy (RipEngine will receive `RIP_ENGINE_ROLE` when that contract lands)
+- Neither `WHITELIST_ADMIN_ROLE` nor `RIP_ENGINE_ROLE` is granted at construction; `DEFAULT_ADMIN_ROLE` grants them after deploy (RipEngine receives `RIP_ENGINE_ROLE` via `pnpm deploy:rip-engine`)
 
-Oracle NAV, eligibility, and Rip selection live in AssetRegistry (and later RipEngine); custody knows nothing about them.
+Oracle NAV, eligibility, and Rip selection live in AssetRegistry and RipEngine; custody knows nothing about them.
 
 ## AssetRegistry + MockPriceFeed
 
 Owner-curated Stock Token whitelist, pool levers, and fail-closed Pack NAV (issue [#300](https://github.com/hurley87/margin-call/issues/300)):
 
 - Per asset: token address, `IPriceFeed`, `staleAfter`, status (`Active` / `Frozen` / `Delisting`), live inventory
-- `addAsset` / `setStatus` / `removeAsset` (zero inventory only); inventory adjusted via `INVENTORY_ROLE` (for RipEngine later)
+- `addAsset` / `setStatus` / `removeAsset` (zero inventory only); inventory adjusted via `INVENTORY_ROLE`
 - Owner setters for `minPackNav`, `poolMax`, `alpha`, `surcharge`, `protocolShareOfSurcharge`, `maxBatchSize`, and crown params — evented and prospective
 - `navOf` / `quote` return WAD USD (`$1 = 1e18`); every consumed feed read requires fresh, valid, non-paused data or reverts
 - Frozen assets are excluded from deposits and the price basket; Delisting blocks deposits but keeps resting Packs in the basket so inventory can drain
 - `MockPriceFeed` (`src/mocks/`) is the testnet / Foundry substitution point until real Robinhood feeds are wired (#310)
 
 Canonical Stock Token map: [`deployments/robinhood-testnet.stock-tokens.json`](./deployments/robinhood-testnet.stock-tokens.json).
+
+## RipEngine
+
+NAV-weighted Pack selection, live Rip pricing, Model-A settlement, and Acquisition Fees (issue [#301](https://github.com/hurley87/margin-call/issues/301)):
+
+- Explicit pool membership via `enterPool` / `exitPool` (PackCustody has no enumeration)
+- `eligibleSnapshot` fail-closed: not listed, frozen/stale/invalid NAV, or out of band → excluded
+- `quoteRip(count)` / `rip(count, maxTotalPayment)` price off one snapshot: `clamp(HM × (1+surcharge), [min, max]×(1+surcharge))` with `HM = n / Σ(1/N)`
+- Distinct draws without replacement, weights `∝ 1/NAV^alpha` (whole-number alpha only); entropy via injectable `IRandomnessSource` (`MockRandomness` in V1)
+- Protocol cut from the surcharge only; remainder socialized equally per resting Pack via a fee-per-Pack index (make-whole at `alpha = 1`)
+- Requires `eligibleCount > count` so socialization has a non-empty destination set
+- Maker `claimFees` / `claim`; admin `withdrawProtocolFees`
+- Crown carve-out is a documented seam for [#302](https://github.com/hurley87/margin-call/issues/302) — unused in V1 while `crownEnabled = false`
+- Equal-rate fee accrual follows enrollment (not per-rip eligibility); a Pack with a temporarily stale feed keeps accruing while undrawable
 
 ## Deploy (Robinhood Chain testnet)
 
@@ -144,6 +158,21 @@ pnpm deploy:asset-registry
 ```
 
 Writes `contracts/deployments/robinhood-testnet.asset-registry.json` and patches `ASSETREGISTRY_ADDRESS` / `NEXT_PUBLIC_ASSETREGISTRY_ADDRESS`. Testnet deploy + Blockscout verify of the full V1 set is tracked in [#310](https://github.com/hurley87/margin-call/issues/310).
+
+### RipEngine
+
+Requires PackCustody, AssetRegistry, and MockUSD addresses already in `.env.local`:
+
+```bash
+# Optional overrides:
+#   RIPENGINE_ADMIN=0x…              # defaults to deployer
+#   RIPENGINE_SEED=0xC0FFEE          # MockRandomness base seed
+#   RIPENGINE_GRANT_ROLE=true        # grant RIP_ENGINE_ROLE on PackCustody
+
+pnpm deploy:rip-engine
+```
+
+Writes `contracts/deployments/robinhood-testnet.rip-engine.json` and patches `RIPENGINE_ADDRESS` / `NEXT_PUBLIC_RIPENGINE_ADDRESS`.
 
 ### Explorer
 

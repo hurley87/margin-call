@@ -52,7 +52,7 @@ odds_i   = weight_i / Σ_j weight_j
 **Rip price (dynamic, live)**
 
 ```
-harmonic_mean = (Σ_i N_i) / (Σ_i 1/N_i)      // over eligible Packs
+harmonic_mean = n / (Σ_i 1/N_i)              // over eligible Packs
 rip_price     = harmonic_mean × (1 + surcharge)
 ```
 
