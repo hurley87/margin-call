@@ -2,6 +2,7 @@
 
 import { usePrivy } from "@privy-io/react-auth";
 
+import { StarterGrantPanel } from "@/components/grants/starter-grant-panel";
 import { LandingScreen } from "@/components/landing/landing-screen";
 import { GameButton } from "@/components/ui/game-button";
 import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
@@ -38,6 +39,9 @@ function ConnectedShell({
         <p className="mt-4 max-w-[28rem] text-base leading-7 text-[var(--t-text)]/92">
           {address ? `Wallet ${shortAddress(address)}` : "Wallet provisioning…"}
         </p>
+        {address && process.env.NEXT_PUBLIC_CONVEX_URL ? (
+          <StarterGrantPanel walletAddress={address} />
+        ) : null}
         <div className="mt-8">
           <GameButton onClick={onLogout} variant="secondary" size="lg">
             [LOG OUT]

@@ -7,6 +7,10 @@ vi.mock("@privy-io/react-auth", () => ({
   usePrivy: () => usePrivyMock(),
 }));
 
+vi.mock("@/components/grants/starter-grant-panel", () => ({
+  StarterGrantPanel: () => <div>Starter Grant panel</div>,
+}));
+
 import Home from "./page";
 
 describe("Home", () => {
@@ -42,6 +46,7 @@ describe("Home", () => {
   });
 
   it("shows connected shell with wallet when authenticated", () => {
+    vi.stubEnv("NEXT_PUBLIC_CONVEX_URL", "https://example.convex.cloud");
     usePrivyMock.mockReturnValue({
       ready: true,
       authenticated: true,
@@ -59,6 +64,8 @@ describe("Home", () => {
     const html = renderToStaticMarkup(<Home />);
     expect(html).toContain("Connected");
     expect(html).toContain("0x1234");
+    expect(html).toContain("Starter Grant panel");
     expect(html).toContain("[LOG OUT]");
+    vi.unstubAllEnvs();
   });
 });
