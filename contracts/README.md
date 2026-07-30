@@ -95,12 +95,23 @@ NAV-weighted Pack selection, live Rip pricing, Model-A settlement, and Acquisiti
 - `eligibleSnapshot` fail-closed: not listed, frozen/stale/invalid NAV, or out of band → excluded
 - `quoteRip(count)` / `rip(count, maxTotalPayment)` price off one snapshot: `clamp(HM × (1+surcharge), [min, max]×(1+surcharge))` with `HM = n / Σ(1/N)`
 - Distinct draws without replacement, weights `∝ 1/NAV^alpha` (whole-number alpha only); entropy via injectable `IRandomnessSource` (`MockRandomness` in V1)
-- Protocol cut from the surcharge only; remainder socialized equally per resting Pack via a fee-per-Pack index (make-whole at `alpha = 1`)
+- Protocol and crown cuts from the surcharge only; remainder socialized equally per resting Pack via a fee-per-Pack index (make-whole at `alpha = 1`)
 - Requires `eligibleCount > count` so socialization has a non-empty destination set
 - Maker `claim(tokenIds)` (empty = crystallized only); admin `withdrawProtocolFees`
 - Unlisted Packs are purged at the start of every `rip` so ghosts cannot dilute fee socialization
-- Crown carve-out is a documented seam for [#302](https://github.com/hurley87/margin-call/issues/302) — unused in V1 while `crownEnabled = false`
 - Equal-rate fee accrual follows enrollment for listed Packs (not per-rip eligibility); a Pack with a temporarily stale feed keeps accruing while undrawable
+
+### The Crown
+
+`crown_cut = crownShareOfSurcharge × surcharge` for the Crowned Maker on every Rip, off by default (issue #302):
+
+- **Funded from the surcharge only.** The registry caps `protocolShareOfSurcharge + crownShareOfSurcharge` at `1`, so `toMakers ≥ base` for every setting — the harmonic-mean base is never cut and make-whole holds. Defaults move the split 25/0/75 → 25/10/65 when enabled.
+- **Paid as a fee credit.** The cut lands in the Crowned Maker's `claimableFees` before the draws settle, so the Maker who held the Crown at Rip time is paid even when that Rip draws out their last Pack. `crownEnabled = false` (the default) or a vacant Crown carves nothing and the whole remainder socializes.
+- **Crowned Maker = largest total resting NAV**, summed across their Packs (`restingNavOf`), from per-Pack `navCheckpoint` values rather than a live read — grouping live NAV by Maker inside `rip` would need an unbounded pass over the resting set.
+- **Checkpoints are recomputed** on enrollment, `syncPackNav`, exit, ghost purge, and draw-out. `syncPackNav(tokenId)` is permissionless so a Maker can register a top-up and a challenger can true a stale leader down; it fails closed on an unreadable feed, so an oracle gap can never be used to zero a Maker's total. Enrollment under a bad feed checkpoints zero and joins the Crown race once synced.
+- **The Crown only moves on a beat.** `crownThreshold()` is the reigning total plus `crownBeatMargin` (never a tie), so it cannot flicker; the reigning Maker keeps it while shrinking and vacates at zero resting NAV. `challengeCrown(maker)` presses a standing claim after the leader shrinks without touching the pool.
+- Crown totals count every resting Pack, in or out of band — the same rule the Acquisition Fee follows. `poolMax` therefore bounds eligibility but **not** a Crown total, so `crownThreshold()` must never revert: it sits on `_leavePool`'s path, where an arithmetic failure would block exits, purges, and draws for every other Maker. It uses `Math.mulDiv` and a saturating add, and an unreachable threshold simply means the Crown cannot be taken.
+- **Tracking runs even while `crownEnabled` is false**, which costs an enrolling Maker roughly 105k gas (one NAV read plus the checkpoint and total writes). That is the deliberate trade for the lever being useful the moment it flips: gating the bookkeeping on the toggle would leave `restingNavOf` cold at enable time, so the Crown would go to whoever moved first rather than the largest total, and a Pack enrolled while enabled but exited while disabled would strand its contribution in the running total.
 
 ## Deploy (Robinhood Chain testnet)
 
