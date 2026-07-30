@@ -134,7 +134,7 @@ Pays Maker Emissions and Participation Rewards from a funded GameToken balance (
 - **Maker Emissions** accrue continuously on-chain, equal per resting Pack, at `makerRatePerEpoch`. RipEngine checkpoints accrual on enter / exit / Rip; Makers claim at any time via `claimMaker`
 - **Participation Rewards** are a fixed daily pot (`takerPotPerEpoch`) split equally across successfully ripped Packs in a closed epoch. A batch of `count` contributes `count` Rips. Claim via `claimTaker` once the epoch has closed
 - No merkle Claim Roots, no surcharge weighting, no per-Rip cap, and no rollover. Empty epochs create no liability; floor-division dust stays in the funded balance
-- Rate / pot changes are prospective (Maker: next second after accrual is checkpointed; Taker: next epoch once the current pot is frozen by a Rip). An unfrozen current epoch can still pick up a pot change
+- Rate / pot changes are prospective (Maker: next second after accrual is checkpointed; Taker: live `takerPotPerEpoch` is snapshotted into `potOf[epoch]` on that epoch's first Rip)
 - `setRipEngine` / RipEngine `setDistributor` are one-shot mutual bindings. Only RipEngine may call `onPackEntered` / `onPackExited` / `onRip`
 - Claims are pull-based and sponsorable; funds always go to the account. Underfunding reverts without consuming the entitlement
 - Paying out depends on GameToken's `DISTRIBUTOR_ROLE` grant. Without it every claim fails closed with `TransfersLocked`

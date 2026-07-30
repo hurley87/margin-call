@@ -8,10 +8,12 @@ import {PackCustody} from "../../src/PackCustody.sol";
 import {RipEngine} from "../../src/RipEngine.sol";
 import {MockPriceFeed} from "../../src/mocks/MockPriceFeed.sol";
 import {MockRandomness} from "../../src/mocks/MockRandomness.sol";
+import {MockDistributor} from "../mocks/MockDistributor.sol";
 import {MockStockToken} from "../mocks/MockStockToken.sol";
 
 /// @notice Wired PackCustody + AssetRegistry + MockUSD + RipEngine for game-loop tests.
 /// @dev Does not inherit `Test` so invariant suites can mix this with `StdInvariant`.
+///      Wires a no-op Distributor by default; override `_wireDistributor` for a real one.
 abstract contract RipEngineFixture {
     Vm private constant _vm = Vm(address(uint160(uint256(keccak256("hevm cheat code")))));
 
@@ -90,9 +92,18 @@ abstract contract RipEngineFixture {
         _vm.prank(admin);
         packs.grantRole(ripRole, address(engine));
 
+        _wireDistributor();
+
         _fundMaker(maker);
         _fundMaker(maker2);
         _fundTaker(taker);
+    }
+
+    /// @dev Default: no-op rewards hook so pool tests stay focused. Override to defer / real-wire.
+    function _wireDistributor() internal virtual {
+        MockDistributor mock = new MockDistributor();
+        _vm.prank(admin);
+        engine.setDistributor(address(mock));
     }
 
     function _fundMaker(address who) internal {

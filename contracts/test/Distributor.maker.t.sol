@@ -145,9 +145,9 @@ contract DistributorMakerTest is Test, DistributorFixture {
         _enterPack(1, maker2);
     }
 
-    function test_exitWithoutEnterIsNoop() public {
+    function test_exitWithoutEnterReverts() public {
+        vm.expectRevert(abi.encodeWithSelector(Distributor.PackNotEnrolled.selector, 99));
         _exitPack(99);
-        assertEq(distributor.emissionMakerOf(99), address(0));
     }
 
     function test_fractionalRemainderCarries() public {

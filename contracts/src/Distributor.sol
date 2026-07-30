@@ -17,8 +17,9 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
 ///
 ///      Participation Rewards are a fixed daily pot (`takerPotPerEpoch`) split equally across
 ///      successfully ripped Packs in a closed epoch. A batch of `count` contributes `count` Rips.
-///      Empty epochs create no liability; floor-division dust stays in the funded balance. Pot
-///      changes apply from the next epoch (prospective).
+///      The pot for an epoch freezes to the live `takerPotPerEpoch` on that epoch's first Rip;
+///      later setpoint changes do not reprice a frozen epoch. Empty epochs create no liability;
+///      floor-division dust stays in the funded balance.
 ///
 ///      Epochs are anchored to `epochZeroStart` (the deploy timestamp), *not* to UTC midnight.
 contract Distributor is AccessControl, ReentrancyGuard {
@@ -39,17 +40,8 @@ contract Distributor is AccessControl, ReentrancyGuard {
     /// @notice Maker Emissions rate: tokens per resting Pack per epoch.
     uint256 public makerRatePerEpoch;
 
-    /// @notice Participation Rewards pot that applies from the next epoch onward.
+    /// @notice Participation Rewards pot snapped into `potOf[epoch]` on that epoch's first Rip.
     uint256 public takerPotPerEpoch;
-
-    /// @notice Pot frozen for the epoch currently being written (`activeTakerPotEpoch`).
-    uint256 public activeTakerPot;
-
-    /// @notice Epoch whose pot is `activeTakerPot`. Advanced lazily on first write past it.
-    uint256 public activeTakerPotEpoch;
-
-    /// @notice True once `_syncTakerPot` has initialized `activeTakerPot` for some epoch.
-    bool private _takerPotInitialized;
 
     /// @notice Accumulated Maker Emissions per Pack (token units), advanced continuously.
     uint256 public accTokenPerPack;
@@ -69,11 +61,8 @@ contract Distributor is AccessControl, ReentrancyGuard {
     /// @notice Crystallized Maker Emissions awaiting withdrawal, keyed by Maker.
     mapping(address maker => uint256 amount) public makerCredit;
 
-    /// @notice Frozen pot for an epoch (set on first Rip that lands in that epoch).
+    /// @notice Pot frozen for an epoch on its first Rip (`takerPotPerEpoch` at that moment).
     mapping(uint256 epoch => uint256 pot) public potOf;
-
-    /// @notice Whether `potOf[epoch]` has been frozen by a Rip (distinguishes pot = 0 from unset).
-    mapping(uint256 epoch => bool frozen) public potFrozen;
 
     /// @notice Successfully ripped Packs recorded in an epoch.
     mapping(uint256 epoch => uint256 count) public ripCountOf;
@@ -102,6 +91,7 @@ contract Distributor is AccessControl, ReentrancyGuard {
     error RipEngineAlreadySet();
     error OnlyRipEngine();
     error PackAlreadyEnrolled(uint256 tokenId);
+    error PackNotEnrolled(uint256 tokenId);
     error EpochNotClosed(uint256 epoch, uint256 currentEpoch);
     error AlreadyClaimed(uint256 epoch, address account);
     error NothingToClaim();
@@ -148,14 +138,9 @@ contract Distributor is AccessControl, ReentrancyGuard {
         emit MakerRatePerEpochSet(newRate);
     }
 
-    /// @notice Set the Participation Rewards pot. Applies to the current epoch only while it has
-    ///         no Rips yet; once an epoch freezes its pot, further changes wait for the next epoch.
+    /// @notice Set the Participation Rewards pot. Snapshotted into an epoch on that epoch's first Rip.
     function setTakerPotPerEpoch(uint256 newPot) external onlyRole(DEFAULT_ADMIN_ROLE) {
-        _syncTakerPot();
         takerPotPerEpoch = newPot;
-        if (!potFrozen[activeTakerPotEpoch]) {
-            activeTakerPot = newPot;
-        }
         emit TakerPotPerEpochSet(newPot);
     }
 
@@ -175,12 +160,11 @@ contract Distributor is AccessControl, ReentrancyGuard {
     }
 
     /// @notice Crystallize and drop a Pack from Maker Emissions. RipEngine-only.
-    /// @dev Covers every departure: manual exit, purge, and draw-out. No-ops when the Pack was
-    ///      never enrolled (e.g. Distributor wired after the Pack entered the pool) so exits stay
-    ///      live; a real enrolled Pack that fails bookkeeping still reverts the whole departure.
+    /// @dev Covers every departure: manual exit, purge, and draw-out. Reverts if the Pack was
+    ///      never enrolled — every resting Pack must have entered through `onPackEntered`.
     function onPackExited(uint256 tokenId) external onlyRipEngine {
         address maker = emissionMakerOf[tokenId];
-        if (maker == address(0)) return;
+        if (maker == address(0)) revert PackNotEnrolled(tokenId);
 
         _advanceMaker();
         uint256 accrued = accTokenPerPack - emissionDebtOf[tokenId];
@@ -200,11 +184,9 @@ contract Distributor is AccessControl, ReentrancyGuard {
         if (taker == address(0)) revert ZeroAddress();
         if (count == 0) revert ZeroAmount();
 
-        _syncTakerPot();
         uint256 epoch = currentEpoch();
-        if (!potFrozen[epoch]) {
-            potOf[epoch] = activeTakerPot;
-            potFrozen[epoch] = true;
+        if (ripCountOf[epoch] == 0) {
+            potOf[epoch] = takerPotPerEpoch;
         }
 
         ripCountOf[epoch] += count;
@@ -362,22 +344,6 @@ contract Distributor is AccessControl, ReentrancyGuard {
 
         uint256 scaled = (timestamp - last) * rate + emissionRemainder;
         return accTokenPerPack + scaled / EPOCH_DURATION;
-    }
-
-    /// @dev Carry `takerPotPerEpoch` into the current epoch the first time we observe it.
-    ///      Earlier epochs keep whatever pot they froze on their first Rip.
-    function _syncTakerPot() internal {
-        uint256 epoch = currentEpoch();
-        if (!_takerPotInitialized) {
-            activeTakerPot = takerPotPerEpoch;
-            activeTakerPotEpoch = epoch;
-            _takerPotInitialized = true;
-            return;
-        }
-        if (epoch > activeTakerPotEpoch) {
-            activeTakerPot = takerPotPerEpoch;
-            activeTakerPotEpoch = epoch;
-        }
     }
 
     /// @dev Pay from the held balance only — the balance, not a rate, is the hard cap.

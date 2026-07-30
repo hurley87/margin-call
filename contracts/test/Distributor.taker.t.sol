@@ -66,7 +66,7 @@ contract DistributorTakerTest is Test, DistributorFixture {
         vm.expectRevert(Distributor.NothingToClaim.selector);
         distributor.claimTaker(taker, epochs);
         assertEq(distributor.ripCountOf(0), 0);
-        assertFalse(distributor.potFrozen(0));
+        assertEq(distributor.potOf(0), 0);
     }
 
     function test_floorDustStaysFunded() public {
@@ -96,7 +96,7 @@ contract DistributorTakerTest is Test, DistributorFixture {
         vm.prank(admin);
         distributor.setTakerPotPerEpoch(POT * 2);
 
-        // Still in epoch 0 — first rip froze pot at POT.
+        // Still in epoch 0 — first Rip froze pot at POT.
         assertEq(distributor.potOf(0), POT);
 
         _endEpoch(0);

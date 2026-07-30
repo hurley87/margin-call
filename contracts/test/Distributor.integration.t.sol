@@ -4,6 +4,7 @@ pragma solidity ^0.8.20;
 import {Test} from "forge-std/Test.sol";
 import {Distributor} from "../src/Distributor.sol";
 import {GameToken} from "../src/GameToken.sol";
+import {RipEngine} from "../src/RipEngine.sol";
 import {RipEngineFixture} from "./helpers/RipEngineFixture.sol";
 
 /// @notice Real RipEngine pool events produce exact Distributor Maker / Taker claims.
@@ -16,6 +17,9 @@ contract DistributorRipEngineIntegrationTest is Test, RipEngineFixture {
     GameToken internal gameToken;
     Distributor internal rewards;
     address internal treasury = address(uint160(uint256(keccak256(abi.encodePacked("treasury")))));
+
+    /// @dev Defer fixture's mock wire; bind the real Distributor below.
+    function _wireDistributor() internal override {}
 
     function setUp() public override {
         super.setUp();
@@ -34,6 +38,18 @@ contract DistributorRipEngineIntegrationTest is Test, RipEngineFixture {
 
         vm.prank(treasury);
         gameToken.transfer(address(rewards), FUNDED);
+    }
+
+    function test_enterWithoutDistributorReverts() public {
+        RipEngine bare = new RipEngine(admin, address(packs), address(registry), address(usd), address(randomness));
+        bytes32 ripRole = packs.RIP_ENGINE_ROLE();
+        vm.prank(admin);
+        packs.grantRole(ripRole, address(bare));
+
+        uint256 id = _mintPackAtNav(maker, 50e18);
+        vm.prank(maker);
+        vm.expectRevert(RipEngine.DistributorNotSet.selector);
+        bare.enterPool(id);
     }
 
     function test_enterExitAndRipDriveExactClaims() public {

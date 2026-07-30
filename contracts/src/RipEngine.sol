@@ -101,6 +101,7 @@ contract RipEngine is AccessControl, ReentrancyGuard {
 
     error ZeroAddress();
     error DistributorAlreadySet();
+    error DistributorNotSet();
     error NotPackCreator(uint256 tokenId, address caller);
     error PackNotListed(uint256 tokenId);
     error PackAlreadyResting(uint256 tokenId);
@@ -186,10 +187,7 @@ contract RipEngine is AccessControl, ReentrancyGuard {
         (, uint256 nav) = _tryNav(tokenId);
         _checkpointNav(tokenId, creator, nav);
 
-        IDistributor rewards = distributor;
-        if (address(rewards) != address(0)) {
-            rewards.onPackEntered(tokenId, creator);
-        }
+        _rewards().onPackEntered(tokenId, creator);
     }
 
     /// @notice Remove a Pack from the resting set.
@@ -262,10 +260,7 @@ contract RipEngine is AccessControl, ReentrancyGuard {
         tokenIds = _settleDraws(e, count, q);
         _socialize(q.toMakersTotal);
 
-        IDistributor rewards = distributor;
-        if (address(rewards) != address(0)) {
-            rewards.onRip(msg.sender, count);
-        }
+        _rewards().onRip(msg.sender, count);
 
         emit RipSettled(
             msg.sender, count, q.unitPriceWad, q.totalPaid, q.protocolCutTotal, q.crownCutTotal, q.toMakersTotal
@@ -359,11 +354,18 @@ contract RipEngine is AccessControl, ReentrancyGuard {
     }
 
     /// @notice Bind the sole Distributor for emissions / rewards. One-shot; there is no unset.
+    /// @dev Pool enter / exit / Rip always call the Distributor; wire before live traffic.
     function setDistributor(address distributor_) external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (distributor_ == address(0)) revert ZeroAddress();
         if (address(distributor) != address(0)) revert DistributorAlreadySet();
         distributor = IDistributor(distributor_);
         emit DistributorSet(distributor_);
+    }
+
+    /// @dev Fail-closed Distributor handle — rewards bookkeeping is mandatory once the pool is live.
+    function _rewards() internal view returns (IDistributor rewards) {
+        rewards = distributor;
+        if (address(rewards) == address(0)) revert DistributorNotSet();
     }
 
     /// @notice Sum USD NAV of a Pack via registry quotes (no basket reshape). Fail-closed.
@@ -515,10 +517,7 @@ contract RipEngine is AccessControl, ReentrancyGuard {
         delete makerOf[tokenId];
         delete feeCheckpoint[tokenId];
 
-        IDistributor rewards = distributor;
-        if (address(rewards) != address(0)) {
-            rewards.onPackExited(tokenId);
-        }
+        _rewards().onPackExited(tokenId);
     }
 
     /// @dev Remove unlisted Packs from the resting set (descending so swap-pop is safe).
