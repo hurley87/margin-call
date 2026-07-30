@@ -1,10 +1,12 @@
 /**
- * Minimal ABIs for V1 Pack-rip contracts (reads + Starter Grant mint).
+ * V1 Pack-rip contract APIs.
  * Source of truth: `@margin-call/shared`.
  */
 export {
+  erc20Abi,
   mockUsdAbi,
   packCustodyAbi,
   ripEngineAbi,
   assetRegistryAbi,
+  getPackMintedTokenId,
 } from "@margin-call/shared";
