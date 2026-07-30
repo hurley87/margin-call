@@ -12,11 +12,17 @@ export function parseAddress(
   return trimmed as `0x${string}`;
 }
 
-/** Require a valid address from `process.env[envKey]`. */
-export function requireEnvAddress(envKey: string): `0x${string}` {
+/**
+ * Require a valid address from `process.env[envKey]`.
+ * `context` (e.g. "Convex env") qualifies the "is not set" message for the caller.
+ */
+export function requireEnvAddress(
+  envKey: string,
+  context?: string
+): `0x${string}` {
   const value = process.env[envKey]?.trim();
   if (!value) {
-    throw new Error(`${envKey} is not set`);
+    throw new Error(`${envKey} is not set${context ? ` in ${context}` : ""}`);
   }
   if (!ADDRESS_RE.test(value)) {
     throw new Error(`${envKey} must be a 0x-prefixed 20-byte address`);

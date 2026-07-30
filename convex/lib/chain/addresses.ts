@@ -11,24 +11,13 @@ export type ConvexContractAddresses = {
   ripEngine: `0x${string}`;
 };
 
-function requireConvexAddress(envKey: string): `0x${string}` {
-  try {
-    return requireEnvAddress(envKey);
-  } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    if (message === `${envKey} is not set`) {
-      throw new Error(`${envKey} is not set in Convex env`);
-    }
-    throw err;
-  }
-}
-
 /** Addresses required for Starter Grant + pool indexing. */
 export function requireIndexerAddresses(): ConvexContractAddresses {
+  const req = (envKey: string) => requireEnvAddress(envKey, "Convex env");
   return {
-    mockUsd: requireConvexAddress("MOCKUSD_ADDRESS"),
-    packCustody: requireConvexAddress("PACKCUSTODY_ADDRESS"),
-    assetRegistry: requireConvexAddress("ASSETREGISTRY_ADDRESS"),
-    ripEngine: requireConvexAddress("RIPENGINE_ADDRESS"),
+    mockUsd: req("MOCKUSD_ADDRESS"),
+    packCustody: req("PACKCUSTODY_ADDRESS"),
+    assetRegistry: req("ASSETREGISTRY_ADDRESS"),
+    ripEngine: req("RIPENGINE_ADDRESS"),
   };
 }
