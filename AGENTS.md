@@ -4,9 +4,9 @@
 
 ### Project overview
 
-Margin Call is a Next.js 16 (App Router) web app — a NAV-weighted Pack-rip game on Robinhood Chain. The agent-game UI/backend was torn down (#298); the app is currently a Privy connect shell plus SIWA/Convex auth scaffolding. See `CLAUDE.md` for tech stack and architecture. Design: `docs/prd-margin-call.md`; glossary: `CONTEXT.md`. Full V1 build: GitHub issue #297.
+Margin Call is a Next.js 16 (App Router) web app — a NAV-weighted Pack-rip game on Robinhood Chain. The agent-game UI/backend was torn down (#298); the app shell (#305) is Privy connect + Starter Grant + Browse Pool over Convex-indexed chain state. See `CLAUDE.md` for tech stack and architecture. Design: `docs/prd-margin-call.md`; glossary: `CONTEXT.md`. Full V1 build: GitHub issue #297.
 
-The Foundry workspace lives under `contracts/` (LazerForge-based). MockUSD and PackCustody are on Robinhood Chain testnet; AssetRegistry + MockPriceFeed (#300), RipEngine (#301, plus the Crown in #302), and GameToken + Distributor (#303/#304, on-chain Maker Emissions and equal-per-Rip Participation Rewards) are built with deploy scripts — testnet wire-up is #310. Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
+The Foundry workspace lives under `contracts/` (LazerForge-based). All V1 contracts are deployed and verified on Robinhood Chain testnet (#310). Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
 
 ### Commands
 
@@ -36,7 +36,8 @@ Standard commands are in `package.json` scripts and documented in `CLAUDE.md`:
 - Without `NEXT_PUBLIC_PRIVY_APP_ID`, `PrivyProvider` renders children without Privy/Wagmi/Convex wrappers; `usePrivy()` on the home page shows the unauthenticated landing (connect CTA).
 - Upstash Redis is optional; the rate limiter falls back to in-memory when env vars are missing.
 - Sentry source map uploads are disabled when `SENTRY_AUTH_TOKEN` is absent.
-- Convex schema is `siwaNonces` only after #298; reset the Convex deployment/data when pulling schema shrinks (no migration — DB is resettable).
+- Convex schema includes `siwaNonces`, `starterGrants`, `packs`, `poolSnapshots`, `chainCursors` (#305). Reset the Convex deployment/data when pulling schema shrinks (no migration — DB is resettable).
+- Starter Grant minting needs Convex env `STARTER_GRANT_MINTER_PRIVATE_KEY` with MockUSD `MINTER_ROLE`; pool sync needs contract addresses + `ROBINHOOD_TESTNET_RPC_URL` in Convex env.
 
 ### Build scripts (pnpm)
 
