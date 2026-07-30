@@ -33,7 +33,7 @@ export function isChainIdBase(chainId: string | number): boolean {
 }
 
 export const privyConfig: PrivyClientConfig = {
-  loginMethods: ["email", "wallet"],
+  loginMethods: ["wallet"],
   appearance: {
     theme: "dark",
     accentColor: "#d6a660",

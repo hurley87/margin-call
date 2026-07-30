@@ -24,8 +24,8 @@ describe("payment chain id helpers", () => {
   });
 
   describe("Privy onboarding config", () => {
-    it("offers email + external wallet login with embedded EVM wallet creation", () => {
-      expect(privyConfig.loginMethods).toEqual(["email", "wallet"]);
+    it("offers external wallet login with embedded EVM wallet creation", () => {
+      expect(privyConfig.loginMethods).toEqual(["wallet"]);
       expect(privyConfig.appearance?.walletList).toEqual([
         "detected_wallets",
         "metamask",
