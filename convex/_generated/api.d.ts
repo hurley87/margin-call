@@ -14,6 +14,7 @@ import type * as lib_chain_abis from "../lib/chain/abis.js";
 import type * as lib_chain_addresses from "../lib/chain/addresses.js";
 import type * as lib_chain_clients from "../lib/chain/clients.js";
 import type * as lib_chain_walletAddress from "../lib/chain/walletAddress.js";
+import type * as lib_poolIndexerHandlers from "../lib/poolIndexerHandlers.js";
 import type * as lib_poolStats from "../lib/poolStats.js";
 import type * as lib_starterGrantConfig from "../lib/starterGrantConfig.js";
 import type * as lib_stockTokens from "../lib/stockTokens.js";
@@ -38,6 +39,7 @@ declare const fullApi: ApiFromModules<{
   "lib/chain/addresses": typeof lib_chain_addresses;
   "lib/chain/clients": typeof lib_chain_clients;
   "lib/chain/walletAddress": typeof lib_chain_walletAddress;
+  "lib/poolIndexerHandlers": typeof lib_poolIndexerHandlers;
   "lib/poolStats": typeof lib_poolStats;
   "lib/starterGrantConfig": typeof lib_starterGrantConfig;
   "lib/stockTokens": typeof lib_stockTokens;

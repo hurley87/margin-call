@@ -5,10 +5,10 @@ import {
   RIPENGINE_DEPLOY_BLOCK_BIGINT as RIPENGINE_DEPLOY_BLOCK,
 } from "@margin-call/shared";
 import { v } from "convex/values";
-import { decodeEventLog, parseAbiItem, type AbiEvent, type Log } from "viem";
+import { parseAbiItem } from "viem";
 
 import { internal } from "./_generated/api";
-import { type ActionCtx, internalAction } from "./_generated/server";
+import { internalAction } from "./_generated/server";
 import {
   assetRegistryAbi,
   packCustodyAbi,
@@ -17,13 +17,16 @@ import {
 import { requireIndexerAddresses } from "./lib/chain/addresses";
 import { createChainPublicClient } from "./lib/chain/clients";
 import {
+  applyPackUnlisted,
+  applyRipEngineLog,
+  scanLogs,
+  upsertRestingPack,
+} from "./lib/poolIndexerHandlers";
+import {
   buildNavDistribution,
   harmonicMeanWad,
   unitPriceFromHm,
 } from "./lib/poolStats";
-import { stockSymbolForAddress } from "./lib/stockTokens";
-
-const MAX_BLOCK_SPAN = 2_000n;
 
 const packUnlistedEvent = parseAbiItem(
   "event PackUnlisted(uint256 indexed tokenId)"
@@ -37,112 +40,6 @@ const packExitedEvent = parseAbiItem(
 const packRippedEvent = parseAbiItem(
   "event PackRipped(uint256 indexed tokenId, address indexed taker, address indexed maker, uint256 nav, uint256 unitPrice, uint256 protocolCut, uint256 crownCut, uint256 toMakers)"
 );
-
-type BasketEntry = {
-  asset: string;
-  amount: string;
-  symbol: string | null;
-};
-
-type PublicClient = ReturnType<typeof createChainPublicClient>;
-
-async function readBasket(
-  client: PublicClient,
-  packCustody: `0x${string}`,
-  tokenId: bigint
-): Promise<BasketEntry[]> {
-  const basket = await client.readContract({
-    address: packCustody,
-    abi: packCustodyAbi,
-    functionName: "basketOf",
-    args: [tokenId],
-  });
-  return basket.map((entry) => ({
-    asset: entry.asset.toLowerCase(),
-    amount: entry.amount.toString(),
-    symbol: stockSymbolForAddress(entry.asset),
-  }));
-}
-
-async function upsertRestingPack(
-  ctx: ActionCtx,
-  client: PublicClient,
-  packCustody: `0x${string}`,
-  ripEngine: `0x${string}`,
-  tokenId: bigint,
-  maker: string,
-  eligible: boolean,
-  now: number,
-  knownNavWad?: string
-): Promise<void> {
-  const basket = await readBasket(client, packCustody, tokenId);
-  let navUsdWad: string | null = knownNavWad ?? null;
-  // Only hit the chain when the caller didn't already have this pack's NAV
-  // (e.g. from eligibleSnapshot).
-  if (navUsdWad === null) {
-    try {
-      const nav = await client.readContract({
-        address: ripEngine,
-        abi: ripEngineAbi,
-        functionName: "navOfPack",
-        args: [tokenId],
-      });
-      navUsdWad = nav.toString();
-    } catch {
-      navUsdWad = null;
-    }
-  }
-  await ctx.runMutation(internal.poolIndexer.upsertPack, {
-    tokenId: Number(tokenId),
-    maker: maker.toLowerCase(),
-    basket,
-    navUsdWad,
-    status: "resting",
-    eligible,
-    updatedAt: now,
-  });
-}
-
-/**
- * Scan a contract's logs from its persisted cursor (or `fallbackBlock`) up to
- * `latest`, in `MAX_BLOCK_SPAN` chunks, applying each log and advancing the
- * cursor per chunk.
- */
-async function scanLogs(
-  ctx: ActionCtx,
-  client: PublicClient,
-  opts: {
-    key: string;
-    address: `0x${string}`;
-    events: AbiEvent[];
-    fallbackBlock: bigint;
-    latest: bigint;
-    apply: (log: Log) => Promise<void>;
-  }
-): Promise<void> {
-  const cursor =
-    (await ctx.runQuery(internal.poolIndexer.getCursor, { key: opts.key })) ??
-    Number(opts.fallbackBlock);
-  let from = BigInt(cursor);
-  while (from <= opts.latest) {
-    const to =
-      from + MAX_BLOCK_SPAN > opts.latest ? opts.latest : from + MAX_BLOCK_SPAN;
-    const logs = await client.getLogs({
-      address: opts.address,
-      events: opts.events,
-      fromBlock: from,
-      toBlock: to,
-    });
-    for (const log of logs) {
-      await opts.apply(log);
-    }
-    await ctx.runMutation(internal.poolIndexer.setCursor, {
-      key: opts.key,
-      blockNumber: Number(to),
-    });
-    from = to + 1n;
-  }
-}
 
 /**
  * Sync Pack membership + Pool Statistics from live RipEngine / PackCustody.
@@ -287,100 +184,3 @@ export const syncPoolFromChain = internalAction({
     };
   },
 });
-
-async function applyRipEngineLog(
-  ctx: ActionCtx,
-  client: PublicClient,
-  addresses: {
-    packCustody: `0x${string}`;
-    ripEngine: `0x${string}`;
-  },
-  log: Log,
-  now: number
-): Promise<void> {
-  try {
-    const decoded = decodeEventLog({
-      abi: ripEngineAbi,
-      data: log.data,
-      topics: log.topics,
-    });
-    if (decoded.eventName === "PackEntered") {
-      await upsertRestingPack(
-        ctx,
-        client,
-        addresses.packCustody,
-        addresses.ripEngine,
-        decoded.args.tokenId as bigint,
-        decoded.args.maker as string,
-        true,
-        now
-      );
-      return;
-    }
-    if (decoded.eventName === "PackExited") {
-      const tokenId = decoded.args.tokenId as bigint;
-      const basket = await readBasket(client, addresses.packCustody, tokenId);
-      await ctx.runMutation(internal.poolIndexer.upsertPack, {
-        tokenId: Number(tokenId),
-        maker: (decoded.args.maker as string).toLowerCase(),
-        basket,
-        navUsdWad: null,
-        status: "unlisted",
-        eligible: false,
-        updatedAt: now,
-      });
-      return;
-    }
-    if (decoded.eventName === "PackRipped") {
-      const tokenId = decoded.args.tokenId as bigint;
-      const basket = await readBasket(client, addresses.packCustody, tokenId);
-      await ctx.runMutation(internal.poolIndexer.upsertPack, {
-        tokenId: Number(tokenId),
-        maker: (decoded.args.maker as string).toLowerCase(),
-        basket,
-        navUsdWad: (decoded.args.nav as bigint).toString(),
-        status: "ripped",
-        eligible: false,
-        updatedAt: now,
-      });
-    }
-  } catch {
-    // Skip undecodable logs.
-  }
-}
-
-async function applyPackUnlisted(
-  ctx: ActionCtx,
-  client: PublicClient,
-  packCustody: `0x${string}`,
-  log: Log,
-  now: number
-): Promise<void> {
-  try {
-    const decoded = decodeEventLog({
-      abi: packCustodyAbi,
-      data: log.data,
-      topics: log.topics,
-    });
-    if (decoded.eventName !== "PackUnlisted") return;
-    const tokenId = decoded.args.tokenId as bigint;
-    const basket = await readBasket(client, packCustody, tokenId);
-    const maker = await client.readContract({
-      address: packCustody,
-      abi: packCustodyAbi,
-      functionName: "creatorOf",
-      args: [tokenId],
-    });
-    await ctx.runMutation(internal.poolIndexer.upsertPack, {
-      tokenId: Number(tokenId),
-      maker: maker.toLowerCase(),
-      basket,
-      navUsdWad: null,
-      status: "unlisted",
-      eligible: false,
-      updatedAt: now,
-    });
-  } catch {
-    // Skip undecodable logs.
-  }
-}
