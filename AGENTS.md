@@ -6,7 +6,7 @@
 
 Margin Call is a Next.js 16 (App Router) web app — a NAV-weighted Pack-rip game on Robinhood Chain. The agent-game UI/backend was torn down (#298); the app is currently a Privy connect shell plus SIWA/Convex auth scaffolding. See `CLAUDE.md` for tech stack and architecture. Design: `docs/prd-margin-call.md`; glossary: `CONTEXT.md`. Full V1 build: GitHub issue #297.
 
-The Foundry workspace lives under `contracts/` (LazerForge-based). MockUSD and PackCustody are on Robinhood Chain testnet; AssetRegistry + MockPriceFeed are built (issue #300) with a deploy script — testnet wire-up is #310. RipEngine / GameToken / Distributor follow in later slices. Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
+The Foundry workspace lives under `contracts/` (LazerForge-based). MockUSD and PackCustody are on Robinhood Chain testnet; AssetRegistry + MockPriceFeed (#300) and RipEngine (#301) are built with deploy scripts — testnet wire-up is #310. GameToken / Distributor follow in later slices. Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
 
 ### Commands
 
@@ -21,6 +21,7 @@ Standard commands are in `package.json` scripts and documented in `CLAUDE.md`:
 - `pnpm deploy:mockusd` / `pnpm verify:mockusd` — Robinhood testnet deploy + verify
 - `pnpm deploy:packcustody` / `pnpm verify:packcustody` — PackCustody deploy + verify
 - `pnpm deploy:asset-registry` — AssetRegistry + MockPriceFeed seed
+- `pnpm deploy:rip-engine` — RipEngine + MockRandomness
 
 ### Contracts caveats
 
