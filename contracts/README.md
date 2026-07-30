@@ -199,7 +199,11 @@ Writes `contracts/deployments/robinhood-testnet.packcustody.json` (address, admi
 pnpm deploy:asset-registry
 ```
 
-Writes `contracts/deployments/robinhood-testnet.asset-registry.json` and patches `ASSETREGISTRY_ADDRESS` / `NEXT_PUBLIC_ASSETREGISTRY_ADDRESS`. Testnet deploy + Blockscout verify of the full V1 set is tracked in [#310](https://github.com/hurley87/margin-call/issues/310).
+Writes `contracts/deployments/robinhood-testnet.asset-registry.json` and patches `ASSETREGISTRY_ADDRESS` / `NEXT_PUBLIC_ASSETREGISTRY_ADDRESS`.
+
+```bash
+pnpm verify:asset-registry   # AssetRegistry + seeded MockPriceFeeds
+```
 
 ### RipEngine
 
@@ -212,6 +216,7 @@ Requires PackCustody, AssetRegistry, and MockUSD addresses already in `.env.loca
 #   RIPENGINE_GRANT_ROLE=true        # grant RIP_ENGINE_ROLE on PackCustody
 
 pnpm deploy:rip-engine
+pnpm verify:rip-engine       # RipEngine + MockRandomness
 ```
 
 Writes `contracts/deployments/robinhood-testnet.rip-engine.json` and patches `RIPENGINE_ADDRESS` / `NEXT_PUBLIC_RIPENGINE_ADDRESS`.
@@ -227,6 +232,7 @@ The supply chosen here is final — there is no mint authority after deploy:
 #   GAMETOKEN_SUPPLY=1000000000000000000000000000   # 18-decimal units; default 1e9 tokens
 
 pnpm deploy:game-token
+pnpm verify:game-token
 ```
 
 Writes `contracts/deployments/robinhood-testnet.game-token.json` and patches `GAMETOKEN_ADDRESS` / `NEXT_PUBLIC_GAMETOKEN_ADDRESS`.
@@ -235,33 +241,53 @@ Writes `contracts/deployments/robinhood-testnet.game-token.json` and patches `GA
 
 Requires `GAMETOKEN_ADDRESS` in `.env.local`. The script grants `DISTRIBUTOR_ROLE` **before** funding —
 the funding transfer would otherwise fail closed against the transfer lock. Funding also requires the
-deployer to be the GameToken treasury, since that is the only sender the lock lets fund a role holder:
+deployer to be the GameToken treasury, since that is the only sender the lock lets fund a role holder.
+Set `DISTRIBUTOR_FUND` non-zero for a funded Season:
 
 ```bash
 # Optional overrides:
 #   DISTRIBUTOR_ADMIN=0x…            # defaults to deployer
 #   DISTRIBUTOR_GRANT_ROLE=true      # grant GameToken DISTRIBUTOR_ROLE
-#   DISTRIBUTOR_FUND=300000000000000000000000000    # 18-decimal units moved from the deployer
+#   DISTRIBUTOR_FUND=1000000000000000000000000      # 18-decimal units moved from the deployer
 #   DISTRIBUTOR_MAKER_RATE=…         # makerRatePerEpoch
 #   DISTRIBUTOR_TAKER_POT=…          # takerPotPerEpoch
 #   DISTRIBUTOR_RIP_ENGINE=0x…       # defaults to RIPENGINE_ADDRESS
 #   DISTRIBUTOR_WIRE_RIPENGINE=true  # mutually bind Distributor ↔ RipEngine
 
 pnpm deploy:distributor
+pnpm verify:distributor
 ```
 
 Writes `contracts/deployments/robinhood-testnet.distributor.json` and patches `DISTRIBUTOR_ADDRESS` / `NEXT_PUBLIC_DISTRIBUTOR_ADDRESS`. When a RipEngine address is available, the script also calls `setRipEngine` / `setDistributor`.
 
+### V1 wire-up (#310)
+
+Deploy order: MockUSD → PackCustody → AssetRegistry → RipEngine → GameToken → Distributor (funded).
+
+App config reads `NEXT_PUBLIC_*` addresses via [`src/lib/contracts/addresses.ts`](../src/lib/contracts/addresses.ts). For future Convex indexers (#305+), mirror the same keys with `npx convex env set`.
+
+Live create → rip → Acquisition Fee claim (needs faucet Stock Tokens on the deployer):
+
+```bash
+pnpm testnet:e2e
+```
+
+Distributor Maker Emissions claim needs elapsed time. Prove it immediately against live bytecode with a fork + warp (`claimMaker`):
+
+```bash
+pnpm testnet:e2e:distributor-fork
+```
+
 ### Explorer
 
 - Browser: https://explorer.testnet.chain.robinhood.com
-- **MockUSD (testnet, verified):** [`0xAA555fD042F33B5AF485171015AeAF11eD49EF3D`](https://explorer.testnet.chain.robinhood.com/address/0xAA555fD042F33B5AF485171015AeAF11eD49EF3D#code)
-- Deployment record: [`deployments/robinhood-testnet.mockusd.json`](./deployments/robinhood-testnet.mockusd.json)
-- Tx: [`0x9a2c19d5…`](https://explorer.testnet.chain.robinhood.com/tx/0x9a2c19d5e97a12eb86f7ec5dd3e74bcf30bd099d11a763d57f390fde2af7f4c2)
-- **PackCustody (testnet, verified):** [`0x413e82F990DE796CC279c180F711d720A7Ee7728`](https://explorer.testnet.chain.robinhood.com/address/0x413e82F990DE796CC279c180F711d720A7Ee7728#code)
-- Deployment record: [`deployments/robinhood-testnet.packcustody.json`](./deployments/robinhood-testnet.packcustody.json)
-- Tx: [`0x6532824d…`](https://explorer.testnet.chain.robinhood.com/tx/0x6532824d0202d16b693a55fab1ff2bffa2a87f718037ca3930a3b0d89f11b9e6)
-- Verify after deploy: `pnpm verify:mockusd` / `pnpm verify:packcustody` (Blockscout; workspace uses `optimizer_runs = 1_000_000`).
+- **MockUSD (verified):** [`0xAA555fD042F33B5AF485171015AeAF11eD49EF3D`](https://explorer.testnet.chain.robinhood.com/address/0xAA555fD042F33B5AF485171015AeAF11eD49EF3D#code) — [`deployments/robinhood-testnet.mockusd.json`](./deployments/robinhood-testnet.mockusd.json)
+- **PackCustody (verified):** [`0x7768c01f7538266Bd87DbDc435bFB238683eB53B`](https://explorer.testnet.chain.robinhood.com/address/0x7768c01f7538266Bd87DbDc435bFB238683eB53B#code) — [`deployments/robinhood-testnet.packcustody.json`](./deployments/robinhood-testnet.packcustody.json)
+- **AssetRegistry (verified):** [`0xDCF6fbBbbF83848Bf68500432392C0988712Bf43`](https://explorer.testnet.chain.robinhood.com/address/0xDCF6fbBbbF83848Bf68500432392C0988712Bf43#code) — [`deployments/robinhood-testnet.asset-registry.json`](./deployments/robinhood-testnet.asset-registry.json)
+- **RipEngine (verified):** [`0xa8C2EaF8b06cf139DE07dc06a9849b9728423Fc5`](https://explorer.testnet.chain.robinhood.com/address/0xa8C2EaF8b06cf139DE07dc06a9849b9728423Fc5#code) — [`deployments/robinhood-testnet.rip-engine.json`](./deployments/robinhood-testnet.rip-engine.json)
+- **GameToken (verified):** [`0xbDc5d76A848Bf6F45195D58E6a05483B9Bdffa8A`](https://explorer.testnet.chain.robinhood.com/address/0xbDc5d76A848Bf6F45195D58E6a05483B9Bdffa8A#code) — [`deployments/robinhood-testnet.game-token.json`](./deployments/robinhood-testnet.game-token.json)
+- **Distributor (verified):** [`0xb0C5f84059c23A07C338A1cEeFA00068Cd782530`](https://explorer.testnet.chain.robinhood.com/address/0xb0C5f84059c23A07C338A1cEeFA00068Cd782530#code) — [`deployments/robinhood-testnet.distributor.json`](./deployments/robinhood-testnet.distributor.json)
+- Verify helpers: `pnpm verify:mockusd` / `verify:packcustody` / `verify:asset-registry` / `verify:rip-engine` / `verify:game-token` / `verify:distributor` (Blockscout; `optimizer_runs = 1_000_000`).
 
 ### Stock Tokens (Robinhood testnet)
 
@@ -287,7 +313,7 @@ Everything below runs against the deployed contracts with tokens from the
 
 ```bash
 export RPC=https://rpc.testnet.chain.robinhood.com
-export PACKS=0x413e82F990DE796CC279c180F711d720A7Ee7728
+export PACKS=0x7768c01f7538266Bd87DbDc435bFB238683eB53B
 # From deployments/robinhood-testnet.stock-tokens.json:
 export AMZN=0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02
 export AMD=0x71178BAc73cBeb415514eB542a8995b82669778d
