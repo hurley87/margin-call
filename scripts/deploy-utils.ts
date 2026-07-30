@@ -40,24 +40,19 @@ export function loadEnvLocal(): Record<string, string> {
     "NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL",
     "MOCKUSD_ADMIN",
     "MOCKUSD_MINTER",
-    "MOCKUSD_ADDRESS",
-    "NEXT_PUBLIC_MOCKUSD_ADDRESS",
     "PACKCUSTODY_ADMIN",
     "PACKCUSTODY_WHITELIST_ADMIN",
     "PACKCUSTODY_WHITELIST",
-    "PACKCUSTODY_ADDRESS",
-    "NEXT_PUBLIC_PACKCUSTODY_ADDRESS",
     "ASSETREGISTRY_ADMIN",
     "ASSETREGISTRY_INVENTORY",
     "ASSETREGISTRY_STALE_AFTER",
     "ASSETREGISTRY_SEED_FEEDS",
-    "ASSETREGISTRY_ADDRESS",
-    "NEXT_PUBLIC_ASSETREGISTRY_ADDRESS",
+    "RIPENGINE_ADMIN",
+    "RIPENGINE_SEED",
+    "RIPENGINE_GRANT_ROLE",
     "GAMETOKEN_ADMIN",
     "GAMETOKEN_TREASURY",
     "GAMETOKEN_SUPPLY",
-    "GAMETOKEN_ADDRESS",
-    "NEXT_PUBLIC_GAMETOKEN_ADDRESS",
     "DISTRIBUTOR_ADMIN",
     "DISTRIBUTOR_GRANT_ROLE",
     "DISTRIBUTOR_FUND",
@@ -65,13 +60,32 @@ export function loadEnvLocal(): Record<string, string> {
     "DISTRIBUTOR_TAKER_POT",
     "DISTRIBUTOR_RIP_ENGINE",
     "DISTRIBUTOR_WIRE_RIPENGINE",
-    "DISTRIBUTOR_ADDRESS",
-    "NEXT_PUBLIC_DISTRIBUTOR_ADDRESS",
     "ETHERSCAN_API_KEY",
   ]) {
     const value = process.env[key];
     if (value !== undefined && value !== "") {
       env[key] = value;
+    }
+  }
+  // Address keys: prefer `.env.local` (updated by deploy scripts) over a stale shell export.
+  for (const key of [
+    "MOCKUSD_ADDRESS",
+    "NEXT_PUBLIC_MOCKUSD_ADDRESS",
+    "PACKCUSTODY_ADDRESS",
+    "NEXT_PUBLIC_PACKCUSTODY_ADDRESS",
+    "ASSETREGISTRY_ADDRESS",
+    "NEXT_PUBLIC_ASSETREGISTRY_ADDRESS",
+    "RIPENGINE_ADDRESS",
+    "NEXT_PUBLIC_RIPENGINE_ADDRESS",
+    "GAMETOKEN_ADDRESS",
+    "NEXT_PUBLIC_GAMETOKEN_ADDRESS",
+    "DISTRIBUTOR_ADDRESS",
+    "NEXT_PUBLIC_DISTRIBUTOR_ADDRESS",
+  ]) {
+    const fileValue = env[key];
+    const procValue = process.env[key];
+    if ((!fileValue || fileValue === "") && procValue) {
+      env[key] = procValue;
     }
   }
   return env;

@@ -1,0 +1,21 @@
+{
+  "address": "0xa8C2EaF8b06cf139DE07dc06a9849b9728423Fc5",
+  "admin": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "blockNumber": 95311248,
+  "bytecodeHash": "none",
+  "cborMetadata": false,
+  "chainId": 46630,
+  "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "evmVersion": "cancun",
+  "grantedRipEngineRole": true,
+  "optimizerRuns": 1000000,
+  "packs": "0x7768c01f7538266Bd87DbDc435bFB238683eB53B",
+  "randomness": "0x1a5Ce1616E722cC427d5e7F54d5A2f408A1169a4",
+  "registry": "0xDCF6fbBbbF83848Bf68500432392C0988712Bf43",
+  "solc": "0.8.28",
+  "stablecoin": "0xAA555fD042F33B5AF485171015AeAF11eD49EF3D",
+  "timestamp": 1785426264,
+  "version": 1,
+  "txHash": "0x21d13a3fa780f72671842976f79fb9149520af06c90105440276822c1f9a333c",
+  "deployedAt": "2026-07-30T15:44:30.819Z"
+}
