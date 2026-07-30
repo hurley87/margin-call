@@ -74,14 +74,22 @@ contract GameTokenHandler is Test {
         }
     }
 
+    /// @dev Claimants must not be able to push tokens into the Distributor while locked — that
+    ///      would burn them, since `sweep` cannot recover the game token.
     function tryReturnToDistributor(uint256 actorSeed, uint256 amountSeed) external {
         address from = actors[bound(actorSeed, 0, actors.length - 1)];
         uint256 balance = token.balanceOf(from);
         if (balance == 0) return;
 
         uint256 amount = bound(amountSeed, 1, balance);
+        bool wasLocked = !token.transfersEnabled();
+
         vm.prank(from);
-        token.transfer(distributor, amount);
+        try token.transfer(distributor, amount) {
+            if (wasLocked) ghostLockedTransferSucceeded = true;
+        } catch {
+            if (wasLocked) ghostLockedTransferReverted += 1;
+        }
     }
 
     function scheduleEnable() external {
@@ -134,8 +142,9 @@ contract GameTokenInvariantTest is StdInvariant, Test {
         assertEq(sum, SUPPLY);
     }
 
-    /// @notice No user↔user transfer ever settles while the lock is on.
-    function invariant_userToUserTransfersNeverSettleWhileLocked() public view {
+    /// @notice No transfer out of a claimant ever settles while the lock is on — not to another
+    ///         claimant, and not into the Distributor.
+    function invariant_claimantTransfersNeverSettleWhileLocked() public view {
         assertFalse(handler.ghostLockedTransferSucceeded());
     }
 

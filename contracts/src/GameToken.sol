@@ -8,18 +8,26 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 /// @notice Fixed-supply reward token for Maker Emissions and Participation Rewards.
 /// @dev The entire supply is minted to the treasury in the constructor and there is no mint
 ///      authority afterwards, so emission is a *funded Distributor*, not an inflation lever.
-///      User↔user transfers fail closed: while the lock holds, a transfer only succeeds when one
-///      leg carries `DISTRIBUTOR_ROLE` — Distributor→claimant so claims pay out, and →Distributor
-///      so the treasury can fund it. The lock lifts only through the one-way, timelocked
-///      `scheduleTransferEnable` → `enableTransfers` pair; nothing re-locks it.
+///      User↔user transfers fail closed. While the lock holds only two moves are legal: a
+///      `DISTRIBUTOR_ROLE` holder paying anyone (Distributor→claimant, so claims settle) and the
+///      treasury paying a role holder (funding). Everything else reverts, including a claimant
+///      sending tokens *into* the Distributor, which would otherwise burn them irrecoverably.
+///      The lock lifts only through the one-way, timelocked `scheduleTransferEnable` →
+///      `enableTransfers` pair; nothing re-locks it.
 ///      Ticker and branding are a post-V1 decision (#297), so the name below is a placeholder.
 contract GameToken is ERC20, AccessControl {
     /// @notice Role whose holders are exempt from the transfer lock (the Distributor).
     bytes32 public constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
 
-    /// @notice Delay between scheduling and exercising the transfer-enable switch.
+    /// @notice Notice period between scheduling and exercising the transfer-enable switch.
     /// @dev A constant, not a setter — the owner cannot shorten the notice period.
     uint256 public constant TRANSFER_ENABLE_DELAY = 7 days;
+
+    /// @notice How long a matured schedule stays exercisable before it expires.
+    /// @dev Without this the notice period would be meaningless for any decision taken long after
+    ///      the eta: an admin could arm the switch, wait a year, and unlock in the next block with
+    ///      no recent warning. An expired schedule must be re-armed, which restarts the notice.
+    uint256 public constant TRANSFER_ENABLE_WINDOW = 7 days;
 
     /// @notice Always true — on-chain disclosure that this is a test asset.
     bool public constant IS_TEST_ASSET = true;
@@ -46,6 +54,7 @@ contract GameToken is ERC20, AccessControl {
     error TransferEnableAlreadyScheduled(uint256 eta);
     error TransferEnableNotScheduled();
     error TransferEnableNotElapsed(uint256 eta, uint256 now_);
+    error TransferEnableExpired(uint256 deadline, uint256 now_);
     error TransfersAlreadyEnabled();
 
     /// @param admin DEFAULT_ADMIN_ROLE holder (grants DISTRIBUTOR_ROLE, drives the enable switch).
@@ -66,24 +75,31 @@ contract GameToken is ERC20, AccessControl {
     // One-way timelocked transfer enable
     // ─────────────────────────────────────────────────────────────────────────
 
-    /// @notice Start the notice period for lifting the transfer lock. Callable once.
-    /// @dev There is no cancel: scheduling publicly commits to the change `TRANSFER_ENABLE_DELAY`
-    ///      ahead of time. Exercising it is still a separate call.
+    /// @notice Start the notice period for lifting the transfer lock.
+    /// @dev There is no cancel — scheduling publicly commits to the change `TRANSFER_ENABLE_DELAY`
+    ///      ahead of time, and exercising it is still a separate call. A schedule that is never
+    ///      exercised expires on its own, after which this may be called again for a fresh notice.
     function scheduleTransferEnable() external onlyRole(DEFAULT_ADMIN_ROLE) returns (uint256 eta) {
         if (transfersEnabled) revert TransfersAlreadyEnabled();
-        if (transferEnableEta != 0) revert TransferEnableAlreadyScheduled(transferEnableEta);
+        uint256 pending = transferEnableEta;
+        if (pending != 0 && block.timestamp <= pending + TRANSFER_ENABLE_WINDOW) {
+            revert TransferEnableAlreadyScheduled(pending);
+        }
 
         eta = block.timestamp + TRANSFER_ENABLE_DELAY;
         transferEnableEta = eta;
         emit TransferEnableScheduled(eta);
     }
 
-    /// @notice Lift the transfer lock for good, once the scheduled notice period has elapsed.
+    /// @notice Lift the transfer lock for good, inside the scheduled execution window.
     function enableTransfers() external onlyRole(DEFAULT_ADMIN_ROLE) {
         if (transfersEnabled) revert TransfersAlreadyEnabled();
         uint256 eta = transferEnableEta;
         if (eta == 0) revert TransferEnableNotScheduled();
         if (block.timestamp < eta) revert TransferEnableNotElapsed(eta, block.timestamp);
+
+        uint256 deadline = eta + TRANSFER_ENABLE_WINDOW;
+        if (block.timestamp > deadline) revert TransferEnableExpired(deadline, block.timestamp);
 
         transfersEnabled = true;
         emit TransfersEnabled(block.timestamp);
@@ -93,9 +109,24 @@ contract GameToken is ERC20, AccessControl {
     // Views
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// @notice Last timestamp at which the pending schedule may be exercised; 0 when none is set.
+    function transferEnableDeadline() public view returns (uint256) {
+        uint256 eta = transferEnableEta;
+        return eta == 0 ? 0 : eta + TRANSFER_ENABLE_WINDOW;
+    }
+
+    /// @notice True when a scheduled enable is still live (pending or exercisable).
+    function isTransferEnableScheduled() public view returns (bool) {
+        return !transfersEnabled && transferEnableEta != 0 && block.timestamp <= transferEnableDeadline();
+    }
+
     /// @notice True when a `from` → `to` transfer would pass the lock at the current block.
+    /// @dev Two exemptions while locked, and no more: a role holder paying out, and the treasury
+    ///      funding a role holder. Sending *into* a role holder from anywhere else stays blocked.
     function isTransferAllowed(address from, address to) public view returns (bool) {
-        return transfersEnabled || hasRole(DISTRIBUTOR_ROLE, from) || hasRole(DISTRIBUTOR_ROLE, to);
+        if (transfersEnabled) return true;
+        if (hasRole(DISTRIBUTOR_ROLE, from)) return true;
+        return from == treasury && hasRole(DISTRIBUTOR_ROLE, to);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

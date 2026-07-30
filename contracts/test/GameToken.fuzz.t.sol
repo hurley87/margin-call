@@ -31,10 +31,10 @@ contract GameTokenFuzzTest is Test {
     }
 
     function testFuzz_anyUserPairFailsClosedWhileLocked(address from, address to, uint256 amount) public {
+        // Only the two exemptions may pass: a role holder paying out, or the treasury funding one.
         vm.assume(from != address(0) && to != address(0));
         vm.assume(from != treasury);
         vm.assume(!token.hasRole(distributorRole, from));
-        vm.assume(!token.hasRole(distributorRole, to));
         amount = bound(amount, 1, 1_000e18);
 
         // Give `from` a balance through the exempt path so the revert can only be the lock.

@@ -148,12 +148,27 @@ contract GameTokenTest is Test {
         assertEq(token.balanceOf(claimant), 40e18);
     }
 
-    function test_transferIntoDistributorExemptSoTreasuryCanFund() public {
+    function test_treasuryCanFundTheDistributor() public {
         vm.prank(treasury);
         token.transfer(distributor, 300_000_000e18);
 
         assertEq(token.balanceOf(distributor), 300_000_000e18);
         assertEq(token.balanceOf(treasury), SUPPLY - 300_000_000e18);
+    }
+
+    /// @dev A claimant sending into the Distributor could never get those tokens back, since
+    ///      `sweep` cannot touch the game token. Fail the transfer instead of burning their funds.
+    function test_nonTreasuryCannotSendIntoTheDistributor() public {
+        vm.prank(treasury);
+        token.transfer(distributor, 100e18);
+        vm.prank(distributor);
+        token.transfer(alice, 10e18);
+
+        vm.expectRevert(abi.encodeWithSelector(GameToken.TransfersLocked.selector, alice, distributor));
+        vm.prank(alice);
+        token.transfer(distributor, 1e18);
+
+        assertEq(token.balanceOf(alice), 10e18);
     }
 
     function test_revokingDistributorRoleRelocksThatAddress() public {
@@ -180,7 +195,9 @@ contract GameTokenTest is Test {
     function test_isTransferAllowedReflectsExemptions() public view {
         assertFalse(token.isTransferAllowed(alice, bob));
         assertTrue(token.isTransferAllowed(distributor, alice));
-        assertTrue(token.isTransferAllowed(alice, distributor));
+        assertTrue(token.isTransferAllowed(treasury, distributor));
+        assertFalse(token.isTransferAllowed(alice, distributor));
+        assertFalse(token.isTransferAllowed(treasury, alice));
     }
 
     // ========== One-way timelocked enable switch ==========
@@ -207,6 +224,79 @@ contract GameTokenTest is Test {
         vm.prank(admin);
         uint256 eta = token.scheduleTransferEnable();
 
+        vm.expectRevert(abi.encodeWithSelector(GameToken.TransferEnableAlreadyScheduled.selector, eta));
+        vm.prank(admin);
+        token.scheduleTransferEnable();
+    }
+
+    function test_scheduleSetsAnExecutionWindow() public {
+        vm.prank(admin);
+        uint256 eta = token.scheduleTransferEnable();
+
+        assertEq(token.transferEnableDeadline(), eta + token.TRANSFER_ENABLE_WINDOW());
+        assertTrue(token.isTransferEnableScheduled());
+    }
+
+    function test_enableAtTheWindowDeadlineStillWorks() public {
+        vm.prank(admin);
+        uint256 eta = token.scheduleTransferEnable();
+
+        vm.warp(eta + token.TRANSFER_ENABLE_WINDOW());
+        vm.prank(admin);
+        token.enableTransfers();
+
+        assertTrue(token.transfersEnabled());
+    }
+
+    /// @dev Without an expiry, an admin could arm the switch, sit on it for a year, and unlock in
+    ///      the next block with no recent warning — the notice period would buy holders nothing.
+    function test_unexercisedScheduleExpires() public {
+        vm.prank(admin);
+        uint256 eta = token.scheduleTransferEnable();
+        uint256 deadline = eta + token.TRANSFER_ENABLE_WINDOW();
+
+        vm.warp(deadline + 1);
+        assertFalse(token.isTransferEnableScheduled());
+
+        vm.expectRevert(abi.encodeWithSelector(GameToken.TransferEnableExpired.selector, deadline, block.timestamp));
+        vm.prank(admin);
+        token.enableTransfers();
+
+        assertFalse(token.transfersEnabled());
+    }
+
+    function test_expiredScheduleMustBeRearmedAndServesFreshNotice() public {
+        vm.prank(admin);
+        uint256 firstEta = token.scheduleTransferEnable();
+
+        vm.warp(firstEta + token.TRANSFER_ENABLE_WINDOW() + 365 days);
+
+        vm.prank(admin);
+        uint256 secondEta = token.scheduleTransferEnable();
+        assertEq(secondEta, block.timestamp + token.TRANSFER_ENABLE_DELAY());
+
+        // The re-armed schedule serves the full delay again — no instant unlock.
+        vm.expectRevert(abi.encodeWithSelector(GameToken.TransferEnableNotElapsed.selector, secondEta, block.timestamp));
+        vm.prank(admin);
+        token.enableTransfers();
+
+        vm.warp(secondEta);
+        vm.prank(admin);
+        token.enableTransfers();
+        assertTrue(token.transfersEnabled());
+    }
+
+    function test_liveScheduleCannotBeRearmedToResetTheClock() public {
+        vm.prank(admin);
+        uint256 eta = token.scheduleTransferEnable();
+
+        // Anywhere inside the notice period or the execution window, re-arming is refused.
+        vm.warp(eta - 1);
+        vm.expectRevert(abi.encodeWithSelector(GameToken.TransferEnableAlreadyScheduled.selector, eta));
+        vm.prank(admin);
+        token.scheduleTransferEnable();
+
+        vm.warp(eta + token.TRANSFER_ENABLE_WINDOW());
         vm.expectRevert(abi.encodeWithSelector(GameToken.TransferEnableAlreadyScheduled.selector, eta));
         vm.prank(admin);
         token.scheduleTransferEnable();
