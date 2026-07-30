@@ -108,9 +108,11 @@ Fixed-supply reward token for Maker Emissions and Participation Rewards (issue #
 
 - Name / symbol: `Margin Call Game Token (Test Asset)` / `MCGT`, 18 decimals (ticker and branding are a post-V1 decision)
 - The whole supply is minted to the treasury in the constructor; **there is no mint function**, so emission is a funded Distributor rather than an inflation lever
-- User↔user transfers fail closed with `TransfersLocked(from, to)`. While the lock holds a transfer needs one leg holding `DISTRIBUTOR_ROLE` — Distributor→claimant so claims pay out, and →Distributor so the treasury can fund it
-- The lock lifts only via `scheduleTransferEnable` (starts a `TRANSFER_ENABLE_DELAY` = 7-day notice period) followed by `enableTransfers`. Both are evented and admin-only, neither can run twice, and nothing re-locks the token afterwards
-- `TRANSFER_ENABLE_DELAY` is a constant, not a setter — the owner cannot shorten the notice period
+- User↔user transfers fail closed with `TransfersLocked(from, to)`. Exactly two moves are legal while the lock holds: a `DISTRIBUTOR_ROLE` holder paying anyone (Distributor→claimant, so claims settle) and the treasury paying a role holder (funding)
+- Sending tokens _into_ the Distributor from anywhere but the treasury is refused. Those tokens would be unrecoverable — `sweep` cannot touch the game token — so the transfer fails rather than burning a claimant's balance
+- The lock lifts only via `scheduleTransferEnable` (starts a `TRANSFER_ENABLE_DELAY` = 7-day notice period) followed by `enableTransfers` inside a `TRANSFER_ENABLE_WINDOW` = 7-day execution window. Both are evented and admin-only, and nothing re-locks the token afterwards
+- A schedule that is never exercised **expires** at the end of its window and must be re-armed, which restarts the notice period. Without that, an admin could arm the switch, wait a year, and unlock in the next block with no recent warning
+- `TRANSFER_ENABLE_DELAY` and `TRANSFER_ENABLE_WINDOW` are constants, not setters — the owner cannot shorten the notice period
 - The switch ships unexercised; opening it is a separate post-V1 decision
 
 ## Distributor
@@ -120,10 +122,15 @@ Pays Maker Emissions and Participation Rewards against per-epoch merkle Claim Ro
 - Funded by transferring GameToken in — no mint path anywhere, so the held balance is the hard cap by construction
 - Owner setters for `makerRatePerEpoch`, `takerPotPerEpoch`, and `rebatePerRipCap` (default `0.10` WAD), all evented; they are the published inputs to the off-chain entitlement algorithm, not an on-chain accrual
 - `postClaimRoot(epoch, root, total)` only accepts a finished epoch (`epoch < currentEpoch()`), stays replaceable while nobody has claimed it, then freezes for good
+- `increaseClaimTotal(epoch, newTotal)` raises an epoch's ceiling without touching its root. It is the recovery path for a `total` posted below what the root commits to, which the first claim would otherwise freeze in place, stranding every later claimant. Raise-only and root-preserving, so it can neither invalidate a booked claim nor invent an entitlement
 - `claim(account, input)` / `claimBatch(account, inputs)` verify a proof and pay `makerAmount + takerAmount`; anyone may submit, funds always go to `account`
 - Three independent bounds keep a bad root harmless: one claim per `(epoch, account)`, an epoch pays at most its declared `claimTotalOf`, and every payout is capped by the live balance
-- Epoch = 1 day from `epochZeroStart` (deploy time); `currentEpoch()` / `epochStart(epoch)` expose the schedule
+- Paying out depends on GameToken's `DISTRIBUTOR_ROLE` grant. Without it every claim fails closed with `TransfersLocked` and nothing is booked, so entitlements survive until the grant is restored
 - `sweep` recovers stray tokens but is barred from the GameToken, so unspent rewards stay claimable and roll forward
+
+> **Epochs are anchored to deploy time, not UTC midnight.** Epoch 0 starts at `epochZeroStart` and each
+> epoch is `EPOCH_DURATION` = 1 day long. An off-chain builder that buckets Rips by calendar date will
+> mis-attribute every epoch — read `epochStart(epoch)` / `currentEpoch()` from the contract instead.
 
 Canonical claim leaf — the only thing the contract fixes about tree construction:
 
@@ -227,7 +234,8 @@ Writes `contracts/deployments/robinhood-testnet.game-token.json` and patches `GA
 ### Distributor
 
 Requires `GAMETOKEN_ADDRESS` in `.env.local`. The script grants `DISTRIBUTOR_ROLE` **before** funding —
-the funding transfer would otherwise fail closed against the transfer lock:
+the funding transfer would otherwise fail closed against the transfer lock. Funding also requires the
+deployer to be the GameToken treasury, since that is the only sender the lock lets fund a role holder:
 
 ```bash
 # Optional overrides:
@@ -390,6 +398,13 @@ cast call $DIST "hasClaimed(uint256,address)(bool)" 0 $ALICE --rpc-url $RPC  # t
 
 Re-running the same claim reverts `AlreadyClaimed(0, alice)`, re-posting the epoch's root reverts
 `ClaimRootFrozen(0, 1)`, and `$ALICE` still cannot forward the tokens — claiming does not unlock them.
+
+If the epoch's declared total turns out to be below what the root commits to, raise the ceiling rather
+than re-posting (which the first claim has already frozen):
+
+```bash
+cast send $DIST "increaseClaimTotal(uint256,uint256)" 0 25000000000000000000 --private-key $KEY --rpc-url $RPC
+```
 
 ## Layout
 
