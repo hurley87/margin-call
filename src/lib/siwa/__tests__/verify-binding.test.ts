@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { siwaAuthMatchesTrader } from "@/lib/siwa/binding";
 import { siwaAuthMatchesConvexTrader } from "@/lib/siwa/binding";
-import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
+import { getEvmWalletAddress } from "@/lib/privy/wallet";
 
 describe("siwaAuthMatchesTrader", () => {
   it("returns true when SIWA agent and wallet match trader identity", () => {
@@ -86,10 +86,10 @@ describe("siwaAuthMatchesConvexTrader", () => {
   });
 });
 
-describe("getEmbeddedEvmWalletAddress", () => {
+describe("getEvmWalletAddress", () => {
   it("prefers the primary embedded EVM wallet address when present", () => {
     expect(
-      getEmbeddedEvmWalletAddress({
+      getEvmWalletAddress({
         wallet: {
           type: "wallet",
           address: "0xabc",
@@ -110,7 +110,7 @@ describe("getEmbeddedEvmWalletAddress", () => {
 
   it("falls back to linked embedded EVM wallet address", () => {
     expect(
-      getEmbeddedEvmWalletAddress({
+      getEvmWalletAddress({
         wallet: null,
         linkedAccounts: [
           {
@@ -124,9 +124,30 @@ describe("getEmbeddedEvmWalletAddress", () => {
     ).toBe("0xdef");
   });
 
-  it("ignores external wallets", () => {
+  it("prefers an embedded wallet over a linked external wallet", () => {
     expect(
-      getEmbeddedEvmWalletAddress({
+      getEvmWalletAddress({
+        wallet: {
+          type: "wallet",
+          address: "0xext",
+          chainType: "ethereum",
+          walletClientType: "metamask",
+        },
+        linkedAccounts: [
+          {
+            type: "wallet",
+            address: "0xembedded",
+            chainType: "ethereum",
+            walletClientType: "privy",
+          },
+        ],
+      })
+    ).toBe("0xembedded");
+  });
+
+  it("falls back to an external EVM wallet when no embedded wallet exists", () => {
+    expect(
+      getEvmWalletAddress({
         wallet: null,
         linkedAccounts: [
           {
@@ -137,12 +158,12 @@ describe("getEmbeddedEvmWalletAddress", () => {
           },
         ],
       })
-    ).toBeNull();
+    ).toBe("0xdef");
   });
 
   it("returns null when no wallet is linked", () => {
     expect(
-      getEmbeddedEvmWalletAddress({
+      getEvmWalletAddress({
         wallet: null,
         linkedAccounts: [{ type: "email" }],
       })

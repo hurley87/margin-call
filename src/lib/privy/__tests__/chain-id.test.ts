@@ -24,9 +24,14 @@ describe("payment chain id helpers", () => {
   });
 
   describe("Privy onboarding config", () => {
-    it("uses email-only hosted login with embedded EVM wallet creation", () => {
-      expect(privyConfig.loginMethods).toEqual(["email"]);
-      expect(privyConfig.appearance?.walletList).toBeUndefined();
+    it("offers external wallet login with embedded EVM wallet creation", () => {
+      expect(privyConfig.loginMethods).toEqual(["wallet"]);
+      expect(privyConfig.appearance?.walletList).toEqual([
+        "detected_wallets",
+        "metamask",
+        "coinbase_wallet",
+        "wallet_connect",
+      ]);
       expect(privyConfig.embeddedWallets?.ethereum?.createOnLogin).toBe(
         "users-without-wallets"
       );

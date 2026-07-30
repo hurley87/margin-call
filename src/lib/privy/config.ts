@@ -33,10 +33,16 @@ export function isChainIdBase(chainId: string | number): boolean {
 }
 
 export const privyConfig: PrivyClientConfig = {
-  loginMethods: ["email"],
+  loginMethods: ["wallet"],
   appearance: {
     theme: "dark",
     accentColor: "#d6a660",
+    walletList: [
+      "detected_wallets",
+      "metamask",
+      "coinbase_wallet",
+      "wallet_connect",
+    ],
   },
   embeddedWallets: {
     ethereum: {

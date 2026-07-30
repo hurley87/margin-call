@@ -4,7 +4,7 @@ import { usePrivy } from "@privy-io/react-auth";
 
 import { LandingScreen } from "@/components/landing/landing-screen";
 import { ConnectedShell } from "@/components/shell/connected-shell";
-import { getEmbeddedEvmWalletAddress } from "@/lib/privy/wallet";
+import { getEvmWalletAddress } from "@/lib/privy/wallet";
 
 export default function Home() {
   const { ready, authenticated, login, logout, user } = usePrivy();
@@ -23,7 +23,7 @@ export default function Home() {
     return <LandingScreen onLogin={login} />;
   }
 
-  const address = getEmbeddedEvmWalletAddress(user);
+  const address = getEvmWalletAddress(user);
 
   return <ConnectedShell address={address} onLogout={logout} />;
 }
