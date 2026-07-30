@@ -6,199 +6,195 @@ import {StdInvariant} from "forge-std/StdInvariant.sol";
 import {Distributor} from "../src/Distributor.sol";
 import {GameToken} from "../src/GameToken.sol";
 import {DistributorFixture} from "./helpers/DistributorFixture.sol";
-import {MerkleTreeLib} from "./helpers/MerkleTreeLib.sol";
 
-/// @notice Runs the real claim lifecycle — fund, post a root for a finished epoch, claim, retry —
-///         and books what happened in ghosts so the accounting can be checked from outside.
+/// @notice Handler that drives Pack lifecycle, rates, pots, Rips, funding, and claims.
 contract DistributorHandler is Test {
-    uint256 internal constant ACTOR_COUNT = 3;
+    Distributor public immutable distributor;
+    GameToken public immutable token;
+    address public immutable admin;
+    address public immutable treasury;
+    address public immutable ripEngine;
+    address public immutable maker;
+    address public immutable maker2;
+    address public immutable taker;
+    address public immutable taker2;
 
-    Distributor public distributor;
-    GameToken public token;
-    address public admin;
-    address public treasury;
+    uint256 public nextTokenId = 1;
+    uint256[] public activeIds;
+    mapping(uint256 => bool) public isActive;
+    mapping(uint256 => address) public ownerOf;
 
-    /// @dev Ghost: everything ever transferred into the Distributor.
-    uint256 public ghostFunded;
+    uint256 public ghostMakerPaid;
+    uint256 public ghostTakerPaid;
 
-    /// @dev Ghost: successful claims per epoch per account — must never exceed one.
-    mapping(uint256 epoch => mapping(address account => uint256 successes)) public ghostClaimSuccesses;
-
-    /// @dev Ghost: highest successful claim count observed for any (epoch, account) pair.
-    uint256 public ghostMaxClaimSuccesses;
-
-    /// @dev Ghost: epochs whose root has been posted, in order.
-    uint256[] internal postedEpochs;
-
-    uint256 public nextEpoch;
-
-    address[ACTOR_COUNT] internal actors;
-    mapping(uint256 epoch => uint256[ACTOR_COUNT] amounts) internal makerAmounts;
-    mapping(uint256 epoch => uint256[ACTOR_COUNT] amounts) internal takerAmounts;
-
-    constructor(Distributor distributor_, GameToken token_, address admin_, address treasury_, uint256 funded_) {
+    constructor(
+        Distributor distributor_,
+        GameToken token_,
+        address admin_,
+        address treasury_,
+        address ripEngine_,
+        address maker_,
+        address maker2_,
+        address taker_,
+        address taker2_
+    ) {
         distributor = distributor_;
         token = token_;
         admin = admin_;
         treasury = treasury_;
-        ghostFunded = funded_;
-        actors[0] = makeAddr("claimant0");
-        actors[1] = makeAddr("claimant1");
-        actors[2] = makeAddr("claimant2");
+        ripEngine = ripEngine_;
+        maker = maker_;
+        maker2 = maker2_;
+        taker = taker_;
+        taker2 = taker2_;
     }
 
-    function fund(uint256 amountSeed) external {
-        uint256 amount = bound(amountSeed, 1e18, 1_000e18);
-        vm.prank(treasury);
-        token.transfer(address(distributor), amount);
-        ghostFunded += amount;
+    function enter(uint8 whoSel) external {
+        address who = whoSel % 2 == 0 ? maker : maker2;
+        uint256 id = nextTokenId++;
+        vm.prank(ripEngine);
+        distributor.onPackEntered(id, who);
+        activeIds.push(id);
+        isActive[id] = true;
+        ownerOf[id] = who;
     }
 
-    /// @dev Close the current epoch and commit a root for it with the exact declared total.
-    function postRoot(uint256 amountSeed) external {
-        uint256 epoch = nextEpoch;
-        bytes32[] memory leaves = new bytes32[](ACTOR_COUNT);
-        uint256 total;
+    function exit(uint256 indexSeed) external {
+        if (activeIds.length == 0) return;
+        uint256 index = indexSeed % activeIds.length;
+        uint256 id = activeIds[index];
+        vm.prank(ripEngine);
+        distributor.onPackExited(id);
+        isActive[id] = false;
+        ownerOf[id] = address(0);
+        activeIds[index] = activeIds[activeIds.length - 1];
+        activeIds.pop();
+    }
 
-        for (uint256 i; i < ACTOR_COUNT; ++i) {
-            uint256 makerAmount = bound(uint256(keccak256(abi.encode(amountSeed, epoch, i, "maker"))), 1e18, 100e18);
-            uint256 takerAmount = bound(uint256(keccak256(abi.encode(amountSeed, epoch, i, "taker"))), 0, 100e18);
-            makerAmounts[epoch][i] = makerAmount;
-            takerAmounts[epoch][i] = takerAmount;
-            leaves[i] = distributor.leafOf(epoch, actors[i], makerAmount, takerAmount);
-            total += makerAmount + takerAmount;
-        }
+    function warp(uint16 seconds_) external {
+        vm.warp(block.timestamp + uint256(seconds_) + 1);
+    }
 
-        bytes32 root = MerkleTreeLib.rootOf(leaves);
-        vm.warp(distributor.epochStart(epoch + 1));
+    function setMakerRate(uint128 rate) external {
         vm.prank(admin);
-        distributor.postClaimRoot(epoch, root, total);
-
-        postedEpochs.push(epoch);
-        nextEpoch = epoch + 1;
+        distributor.setMakerRatePerEpoch(rate);
     }
 
-    /// @dev Claim honestly. Repeats are expected to revert; only successes are booked.
-    function claim(uint256 epochSeed, uint256 actorSeed) external {
-        if (postedEpochs.length == 0) return;
-
-        uint256 epoch = postedEpochs[bound(epochSeed, 0, postedEpochs.length - 1)];
-        uint256 index = bound(actorSeed, 0, ACTOR_COUNT - 1);
-        address account = actors[index];
-
-        Distributor.ClaimInput memory input = _inputFor(epoch, index);
-        try distributor.claim(account, input) {
-            uint256 successes = ghostClaimSuccesses[epoch][account] + 1;
-            ghostClaimSuccesses[epoch][account] = successes;
-            if (successes > ghostMaxClaimSuccesses) ghostMaxClaimSuccesses = successes;
-        } catch {}
+    function setTakerPot(uint128 pot) external {
+        vm.prank(admin);
+        distributor.setTakerPotPerEpoch(pot);
     }
 
-    /// @dev Claim with a tampered amount. Must never succeed.
-    function claimTampered(uint256 epochSeed, uint256 actorSeed, uint256 bump) external {
-        if (postedEpochs.length == 0) return;
-
-        uint256 epoch = postedEpochs[bound(epochSeed, 0, postedEpochs.length - 1)];
-        uint256 index = bound(actorSeed, 0, ACTOR_COUNT - 1);
-        address account = actors[index];
-
-        Distributor.ClaimInput memory input = _inputFor(epoch, index);
-        input.makerAmount += bound(bump, 1, 1_000e18);
-
-        try distributor.claim(account, input) {
-            uint256 successes = ghostClaimSuccesses[epoch][account] + 1;
-            ghostClaimSuccesses[epoch][account] = successes;
-            if (successes > ghostMaxClaimSuccesses) ghostMaxClaimSuccesses = successes;
-        } catch {}
+    function rip(uint8 whoSel, uint8 count_) external {
+        address who = whoSel % 2 == 0 ? taker : taker2;
+        uint256 count = uint256(count_ % 5) + 1;
+        vm.prank(ripEngine);
+        distributor.onRip(who, count);
     }
 
-    function postedEpochCount() external view returns (uint256) {
-        return postedEpochs.length;
+    function claimMaker(uint8 whoSel) external {
+        address who = whoSel % 2 == 0 ? maker : maker2;
+        uint256[] memory ids = _activeOwned(who);
+        uint256 owed = distributor.claimableMakerOf(who, ids);
+        if (owed == 0) return;
+        if (owed > distributor.fundedBalance()) return;
+        uint256 paid = distributor.claimMaker(who, ids);
+        ghostMakerPaid += paid;
     }
 
-    function postedEpochAt(uint256 i) external view returns (uint256) {
-        return postedEpochs[i];
+    function claimTaker(uint8 whoSel) external {
+        address who = whoSel % 2 == 0 ? taker : taker2;
+        uint256 current = distributor.currentEpoch();
+        if (current == 0) return;
+
+        uint256 epoch = current - 1;
+        if (distributor.hasClaimed(epoch, who)) return;
+        uint256 owed = distributor.claimableTakerOf(who, epoch);
+        if (distributor.accountRipCountOf(epoch, who) == 0) return;
+        if (owed > distributor.fundedBalance()) return;
+
+        uint256[] memory epochs = new uint256[](1);
+        epochs[0] = epoch;
+        uint256 paid = distributor.claimTaker(who, epochs);
+        ghostTakerPaid += paid;
     }
 
-    function actorCount() external pure returns (uint256) {
-        return ACTOR_COUNT;
+    function fund(uint128 amount) external {
+        uint256 bal = token.balanceOf(treasury);
+        if (bal == 0 || amount == 0) return;
+        uint256 send = amount % bal;
+        if (send == 0) return;
+        vm.prank(treasury);
+        token.transfer(address(distributor), send);
     }
 
-    function actorAt(uint256 i) external view returns (address) {
-        return actors[i];
-    }
-
-    function _inputFor(uint256 epoch, uint256 index) internal view returns (Distributor.ClaimInput memory input) {
-        bytes32[] memory leaves = new bytes32[](ACTOR_COUNT);
-        for (uint256 i; i < ACTOR_COUNT; ++i) {
-            leaves[i] = distributor.leafOf(epoch, actors[i], makerAmounts[epoch][i], takerAmounts[epoch][i]);
+    function _activeOwned(address who) internal view returns (uint256[] memory ids) {
+        uint256 n;
+        for (uint256 i; i < activeIds.length; ++i) {
+            if (ownerOf[activeIds[i]] == who) ++n;
         }
-
-        input = Distributor.ClaimInput({
-            epoch: epoch,
-            makerAmount: makerAmounts[epoch][index],
-            takerAmount: takerAmounts[epoch][index],
-            proof: MerkleTreeLib.proofOf(leaves, leaves[index])
-        });
+        ids = new uint256[](n);
+        uint256 j;
+        for (uint256 i; i < activeIds.length; ++i) {
+            uint256 id = activeIds[i];
+            if (ownerOf[id] == who) ids[j++] = id;
+        }
     }
 }
 
 contract DistributorInvariantTest is StdInvariant, Test, DistributorFixture {
-    DistributorHandler public handler;
+    DistributorHandler internal handler;
 
     function setUp() public override {
-        DistributorFixture.setUp();
+        super.setUp();
 
-        handler = new DistributorHandler(distributor, token, admin, treasury, FUNDED);
+        vm.startPrank(admin);
+        distributor.setMakerRatePerEpoch(1_000e18);
+        distributor.setTakerPotPerEpoch(10_000e18);
+        vm.stopPrank();
+
+        handler = new DistributorHandler(distributor, token, admin, treasury, ripEngine, maker, maker2, taker, taker2);
         targetContract(address(handler));
     }
 
-    /// @notice Everything paid out came from the funded balance — there is no mint path.
-    function invariant_totalClaimedNeverExceedsFunded() public view {
-        assertLe(distributor.totalClaimed(), handler.ghostFunded());
+    function invariant_totalClaimedNeverExceedsInitialPlusTopUps() public view {
+        uint256 paidOut =
+            token.balanceOf(maker) + token.balanceOf(maker2) + token.balanceOf(taker) + token.balanceOf(taker2);
+        assertEq(paidOut, distributor.totalClaimed());
+        assertLe(distributor.totalClaimed(), FUNDED + (TOTAL_SUPPLY - FUNDED - token.balanceOf(treasury)));
     }
 
-    /// @notice The held balance is exactly what was funded minus what was claimed.
-    function invariant_balanceIsFundedMinusClaimed() public view {
-        assertEq(distributor.fundedBalance(), handler.ghostFunded() - distributor.totalClaimed());
+    function invariant_conservationOfFundedTokens() public view {
+        uint256 paidOut =
+            token.balanceOf(maker) + token.balanceOf(maker2) + token.balanceOf(taker) + token.balanceOf(taker2);
+        assertEq(paidOut + distributor.fundedBalance() + token.balanceOf(treasury), TOTAL_SUPPLY);
     }
 
-    /// @notice A valid proof claims at most once per epoch, and a tampered one never claims.
-    function invariant_noAccountClaimsAnEpochTwice() public view {
-        assertLe(handler.ghostMaxClaimSuccesses(), 1);
+    function invariant_supplyNeverInflates() public view {
+        assertEq(token.totalSupply(), TOTAL_SUPPLY);
     }
 
-    /// @notice No epoch ever pays out more than the total its root declared.
-    function invariant_epochPayoutsStayWithinDeclaredTotal() public view {
-        uint256 epochs = handler.postedEpochCount();
-        for (uint256 i; i < epochs; ++i) {
-            uint256 epoch = handler.postedEpochAt(i);
-            assertLe(distributor.claimedTotalOf(epoch), distributor.claimTotalOf(epoch));
+    function invariant_ghostPaymentsMatchBalances() public view {
+        assertEq(handler.ghostMakerPaid() + handler.ghostTakerPaid(), distributor.totalClaimed());
+    }
+
+    function invariant_closedEpochSharesNeverExceedPot() public view {
+        uint256 current = distributor.currentEpoch();
+        if (current == 0) return;
+        uint256 epoch = current - 1;
+        uint256 total = distributor.ripCountOf(epoch);
+        if (total == 0) return;
+
+        uint256 pot = distributor.potOf(epoch);
+        uint256 sum;
+        address[4] memory accounts = [maker, maker2, taker, taker2];
+        for (uint256 i; i < accounts.length; ++i) {
+            uint256 mine = distributor.accountRipCountOf(epoch, accounts[i]);
+            if (mine == 0) continue;
+            sum += (pot * mine) / total;
         }
-    }
-
-    /// @notice Claimant holdings account for every token that left the Distributor.
-    function invariant_claimantBalancesEqualTotalClaimed() public view {
-        uint256 held;
-        uint256 n = handler.actorCount();
-        for (uint256 i; i < n; ++i) {
-            held += token.balanceOf(handler.actorAt(i));
-        }
-        assertEq(held, distributor.totalClaimed());
-    }
-
-    /// @notice `claimCountOf` tracks the number of accounts actually paid for an epoch.
-    function invariant_claimCountMatchesClaimedAccounts() public view {
-        uint256 epochs = handler.postedEpochCount();
-        uint256 actors = handler.actorCount();
-
-        for (uint256 i; i < epochs; ++i) {
-            uint256 epoch = handler.postedEpochAt(i);
-            uint256 claimed;
-            for (uint256 j; j < actors; ++j) {
-                if (distributor.hasClaimed(epoch, handler.actorAt(j))) ++claimed;
-            }
-            assertEq(distributor.claimCountOf(epoch), claimed);
-        }
+        // Only accounts the handler uses; may under-count if other addresses ripped, but handler
+        // only rips taker/taker2, so this is exact for our ghost world when makers never rip.
+        assertLe(sum, pot);
     }
 }
