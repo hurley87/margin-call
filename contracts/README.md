@@ -128,31 +128,20 @@ Fixed-supply reward token for Maker Emissions and Participation Rewards (issue #
 
 ## Distributor
 
-Pays Maker Emissions and Participation Rewards against per-epoch merkle Claim Roots (issue #303):
+Pays Maker Emissions and Participation Rewards from a funded GameToken balance (issue #304):
 
 - Funded by transferring GameToken in — no mint path anywhere, so the held balance is the hard cap by construction
-- Owner setters for `makerRatePerEpoch`, `takerPotPerEpoch`, and `rebatePerRipCap` (default `0.10` WAD), all evented; they are the published inputs to the off-chain entitlement algorithm, not an on-chain accrual
-- `postClaimRoot(epoch, root, total)` only accepts a finished epoch (`epoch < currentEpoch()`), stays replaceable while nobody has claimed it, then freezes for good
-- `increaseClaimTotal(epoch, newTotal)` raises an epoch's ceiling without touching its root. It is the recovery path for a `total` posted below what the root commits to, which the first claim would otherwise freeze in place, stranding every later claimant. Raise-only and root-preserving, so it can neither invalidate a booked claim nor invent an entitlement
-- `claim(account, input)` / `claimBatch(account, inputs)` verify a proof and pay `makerAmount + takerAmount`; anyone may submit, funds always go to `account`
-- Three independent bounds keep a bad root harmless: one claim per `(epoch, account)`, an epoch pays at most its declared `claimTotalOf`, and every payout is capped by the live balance
-- Paying out depends on GameToken's `DISTRIBUTOR_ROLE` grant. Without it every claim fails closed with `TransfersLocked` and nothing is booked, so entitlements survive until the grant is restored
-- `sweep` recovers stray tokens but is barred from the GameToken, so unspent rewards stay claimable and roll forward
+- **Maker Emissions** accrue continuously on-chain, equal per resting Pack, at `makerRatePerEpoch`. RipEngine checkpoints accrual on enter / exit / Rip; Makers claim at any time via `claimMaker`
+- **Participation Rewards** are a fixed daily pot (`takerPotPerEpoch`) split equally across successfully ripped Packs in a closed epoch. A batch of `count` contributes `count` Rips. Claim via `claimTaker` once the epoch has closed
+- No merkle Claim Roots, no surcharge weighting, no per-Rip cap, and no rollover. Empty epochs create no liability; floor-division dust stays in the funded balance
+- Rate / pot changes are prospective (Maker: next second after accrual is checkpointed; Taker: next epoch once the current pot is frozen by a Rip). An unfrozen current epoch can still pick up a pot change
+- `setRipEngine` / RipEngine `setDistributor` are one-shot mutual bindings. Only RipEngine may call `onPackEntered` / `onPackExited` / `onRip`
+- Claims are pull-based and sponsorable; funds always go to the account. Underfunding reverts without consuming the entitlement
+- Paying out depends on GameToken's `DISTRIBUTOR_ROLE` grant. Without it every claim fails closed with `TransfersLocked`
+- `sweep` recovers stray tokens but is barred from the GameToken
 
 > **Epochs are anchored to deploy time, not UTC midnight.** Epoch 0 starts at `epochZeroStart` and each
-> epoch is `EPOCH_DURATION` = 1 day long. An off-chain builder that buckets Rips by calendar date will
-> mis-attribute every epoch — read `epochStart(epoch)` / `currentEpoch()` from the contract instead.
-
-Canonical claim leaf — the only thing the contract fixes about tree construction:
-
-```solidity
-keccak256(bytes.concat(keccak256(abi.encode(epoch, account, makerAmount, takerAmount))))
-```
-
-`Distributor.leafOf` returns exactly that. Any tree built over those leaves with commutative sorted-pair
-keccak256 verifies, including OpenZeppelin's JavaScript `StandardMerkleTree` with the leaf encoding
-`["uint256", "address", "uint256", "uint256"]`. `test/helpers/MerkleTreeLib.sol` mirrors that layout so
-tests recompute roots the way an off-chain builder would.
+> epoch is `EPOCH_DURATION` = 1 day long. Read `epochStart(epoch)` / `currentEpoch()` from the contract.
 
 ## Deploy (Robinhood Chain testnet)
 
@@ -255,11 +244,13 @@ deployer to be the GameToken treasury, since that is the only sender the lock le
 #   DISTRIBUTOR_FUND=300000000000000000000000000    # 18-decimal units moved from the deployer
 #   DISTRIBUTOR_MAKER_RATE=…         # makerRatePerEpoch
 #   DISTRIBUTOR_TAKER_POT=…          # takerPotPerEpoch
+#   DISTRIBUTOR_RIP_ENGINE=0x…       # defaults to RIPENGINE_ADDRESS
+#   DISTRIBUTOR_WIRE_RIPENGINE=true  # mutually bind Distributor ↔ RipEngine
 
 pnpm deploy:distributor
 ```
 
-Writes `contracts/deployments/robinhood-testnet.distributor.json` and patches `DISTRIBUTOR_ADDRESS` / `NEXT_PUBLIC_DISTRIBUTOR_ADDRESS`.
+Writes `contracts/deployments/robinhood-testnet.distributor.json` and patches `DISTRIBUTOR_ADDRESS` / `NEXT_PUBLIC_DISTRIBUTOR_ADDRESS`. When a RipEngine address is available, the script also calls `setRipEngine` / `setDistributor`.
 
 ### Explorer
 
@@ -370,52 +361,37 @@ before and after: nothing is deducted on either path.
 export RPC=…                  # Robinhood testnet or a local anvil
 export TOKEN=…                # GameToken
 export DIST=…                 # Distributor
-export KEY=…                  # the Distributor admin
-export ALICE=…                # a claimant
+export ENGINE=…               # RipEngine (already wired to DIST)
+export KEY=…                  # a Maker / admin key
+export ME=$(cast wallet address --private-key $KEY)
 ```
 
 The transfer lock is on, so a plain user↔user transfer fails closed:
 
 ```bash
-cast send $TOKEN "transfer(address,uint256)" $ALICE 1000000000000000000 --private-key $KEY --rpc-url $RPC
-# reverts TransfersLocked(<treasury>, <alice>)
+cast send $TOKEN "transfer(address,uint256)" $ME 1000000000000000000 --private-key $KEY --rpc-url $RPC
+# reverts TransfersLocked(<treasury>, <me>)
 ```
 
-A single-claimant epoch needs no proof — the root _is_ the leaf, so this is the shortest end-to-end
-check that a Claim Root pays out. Ask the contract for the canonical leaf:
+After a Pack has rested in the pool (via `enterPool`) and some time has elapsed, claim Maker Emissions:
 
 ```bash
-export LEAF=$(cast call $DIST "leafOf(uint256,address,uint256,uint256)(bytes32)" \
-  0 $ALICE 10000000000000000000 5000000000000000000 --rpc-url $RPC)
+cast call $DIST "pendingMakerOf(uint256)(uint256)" $ID --rpc-url $RPC
+cast send $DIST "claimMaker(address,uint256[])" $ME "[$ID]" --private-key $KEY --rpc-url $RPC
+cast call $TOKEN "balanceOf(address)(uint256)" $ME --rpc-url $RPC
 ```
 
-Roots are only accepted for finished epochs, so epoch 0 has to be over first:
+After a successful Rip and once the deploy-anchored epoch has closed, claim Participation Rewards:
 
 ```bash
 cast call $DIST "currentEpoch()(uint256)" --rpc-url $RPC
-cast send $DIST "postClaimRoot(uint256,bytes32,uint256)" 0 $LEAF 15000000000000000000 \
-  --private-key $KEY --rpc-url $RPC
+cast call $DIST "claimableTakerOf(address,uint256)(uint256)" $ME 0 --rpc-url $RPC
+cast send $DIST "claimTaker(address,uint256[])" $ME "[0]" --private-key $KEY --rpc-url $RPC
+cast call $DIST "hasClaimed(uint256,address)(bool)" 0 $ME --rpc-url $RPC  # true
 ```
 
-Then claim with an empty proof. Anyone may submit; the tokens go to `$ALICE`:
-
-```bash
-cast send $DIST "claim(address,(uint256,uint256,uint256,bytes32[]))" \
-  $ALICE "(0,10000000000000000000,5000000000000000000,[])" --private-key $KEY --rpc-url $RPC
-
-cast call $TOKEN "balanceOf(address)(uint256)" $ALICE --rpc-url $RPC      # 15e18
-cast call $DIST "hasClaimed(uint256,address)(bool)" 0 $ALICE --rpc-url $RPC  # true
-```
-
-Re-running the same claim reverts `AlreadyClaimed(0, alice)`, re-posting the epoch's root reverts
-`ClaimRootFrozen(0, 1)`, and `$ALICE` still cannot forward the tokens — claiming does not unlock them.
-
-If the epoch's declared total turns out to be below what the root commits to, raise the ceiling rather
-than re-posting (which the first claim has already frozen):
-
-```bash
-cast send $DIST "increaseClaimTotal(uint256,uint256)" 0 25000000000000000000 --private-key $KEY --rpc-url $RPC
-```
+Re-running the same Taker claim reverts `AlreadyClaimed(0, me)`. Claiming does not unlock the
+tokens — `$ME` still cannot forward them while the transfer lock holds.
 
 ## Layout
 
