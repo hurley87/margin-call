@@ -10,29 +10,43 @@ export type PrivyWalletUser = {
   linkedAccounts?: PrivyWalletAccount[] | null;
 };
 
-function isEmbeddedEvmWallet(account: PrivyWalletAccount | null | undefined) {
+function isEvmWallet(account: PrivyWalletAccount | null | undefined) {
   return (
     typeof account?.address === "string" &&
     account.address.length > 0 &&
-    account.chainType === "ethereum" &&
-    (account.walletClientType === "privy" ||
-      account.walletClientType === "privy-v2")
+    account.chainType === "ethereum"
+  );
+}
+
+function isEmbeddedEvmWallet(account: PrivyWalletAccount | null | undefined) {
+  return (
+    isEvmWallet(account) &&
+    (account?.walletClientType === "privy" ||
+      account?.walletClientType === "privy-v2")
   );
 }
 
 /**
- * Returns the desk manager's canonical Privy embedded EVM wallet address.
- * External wallets are intentionally ignored for fresh-start email onboarding.
+ * Returns the user's active EVM wallet address.
+ *
+ * Prefers a Privy embedded wallet (the email-onboarding path) and falls back
+ * to any linked external EVM wallet (MetaMask, Coinbase Wallet, WalletConnect,
+ * …) so `wallet` login users are provisioned too.
  */
-export function getEmbeddedEvmWalletAddress(
+export function getEvmWalletAddress(
   user: PrivyWalletUser | null | undefined
 ): `0x${string}` | null {
   if (!user) return null;
-  const primaryWallet = user.wallet;
-  if (isEmbeddedEvmWallet(primaryWallet)) {
-    return (primaryWallet?.address as `0x${string}`) ?? null;
-  }
 
-  const linkedWallet = user.linkedAccounts?.find(isEmbeddedEvmWallet);
-  return (linkedWallet?.address as `0x${string}` | undefined) ?? null;
+  const accounts: (PrivyWalletAccount | null | undefined)[] = [
+    user.wallet,
+    ...(user.linkedAccounts ?? []),
+  ];
+
+  // Prefer an embedded Privy wallet, then any other connected EVM wallet.
+  const embedded = accounts.find(isEmbeddedEvmWallet);
+  if (embedded) return embedded.address as `0x${string}`;
+
+  const external = accounts.find(isEvmWallet);
+  return (external?.address as `0x${string}` | undefined) ?? null;
 }
