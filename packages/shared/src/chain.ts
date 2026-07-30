@@ -12,7 +12,7 @@ export const PAYMENT_EXPLORER_URL =
 
 /** Canonical Multicall3 — verified present on Robinhood Chain testnet (#322). */
 export const MULTICALL3_ADDRESS =
-  "0xcA11bde05977b3631167028862be2a173976CA11" as const;
+  "0xcA11bde05977b3631167028862bE2a173976CA11" as const;
 
 export const PAYMENT_CHAIN = defineChain({
   id: PAYMENT_CHAIN_ID,
