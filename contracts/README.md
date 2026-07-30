@@ -102,6 +102,40 @@ NAV-weighted Pack selection, live Rip pricing, Model-A settlement, and Acquisiti
 - Crown carve-out is a documented seam for [#302](https://github.com/hurley87/margin-call/issues/302) — unused in V1 while `crownEnabled = false`
 - Equal-rate fee accrual follows enrollment for listed Packs (not per-rip eligibility); a Pack with a temporarily stale feed keeps accruing while undrawable
 
+## GameToken
+
+Fixed-supply reward token for Maker Emissions and Participation Rewards (issue #303):
+
+- Name / symbol: `Margin Call Game Token (Test Asset)` / `MCGT`, 18 decimals (ticker and branding are a post-V1 decision)
+- The whole supply is minted to the treasury in the constructor; **there is no mint function**, so emission is a funded Distributor rather than an inflation lever
+- User↔user transfers fail closed with `TransfersLocked(from, to)`. While the lock holds a transfer needs one leg holding `DISTRIBUTOR_ROLE` — Distributor→claimant so claims pay out, and →Distributor so the treasury can fund it
+- The lock lifts only via `scheduleTransferEnable` (starts a `TRANSFER_ENABLE_DELAY` = 7-day notice period) followed by `enableTransfers`. Both are evented and admin-only, neither can run twice, and nothing re-locks the token afterwards
+- `TRANSFER_ENABLE_DELAY` is a constant, not a setter — the owner cannot shorten the notice period
+- The switch ships unexercised; opening it is a separate post-V1 decision
+
+## Distributor
+
+Pays Maker Emissions and Participation Rewards against per-epoch merkle Claim Roots (issue #303):
+
+- Funded by transferring GameToken in — no mint path anywhere, so the held balance is the hard cap by construction
+- Owner setters for `makerRatePerEpoch`, `takerPotPerEpoch`, and `rebatePerRipCap` (default `0.10` WAD), all evented; they are the published inputs to the off-chain entitlement algorithm, not an on-chain accrual
+- `postClaimRoot(epoch, root, total)` only accepts a finished epoch (`epoch < currentEpoch()`), stays replaceable while nobody has claimed it, then freezes for good
+- `claim(account, input)` / `claimBatch(account, inputs)` verify a proof and pay `makerAmount + takerAmount`; anyone may submit, funds always go to `account`
+- Three independent bounds keep a bad root harmless: one claim per `(epoch, account)`, an epoch pays at most its declared `claimTotalOf`, and every payout is capped by the live balance
+- Epoch = 1 day from `epochZeroStart` (deploy time); `currentEpoch()` / `epochStart(epoch)` expose the schedule
+- `sweep` recovers stray tokens but is barred from the GameToken, so unspent rewards stay claimable and roll forward
+
+Canonical claim leaf — the only thing the contract fixes about tree construction:
+
+```solidity
+keccak256(bytes.concat(keccak256(abi.encode(epoch, account, makerAmount, takerAmount))))
+```
+
+`Distributor.leafOf` returns exactly that. Any tree built over those leaves with commutative sorted-pair
+keccak256 verifies, including OpenZeppelin's JavaScript `StandardMerkleTree` with the leaf encoding
+`["uint256", "address", "uint256", "uint256"]`. `test/helpers/MerkleTreeLib.sol` mirrors that layout so
+tests recompute roots the way an off-chain builder would.
+
 ## Deploy (Robinhood Chain testnet)
 
 1. Fund a deployer with testnet ETH from the [Robinhood faucet](https://faucet.testnet.chain.robinhood.com).
@@ -174,6 +208,39 @@ pnpm deploy:rip-engine
 ```
 
 Writes `contracts/deployments/robinhood-testnet.rip-engine.json` and patches `RIPENGINE_ADDRESS` / `NEXT_PUBLIC_RIPENGINE_ADDRESS`.
+
+### GameToken
+
+The supply chosen here is final — there is no mint authority after deploy:
+
+```bash
+# Optional overrides:
+#   GAMETOKEN_ADMIN=0x…              # defaults to deployer
+#   GAMETOKEN_TREASURY=0x…           # defaults to deployer; receives the whole supply
+#   GAMETOKEN_SUPPLY=1000000000000000000000000000   # 18-decimal units; default 1e9 tokens
+
+pnpm deploy:game-token
+```
+
+Writes `contracts/deployments/robinhood-testnet.game-token.json` and patches `GAMETOKEN_ADDRESS` / `NEXT_PUBLIC_GAMETOKEN_ADDRESS`.
+
+### Distributor
+
+Requires `GAMETOKEN_ADDRESS` in `.env.local`. The script grants `DISTRIBUTOR_ROLE` **before** funding —
+the funding transfer would otherwise fail closed against the transfer lock:
+
+```bash
+# Optional overrides:
+#   DISTRIBUTOR_ADMIN=0x…            # defaults to deployer
+#   DISTRIBUTOR_GRANT_ROLE=true      # grant GameToken DISTRIBUTOR_ROLE
+#   DISTRIBUTOR_FUND=300000000000000000000000000    # 18-decimal units moved from the deployer
+#   DISTRIBUTOR_MAKER_RATE=…         # makerRatePerEpoch
+#   DISTRIBUTOR_TAKER_POT=…          # takerPotPerEpoch
+
+pnpm deploy:distributor
+```
+
+Writes `contracts/deployments/robinhood-testnet.distributor.json` and patches `DISTRIBUTOR_ADDRESS` / `NEXT_PUBLIC_DISTRIBUTOR_ADDRESS`.
 
 ### Explorer
 
@@ -278,11 +345,58 @@ cast send $PACKS "unwrap(uint256)" $ID --private-key $BUYER_KEY --rpc-url $RPC
 Both exit paths return the entire recorded basket and burn the Pack. Compare the token balances
 before and after: nothing is deducted on either path.
 
+## Demo the reward claim lifecycle with `cast`
+
+```bash
+export RPC=…                  # Robinhood testnet or a local anvil
+export TOKEN=…                # GameToken
+export DIST=…                 # Distributor
+export KEY=…                  # the Distributor admin
+export ALICE=…                # a claimant
+```
+
+The transfer lock is on, so a plain user↔user transfer fails closed:
+
+```bash
+cast send $TOKEN "transfer(address,uint256)" $ALICE 1000000000000000000 --private-key $KEY --rpc-url $RPC
+# reverts TransfersLocked(<treasury>, <alice>)
+```
+
+A single-claimant epoch needs no proof — the root _is_ the leaf, so this is the shortest end-to-end
+check that a Claim Root pays out. Ask the contract for the canonical leaf:
+
+```bash
+export LEAF=$(cast call $DIST "leafOf(uint256,address,uint256,uint256)(bytes32)" \
+  0 $ALICE 10000000000000000000 5000000000000000000 --rpc-url $RPC)
+```
+
+Roots are only accepted for finished epochs, so epoch 0 has to be over first:
+
+```bash
+cast call $DIST "currentEpoch()(uint256)" --rpc-url $RPC
+cast send $DIST "postClaimRoot(uint256,bytes32,uint256)" 0 $LEAF 15000000000000000000 \
+  --private-key $KEY --rpc-url $RPC
+```
+
+Then claim with an empty proof. Anyone may submit; the tokens go to `$ALICE`:
+
+```bash
+cast send $DIST "claim(address,(uint256,uint256,uint256,bytes32[]))" \
+  $ALICE "(0,10000000000000000000,5000000000000000000,[])" --private-key $KEY --rpc-url $RPC
+
+cast call $TOKEN "balanceOf(address)(uint256)" $ALICE --rpc-url $RPC      # 15e18
+cast call $DIST "hasClaimed(uint256,address)(bool)" 0 $ALICE --rpc-url $RPC  # true
+```
+
+Re-running the same claim reverts `AlreadyClaimed(0, alice)`, re-posting the epoch's root reverts
+`ClaimRootFrozen(0, 1)`, and `$ALICE` still cannot forward the tokens — claiming does not unlock them.
+
 ## Layout
 
 ```
 contracts/
-  src/            # Deployable contracts (MockUSD, PackCustody; RipEngine et al. later)
+  src/            # Deployable contracts (MockUSD, PackCustody, AssetRegistry, RipEngine,
+                  #   GameToken, Distributor) + interfaces/, libraries/, mocks/
   test/           # Forge unit / fuzz / invariant suites
   script/         # Deploy scripts + LazerForge Utils
   deployments/    # Recorded, reproducible addresses (committed)
