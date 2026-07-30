@@ -13,6 +13,7 @@ contract RipEngineSettlementTest is Test, RipEngineFixture {
         uint256 nav,
         uint256 unitPrice,
         uint256 protocolCut,
+        uint256 crownCut,
         uint256 toMakers
     );
     event RipSettled(
@@ -21,6 +22,7 @@ contract RipEngineSettlementTest is Test, RipEngineFixture {
         uint256 unitPrice,
         uint256 totalPaid,
         uint256 protocolCut,
+        uint256 crownCut,
         uint256 toMakers
     );
 
