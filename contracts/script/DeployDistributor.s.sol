@@ -63,7 +63,9 @@ contract DeployDistributor is Utils {
                 GameToken(gameToken).balanceOf(deployer) >= fund,
                 "DeployDistributor: deployer balance below DISTRIBUTOR_FUND"
             );
-            GameToken(gameToken).transfer(address(distributor), fund);
+            require(
+                GameToken(gameToken).transfer(address(distributor), fund), "DeployDistributor: funding transfer failed"
+            );
         }
 
         if (makerRate != 0 || takerPot != 0) {
