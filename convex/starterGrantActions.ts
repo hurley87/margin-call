@@ -1,6 +1,11 @@
 "use node";
 
 import { v } from "convex/values";
+import {
+  decideRefill,
+  decideStarterGrant,
+  type GrantRecord,
+} from "@margin-call/shared";
 
 import { internal } from "./_generated/api";
 import { action } from "./_generated/server";
@@ -12,7 +17,6 @@ import {
   parsePrivateKey,
 } from "./lib/chain/clients";
 import { normalizeWalletAddress } from "./lib/chain/walletAddress";
-import { STARTER_GRANT_CONFIG } from "./lib/starterGrantConfig";
 
 type ClaimResult = {
   kind: "grant" | "refill" | "already_granted" | "cooldown";
@@ -43,6 +47,21 @@ function requireMinterKey(): string {
     );
   }
   return key;
+}
+
+function toGrantRecord(
+  existing: {
+    grantedAt: number;
+    lastRefillAt: number | null;
+    configVersion: number;
+  } | null
+): GrantRecord | null {
+  if (!existing) return null;
+  return {
+    grantedAt: existing.grantedAt,
+    lastRefillAt: existing.lastRefillAt,
+    configVersion: existing.configVersion,
+  };
 }
 
 async function mintMockUsd(to: `0x${string}`, amount: number): Promise<string> {
@@ -83,31 +102,31 @@ export const claimStarterGrant = action({
       walletAddress: wallet,
     });
 
-    const cfg = STARTER_GRANT_CONFIG;
-    if (existing) {
+    const decision = decideStarterGrant(toGrantRecord(existing));
+    if (decision.kind !== "grant") {
       return {
-        kind: "already_granted",
-        configVersion: cfg.version,
+        kind: decision.kind,
+        configVersion: decision.configVersion,
       };
     }
 
     const grantedAt = Date.now();
-    const txHash = await mintMockUsd(wallet, cfg.grantAmount);
+    const txHash = await mintMockUsd(wallet, decision.amount);
 
     await ctx.runMutation(internal.starterGrants.recordGrant, {
       walletAddress: wallet,
       privySubject: identity.subject,
-      grantAmount: cfg.grantAmount,
-      configVersion: cfg.version,
+      grantAmount: decision.amount,
+      configVersion: decision.configVersion,
       grantedAt,
       txHash,
     });
 
     return {
       kind: "grant",
-      amount: cfg.grantAmount,
+      amount: decision.amount,
       txHash,
-      configVersion: cfg.version,
+      configVersion: decision.configVersion,
     };
   },
 });
@@ -127,7 +146,6 @@ export const claimRefill = action({
       walletAddress: wallet,
     });
 
-    const cfg = STARTER_GRANT_CONFIG;
     if (!existing) {
       throw new Error("Claim the Starter Grant before requesting a refill");
     }
@@ -136,17 +154,20 @@ export const claimRefill = action({
     }
 
     const now = Date.now();
-    const last: number = existing.lastRefillAt ?? existing.grantedAt;
-    const availableAt: number = last + cfg.refillCooldownMs;
-    if (now < availableAt) {
+    const decision = decideRefill(toGrantRecord(existing), now);
+    if (decision.kind === "cooldown") {
       return {
         kind: "cooldown",
-        availableAt,
-        configVersion: cfg.version,
+        availableAt: decision.availableAt,
+        configVersion: decision.configVersion,
       };
     }
+    if (decision.kind !== "refill") {
+      // decideRefill only returns grant when record is null (handled above).
+      throw new Error("Unexpected grant decision for refill");
+    }
 
-    const txHash = await mintMockUsd(wallet, cfg.refillAmount);
+    const txHash = await mintMockUsd(wallet, decision.amount);
 
     await ctx.runMutation(internal.starterGrants.recordRefill, {
       walletAddress: wallet,
@@ -157,10 +178,10 @@ export const claimRefill = action({
 
     return {
       kind: "refill",
-      amount: cfg.refillAmount,
+      amount: decision.amount,
       txHash,
-      availableAt: now + cfg.refillCooldownMs,
-      configVersion: cfg.version,
+      availableAt: decision.availableAt,
+      configVersion: decision.configVersion,
     };
   },
 });

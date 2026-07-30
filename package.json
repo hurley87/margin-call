@@ -39,6 +39,7 @@
     "prepare": "husky"
   },
   "dependencies": {
+    "@margin-call/shared": "workspace:*",
     "@base-ui/react": "^1.6.0",
     "@buildersgarden/siwa": "^0.0.24",
     "@coinbase/cdp-sdk": "^1.54.0",

@@ -7,6 +7,7 @@ import { useReadContract } from "wagmi";
 import { api } from "../../../convex/_generated/api";
 import { GameButton } from "@/components/ui/game-button";
 import { mockUsdAbi } from "@/lib/contracts/abis";
+import { getMockUsdAddress } from "@/lib/contracts/addresses";
 import { formatMockUsd } from "@/lib/grants/starter-grant-policy";
 
 type Props = {
@@ -23,12 +24,6 @@ function formatCountdown(availableAt: number, now: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-function readMockUsdAddress(): `0x${string}` | undefined {
-  const value = process.env.NEXT_PUBLIC_MOCKUSD_ADDRESS?.trim();
-  if (!value || !/^0x[a-fA-F0-9]{40}$/.test(value)) return undefined;
-  return value as `0x${string}`;
-}
-
 export function StarterGrantPanel({ walletAddress }: Props) {
   const status = useQuery(api.starterGrants.getStatus, { walletAddress });
   const claimGrant = useAction(api.starterGrantActions.claimStarterGrant);
@@ -36,7 +31,7 @@ export function StarterGrantPanel({ walletAddress }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const mockUsd = readMockUsdAddress();
+  const mockUsd = getMockUsdAddress();
 
   const { data: balance, refetch: refetchBalance } = useReadContract({
     address: mockUsd,

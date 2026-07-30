@@ -4,7 +4,7 @@
 
 ### Project overview
 
-Margin Call is a Next.js 16 (App Router) web app — a NAV-weighted Pack-rip game on Robinhood Chain. The agent-game UI/backend was torn down (#298); the app shell (#305) is Privy connect + Starter Grant + Browse Pool over Convex-indexed chain state. See `CLAUDE.md` for tech stack and architecture. Design: `docs/prd-margin-call.md`; glossary: `CONTEXT.md`. Full V1 build: GitHub issue #297.
+Margin Call is a Next.js 16 (App Router) web app — a NAV-weighted Pack-rip game on Robinhood Chain. The agent-game UI/backend was torn down (#298); the app shell (#305) is Privy connect + Starter Grant + Browse Pool over Convex-indexed chain state. Framework-neutral chain/pricing/grant primitives live in `packages/shared` (`@margin-call/shared`) and are shared by Next + Convex (#320). See `CLAUDE.md` for tech stack and architecture. Design: `docs/prd-margin-call.md`; glossary: `CONTEXT.md`. Full V1 build: GitHub issue #297.
 
 The Foundry workspace lives under `contracts/` (LazerForge-based). All V1 contracts are deployed and verified on Robinhood Chain testnet (#310). Stock Token map: `contracts/deployments/robinhood-testnet.stock-tokens.json`. See `contracts/README.md`.
 

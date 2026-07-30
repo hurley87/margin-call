@@ -19,7 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@margin-call/shared": ["./packages/shared/src/index.ts"],
+      "@margin-call/shared/*": ["./packages/shared/src/*"]
     }
   },
   "include": [

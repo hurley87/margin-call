@@ -1,6 +1,10 @@
 /**
- * Deploy block numbers for log-cursor bootstraps (from
- * contracts/deployments/robinhood-testnet.*.json).
+ * Deploy block numbers for log-cursor bootstraps.
+ * Source of truth: `@margin-call/shared`.
  */
-export const PACKCUSTODY_DEPLOY_BLOCK = 95_307_505;
-export const RIPENGINE_DEPLOY_BLOCK = 95_311_248;
+export {
+  PACKCUSTODY_DEPLOY_BLOCK,
+  RIPENGINE_DEPLOY_BLOCK,
+  PACKCUSTODY_DEPLOY_BLOCK_BIGINT,
+  RIPENGINE_DEPLOY_BLOCK_BIGINT,
+} from "@margin-call/shared";

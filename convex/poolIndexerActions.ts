@@ -1,5 +1,9 @@
 "use node";
 
+import {
+  PACKCUSTODY_DEPLOY_BLOCK_BIGINT as PACKCUSTODY_DEPLOY_BLOCK,
+  RIPENGINE_DEPLOY_BLOCK_BIGINT as RIPENGINE_DEPLOY_BLOCK,
+} from "@margin-call/shared";
 import { v } from "convex/values";
 import { decodeEventLog, parseAbiItem, type AbiEvent, type Log } from "viem";
 
@@ -19,8 +23,6 @@ import {
 } from "./lib/poolStats";
 import { stockSymbolForAddress } from "./lib/stockTokens";
 
-const PACKCUSTODY_DEPLOY_BLOCK = 95_307_505n;
-const RIPENGINE_DEPLOY_BLOCK = 95_311_248n;
 const MAX_BLOCK_SPAN = 2_000n;
 
 const packUnlistedEvent = parseAbiItem(
