@@ -1,18 +1,21 @@
 "use client";
 
+import type { Address } from "viem";
+
 import { StarterGrantPanel } from "@/components/grants/starter-grant-panel";
 import { MyPacksDashboard } from "@/components/maker/my-packs-dashboard";
+import { PackComposer } from "@/components/maker/pack-composer";
 import { BrowsePool } from "@/components/pool/browse-pool";
 import { GameButton } from "@/components/ui/game-button";
 import { formatShortAddress } from "@/lib/utils";
 
 type Props = {
-  address: string | null;
+  address: Address | null;
   onLogout: () => void;
 };
 
 /**
- * Post-auth shell: wallet + Starter Grant + Maker dashboard + Browse Pool.
+ * Post-auth shell: wallet + Starter Grant + Maker create/dashboard + Browse Pool.
  */
 export function ConnectedShell({ address, onLogout }: Props) {
   const convexConfigured = Boolean(process.env.NEXT_PUBLIC_CONVEX_URL);
@@ -51,6 +54,8 @@ export function ConnectedShell({ address, onLogout }: Props) {
         {address && convexConfigured ? (
           <StarterGrantPanel walletAddress={address} />
         ) : null}
+
+        {address ? <PackComposer walletAddress={address} /> : null}
 
         {convexConfigured ? (
           <>

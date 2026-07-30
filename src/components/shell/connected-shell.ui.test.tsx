@@ -11,6 +11,12 @@ vi.mock("@/components/maker/my-packs-dashboard", () => ({
   ),
 }));
 
+vi.mock("@/components/maker/pack-composer", () => ({
+  PackComposer: ({ walletAddress }: { walletAddress: string }) => (
+    <div>Compose a Pack for {walletAddress}</div>
+  ),
+}));
+
 vi.mock("@/components/pool/browse-pool", () => ({
   BrowsePool: () => (
     <div>
@@ -36,6 +42,7 @@ describe("ConnectedShell", () => {
     expect(html).toContain("0x1234");
     expect(html).toContain("Starter Grant panel");
     expect(html).toContain("My Packs for");
+    expect(html).toContain("Compose a Pack for");
     expect(html).toContain("0x1234567890abcdef1234567890abcdef12345678");
     expect(html).toContain("Pool Statistics");
     expect(html).toContain("[LOG OUT]");
