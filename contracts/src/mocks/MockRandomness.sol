@@ -34,15 +34,15 @@ contract MockRandomness is IRandomnessSource, AccessControl {
 
     /// @inheritdoc IRandomnessSource
     function nextSeed(bytes32 salt) external returns (uint256 seed) {
-        uint256 nonce = ++_nonce;
-        seed = uint256(keccak256(abi.encodePacked(_baseSeed, nonce, salt, block.timestamp, block.prevrandao)));
-        emit SeedConsumed(nonce, salt, seed);
+        uint256 n = ++_nonce;
+        seed = uint256(keccak256(abi.encodePacked(_baseSeed, n, salt, block.timestamp, block.prevrandao)));
+        emit SeedConsumed(n, salt, seed);
     }
 
     /// @notice Rotate the base seed (House operator / test harness).
-    function setSeed(uint256 baseSeed) external onlyRole(SEED_ADMIN_ROLE) {
-        _baseSeed = baseSeed;
-        emit SeedUpdated(baseSeed);
+    function setSeed(uint256 newBaseSeed) external onlyRole(SEED_ADMIN_ROLE) {
+        _baseSeed = newBaseSeed;
+        emit SeedUpdated(newBaseSeed);
     }
 
     /// @notice Current base seed (for tests / disclosure).
