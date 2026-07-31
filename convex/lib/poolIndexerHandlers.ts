@@ -362,6 +362,19 @@ export async function applyRipEngineLog(
     return;
   }
   if (decoded.eventName === "PackExited") {
+    const isListed = await client.readContract({
+      address: addresses.packCustody,
+      abi: packCustodyAbi,
+      functionName: "isListed",
+      args: [decoded.args.tokenId],
+      blockNumber: log.blockNumber ?? undefined,
+    });
+    // RipEngine also emits PackExited when it purges a Pack that PackCustody
+    // already unlisted. In that case PackCustody's event is authoritative; do
+    // not regress an unlisted/redeemed record when the two cursors advance in
+    // separate sync runs.
+    if (!isListed) return;
+
     const navUsdWad = await readNavOfPack(
       client,
       addresses.ripEngine,

@@ -312,6 +312,7 @@ describe("Pack exit and unlist indexing", () => {
     });
     const client = makeClient({
       readContract: async ({ functionName }) => {
+        if (functionName === "isListed") return true;
         if (functionName === "basketOf") {
           return [{ asset: ZERO_ADDR, amount: 1n }];
         }
@@ -342,6 +343,43 @@ describe("Pack exit and unlist indexing", () => {
     );
 
     expect(statuses).toEqual(["exited", "unlisted"]);
+  });
+
+  it("does not regress an already-unlisted Pack when a later purge emits PackExited", async () => {
+    const upserts: Record<string, unknown>[] = [];
+    const ctx = makeCtx({
+      onUpsertPack: async (args) => {
+        upserts.push(args);
+      },
+    });
+    const readContract = vi.fn(async ({ functionName }) => {
+      if (functionName === "isListed") return false;
+      throw new Error(`unexpected ${functionName}`);
+    });
+    const client = makeClient({ readContract });
+
+    await applyRipEngineLog(
+      ctx,
+      client,
+      { packCustody: PACK, ripEngine: RIP },
+      eventLog(
+        ripEngineAbi,
+        "PackExited",
+        { tokenId: 42n, maker: ZERO_ADDR },
+        RIP
+      ),
+      3
+    );
+
+    expect(upserts).toEqual([]);
+    expect(readContract).toHaveBeenCalledOnce();
+    expect(readContract).toHaveBeenCalledWith(
+      expect.objectContaining({
+        functionName: "isListed",
+        args: [42n],
+        blockNumber: 100n,
+      })
+    );
   });
 });
 
