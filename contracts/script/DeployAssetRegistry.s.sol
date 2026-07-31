@@ -25,10 +25,7 @@ contract DeployAssetRegistry is Utils {
         address admin = vm.envOr("ASSETREGISTRY_ADMIN", deployer);
         address inventory = vm.envOr("ASSETREGISTRY_INVENTORY", address(0));
         bool seedFeeds = vm.envOr("ASSETREGISTRY_SEED_FEEDS", true);
-        uint256 configuredStaleAfter =
-            vm.envOr("ASSETREGISTRY_STALE_AFTER", seedFeeds ? uint256(type(uint64).max) : uint256(3_600));
-        require(configuredStaleAfter <= type(uint64).max, "DeployAssetRegistry: staleAfter exceeds uint64");
-        uint64 staleAfter = uint64(configuredStaleAfter);
+        uint64 staleAfter = _configuredStaleAfter(seedFeeds);
 
         address[] memory tokens = LaunchTokens.tokens();
         string[] memory symbols = LaunchTokens.symbols();
@@ -67,6 +64,13 @@ contract DeployAssetRegistry is Utils {
         }
 
         _writeRecord(address(registry), deployer, admin, inventory, tokens, feeds, symbols, staleAfter, seedFeeds);
+    }
+
+    function _configuredStaleAfter(bool seedFeeds) internal view returns (uint64) {
+        uint256 configured =
+            vm.envOr("ASSETREGISTRY_STALE_AFTER", seedFeeds ? uint256(type(uint64).max) : uint256(3_600));
+        require(configured <= type(uint64).max, "DeployAssetRegistry: staleAfter exceeds uint64");
+        return uint64(configured);
     }
 
     function _writeRecord(
