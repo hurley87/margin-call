@@ -1,8 +1,10 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
+import type { Address } from "viem";
 
 import { api } from "../../../convex/_generated/api";
+import { PackLifecycleActions } from "@/components/maker/pack-lifecycle-actions";
 import { formatWadUsd } from "@/lib/pool/nav-distribution";
 import { formatShortAddress } from "@/lib/utils";
 
@@ -94,6 +96,10 @@ export function MyPacksDashboard({ walletAddress }: Props) {
                   {pack.eligible ? "Eligible" : "Ineligible"}
                 </span>
               </p>
+              <PackLifecycleActions
+                tokenId={pack.tokenId}
+                walletAddress={walletAddress as Address}
+              />
             </li>
           ))}
         </ul>

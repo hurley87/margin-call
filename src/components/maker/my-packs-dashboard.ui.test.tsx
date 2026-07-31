@@ -9,6 +9,12 @@ vi.mock("convex/react", () => ({
   usePaginatedQuery: usePaginatedQueryMock,
 }));
 
+vi.mock("./pack-lifecycle-actions", () => ({
+  PackLifecycleActions: ({ tokenId }: { tokenId: number }) => (
+    <button>[MANAGE PACK #{tokenId}]</button>
+  ),
+}));
+
 import { MyPacksDashboard } from "./my-packs-dashboard";
 
 const WALLET = "0x1234567890abcdef1234567890abcdef12345678";
@@ -101,6 +107,7 @@ describe("MyPacksDashboard", () => {
     expect(html).toContain("Indexed NAV $123.45");
     expect(html).toContain("Eligible");
     expect(html).toContain("Resting");
+    expect(html).toContain("[MANAGE PACK #42]");
     expect(html).toContain("[LOAD MORE PACKS]");
   });
 });
