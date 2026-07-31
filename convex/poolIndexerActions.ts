@@ -13,7 +13,7 @@ import { assetRegistryAbi, ripEngineAbi } from "./lib/chain/abis";
 import { requireIndexerAddresses } from "./lib/chain/addresses";
 import { createChainPublicClient } from "./lib/chain/clients";
 import {
-  applyPackUnlisted,
+  applyPackCustodyLog,
   applyRipEngineLog,
   refreshRestingPacks,
   scanLogs,
@@ -26,6 +26,9 @@ import {
 
 const packUnlistedEvent = parseAbiItem(
   "event PackUnlisted(uint256 indexed tokenId)"
+);
+const packRedeemedEvent = parseAbiItem(
+  "event PackRedeemed(uint256 indexed tokenId, address indexed creator, address[] assets, uint256[] amounts)"
 );
 const packEnteredEvent = parseAbiItem(
   "event PackEntered(uint256 indexed tokenId, address indexed maker)"
@@ -80,11 +83,11 @@ export const syncPoolFromChain = internalAction({
     await scanLogs(ctx, client, {
       key: "packCustody",
       address: addresses.packCustody,
-      events: [packUnlistedEvent],
+      events: [packUnlistedEvent, packRedeemedEvent],
       fallbackBlock: PACKCUSTODY_DEPLOY_BLOCK,
       latest,
       apply: (log) =>
-        applyPackUnlisted(ctx, client, addresses.packCustody, log, now),
+        applyPackCustodyLog(ctx, client, addresses.packCustody, log, now),
     });
 
     // Live eligible snapshot + quote

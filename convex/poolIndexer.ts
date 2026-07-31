@@ -54,6 +54,7 @@ export const upsertPack = internalMutation({
     navUsdWad: v.union(v.string(), v.null()),
     status: v.union(
       v.literal("resting"),
+      v.literal("exited"),
       v.literal("ripped"),
       v.literal("unlisted")
     ),
@@ -67,7 +68,18 @@ export const upsertPack = internalMutation({
       .withIndex("by_tokenId", (q) => q.eq("tokenId", args.tokenId))
       .unique();
     if (existing) {
-      await ctx.db.patch(existing._id, args);
+      // The contracts have independent cursors. Preserve irreversible custody
+      // states against a delayed PackExited/PackEntered event, but allow the
+      // more specific PackRipped event to upgrade an earlier PackUnlisted.
+      const staleAgainstTerminalState =
+        (existing.status === "ripped" && args.status !== "ripped") ||
+        (existing.status === "unlisted" &&
+          (args.status === "exited" || args.status === "resting"));
+      if (staleAgainstTerminalState) {
+        await ctx.db.patch(existing._id, { updatedAt: args.updatedAt });
+      } else {
+        await ctx.db.patch(existing._id, args);
+      }
     } else {
       await ctx.db.insert("packs", args);
     }

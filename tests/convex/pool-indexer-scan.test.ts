@@ -9,8 +9,9 @@ import {
 import { describe, expect, it, vi } from "vitest";
 
 import type { ActionCtx } from "../../convex/_generated/server";
-import { ripEngineAbi } from "../../convex/lib/chain/abis";
+import { packCustodyAbi, ripEngineAbi } from "../../convex/lib/chain/abis";
 import {
+  applyPackCustodyLog,
   applyRipEngineLog,
   isContractCallRevert,
   MAX_BLOCK_SPAN,
@@ -28,7 +29,7 @@ const PACK = "0x00000000000000000000000000000000000000bb" as const;
 function makeCtx(overrides?: {
   cursor?: number | null;
   onSetCursor?: (blockNumber: number) => void;
-  onUpsertPack?: () => Promise<void>;
+  onUpsertPack?: (args: Record<string, unknown>) => Promise<void>;
 }): ActionCtx {
   const setCursor = vi.fn(
     async (_ref: unknown, args: { key: string; blockNumber: number }) => {
@@ -36,8 +37,8 @@ function makeCtx(overrides?: {
       return null;
     }
   );
-  const upsertPack = vi.fn(async () => {
-    if (overrides?.onUpsertPack) await overrides.onUpsertPack();
+  const upsertPack = vi.fn(async (args: Record<string, unknown>) => {
+    if (overrides?.onUpsertPack) await overrides.onUpsertPack(args);
     return null;
   });
 
@@ -59,11 +60,31 @@ function makeCtx(overrides?: {
         "tokenId" in args &&
         "status" in args
       ) {
-        return upsertPack();
+        return upsertPack(args as Record<string, unknown>);
       }
       return null;
     }),
   } as unknown as ActionCtx;
+}
+
+function eventLog(
+  abi: typeof ripEngineAbi | typeof packCustodyAbi,
+  eventName: "PackExited" | "PackUnlisted",
+  args: Record<string, unknown>,
+  address: `0x${string}`
+): Log {
+  const topics = encodeEventTopics({ abi, eventName, args } as never);
+  return {
+    address,
+    blockHash: `0x${"11".repeat(32)}`,
+    blockNumber: 100n,
+    data: "0x",
+    logIndex: 0,
+    transactionHash: `0x${"22".repeat(32)}`,
+    transactionIndex: 0,
+    removed: false,
+    topics: topics as [`0x${string}`, ...`0x${string}`[]],
+  };
 }
 
 function makeClient(overrides?: {
@@ -278,6 +299,49 @@ describe("applyRipEngineLog error boundary", () => {
         Date.now()
       )
     ).rejects.toThrow("db write failed");
+  });
+});
+
+describe("Pack exit and unlist indexing", () => {
+  it("models a listed exit separately until PackCustody reports unlisting", async () => {
+    const statuses: string[] = [];
+    const ctx = makeCtx({
+      onUpsertPack: async (args) => {
+        statuses.push(String(args.status));
+      },
+    });
+    const client = makeClient({
+      readContract: async ({ functionName }) => {
+        if (functionName === "basketOf") {
+          return [{ asset: ZERO_ADDR, amount: 1n }];
+        }
+        if (functionName === "navOfPack") return 100n;
+        if (functionName === "creatorOf") return ZERO_ADDR;
+        throw new Error(`unexpected ${functionName}`);
+      },
+    });
+
+    await applyRipEngineLog(
+      ctx,
+      client,
+      { packCustody: PACK, ripEngine: RIP },
+      eventLog(
+        ripEngineAbi,
+        "PackExited",
+        { tokenId: 42n, maker: ZERO_ADDR },
+        RIP
+      ),
+      1
+    );
+    await applyPackCustodyLog(
+      ctx,
+      client,
+      PACK,
+      eventLog(packCustodyAbi, "PackUnlisted", { tokenId: 42n }, PACK),
+      2
+    );
+
+    expect(statuses).toEqual(["exited", "unlisted"]);
   });
 });
 

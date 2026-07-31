@@ -21,6 +21,7 @@ const basketEntryValidator = v.object({
 
 const packStatusValidator = v.union(
   v.literal("resting"),
+  v.literal("exited"),
   v.literal("ripped"),
   v.literal("unlisted")
 );
@@ -84,7 +85,12 @@ export const listPacks = query({
   args: {
     paginationOpts: paginationOptsValidator,
     status: v.optional(
-      v.union(v.literal("resting"), v.literal("ripped"), v.literal("unlisted"))
+      v.union(
+        v.literal("resting"),
+        v.literal("exited"),
+        v.literal("ripped"),
+        v.literal("unlisted")
+      )
     ),
   },
   returns: v.object({
@@ -96,6 +102,7 @@ export const listPacks = query({
         navUsdWad: v.union(v.string(), v.null()),
         status: v.union(
           v.literal("resting"),
+          v.literal("exited"),
           v.literal("ripped"),
           v.literal("unlisted")
         ),
@@ -178,6 +185,7 @@ export const getPack = query({
       navUsdWad: v.union(v.string(), v.null()),
       status: v.union(
         v.literal("resting"),
+        v.literal("exited"),
         v.literal("ripped"),
         v.literal("unlisted")
       ),

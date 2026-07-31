@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { describe, expect, it } from "vitest";
 
-import { api } from "../../convex/_generated/api";
+import { api, internal } from "../../convex/_generated/api";
 import schema from "../../convex/schema";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
@@ -11,7 +11,7 @@ const modules = import.meta.glob("../../convex/**/*.ts");
 const MAKER = "0x1234567890abcdef1234567890abcdef12345678";
 const OTHER_MAKER = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd";
 
-type PackStatus = "resting" | "ripped" | "unlisted";
+type PackStatus = "resting" | "exited" | "ripped" | "unlisted";
 
 async function insertPack(
   t: ReturnType<typeof convexTest>,
@@ -44,7 +44,8 @@ describe("pool.listPacksByMaker", () => {
     await insertPack(t, 1, MAKER, "resting");
     await insertPack(t, 2, MAKER, "ripped");
     await insertPack(t, 3, MAKER, "unlisted");
-    await insertPack(t, 4, OTHER_MAKER, "resting");
+    await insertPack(t, 4, MAKER, "exited");
+    await insertPack(t, 5, OTHER_MAKER, "resting");
 
     const firstPage = await t.query(api.pool.listPacksByMaker, {
       maker: `  0x${MAKER.slice(2).toUpperCase()}  `,
@@ -68,7 +69,7 @@ describe("pool.listPacksByMaker", () => {
       [...firstPage.page, ...secondPage.page]
         .map((pack) => pack.tokenId)
         .sort((a, b) => a - b)
-    ).toEqual([1, 2, 3]);
+    ).toEqual([1, 2, 3, 4]);
   });
 
   it("uses the composite index to filter by Maker and lifecycle status", async () => {
@@ -100,5 +101,45 @@ describe("pool.listPacksByMaker", () => {
         paginationOpts: { cursor: null, numItems: 20 },
       })
     ).rejects.toThrow("Invalid wallet address");
+  });
+});
+
+describe("pool index lifecycle precedence", () => {
+  it("does not let a delayed PackExited overwrite unlisted or ripped", async () => {
+    const t = convexTest(schema, modules);
+    const base = {
+      tokenId: 42,
+      maker: MAKER,
+      basket: [],
+      navUsdWad: null,
+      eligible: false,
+      updatedAt: 1,
+    };
+    await t.mutation(internal.poolIndexer.upsertPack, {
+      ...base,
+      status: "unlisted",
+    });
+    await t.mutation(internal.poolIndexer.upsertPack, {
+      ...base,
+      status: "exited",
+      updatedAt: 2,
+    });
+    expect((await t.query(api.pool.getPack, { tokenId: 42 }))?.status).toBe(
+      "unlisted"
+    );
+
+    await t.mutation(internal.poolIndexer.upsertPack, {
+      ...base,
+      status: "ripped",
+      updatedAt: 3,
+    });
+    await t.mutation(internal.poolIndexer.upsertPack, {
+      ...base,
+      status: "unlisted",
+      updatedAt: 4,
+    });
+    expect((await t.query(api.pool.getPack, { tokenId: 42 }))?.status).toBe(
+      "ripped"
+    );
   });
 });

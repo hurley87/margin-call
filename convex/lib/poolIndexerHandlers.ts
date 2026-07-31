@@ -267,7 +267,7 @@ export async function refreshRestingPacks(
 
 /**
  * Read a pack's basket and upsert it in a terminal (non-resting) state.
- * Shared by the PackExited / PackRipped / PackUnlisted handlers, which differ
+ * Shared by terminal/non-resting handlers, which differ
  * only in `status`, `navUsdWad`, and where the maker comes from.
  */
 async function upsertTerminalPack(
@@ -276,7 +276,7 @@ async function upsertTerminalPack(
   packCustody: `0x${string}`,
   tokenId: bigint,
   maker: string,
-  status: "ripped" | "unlisted",
+  status: "exited" | "ripped" | "unlisted",
   navUsdWad: string | null,
   now: number
 ): Promise<void> {
@@ -362,14 +362,19 @@ export async function applyRipEngineLog(
     return;
   }
   if (decoded.eventName === "PackExited") {
+    const navUsdWad = await readNavOfPack(
+      client,
+      addresses.ripEngine,
+      decoded.args.tokenId
+    );
     await upsertTerminalPack(
       ctx,
       client,
       addresses.packCustody,
       decoded.args.tokenId,
       decoded.args.maker,
-      "unlisted",
-      null,
+      "exited",
+      navUsdWad,
       now
     );
     return;
@@ -388,7 +393,7 @@ export async function applyRipEngineLog(
   }
 }
 
-export async function applyPackUnlisted(
+export async function applyPackCustodyLog(
   ctx: ActionCtx,
   client: PublicClient,
   packCustody: `0x${string}`,
@@ -396,7 +401,27 @@ export async function applyPackUnlisted(
   now: number
 ): Promise<void> {
   const decoded = tryDecodeEventLog(packCustodyAbi, log);
-  if (!decoded || decoded.eventName !== "PackUnlisted") return;
+  if (!decoded) return;
+
+  if (decoded.eventName === "PackRedeemed") {
+    const basket = decoded.args.assets.map((asset, index) => ({
+      asset: asset.toLowerCase(),
+      amount: decoded.args.amounts[index]!.toString(),
+      symbol: stockSymbolForAddress(asset),
+    }));
+    await ctx.runMutation(internal.poolIndexer.upsertPack, {
+      tokenId: Number(decoded.args.tokenId),
+      maker: decoded.args.creator.toLowerCase(),
+      basket,
+      navUsdWad: null,
+      status: "unlisted",
+      eligible: false,
+      updatedAt: now,
+    });
+    return;
+  }
+
+  if (decoded.eventName !== "PackUnlisted") return;
 
   const tokenId = decoded.args.tokenId;
   const maker = await client.readContract({
@@ -416,3 +441,6 @@ export async function applyPackUnlisted(
     now
   );
 }
+
+/** Backward-compatible narrow helper retained for focused tests/importers. */
+export const applyPackUnlisted = applyPackCustodyLog;

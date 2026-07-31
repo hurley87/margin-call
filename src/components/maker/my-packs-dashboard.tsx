@@ -23,10 +23,14 @@ function basketLabel(
   );
 }
 
-function statusLabel(status: "resting" | "ripped" | "unlisted"): string {
+function statusLabel(
+  status: "resting" | "exited" | "ripped" | "unlisted"
+): string {
   switch (status) {
     case "resting":
       return "Resting";
+    case "exited":
+      return "Exited · Listed";
     case "ripped":
       return "Ripped";
     case "unlisted":

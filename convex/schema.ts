@@ -46,6 +46,7 @@ export default defineSchema({
     navUsdWad: v.union(v.string(), v.null()),
     status: v.union(
       v.literal("resting"),
+      v.literal("exited"),
       v.literal("ripped"),
       v.literal("unlisted")
     ),
