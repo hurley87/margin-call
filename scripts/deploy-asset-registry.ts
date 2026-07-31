@@ -8,7 +8,7 @@
  * Optional:
  *   ASSETREGISTRY_ADMIN       — defaults to deployer
  *   ASSETREGISTRY_INVENTORY   — granted INVENTORY_ROLE when admin == deployer
- *   ASSETREGISTRY_STALE_AFTER — seconds; default 3600
+ *   ASSETREGISTRY_STALE_AFTER — seconds; seeded mocks default to uint64 max
  *   ASSETREGISTRY_SEED_FEEDS  — "true"/"false"; default true
  *
  * Usage: pnpm deploy:asset-registry

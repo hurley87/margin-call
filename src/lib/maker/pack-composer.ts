@@ -121,7 +121,7 @@ export function buildPackPlan(
     }
     if (input.quoteError || input.quote === undefined) {
       errors.push(
-        `${input.symbol}: ${input.quoteError ?? "live quote unavailable"}`
+        `${input.symbol}: ${input.quoteError ?? "testnet quote unavailable"}`
       );
       continue;
     }

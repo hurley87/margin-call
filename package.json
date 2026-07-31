@@ -24,6 +24,7 @@
     "deploy:packcustody": "tsx scripts/deploy-packcustody.ts",
     "verify:packcustody": "tsx scripts/verify-packcustody.ts",
     "deploy:asset-registry": "tsx scripts/deploy-asset-registry.ts",
+    "configure:asset-registry-mock-feeds": "tsx scripts/configure-asset-registry-mock-feeds.ts",
     "verify:asset-registry": "tsx scripts/verify-asset-registry.ts",
     "deploy:rip-engine": "tsx scripts/deploy-rip-engine.ts",
     "verify:rip-engine": "tsx scripts/verify-rip-engine.ts",

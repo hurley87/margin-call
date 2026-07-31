@@ -14,6 +14,7 @@ export default defineConfig({
       "src/**/*.test.ts",
       "src/**/*.test.tsx",
       "packages/shared/**/*.test.ts",
+      "scripts/**/*.test.ts",
       "tests/convex/**/*.test.ts",
     ],
     exclude: ["**/node_modules/**"],

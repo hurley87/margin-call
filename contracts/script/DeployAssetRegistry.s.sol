@@ -11,7 +11,7 @@ import {Utils} from "./utils/Utils.sol";
 /// @dev Signing: set DEPLOYER_PRIVATE_KEY. Env:
 ///        ASSETREGISTRY_ADMIN         — optional; defaults to deployer
 ///        ASSETREGISTRY_INVENTORY     — optional; granted INVENTORY_ROLE when admin == deployer
-///        ASSETREGISTRY_STALE_AFTER   — optional; seconds, default 3600
+///        ASSETREGISTRY_STALE_AFTER   — optional; seconds, defaults to uint64 max for seeded mocks
 ///        ASSETREGISTRY_SEED_FEEDS    — optional; "true" (default) deploys MockPriceFeeds + addAsset
 ///      Stock token addresses come from `LaunchTokens` (JSON mirror:
 ///      `deployments/robinhood-testnet.stock-tokens.json`).
@@ -24,8 +24,11 @@ contract DeployAssetRegistry is Utils {
         address deployer = vm.addr(deployerKey);
         address admin = vm.envOr("ASSETREGISTRY_ADMIN", deployer);
         address inventory = vm.envOr("ASSETREGISTRY_INVENTORY", address(0));
-        uint64 staleAfter = uint64(vm.envOr("ASSETREGISTRY_STALE_AFTER", uint256(3_600)));
         bool seedFeeds = vm.envOr("ASSETREGISTRY_SEED_FEEDS", true);
+        uint256 configuredStaleAfter =
+            vm.envOr("ASSETREGISTRY_STALE_AFTER", seedFeeds ? uint256(type(uint64).max) : uint256(3_600));
+        require(configuredStaleAfter <= type(uint64).max, "DeployAssetRegistry: staleAfter exceeds uint64");
+        uint64 staleAfter = uint64(configuredStaleAfter);
 
         address[] memory tokens = LaunchTokens.tokens();
         string[] memory symbols = LaunchTokens.symbols();

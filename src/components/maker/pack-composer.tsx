@@ -40,6 +40,7 @@ import {
   type TokenAmountInput,
   type TransactionPhase,
 } from "@/lib/maker/pack-composer";
+import { describeAssetRegistryQuoteError } from "@/lib/maker/quote-errors";
 import {
   PendingTransactionError,
   createBrowserJournalStorage,
@@ -205,9 +206,9 @@ async function readComposerChainState(
             functionName: "quote",
             args: [token.address, parsed.amount],
           });
-        } catch {
+        } catch (error) {
           tokenReads[token.symbol].quoteError =
-            "live quote unavailable or stale";
+            describeAssetRegistryQuoteError(error);
         }
       })
     );
@@ -394,7 +395,7 @@ export function PackComposerView({
                     )}
                     {tokenRead.quoteError && (
                       <p className="text-[var(--t-red)]">
-                        Quote unavailable or stale
+                        {tokenRead.quoteError}
                       </p>
                     )}
                   </div>
@@ -442,7 +443,7 @@ export function PackComposerView({
 
           {isReading && (
             <p className="mt-3 text-xs text-[var(--t-muted)]">
-              Refreshing live balances, allowances, quotes, and band…
+              Refreshing on-chain balances, allowances, quotes, and band…
             </p>
           )}
           {reads.error && (

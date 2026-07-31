@@ -38,6 +38,17 @@ const eventSignatures = (abi: readonly unknown[]) =>
     )
     .map(toEventSignature);
 
+const errorNames = (abi: readonly unknown[]) =>
+  abi
+    .filter(
+      (item): item is Extract<(typeof abi)[number], { type: "error" }> =>
+        typeof item === "object" &&
+        item !== null &&
+        "type" in item &&
+        item.type === "error"
+    )
+    .map((item) => item.name);
+
 describe("Maker lifecycle ABIs", () => {
   it("exposes ERC-20 funding calls", () => {
     expect(functionSignatures(erc20Abi)).toEqual([
@@ -90,6 +101,16 @@ describe("Maker lifecycle ABIs", () => {
         "quote(address,uint256)",
         "minPackNav()",
         "poolMax()",
+      ])
+    );
+    expect(errorNames(assetRegistryAbi)).toEqual(
+      expect.arrayContaining([
+        "FeedStale",
+        "FeedPaused",
+        "FeedInvalid",
+        "FeedZeroPrice",
+        "AssetNotListed",
+        "AssetNotInPriceBasket",
       ])
     );
   });

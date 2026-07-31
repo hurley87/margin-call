@@ -119,7 +119,7 @@ describe("Pack composer amount and NAV validation", () => {
           value: "2",
           balance: 100n,
           allowance: 100n,
-          quoteError: "live quote unavailable or stale",
+          quoteError: "Testnet price is stale — operator action is required",
         },
       ],
       20n,
@@ -138,13 +138,15 @@ describe("Pack composer amount and NAV validation", () => {
           value: "1",
           balance: 100n,
           allowance: 100n,
-          quoteError: "live quote unavailable or stale",
+          quoteError: "Testnet price is stale — operator action is required",
         },
       ],
       20n,
       300n
     );
-    expect(stale.errors).toContain("AAA: live quote unavailable or stale");
+    expect(stale.errors).toContain(
+      "AAA: Testnet price is stale — operator action is required"
+    );
 
     const outside = buildPackPlan(
       [

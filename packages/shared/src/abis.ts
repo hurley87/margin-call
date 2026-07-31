@@ -320,6 +320,44 @@ export const ripEngineAbi = [
 
 export const assetRegistryAbi = [
   {
+    type: "error",
+    name: "FeedStale",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "updatedAt", type: "uint256" },
+      { name: "staleAfter", type: "uint64" },
+      { name: "now_", type: "uint256" },
+    ],
+  },
+  {
+    type: "error",
+    name: "FeedPaused",
+    inputs: [{ name: "token", type: "address" }],
+  },
+  {
+    type: "error",
+    name: "FeedInvalid",
+    inputs: [{ name: "token", type: "address" }],
+  },
+  {
+    type: "error",
+    name: "FeedZeroPrice",
+    inputs: [{ name: "token", type: "address" }],
+  },
+  {
+    type: "error",
+    name: "AssetNotListed",
+    inputs: [{ name: "token", type: "address" }],
+  },
+  {
+    type: "error",
+    name: "AssetNotInPriceBasket",
+    inputs: [
+      { name: "token", type: "address" },
+      { name: "status", type: "uint8" },
+    ],
+  },
+  {
     type: "function",
     name: "quote",
     stateMutability: "view",

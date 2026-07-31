@@ -94,6 +94,38 @@ describe("PackComposerView", () => {
     expect(html).toContain("min-w-0 truncate tabular-nums");
   });
 
+  it("shows a precise decoded quote failure", () => {
+    const reads: ChainReads = {
+      ...READS,
+      tokens: {
+        AMZN: {
+          balance: READS.tokens.AMZN!.balance,
+          allowance: READS.tokens.AMZN!.allowance,
+          quoteError: "Testnet price feed is paused",
+        },
+      },
+    };
+    const html = renderView({
+      reads,
+      plan: buildPackPlan(
+        [
+          {
+            symbol: "AMZN",
+            address: "0x5884aD2f920c162CFBbACc88C9C51AA75eC09E02",
+            decimals: 18,
+            value: "1",
+            ...reads.tokens.AMZN,
+          },
+        ],
+        reads.minPackNav,
+        reads.poolMax
+      ),
+    });
+
+    expect(html).toContain("Testnet price feed is paused");
+    expect(html).not.toContain("Quote unavailable or stale");
+  });
+
   it("shows confirmed mint and enrollment success", () => {
     const html = renderView({
       phase: { kind: "complete", tokenId: 42n },

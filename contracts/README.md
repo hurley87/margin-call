@@ -204,13 +204,23 @@ Writes `contracts/deployments/robinhood-testnet.packcustody.json` (address, admi
 # Optional overrides in .env.local:
 #   ASSETREGISTRY_ADMIN=0x…          # defaults to deployer
 #   ASSETREGISTRY_INVENTORY=0x…      # granted INVENTORY_ROLE when admin == deployer
-#   ASSETREGISTRY_STALE_AFTER=3600   # seconds; default 3600
+#   ASSETREGISTRY_STALE_AFTER=…      # seeded mocks default to uint64 max (static fixtures)
 #   ASSETREGISTRY_SEED_FEEDS=true    # deploy MockPriceFeeds + addAsset for the launch five
 
 pnpm deploy:asset-registry
 ```
 
 Writes `contracts/deployments/robinhood-testnet.asset-registry.json` and patches `ASSETREGISTRY_ADDRESS` / `NEXT_PUBLIC_ASSETREGISTRY_ADDRESS`.
+
+Seeded `MockPriceFeed` values are disclosed, static test fixtures rather than live market prices. They default to a non-expiring staleness bound while still failing closed when paused, invalid, or zero. Existing deployments can be inspected and configured idempotently; the command is a dry run unless `--execute` is supplied:
+
+```bash
+pnpm configure:asset-registry-mock-feeds
+# After reviewing the exact plan and explicitly approving the on-chain writes:
+pnpm configure:asset-registry-mock-feeds -- --execute
+```
+
+Execution requires the current AssetRegistry admin key through the ignored `.env.local` file or process environment. The script never prints the key, verifies chain id `46630`, committed token/feed mappings, mock-feed disclosure and health, simulates each write, waits for successful receipts, and verifies a post-write quote. It skips completed assets, so rerunning after a partial failure is safe. Do not use this static policy for a live oracle; configure real feeds with their published finite heartbeat.
 
 ```bash
 pnpm verify:asset-registry   # AssetRegistry + seeded MockPriceFeeds

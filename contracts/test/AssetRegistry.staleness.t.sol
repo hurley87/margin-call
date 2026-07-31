@@ -29,6 +29,28 @@ contract AssetRegistryStalenessTest is AssetRegistryFixture {
         assertEq(registry.quote(address(amzn), 1e18), 100e18);
     }
 
+    function test_setAssetFeed_maxStaleAfterMakesStaticMockNonExpiring() public {
+        vm.prank(admin);
+        amznFeed.setUpdatedAt(block.timestamp - STALE_AFTER - 1);
+
+        vm.expectRevert();
+        registry.quote(address(amzn), 1e18);
+
+        vm.prank(admin);
+        registry.setAssetFeed(address(amzn), address(amznFeed), type(uint64).max);
+
+        AssetRegistry.Asset memory asset = registry.getAsset(address(amzn));
+        assertEq(asset.feed, address(amznFeed));
+        assertEq(asset.staleAfter, type(uint64).max);
+        assertEq(registry.quote(address(amzn), 1e18), 100e18);
+    }
+
+    function test_setAssetFeed_nonAdminCannotDisableStaleness() public {
+        vm.prank(stranger);
+        vm.expectRevert();
+        registry.setAssetFeed(address(amzn), address(amznFeed), type(uint64).max);
+    }
+
     function test_quote_pausedFeedReverts() public {
         vm.prank(admin);
         amznFeed.setPaused(true);
