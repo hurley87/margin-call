@@ -15,16 +15,22 @@ export type ContractAddresses = {
   distributor: `0x${string}`;
 };
 
-function readAddress(envKey: string): `0x${string}` | undefined {
+function readAddress(
+  envKey: string,
+  value: string | undefined
+): `0x${string}` | undefined {
   try {
-    return parseAddress(process.env[envKey]);
+    return parseAddress(value);
   } catch {
     throw new Error(`${envKey} must be a 0x-prefixed 20-byte address`);
   }
 }
 
-function requirePublicAddress(envKey: string): `0x${string}` {
-  const address = readAddress(envKey);
+function requirePublicAddress(
+  envKey: string,
+  value: string | undefined
+): `0x${string}` {
+  const address = readAddress(envKey, value);
   if (!address) {
     throw new Error(
       `${envKey} is required when NEXT_PUBLIC_MARGIN_CALL_NETWORK=${PAYMENT_CHAIN_SLUG}`
@@ -48,12 +54,30 @@ export function getContractAddresses(): ContractAddresses | null {
   }
 
   return {
-    mockUsd: requirePublicAddress("NEXT_PUBLIC_MOCKUSD_ADDRESS"),
-    packCustody: requirePublicAddress("NEXT_PUBLIC_PACKCUSTODY_ADDRESS"),
-    assetRegistry: requirePublicAddress("NEXT_PUBLIC_ASSETREGISTRY_ADDRESS"),
-    ripEngine: requirePublicAddress("NEXT_PUBLIC_RIPENGINE_ADDRESS"),
-    gameToken: requirePublicAddress("NEXT_PUBLIC_GAMETOKEN_ADDRESS"),
-    distributor: requirePublicAddress("NEXT_PUBLIC_DISTRIBUTOR_ADDRESS"),
+    mockUsd: requirePublicAddress(
+      "NEXT_PUBLIC_MOCKUSD_ADDRESS",
+      process.env.NEXT_PUBLIC_MOCKUSD_ADDRESS
+    ),
+    packCustody: requirePublicAddress(
+      "NEXT_PUBLIC_PACKCUSTODY_ADDRESS",
+      process.env.NEXT_PUBLIC_PACKCUSTODY_ADDRESS
+    ),
+    assetRegistry: requirePublicAddress(
+      "NEXT_PUBLIC_ASSETREGISTRY_ADDRESS",
+      process.env.NEXT_PUBLIC_ASSETREGISTRY_ADDRESS
+    ),
+    ripEngine: requirePublicAddress(
+      "NEXT_PUBLIC_RIPENGINE_ADDRESS",
+      process.env.NEXT_PUBLIC_RIPENGINE_ADDRESS
+    ),
+    gameToken: requirePublicAddress(
+      "NEXT_PUBLIC_GAMETOKEN_ADDRESS",
+      process.env.NEXT_PUBLIC_GAMETOKEN_ADDRESS
+    ),
+    distributor: requirePublicAddress(
+      "NEXT_PUBLIC_DISTRIBUTOR_ADDRESS",
+      process.env.NEXT_PUBLIC_DISTRIBUTOR_ADDRESS
+    ),
   };
 }
 
