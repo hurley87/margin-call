@@ -105,9 +105,9 @@ export function AcquisitionFeesView({
           {snapshot.visibilityComplete ? (
             <div>
               <dt className="text-[var(--t-muted)]">
-                Pending across {snapshot.restingMakerTokenIds.length} resting
-                Pack
+                Pending fees across {snapshot.restingMakerTokenIds.length} Pack
                 {snapshot.restingMakerTokenIds.length === 1 ? "" : "s"}
+                {" with nonzero accrual"}
               </dt>
               <dd className="mt-1 font-bold text-[var(--t-text)]">
                 {formatStablecoin(snapshot.pending!, decimals)}

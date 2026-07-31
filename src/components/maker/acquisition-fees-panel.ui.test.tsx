@@ -40,7 +40,7 @@ describe("AcquisitionFeesView", () => {
 
     expect(html).toContain("Already crystallized");
     expect(html).toContain("1.25 MockUSD");
-    expect(html).toContain("Pending across 2 resting Packs");
+    expect(html).toContain("Pending fees across 2 Packs with nonzero accrual");
     expect(html).toContain("2.5 MockUSD");
     expect(html).toContain("Total claimable");
     expect(html).toContain("3.75 MockUSD");
@@ -59,6 +59,7 @@ describe("AcquisitionFeesView", () => {
       },
     });
 
+    expect(html).toContain("Pending fees across 0 Packs with nonzero accrual");
     expect(html).toContain("No Acquisition Fees are currently claimable");
     expect(html).toMatch(
       /<button[^>]*disabled[^>]*>\[CLAIM ACQUISITION FEES\]/
