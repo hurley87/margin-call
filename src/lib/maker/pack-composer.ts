@@ -1,5 +1,10 @@
 import type { Address, Hash, TransactionReceipt } from "viem";
 
+import {
+  executeMakerWrite,
+  type LifecycleJournalRun,
+} from "./transaction-journal";
+
 export type TokenAmountInput = {
   symbol: string;
   address: Address;
@@ -36,7 +41,7 @@ export type TransactionPhase =
   | { kind: "enrolling"; tokenId: bigint }
   | { kind: "enrollment-pending"; tokenId: bigint; hash: Hash }
   | { kind: "complete"; tokenId: bigint }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; hash?: Hash };
 
 export type PackTransactionAdapter = {
   approve: (token: Address, amount: bigint) => Promise<Hash>;
@@ -188,12 +193,19 @@ function requireSuccessfulReceipt(receipt: TransactionReceipt, label: string) {
 export async function enrollMintedPack(
   tokenId: bigint,
   adapter: PackTransactionAdapter,
-  onPhase: (phase: TransactionPhase) => void
+  onPhase: (phase: TransactionPhase) => void,
+  journal?: LifecycleJournalRun
 ): Promise<void> {
   onPhase({ kind: "enrolling", tokenId });
-  const hash = await adapter.enterPool(tokenId);
-  onPhase({ kind: "enrollment-pending", tokenId, hash });
-  const receipt = await adapter.waitForReceipt(hash);
+  const receipt = await executeMakerWrite({
+    journal,
+    step: "enterPool",
+    action: "enterPool",
+    submit: () => adapter.enterPool(tokenId),
+    reconcile: adapter.waitForReceipt,
+    onAccepted: (hash) =>
+      onPhase({ kind: "enrollment-pending", tokenId, hash }),
+  });
   requireSuccessfulReceipt(receipt, "Pool enrollment");
   onPhase({ kind: "complete", tokenId });
 }
@@ -202,27 +214,40 @@ export async function createAndEnrollPack(
   plan: Pick<PackPlan, "selected" | "approvals">,
   adapter: PackTransactionAdapter,
   onPhase: (phase: TransactionPhase) => void,
-  onMinted: (tokenId: bigint) => void
+  onMinted: (tokenId: bigint) => void,
+  journal?: LifecycleJournalRun
 ): Promise<bigint> {
   for (const token of plan.approvals) {
     onPhase({ kind: "approving", symbol: token.symbol });
-    const hash = await adapter.approve(token.address, token.amount);
-    onPhase({ kind: "approval-pending", symbol: token.symbol, hash });
-    const receipt = await adapter.waitForReceipt(hash);
+    const receipt = await executeMakerWrite({
+      journal,
+      step: `approve:${token.address.toLowerCase()}:${token.amount}`,
+      action: "approve",
+      submit: () => adapter.approve(token.address, token.amount),
+      reconcile: adapter.waitForReceipt,
+      onAccepted: (hash) =>
+        onPhase({ kind: "approval-pending", symbol: token.symbol, hash }),
+    });
     requireSuccessfulReceipt(receipt, `${token.symbol} approval`);
   }
 
   onPhase({ kind: "minting" });
-  const mintHash = await adapter.mint(
-    plan.selected.map((token) => token.address),
-    plan.selected.map((token) => token.amount)
-  );
-  onPhase({ kind: "mint-pending", hash: mintHash });
-  const mintReceipt = await adapter.waitForReceipt(mintHash);
+  const mintReceipt = await executeMakerWrite({
+    journal,
+    step: "mint",
+    action: "mint",
+    submit: () =>
+      adapter.mint(
+        plan.selected.map((token) => token.address),
+        plan.selected.map((token) => token.amount)
+      ),
+    reconcile: adapter.waitForReceipt,
+    onAccepted: (hash) => onPhase({ kind: "mint-pending", hash }),
+  });
   requireSuccessfulReceipt(mintReceipt, "Pack mint");
 
   const tokenId = adapter.getMintedTokenId(mintReceipt);
   onMinted(tokenId);
-  await enrollMintedPack(tokenId, adapter, onPhase);
+  await enrollMintedPack(tokenId, adapter, onPhase, journal);
   return tokenId;
 }

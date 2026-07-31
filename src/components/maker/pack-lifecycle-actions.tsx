@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useWallets } from "@privy-io/react-auth";
 import {
   PAYMENT_CHAIN,
   ROBINHOOD_TESTNET_STOCK_TOKENS,
@@ -13,16 +12,10 @@ import {
   stockSymbolForAddress,
   txExplorerUrl,
 } from "@margin-call/shared";
-import {
-  createWalletClient,
-  custom,
-  formatUnits,
-  type Address,
-  type Hash,
-  type PublicClient,
-} from "viem";
+import { formatUnits, type Address, type Hash, type PublicClient } from "viem";
 
 import { GameButton } from "@/components/ui/game-button";
+import { useMakerTransactionClient } from "@/hooks/use-maker-transaction-client";
 import { getContractAddresses } from "@/lib/contracts/addresses";
 import {
   buildTopUpPlan,
@@ -40,6 +33,14 @@ import {
   type TopUpTransactionAdapter,
 } from "@/lib/maker/pack-lifecycle";
 import { parseTokenAmount } from "@/lib/maker/pack-composer";
+import {
+  PendingTransactionError,
+  createBrowserJournalStorage,
+  ensureWorkflow,
+  listWorkflows,
+  requestFingerprint,
+  type LifecycleWorkflow,
+} from "@/lib/maker/transaction-journal";
 import { formatWadUsd } from "@/lib/pool/nav-distribution";
 
 type LifecycleAddresses = NonNullable<ReturnType<typeof getContractAddresses>>;
@@ -110,9 +111,37 @@ function phaseHash(phase: TopUpPhase | RedemptionPhase): Hash | null {
     case "exit-pending":
     case "redeem-pending":
       return phase.hash;
+    case "error":
+      return phase.hash ?? null;
     default:
       return null;
   }
+}
+
+function savedTopUpPlan(
+  workflow: LifecycleWorkflow
+): Pick<TopUpPlan, "additions" | "approvals"> {
+  const raw = workflow.context.plan;
+  if (typeof raw !== "string") throw new Error("Saved top-up plan is missing");
+  const saved = JSON.parse(raw) as Array<{
+    symbol: string;
+    address: Address;
+    amount: string;
+    allowance: string;
+    quote: string;
+    needsApproval: boolean;
+  }>;
+  const additions = saved.map((token) => ({
+    symbol: token.symbol,
+    address: token.address,
+    amount: BigInt(token.amount),
+    allowance: BigInt(token.allowance),
+    quote: BigInt(token.quote),
+  }));
+  return {
+    additions,
+    approvals: additions.filter((_, index) => saved[index]!.needsApproval),
+  };
 }
 
 function topUpInputs(
@@ -548,8 +577,10 @@ export function PackLifecycleActions({
   tokenId: number;
   walletAddress: Address;
 }) {
-  const { wallets } = useWallets();
   const publicClient = useMemo(() => createRobinhoodPublicClient(), []);
+  const { walletReady, getWalletClient, waitForReceipt } =
+    useMakerTransactionClient(walletAddress, publicClient);
+  const journalStorage = useMemo(() => createBrowserJournalStorage(), []);
   const addresses = useMemo(() => {
     try {
       return getContractAddresses();
@@ -574,6 +605,7 @@ export function PackLifecycleActions({
   const [isReading, setIsReading] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const readSequence = useRef(0);
+  const recoveryStarted = useRef(false);
   const valueSignature = ROBINHOOD_TESTNET_STOCK_TOKENS.map(
     (token) => values[token.symbol] ?? ""
   ).join("|");
@@ -618,20 +650,8 @@ export function PackLifecycleActions({
     topUp: TopUpTransactionAdapter;
     redemption: RedemptionTransactionAdapter;
   }> {
-    const wallet = wallets.find(
-      (candidate) =>
-        candidate.address.toLowerCase() === walletAddress.toLowerCase()
-    );
-    if (!wallet) throw new Error("Connected Privy EVM wallet is unavailable");
     if (!addresses) throw new Error("Contract addresses are not configured");
-    const provider = await wallet.getEthereumProvider();
-    const walletClient = createWalletClient({
-      account: walletAddress,
-      chain: PAYMENT_CHAIN,
-      transport: custom(provider),
-    });
-    const waitForReceipt = (hash: Hash) =>
-      publicClient.waitForTransactionReceipt({ hash });
+    const walletClient = await getWalletClient();
 
     return {
       topUp: {
@@ -688,11 +708,113 @@ export function PackLifecycleActions({
     };
   }
 
+  async function recoverTopUp(workflow: LifecycleWorkflow) {
+    const { topUp } = await adaptersForConnectedWallet();
+    const journal = { storage: journalStorage, workflowKey: workflow.key };
+    if (workflow.completed.topUp || workflow.current?.step === "syncPackNav") {
+      setTopUpConfirmed(true);
+      await syncConfirmedTopUp(packId, topUp, setTopUpPhase, journal);
+    } else {
+      await topUpAndSyncPack(
+        packId,
+        savedTopUpPlan(workflow),
+        topUp,
+        setTopUpPhase,
+        () => setTopUpConfirmed(true),
+        journal
+      );
+    }
+    setTopUpConfirmed(false);
+    journalStorage.remove(workflow.key);
+  }
+
+  async function recoverRedemption(workflow: LifecycleWorkflow) {
+    const { redemption } = await adaptersForConnectedWallet();
+    const journal = { storage: journalStorage, workflowKey: workflow.key };
+    if (
+      workflow.completed.exitPool ||
+      workflow.current?.step === "delistAndRedeem"
+    ) {
+      setExitConfirmed(true);
+      await redeemExitedPack(packId, redemption, setRedemptionPhase, journal);
+    } else {
+      // If an exit hash is accepted, force that exact step through receipt
+      // reconciliation even when a fresh state read already sees it exited.
+      const reconcilingExit = workflow.current?.step === "exitPool";
+      const fresh = await readLifecycleState(
+        publicClient,
+        addresses!,
+        walletAddress,
+        packId,
+        values
+      );
+      await exitAndRedeemPack(
+        packId,
+        {
+          isListed: reconcilingExit ? true : fresh.isListed === true,
+          isResting: reconcilingExit ? true : fresh.isResting === true,
+        },
+        redemption,
+        setRedemptionPhase,
+        () => setExitConfirmed(true),
+        journal
+      );
+    }
+    setExitConfirmed(false);
+    journalStorage.remove(workflow.key);
+  }
+
+  useEffect(() => {
+    if (recoveryStarted.current || !addresses || !walletReady) return;
+    const workflows = listWorkflows(
+      journalStorage,
+      PAYMENT_CHAIN.id,
+      walletAddress
+    ).filter((workflow) => workflow.context.tokenId === packId.toString());
+    const workflow = workflows.find(
+      (candidate) =>
+        candidate.kind === "top-up" || candidate.kind === "redemption"
+    );
+    if (!workflow) return;
+    recoveryStarted.current = true;
+    setIsOpen(true);
+    setIsBusy(true);
+    const recover =
+      workflow.kind === "top-up"
+        ? recoverTopUp(workflow)
+        : recoverRedemption(workflow);
+    void recover
+      .then(() => refresh())
+      .catch((error) => {
+        const phase = {
+          kind: "error" as const,
+          message: errorMessage(error, "Lifecycle recovery needs attention"),
+          hash:
+            error instanceof PendingTransactionError ? error.hash : undefined,
+        };
+        if (workflow.kind === "top-up") setTopUpPhase(phase);
+        else setRedemptionPhase(phase);
+      })
+      .finally(() => setIsBusy(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addresses, journalStorage, packId, walletAddress, walletReady]);
+
   async function onTopUp() {
     if (!addresses || isBusy || topUpConfirmed) return;
     setIsBusy(true);
     setTopUpPhase({ kind: "idle" });
     try {
+      const existing = listWorkflows(
+        journalStorage,
+        PAYMENT_CHAIN.id,
+        walletAddress,
+        "top-up"
+      ).find((candidate) => candidate.context.tokenId === packId.toString());
+      if (existing) {
+        await recoverTopUp(existing);
+        await refresh();
+        return;
+      }
       const freshReads = await readLifecycleState(
         publicClient,
         addresses,
@@ -715,9 +837,40 @@ export function PackLifecycleActions({
         throw new Error(freshPlan.errors.join(". "));
       }
       const { topUp } = await adaptersForConnectedWallet();
-      await topUpAndSyncPack(packId, freshPlan, topUp, setTopUpPhase, () =>
-        setTopUpConfirmed(true)
+      const fingerprint = requestFingerprint([
+        packId,
+        ...freshPlan.additions.flatMap((token) => [
+          token.address,
+          token.amount,
+        ]),
+      ]);
+      const workflow = ensureWorkflow(journalStorage, {
+        chainId: PAYMENT_CHAIN.id,
+        wallet: walletAddress,
+        kind: "top-up",
+        requestFingerprint: fingerprint,
+        context: {
+          tokenId: packId.toString(),
+          plan: JSON.stringify(
+            freshPlan.additions.map((token) => ({
+              ...token,
+              amount: token.amount.toString(),
+              allowance: token.allowance.toString(),
+              quote: token.quote.toString(),
+              needsApproval: token.allowance < token.amount,
+            }))
+          ),
+        },
+      });
+      await topUpAndSyncPack(
+        packId,
+        freshPlan,
+        topUp,
+        setTopUpPhase,
+        () => setTopUpConfirmed(true),
+        { storage: journalStorage, workflowKey: workflow.key }
       );
+      journalStorage.remove(workflow.key);
       setTopUpConfirmed(false);
       setValues(
         Object.fromEntries(
@@ -729,6 +882,7 @@ export function PackLifecycleActions({
       setTopUpPhase({
         kind: "error",
         message: errorMessage(error, "Pack top-up failed"),
+        hash: error instanceof PendingTransactionError ? error.hash : undefined,
       });
     } finally {
       setIsBusy(false);
@@ -740,7 +894,18 @@ export function PackLifecycleActions({
     setIsBusy(true);
     try {
       const { topUp } = await adaptersForConnectedWallet();
-      await syncConfirmedTopUp(packId, topUp, setTopUpPhase);
+      const workflow = listWorkflows(
+        journalStorage,
+        PAYMENT_CHAIN.id,
+        walletAddress,
+        "top-up"
+      ).find((candidate) => candidate.context.tokenId === packId.toString());
+      if (!workflow) throw new Error("Saved top-up workflow is unavailable");
+      await syncConfirmedTopUp(packId, topUp, setTopUpPhase, {
+        storage: journalStorage,
+        workflowKey: workflow.key,
+      });
+      journalStorage.remove(workflow.key);
       setTopUpConfirmed(false);
       setValues(
         Object.fromEntries(
@@ -752,6 +917,7 @@ export function PackLifecycleActions({
       setTopUpPhase({
         kind: "error",
         message: errorMessage(error, "Pack NAV sync failed"),
+        hash: error instanceof PendingTransactionError ? error.hash : undefined,
       });
     } finally {
       setIsBusy(false);
@@ -779,6 +945,13 @@ export function PackLifecycleActions({
         throw new Error("Live Pack and basket state unavailable");
       }
       const { redemption } = await adaptersForConnectedWallet();
+      const workflow = ensureWorkflow(journalStorage, {
+        chainId: PAYMENT_CHAIN.id,
+        wallet: walletAddress,
+        kind: "redemption",
+        requestFingerprint: requestFingerprint([packId]),
+        context: { tokenId: packId.toString() },
+      });
       await exitAndRedeemPack(
         packId,
         {
@@ -787,14 +960,17 @@ export function PackLifecycleActions({
         },
         redemption,
         setRedemptionPhase,
-        () => setExitConfirmed(true)
+        () => setExitConfirmed(true),
+        { storage: journalStorage, workflowKey: workflow.key }
       );
+      journalStorage.remove(workflow.key);
       setExitConfirmed(false);
       await refresh();
     } catch (error) {
       setRedemptionPhase({
         kind: "error",
         message: errorMessage(error, "Pack redemption failed"),
+        hash: error instanceof PendingTransactionError ? error.hash : undefined,
       });
     } finally {
       setIsBusy(false);
@@ -806,13 +982,26 @@ export function PackLifecycleActions({
     setIsBusy(true);
     try {
       const { redemption } = await adaptersForConnectedWallet();
-      await redeemExitedPack(packId, redemption, setRedemptionPhase);
+      const workflow = listWorkflows(
+        journalStorage,
+        PAYMENT_CHAIN.id,
+        walletAddress,
+        "redemption"
+      ).find((candidate) => candidate.context.tokenId === packId.toString());
+      if (!workflow)
+        throw new Error("Saved redemption workflow is unavailable");
+      await redeemExitedPack(packId, redemption, setRedemptionPhase, {
+        storage: journalStorage,
+        workflowKey: workflow.key,
+      });
+      journalStorage.remove(workflow.key);
       setExitConfirmed(false);
       await refresh();
     } catch (error) {
       setRedemptionPhase({
         kind: "error",
         message: errorMessage(error, "Pack redemption failed"),
+        hash: error instanceof PendingTransactionError ? error.hash : undefined,
       });
     } finally {
       setIsBusy(false);

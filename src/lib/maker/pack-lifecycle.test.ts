@@ -12,6 +12,10 @@ import {
   type TopUpPhase,
   type TopUpTransactionAdapter,
 } from "./pack-lifecycle";
+import {
+  createMemoryJournalStorage,
+  ensureWorkflow,
+} from "./transaction-journal";
 
 const TOKEN_A = "0x0000000000000000000000000000000000000001" as Address;
 const HASH_A = `0x${"1".repeat(64)}` as Hash;
@@ -213,6 +217,59 @@ describe("Pack top-up transaction lifecycle", () => {
     expect(syncPackNav).toHaveBeenCalledTimes(2);
   });
 
+  it("recovers confirmed top-up through NAV sync after remount", async () => {
+    const storage = createMemoryJournalStorage();
+    const workflow = ensureWorkflow(storage, {
+      chainId: 46630,
+      wallet: "0x1234567890abcdef1234567890abcdef12345678",
+      kind: "top-up",
+      requestFingerprint: "pack-42-topup",
+      context: { tokenId: "42" },
+    });
+    const journal = { storage, workflowKey: workflow.key };
+    const topUp = vi.fn().mockResolvedValue(HASH_B);
+    const syncPackNav = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("wallet unavailable after reload"))
+      .mockResolvedValueOnce(HASH_C);
+    const adapter: TopUpTransactionAdapter = {
+      approve: vi.fn(),
+      topUp,
+      syncPackNav,
+      waitForReceipt: vi.fn().mockResolvedValue(receipt()),
+    };
+    const addition = {
+      symbol: "AMZN",
+      address: TOKEN_A,
+      amount: 5n,
+      allowance: 5n,
+      quote: 25n,
+    };
+
+    await expect(
+      topUpAndSyncPack(
+        42n,
+        { additions: [addition], approvals: [] },
+        adapter,
+        () => undefined,
+        () => undefined,
+        journal
+      )
+    ).rejects.toThrow("wallet unavailable after reload");
+    expect(storage.get(workflow.key)?.completed.topUp).toBe(HASH_B);
+
+    await topUpAndSyncPack(
+      42n,
+      { additions: [addition], approvals: [] },
+      adapter,
+      () => undefined,
+      () => undefined,
+      journal
+    );
+    expect(topUp).toHaveBeenCalledOnce();
+    expect(syncPackNav).toHaveBeenCalledTimes(2);
+  });
+
   it("stops after a reverted top-up receipt", async () => {
     const adapter: TopUpTransactionAdapter = {
       approve: vi.fn(),
@@ -317,6 +374,44 @@ describe("Pack redemption transaction lifecycle", () => {
     expect(exited).toHaveBeenCalledOnce();
 
     await redeemExitedPack(42n, adapter, () => undefined);
+    expect(exitPool).toHaveBeenCalledOnce();
+    expect(delistAndRedeem).toHaveBeenCalledTimes(2);
+  });
+
+  it("recovers a confirmed exit through redemption after remount", async () => {
+    const storage = createMemoryJournalStorage();
+    const workflow = ensureWorkflow(storage, {
+      chainId: 46630,
+      wallet: "0x1234567890abcdef1234567890abcdef12345678",
+      kind: "redemption",
+      requestFingerprint: "pack-42-redeem",
+      context: { tokenId: "42" },
+    });
+    const journal = { storage, workflowKey: workflow.key };
+    const exitPool = vi.fn().mockResolvedValue(HASH_A);
+    const delistAndRedeem = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("wallet unavailable after reload"))
+      .mockResolvedValueOnce(HASH_B);
+    const adapter: RedemptionTransactionAdapter = {
+      exitPool,
+      delistAndRedeem,
+      waitForReceipt: vi.fn().mockResolvedValue(receipt()),
+    };
+
+    await expect(
+      exitAndRedeemPack(
+        42n,
+        { isResting: true, isListed: true },
+        adapter,
+        () => undefined,
+        () => undefined,
+        journal
+      )
+    ).rejects.toThrow("wallet unavailable after reload");
+    expect(storage.get(workflow.key)?.completed.exitPool).toBe(HASH_A);
+
+    await redeemExitedPack(42n, adapter, () => undefined, journal);
     expect(exitPool).toHaveBeenCalledOnce();
     expect(delistAndRedeem).toHaveBeenCalledTimes(2);
   });

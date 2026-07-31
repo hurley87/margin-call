@@ -1,6 +1,10 @@
 import type { Address, Hash, TransactionReceipt } from "viem";
 
 import { isNavInBand, parseTokenAmount } from "./pack-composer";
+import {
+  executeMakerWrite,
+  type LifecycleJournalRun,
+} from "./transaction-journal";
 
 export type TopUpTokenInput = {
   symbol: string;
@@ -40,7 +44,7 @@ export type TopUpPhase =
   | { kind: "syncing" }
   | { kind: "sync-pending"; hash: Hash }
   | { kind: "complete" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; hash?: Hash };
 
 export type TopUpTransactionAdapter = {
   approve: (token: Address, amount: bigint) => Promise<Hash>;
@@ -60,7 +64,7 @@ export type RedemptionPhase =
   | { kind: "redeeming" }
   | { kind: "redeem-pending"; hash: Hash }
   | { kind: "complete" }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; hash?: Hash };
 
 export type RedemptionTransactionAdapter = {
   exitPool: (tokenId: bigint) => Promise<Hash>;
@@ -158,12 +162,18 @@ function requireSuccessfulReceipt(receipt: TransactionReceipt, label: string) {
 export async function syncConfirmedTopUp(
   tokenId: bigint,
   adapter: TopUpTransactionAdapter,
-  onPhase: (phase: TopUpPhase) => void
+  onPhase: (phase: TopUpPhase) => void,
+  journal?: LifecycleJournalRun
 ): Promise<void> {
   onPhase({ kind: "syncing" });
-  const hash = await adapter.syncPackNav(tokenId);
-  onPhase({ kind: "sync-pending", hash });
-  const receipt = await adapter.waitForReceipt(hash);
+  const receipt = await executeMakerWrite({
+    journal,
+    step: "syncPackNav",
+    action: "syncPackNav",
+    submit: () => adapter.syncPackNav(tokenId),
+    reconcile: adapter.waitForReceipt,
+    onAccepted: (hash) => onPhase({ kind: "sync-pending", hash }),
+  });
   requireSuccessfulReceipt(receipt, "Pack NAV sync");
   onPhase({ kind: "complete" });
 }
@@ -173,39 +183,58 @@ export async function topUpAndSyncPack(
   plan: Pick<TopUpPlan, "additions" | "approvals">,
   adapter: TopUpTransactionAdapter,
   onPhase: (phase: TopUpPhase) => void,
-  onTopUpConfirmed: () => void
+  onTopUpConfirmed: () => void,
+  journal?: LifecycleJournalRun
 ): Promise<void> {
   for (const token of plan.approvals) {
     onPhase({ kind: "approving", symbol: token.symbol });
-    const hash = await adapter.approve(token.address, token.amount);
-    onPhase({ kind: "approval-pending", symbol: token.symbol, hash });
-    const receipt = await adapter.waitForReceipt(hash);
+    const receipt = await executeMakerWrite({
+      journal,
+      step: `approve:${token.address.toLowerCase()}:${token.amount}`,
+      action: "approve",
+      submit: () => adapter.approve(token.address, token.amount),
+      reconcile: adapter.waitForReceipt,
+      onAccepted: (hash) =>
+        onPhase({ kind: "approval-pending", symbol: token.symbol, hash }),
+    });
     requireSuccessfulReceipt(receipt, `${token.symbol} approval`);
   }
 
   onPhase({ kind: "topping-up" });
-  const hash = await adapter.topUp(
-    tokenId,
-    plan.additions.map((token) => token.address),
-    plan.additions.map((token) => token.amount)
-  );
-  onPhase({ kind: "top-up-pending", hash });
-  const receipt = await adapter.waitForReceipt(hash);
+  const receipt = await executeMakerWrite({
+    journal,
+    step: "topUp",
+    action: "topUp",
+    submit: () =>
+      adapter.topUp(
+        tokenId,
+        plan.additions.map((token) => token.address),
+        plan.additions.map((token) => token.amount)
+      ),
+    reconcile: adapter.waitForReceipt,
+    onAccepted: (hash) => onPhase({ kind: "top-up-pending", hash }),
+  });
   requireSuccessfulReceipt(receipt, "Pack top-up");
   onTopUpConfirmed();
 
-  await syncConfirmedTopUp(tokenId, adapter, onPhase);
+  await syncConfirmedTopUp(tokenId, adapter, onPhase, journal);
 }
 
 export async function redeemExitedPack(
   tokenId: bigint,
   adapter: RedemptionTransactionAdapter,
-  onPhase: (phase: RedemptionPhase) => void
+  onPhase: (phase: RedemptionPhase) => void,
+  journal?: LifecycleJournalRun
 ): Promise<void> {
   onPhase({ kind: "redeeming" });
-  const hash = await adapter.delistAndRedeem(tokenId);
-  onPhase({ kind: "redeem-pending", hash });
-  const receipt = await adapter.waitForReceipt(hash);
+  const receipt = await executeMakerWrite({
+    journal,
+    step: "delistAndRedeem",
+    action: "delistAndRedeem",
+    submit: () => adapter.delistAndRedeem(tokenId),
+    reconcile: adapter.waitForReceipt,
+    onAccepted: (hash) => onPhase({ kind: "redeem-pending", hash }),
+  });
   requireSuccessfulReceipt(receipt, "Pack redemption");
   onPhase({ kind: "complete" });
 }
@@ -215,20 +244,26 @@ export async function exitAndRedeemPack(
   state: { isResting: boolean; isListed: boolean },
   adapter: RedemptionTransactionAdapter,
   onPhase: (phase: RedemptionPhase) => void,
-  onExitConfirmed: () => void
+  onExitConfirmed: () => void,
+  journal?: LifecycleJournalRun
 ): Promise<void> {
   if (!state.isListed) throw new Error("Pack is no longer listed");
 
   if (state.isResting) {
     onPhase({ kind: "exiting" });
-    const hash = await adapter.exitPool(tokenId);
-    onPhase({ kind: "exit-pending", hash });
-    const receipt = await adapter.waitForReceipt(hash);
+    const receipt = await executeMakerWrite({
+      journal,
+      step: "exitPool",
+      action: "exitPool",
+      submit: () => adapter.exitPool(tokenId),
+      reconcile: adapter.waitForReceipt,
+      onAccepted: (hash) => onPhase({ kind: "exit-pending", hash }),
+    });
     requireSuccessfulReceipt(receipt, "Pool exit");
     onExitConfirmed();
   }
 
-  await redeemExitedPack(tokenId, adapter, onPhase);
+  await redeemExitedPack(tokenId, adapter, onPhase, journal);
 }
 
 export function topUpPhaseMessage(phase: TopUpPhase): string {

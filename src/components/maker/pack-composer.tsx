@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useWallets } from "@privy-io/react-auth";
 import {
   PAYMENT_CHAIN,
   PAYMENT_EXPLORER_URL,
@@ -16,8 +15,6 @@ import {
   type StockToken,
 } from "@margin-call/shared";
 import {
-  createWalletClient,
-  custom,
   formatUnits,
   type Address,
   type Hash,
@@ -26,6 +23,7 @@ import {
 } from "viem";
 
 import { GameButton } from "@/components/ui/game-button";
+import { useMakerTransactionClient } from "@/hooks/use-maker-transaction-client";
 import { getContractAddresses } from "@/lib/contracts/addresses";
 import { formatWadUsd } from "@/lib/pool/nav-distribution";
 import {
@@ -39,6 +37,14 @@ import {
   type TokenAmountInput,
   type TransactionPhase,
 } from "@/lib/maker/pack-composer";
+import {
+  PendingTransactionError,
+  createBrowserJournalStorage,
+  ensureWorkflow,
+  listWorkflows,
+  requestFingerprint,
+  type LifecycleWorkflow,
+} from "@/lib/maker/transaction-journal";
 
 const FAUCET_URL = "https://faucet.testnet.chain.robinhood.com";
 
@@ -92,9 +98,37 @@ function phaseHash(phase: TransactionPhase): Hash | null {
     case "mint-pending":
     case "enrollment-pending":
       return phase.hash;
+    case "error":
+      return phase.hash ?? null;
     default:
       return null;
   }
+}
+
+function workflowPlan(
+  workflow: LifecycleWorkflow
+): Pick<PackPlan, "selected" | "approvals"> {
+  const raw = workflow.context.plan;
+  if (typeof raw !== "string") throw new Error("Saved Pack plan is missing");
+  const saved = JSON.parse(raw) as Array<{
+    symbol: string;
+    address: Address;
+    amount: string;
+    allowance: string;
+    quote: string;
+    needsApproval: boolean;
+  }>;
+  const selected = saved.map((token) => ({
+    symbol: token.symbol,
+    address: token.address,
+    amount: BigInt(token.amount),
+    allowance: BigInt(token.allowance),
+    quote: BigInt(token.quote),
+  }));
+  return {
+    selected,
+    approvals: selected.filter((_, index) => saved[index]!.needsApproval),
+  };
 }
 
 function formatBalance(value: bigint | undefined, decimals: number): string {
@@ -198,7 +232,9 @@ async function readComposerChainState(
 
 function makeTransactionAdapter(
   publicClient: PublicClient,
-  walletClient: ReturnType<typeof createWalletClient>,
+  walletClient: Awaited<
+    ReturnType<ReturnType<typeof useMakerTransactionClient>["getWalletClient"]>
+  >,
   walletAddress: Address,
   addresses: ComposerAddresses
 ): PackTransactionAdapter {
@@ -494,8 +530,12 @@ export function PackComposerView({
 }
 
 export function PackComposer({ walletAddress }: { walletAddress: Address }) {
-  const { wallets } = useWallets();
   const publicClient = useMemo(() => createRobinhoodPublicClient(), []);
+  const { walletReady, getWalletClient } = useMakerTransactionClient(
+    walletAddress,
+    publicClient
+  );
+  const journalStorage = useMemo(() => createBrowserJournalStorage(), []);
   const addresses = useMemo(() => {
     try {
       return getContractAddresses();
@@ -514,6 +554,7 @@ export function PackComposer({ walletAddress }: { walletAddress: Address }) {
   const [isReading, setIsReading] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
   const readSequence = useRef(0);
+  const recoveryStarted = useRef(false);
   const valueSignature = ROBINHOOD_TESTNET_STOCK_TOKENS.map(
     (token) => values[token.symbol] ?? ""
   ).join("|");
@@ -547,17 +588,7 @@ export function PackComposer({ walletAddress }: { walletAddress: Address }) {
   );
 
   async function adapterForConnectedWallet() {
-    const wallet = wallets.find(
-      (candidate) =>
-        candidate.address.toLowerCase() === walletAddress.toLowerCase()
-    );
-    if (!wallet) throw new Error("Connected Privy EVM wallet is unavailable");
-    const provider = await wallet.getEthereumProvider();
-    const walletClient = createWalletClient({
-      account: walletAddress,
-      chain: PAYMENT_CHAIN,
-      transport: custom(provider),
-    });
+    const walletClient = await getWalletClient();
     if (!addresses) throw new Error("Contract addresses are not configured");
     return makeTransactionAdapter(
       publicClient,
@@ -567,11 +598,61 @@ export function PackComposer({ walletAddress }: { walletAddress: Address }) {
     );
   }
 
+  async function resumeWorkflow(workflow: LifecycleWorkflow) {
+    const adapter = await adapterForConnectedWallet();
+    const tokenId = await createAndEnrollPack(
+      workflowPlan(workflow),
+      adapter,
+      setPhase,
+      setMintedTokenId,
+      { storage: journalStorage, workflowKey: workflow.key }
+    );
+    setMintedTokenId(tokenId);
+    journalStorage.remove(workflow.key);
+    await refresh();
+  }
+
+  useEffect(() => {
+    if (recoveryStarted.current || !addresses || !walletReady) return;
+    const workflow = listWorkflows(
+      journalStorage,
+      PAYMENT_CHAIN.id,
+      walletAddress,
+      "create"
+    )[0];
+    if (!workflow) return;
+    recoveryStarted.current = true;
+    setIsBusy(true);
+    void resumeWorkflow(workflow)
+      .catch((error) => {
+        setPhase({
+          kind: "error",
+          message: errorMessage(error, "Pack recovery needs attention"),
+          hash:
+            error instanceof PendingTransactionError ? error.hash : undefined,
+        });
+      })
+      .finally(() => setIsBusy(false));
+    // Recovery is intentionally a one-shot per mount; the explicit retry keeps
+    // wallet prompts user-driven after the first reconciliation pass.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addresses, journalStorage, walletAddress, walletReady]);
+
   async function onSubmit() {
     if (!addresses || isBusy || mintedTokenId !== null) return;
     setIsBusy(true);
     setPhase({ kind: "idle" });
     try {
+      const existing = listWorkflows(
+        journalStorage,
+        PAYMENT_CHAIN.id,
+        walletAddress,
+        "create"
+      )[0];
+      if (existing) {
+        await resumeWorkflow(existing);
+        return;
+      }
       const freshReads = await readComposerChainState(
         publicClient,
         addresses,
@@ -588,12 +669,40 @@ export function PackComposer({ walletAddress }: { walletAddress: Address }) {
         throw new Error(freshPlan.errors.join(". "));
       }
       const adapter = await adapterForConnectedWallet();
-      await createAndEnrollPack(freshPlan, adapter, setPhase, setMintedTokenId);
+      const fingerprint = requestFingerprint(
+        freshPlan.selected.flatMap((token) => [token.address, token.amount])
+      );
+      const workflow = ensureWorkflow(journalStorage, {
+        chainId: PAYMENT_CHAIN.id,
+        wallet: walletAddress,
+        kind: "create",
+        requestFingerprint: fingerprint,
+        context: {
+          plan: JSON.stringify(
+            freshPlan.selected.map((token) => ({
+              ...token,
+              amount: token.amount.toString(),
+              allowance: token.allowance.toString(),
+              quote: token.quote.toString(),
+              needsApproval: token.allowance < token.amount,
+            }))
+          ),
+        },
+      });
+      await createAndEnrollPack(
+        freshPlan,
+        adapter,
+        setPhase,
+        setMintedTokenId,
+        { storage: journalStorage, workflowKey: workflow.key }
+      );
+      journalStorage.remove(workflow.key);
       await refresh();
     } catch (error) {
       setPhase({
         kind: "error",
         message: errorMessage(error, "Pack creation failed"),
+        hash: error instanceof PendingTransactionError ? error.hash : undefined,
       });
     } finally {
       setIsBusy(false);
@@ -605,12 +714,24 @@ export function PackComposer({ walletAddress }: { walletAddress: Address }) {
     setIsBusy(true);
     try {
       const adapter = await adapterForConnectedWallet();
-      await enrollMintedPack(mintedTokenId, adapter, setPhase);
+      const workflow = listWorkflows(
+        journalStorage,
+        PAYMENT_CHAIN.id,
+        walletAddress,
+        "create"
+      )[0];
+      if (!workflow) throw new Error("Saved Pack workflow is unavailable");
+      await enrollMintedPack(mintedTokenId, adapter, setPhase, {
+        storage: journalStorage,
+        workflowKey: workflow.key,
+      });
+      journalStorage.remove(workflow.key);
       await refresh();
     } catch (error) {
       setPhase({
         kind: "error",
         message: errorMessage(error, "Pool enrollment failed"),
+        hash: error instanceof PendingTransactionError ? error.hash : undefined,
       });
     } finally {
       setIsBusy(false);

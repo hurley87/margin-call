@@ -11,6 +11,10 @@ import {
   type PackTransactionAdapter,
   type TransactionPhase,
 } from "./pack-composer";
+import {
+  createMemoryJournalStorage,
+  ensureWorkflow,
+} from "./transaction-journal";
 
 const TOKEN_A = "0x0000000000000000000000000000000000000001" as Address;
 const TOKEN_B = "0x0000000000000000000000000000000000000002" as Address;
@@ -277,6 +281,58 @@ describe("Pack composer transaction lifecycle", () => {
     ).resolves.toBeUndefined();
     expect(enterPool).toHaveBeenCalledTimes(2);
     expect(mint).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers a confirmed mint after remount without duplicate submission", async () => {
+    const storage = createMemoryJournalStorage();
+    const workflow = ensureWorkflow(storage, {
+      chainId: 46630,
+      wallet: "0x1234567890abcdef1234567890abcdef12345678",
+      kind: "create",
+      requestFingerprint: "pack-77",
+      context: {},
+    });
+    const journal = { storage, workflowKey: workflow.key };
+    const mint = vi.fn().mockResolvedValue(HASH_B);
+    const enterPool = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("wallet unavailable after reload"))
+      .mockResolvedValueOnce(HASH_C);
+    const adapter: PackTransactionAdapter = {
+      approve: vi.fn(),
+      mint,
+      enterPool,
+      waitForReceipt: vi.fn().mockResolvedValue(receipt()),
+      getMintedTokenId: () => 77n,
+    };
+    const token = {
+      symbol: "AMZN",
+      address: TOKEN_A,
+      amount: 5n,
+      allowance: 5n,
+      quote: 25n,
+    };
+
+    await expect(
+      createAndEnrollPack(
+        { selected: [token], approvals: [] },
+        adapter,
+        () => undefined,
+        () => undefined,
+        journal
+      )
+    ).rejects.toThrow("wallet unavailable after reload");
+    expect(storage.get(workflow.key)?.completed.mint).toBe(HASH_B);
+
+    await createAndEnrollPack(
+      { selected: [token], approvals: [] },
+      adapter,
+      () => undefined,
+      () => undefined,
+      journal
+    );
+    expect(mint).toHaveBeenCalledOnce();
+    expect(enterPool).toHaveBeenCalledTimes(2);
   });
 
   it("does not advance after a reverted receipt", async () => {
