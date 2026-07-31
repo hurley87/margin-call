@@ -98,6 +98,17 @@ NAV-weighted Pack selection, live Rip pricing, Model-A settlement, and Acquisiti
 - Protocol and crown cuts from the surcharge only; remainder socialized equally per resting Pack via a fee-per-Pack index (make-whole at `alpha = 1`)
 - Requires `eligibleCount > count` so socialization has a non-empty destination set
 - Maker `claim(tokenIds)` (empty = crystallized only); admin `withdrawProtocolFees`
+
+Deployed fee-read limitation: Robinhood testnet RipEngine exposes only
+`restingCount()` plus the full-array `restingPackIds()` view. It has no indexed,
+offset, or cursor-based resting-Pack accessor, while `claim(tokenIds)` accepts an
+arbitrary caller-supplied array. The web client therefore checks `restingCount()`
+at one block and reads the array only at or below its explicit 500-Pack cap; above
+that cap it reports pending fees as unknown and can claim only already-crystallized
+fees with `claim([])`. Within the cap, claim writes are split into 25-Pack batches.
+Complete scalable visibility requires a new paginated contract API and redeployment;
+the client must not advertise an undeployed ABI.
+
 - Unlisted Packs are purged at the start of every `rip` so ghosts cannot dilute fee socialization
 - Equal-rate fee accrual follows enrollment for listed Packs (not per-rip eligibility); a Pack with a temporarily stale feed keeps accruing while undrawable
 

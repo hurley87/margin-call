@@ -6,8 +6,14 @@ import {
 } from "viem";
 
 import { erc20Abi, mockUsdAbi, ripEngineAbi } from "@margin-call/shared";
+import {
+  executeMakerWrite,
+  type LifecycleJournalRun,
+} from "./transaction-journal";
 
 const MULTICALL_CHUNK_SIZE = 100;
+export const MAX_RESTING_PACK_SCAN = 500;
+export const CLAIM_BATCH_SIZE = 25;
 
 export type AcquisitionFeeAddresses = {
   ripEngine: Address;
@@ -17,11 +23,14 @@ export type AcquisitionFeeAddresses = {
 export type AcquisitionFeeSnapshot = {
   blockNumber: bigint;
   crystallized: bigint;
-  pending: bigint;
-  total: bigint;
+  pending: bigint | null;
+  total: bigint | null;
   mockUsdBalance: bigint;
   stablecoinDecimals: number;
   restingMakerTokenIds: bigint[];
+  restingCount: bigint;
+  visibilityComplete: boolean;
+  visibilityLimit: number;
 };
 
 export type AcquisitionFeeReadClient = Pick<
@@ -31,15 +40,16 @@ export type AcquisitionFeeReadClient = Pick<
 
 export type ClaimPhase =
   | { kind: "idle" }
-  | { kind: "signing" }
-  | { kind: "pending"; hash: Hash }
-  | { kind: "complete" }
+  | { kind: "signing"; batch: number; totalBatches: number }
+  | { kind: "pending"; hash: Hash; batch: number; totalBatches: number }
+  | { kind: "complete"; batches: number }
   | { kind: "refresh-error"; message: string }
-  | { kind: "error"; message: string };
+  | { kind: "error"; message: string; hash?: Hash };
 
 export type AcquisitionFeeClaimAdapter = {
   claim: (tokenIds: bigint[]) => Promise<Hash>;
   waitForReceipt: (hash: Hash) => Promise<{ status: "success" | "reverted" }>;
+  hasClaimable?: (tokenIds: bigint[]) => Promise<boolean>;
 };
 
 function chunks<T>(values: readonly T[], size: number): T[][] {
@@ -82,8 +92,8 @@ export function acquisitionFeeTotal(
 
 /**
  * Read one coherent, live Acquisition Fee snapshot directly from the chain.
- * The full resting set is discovered first; Maker and pending reads are then
- * explicitly chunked to bound each Multicall3 payload.
+ * The deployed full-array read is used only after a same-block count proves it
+ * is within the hard cap; Maker and pending reads are explicitly chunked.
  */
 export async function readAcquisitionFeeSnapshot(
   client: AcquisitionFeeReadClient,
@@ -91,46 +101,59 @@ export async function readAcquisitionFeeSnapshot(
   walletAddress: Address
 ): Promise<AcquisitionFeeSnapshot> {
   const blockNumber = await client.getBlockNumber();
-  const [
-    restingPackIds,
-    restingCount,
-    crystallized,
-    mockUsdBalance,
-    stablecoinDecimals,
-  ] = await Promise.all([
-    client.readContract({
-      address: addresses.ripEngine,
-      abi: ripEngineAbi,
-      functionName: "restingPackIds",
+  const [restingCount, crystallized, mockUsdBalance, stablecoinDecimals] =
+    await Promise.all([
+      client.readContract({
+        address: addresses.ripEngine,
+        abi: ripEngineAbi,
+        functionName: "restingCount",
+        blockNumber,
+      }),
+      client.readContract({
+        address: addresses.ripEngine,
+        abi: ripEngineAbi,
+        functionName: "claimableFees",
+        args: [walletAddress],
+        blockNumber,
+      }),
+      client.readContract({
+        address: addresses.mockUsd,
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [walletAddress],
+        blockNumber,
+      }),
+      client.readContract({
+        address: addresses.mockUsd,
+        abi: mockUsdAbi,
+        functionName: "decimals",
+        blockNumber,
+      }),
+    ]);
+
+  if (restingCount > BigInt(MAX_RESTING_PACK_SCAN)) {
+    return {
       blockNumber,
-    }),
-    client.readContract({
-      address: addresses.ripEngine,
-      abi: ripEngineAbi,
-      functionName: "restingCount",
-      blockNumber,
-    }),
-    client.readContract({
-      address: addresses.ripEngine,
-      abi: ripEngineAbi,
-      functionName: "claimableFees",
-      args: [walletAddress],
-      blockNumber,
-    }),
-    client.readContract({
-      address: addresses.mockUsd,
-      abi: erc20Abi,
-      functionName: "balanceOf",
-      args: [walletAddress],
-      blockNumber,
-    }),
-    client.readContract({
-      address: addresses.mockUsd,
-      abi: mockUsdAbi,
-      functionName: "decimals",
-      blockNumber,
-    }),
-  ]);
+      crystallized,
+      pending: null,
+      total: null,
+      mockUsdBalance,
+      stablecoinDecimals,
+      restingMakerTokenIds: [],
+      restingCount,
+      visibilityComplete: false,
+      visibilityLimit: MAX_RESTING_PACK_SCAN,
+    };
+  }
+
+  // The deployed contract has no indexed/page read. Only call the unbounded ABI
+  // after proving at this exact block that the response is within our hard cap.
+  const restingPackIds = await client.readContract({
+    address: addresses.ripEngine,
+    abi: ripEngineAbi,
+    functionName: "restingPackIds",
+    blockNumber,
+  });
 
   if (BigInt(restingPackIds.length) !== restingCount) {
     throw new Error(
@@ -149,12 +172,12 @@ export async function readAcquisitionFeeSnapshot(
     })),
     blockNumber
   );
-  const restingMakerTokenIds = tokenIds.filter((_, index) =>
+  const makerTokenIds = tokenIds.filter((_, index) =>
     isAddressEqual(makers[index], walletAddress)
   );
   const pendingAmounts = await readChunkedContracts<bigint>(
     client,
-    restingMakerTokenIds.map((tokenId) => ({
+    makerTokenIds.map((tokenId) => ({
       address: addresses.ripEngine,
       abi: ripEngineAbi,
       functionName: "pendingOf",
@@ -163,6 +186,9 @@ export async function readAcquisitionFeeSnapshot(
     blockNumber
   );
   const totals = acquisitionFeeTotal(crystallized, pendingAmounts);
+  const restingMakerTokenIds = makerTokenIds.filter(
+    (_, index) => pendingAmounts[index]! > 0n
+  );
 
   return {
     blockNumber,
@@ -172,6 +198,9 @@ export async function readAcquisitionFeeSnapshot(
     mockUsdBalance,
     stablecoinDecimals,
     restingMakerTokenIds,
+    restingCount,
+    visibilityComplete: true,
+    visibilityLimit: MAX_RESTING_PACK_SCAN,
   };
 }
 
@@ -179,17 +208,53 @@ export async function claimAcquisitionFees(
   tokenIds: bigint[],
   adapter: AcquisitionFeeClaimAdapter,
   onPhase: (phase: ClaimPhase) => void,
-  refreshAfterConfirmation: () => Promise<void>
+  refreshAfterConfirmation: () => Promise<void>,
+  journal?: LifecycleJournalRun
 ): Promise<void> {
-  onPhase({ kind: "signing" });
-  const hash = await adapter.claim(tokenIds);
-  onPhase({ kind: "pending", hash });
-  const receipt = await adapter.waitForReceipt(hash);
-  if (receipt.status !== "success") {
-    throw new Error("Acquisition Fee claim transaction reverted");
+  const batches = chunks(tokenIds, CLAIM_BATCH_SIZE);
+  if (batches.length === 0) batches.push([]);
+  let confirmedBatches = 0;
+
+  for (let index = 0; index < batches.length; index += 1) {
+    const batchNumber = index + 1;
+    const step = `claim:${index}`;
+    const saved = journal?.storage.get(journal.workflowKey);
+    const mustReconcile = Boolean(
+      saved?.completed[step] || saved?.current?.step === step
+    );
+    if (
+      !mustReconcile &&
+      adapter.hasClaimable &&
+      !(await adapter.hasClaimable(batches[index]!))
+    ) {
+      continue;
+    }
+    onPhase({
+      kind: "signing",
+      batch: batchNumber,
+      totalBatches: batches.length,
+    });
+    const receipt = await executeMakerWrite({
+      journal,
+      step,
+      action: "claim",
+      submit: () => adapter.claim(batches[index]!),
+      reconcile: adapter.waitForReceipt,
+      onAccepted: (hash) =>
+        onPhase({
+          kind: "pending",
+          hash,
+          batch: batchNumber,
+          totalBatches: batches.length,
+        }),
+    });
+    if (receipt.status !== "success") {
+      throw new Error(`Acquisition Fee claim batch ${batchNumber} reverted`);
+    }
+    confirmedBatches += 1;
   }
 
-  onPhase({ kind: "complete" });
+  onPhase({ kind: "complete", batches: confirmedBatches });
   try {
     await refreshAfterConfirmation();
   } catch (error) {
@@ -208,11 +273,11 @@ export function claimPhaseMessage(phase: ClaimPhase): string {
     case "idle":
       return "Ready to claim Acquisition Fees";
     case "signing":
-      return "Confirm the Acquisition Fee claim in your wallet";
+      return `Confirm claim batch ${phase.batch} of ${phase.totalBatches} in your wallet`;
     case "pending":
-      return "Claim submitted — waiting for confirmation";
+      return `Claim batch ${phase.batch} of ${phase.totalBatches} submitted — waiting for confirmation`;
     case "complete":
-      return "Acquisition Fee claim confirmed";
+      return `${phase.batches} Acquisition Fee claim batch${phase.batches === 1 ? "" : "es"} confirmed`;
     case "refresh-error":
     case "error":
       return phase.message;

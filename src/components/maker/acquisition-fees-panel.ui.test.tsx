@@ -12,6 +12,9 @@ const SNAPSHOT: AcquisitionFeeSnapshot = {
   mockUsdBalance: 9_000_000n,
   stablecoinDecimals: 6,
   restingMakerTokenIds: [11n, 22n],
+  restingCount: 4n,
+  visibilityComplete: true,
+  visibilityLimit: 500,
 };
 
 function renderView(
@@ -64,11 +67,36 @@ describe("AcquisitionFeesView", () => {
 
   it("shows submitted claims as pending rather than successful", () => {
     const hash = `0x${"1".repeat(64)}` as const;
-    const html = renderView({ phase: { kind: "pending", hash }, isBusy: true });
+    const html = renderView({
+      phase: { kind: "pending", hash, batch: 1, totalBatches: 2 },
+      isBusy: true,
+    });
 
-    expect(html).toContain("Claim submitted — waiting for confirmation");
+    expect(html).toContain(
+      "Claim batch 1 of 2 submitted — waiting for confirmation"
+    );
     expect(html).toContain("View pending transaction");
     expect(html).not.toContain("Acquisition Fee claim confirmed");
+  });
+
+  it("discloses capped visibility without presenting a partial total", () => {
+    const html = renderView({
+      snapshot: {
+        ...SNAPSHOT,
+        pending: null,
+        total: null,
+        restingMakerTokenIds: [],
+        restingCount: 700n,
+        visibilityComplete: false,
+      },
+    });
+
+    expect(html).toContain("Pending visibility");
+    expect(html).toContain("Unknown");
+    expect(html).toContain(
+      "above this client&#x27;s explicit 500-Pack safety cap"
+    );
+    expect(html).not.toContain("Total claimable");
   });
 
   it("renders rejected and reverted claims as errors", () => {
