@@ -15,7 +15,6 @@ import {
   type StockToken,
 } from "@margin-call/shared";
 import {
-  formatUnits,
   type Address,
   type Hash,
   type PublicClient,
@@ -26,6 +25,10 @@ import { GameButton } from "@/components/ui/game-button";
 import { useMakerTransactionClient } from "@/hooks/use-maker-transaction-client";
 import { getContractAddresses } from "@/lib/contracts/addresses";
 import { formatWadUsd } from "@/lib/pool/nav-distribution";
+import {
+  formatAllowanceDisplay,
+  formatTokenAmountDisplay,
+} from "@/lib/token-display";
 import {
   buildPackPlan,
   createAndEnrollPack,
@@ -129,14 +132,6 @@ function workflowPlan(
     selected,
     approvals: selected.filter((_, index) => saved[index]!.needsApproval),
   };
-}
-
-function formatBalance(value: bigint | undefined, decimals: number): string {
-  if (value === undefined) return "Unavailable";
-  const formatted = formatUnits(value, decimals);
-  const [whole, fraction = ""] = formatted.split(".");
-  const compactFraction = fraction.slice(0, 6).replace(/0+$/, "");
-  return compactFraction ? `${whole}.${compactFraction}` : whole;
 }
 
 function inputRows(
@@ -325,6 +320,14 @@ export function PackComposerView({
           <div className="mt-5 space-y-3">
             {ROBINHOOD_TESTNET_STOCK_TOKENS.map((token) => {
               const tokenRead = reads.tokens[token.symbol] ?? {};
+              const balance = formatTokenAmountDisplay(
+                tokenRead.balance,
+                token.decimals
+              );
+              const allowance = formatAllowanceDisplay(
+                tokenRead.allowance,
+                token.decimals
+              );
               const parsed = parseTokenAmount(
                 values[token.symbol] ?? "",
                 token.decimals
@@ -336,11 +339,11 @@ export function PackComposerView({
               return (
                 <div
                   key={token.address}
-                  className="grid gap-2 border border-[var(--t-divider)]/50 bg-[var(--t-panel)]/40 p-3 sm:grid-cols-[5rem_1fr_auto] sm:items-center"
+                  className="grid min-w-0 gap-2 overflow-hidden border border-[var(--t-divider)]/50 bg-[var(--t-panel)]/40 p-3 sm:grid-cols-[5rem_minmax(0,1fr)_minmax(0,12rem)] sm:items-center"
                 >
                   <label
                     htmlFor={`pack-${token.symbol}`}
-                    className="font-bold text-[var(--t-accent)]"
+                    className="min-w-0 break-all font-bold text-[var(--t-accent)]"
                   >
                     {token.symbol}
                   </label>
@@ -355,18 +358,31 @@ export function PackComposerView({
                     }
                     disabled={isBusy}
                     aria-describedby={`pack-${token.symbol}-details`}
-                    className="min-h-11 border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 text-[var(--t-text)] outline-none focus:border-[var(--t-accent)] disabled:opacity-50"
+                    className="min-h-11 min-w-0 border border-[var(--t-divider)] bg-[var(--t-bg)] px-3 text-[var(--t-text)] outline-none focus:border-[var(--t-accent)] disabled:opacity-50"
                   />
                   <div
                     id={`pack-${token.symbol}-details`}
-                    className="text-xs text-[var(--t-muted)] sm:text-right"
+                    className="min-w-0 max-w-full overflow-hidden text-xs text-[var(--t-muted)] sm:text-right"
                   >
-                    <p>
-                      Balance {formatBalance(tokenRead.balance, token.decimals)}
+                    <p className="flex min-w-0 gap-1 sm:justify-end">
+                      <span className="shrink-0">Balance</span>
+                      <span
+                        className="min-w-0 truncate tabular-nums"
+                        title={balance.exact}
+                        aria-label={balance.exact}
+                      >
+                        {balance.compact}
+                      </span>
                     </p>
-                    <p>
-                      Allowance{" "}
-                      {formatBalance(tokenRead.allowance, token.decimals)}
+                    <p className="flex min-w-0 gap-1 sm:justify-end">
+                      <span className="shrink-0">Allowance</span>
+                      <span
+                        className="min-w-0 truncate tabular-nums"
+                        title={allowance.exact}
+                        aria-label={allowance.exact}
+                      >
+                        {allowance.compact}
+                      </span>
                     </p>
                     {tokenRead.quote !== undefined && (
                       <p className="text-[var(--t-green)]">

@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
+import { maxUint256 } from "viem";
 
 import { buildPackPlan } from "@/lib/maker/pack-composer";
 import { PackComposerView, type ChainReads } from "./pack-composer";
@@ -68,6 +69,29 @@ describe("PackComposerView", () => {
     expect(html).toContain("$300.00");
     expect(html).toContain("Inside eligibility band");
     expect(html).toContain("Approvals required: AMZN");
+  });
+
+  it("contains long token metadata and labels max allowance as unlimited", () => {
+    const reads = {
+      ...READS,
+      tokens: {
+        AMZN: {
+          ...READS.tokens.AMZN,
+          balance: 123_456_789_012_345_678_901n,
+          allowance: maxUint256,
+        },
+      },
+    };
+    const html = renderView({ reads });
+
+    expect(html).toContain("Unlimited");
+    expect(html).toContain('title="Unlimited (max uint256)"');
+    expect(html).not.toContain(maxUint256.toString());
+    expect(html).toContain("123.456789…");
+    expect(html).toContain('title="123.456789012345678901"');
+    expect(html).toContain("overflow-hidden");
+    expect(html).toContain("sm:grid-cols-[5rem_minmax(0,1fr)_minmax(0,12rem)]");
+    expect(html).toContain("min-w-0 truncate tabular-nums");
   });
 
   it("shows confirmed mint and enrollment success", () => {
