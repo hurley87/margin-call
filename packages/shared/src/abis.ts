@@ -223,6 +223,13 @@ export const ripEngineAbi = [
   },
   {
     type: "function",
+    name: "makerOf",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
     name: "claimableFees",
     stateMutability: "view",
     inputs: [{ name: "maker", type: "address" }],

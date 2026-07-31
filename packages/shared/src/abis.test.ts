@@ -77,6 +77,7 @@ describe("Maker lifecycle ABIs", () => {
         "isResting(uint256)",
         "syncPackNav(uint256)",
         "pendingOf(uint256)",
+        "makerOf(uint256)",
         "claimableFees(address)",
         "claim(uint256[])",
       ])

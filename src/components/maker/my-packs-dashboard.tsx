@@ -4,6 +4,7 @@ import { usePaginatedQuery } from "convex/react";
 import type { Address } from "viem";
 
 import { api } from "../../../convex/_generated/api";
+import { AcquisitionFeesPanel } from "@/components/maker/acquisition-fees-panel";
 import { PackLifecycleActions } from "@/components/maker/pack-lifecycle-actions";
 import { formatWadUsd } from "@/lib/pool/nav-distribution";
 import { formatShortAddress } from "@/lib/utils";
@@ -53,6 +54,10 @@ export function MyPacksDashboard({ walletAddress }: Props) {
       >
         My Packs
       </h2>
+
+      {walletAddress && (
+        <AcquisitionFeesPanel walletAddress={walletAddress as Address} />
+      )}
 
       {!walletAddress ? (
         <p className="mt-3 text-sm text-[var(--t-muted)]">

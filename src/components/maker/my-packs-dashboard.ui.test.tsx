@@ -15,6 +15,10 @@ vi.mock("./pack-lifecycle-actions", () => ({
   ),
 }));
 
+vi.mock("./acquisition-fees-panel", () => ({
+  AcquisitionFeesPanel: () => <div>[LIVE ACQUISITION FEES]</div>,
+}));
+
 import { MyPacksDashboard } from "./my-packs-dashboard";
 
 const WALLET = "0x1234567890abcdef1234567890abcdef12345678";
@@ -102,6 +106,7 @@ describe("MyPacksDashboard", () => {
     );
 
     expect(html).toContain("My Packs");
+    expect(html).toContain("[LIVE ACQUISITION FEES]");
     expect(html).toContain("Pack #42");
     expect(html).toContain("AAPL · MSFT");
     expect(html).toContain("Indexed NAV $123.45");
