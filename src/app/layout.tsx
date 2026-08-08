@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans_Condensed } from "next/font/google";
-import { PrivyProvider } from "@/components/providers/privy-provider";
 import "./globals.css";
 
 const plexMono = IBM_Plex_Mono({
@@ -20,21 +19,16 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   ),
   title: "MARGIN CALL",
-  description:
-    "NAV-weighted Pack rips on Robinhood Chain testnet. Connect a wallet to play.",
+  description: "Margin Call is being rebuilt.",
   openGraph: {
     title: "MARGIN CALL",
-    description: "NAV-weighted Pack rips on Robinhood Chain testnet.",
-    images: [
-      { url: "/banner.png", width: 1200, height: 630, alt: "Margin Call" },
-    ],
+    description: "Margin Call is being rebuilt.",
     type: "website",
   },
   twitter: {
-    card: "summary_large_image",
+    card: "summary",
     title: "MARGIN CALL",
-    description: "NAV-weighted Pack rips on Robinhood Chain testnet.",
-    images: ["/banner.png"],
+    description: "Margin Call is being rebuilt.",
   },
 };
 
@@ -46,7 +40,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${plexMono.variable} ${plexSans.variable} antialiased`}>
-        <PrivyProvider>{children}</PrivyProvider>
+        {children}
       </body>
     </html>
   );

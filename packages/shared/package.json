@@ -6,15 +6,8 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
-    "./abis": "./src/abis.ts",
     "./address": "./src/address.ts",
-    "./chain": "./src/chain.ts",
-    "./clients": "./src/clients.ts",
-    "./deploy-blocks": "./src/deploy-blocks.ts",
-    "./nav": "./src/nav.ts",
-    "./parse-private-key": "./src/parse-private-key.ts",
-    "./starter-grant": "./src/starter-grant.ts",
-    "./stock-tokens": "./src/stock-tokens.ts"
+    "./parse-private-key": "./src/parse-private-key.ts"
   },
   "dependencies": {
     "viem": "^2.55.10"
