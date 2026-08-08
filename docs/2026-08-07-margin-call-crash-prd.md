@@ -190,7 +190,7 @@ The exact reservation, queue, settlement, and reward-accounting mechanics are de
 - A safety buffer of at least 20% of vault assets remains after every accepted entry.
 - One round may reserve at most 25% of vault assets.
 - One ticket may reserve at most the lower of `100 tUSDC` or 1% of vault assets.
-- No entries are accepted while vault assets are below `1,000 tUSDC`.
+- No entries are accepted while vault assets are below `10,000 tUSDC`, the level at which the per-ticket cap admits the full `10 tUSDC × 10.00x` matrix.
 - Owner and LP withdrawals cannot consume reservations or the safety buffer.
 - Later rounds continue while an earlier round is revealing, delayed, claimable, or refundable.
 - Any wallet can advance permissionless round transitions if the primary automation stops.
@@ -210,7 +210,7 @@ Present a heightened 1980s Wall Street trading floor: green CRT numerals, amber 
 The Game Jam MVP is complete when:
 
 1. The contracts and public frontend are deployed on Base Sepolia with Circle's documented tUSDC address.
-2. The bankroll is funded for the demo and the interface clearly says all tokens have no real value.
+2. The bankroll is funded with at least `10,000 tUSDC` for the demo — enough for every advertised margin and leverage combination — and the interface clearly says all tokens have no real value.
 3. A player can approve and post `1`, `5`, or `10` tUSDC, select supported Arcade Leverage, and receive one ticket in an open round.
 4. Player margin is received directly by `BankrollVault`; `MarginCallCrash` never holds general bankroll custody.
 5. An accepted entry atomically reserves its maximum payout, and an undercollateralized or exposure-breaking entry reverts without retaining funds.

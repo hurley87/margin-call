@@ -199,7 +199,7 @@ The intuitive pre-transfer admission check is that existing free backing covers 
 
 Entry rejects when any condition fails:
 
-- Vault assets after transfer are below `1,000 tUSDC`.
+- Vault assets after transfer are below `10,000 tUSDC` (below this floor, 1% of assets would cap tickets under the full `10 tUSDC × 10.00x` matrix).
 - Total reserved liability would exceed assets net of the safety buffer.
 - The round's reserved payout would exceed 25% of vault assets.
 - The ticket reservation exceeds the lower of `100 tUSDC` or 1% of vault assets.
