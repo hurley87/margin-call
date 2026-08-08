@@ -1,8 +1,6 @@
-/**
- * Shared helpers for Foundry deploy and verify scripts (Robinhood Chain testnet).
- */
+/** Framework-neutral helpers for future Foundry deploy scripts. */
 import { execFileSync } from "node:child_process";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const ROOT = join(import.meta.dirname, "..");
@@ -10,83 +8,22 @@ export const ENV_LOCAL = join(ROOT, ".env.local");
 export const CONTRACTS_DIR = join(ROOT, "contracts");
 export const DEPLOYMENTS_DIR = join(CONTRACTS_DIR, "deployments");
 
-export const ROBINHOOD_TESTNET_CHAIN_ID = 46_630;
-export const ROBINHOOD_TESTNET_EXPLORER =
-  "https://explorer.testnet.chain.robinhood.com";
-export const ROBINHOOD_TESTNET_VERIFIER_URL =
-  "https://explorer.testnet.chain.robinhood.com/api/";
-
 const ADDRESS_RE = /^0x[a-fA-F0-9]{40}$/;
 
 export function loadEnvLocal(): Record<string, string> {
   if (!existsSync(ENV_LOCAL)) {
-    throw new Error(
-      ".env.local not found — copy .env.example and set DEPLOYER_PRIVATE_KEY / ROBINHOOD_TESTNET_RPC_URL"
-    );
+    throw new Error(".env.local not found — copy .env.example first");
   }
-  const lines = readFileSync(ENV_LOCAL, "utf8").split("\n");
+
   const env: Record<string, string> = {};
-  for (const line of lines) {
+  for (const line of readFileSync(ENV_LOCAL, "utf8").split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#")) continue;
-    const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
-    env[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1).trim();
-  }
-  for (const key of [
-    "DEPLOYER_PRIVATE_KEY",
-    "OPERATOR_PRIVATE_KEY",
-    "ROBINHOOD_TESTNET_RPC_URL",
-    "NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL",
-    "MOCKUSD_ADMIN",
-    "MOCKUSD_MINTER",
-    "PACKCUSTODY_ADMIN",
-    "PACKCUSTODY_WHITELIST_ADMIN",
-    "PACKCUSTODY_WHITELIST",
-    "ASSETREGISTRY_ADMIN",
-    "ASSETREGISTRY_INVENTORY",
-    "ASSETREGISTRY_STALE_AFTER",
-    "ASSETREGISTRY_SEED_FEEDS",
-    "RIPENGINE_ADMIN",
-    "RIPENGINE_SEED",
-    "RIPENGINE_GRANT_ROLE",
-    "GAMETOKEN_ADMIN",
-    "GAMETOKEN_TREASURY",
-    "GAMETOKEN_SUPPLY",
-    "DISTRIBUTOR_ADMIN",
-    "DISTRIBUTOR_GRANT_ROLE",
-    "DISTRIBUTOR_FUND",
-    "DISTRIBUTOR_MAKER_RATE",
-    "DISTRIBUTOR_TAKER_POT",
-    "DISTRIBUTOR_RIP_ENGINE",
-    "DISTRIBUTOR_WIRE_RIPENGINE",
-    "ETHERSCAN_API_KEY",
-  ]) {
-    const value = process.env[key];
-    if (value !== undefined && value !== "") {
-      env[key] = value;
-    }
-  }
-  // Address keys: prefer `.env.local` (updated by deploy scripts) over a stale shell export.
-  for (const key of [
-    "MOCKUSD_ADDRESS",
-    "NEXT_PUBLIC_MOCKUSD_ADDRESS",
-    "PACKCUSTODY_ADDRESS",
-    "NEXT_PUBLIC_PACKCUSTODY_ADDRESS",
-    "ASSETREGISTRY_ADDRESS",
-    "NEXT_PUBLIC_ASSETREGISTRY_ADDRESS",
-    "RIPENGINE_ADDRESS",
-    "NEXT_PUBLIC_RIPENGINE_ADDRESS",
-    "GAMETOKEN_ADDRESS",
-    "NEXT_PUBLIC_GAMETOKEN_ADDRESS",
-    "DISTRIBUTOR_ADDRESS",
-    "NEXT_PUBLIC_DISTRIBUTOR_ADDRESS",
-  ]) {
-    const fileValue = env[key];
-    const procValue = process.env[key];
-    if ((!fileValue || fileValue === "") && procValue) {
-      env[key] = procValue;
-    }
+    const separator = trimmed.indexOf("=");
+    if (separator === -1) continue;
+    env[trimmed.slice(0, separator).trim()] = trimmed
+      .slice(separator + 1)
+      .trim();
   }
   return env;
 }
@@ -119,9 +56,6 @@ type BroadcastFile = {
   }>;
 };
 
-/**
- * Read the latest forge `--broadcast` artifact for a script.
- */
 export function readLatestBroadcastCreate(opts: {
   scriptFileName: string;
   chainId: number;
@@ -142,20 +76,16 @@ export function readLatestBroadcastCreate(opts: {
   if (!create?.contractAddress) return null;
 
   const receipt = data.receipts?.find(
-    (r) =>
-      r.transactionHash &&
+    (candidate) =>
+      candidate.transactionHash &&
       create.hash &&
-      r.transactionHash.toLowerCase() === create.hash.toLowerCase()
+      candidate.transactionHash.toLowerCase() === create.hash.toLowerCase()
   );
-
-  let blockNumber: number | undefined;
-  if (receipt?.blockNumber !== undefined) {
-    const raw = receipt.blockNumber;
-    blockNumber =
-      typeof raw === "string"
-        ? Number.parseInt(raw, raw.startsWith("0x") ? 16 : 10)
-        : raw;
-  }
+  const rawBlock = receipt?.blockNumber;
+  const blockNumber =
+    typeof rawBlock === "string"
+      ? Number.parseInt(rawBlock, rawBlock.startsWith("0x") ? 16 : 10)
+      : rawBlock;
 
   return {
     contractAddress: create.contractAddress,
@@ -163,20 +93,6 @@ export function readLatestBroadcastCreate(opts: {
     blockNumber,
   };
 }
-
-/**
- * Run a Foundry deploy script and return the deployed address parsed from its
- * output. Uses execFileSync with an argv array so the private key is never
- * interpolated into a shell-parsed command string.
- */
-/**
- * Robinhood Chain charges L1 calldata as extra gas, and for a contract deployment that
- * component dominates the estimate and moves with the L1 base fee between estimation and
- * execution. Forge's default 130% headroom is not enough: PackCustody's first attempt
- * consumed its whole limit (4.1M of 4.4M gas was the L1 component) and reverted out of gas.
- * Only gas actually used is billed, so a generous ceiling costs nothing.
- */
-const GAS_ESTIMATE_MULTIPLIER = 400;
 
 export function runForgeDeploy(opts: {
   scriptTarget: string;
@@ -197,19 +113,15 @@ export function runForgeDeploy(opts: {
       opts.privateKey,
       "--broadcast",
       "--gas-estimate-multiplier",
-      String(opts.gasEstimateMultiplier ?? GAS_ESTIMATE_MULTIPLIER),
+      String(opts.gasEstimateMultiplier ?? 130),
       "-vv",
     ],
     {
       cwd: CONTRACTS_DIR,
-      env: {
-        ...process.env,
-        ...opts.env,
-      },
+      env: { ...process.env, ...opts.env },
       encoding: "utf8",
     }
   );
-  console.log(output);
 
   const match = output.match(
     new RegExp(`${opts.addressLabel} deployed at:\\s*(0x[a-fA-F0-9]{40})`)
@@ -221,15 +133,13 @@ export function runForgeDeploy(opts: {
 }
 
 export function patchEnvLocal(key: string, value: string) {
-  let content = readFileSync(ENV_LOCAL, "utf8");
+  const current = readFileSync(ENV_LOCAL, "utf8");
   const line = `${key}=${value}`;
   const pattern = new RegExp(`^${key}=.*$`, "m");
-  if (pattern.test(content)) {
-    content = content.replace(pattern, line);
-  } else {
-    content = content.trimEnd() + `\n${line}\n`;
-  }
-  writeFileSync(ENV_LOCAL, content);
+  const next = pattern.test(current)
+    ? current.replace(pattern, line)
+    : `${current.trimEnd()}\n${line}\n`;
+  writeFileSync(ENV_LOCAL, next);
 }
 
 export function castAbiEncode(signature: string, args: string[]): string {
@@ -242,40 +152,6 @@ export function castAbiEncode(signature: string, args: string[]): string {
   return encoded;
 }
 
-export function runForgeVerifyBlockscout(opts: {
-  address: string;
-  contractPath: string;
-  constructorArgsHex: string;
-  chainId?: number;
-}): string {
-  const chainId = opts.chainId ?? ROBINHOOD_TESTNET_CHAIN_ID;
-  return execFileSync(
-    "forge",
-    [
-      "verify-contract",
-      opts.address,
-      opts.contractPath,
-      "--chain-id",
-      String(chainId),
-      "--watch",
-      "--verifier",
-      "blockscout",
-      "--verifier-url",
-      ROBINHOOD_TESTNET_VERIFIER_URL,
-      "--constructor-args",
-      opts.constructorArgsHex,
-    ],
-    {
-      cwd: CONTRACTS_DIR,
-      encoding: "utf8",
-    }
-  );
-}
-
-/**
- * Merge txHash (and optional blockNumber) from the forge broadcast artifact into
- * an existing deployment JSON written by the Solidity script.
- */
 export function enrichDeploymentRecord(
   filename: string,
   fields: { txHash?: string; blockNumber?: number; address?: string }

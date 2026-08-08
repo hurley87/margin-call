@@ -8,18 +8,10 @@ const crons = cronJobs();
  * Nonces have a short TTL (default 5 min); this is a safety net for any
  * that were issued but never consumed (e.g. abandoned auth flows).
  */
-crons.hourly(
-  "purge expired siwa nonces",
-  { minuteUTC: 0 },
-  internal.siwaNonces.cleanup,
-  {}
-);
-
-/** Index RipEngine / PackCustody pool state every minute. */
 crons.interval(
-  "sync pool from chain",
-  { minutes: 1 },
-  internal.poolIndexerActions.syncPoolFromChain,
+  "purge expired siwa nonces",
+  { hours: 1 },
+  internal.siwaNonces.cleanup,
   {}
 );
 

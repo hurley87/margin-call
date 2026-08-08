@@ -1,29 +1,18 @@
-"use client";
-
-import { usePrivy } from "@privy-io/react-auth";
-
-import { LandingScreen } from "@/components/landing/landing-screen";
-import { ConnectedShell } from "@/components/shell/connected-shell";
-import { getEvmWalletAddress } from "@/lib/privy/wallet";
-
 export default function Home() {
-  const { ready, authenticated, login, logout, user } = usePrivy();
-
-  if (!ready) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] font-mono">
-        <p className="text-[var(--t-muted)]">
-          INITIALIZING...<span className="cursor-blink">█</span>
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] px-6 font-mono text-[var(--t-text)]">
+      <div className="max-w-xl text-center">
+        <p className="text-xs font-bold uppercase tracking-[0.28em] text-[var(--t-green)]">
+          Margin Call
+        </p>
+        <h1 className="mt-4 font-[family-name:var(--font-plex-sans)] text-5xl font-black uppercase tracking-tight text-[var(--t-accent)] sm:text-7xl">
+          Rebuilding
+        </h1>
+        <p className="mt-5 text-sm leading-6 text-[var(--t-muted)]">
+          The retired product implementation has been removed while the next
+          version is built.
         </p>
       </div>
-    );
-  }
-
-  if (!authenticated) {
-    return <LandingScreen onLogin={login} />;
-  }
-
-  const address = getEvmWalletAddress(user);
-
-  return <ConnectedShell address={address} onLogout={logout} />;
+    </main>
+  );
 }
