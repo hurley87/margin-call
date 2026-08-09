@@ -113,7 +113,7 @@ entryWindow = 45 seconds
 expiryDelay = 15 minutes after lockAt
 ```
 
-Round timing derives from the fixed epoch grid. A round is created in one of two equivalent ways: permissionless `openRound` initializes the current or next epoch ahead of demand, or the epoch's first `enter` creates the round inline. Both paths reject duplicate initialization, pay the required Inco fee (via `inco.getFee()`, from the game contract's funded ETH balance), and store exactly one encrypted randomness handle before any ticket is accepted. An epoch nobody enters creates no round state. Timing checks use `block.timestamp`.
+Round timing derives from the fixed epoch grid. A round is created in one of two equivalent ways: permissionless `openRound` initializes the current or next epoch ahead of demand, or the epoch's first `enter` creates the round inline. Both paths reject duplicate initialization, require the caller to supply the Inco fee (`msg.value >= inco.getFee()`, forwarding exactly the fee and refunding any excess in the same transaction), and store exactly one encrypted randomness handle before any ticket is accepted. The game contract sponsors no fees and holds no ETH between transactions, so permissionless pre-opening cannot drain operator funding: whoever materializes a round — keeper, player, or stranger — pays its randomness fee. An epoch nobody enters creates no round state. Timing checks use `block.timestamp`.
 
 `requestReveal` is permissionless after `lockAt`, idempotent at the workflow level, and changes only `Open` to `RevealRequested`. It marks the stored handle for public reveal; it does not accept a replacement handle.
 
@@ -283,8 +283,8 @@ Exact Solidity signatures may vary, but equivalent behaviour and access boundari
 
 ### Game
 
-- `openRound()` — permissionlessly pre-open the current or next eligible epoch and create its Inco handle.
-- `enter` on an uninitialized epoch first creates the round identically to `openRound`, then proceeds with entry validation.
+- `openRound()` — payable; permissionlessly pre-open the current or next eligible epoch and create its Inco handle, with the caller supplying the Inco fee.
+- `enter` on an uninitialized epoch first creates the round identically to `openRound` — including supplying the Inco fee as `msg.value` — then proceeds with entry validation. Entering an existing round requires no ETH and rejects a nonzero `msg.value`.
 - `enter(roundId, margin, leverageBps)` — validate entry and atomically coordinate direct-to-vault margin plus reservation.
 - `requestReveal(roundId)` — permissionlessly begin reveal after lock and strictly before expiry.
 - `finalizeRound(roundId, plaintext, signatures)` — verify the attestation and finalize the exact stored handle, strictly before expiry.
@@ -330,7 +330,7 @@ No event exposes private plaintext before finalization.
 
 Contracts do not wake on timers, and no keeper is required for the game to be playable or to settle: rounds are created on demand and every transition is permissionless. An optional keeper — for example a Convex scheduled action holding a funded key — accelerates the experience:
 
-1. Pre-opens upcoming rounds during active sessions.
+1. Pre-opens upcoming rounds during active sessions, funding each round's Inco fee from its own wallet as an operator cost.
 2. Requests reveal after lock for rounds with tickets.
 3. Fetches the covalidator's attested reveal.
 4. Submits finalization.
@@ -338,7 +338,7 @@ Contracts do not wake on timers, and no keeper is required for the game to be pl
 
 Expiring an eligible exposed round is the transition that clears that round's share-operation freeze, so any deployment that runs a keeper must treat eligible expiries as its highest-priority work and submit them promptly; without a keeper, the same call remains permissionless for anyone, including a frozen LP. The keeper skips epochs with no tickets and no-ops when there is no work, so an idle deployment emits no transactions. Every keeper transition is permissionless and idempotent or safely retryable. The keeper chooses no outcome, receives no early decryption access, and cannot replace a handle. It stores credentials server-side, waits for successful receipts, and resumes from onchain state after restart.
 
-If the keeper fails, players or another caller can perform the same transitions. Later epochs continue independently. Monitoring alerts on delayed reveal, failed attestation, expiry eligibility, a share-operation freeze outliving its blocking round's expiry, low free liquidity, vault assets approaching the `10,000 tUSD` entry floor (alert at `12,500`), and a low game-contract ETH balance for Inco fees; alerts do not become settlement authority.
+If the keeper fails, players or another caller can perform the same transitions. Later epochs continue independently. Monitoring alerts on delayed reveal, failed attestation, expiry eligibility, a share-operation freeze outliving its blocking round's expiry, low free liquidity, vault assets approaching the `10,000 tUSD` entry floor (alert at `12,500`), and a low keeper-wallet ETH balance for gas and Inco fees; alerts do not become settlement authority.
 
 ## 12. Client, indexing, and transaction state
 
@@ -353,6 +353,7 @@ If the keeper fails, players or another caller can perform the same transitions.
 - An indexer may serve history but must preserve delayed and expired states and link back to raw events and transactions. Event fan-out for the live ticket tape and replay trigger may push `TicketEntered` and `RoundFinalized` into Convex for reactive subscriptions; contract reads remain authoritative.
 - The interface never silently changes the signed round ID after a missed lock.
 - Approval completes before the timed entry decision and shows spender, cap, and contract address.
+- If entry would create the round, the interface shows the required Inco fee alongside gas before signing; entry into a pre-opened round sends no ETH.
 - Reduced-motion, colour-independent status, and sound-independent text are required.
 
 ## 13. Security and test plan
@@ -371,6 +372,7 @@ If the keeper fails, players or another caller can perform the same transitions.
 ### Deterministic contract tests
 
 - Round epoch, lazy first-entry creation, pre-open equivalence, duplicate-initialization rejection, lock, reveal, finalization, delay, expiry from both `Open` and `RevealRequested`, and overlapping-round state machines
+- Round-creation fee funding: `openRound` and round-creating `enter` revert when `msg.value` is below `inco.getFee()`, forward exactly the fee, and refund any excess atomically; `enter` on an existing round rejects nonzero `msg.value`; and the game contract's ETH balance is zero after every transaction
 - Inco handle binding and invalid/replayed attestation rejection
 - Crash formula, cap, comparison equality, payout rounding, and sampled distribution
 - Direct-to-vault player margin and full atomic rollback on failed admission
