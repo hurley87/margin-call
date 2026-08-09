@@ -6,6 +6,8 @@
 
 **Audience:** Summer Game Jam judges and public testnet players
 
+Terminology follows the canonical glossary in [CONTEXT.md](../CONTEXT.md).
+
 Implementation details are defined in the [technical design](./2026-08-08-margin-call-crash-technical-design.md). Deferred product and token decisions are tracked in the [roadmap](./2026-08-08-margin-call-crash-roadmap.md).
 
 ## 1. Product summary

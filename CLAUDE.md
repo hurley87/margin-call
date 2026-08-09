@@ -4,6 +4,7 @@
 
 Margin Call is being rebuilt as a shared-round Crash game for Base Sepolia. The retired Pack Rip implementation has been removed. Product decisions live in:
 
+- `CONTEXT.md` — canonical glossary for product terms across docs, contracts, and UI copy
 - `docs/2026-08-07-margin-call-crash-prd.md`
 - `docs/2026-08-08-margin-call-crash-technical-design.md`
 - `docs/2026-08-08-margin-call-crash-roadmap.md`

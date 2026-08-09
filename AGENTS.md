@@ -4,6 +4,7 @@
 
 Margin Call is a Next.js 16 application being rebuilt around the Base Sepolia Crash Game Jam MVP. The prior Pack Rip application, backend flows, and contracts are retired. Use these documents as the source of truth:
 
+- `CONTEXT.md` — canonical glossary for product terms across docs, contracts, and UI copy
 - `docs/2026-08-07-margin-call-crash-prd.md`
 - `docs/2026-08-08-margin-call-crash-technical-design.md`
 - `docs/2026-08-08-margin-call-crash-roadmap.md`

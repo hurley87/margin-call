@@ -2,7 +2,7 @@
 
 **Created:** August 8, 2026 · **Updated:** August 9, 2026 · **Status:** Implementation specification · **Network:** Base Sepolia (`84532`)
 
-This document defines how to implement the product guarantees in the [Crash MVP PRD](./2026-08-07-margin-call-crash-prd.md). Deferred modes and post-MVP token work belong in the [roadmap](./2026-08-08-margin-call-crash-roadmap.md), not in the MVP contracts unless explicitly promoted through a later design review.
+This document defines how to implement the product guarantees in the [Crash MVP PRD](./2026-08-07-margin-call-crash-prd.md). Deferred modes and post-MVP token work belong in the [roadmap](./2026-08-08-margin-call-crash-roadmap.md), not in the MVP contracts unless explicitly promoted through a later design review. Terminology follows the canonical glossary in [CONTEXT.md](../CONTEXT.md).
 
 ## 1. Design invariants
 
@@ -113,7 +113,7 @@ entryWindow = 45 seconds
 expiryDelay = 15 minutes after lockAt
 ```
 
-Round timing derives from the fixed epoch grid. A round is created in one of two equivalent ways: permissionless `openRound` initializes the current or next epoch ahead of demand, or the epoch's first `enter` creates the round inline. Both paths reject duplicate initialization, require the caller to supply the Inco fee (`msg.value >= inco.getFee()`, forwarding exactly the fee and refunding any excess in the same transaction), and store exactly one encrypted randomness handle before any ticket is accepted. The game contract sponsors no fees and holds no ETH between transactions, so permissionless pre-opening cannot drain operator funding: whoever materializes a round — keeper, player, or stranger — pays its randomness fee. An epoch nobody enters creates no round state. Timing checks use `block.timestamp`.
+Round timing derives from the fixed epoch grid. A round is created in one of two equivalent ways: permissionless `openRound(roundId)` initializes an explicitly named epoch — validated to be the current or next epoch on the grid, anything else reverts — or the epoch's first `enter` creates the round inline. Both paths reject duplicate initialization, require the caller to supply the Inco fee (`msg.value >= inco.getFee()`, forwarding exactly the fee and refunding any excess in the same transaction), and store exactly one encrypted randomness handle before any ticket is accepted. The game contract sponsors no fees and holds no ETH between transactions, so permissionless pre-opening cannot drain operator funding: whoever materializes a round — keeper, player, or stranger — pays its randomness fee. An epoch nobody enters creates no round state. Timing checks use `block.timestamp`.
 
 `requestReveal` is permissionless after `lockAt`, idempotent at the workflow level, and changes only `Open` to `RevealRequested`. It marks the stored handle for public reveal; it does not accept a replacement handle.
 
@@ -169,7 +169,7 @@ Any failure reverts the whole transaction, including the tUSD transfer and reser
 maximumPayout = floor(margin × leverageBps / 10000)
 additionalBackingRequired = maximumPayout − margin
 
-assetsAfterTransfer = live vault tUSD balance
+assetsAfterTransfer = live vault tUSD balance (grossAssets)
 reservedAfterEntry = reservedLiabilities + maximumPayout
 safetyBufferAfterEntry = ceil(assetsAfterTransfer × 20%)
 freeLiquidityAfterEntry = assetsAfterTransfer
@@ -225,9 +225,9 @@ No generic administrative release is available for live tickets. Recovery calls 
 
 ### ERC-4626 accounting
 
-LP deposits use standard proportional ERC-4626 conversion between outstanding shares and `totalAssets − pendingObligations − unrecognizedMargin`, so share value participates in game results exactly when they are verified.
+The vault's live tUSD balance is exposed as `grossAssets`. The ERC-4626 `totalAssets()` function returns net assets — `grossAssets − pendingObligations − unrecognizedMargin` — so every standard `convertTo*` and `preview*` function prices on the net base with no nonstandard overrides, and share value participates in game results exactly when they are verified. Wherever this document reasons about capacity or balances it says `grossAssets`; wherever it reasons about share pricing it means the net `totalAssets()`.
 
-Reserved payout capacity constrains liquidity but does not reduce share pricing while a round's outcome is unknown. Margin recognition is deferred: entry adds each ticket's margin to both `totalAssets` (the tokens arrive) and `unrecognizedMargin` (they are not yet earned), so accepting entries leaves share pricing exactly unchanged. Once an outcome is verified, the vault marks to market immediately:
+Reserved payout capacity constrains liquidity but does not reduce share pricing while a round's outcome is unknown. Margin recognition is deferred: entry adds each ticket's margin to both `grossAssets` (the tokens arrive) and `unrecognizedMargin` (they are not yet earned), so accepting entries leaves share pricing exactly unchanged. Once an outcome is verified, the vault marks to market immediately:
 
 - `finalizeRound` removes the round's `totalMargin` from `unrecognizedMargin` and sums the per-tier reserved payouts at or below the crash point — O(tiers) — into `pendingObligations`. Share value moves by exactly the round's realized result, `totalMargin − winningLiability`: it rises the moment a net-losing round finalizes and falls the moment a net-winning round finalizes, before any claim is pulled.
 - Expiry moves the round's `totalMargin` from `unrecognizedMargin` to `pendingObligations`, leaving share pricing unchanged: the margins were never recognized and are now owed back as refunds.
@@ -251,7 +251,8 @@ The freeze fails closed: share operations stay blocked until every blocking roun
 Views expose at least:
 
 ```text
-totalAssets
+grossAssets
+totalAssets (net, ERC-4626)
 totalSupply
 assetsPerShare
 reservedLiabilities
@@ -284,7 +285,7 @@ Exact Solidity signatures may vary, but equivalent behaviour and access boundari
 
 ### Game
 
-- `openRound()` — payable; permissionlessly pre-open the current or next eligible epoch and create its Inco handle, with the caller supplying the Inco fee.
+- `openRound(roundId)` — payable; permissionlessly pre-open the explicitly named epoch, which must be the current or next epoch on the grid, creating its Inco handle with the caller supplying the fee.
 - `enter` on an uninitialized epoch first creates the round identically to `openRound` — including supplying the Inco fee as `msg.value` — then proceeds with entry validation. Entering an existing round requires no ETH and rejects a nonzero `msg.value`.
 - `enter(roundId, margin, leverageBps)` — validate entry and atomically coordinate direct-to-vault margin plus reservation.
 - `requestReveal(roundId)` — permissionlessly begin reveal after lock and strictly before expiry.
@@ -372,14 +373,14 @@ If the keeper fails, players or another caller can perform the same transitions.
 
 ### Deterministic contract tests
 
-- Round epoch, lazy first-entry creation, pre-open equivalence, duplicate-initialization rejection, lock, reveal, finalization, delay, expiry from both `Open` and `RevealRequested`, and overlapping-round state machines
+- Round epoch, lazy first-entry creation, pre-open equivalence, duplicate-initialization rejection, rejection of `openRound` targeting an epoch that is neither current nor next, lock, reveal, finalization, delay, expiry from both `Open` and `RevealRequested`, and overlapping-round state machines
 - Round-creation fee funding: `openRound` and round-creating `enter` revert when `msg.value` is below `inco.getFee()`, forward exactly the fee, and refund any excess atomically; `enter` on an existing round rejects nonzero `msg.value`; and the game contract's ETH balance is zero after every transaction
 - Inco handle binding and invalid/replayed attestation rejection
 - Crash formula, cap, comparison equality, payout rounding, and sampled distribution
 - Direct-to-vault player margin and full atomic rollback on failed admission
 - Safety buffer, minimum assets, per-round, per-ticket, and total reservation limits
 - Winning claim, loss release, expiry refund, failed-transfer retry, and replay rejection
-- ERC-4626 deposit/share conversion and share-value change after game results
+- ERC-4626 semantics: `totalAssets()` returns net assets (`grossAssets − pendingObligations − unrecognizedMargin`), preview functions match executed conversions, and deposit/share conversion reflects share-value change after game results
 - Mark-to-market: entry leaves share pricing exactly unchanged and `unrecognizedMargin` equals open rounds' total margin, finalization moves share value by exactly `totalMargin − winningLiability` — down the moment a net-winning round finalizes and up the moment a net-losing round finalizes, before any claim — expiry moves the round's margin to `pendingObligations` with no price change, share pricing from reveal request or expiry eligibility through claim admits no profitable sandwich, mid-round redemption followed by post-finalization re-deposit yields no riskless profit in either outcome, and `pendingObligations` and `unrecognizedMargin` return to zero after all claims, settlements, and refunds
 - Strict expiry boundary: `requestReveal` and `finalizeRound` revert once `block.timestamp >= expiresAt`, `expireRound` reverts before it, and because every transaction in a block shares `block.timestamp`, exactly one terminal transition can succeed in any block regardless of transaction order — tested at `expiresAt − 1`, `expiresAt`, and with finalize/expire submitted in both orders in the same block
 - Reveal-window freeze: revealing an exposed round zeroes `maxDeposit`/`maxMint`/`maxWithdraw`/`maxRedeem` and reverts share operations with the freeze error, revealing or expiring a ticketless round never freezes, an exposed round `Open` past `expiresAt` blocks share operations until expired, and finalization or expiry marks `pendingObligations` and clears the freeze in the same transaction

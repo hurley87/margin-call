@@ -2,7 +2,7 @@
 
 **Created:** August 8, 2026 · **Updated:** August 9, 2026 · **Status:** Deferred product direction, not an implementation commitment
 
-The [Crash MVP PRD](./2026-08-07-margin-call-crash-prd.md) is the Game Jam scope. Its implementation is specified in the [technical design](./2026-08-08-margin-call-crash-technical-design.md). This roadmap preserves agreed future directions without inventing economics, probabilities, token utility, or launch mechanics that have not been decided.
+The [Crash MVP PRD](./2026-08-07-margin-call-crash-prd.md) is the Game Jam scope. Its implementation is specified in the [technical design](./2026-08-08-margin-call-crash-technical-design.md). This roadmap preserves agreed future directions without inventing economics, probabilities, token utility, or launch mechanics that have not been decided. Terminology follows the canonical glossary in [CONTEXT.md](../CONTEXT.md).
 
 ## 1. Promotion rule
 
