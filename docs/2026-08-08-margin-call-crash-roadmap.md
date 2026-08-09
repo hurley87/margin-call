@@ -40,6 +40,8 @@ This requires a separate design for access control, information leakage, accurac
 
 An opted-in player may eventually receive an AI-voice 1980s risk-manager call after a successfully finalized loss. A conversational appeal could be explored as a separately funded promotional experience, but it must remain independent of core entry, settlement, claims, expiry refunds, LP funds, and `$CALL` rewards.
 
+The MVP's phone-only login (PRD §6, ADR 0008) already captures the delivery channel: the number a player logs in with is — only with explicit, separately obtained opt-in consent — the number the desk-phone experience would call. Nothing in the MVP contacts a player by phone or SMS beyond the login code.
+
 Any implementation requires a separate product, legal, consent, privacy, abuse, reliability, funding, and contract review. No refund probability, provider, budget, or appeal mechanic is committed by this roadmap.
 
 ### Deeper analytics and expansion
