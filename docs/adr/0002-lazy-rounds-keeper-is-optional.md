@@ -7,3 +7,7 @@ Rounds live on a fixed 60-second epoch grid but are materialized on demand: the 
 - The confidentiality guarantee is worded "the handle is created before any ticket is accepted" rather than "before entries open"; pre-opening restores the stronger phrasing during judged sessions.
 - The first entrant of an epoch pays the round-creation gas; the interface discloses this honestly.
 - Rounds must be expirable from `Open` as well as `RevealRequested`, so no round is ever stranded by a missing reveal request.
+
+## Amended August 9, 2026 by ADR 0008 (phone-only login)
+
+Phone-only login narrows "the game stays playable if the keeper dies entirely." Embedded wallets cannot fund round creation, and the interface offers entry only into initialized rounds, so **the keeper is required for entry availability and optional for settlement**: settlement, claims, refunds, expiry, and LP operations remain fully permissionless and keeper-independent, but a playable entry window for phone-login players exists only while some ETH-holding wallet pre-opens rounds. The lazy-creation contract design is unchanged — the first-entry creation path and permissionless `openRound` still exist for ETH-holding callers — and the "first entrant pays round-creation gas" consequence no longer applies to embedded-wallet users, whose interface never offers a round-creating entry. Outage and failover behaviour is specified in technical design §11.

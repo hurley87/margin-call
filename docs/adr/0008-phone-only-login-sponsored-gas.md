@@ -10,7 +10,7 @@ Three reasons:
 
 Consequences:
 
-- A paymaster sponsors gas but cannot supply `msg.value`, so an embedded wallet cannot be a round creator (ADR 0006 unchanged). The interface offers entry only into initialized rounds; keeper pre-opening becomes UX-load-bearing (technical design §11–12) while every transition stays permissionless for ETH-holding wallets.
+- A paymaster sponsors gas but cannot supply `msg.value`, so an embedded wallet cannot be a round creator (ADR 0006 unchanged). The interface offers entry only into initialized rounds, which narrows ADR 0002's guarantee (amended there): **the keeper is required for entry availability, optional for settlement**. A funded pre-opening mechanism was considered and rejected — a game-held fee balance reintroduces the ETH-drain surface ADR 0006 removed. Outage behaviour is documented rather than papered over: a stalled pre-opener triggers the stale-pre-open alert, the interface shows an honest waiting state instead of an entry form, everything in flight settles permissionlessly, and any ETH-holding wallet restores entry availability with one `openRound` call (technical design §11).
 - Phone numbers live only with Privy — never onchain, in events, logs, analytics, or the repository. The embedded wallet address is the only onchain identity.
 - The sponsorship policy is scoped to the deployed contract addresses and monitored; a drained policy degrades to a clear user-facing error.
 - The deployment record includes the Privy app identifier and paymaster policy configuration (identifiers only, never secrets).
