@@ -394,4 +394,4 @@ If the keeper fails, players or another caller can perform the same transitions.
 
 ### Base Sepolia smoke test
 
-Record a complete 60-second round with player approval, direct vault receipt, reservation, Inco handle, lock, attestation, finalization, and claim or loss settlement. Separately record an LP deposit, a free-liquidity withdrawal, and a rejected withdrawal that exceeds free liquidity. Preserve contract addresses and transaction hashes in the deployment record.
+Starting from a cold wallet that claims from the in-app faucet, record a complete 60-second round with player approval, direct vault receipt, reservation, Inco handle, lock, attestation, finalization, and claim or loss settlement. Record a second live round deliberately left unfinalized past `expiresAt`: the expiry transition followed by the ticket owner's refund, so the smoke test exercises the expiry-refund path the PRD's acceptance criterion 22 requires. Separately record an LP deposit, a free-liquidity withdrawal, and a rejected withdrawal that exceeds free liquidity. Preserve contract addresses and transaction hashes in the deployment record.
