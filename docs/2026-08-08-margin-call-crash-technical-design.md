@@ -158,7 +158,7 @@ Tests cover `r = 0`, `r = 9999`, the cap boundary, rejection of non-tier leverag
 3. The game validates round, time, supported margin, leverage, and duplicate-entry rules.
 4. The game derives `maximumPayout` and calls a game-only vault method with the player, round, ticket, margin, and maximum payout.
 5. The vault transfers `margin` directly from the player into itself.
-6. Using the post-transfer live tUSD balance, the vault validates all capacity and exposure limits and records the ticket reservation.
+6. Using the post-transfer live tUSD balance, the vault validates all capacity and exposure limits, records the ticket reservation, and adds the margin to `unrecognizedMargin`, so an accepted entry leaves share pricing exactly unchanged.
 7. The game stores the ticket and emits entry only after the vault call succeeds.
 
 Any failure reverts the whole transaction, including the tUSD transfer and reservation. Neither the game nor an intermediate adapter retains player margin.
@@ -225,15 +225,15 @@ No generic administrative release is available for live tickets. Recovery calls 
 
 ### ERC-4626 accounting
 
-LP deposits use standard proportional ERC-4626 conversion against live vault assets and outstanding shares. Player margin and payouts change `totalAssets`, so share value participates in realized game results.
+LP deposits use standard proportional ERC-4626 conversion between outstanding shares and `totalAssets − pendingObligations − unrecognizedMargin`, so share value participates in game results exactly when they are verified.
 
-Reserved liabilities constrain liquidity but do not reduce share pricing while a round's outcome is unknown. Once an outcome is verified, the vault marks to market immediately through a single `pendingObligations` figure:
+Reserved payout capacity constrains liquidity but does not reduce share pricing while a round's outcome is unknown. Margin recognition is deferred: entry adds each ticket's margin to both `totalAssets` (the tokens arrive) and `unrecognizedMargin` (they are not yet earned), so accepting entries leaves share pricing exactly unchanged. Once an outcome is verified, the vault marks to market immediately:
 
-- `finalizeRound` sums the per-tier reserved payouts at or below the crash point — O(tiers) — and adds that winning liability to `pendingObligations`.
-- Expiry adds the round's `totalMargin` to `pendingObligations`.
+- `finalizeRound` removes the round's `totalMargin` from `unrecognizedMargin` and sums the per-tier reserved payouts at or below the crash point — O(tiers) — into `pendingObligations`. Share value moves by exactly the round's realized result, `totalMargin − winningLiability`: it rises the moment a net-losing round finalizes and falls the moment a net-winning round finalizes, before any claim is pulled.
+- Expiry moves the round's `totalMargin` from `unrecognizedMargin` to `pendingObligations`, leaving share pricing unchanged: the margins were never recognized and are now owed back as refunds.
 - Each claim or refund consumes its exact amount from `pendingObligations` as it pays.
 
-All share-price conversion uses `totalAssets − pendingObligations`, so share value reflects a verified result the instant it lands rather than when winners claim, and neither a redemption after finalization nor a deposit before loss settlement can trade against a publicly known outcome. `pendingObligations` is always a subset of `reservedLiabilities`, so free-liquidity math is unchanged and remains the stricter constraint.
+Share value therefore reflects a verified result the instant it lands rather than when winners claim, entry and expiry are pricing-neutral, and neither a redemption after finalization nor a deposit before loss settlement can trade against a publicly known outcome. Deferral also removes the one-sided option that entry-time recognition would create — with margins priced in at entry, redeeming mid-round and re-buying after finalization could never lose, because the price falls when players win and stays flat when they lose; with deferral, mid-round pricing carries no unearned margin and finalization moves it in either direction. `pendingObligations + unrecognizedMargin` never exceeds `reservedLiabilities`, so free-liquidity math is unchanged and remains the stricter constraint.
 
 ### Reveal-window freeze
 
@@ -256,6 +256,7 @@ totalSupply
 assetsPerShare
 reservedLiabilities
 pendingObligations
+unrecognizedMargin
 safetyBuffer
 freeLiquidity
 roundExposure(roundId)
@@ -379,7 +380,7 @@ If the keeper fails, players or another caller can perform the same transitions.
 - Safety buffer, minimum assets, per-round, per-ticket, and total reservation limits
 - Winning claim, loss release, expiry refund, failed-transfer retry, and replay rejection
 - ERC-4626 deposit/share conversion and share-value change after game results
-- Mark-to-market: `pendingObligations` equals the winning-tier sum at finalization and `totalMargin` at expiry, share pricing from reveal request or expiry eligibility through claim admits no profitable sandwich, and `pendingObligations` returns to zero after all claims and refunds
+- Mark-to-market: entry leaves share pricing exactly unchanged and `unrecognizedMargin` equals open rounds' total margin, finalization moves share value by exactly `totalMargin − winningLiability` — down the moment a net-winning round finalizes and up the moment a net-losing round finalizes, before any claim — expiry moves the round's margin to `pendingObligations` with no price change, share pricing from reveal request or expiry eligibility through claim admits no profitable sandwich, mid-round redemption followed by post-finalization re-deposit yields no riskless profit in either outcome, and `pendingObligations` and `unrecognizedMargin` return to zero after all claims, settlements, and refunds
 - Strict expiry boundary: `requestReveal` and `finalizeRound` revert once `block.timestamp >= expiresAt`, `expireRound` reverts before it, and because every transaction in a block shares `block.timestamp`, exactly one terminal transition can succeed in any block regardless of transaction order — tested at `expiresAt − 1`, `expiresAt`, and with finalize/expire submitted in both orders in the same block
 - Reveal-window freeze: revealing an exposed round zeroes `maxDeposit`/`maxMint`/`maxWithdraw`/`maxRedeem` and reverts share operations with the freeze error, revealing or expiring a ticketless round never freezes, an exposed round `Open` past `expiresAt` blocks share operations until expired, and finalization or expiry marks `pendingObligations` and clears the freeze in the same transaction
 - Overlapping reveals: multiple exposed rounds in `RevealRequested` keep the vault frozen until the last blocking round resolves, and share operations unfreeze the moment it does

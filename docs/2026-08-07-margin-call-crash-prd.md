@@ -205,7 +205,7 @@ The exact reservation and settlement mechanics are defined in the [technical des
 - One ticket may reserve at most the lower of `100 tUSD` or 1% of vault assets.
 - No entries are accepted while vault assets are below `10,000 tUSD`, the level at which the per-ticket cap admits the full `10 tUSD × 10.00x` matrix.
 - Owner and LP withdrawals cannot consume reservations or the safety buffer.
-- Vault share pricing reflects a verified result immediately at finalization or expiry, and LP deposits and withdrawals freeze from the moment a result becomes publicly decryptable (or a refund becomes deterministic) until it is priced in, so a publicly knowable outcome cannot be traded against remaining LPs. A sustained reveal outage can extend this freeze across overlapping rounds.
+- Vault share pricing reflects a verified result immediately at finalization or expiry, and LP deposits and withdrawals freeze from the moment a result becomes publicly decryptable (or a refund becomes deterministic) until it is priced in, so a publicly knowable outcome cannot be traded against remaining LPs. A sustained reveal outage can extend this freeze across overlapping rounds. Entry never moves share pricing; margin is recognized as a game result only at finalization.
 - Later rounds continue while an earlier round is revealing, delayed, claimable, or refundable.
 - An epoch with no entries creates no round state and requires no operator transactions.
 - Any wallet can advance permissionless round transitions if the optional keeper stops; no transition depends on the keeper.
