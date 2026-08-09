@@ -12,7 +12,7 @@ Implementation details are defined in the [technical design](./2026-08-08-margin
 
 ## 1. Product summary
 
-**Margin Call — Crash** is a 1980s Wall Street-themed crash game. A new shared round is available every minute on a fixed epoch grid; round state is created on demand by the first entry, so the game is always playable without requiring an operator heartbeat. Players post Desk Dollars (`tUSD`) as margin and choose an **Arcade Leverage** tier before the round locks. The market multiplier rises from `1.00x` to a confidential crash point. If it reaches the selected multiple first, the ticket closes automatically and pays margin multiplied by that value. If the market crashes first, the player's posted margin is liquidated.
+**Margin Call — Crash** is a 1980s Wall Street-themed crash game. A new shared round is available every minute on a fixed epoch grid, pre-opened ahead of demand by a keeper. Settlement never depends on any operator — every transition is permissionless — but entry availability for phone-login players does depend on rounds being pre-opened, since their embedded wallets cannot fund round creation; any ETH-holding wallet can open rounds permissionlessly if the keeper stops. Players post Desk Dollars (`tUSD`) as margin and choose an **Arcade Leverage** tier before the round locks. The market multiplier rises from `1.00x` to a confidential crash point. If it reaches the selected multiple first, the ticket closes automatically and pays margin multiplied by that value. If the market crashes first, the player's posted margin is liquidated.
 
 The crash point is generated onchain as encrypted state with Inco Lightning before entry closes. Players, the operator, and chain observers cannot inspect it while entries are open. After lock, an Inco covalidator attestation reveals the result for public verification and permissionless settlement.
 
@@ -76,17 +76,17 @@ Those deferred ideas are recorded without becoming MVP commitments in the [roadm
 
 ## 5. Target users
 
-The primary user is a crypto-aware casual player who wants a short game, may arrive mid-round, is comfortable with a testnet wallet, and wants proof that the operator could not inspect or change the result after seeing entries. No knowledge of Inco or crash-game mathematics is required.
+The primary user is a casual player who wants a short game, may arrive mid-round, logs in with only a phone number, and wants proof that the operator could not inspect or change the result after seeing entries. No wallet software, seed phrase, test ETH, or knowledge of Inco or crash-game mathematics is required.
 
-The secondary user is a testnet liquidity provider who wants to fund game capacity, observe vault performance, and withdraw when capital is not reserved for player liabilities.
+The secondary user is a testnet liquidity provider who wants to fund game capacity, observe vault performance, and withdraw when capital is not reserved for player liabilities. LPs use the same phone login and embedded wallet as players.
 
 ## 6. Player experience
 
 ### Core loop
 
-1. Connect a wallet on Base Sepolia.
-2. Obtain test ETH if needed and claim `tUSD` from the in-app faucet.
-3. Approve the configured vault spender — by default a bounded `1,000 tUSD` allowance that covers many entries, or an exact per-entry amount for the cautious. The spender, cap, and contract address are always displayed, and an unlimited allowance is never requested.
+1. Log in with a phone number and SMS code. An embedded smart wallet on Base Sepolia is created automatically — no wallet app, browser extension, seed phrase, or test ETH.
+2. Claim `tUSD` from the in-app faucet. Gas is sponsored for every action in the app; the player never acquires ETH.
+3. Approve the configured vault spender — by default a bounded `1,000 tUSD` allowance that covers many entries, or an exact per-entry amount for the cautious — batched with entry into a single sponsored confirmation. The spender, cap, and contract address are always displayed, and an unlimited allowance is never requested.
 4. Choose `1`, `5`, or `10` tUSD of margin.
 5. Choose one of the six Arcade Leverage tiers.
 6. Confirm entry before lock. The margin is transferred directly into the vault and the ticket's maximum payout is reserved atomically.
@@ -99,7 +99,7 @@ One wallet may hold at most one ticket per round. Watching the animation never c
 
 ### Round cadence
 
-The Game Jam deployment uses a deterministic 60-second epoch with a 45-second entry window. Rounds are created lazily: the first entry of an epoch creates the round and its encrypted crash point in the same transaction, before the ticket is accepted, and a keeper may pre-open rounds ahead of demand during active sessions. An epoch nobody enters creates no onchain state.
+The Game Jam deployment uses a deterministic 60-second epoch with a 45-second entry window. Rounds are created lazily: the first entry of an epoch creates the round and its encrypted crash point in the same transaction, before the ticket is accepted, and a keeper may pre-open rounds ahead of demand during active sessions. Because embedded wallets hold no ETH for the round-creation fee, the interface offers entry only into rounds that already exist; keeper pre-opening keeps that gap to seconds, and any ETH-holding wallet can still create rounds permissionlessly. An epoch nobody enters creates no onchain state.
 
 | Phase      | Nominal timing     | Behaviour                                                                          |
 | ---------- | ------------------ | ---------------------------------------------------------------------------------- |
@@ -210,12 +210,14 @@ The exact reservation and settlement mechanics are defined in the [technical des
 - Vault share pricing reflects a verified result immediately at finalization or expiry, and LP deposits and withdrawals freeze from the moment a result becomes publicly decryptable (or a refund becomes deterministic) until it is priced in, so a publicly knowable outcome cannot be traded against remaining LPs. A sustained reveal outage can extend this freeze across overlapping rounds. Entry never moves share pricing; margin is recognized as a game result only at finalization.
 - Later rounds continue while an earlier round is revealing, delayed, claimable, or refundable.
 - An epoch with no entries creates no round state and requires no operator transactions.
-- Any wallet can advance permissionless round transitions if the optional keeper stops; no transition depends on the keeper.
+- Any wallet can advance permissionless round transitions if the keeper stops; no settlement, claim, refund, or LP operation depends on the keeper.
+- The keeper is required for entry availability under phone-only login, and optional for everything else: if pre-opening stalls, the interface shows an honest waiting state instead of an entry form, existing tickets settle normally, and any ETH-holding wallet can restore entry availability by opening the current round.
 - A round that cannot finalize by 15 minutes after lock expires irreversibly and becomes refundable.
 - Claims and refunds are pull-based, retryable, non-replayable, and marked complete only with a successful atomic token transfer.
 - Administrative actions are public and cannot change a round's encrypted or finalized result.
 - Token movement uses safe transfers, checks-effects-interactions, and reentrancy protection.
 - Secrets and administrative credentials never enter the browser bundle or repository.
+- Phone numbers are held only by the login provider and never appear onchain, in events, in logs, in analytics, or in the repository; the embedded wallet address is the only onchain identity.
 
 ## 10. Creative brief
 
@@ -227,7 +229,7 @@ The Game Jam MVP is complete when:
 
 1. The contracts, the `tUSD` token and faucet, and the public frontend are deployed on Base Sepolia at published addresses.
 2. The bankroll is funded with at least `25,000 tUSD` — 2.5× the `10,000 tUSD` entry floor, so demo variance cannot freeze entries — and the interface clearly says all tokens have no real value.
-3. A cold wallet can claim `tUSD` from the rate-limited in-app faucet, approve, post `1`, `5`, or `10` tUSD, select an Arcade Leverage tier, and receive one ticket in an open round.
+3. A fresh phone number can log in, receive an embedded wallet, claim `tUSD` from the rate-limited in-app faucet, approve, post `1`, `5`, or `10` tUSD, select an Arcade Leverage tier, and receive one ticket in an open round — without installing a wallet or holding ETH.
 4. Player margin is received directly by `BankrollVault`; `MarginCallCrash` never holds general bankroll custody.
 5. An accepted entry atomically reserves its maximum payout, and an undercollateralized or exposure-breaking entry reverts without retaining funds.
 6. The encrypted crash handle is created before any ticket is accepted and cannot be publicly read while entry is open.
@@ -247,6 +249,7 @@ The Game Jam MVP is complete when:
 20. The LP Desk clearly separates tUSD performance, reservations, liquidity, and possible LP loss.
 21. All wallet actions remain pending until a successful receipt and expose a recovery path after failure.
 22. Contract unit tests and a Base Sepolia end-to-end smoke test cover entry, reveal, finalization, claim, expiry refund, LP deposit, reservation, and withdrawal.
+23. Every player and LP flow — faucet, approval, entry, claim, refund, deposit, and withdrawal — completes from a zero-ETH embedded wallet with sponsored gas.
 
 ## 12. Deployment summary
 
@@ -257,6 +260,7 @@ The release record includes:
 - `MarginCallCrash`, `BankrollVault`, and vault-share token addresses
 - Inco package and covalidator versions
 - Keeper and contract-owner addresses
+- Privy app identifier and paymaster sponsorship-policy configuration (identifiers only, never secrets)
 - Initial bankroll and LP-share mint transaction hashes
 - One verified complete-round transaction set
 - Immutable 60-second round and 45-second entry-window values
@@ -269,4 +273,6 @@ Environment-specific values are explicit. No production or mainnet address is us
 - [Inco operations](https://docs.inco.org/guide/operations) — encrypted arithmetic, comparison, and randomness
 - [Inco attestation verification](https://docs.inco.org/guide/verifying-attestations) — binding settlement to an expected handle
 - [Base network configuration](https://docs.base.org/base-chain/quickstart/connecting-to-base) — Base Sepolia information
-- [Base faucets](https://docs.base.org/base-chain/network-information/network-faucets) — test ETH
+- [Base faucets](https://docs.base.org/base-chain/network-information/network-faucets) — test ETH for the keeper and deployer (players never need it)
+- [Privy documentation](https://docs.privy.io) — SMS login and embedded smart wallets
+- [Coinbase Developer Platform paymaster](https://docs.cdp.coinbase.com/paymaster/docs/welcome) — sponsored transactions on Base

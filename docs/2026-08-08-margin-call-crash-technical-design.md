@@ -330,7 +330,7 @@ No event exposes private plaintext before finalization.
 
 ## 11. Keeper and automation
 
-Contracts do not wake on timers, and no keeper is required for the game to be playable or to settle: rounds are created on demand and every transition is permissionless. An optional keeper — for example a Convex scheduled action holding a funded key — accelerates the experience:
+Contracts do not wake on timers, and no keeper is required for settlement: every transition is permissionless and any wallet can drive it. Entry availability is narrower under phone-only login (ADR 0008): embedded wallets cannot fund round creation (§12), so a playable entry window exists only while some ETH-holding wallet — in practice the keeper — pre-opens rounds. **The keeper is required for entry availability and optional for settlement.** The keeper — for example a Convex scheduled action holding a funded key — performs:
 
 1. Pre-opens upcoming rounds during active sessions, funding each round's Inco fee from its own wallet as an operator cost.
 2. Requests reveal after lock for rounds with tickets.
@@ -338,11 +338,20 @@ Contracts do not wake on timers, and no keeper is required for the game to be pl
 4. Submits finalization.
 5. Expires overdue rounds.
 
-Expiring an eligible exposed round is the transition that clears that round's share-operation freeze, so any deployment that runs a keeper must treat eligible expiries as its highest-priority work and submit them promptly; without a keeper, the same call remains permissionless for anyone, including a frozen LP. The keeper skips epochs with no tickets and no-ops when there is no work, so an idle deployment emits no transactions. Every keeper transition is permissionless and idempotent or safely retryable. The keeper chooses no outcome, receives no early decryption access, and cannot replace a handle. It stores credentials server-side, waits for successful receipts, and resumes from onchain state after restart.
+Expiring an eligible exposed round is the transition that clears that round's share-operation freeze, so any deployment that runs a keeper must treat eligible expiries as its highest-priority work and submit them promptly; without a keeper, the same call remains permissionless for anyone, including a frozen LP. Pre-opening is also UX-load-bearing: embedded wallets cannot supply the round-creation fee (§12), so the keeper keeps the current and next epochs initialized during active sessions — every transition remains permissionless, but phone-login players can only enter rounds some ETH-holding wallet has opened. The keeper skips epochs with no tickets and no-ops when there is no work, so an idle deployment emits no transactions. Every keeper transition is permissionless and idempotent or safely retryable. The keeper chooses no outcome, receives no early decryption access, and cannot replace a handle. It stores credentials server-side, waits for successful receipts, and resumes from onchain state after restart.
 
-If the keeper fails, players or another caller can perform the same transitions. Later epochs continue independently. Monitoring alerts on delayed reveal, failed attestation, expiry eligibility, a share-operation freeze outliving its blocking round's expiry, low free liquidity, vault assets approaching the `10,000 tUSD` entry floor (alert at `12,500`), and a low keeper-wallet ETH balance for gas and Inco fees; alerts do not become settlement authority.
+Keeper outage behaviour is explicit. If pre-opening stalls while players are active, the stale-pre-open alert fires and the interface replaces the entry form with an honest waiting state — no fake countdown, no unfulfillable entry offer. Everything already in flight is unaffected: locked rounds reveal, finalize, or expire permissionlessly, claims and refunds pull normally, and LP operations follow their usual rules. Failover is any ETH-holding wallet calling `openRound` — a second keeper instance, an operator's manual transaction, or a player with gas — and the runbook documents both the manual command and the redundant-keeper option. If the keeper fails, players or another caller can perform the same settlement transitions. Later epochs continue independently. Monitoring alerts on delayed reveal, failed attestation, expiry eligibility, a share-operation freeze outliving its blocking round's expiry, low free liquidity, vault assets approaching the `10,000 tUSD` entry floor (alert at `12,500`), and a low keeper-wallet ETH balance for gas and Inco fees; alerts do not become settlement authority.
 
-## 12. Client, indexing, and transaction state
+## 12. Client, identity, indexing, and transaction state
+
+### Identity, wallets, and sponsored gas
+
+- Login is phone-number-only through Privy (SMS OTP); no other login method is enabled. A successful login provisions an embedded smart wallet on Base Sepolia. Players and LPs never install a wallet, hold a seed phrase, or acquire test ETH.
+- Every app-driven transaction — faucet claim, entry, claim, refund, LP deposit and withdrawal, and permissionless recovery transitions offered by the UI — executes as a sponsored user operation through a paymaster whose policy is scoped to the deployed contract addresses. Approval and entry batch into a single sponsored confirmation; the bounded-allowance rule is unchanged.
+- Server-side identity is the verified Privy token mapped to a Convex identity. The previously scaffolded SIWA signature/nonce flow is retired and removed. Phone numbers are held only by Privy — never onchain, in events, logs, analytics, or the repository; the embedded wallet address is the only onchain identity.
+- A paymaster sponsors gas but cannot supply `msg.value`, so an embedded wallet cannot be a round creator (ADR 0006). The interface offers entry only into rounds that already exist; keeper pre-opening (§11) keeps that gap to seconds, and any ETH-holding wallet can still create rounds permissionlessly.
+
+### Transaction and indexing rules
 
 - Contract reads and successful receipts are authoritative.
 - Submitted hashes remain pending until a successful receipt.
@@ -354,8 +363,8 @@ If the keeper fails, players or another caller can perform the same transitions.
 - The replay is a deterministic pure function of the finalized crash point and a fixed easing profile: a client arriving mid-replay seeks to the correct frame, and reduced-motion clients render the same data as a static result card.
 - An indexer may serve history but must preserve delayed and expired states and link back to raw events and transactions. Event fan-out for the live ticket tape and replay trigger may push `TicketEntered` and `RoundFinalized` into Convex for reactive subscriptions; contract reads remain authoritative.
 - The interface never silently changes the signed round ID after a missed lock.
-- Approval completes before the timed entry decision and shows spender, cap, and contract address.
-- If entry would create the round, the interface shows the required Inco fee alongside gas before signing; entry into a pre-opened round sends no ETH, and a fee-bearing entry that loses the creation race is refunded automatically with the entry still succeeding — no user action needed.
+- Approval and entry batch into a single sponsored operation that shows spender, cap, and contract address before confirmation; a standalone bounded approval remains available.
+- The interface offers entry only into initialized rounds, so player entries never carry the Inco fee. The contract's round-creating entry path remains for ETH-holding callers, and a fee-bearing entry that loses the creation race is refunded automatically with the entry still succeeding — no user action needed.
 - Reduced-motion, colour-independent status, and sound-independent text are required.
 
 ## 13. Security and test plan
@@ -369,7 +378,8 @@ If the keeper fails, players or another caller can perform the same transitions.
 - Reject duplicate rounds, tickets, settlement, claims, and refunds.
 - Keep owner controls unable to edit outcomes or consume reservations.
 - Emit every administrative change.
-- Keep keys, RPC credentials, and keeper secrets out of client code and source control.
+- Keep keys, RPC credentials, keeper secrets, the Privy app secret, and paymaster credentials out of client code and source control.
+- Scope the paymaster sponsorship policy to the deployed contract addresses and monitor its spend; a drained or misconfigured policy must degrade to a clear user-facing error, never to silent failure.
 
 ### Deterministic contract tests
 
@@ -394,4 +404,4 @@ If the keeper fails, players or another caller can perform the same transitions.
 
 ### Base Sepolia smoke test
 
-Starting from a cold wallet that claims from the in-app faucet, record a complete 60-second round with player approval, direct vault receipt, reservation, Inco handle, lock, attestation, finalization, and claim or loss settlement. Record a second live round deliberately left unfinalized past `expiresAt`: the expiry transition followed by the ticket owner's refund, so the smoke test exercises the expiry-refund path the PRD's acceptance criterion 22 requires. Separately record an LP deposit, a free-liquidity withdrawal, and a rejected withdrawal that exceeds free liquidity. Preserve contract addresses and transaction hashes in the deployment record.
+Starting from a fresh phone number that logs in through SMS, receives an embedded smart wallet, and claims from the in-app faucet — with every transaction gas-sponsored from a zero-ETH wallet — record a complete 60-second round with player approval, direct vault receipt, reservation, Inco handle, lock, attestation, finalization, and claim or loss settlement. Record a second live round deliberately left unfinalized past `expiresAt`: the expiry transition followed by the ticket owner's refund, so the smoke test exercises the expiry-refund path the PRD's acceptance criterion 22 requires. Separately record an LP deposit, a free-liquidity withdrawal, and a rejected withdrawal that exceeds free liquidity. Preserve contract addresses and transaction hashes in the deployment record.
