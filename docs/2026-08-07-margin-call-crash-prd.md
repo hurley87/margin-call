@@ -99,7 +99,7 @@ One wallet may hold at most one ticket per round. Watching the animation never c
 
 ### Round cadence
 
-The Game Jam deployment uses a deterministic 60-second epoch with a 45-second entry window. Rounds are created lazily: the first entry of an epoch creates the round and its encrypted crash point in the same transaction, before the ticket is accepted, and a keeper may pre-open rounds ahead of demand during active sessions. Because embedded wallets hold no ETH for the round-creation fee, the interface offers entry only into rounds that already exist; keeper pre-opening keeps that gap to seconds, and any ETH-holding wallet can still create rounds permissionlessly. An epoch nobody enters creates no onchain state.
+The Game Jam deployment uses a deterministic 60-second epoch with a 45-second entry window. Rounds are created lazily: the first entry of an epoch creates the round and its encrypted crash point in the same transaction, before the ticket is accepted, and a keeper may pre-open rounds ahead of demand during active sessions. Because embedded wallets hold no ETH for the round-creation fee, the interface offers entry only into rounds that already exist; keeper pre-opening keeps that gap to seconds, and any ETH-holding wallet can still create rounds permissionlessly. An untouched epoch — one nobody pre-opens or enters — creates no onchain state.
 
 | Phase      | Nominal timing     | Behaviour                                                                          |
 | ---------- | ------------------ | ---------------------------------------------------------------------------------- |
@@ -209,7 +209,7 @@ The exact reservation and settlement mechanics are defined in the [technical des
 - Owner and LP withdrawals cannot consume reservations or the safety buffer.
 - Vault share pricing reflects a verified result immediately at finalization or expiry, and LP deposits and withdrawals freeze from the moment a result becomes publicly decryptable (or a refund becomes deterministic) until it is priced in, so a publicly knowable outcome cannot be traded against remaining LPs. A sustained reveal outage can extend this freeze across overlapping rounds. Entry never moves share pricing; margin is recognized as a game result only at finalization.
 - Later rounds continue while an earlier round is revealing, delayed, claimable, or refundable.
-- An epoch with no entries creates no round state and requires no operator transactions.
+- An untouched epoch creates no round state and requires no operator transactions; a pre-opened round with no tickets carries no vault exposure and requires no maintenance.
 - Any wallet can advance permissionless round transitions if the keeper stops; no settlement, claim, refund, or LP operation depends on the keeper.
 - The keeper is required for entry availability under phone-only login, and optional for everything else: if pre-opening stalls, the interface shows an honest waiting state instead of an entry form, existing tickets settle normally, and any ETH-holding wallet can restore entry availability by opening the current round.
 - A round that cannot finalize by 15 minutes after lock expires irreversibly and becomes refundable.
@@ -217,7 +217,7 @@ The exact reservation and settlement mechanics are defined in the [technical des
 - Administrative actions are public and cannot change a round's encrypted or finalized result.
 - Token movement uses safe transfers, checks-effects-interactions, and reentrancy protection.
 - Secrets and administrative credentials never enter the browser bundle or repository.
-- Phone numbers are held only by the login provider and never appear onchain, in events, in logs, in analytics, or in the repository; the embedded wallet address is the only onchain identity.
+- The application never stores, logs, or transmits phone numbers: they are held by the login provider and appear in the client only inside the provider's session object. Server-side identity uses only the login provider's user identifier and wallet address, and phone numbers never appear onchain, in app databases, logs, analytics, error reports, or the repository; the embedded wallet address is the only onchain identity.
 
 ## 10. Creative brief
 
@@ -238,7 +238,7 @@ The Game Jam MVP is complete when:
 9. Crash and payout boundary and distribution tests pass, including equality and the `10.00x` cap.
 10. A winner can claim the exact payout once; a loser receives zero and cannot replay settlement.
 11. An irreversibly expired round lets every player pull back exactly the original margin.
-12. At least three consecutive one-minute rounds can overlap in open, revealing, delayed, claimable, or refundable states without blocking one another, and an epoch with no entries creates no round state and requires no maintenance transactions.
+12. At least three consecutive one-minute rounds can overlap in open, revealing, delayed, claimable, or refundable states without blocking one another; an untouched epoch creates no round state; and a pre-opened round with no tickets carries no vault exposure and requires no maintenance transactions.
 13. A judge can enter, leave, return, verify the round, and claim without watching the animation.
 14. Global history shows at least 20 rounds; personal history makes every claim or refund visible.
 15. Contract addresses, transaction hashes, encrypted handles, attestations, and finalized results are visible from the demo.
