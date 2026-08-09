@@ -44,6 +44,10 @@ _Avoid_: finalize (for tickets)
 The vault's ticket-scoped hold guaranteeing a maximum payout, created atomically at entry and consumed or released at settlement.
 _Avoid_: lock, hold, escrow
 
+**Reveal-Window Freeze**:
+The vault-wide pause on LP deposits, mints, withdrawals, and redemptions while any exposed round's outcome is publicly knowable but not yet priced into shares — from reveal request (or expiry eligibility) until finalization or expiry marks `pendingObligations`. Applies only to share operations; entries and later rounds continue.
+_Avoid_: pause (the game never pauses), lockdown
+
 **Margin Call (`$CALL`)**:
 The deferred LP reward token, named after the game. Roadmap-only; not part of the MVP. The intended mainnet Bankr-launched token carries the same brand.
 _Avoid_: $MARGIN (retired name)

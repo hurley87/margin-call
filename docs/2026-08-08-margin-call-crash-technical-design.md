@@ -119,6 +119,8 @@ Round timing derives from the fixed epoch grid. A round is created in one of two
 
 `finalizeRound` verifies the covalidator signatures, expected chain and contract context, and exact stored handle before deriving plaintext. It stores the crash point and makes claims permissionless. Failure leaves the round retryable.
 
+The expiry boundary is strict and exclusive: `requestReveal` and `finalizeRound` require `block.timestamp < expiresAt`, and `expireRound` requires `block.timestamp >= expiresAt`, so at any instant exactly one terminal path is available and a round past `expiresAt` is deterministically a refund even before anyone marks it `Expired`.
+
 If the round remains unfinalized at `expiresAt`, a permissionless expiry transition marks it `Expired` from `Open` or `RevealRequested`. This is irreversible. Each ticket owner then pulls a refund separately; a pre-opened round with no tickets can be expired the same way purely for hygiene.
 
 ## 5. Crash and payout math
@@ -233,6 +235,19 @@ Reserved liabilities constrain liquidity but do not reduce share pricing while a
 
 All share-price conversion uses `totalAssets − pendingObligations`, so share value reflects a verified result the instant it lands rather than when winners claim, and neither a redemption after finalization nor a deposit before loss settlement can trade against a publicly known outcome. `pendingObligations` is always a subset of `reservedLiabilities`, so free-liquidity math is unchanged and remains the stricter constraint.
 
+### Reveal-window freeze
+
+Mark-to-market closes informed trading from finalization onward, but the outcome becomes publicly knowable earlier: Inco makes the plaintext obtainable offchain the moment `requestReveal` marks the handle, and the strict expiry boundary makes an unresolved exposed round past `expiresAt` a deterministic refund obligation before `expireRound` lands. Share-changing vault operations are frozen across both gaps:
+
+> Share-changing vault operations revert while any round with nonzero player exposure is `RevealRequested`, and while any unresolved exposed round is expiry-eligible but not yet marked `Expired`. Finalization or expiry updates `pendingObligations` before atomically clearing the freeze. This prevents deposits, mints, withdrawals, or redemptions from trading against a publicly available result or deterministic refund obligation.
+
+- Only rounds with live player exposure freeze. Revealing or expiring a ticketless pre-opened round changes round state but never touches the freeze, so nobody can lock the vault by revealing empty rounds.
+- The `RevealRequested` leg is an O(1) counter: incremented once when an exposed round enters `RevealRequested`, decremented only in the transaction that marks that round's obligations into `pendingObligations` (finalization or expiry).
+- The expiry-eligibility leg covers an exposed round still `Open` past `expiresAt`, which the counter alone cannot see. Because rounds sit on the fixed epoch grid, `expiresAt` is monotone in round id, so tracking the oldest unresolved exposed round gives an O(1) eligibility check; equivalently, a share operation may atomically expire eligible rounds before pricing.
+- While frozen, `maxDeposit`, `maxMint`, `maxWithdraw`, and `maxRedeem` return zero, and `deposit`, `mint`, `withdraw`, and `redeem` revert with a clear custom error naming the freeze.
+
+The freeze fails closed: share operations stay blocked until every blocking round resolves. The 15-minute expiry bounds each round's freeze contribution, not the vault's total frozen time — entries continue during a covalidator outage (handle creation does not depend on covalidators), so overlapping delayed rounds can keep LP share operations frozen indefinitely while the outage lasts, even though every individual round resolves to refunds within 15 minutes. The MVP deliberately ships no onchain new-exposure pause. The operational mitigations are prompt expiry of eligible rounds (a keeper duty, and permissionless for anyone including LPs) and interface visibility into the blocking rounds; if a hard global bound were ever required post-MVP, it would take the form of pausing new exposure, never unfreezing share pricing against a known result.
+
 Views expose at least:
 
 ```text
@@ -247,6 +262,9 @@ roundExposure(roundId)
 realizedGamePnl
 maxWithdraw(owner)
 maxRedeem(owner)
+shareOperationsFrozen
+frozenRoundCount
+oldestBlockingRound
 ```
 
 Free liquidity is never negative and is calculated from live assets less reservations and the required buffer. Client estimates are advisory; the transaction-time vault check is authoritative.
@@ -268,8 +286,8 @@ Exact Solidity signatures may vary, but equivalent behaviour and access boundari
 - `openRound()` — permissionlessly pre-open the current or next eligible epoch and create its Inco handle.
 - `enter` on an uninitialized epoch first creates the round identically to `openRound`, then proceeds with entry validation.
 - `enter(roundId, margin, leverageBps)` — validate entry and atomically coordinate direct-to-vault margin plus reservation.
-- `requestReveal(roundId)` — permissionlessly begin reveal after lock.
-- `finalizeRound(roundId, plaintext, signatures)` — verify the attestation and finalize the exact stored handle.
+- `requestReveal(roundId)` — permissionlessly begin reveal after lock and strictly before expiry.
+- `finalizeRound(roundId, plaintext, signatures)` — verify the attestation and finalize the exact stored handle, strictly before expiry.
 - `claim(roundId)` — atomically pay a win or settle a loss.
 - `settleLoss(roundId, player)` — optional permissionless explicit loss settlement.
 - `expireRound(roundId)` — permissionlessly mark an eligible unresolved round expired.
@@ -285,7 +303,7 @@ Exact Solidity signatures may vary, but equivalent behaviour and access boundari
 
 ### Vault LP interface
 
-- Standard `deposit`, `mint`, `withdraw`, and `redeem` with free-liquidity restrictions.
+- Standard `deposit`, `mint`, `withdraw`, and `redeem` with free-liquidity restrictions and the reveal-window freeze.
 - Reads for vault assets, shares, share price, reservations, buffer, free liquidity, exposure, and immediate withdrawal limits.
 
 ## 10. Required events
@@ -318,9 +336,9 @@ Contracts do not wake on timers, and no keeper is required for the game to be pl
 4. Submits finalization.
 5. Expires overdue rounds.
 
-It skips epochs with no tickets and no-ops when there is no work, so an idle deployment emits no transactions. Every keeper transition is permissionless and idempotent or safely retryable. The keeper chooses no outcome, receives no early decryption access, and cannot replace a handle. It stores credentials server-side, waits for successful receipts, and resumes from onchain state after restart.
+Expiring an eligible exposed round is the transition that clears that round's share-operation freeze, so any deployment that runs a keeper must treat eligible expiries as its highest-priority work and submit them promptly; without a keeper, the same call remains permissionless for anyone, including a frozen LP. The keeper skips epochs with no tickets and no-ops when there is no work, so an idle deployment emits no transactions. Every keeper transition is permissionless and idempotent or safely retryable. The keeper chooses no outcome, receives no early decryption access, and cannot replace a handle. It stores credentials server-side, waits for successful receipts, and resumes from onchain state after restart.
 
-If the keeper fails, players or another caller can perform the same transitions. Later epochs continue independently. Monitoring alerts on delayed reveal, failed attestation, expiry eligibility, low free liquidity, vault assets approaching the `10,000 tUSD` entry floor (alert at `12,500`), and a low game-contract ETH balance for Inco fees; alerts do not become settlement authority.
+If the keeper fails, players or another caller can perform the same transitions. Later epochs continue independently. Monitoring alerts on delayed reveal, failed attestation, expiry eligibility, a share-operation freeze outliving its blocking round's expiry, low free liquidity, vault assets approaching the `10,000 tUSD` entry floor (alert at `12,500`), and a low game-contract ETH balance for Inco fees; alerts do not become settlement authority.
 
 ## 12. Client, indexing, and transaction state
 
@@ -330,6 +348,7 @@ If the keeper fails, players or another caller can perform the same transitions.
 - Countdown and entry eligibility use contract timestamps corrected against chain time.
 - The interface stops offering entry approximately five seconds before `lockAt`; a late transaction that reverts at lock is a normal, message-handled outcome.
 - If a returning player's round is locked but not finalized, the interface offers a verify-and-settle path that drives reveal, finalization, and claim from the player's own wallet.
+- While share operations are frozen, the LP interface states why, lists the blocking rounds with the earliest expiry at which the freeze can begin clearing (derived from `frozenRoundCount`, `oldestBlockingRound`, and the fixed epoch grid), and offers the permissionless finalize and expire transitions directly.
 - The replay is a deterministic pure function of the finalized crash point and a fixed easing profile: a client arriving mid-replay seeks to the correct frame, and reduced-motion clients render the same data as a static result card.
 - An indexer may serve history but must preserve delayed and expired states and link back to raw events and transactions. Event fan-out for the live ticket tape and replay trigger may push `TicketEntered` and `RoundFinalized` into Convex for reactive subscriptions; contract reads remain authoritative.
 - The interface never silently changes the signed round ID after a missed lock.
@@ -358,7 +377,12 @@ If the keeper fails, players or another caller can perform the same transitions.
 - Safety buffer, minimum assets, per-round, per-ticket, and total reservation limits
 - Winning claim, loss release, expiry refund, failed-transfer retry, and replay rejection
 - ERC-4626 deposit/share conversion and share-value change after game results
-- Mark-to-market: `pendingObligations` equals the winning-tier sum at finalization and `totalMargin` at expiry, share pricing between finalization and claim admits no profitable sandwich, and `pendingObligations` returns to zero after all claims and refunds
+- Mark-to-market: `pendingObligations` equals the winning-tier sum at finalization and `totalMargin` at expiry, share pricing from reveal request or expiry eligibility through claim admits no profitable sandwich, and `pendingObligations` returns to zero after all claims and refunds
+- Strict expiry boundary: `requestReveal` and `finalizeRound` revert once `block.timestamp >= expiresAt`, and `expireRound` reverts before it
+- Reveal-window freeze: revealing an exposed round zeroes `maxDeposit`/`maxMint`/`maxWithdraw`/`maxRedeem` and reverts share operations with the freeze error, revealing or expiring a ticketless round never freezes, an exposed round `Open` past `expiresAt` blocks share operations until expired, and finalization or expiry marks `pendingObligations` and clears the freeze in the same transaction
+- Overlapping reveals: multiple exposed rounds in `RevealRequested` keep the vault frozen until the last blocking round resolves, and share operations unfreeze the moment it does
+- Expiry cleanup: expiring a blocking round marks `totalMargin` into `pendingObligations`, decrements the freeze, and re-enables share operations in one transaction when it was the last blocker, including the `Open`-past-`expiresAt` case where no reveal was requested
+- Freeze-counter recovery: every interleaving of reveals, finalizations, and expiries across overlapping rounds returns `frozenRoundCount` exactly to zero, `oldestBlockingRound` advances past resolved and unexposed rounds, and no sequence leaves a nonzero counter with no blocking round or a zero counter while one remains
 - Immediate withdrawal limits and inability to consume reserved or buffered assets
 - Rejection of withdrawals exceeding free liquidity, with no partial execution
 - Faucet claim amount, per-wallet cooldown, and absence of other unrestricted mint paths
