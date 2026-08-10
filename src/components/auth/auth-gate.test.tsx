@@ -79,7 +79,7 @@ describe("AuthGate", () => {
     expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
   });
 
-  it("keeps an external-only wallet in setup and never displays it", () => {
+  it("keeps an external-only wallet in setup, never displays it, and lets the user leave", () => {
     sdk.privy = {
       ready: true,
       authenticated: true,
@@ -98,7 +98,31 @@ describe("AuthGate", () => {
 
     expect(screen.getByText("Setting up your wallet…")).not.toBeNull();
     expect(screen.queryByText("Wallet: 0xexternal")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Log out" }));
+    expect(sdk.logout).toHaveBeenCalledTimes(1);
+  });
+
+  it("renders gated children only once the user is signed in", () => {
+    sdk.privy = { ready: true, authenticated: false, user: null };
+    sdk.wallets = { ready: false };
+    const { rerender } = render(
+      <AuthGate>
+        <p>Gated content</p>
+      </AuthGate>
+    );
+
+    expect(screen.queryByText("Gated content")).toBeNull();
+
+    sdk.privy = { ready: true, authenticated: true, user: embeddedUser() };
+    sdk.wallets = { ready: true };
+    rerender(
+      <AuthGate>
+        <p>Gated content</p>
+      </AuthGate>
+    );
+
+    expect(screen.getByText("Gated content")).not.toBeNull();
   });
 
   it("returns a cancelled login to a retryable phone sign-in action", () => {

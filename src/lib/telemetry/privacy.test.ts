@@ -1,7 +1,10 @@
 import * as Sentry from "@sentry/nextjs";
 import { describe, expect, it } from "vitest";
 
-import { sentryPrivacyOptions } from "@/lib/telemetry/privacy";
+import {
+  sanitizeTelemetryPayload,
+  sentryPrivacyOptions,
+} from "@/lib/telemetry/privacy";
 
 const SYNTHETIC_PHONE = "+1 (555) 010-0200";
 const SYNTHETIC_TOKEN = "synthetic-token-do-not-use";
@@ -16,6 +19,73 @@ const PUBLIC_PRIVY_APP_ID = "cm_public_app_id";
 const WALLET_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
 const TRANSACTION_HASH =
   "0xabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcdefabcd";
+
+describe("sanitizeTelemetryPayload", () => {
+  it("redacts phone numbers stored as digits-only strings", () => {
+    expect(
+      sanitizeTelemetryPayload({
+        to: "15555550123",
+        contact: "5550100200",
+      })
+    ).toEqual({ to: "[REDACTED]", contact: "[REDACTED]" });
+  });
+
+  it("keeps whole-string numeric values that are not phone-shaped", () => {
+    expect(
+      sanitizeTelemetryPayload({
+        blockTimestamp: "1786367706",
+        chainId: "84532",
+        weiValue: "1786367706463",
+      })
+    ).toEqual({
+      blockTimestamp: "1786367706",
+      chainId: "84532",
+      weiValue: "1786367706463",
+    });
+  });
+
+  it("redacts sensitive keys inside JSON-serialized text", () => {
+    expect(
+      sanitizeTelemetryPayload('{"token":"synthetic.jwt.value","retryCount":3}')
+    ).toBe('{"token":[REDACTED],"retryCount":3}');
+    expect(
+      sanitizeTelemetryPayload('{"identity_token":"synthetic","safe":"kept"}')
+    ).toBe('{"identity_token":[REDACTED],"safe":"kept"}');
+  });
+
+  it("preserves Error diagnostics while redacting their messages", () => {
+    const sanitized = sanitizeTelemetryPayload({
+      error: new Error("Login failed for +1 (555) 010-0200"),
+    });
+
+    expect(sanitized.error).toMatchObject({
+      name: "Error",
+      message: "Login failed for [REDACTED]",
+    });
+    expect((sanitized.error as unknown as { stack?: string }).stack).toContain(
+      "Error"
+    );
+  });
+
+  it("preserves Date, Map, and Set values instead of flattening them", () => {
+    const timestamp = new Date("2026-08-10T00:00:00.000Z");
+    const sanitized = sanitizeTelemetryPayload({
+      when: timestamp,
+      details: new Map<string, unknown>([
+        ["authToken", "synthetic-token"],
+        ["retryCount", 3],
+      ]),
+      seenChains: new Set([84532]),
+    });
+
+    expect(sanitized.when).toEqual(timestamp);
+    expect(sanitized.details).toEqual({
+      authToken: "[REDACTED]",
+      retryCount: 3,
+    });
+    expect(sanitized.seenChains).toEqual([84532]);
+  });
+});
 
 describe("Sentry telemetry privacy boundary", () => {
   it("redacts sensitive data at the Sentry payload boundary while preserving safe diagnostics", async () => {

@@ -38,7 +38,7 @@ describe("authentication boundary", () => {
     });
   });
 
-  it("shows wallet setup feedback after authentication until the embedded wallet is ready", () => {
+  it("shows wallet setup feedback after authentication and keeps logout reachable", () => {
     expect(
       getAuthBoundaryState({
         privyReady: true,
@@ -52,6 +52,24 @@ describe("authentication boundary", () => {
     ).toEqual({
       status: "wallet-provisioning",
       message: "Setting up your wallet…",
+      action: "logout",
+    });
+  });
+
+  it("shows logout progress even while the wallet is still provisioning", () => {
+    expect(
+      getAuthBoundaryState({
+        privyReady: true,
+        authenticated: true,
+        walletsReady: false,
+        walletAddress: null,
+        loginError: false,
+        logoutPending: true,
+        logoutError: false,
+      })
+    ).toEqual({
+      status: "logout-pending",
+      message: "Signing out…",
       action: null,
     });
   });

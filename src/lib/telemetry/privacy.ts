@@ -2,11 +2,23 @@ import type { Breadcrumb, ErrorEvent, Log } from "@sentry/nextjs";
 
 const REDACTED = "[REDACTED]";
 
+const SENSITIVE_KEY_PATTERN =
+  "(?:authorization|proxy[-_]?authorization|access[-_]?token|auth[-_]?token|identity[-_]?token|id[-_]?token|refresh[-_]?token|session[-_]?token|token|(?:auth(?:entication)?|session|identity)(?:[-_][a-z0-9]+)?|phone(?:[-_]?number)?|cookie|password|secret|credential)";
+
 const BEARER_OR_BASIC_CREDENTIAL = /\b(bearer|basic)\s+[^\s,;]+/gi;
-const SENSITIVE_ASSIGNMENT =
-  /\b(?:authorization|proxy[-_]?authorization|access[-_]?token|auth[-_]?token|identity[-_]?token|id[-_]?token|refresh[-_]?token|session[-_]?token|token|(?:auth(?:entication)?|session|identity)(?:[-_][a-z0-9]+)?|phone(?:[-_]?number)?|cookie|password|secret|credential)\b\s*[:=]\s*(?:"[^"]*"|'[^']*'|[^\s,;}&]+)/gi;
-const SENSITIVE_QUERY_PARAMETER =
-  /([?&#;]\s*(?:authorization|proxy[-_]?authorization|access[-_]?token|auth[-_]?token|identity[-_]?token|id[-_]?token|refresh[-_]?token|session[-_]?token|token|(?:auth(?:entication)?|session|identity)(?:[-_][a-z0-9]+)?|phone(?:[-_]?number)?|cookie|password|secret|credential)\s*=)[^&#\s]*/gi;
+// The optional quote group lets the same rule catch JSON-serialized payloads
+// ("token":"…") in addition to bare key=value / key: value assignments.
+const SENSITIVE_ASSIGNMENT = new RegExp(
+  `(["']?)\\b${SENSITIVE_KEY_PATTERN}\\b\\1\\s*[:=]\\s*(?:"[^"]*"|'[^']*'|[^\\s,;}&]+)`,
+  "gi"
+);
+const SENSITIVE_QUERY_PARAMETER = new RegExp(
+  `([?&#;]\\s*${SENSITIVE_KEY_PATTERN}\\s*=)[^&#\\s]*`,
+  "gi"
+);
+// Any NANP-shaped digit run is redacted, even when it could be a numeric ID:
+// a phone-shaped value is indistinguishable from a phone number, and this
+// boundary prefers over-redaction to leaking PII.
 const NORTH_AMERICAN_PHONE =
   /(?<![A-Za-z0-9])(?:\+?1[\s.-]?)?(?:\(?[2-9]\d{2}\)?[\s.-]?)\d{3}[\s.-]?\d{4}(?![A-Za-z0-9])/g;
 const INTERNATIONAL_PHONE =
@@ -51,8 +63,6 @@ function isSensitiveKey(key: string) {
 }
 
 function redactSensitiveText(value: string) {
-  if (/^\d+(?:\.\d+)?$/.test(value)) return value;
-
   return value
     .replace(BEARER_OR_BASIC_CREDENTIAL, "$1 " + REDACTED)
     .replace(SENSITIVE_ASSIGNMENT, (match) => {
@@ -70,6 +80,49 @@ function sanitizeValue<T>(value: T, seen: WeakMap<object, unknown>): T {
 
   const existing = seen.get(value);
   if (existing) return existing as T;
+
+  // Error message/stack are non-enumerable and Date/Map/Set carry no
+  // enumerable entries, so the generic Object.entries walk below would
+  // flatten them all to {}.
+  if (value instanceof Date) return new Date(value.getTime()) as T;
+
+  if (value instanceof Error) {
+    const sanitized: Record<string, unknown> = {
+      name: value.name,
+      message: redactSensitiveText(value.message),
+    };
+    seen.set(value, sanitized);
+    if (typeof value.stack === "string") {
+      sanitized.stack = redactSensitiveText(value.stack);
+    }
+    for (const [key, nestedValue] of Object.entries(value)) {
+      sanitized[key] = isSensitiveKey(key)
+        ? REDACTED
+        : sanitizeValue(nestedValue, seen);
+    }
+    return sanitized as T;
+  }
+
+  if (value instanceof Map) {
+    const sanitized: Record<string, unknown> = {};
+    seen.set(value, sanitized);
+    for (const [key, nestedValue] of value.entries()) {
+      const normalizedKey = String(key);
+      sanitized[normalizedKey] = isSensitiveKey(normalizedKey)
+        ? REDACTED
+        : sanitizeValue(nestedValue, seen);
+    }
+    return sanitized as T;
+  }
+
+  if (value instanceof Set) {
+    const sanitized: unknown[] = [];
+    seen.set(value, sanitized);
+    for (const item of value.values()) {
+      sanitized.push(sanitizeValue(item, seen));
+    }
+    return sanitized as T;
+  }
 
   if (Array.isArray(value)) {
     const sanitized: unknown[] = [];

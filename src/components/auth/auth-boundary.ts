@@ -32,14 +32,6 @@ export function getAuthBoundaryState(
     };
   }
 
-  if (input.authenticated && (!input.walletsReady || !input.walletAddress)) {
-    return {
-      status: "wallet-provisioning",
-      message: "Setting up your wallet…",
-      action: null,
-    };
-  }
-
   if (input.authenticated && input.logoutPending) {
     return {
       status: "logout-pending",
@@ -52,6 +44,16 @@ export function getAuthBoundaryState(
     return {
       status: "logout-error",
       message: "We couldn't sign you out. Please try again.",
+      action: "logout",
+    };
+  }
+
+  // Provisioning can stall forever (embedded-wallet creation failed, or the
+  // account only has an external wallet), so logout must stay reachable.
+  if (input.authenticated && (!input.walletsReady || !input.walletAddress)) {
+    return {
+      status: "wallet-provisioning",
+      message: "Setting up your wallet…",
       action: "logout",
     };
   }

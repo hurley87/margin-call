@@ -17,6 +17,11 @@ export type ConvexAuthProvider = {
 /**
  * Maps Privy's client state to Convex's auth-provider contract. The callback
  * deliberately asks Privy for a token per Convex request and never retains it.
+ *
+ * Privy's getAccessToken exposes no force-refresh option: it re-mints the JWT
+ * itself whenever the cached one is expired or near expiry. A Convex
+ * forceRefreshToken request therefore receives the freshest token Privy is
+ * willing to produce, which is also the strongest guarantee available here.
  */
 export function toConvexAuthProvider(
   privy: PrivyAuthState
@@ -26,14 +31,4 @@ export function toConvexAuthProvider(
     isAuthenticated: privy.ready && privy.authenticated,
     fetchAccessToken: async () => privy.getAccessToken(),
   };
-}
-
-export function getConvexUrl(url: string | undefined): string {
-  if (!url) {
-    throw new Error(
-      "Missing NEXT_PUBLIC_CONVEX_URL. Set it to the Convex deployment URL before starting Margin Call."
-    );
-  }
-
-  return url;
 }

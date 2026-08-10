@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { getConvexUrl, toConvexAuthProvider } from "@/lib/convex/auth";
+import { toConvexAuthProvider } from "@/lib/convex/auth";
 
 describe("Privy-to-Convex auth adapter", () => {
   it("keeps Convex loading until Privy is ready", () => {
@@ -49,19 +49,5 @@ describe("Privy-to-Convex auth adapter", () => {
       auth.fetchAccessToken({ forceRefreshToken: true })
     ).resolves.toBe("second-token");
     expect(getAccessToken).toHaveBeenCalledTimes(2);
-  });
-});
-
-describe("Convex public configuration", () => {
-  it("fails at a testable boundary when the public Convex URL is absent", () => {
-    expect(() => getConvexUrl(undefined)).toThrow(
-      "Missing NEXT_PUBLIC_CONVEX_URL"
-    );
-  });
-
-  it("returns a configured Convex URL unchanged", () => {
-    expect(getConvexUrl("https://example.convex.cloud")).toBe(
-      "https://example.convex.cloud"
-    );
   });
 });
