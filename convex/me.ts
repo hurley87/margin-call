@@ -1,16 +1,24 @@
 import { query } from "./_generated/server";
 
-/** Returns the authenticated user's identity from Privy JWT, or null if unauthenticated. */
+function canonicalPrivyDid(subject: string): string {
+  if (!subject.startsWith("did:privy:") || subject === "did:privy:") {
+    throw new Error(
+      "Expected a canonical Privy DID from the verified identity"
+    );
+  }
+
+  return subject;
+}
+
+/** Returns the verified Privy DID, or null if the request is unauthenticated. */
 export const me = query({
   args: {},
   handler: async (ctx) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return null;
+
     return {
-      subject: identity.subject,
-      issuer: identity.issuer,
-      name: identity.name ?? null,
-      email: identity.email ?? null,
+      did: canonicalPrivyDid(identity.subject),
     };
   },
 });
