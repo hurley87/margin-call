@@ -1,44 +1,11 @@
-import { isAddress, type Address } from "viem";
+import { erc20Abi, isAddress, type Address } from "viem";
 import { baseSepoliaPublicClient } from "./base-sepolia";
 
 export const TUSD_DECIMALS = 6;
 
-export const deskDollarsAbi = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "decimals",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint8" }],
-  },
-  {
-    type: "function",
-    name: "allowance",
-    stateMutability: "view",
-    inputs: [
-      { name: "owner", type: "address" },
-      { name: "spender", type: "address" },
-    ],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "approve",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "spender", type: "address" },
-      { name: "value", type: "uint256" },
-    ],
-    outputs: [{ name: "", type: "bool" }],
-  },
-] as const;
+// Desk Dollars is a plain ERC-20 to its consumers; the faucet ABI below is
+// the only custom surface.
+export const deskDollarsAbi = erc20Abi;
 
 export const deskDollarsFaucetAbi = [
   {

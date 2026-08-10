@@ -1,32 +1,14 @@
-import { isAddress, type Address } from "viem";
+import { erc4626Abi, isAddress, type Address } from "viem";
 import { baseSepoliaPublicClient } from "./base-sepolia";
 import { deskDollarsAbi, getDeskDollarsTokenAddress } from "./desk-dollars";
 
+// Standard ERC-20/4626 entries come from viem; only the vault-specific
+// accounting views need hand-written fragments.
 export const bankrollVaultAbi = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
+  ...erc4626Abi,
   {
     type: "function",
     name: "grossAssets",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "totalAssets",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "totalSupply",
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
@@ -51,16 +33,6 @@ export const bankrollVaultAbi = [
     stateMutability: "view",
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "deposit",
-    stateMutability: "nonpayable",
-    inputs: [
-      { name: "assets", type: "uint256" },
-      { name: "receiver", type: "address" },
-    ],
-    outputs: [{ name: "shares", type: "uint256" }],
   },
 ] as const;
 

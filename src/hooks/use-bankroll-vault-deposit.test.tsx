@@ -55,6 +55,7 @@ vi.mock("./use-privy-sponsored-transaction", () => ({
   }),
 }));
 
+import { notifyWalletBalancesChanged } from "@/lib/wallet-balance-sync";
 import { useBankrollVaultDeposit } from "./use-bankroll-vault-deposit";
 
 describe("useBankrollVaultDeposit", () => {
@@ -160,6 +161,82 @@ describe("useBankrollVaultDeposit", () => {
     expect(
       sdk.submit.mock.calls.every(([request]) => request.to === vault)
     ).toBe(true);
+  });
+
+  it("re-checks the same deposit hash after a receipt-wait failure instead of resubmitting", async () => {
+    sdk.read.mockResolvedValue(readyValues(123n));
+    sdk.getSubmittedHash.mockReset().mockReturnValue("0xbbb");
+    sdk.wait
+      .mockReset()
+      .mockRejectedValueOnce(new Error("rpc timeout"))
+      .mockResolvedValueOnce({ status: "success" });
+    const { result } = renderHook(() => useBankrollVaultDeposit(wallet));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await act(async () => {
+      await result.current.deposit(123n);
+    });
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe(
+      "Your LP deposit was submitted, but we couldn't confirm it yet. Retry to check its status."
+    );
+    expect(result.current.canDeposit).toBe(false);
+    expect(result.current.canRetry).toBe(true);
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(sdk.submit).toHaveBeenCalledTimes(1);
+    expect(sdk.wait).toHaveBeenCalledTimes(2);
+    expect(sdk.wait).toHaveBeenNthCalledWith(2, { hash: "0xbbb" });
+    expect(result.current.status).toBe("ready");
+  });
+
+  it("accepts a different amount after a resolved deposit failure", async () => {
+    sdk.read.mockResolvedValue(readyValues(123n));
+    sdk.getSubmittedHash.mockReset().mockReturnValue("0xbbb");
+    sdk.wait
+      .mockReset()
+      .mockResolvedValueOnce({ status: "reverted" })
+      .mockResolvedValue({ status: "success" });
+    const { result } = renderHook(() => useBankrollVaultDeposit(wallet));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await act(async () => {
+      await result.current.deposit(123n);
+    });
+    expect(result.current.status).toBe("error");
+    expect(result.current.canDeposit).toBe(true);
+    await act(async () => {
+      await result.current.deposit(50n);
+    });
+    expect(result.current.status).toBe("ready");
+    expect(sdk.submit).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces the deposit-stage submission failure reason", async () => {
+    sdk.read.mockResolvedValue(readyValues(123n));
+    sdk.submit.mockImplementation(async () => {
+      sdk.submissionError = "Your wallet is not ready. Please try again.";
+      return false;
+    });
+    const { result } = renderHook(() => useBankrollVaultDeposit(wallet));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await act(async () => {
+      await result.current.deposit(123n);
+    });
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe(
+      "Your wallet is not ready. Please try again."
+    );
+  });
+
+  it("re-reads balances when a sibling panel changes wallet balances", async () => {
+    const { result } = renderHook(() => useBankrollVaultDeposit(wallet));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    sdk.read.mockResolvedValue({ ...readyValues(), tUsdBalance: 200000000n });
+    await act(async () => {
+      notifyWalletBalancesChanged();
+    });
+    await waitFor(() => expect(result.current.tUsdBalance).toBe(200000000n));
+    expect(result.current.status).toBe("ready");
   });
 
   it("suppresses duplicate in-flight deposits", async () => {

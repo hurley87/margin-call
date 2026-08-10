@@ -3,14 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 import {
-  BASE_SEPOLIA_CHAIN_ID,
-  baseSepoliaPublicClient,
-} from "@/lib/base-sepolia";
-import {
   deskDollarsFaucetAbi,
   getDeskDollarsConfig,
   readDeskDollarsState,
 } from "@/lib/desk-dollars";
+import {
+  confirmSponsoredCall,
+  submitSponsoredCall,
+} from "@/lib/sponsored-call";
+import {
+  notifyWalletBalancesChanged,
+  subscribeToWalletBalanceChanges,
+} from "@/lib/wallet-balance-sync";
 import { usePrivySponsoredTransaction } from "./use-privy-sponsored-transaction";
 
 type FaucetState = {
@@ -31,6 +35,8 @@ const initialState: FaucetState = {
 };
 const claimFailed =
   "We couldn't complete your Desk Dollars claim. Please try again.";
+const claimUnconfirmed =
+  "Your claim was submitted, but we couldn't confirm it yet. Retry to check its status.";
 const refreshFailed =
   "Your claim was confirmed, but we couldn't refresh your Desk Dollars balance. Please try again.";
 const loadFailed =
@@ -45,6 +51,9 @@ export function useDeskDollarsFaucet(walletAddress: Address | null) {
   const retryKind = useRef<
     "claim" | "refresh" | "refresh-after-confirmation" | null
   >(null);
+  // A claim whose transaction was submitted but whose receipt is unresolved.
+  // Retry must re-check this hash — resubmitting could hit the cooldown.
+  const pendingClaim = useRef<Hex | null>(null);
 
   const refresh = useCallback(
     async (preserveConfirmation = false): Promise<boolean> => {
@@ -86,6 +95,19 @@ export function useDeskDollarsFaucet(walletAddress: Address | null) {
     void refresh();
   }, [config, refresh, walletAddress]);
 
+  // Background re-read when a sibling panel changes wallet balances. Values
+  // merge silently; the visible status and error copy stay authoritative.
+  useEffect(
+    () =>
+      subscribeToWalletBalanceChanges(() => {
+        if (!config || !walletAddress || inFlight.current) return;
+        void readDeskDollarsState(config, walletAddress)
+          .then((next) => setState((current) => ({ ...current, ...next })))
+          .catch(() => undefined);
+      }),
+    [config, walletAddress]
+  );
+
   // Re-render each second while a cooldown is pending so the countdown copy
   // updates and the claim button re-enables at the boundary without a reload.
   useEffect(() => {
@@ -104,36 +126,42 @@ export function useDeskDollarsFaucet(walletAddress: Address | null) {
     inFlight.current = true;
     retryKind.current = "claim";
     setState((current) => ({ ...current, status: "pending", error: null }));
-    const request = {
-      to: config.faucetAddress,
-      data: encodeFunctionData({
-        abi: deskDollarsFaucetAbi,
-        functionName: "claim",
-      }) as Hex,
-      chainId: BASE_SEPOLIA_CHAIN_ID,
-    };
     try {
-      if (!(await transaction.submit(request))) {
+      const result = pendingClaim.current
+        ? await confirmSponsoredCall(pendingClaim.current)
+        : await submitSponsoredCall(
+            transaction,
+            {
+              to: config.faucetAddress,
+              data: encodeFunctionData({
+                abi: deskDollarsFaucetAbi,
+                functionName: "claim",
+              }) as Hex,
+            },
+            (hash) => {
+              pendingClaim.current = hash;
+            }
+          );
+      if (result.outcome !== "confirmation-unknown")
+        pendingClaim.current = null;
+      if (result.outcome === "confirmed") {
         setState((current) => ({
           ...current,
-          status: "error",
-          error: transaction.getSubmissionError() ?? claimFailed,
+          status: "confirmed",
+          error: null,
         }));
-        return false;
+        notifyWalletBalancesChanged();
+        return await refresh(true);
       }
-      const hash = transaction.getSubmittedHash();
-      if (!hash) throw new Error("missing submitted hash");
-      const receipt = await baseSepoliaPublicClient.waitForTransactionReceipt({
-        hash,
-      });
-      if (receipt.status !== "success") throw new Error("receipt reverted");
-      setState((current) => ({ ...current, status: "confirmed", error: null }));
-      return await refresh(true);
-    } catch {
       setState((current) => ({
         ...current,
         status: "error",
-        error: claimFailed,
+        error:
+          result.outcome === "submission-failed"
+            ? (result.message ?? claimFailed)
+            : result.outcome === "confirmation-unknown"
+              ? claimUnconfirmed
+              : claimFailed,
       }));
       return false;
     } finally {

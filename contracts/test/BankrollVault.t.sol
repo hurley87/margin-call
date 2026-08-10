@@ -3,6 +3,8 @@ pragma solidity 0.8.28;
 
 import {Test} from "forge-std/Test.sol";
 
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
+
 import {BankrollVault} from "../src/BankrollVault.sol";
 import {DeskDollars} from "../src/DeskDollars.sol";
 
@@ -108,12 +110,12 @@ contract BankrollVaultTest is Test {
         vault.redeem(ONE_TUSD, ALICE, ALICE);
     }
 
-    function testVaultDepositEventReconstructsDepositForAnotherReceiver() public {
+    function testStandardDepositEventReconstructsDepositForAnotherReceiver() public {
         uint256 assets = 50 * ONE_TUSD;
         uint256 shares = vault.previewDeposit(assets);
 
         vm.expectEmit(true, true, false, true, address(vault));
-        emit BankrollVault.VaultDeposit(ALICE, CAROL, assets, shares);
+        emit IERC4626.Deposit(ALICE, CAROL, assets, shares);
 
         vm.prank(ALICE);
         vault.deposit(assets, CAROL);

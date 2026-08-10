@@ -10,7 +10,7 @@ import {Utils} from "./utils/Utils.sol";
 
 /// @notice Deploys the Base Sepolia BankrollVault and moves the existing tUSD seed into it.
 /// @dev The curated deployment record is input only. A successful run writes the gitignored
-///      `deployments/base_sepolia.run.json` record for deliberate human merging.
+///      `deployments/base_sepolia.bankroll_vault.run.json` record for deliberate human merging.
 ///      Invoke with the recorded seed depositor as the Forge sender:
 ///      forge script script/DeployBankrollVault.s.sol:DeployBankrollVault --rpc-url <base-sepolia-rpc> \
 ///        --sender 0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c --broadcast
@@ -19,7 +19,7 @@ contract DeployBankrollVault is Utils {
     error SeedBalanceMismatch(uint256 expected, uint256 actual);
     error DeploymentPostconditionFailed();
 
-    string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_RUN;
+    string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_VAULT_RUN;
     string internal constant BASESCAN_ADDRESS_PREFIX = "https://sepolia.basescan.org/address/";
     string internal constant BASESCAN_CODE_SUFFIX = "#code";
 

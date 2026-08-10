@@ -22,14 +22,20 @@ function formatAmount(value: bigint | undefined, unit: string) {
 function validateAmount(
   amount: string,
   parsed: bigint | null,
-  balance: bigint | undefined
+  balance: bigint | undefined,
+  status: BankrollVaultDepositStatus
 ): string | null {
   if (amount.length === 0) return null;
   if (parsed === null)
     return `Enter a tUSD amount with no more than ${TUSD_DECIMALS} decimal places.`;
   if (parsed <= 0n) return "Enter a positive tUSD amount.";
-  if (balance === undefined)
-    return "Your Desk Dollars balance is still loading.";
+  if (balance === undefined) {
+    // Unavailable and load-error states already render their own notice;
+    // only a load that is genuinely in progress warrants "still loading".
+    return status === "loading"
+      ? "Your Desk Dollars balance is still loading."
+      : null;
+  }
   if (parsed > balance)
     return "Deposit amount cannot exceed your wallet Desk Dollars balance.";
   return null;
@@ -55,7 +61,8 @@ export function LpDesk() {
   const validationError = validateAmount(
     amount,
     parsedAmount,
-    vault.tUsdBalance
+    vault.tUsdBalance,
+    vault.status
   );
   const canSubmit =
     vault.canDeposit && parsedAmount !== null && !validationError;

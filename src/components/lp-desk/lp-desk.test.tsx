@@ -17,7 +17,7 @@ type VaultFixture = {
   error: string | null;
   canDeposit: boolean;
   canRetry: boolean;
-  tUsdBalance: bigint;
+  tUsdBalance: bigint | undefined;
   shareBalance: bigint;
   assetsPerShare: bigint;
   grossAssets: bigint;
@@ -108,6 +108,31 @@ describe("LpDesk", () => {
     expect(
       screen.getByText(/never requests unlimited approval/)
     ).not.toBeNull();
+  });
+
+  it("never claims the balance is still loading in permanent unavailable or error states", () => {
+    sdk.vault = {
+      ...sdk.ready(),
+      status: "unavailable",
+      error: "not configured",
+      canDeposit: false,
+      tUsdBalance: undefined,
+    };
+    const { rerender } = render(<LpDesk />);
+    const input = screen.getByLabelText("LP deposit amount (tUSD)");
+    fireEvent.change(input, { target: { value: "5" } });
+    expect(screen.queryByText(/still loading/)).toBeNull();
+    sdk.vault = {
+      ...sdk.vault,
+      status: "error",
+      error: "load failed",
+      canRetry: true,
+    };
+    rerender(<LpDesk />);
+    expect(screen.queryByText(/still loading/)).toBeNull();
+    sdk.vault = { ...sdk.vault, status: "loading", error: null };
+    rerender(<LpDesk />);
+    expect(screen.getByText(/still loading/)).not.toBeNull();
   });
 
   it("reports pending receipt states without optimistic share changes", () => {

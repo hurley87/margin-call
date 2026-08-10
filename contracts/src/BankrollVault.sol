@@ -14,9 +14,6 @@ contract BankrollVault is ERC4626 {
 
     error WithdrawalsDisabledInDepositsOnlySlice();
 
-    /// @notice Records an LP deposit or mint with both parties needed to reconstruct share ownership.
-    event VaultDeposit(address indexed caller, address indexed receiver, uint256 assets, uint256 shares);
-
     /// @notice Payouts owed from finalized or expired tickets but not yet transferred.
     uint256 public pendingObligations;
 
@@ -62,10 +59,5 @@ contract BankrollVault is ERC4626 {
     /// @notice Returns zero while redemptions are disabled for this slice.
     function maxRedeem(address) public pure override returns (uint256) {
         return 0;
-    }
-
-    function _deposit(address caller, address receiver, uint256 assets, uint256 shares) internal override {
-        super._deposit(caller, receiver, assets, shares);
-        emit VaultDeposit(caller, receiver, assets, shares);
     }
 }
