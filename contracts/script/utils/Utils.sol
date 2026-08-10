@@ -6,8 +6,10 @@ import {Script} from "forge-std/Script.sol";
 /// @notice LazerForge-style helpers for reading and writing deployment records.
 contract Utils is Script {
     uint256 constant CHAIN_ID_ANVIL_LOCALNET = 31_337;
+    uint256 constant CHAIN_ID_BASE_SEPOLIA = 84_532;
 
     string constant OUTPUT_ANVIL_LOCALNET = "anvil_localnet";
+    string constant OUTPUT_BASE_SEPOLIA = "base_sepolia";
     string constant OUTPUT_UNKNOWN = "unknown";
 
     function readInput(string memory inputFileName) internal view returns (string memory) {
