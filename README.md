@@ -12,12 +12,12 @@ The retired Pack Rip implementation has been removed. **No Crash contract or gam
 
 ## What's in the repo today
 
-| Area               | State                                                                    |
-| ------------------ | ------------------------------------------------------------------------ |
-| `src/`             | Neutral Next.js 16 shell (placeholder page), SIWA helpers, UI primitives |
-| `convex/`          | Convex auth, SIWA nonce, and HTTP infrastructure                         |
-| `packages/shared/` | Framework-neutral validation helpers                                     |
-| `contracts/`       | Foundry scaffolding only — Crash product contracts are future work       |
+| Area               | State                                                                              |
+| ------------------ | ---------------------------------------------------------------------------------- |
+| `src/`             | Neutral Next.js 16 shell (placeholder page), authentication helpers, UI primitives |
+| `convex/`          | Convex auth and HTTP infrastructure                                                |
+| `packages/shared/` | Framework-neutral validation helpers                                               |
+| `contracts/`       | Foundry scaffolding only — Crash product contracts are future work                 |
 
 ## Tech stack
 

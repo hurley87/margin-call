@@ -1,37 +1,5 @@
-import { Ratelimit } from "@upstash/ratelimit";
-import { Redis } from "@upstash/redis";
+import type { Ratelimit } from "@upstash/ratelimit";
 import { NextRequest, NextResponse } from "next/server";
-
-function createRedisOrMemory() {
-  if (
-    process.env.UPSTASH_REDIS_REST_URL &&
-    process.env.UPSTASH_REDIS_REST_TOKEN
-  ) {
-    return Redis.fromEnv();
-  }
-  return undefined;
-}
-
-const redis = createRedisOrMemory();
-
-/** Create a rate limiter only when Redis is configured. Returns null otherwise. */
-function createLimit(
-  prefix: string,
-  requests: number,
-  window: "30 s" | "1 m"
-): Ratelimit | null {
-  if (!redis) return null;
-  return new Ratelimit({
-    redis,
-    limiter: Ratelimit.slidingWindow(requests, window),
-    prefix,
-    analytics: true,
-    ephemeralCache: new Map(),
-  });
-}
-
-/** /api/siwa/nonce — 20 requests per minute per IP */
-export const siwaNonceLimit = createLimit("rl:siwa-nonce", 20, "1 m");
 
 /**
  * Check rate limit for a given limiter and identifier.

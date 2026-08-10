@@ -27,7 +27,6 @@
   "dependencies": {
     "@margin-call/shared": "workspace:*",
     "@base-ui/react": "^1.6.0",
-    "@buildersgarden/siwa": "^0.0.24",
     "@privy-io/server-auth": "^1.32.5",
     "@sentry/nextjs": "^10.69.0",
     "@upstash/ratelimit": "^2.0.8",

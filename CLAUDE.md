@@ -24,7 +24,7 @@ Do not infer that the Crash contracts or frontend are already implemented. Add t
 ## Retained architecture
 
 - `src/` — neutral Next.js shell, styling, authentication helpers, and UI primitives
-- `convex/` — Convex auth, SIWA nonce, and HTTP infrastructure
+- `convex/` — Convex auth and HTTP infrastructure
 - `packages/shared/` — framework-neutral validation helpers
 - `contracts/` — Foundry scaffolding; Crash product contracts are future work
 
