@@ -12,7 +12,12 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 contract BankrollVault is ERC4626 {
     using Math for uint256;
 
-    error WithdrawalsDisabledInDepositsOnlySlice();
+    uint256 internal constant SAFETY_BUFFER_NUMERATOR = 20;
+    uint256 internal constant SAFETY_BUFFER_DENOMINATOR = 100;
+
+    /// @notice Total maximum payouts reserved for unresolved player tickets.
+    /// @dev Reservation mutation is restricted to the future game-only entry and settlement paths.
+    uint256 public reservedLiabilities;
 
     /// @notice Payouts owed from finalized or expired tickets but not yet transferred.
     uint256 public pendingObligations;
@@ -41,23 +46,40 @@ contract BankrollVault is ERC4626 {
         return supply == 0 ? scale : totalAssets().mulDiv(scale, supply);
     }
 
-    /// @notice Withdrawals are intentionally unavailable until the free-liquidity controls ship.
-    function withdraw(uint256, address, address) public pure override returns (uint256) {
-        revert WithdrawalsDisabledInDepositsOnlySlice();
+    /// @notice Returns the minimum gross-asset buffer that remains in the vault after LP withdrawals.
+    /// @dev Rounds up so the buffer is never below 20% of gross assets.
+    function safetyBuffer() public view returns (uint256) {
+        return grossAssets().mulDiv(SAFETY_BUFFER_NUMERATOR, SAFETY_BUFFER_DENOMINATOR, Math.Rounding.Ceil);
     }
 
-    /// @notice Redemptions are intentionally unavailable until the free-liquidity controls ship.
-    function redeem(uint256, address, address) public pure override returns (uint256) {
-        revert WithdrawalsDisabledInDepositsOnlySlice();
+    /// @notice Returns gross assets available for LP withdrawal after reservations and the safety buffer.
+    function freeLiquidity() public view returns (uint256) {
+        uint256 protectedAssets = reservedLiabilities + safetyBuffer();
+        uint256 assets = grossAssets();
+
+        return assets > protectedAssets ? assets - protectedAssets : 0;
     }
 
-    /// @notice Returns zero while withdrawals are disabled for this slice.
-    function maxWithdraw(address) public pure override returns (uint256) {
-        return 0;
+    /// @notice Returns the owner's immediately executable asset withdrawal limit.
+    /// @dev This cap preserves ERC-4626 conversions while partitioning free liquidity by share ownership.
+    function maxWithdraw(address owner) public view override returns (uint256) {
+        uint256 supply = totalSupply();
+        if (supply == 0) return 0;
+
+        uint256 ownerLimit = freeLiquidity().mulDiv(balanceOf(owner), supply);
+        return Math.min(convertToAssets(balanceOf(owner)), ownerLimit);
     }
 
-    /// @notice Returns zero while redemptions are disabled for this slice.
-    function maxRedeem(address) public pure override returns (uint256) {
-        return 0;
+    /// @notice Returns the owner's immediately executable share redemption limit.
+    /// @dev Inverts ERC-4626's virtual-share `previewRedeem` rounding so this is the greatest share amount whose
+    ///      redeemed assets do not exceed `maxWithdraw(owner)`.
+    function maxRedeem(address owner) public view override returns (uint256) {
+        uint256 ownerShares = balanceOf(owner);
+        uint256 maxAssets = maxWithdraw(owner);
+
+        if (maxAssets == convertToAssets(ownerShares)) return ownerShares;
+
+        uint256 maxShares = Math.mulDiv(maxAssets + 1, totalSupply() + 1, totalAssets() + 1, Math.Rounding.Ceil) - 1;
+        return Math.min(ownerShares, maxShares);
     }
 }
