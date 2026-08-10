@@ -34,6 +34,27 @@ export const bankrollVaultAbi = [
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "reservedLiabilities",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "safetyBuffer",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "freeLiquidity",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
 
 export type BankrollVaultConfig = {
@@ -57,18 +78,24 @@ type VaultViewName =
   | "totalSupply"
   | "assetsPerShare"
   | "pendingObligations"
-  | "unrecognizedMargin";
+  | "unrecognizedMargin"
+  | "reservedLiabilities"
+  | "safetyBuffer"
+  | "freeLiquidity"
+  | "maxWithdraw"
+  | "maxRedeem";
 
 export async function readBankrollVaultState(
   config: BankrollVaultConfig,
   walletAddress: Address
 ) {
-  const readVault = (functionName: VaultViewName) =>
+  const readVault = (functionName: VaultViewName, args?: readonly [Address]) =>
     baseSepoliaPublicClient.readContract({
       address: config.vaultAddress,
       abi: bankrollVaultAbi,
       functionName,
-    });
+      ...(args ? { args } : {}),
+    } as never) as Promise<bigint>;
   const [
     tUsdBalance,
     shareBalance,
@@ -79,6 +106,11 @@ export async function readBankrollVaultState(
     assetsPerShare,
     pendingObligations,
     unrecognizedMargin,
+    reservedLiabilities,
+    safetyBuffer,
+    freeLiquidity,
+    maxWithdraw,
+    maxRedeem,
   ] = await Promise.all([
     baseSepoliaPublicClient.readContract({
       address: config.tokenAddress,
@@ -104,6 +136,11 @@ export async function readBankrollVaultState(
     readVault("assetsPerShare"),
     readVault("pendingObligations"),
     readVault("unrecognizedMargin"),
+    readVault("reservedLiabilities"),
+    readVault("safetyBuffer"),
+    readVault("freeLiquidity"),
+    readVault("maxWithdraw", [walletAddress]),
+    readVault("maxRedeem", [walletAddress]),
   ]);
   return {
     tUsdBalance,
@@ -115,5 +152,10 @@ export async function readBankrollVaultState(
     assetsPerShare,
     pendingObligations,
     unrecognizedMargin,
+    reservedLiabilities,
+    safetyBuffer,
+    freeLiquidity,
+    maxWithdraw,
+    maxRedeem,
   };
 }
