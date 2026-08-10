@@ -211,42 +211,43 @@ contract BankrollVaultTest is Test {
 
     function testMaxRedeemIncludesAllSharesWhoseRoundedDownAssetsFitTheLimitAfterALoss() public {
         vm.prank(ALICE);
-        vault.deposit(8, ALICE);
-
-        vault.setReservedLiabilitiesForTest(2);
-        vault.setPendingObligationsForTest(2);
-
-        assertEq(vault.totalSupply(), 8);
-        assertEq(vault.totalAssets(), 6);
-        assertEq(vault.freeLiquidity(), 2);
-        assertEq(vault.maxWithdraw(ALICE), 2);
-        assertEq(vault.previewRedeem(3), 2);
-        assertEq(vault.maxRedeem(ALICE), 3);
-        assertGt(vault.previewRedeem(vault.maxRedeem(ALICE) + 1), vault.maxWithdraw(ALICE));
-
-        vm.prank(ALICE);
-        assertEq(vault.redeem(3, ALICE, ALICE), 2);
-    }
-
-    function testFreeLiquidityProtectsPendingObligationsAndUnrecognizedMargin() public {
-        vm.prank(ALICE);
         vault.deposit(4, ALICE);
 
         vault.setReservedLiabilitiesForTest(2);
         vault.setPendingObligationsForTest(2);
 
-        // Reserved plus pending payouts already equal gross assets, so no LP
-        // withdrawal may drain the funds owed to players. maxRedeem may allow
-        // dust shares whose rounded-down asset value is zero.
-        assertEq(vault.freeLiquidity(), 0);
-        assertEq(vault.maxWithdraw(ALICE), 0);
-        assertEq(vault.previewRedeem(vault.maxRedeem(ALICE)), 0);
+        assertEq(vault.totalSupply(), 4);
+        assertEq(vault.totalAssets(), 2);
+        assertEq(vault.maxWithdraw(ALICE), 1);
+        assertEq(vault.previewRedeem(3), 1);
+        assertEq(vault.maxRedeem(ALICE), 3);
+        assertGt(vault.previewRedeem(vault.maxRedeem(ALICE) + 1), vault.maxWithdraw(ALICE));
 
-        vault.setPendingObligationsForTest(0);
-        vault.setUnrecognizedMarginForTest(2);
+        vm.prank(ALICE);
+        assertEq(vault.redeem(3, ALICE, ALICE), 1);
+    }
 
-        assertEq(vault.freeLiquidity(), 0);
-        assertEq(vault.maxWithdraw(ALICE), 0);
+    function testFreeLiquidityKeepsPendingPayoutsFundedUnderTheReservationInvariant() public {
+        vm.prank(ALICE);
+        vault.deposit(4, ALICE);
+
+        // Design invariant (technical design §8): pendingObligations +
+        // unrecognizedMargin never exceeds reservedLiabilities, because a
+        // reservation is consumed only when its payout or refund transfers.
+        // Under it, subtracting reservations alone keeps every pending payout
+        // and refund funded after a maximum LP withdrawal.
+        vault.setReservedLiabilitiesForTest(2);
+        vault.setPendingObligationsForTest(1);
+        vault.setUnrecognizedMarginForTest(1);
+
+        assertEq(vault.freeLiquidity(), 1);
+        uint256 assets = vault.maxWithdraw(ALICE);
+        assertEq(assets, 1);
+
+        vm.prank(ALICE);
+        vault.withdraw(assets, ALICE, ALICE);
+
+        assertGe(vault.grossAssets(), vault.pendingObligations() + vault.unrecognizedMargin());
     }
 
     function testDelegatedWithdrawUsesOwnerLimitAndAllowance() public {

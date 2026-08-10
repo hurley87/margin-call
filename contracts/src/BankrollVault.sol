@@ -56,13 +56,15 @@ contract BankrollVault is ERC4626 {
         return assets.mulDiv(SAFETY_BUFFER_NUMERATOR, SAFETY_BUFFER_DENOMINATOR, Math.Rounding.Ceil);
     }
 
-    /// @notice Returns gross assets available for LP withdrawal after player liabilities and the safety buffer.
-    /// @dev Protects reserved and pending payouts plus unrecognized margin — none of them are LP value, so
-    ///      withdrawals must never draw down the assets backing them.
+    /// @notice Returns gross assets available for LP withdrawal after reservations and the safety buffer.
+    /// @dev Reservations transitively cover pending obligations and unrecognized margin: a reservation is
+    ///      consumed only when its payout or refund actually transfers, so `pendingObligations +
+    ///      unrecognizedMargin` never exceeds `reservedLiabilities` (technical design §8). The game-only
+    ///      mutation paths must preserve that invariant; subtracting those terms here as well would
+    ///      double-count liabilities and suppress valid LP withdrawals.
     function freeLiquidity() public view returns (uint256) {
         uint256 assets = grossAssets();
-        uint256 protectedAssets =
-            reservedLiabilities + pendingObligations + unrecognizedMargin + _safetyBuffer(assets);
+        uint256 protectedAssets = reservedLiabilities + _safetyBuffer(assets);
 
         return assets > protectedAssets ? assets - protectedAssets : 0;
     }
