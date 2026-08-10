@@ -27,11 +27,10 @@ function isEmbeddedEvmWallet(account: PrivyWalletAccount | null | undefined) {
 }
 
 /**
- * Returns the user's active EVM wallet address.
+ * Returns the user's Privy embedded EVM wallet address.
  *
- * Prefers a Privy embedded wallet (the email-onboarding path) and falls back
- * to any linked external EVM wallet (MetaMask, Coinbase Wallet, WalletConnect,
- * …) so `wallet` login users are provisioned too.
+ * Margin Call accepts only the embedded wallet created by its SMS-only Privy
+ * login flow. Linked external wallets never make the auth boundary ready.
  */
 export function getEvmWalletAddress(
   user: PrivyWalletUser | null | undefined
@@ -43,10 +42,6 @@ export function getEvmWalletAddress(
     ...(user.linkedAccounts ?? []),
   ];
 
-  // Prefer an embedded Privy wallet, then any other connected EVM wallet.
   const embedded = accounts.find(isEmbeddedEvmWallet);
-  if (embedded) return embedded.address as `0x${string}`;
-
-  const external = accounts.find(isEvmWallet);
-  return (external?.address as `0x${string}` | undefined) ?? null;
+  return (embedded?.address as `0x${string}` | undefined) ?? null;
 }

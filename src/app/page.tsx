@@ -1,3 +1,5 @@
+import { AuthGate } from "@/components/auth/auth-gate";
+
 export default function Home() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] px-6 font-mono text-[var(--t-text)]">
@@ -9,9 +11,9 @@ export default function Home() {
           Rebuilding
         </h1>
         <p className="mt-5 text-sm leading-6 text-[var(--t-muted)]">
-          The retired product implementation has been removed while the next
-          version is built.
+          The next version is under construction.
         </p>
+        <AuthGate />
       </div>
     </main>
   );

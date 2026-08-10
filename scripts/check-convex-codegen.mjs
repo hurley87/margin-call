@@ -37,20 +37,33 @@ const wired = new Set(
   [...api.matchAll(/from "\.\.\/(.+?)\.js"/g)].map((m) => m[1])
 );
 
-const missing = [];
-for (const file of listModules(CONVEX_DIR)) {
-  const mod = relative(CONVEX_DIR, file)
-    .replace(/\.ts$/, "")
-    .split(sep)
-    .join("/");
-  if (wired.has(mod) || ALLOWED_UNWIRED.has(mod)) continue;
-  missing.push(mod);
-}
+const modules = new Set(
+  listModules(CONVEX_DIR).map((file) =>
+    relative(CONVEX_DIR, file).replace(/\.ts$/, "").split(sep).join("/")
+  )
+);
+const expected = [...modules].filter((mod) => !ALLOWED_UNWIRED.has(mod)).sort();
+const missing = expected.filter((mod) => !wired.has(mod));
+const stale = [...wired].filter((mod) => !modules.has(mod)).sort();
 
-if (missing.length > 0) {
+if (missing.length > 0 || stale.length > 0) {
+  const details = [
+    ...(missing.length > 0
+      ? [
+          "\n  Modules missing from api.d.ts:\n" +
+            missing.map((mod) => `    convex/${mod}.ts`).join("\n"),
+        ]
+      : []),
+    ...(stale.length > 0
+      ? [
+          "\n  Modules wired in api.d.ts but missing from convex/:\n" +
+            stale.map((mod) => `    convex/${mod}.ts`).join("\n"),
+        ]
+      : []),
+  ].join("\n");
   console.error(
-    "\n✗ convex/_generated is stale — these modules are not wired into api.d.ts:\n" +
-      missing.map((m) => `    convex/${m}.ts`).join("\n") +
+    "\n✗ convex/_generated/api.d.ts is stale." +
+      details +
       "\n\nRun `npx convex codegen` and commit convex/_generated.\n"
   );
   process.exit(1);

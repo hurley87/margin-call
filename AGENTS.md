@@ -9,7 +9,7 @@ Margin Call is a Next.js 16 application being rebuilt around the Base Sepolia Cr
 - `docs/2026-08-08-margin-call-crash-technical-design.md`
 - `docs/2026-08-08-margin-call-crash-roadmap.md`
 
-The repository retains neutral Next.js, Convex, SIWA/Privy, shared TypeScript, Foundry, and CI scaffolding. Do not treat future Crash contracts, UI, keeper, or indexing as implemented.
+The repository retains neutral Next.js, Convex, Privy, shared TypeScript, Foundry, and CI scaffolding. Do not treat future Crash contracts, UI, keeper, or indexing as implemented.
 
 ## Commands
 
