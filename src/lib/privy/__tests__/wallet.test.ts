@@ -60,7 +60,7 @@ describe("getEvmWalletAddress", () => {
     ).toBe("0xembedded");
   });
 
-  it("falls back to an external EVM wallet when no embedded wallet exists", () => {
+  it("rejects an external EVM wallet when no embedded wallet exists", () => {
     expect(
       getEvmWalletAddress({
         wallet: null,
@@ -73,7 +73,7 @@ describe("getEvmWalletAddress", () => {
           },
         ],
       })
-    ).toBe("0xdef");
+    ).toBeNull();
   });
 
   it("returns null when no wallet is linked", () => {

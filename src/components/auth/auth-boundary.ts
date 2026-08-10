@@ -1,0 +1,80 @@
+export type AuthBoundaryInput = {
+  privyReady: boolean;
+  authenticated: boolean;
+  walletsReady: boolean;
+  walletAddress: `0x${string}` | null;
+  loginError: boolean;
+  logoutPending: boolean;
+  logoutError: boolean;
+};
+
+export type AuthBoundaryState = {
+  status:
+    | "restoring"
+    | "logged-out"
+    | "login-error"
+    | "wallet-provisioning"
+    | "signed-in"
+    | "logout-pending"
+    | "logout-error";
+  message: string;
+  action: "login" | "logout" | null;
+};
+
+export function getAuthBoundaryState(
+  input: AuthBoundaryInput
+): AuthBoundaryState {
+  if (!input.privyReady) {
+    return {
+      status: "restoring",
+      message: "Restoring your session…",
+      action: null,
+    };
+  }
+
+  if (input.authenticated && (!input.walletsReady || !input.walletAddress)) {
+    return {
+      status: "wallet-provisioning",
+      message: "Setting up your wallet…",
+      action: null,
+    };
+  }
+
+  if (input.authenticated && input.logoutPending) {
+    return {
+      status: "logout-pending",
+      message: "Signing out…",
+      action: null,
+    };
+  }
+
+  if (input.authenticated && input.logoutError) {
+    return {
+      status: "logout-error",
+      message: "We couldn't sign you out. Please try again.",
+      action: "logout",
+    };
+  }
+
+  if (input.authenticated) {
+    return {
+      status: "signed-in",
+      message: "Signed in.",
+      action: "logout",
+    };
+  }
+
+  if (input.loginError) {
+    return {
+      status: "login-error",
+      message: "Sign-in was cancelled or unavailable. Try again.",
+      action: "login",
+    };
+  }
+
+  return {
+    status: "logged-out",
+    message: "Sign in with your phone to continue.",
+    action: "login",
+  };
+}
