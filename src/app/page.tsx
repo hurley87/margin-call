@@ -1,4 +1,5 @@
 import { AuthGate } from "@/components/auth/auth-gate";
+import { DeskDollarsPanel } from "@/components/desk-dollars/desk-dollars-panel";
 
 export default function Home() {
   return (
@@ -13,7 +14,9 @@ export default function Home() {
         <p className="mt-5 text-sm leading-6 text-[var(--t-muted)]">
           The next version is under construction.
         </p>
-        <AuthGate />
+        <AuthGate>
+          <DeskDollarsPanel />
+        </AuthGate>
       </div>
     </main>
   );

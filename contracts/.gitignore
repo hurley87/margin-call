@@ -6,3 +6,6 @@ via_ir-out/
 
 # Dependencies (restore with: pnpm install:forge-deps)
 lib/
+
+# Raw deploy-script run records; merge into the curated <network>.json by hand
+deployments/*.run.json

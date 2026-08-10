@@ -1,0 +1,47 @@
+{
+  "sourceCommit": "4b1108c4f5c806c67c189003b3093c4dd3ac0483",
+  "chainId": 84532,
+  "frontend": {
+    "url": "https://margincall.fun",
+    "productionDeploymentId": "dpl_2BzRdVNaSbCzsCxYxPaxPSpbdvUz",
+    "previewUrl": "https://margin-call-d78hczui6-dhurls99-s-team.vercel.app",
+    "previewDeploymentId": "dpl_79Pcf9S4uU71ZFWs82LbM76vTU12"
+  },
+  "deploymentBlock": 45302565,
+  "token": "0x78c9DfaA9288Dd9c1f757d336A88f4F8e9EfC35C",
+  "faucet": "0x23f4C0622D9b88aA0Fe7469B34F1e780b5367c78",
+  "bankrollSeedRecipient": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "bankrollSeedAmount": 25000000000,
+  "faucetClaimAmount": 100000000,
+  "faucetClaimCooldown": 3600,
+  "faucetConfigured": true,
+  "faucetClaimSelector": "0x4e71d92d",
+  "verification": {
+    "token": "https://sepolia.basescan.org/address/0x78c9DfaA9288Dd9c1f757d336A88f4F8e9EfC35C#code",
+    "faucet": "https://sepolia.basescan.org/address/0x23f4C0622D9b88aA0Fe7469B34F1e780b5367c78#code"
+  },
+  "transactions": {
+    "deployToken": "0x76d95c7f64a1f71c2b3cf32cd0e231fe695409838f5f1389e2b156a01c634162",
+    "deployFaucet": "0xc1b0bb52b868fa95536c9c55e2a51ad9ba79e92c8ee0d099e6b4175dbb362b3f",
+    "configureFaucet": "0x9f6a159437bd29cae71c3a1b5a5e92687dcded05d77d5d561c11c392ed29c523"
+  },
+  "privySponsorship": {
+    "appId": "cmmfbu7o900c10cjme09a31h4",
+    "mode": "app-pays",
+    "chain": "Base Sepolia",
+    "clientTransactionsAllowed": true,
+    "contractSelectorAllowlist": "not-exposed-by-dashboard"
+  },
+  "smokeTest": {
+    "wallet": "0xE7142103d5f83B94E8A5e44AAC2eD84008C51fb7",
+    "startingEthWei": "0",
+    "endingEthWei": "0",
+    "startingBalance": 0,
+    "endingBalance": 100000000,
+    "nextClaimAt": 1786377632,
+    "transaction": "0x39307bfdf8acf842ead1325000f83192b3c54565422b0408d7f628638a6ef81b",
+    "block": 45302872,
+    "receiptStatus": "success"
+  }
+}
