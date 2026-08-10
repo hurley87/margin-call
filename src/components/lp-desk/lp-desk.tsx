@@ -2,24 +2,49 @@
 
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useBankrollVaultDeposit } from "@/hooks/use-bankroll-vault-deposit";
-import { formatDeskDollars } from "@/lib/desk-dollars";
+import {
+  useBankrollVaultDeposit,
+  type BankrollVaultDepositStatus,
+} from "@/hooks/use-bankroll-vault-deposit";
+import {
+  formatDeskDollars,
+  parseTUsdInput,
+  TUSD_DECIMALS,
+} from "@/lib/desk-dollars";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
-import { parseTUsdInput } from "@/lib/tusd-input";
 
-const unavailableValue = "— tUSD";
-
-function formatTUsd(value: bigint | undefined) {
+function formatAmount(value: bigint | undefined, unit: string) {
   return value === undefined
-    ? unavailableValue
-    : `${formatDeskDollars(value, 6)} tUSD`;
+    ? `— ${unit}`
+    : `${formatDeskDollars(value, TUSD_DECIMALS)} ${unit}`;
 }
 
-function formatVaultShares(value: bigint | undefined) {
-  return value === undefined
-    ? "— vault shares"
-    : `${formatDeskDollars(value, 6)} vault shares`;
+function validateAmount(
+  amount: string,
+  parsed: bigint | null,
+  balance: bigint | undefined
+): string | null {
+  if (amount.length === 0) return null;
+  if (parsed === null)
+    return `Enter a tUSD amount with no more than ${TUSD_DECIMALS} decimal places.`;
+  if (parsed <= 0n) return "Enter a positive tUSD amount.";
+  if (balance === undefined)
+    return "Your Desk Dollars balance is still loading.";
+  if (parsed > balance)
+    return "Deposit amount cannot exceed your wallet Desk Dollars balance.";
+  return null;
 }
+
+const statusCopy: Partial<Record<BankrollVaultDepositStatus, string>> = {
+  loading: "Loading your Bankroll Vault balances…",
+  "approval-submitting": "Submitting an exact tUSD approval…",
+  "approval-pending":
+    "Exact tUSD approval pending until its Base Sepolia receipt succeeds…",
+  "deposit-submitting": "Submitting your LP deposit…",
+  "deposit-pending":
+    "LP deposit pending until its Base Sepolia receipt succeeds. Vault shares will not update until confirmation.",
+  confirmed: "LP deposit confirmed on Base Sepolia.",
+};
 
 export function LpDesk() {
   const { user } = usePrivy();
@@ -27,18 +52,11 @@ export function LpDesk() {
   const vault = useBankrollVaultDeposit(walletAddress);
   const [amount, setAmount] = useState("");
   const parsedAmount = parseTUsdInput(amount);
-  const validationError =
-    amount.length === 0
-      ? null
-      : parsedAmount === null
-        ? "Enter a tUSD amount with no more than 6 decimal places."
-        : parsedAmount <= 0n
-          ? "Enter a positive tUSD amount."
-          : vault.tUsdBalance === undefined
-            ? "Your Desk Dollars balance is still loading."
-            : parsedAmount > vault.tUsdBalance
-              ? "Deposit amount cannot exceed your wallet Desk Dollars balance."
-              : null;
+  const validationError = validateAmount(
+    amount,
+    parsedAmount,
+    vault.tUsdBalance
+  );
   const canSubmit =
     vault.canDeposit && parsedAmount !== null && !validationError;
 
@@ -48,35 +66,10 @@ export function LpDesk() {
     void vault.deposit(parsedAmount);
   };
 
-  const statusMessage = (() => {
-    switch (vault.status) {
-      case "unavailable":
-        return vault.error;
-      case "loading":
-        return "Loading your Bankroll Vault balances…";
-      case "approval-submitting":
-        return "Submitting an exact tUSD approval…";
-      case "approval-pending":
-        return "Exact tUSD approval pending until its Base Sepolia receipt succeeds…";
-      case "deposit-submitting":
-        return "Submitting your LP deposit…";
-      case "deposit-pending":
-        return "LP deposit pending until its Base Sepolia receipt succeeds. Vault shares will not update until confirmation.";
-      case "confirmed":
-        return "LP deposit confirmed on Base Sepolia.";
-      case "error":
-        return vault.error;
-      default:
-        return null;
-    }
-  })();
-  const liveStatus =
-    vault.status === "loading" ||
-    vault.status === "approval-submitting" ||
-    vault.status === "approval-pending" ||
-    vault.status === "deposit-submitting" ||
-    vault.status === "deposit-pending" ||
-    vault.status === "confirmed";
+  const isAlert = vault.status === "error" || vault.status === "unavailable";
+  const statusMessage = isAlert
+    ? vault.error
+    : (statusCopy[vault.status] ?? null);
 
   return (
     <section
@@ -101,37 +94,37 @@ export function LpDesk() {
       <dl className="mt-5 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-[var(--t-muted)]">Wallet Desk Dollars</dt>
-          <dd>{formatTUsd(vault.tUsdBalance)}</dd>
+          <dd>{formatAmount(vault.tUsdBalance, "tUSD")}</dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Wallet vault shares</dt>
-          <dd>{formatVaultShares(vault.shareBalance)}</dd>
+          <dd>{formatAmount(vault.shareBalance, "vault shares")}</dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">
             Share price (assets per share)
           </dt>
-          <dd>{formatTUsd(vault.assetsPerShare)}</dd>
+          <dd>{formatAmount(vault.assetsPerShare, "tUSD")}</dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Gross assets</dt>
-          <dd>{formatTUsd(vault.grossAssets)}</dd>
+          <dd>{formatAmount(vault.grossAssets, "tUSD")}</dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Net total assets</dt>
-          <dd>{formatTUsd(vault.totalAssets)}</dd>
+          <dd>{formatAmount(vault.totalAssets, "tUSD")}</dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Total supply</dt>
-          <dd>{formatVaultShares(vault.totalSupply)}</dd>
+          <dd>{formatAmount(vault.totalSupply, "vault shares")}</dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Pending obligations</dt>
-          <dd>{formatTUsd(vault.pendingObligations)}</dd>
+          <dd>{formatAmount(vault.pendingObligations, "tUSD")}</dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Unrecognized margin</dt>
-          <dd>{formatTUsd(vault.unrecognizedMargin)}</dd>
+          <dd>{formatAmount(vault.unrecognizedMargin, "tUSD")}</dd>
         </div>
       </dl>
       <p className="mt-3 text-xs text-[var(--t-muted)]">
@@ -169,11 +162,9 @@ export function LpDesk() {
           disabled={!canSubmit}
           type="submit"
         >
-          {vault.status === "approval-submitting" ||
-          vault.status === "approval-pending"
+          {vault.status.startsWith("approval-")
             ? "Approval pending…"
-            : vault.status === "deposit-submitting" ||
-                vault.status === "deposit-pending"
+            : vault.status.startsWith("deposit-")
               ? "LP deposit pending…"
               : "Deposit tUSD"}
         </button>
@@ -181,13 +172,9 @@ export function LpDesk() {
 
       {statusMessage ? (
         <p
-          aria-live={liveStatus ? "polite" : undefined}
+          aria-live={isAlert ? undefined : "polite"}
           className="mt-4 text-sm"
-          role={
-            vault.status === "error" || vault.status === "unavailable"
-              ? "alert"
-              : undefined
-          }
+          role={isAlert ? "alert" : undefined}
         >
           {statusMessage}
         </p>

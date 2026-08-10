@@ -11,6 +11,12 @@ const sdk = vi.hoisted(() => ({
   wait: vi.fn(),
 }));
 
+vi.mock("@/lib/base-sepolia", () => ({
+  BASE_SEPOLIA_CHAIN_ID: 84532,
+  baseSepoliaPublicClient: {
+    waitForTransactionReceipt: (...args: unknown[]) => sdk.wait(...args),
+  },
+}));
 vi.mock("@/lib/desk-dollars", () => ({
   getDeskDollarsConfig: () => ({
     tokenAddress: "0x0000000000000000000000000000000000000001",
@@ -25,9 +31,6 @@ vi.mock("@/lib/desk-dollars", () => ({
       outputs: [],
     },
   ],
-  deskDollarsPublicClient: {
-    waitForTransactionReceipt: (...args: unknown[]) => sdk.wait(...args),
-  },
   readDeskDollarsState: (...args: unknown[]) => sdk.read(...args),
 }));
 vi.mock("./use-privy-sponsored-transaction", () => ({

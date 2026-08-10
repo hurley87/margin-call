@@ -9,7 +9,6 @@ import {Utils} from "./utils/Utils.sol";
 /// @dev Run only with an explicitly supplied bankroll recipient:
 ///      forge script script/DeployDeskDollars.s.sol:DeployDeskDollars --sig "run(address)" <recipient> --broadcast
 contract DeployDeskDollars is Utils {
-    error UnsupportedChain(uint256 chainId);
     error DeploymentPostconditionFailed();
 
     string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_RUN;
@@ -92,10 +91,6 @@ contract DeployDeskDollars is Utils {
         });
 
         _assertPostconditions(token, faucet, deployment);
-    }
-
-    function _requireBaseSepolia() internal view {
-        if (block.chainid != CHAIN_ID_BASE_SEPOLIA) revert UnsupportedChain(block.chainid);
     }
 
     function _assertPostconditions(DeskDollars token, DeskDollarsFaucet faucet, Deployment memory deployment)

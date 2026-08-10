@@ -4,6 +4,7 @@ pragma solidity 0.8.28;
 import {Test} from "forge-std/Test.sol";
 
 import {DeployDeskDollars} from "../script/DeployDeskDollars.s.sol";
+import {Utils} from "../script/utils/Utils.sol";
 import {DeskDollars} from "../src/DeskDollars.sol";
 import {DeskDollarsFaucet} from "../src/DeskDollarsFaucet.sol";
 
@@ -28,21 +29,21 @@ contract DeployDeskDollarsTest is Test {
     function testRejectsEthereumMainnetBeforeDeployment() public {
         vm.chainId(ETHEREUM_MAINNET_CHAIN_ID);
 
-        vm.expectRevert(abi.encodeWithSelector(DeployDeskDollars.UnsupportedChain.selector, ETHEREUM_MAINNET_CHAIN_ID));
+        vm.expectRevert(abi.encodeWithSelector(Utils.UnsupportedChain.selector, ETHEREUM_MAINNET_CHAIN_ID));
         deploymentScript.deployForTest(BANKROLL);
     }
 
     function testRunRejectsEthereumMainnetBeforeBroadcast() public {
         vm.chainId(ETHEREUM_MAINNET_CHAIN_ID);
 
-        vm.expectRevert(abi.encodeWithSelector(DeployDeskDollars.UnsupportedChain.selector, ETHEREUM_MAINNET_CHAIN_ID));
+        vm.expectRevert(abi.encodeWithSelector(Utils.UnsupportedChain.selector, ETHEREUM_MAINNET_CHAIN_ID));
         deploymentScript.run(BANKROLL);
     }
 
     function testRejectsAnyNonBaseSepoliaChainBeforeDeployment() public {
         vm.chainId(31_337);
 
-        vm.expectRevert(abi.encodeWithSelector(DeployDeskDollars.UnsupportedChain.selector, 31_337));
+        vm.expectRevert(abi.encodeWithSelector(Utils.UnsupportedChain.selector, 31_337));
         deploymentScript.deployForTest(BANKROLL);
     }
 

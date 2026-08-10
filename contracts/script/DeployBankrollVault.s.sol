@@ -2,6 +2,7 @@
 pragma solidity 0.8.28;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 
 import {BankrollVault} from "../src/BankrollVault.sol";
 import {DeskDollars} from "../src/DeskDollars.sol";
@@ -14,16 +15,13 @@ import {Utils} from "./utils/Utils.sol";
 ///      forge script script/DeployBankrollVault.s.sol:DeployBankrollVault --rpc-url <base-sepolia-rpc> \
 ///        --sender 0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c --broadcast
 contract DeployBankrollVault is Utils {
-    error UnsupportedChain(uint256 chainId);
     error InvalidDeploymentRecord();
-    error SeedDepositorMismatch(address expected, address actual);
     error SeedBalanceMismatch(uint256 expected, uint256 actual);
     error DeploymentPostconditionFailed();
 
     string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_RUN;
     string internal constant BASESCAN_ADDRESS_PREFIX = "https://sepolia.basescan.org/address/";
     string internal constant BASESCAN_CODE_SUFFIX = "#code";
-    string internal constant DEPOSIT_SELECTOR = "0x6e553f65";
 
     struct ExistingDeployment {
         uint256 chainId;
@@ -100,7 +98,7 @@ contract DeployBankrollVault is Utils {
             vm.toString(deployment.seedDepositorBalanceAfter),
             ",\n",
             '  "vaultDepositSelector": "',
-            DEPOSIT_SELECTOR,
+            vm.toString(abi.encodePacked(IERC4626.deposit.selector)),
             '",\n',
             '  "verification": {\n',
             '    "vault": "',
@@ -114,8 +112,6 @@ contract DeployBankrollVault is Utils {
     }
 
     function _deployAndSeed(ExistingDeployment memory existing) internal returns (Deployment memory deployment) {
-        _validateExistingDeployment(existing);
-
         IERC20 token = IERC20(existing.token);
         uint256 balanceBefore = token.balanceOf(existing.seedDepositor);
         // The initial mint is the only accepted source for this seed. Any changed balance requires
@@ -140,10 +136,6 @@ contract DeployBankrollVault is Utils {
         });
 
         _assertPostconditions(token, vault, deployment);
-    }
-
-    function _requireBaseSepolia() internal view {
-        if (block.chainid != CHAIN_ID_BASE_SEPOLIA) revert UnsupportedChain(block.chainid);
     }
 
     function _validateExistingDeployment(ExistingDeployment memory existing) internal view {

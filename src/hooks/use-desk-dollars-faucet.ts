@@ -3,8 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 import {
+  BASE_SEPOLIA_CHAIN_ID,
+  baseSepoliaPublicClient,
+} from "@/lib/base-sepolia";
+import {
   deskDollarsFaucetAbi,
-  deskDollarsPublicClient,
   getDeskDollarsConfig,
   readDeskDollarsState,
 } from "@/lib/desk-dollars";
@@ -107,7 +110,7 @@ export function useDeskDollarsFaucet(walletAddress: Address | null) {
         abi: deskDollarsFaucetAbi,
         functionName: "claim",
       }) as Hex,
-      chainId: 84532,
+      chainId: BASE_SEPOLIA_CHAIN_ID,
     };
     try {
       if (!(await transaction.submit(request))) {
@@ -120,7 +123,7 @@ export function useDeskDollarsFaucet(walletAddress: Address | null) {
       }
       const hash = transaction.getSubmittedHash();
       if (!hash) throw new Error("missing submitted hash");
-      const receipt = await deskDollarsPublicClient.waitForTransactionReceipt({
+      const receipt = await baseSepoliaPublicClient.waitForTransactionReceipt({
         hash,
       });
       if (receipt.status !== "success") throw new Error("receipt reverted");

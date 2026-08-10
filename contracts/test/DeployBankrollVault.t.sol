@@ -6,8 +6,11 @@ import {Test} from "forge-std/Test.sol";
 import {BankrollVault} from "../src/BankrollVault.sol";
 import {DeskDollars} from "../src/DeskDollars.sol";
 import {DeployBankrollVault} from "../script/DeployBankrollVault.s.sol";
+import {Utils} from "../script/utils/Utils.sol";
 
 contract DeployBankrollVaultHarness is DeployBankrollVault {
+    error SeedDepositorMismatch(address expected, address actual);
+
     function deployAndSeedForTest(ExistingDeployment memory existing, address broadcaster)
         external
         returns (Deployment memory deployment)
@@ -40,15 +43,13 @@ contract DeployBankrollVaultTest is Test {
     function testRunRejectsWrongChainBeforeReadingOrBroadcasting() public {
         vm.chainId(ETHEREUM_MAINNET_CHAIN_ID);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(DeployBankrollVault.UnsupportedChain.selector, ETHEREUM_MAINNET_CHAIN_ID)
-        );
+        vm.expectRevert(abi.encodeWithSelector(Utils.UnsupportedChain.selector, ETHEREUM_MAINNET_CHAIN_ID));
         deploymentScript.run();
     }
 
     function testRejectsWrongSeedDepositorBeforeDeployment() public {
         vm.expectRevert(
-            abi.encodeWithSelector(DeployBankrollVault.SeedDepositorMismatch.selector, SEED_DEPOSITOR, OTHER)
+            abi.encodeWithSelector(DeployBankrollVaultHarness.SeedDepositorMismatch.selector, SEED_DEPOSITOR, OTHER)
         );
         deploymentScript.deployAndSeedForTest(_existingDeployment(), OTHER);
     }
@@ -115,32 +116,20 @@ contract DeployBankrollVaultTest is Test {
         DeployBankrollVault.Deployment memory deployment =
             deploymentScript.deployAndSeedForTest(_existingDeployment(), SEED_DEPOSITOR);
 
+        string memory record = deploymentScript.deploymentRecord(deployment);
+
+        assertEq(vm.parseJsonUint(record, ".chainId"), BASE_SEPOLIA_CHAIN_ID);
+        assertEq(vm.parseJsonAddress(record, ".token"), address(token));
+        assertEq(vm.parseJsonAddress(record, ".bankrollVault"), deployment.vault);
+        assertEq(vm.parseJsonAddress(record, ".seedDepositor"), SEED_DEPOSITOR);
+        assertEq(vm.parseJsonUint(record, ".seedAssets"), 25_000_000_000);
+        assertEq(vm.parseJsonUint(record, ".mintedShares"), 25_000_000_000);
+        assertEq(vm.parseJsonUint(record, ".seedDepositorBalanceBefore"), 25_000_000_000);
+        assertEq(vm.parseJsonUint(record, ".seedDepositorBalanceAfter"), 0);
+        assertEq(vm.parseJsonString(record, ".vaultDepositSelector"), "0x6e553f65");
         assertEq(
-            deploymentScript.deploymentRecord(deployment),
-            string.concat(
-                "{\n",
-                '  "chainId": 84532,\n',
-                '  "token": "',
-                vm.toString(address(token)),
-                '",\n',
-                '  "bankrollVault": "',
-                vm.toString(deployment.vault),
-                '",\n',
-                '  "seedDepositor": "',
-                vm.toString(SEED_DEPOSITOR),
-                '",\n',
-                '  "seedAssets": 25000000000,\n',
-                '  "mintedShares": 25000000000,\n',
-                '  "seedDepositorBalanceBefore": 25000000000,\n',
-                '  "seedDepositorBalanceAfter": 0,\n',
-                '  "vaultDepositSelector": "0x6e553f65",\n',
-                '  "verification": {\n',
-                '    "vault": "https://sepolia.basescan.org/address/',
-                vm.toString(deployment.vault),
-                '#code"\n',
-                "  }\n",
-                "}\n"
-            )
+            vm.parseJsonString(record, ".verification.vault"),
+            string.concat("https://sepolia.basescan.org/address/", vm.toString(deployment.vault), "#code")
         );
     }
 

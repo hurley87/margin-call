@@ -25,20 +25,14 @@ const readyValues = (allowance = 0n) => ({
   unrecognizedMargin: 0n,
 });
 
+vi.mock("@/lib/base-sepolia", () => ({
+  BASE_SEPOLIA_CHAIN_ID: 84532,
+  baseSepoliaPublicClient: {
+    waitForTransactionReceipt: (...args: unknown[]) => sdk.wait(...args),
+  },
+}));
 vi.mock("@/lib/bankroll-vault", () => ({
   getBankrollVaultConfig: () => ({ tokenAddress: token, vaultAddress: vault }),
-  tUsdAbi: [
-    {
-      type: "function",
-      name: "approve",
-      stateMutability: "nonpayable",
-      inputs: [
-        { name: "spender", type: "address" },
-        { name: "value", type: "uint256" },
-      ],
-      outputs: [{ name: "", type: "bool" }],
-    },
-  ],
   bankrollVaultAbi: [
     {
       type: "function",
@@ -51,9 +45,6 @@ vi.mock("@/lib/bankroll-vault", () => ({
       outputs: [{ name: "shares", type: "uint256" }],
     },
   ],
-  bankrollVaultPublicClient: {
-    waitForTransactionReceipt: (...args: unknown[]) => sdk.wait(...args),
-  },
   readBankrollVaultState: (...args: unknown[]) => sdk.read(...args),
 }));
 vi.mock("./use-privy-sponsored-transaction", () => ({
@@ -207,7 +198,6 @@ describe("useBankrollVaultDeposit", () => {
     await act(async () => {
       await result.current.deposit(123n);
     });
-    expect(result.current.depositConfirmed).toBe(true);
     expect(result.current.error).toBe(
       "Your deposit was confirmed, but we couldn't refresh the Bankroll Vault. Please try again."
     );

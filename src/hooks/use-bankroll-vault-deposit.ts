@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 import {
+  BASE_SEPOLIA_CHAIN_ID,
+  baseSepoliaPublicClient,
+} from "@/lib/base-sepolia";
+import {
   bankrollVaultAbi,
-  bankrollVaultPublicClient,
   getBankrollVaultConfig,
   readBankrollVaultState,
-  tUsdAbi,
-  type BankrollVaultConfig,
 } from "@/lib/bankroll-vault";
+import { deskDollarsAbi } from "@/lib/desk-dollars";
 import { usePrivySponsoredTransaction } from "./use-privy-sponsored-transaction";
 
 export type BankrollVaultDepositStatus =
@@ -27,16 +29,10 @@ type VaultValues = Awaited<ReturnType<typeof readBankrollVaultState>>;
 type State = Partial<VaultValues> & {
   status: BankrollVaultDepositStatus;
   error: string | null;
-  approvalHash: Hex | null;
-  depositHash: Hex | null;
-  depositConfirmed: boolean;
 };
 const initialState: State = {
   status: "loading",
   error: null,
-  approvalHash: null,
-  depositHash: null,
-  depositConfirmed: false,
 };
 const unavailable =
   "The Bankroll Vault is not configured for this Base Sepolia deployment.";
@@ -102,91 +98,76 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
         return false;
       inFlight.current = true;
       retryAmount.current = assets;
-      const approvalNeeded = !skipApproval && (state.allowance ?? 0n) < assets;
-      try {
-        if (approvalNeeded) {
-          retryKind.current = "approval";
-          setState((current) => ({
-            ...current,
-            status: "approval-submitting",
-            error: null,
-            depositConfirmed: false,
-          }));
-          const approved = await transaction.submit({
-            to: config.tokenAddress,
-            data: encodeFunctionData({
-              abi: tUsdAbi,
-              functionName: "approve",
-              args: [config.vaultAddress, assets],
-            }) as Hex,
-            chainId: 84532,
-          });
-          if (!approved)
-            throw new Error(transaction.getSubmissionError() ?? approvalFailed);
-          const approvalHash = transaction.getSubmittedHash();
-          if (!approvalHash) throw new Error(approvalFailed);
-          setState((current) => ({
-            ...current,
-            status: "approval-pending",
-            approvalHash,
-            error: null,
-          }));
-          const approvalReceipt =
-            await bankrollVaultPublicClient.waitForTransactionReceipt({
-              hash: approvalHash,
-            });
-          if (approvalReceipt.status !== "success")
-            throw new Error(approvalFailed);
-        }
-        retryKind.current = "deposit";
+
+      const submitAndConfirm = async (
+        request: { to: Address; data: Hex },
+        stage: "approval" | "deposit",
+        failMessage: string
+      ) => {
+        retryKind.current = stage;
         setState((current) => ({
           ...current,
-          status: "deposit-submitting",
+          status: `${stage}-submitting`,
           error: null,
-          depositConfirmed: false,
         }));
-        const deposited = await transaction.submit({
-          to: config.vaultAddress,
-          data: encodeFunctionData({
-            abi: bankrollVaultAbi,
-            functionName: "deposit",
-            args: [assets, walletAddress],
-          }) as Hex,
-          chainId: 84532,
+        const submitted = await transaction.submit({
+          ...request,
+          chainId: BASE_SEPOLIA_CHAIN_ID,
         });
-        if (!deposited)
-          throw new Error(transaction.getSubmissionError() ?? depositFailed);
-        const depositHash = transaction.getSubmittedHash();
-        if (!depositHash) throw new Error(depositFailed);
+        if (!submitted)
+          throw new Error(transaction.getSubmissionError() ?? failMessage);
+        const hash = transaction.getSubmittedHash();
+        if (!hash) throw new Error(failMessage);
         setState((current) => ({
           ...current,
-          status: "deposit-pending",
-          depositHash,
+          status: `${stage}-pending`,
           error: null,
         }));
-        const depositReceipt =
-          await bankrollVaultPublicClient.waitForTransactionReceipt({
-            hash: depositHash,
-          });
-        if (depositReceipt.status !== "success") throw new Error(depositFailed);
+        const receipt = await baseSepoliaPublicClient.waitForTransactionReceipt(
+          { hash }
+        );
+        if (receipt.status !== "success") throw new Error(failMessage);
+      };
+
+      try {
+        if (!skipApproval && (state.allowance ?? 0n) < assets) {
+          await submitAndConfirm(
+            {
+              to: config.tokenAddress,
+              data: encodeFunctionData({
+                abi: deskDollarsAbi,
+                functionName: "approve",
+                args: [config.vaultAddress, assets],
+              }) as Hex,
+            },
+            "approval",
+            approvalFailed
+          );
+        }
+        await submitAndConfirm(
+          {
+            to: config.vaultAddress,
+            data: encodeFunctionData({
+              abi: bankrollVaultAbi,
+              functionName: "deposit",
+              args: [assets, walletAddress],
+            }) as Hex,
+          },
+          "deposit",
+          depositFailed
+        );
         setState((current) => ({
           ...current,
           status: "confirmed",
           error: null,
-          depositConfirmed: true,
         }));
         return refresh(true);
       } catch (error) {
         const message = error instanceof Error ? error.message : depositFailed;
-        const stage = retryKind.current === "approval" ? "approval" : "deposit";
-        retryKind.current = stage;
         setState((current) => ({
           ...current,
           status: "error",
-          error:
-            message === approvalFailed || stage === "approval"
-              ? message
-              : depositFailed,
+          error: retryKind.current === "approval" ? message : depositFailed,
         }));
         return false;
       } finally {
@@ -211,7 +192,6 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
 
   return {
     ...state,
-    config: config as BankrollVaultConfig | null,
     canDeposit:
       !!config &&
       !!walletAddress &&
@@ -223,6 +203,5 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
       !inFlight.current,
     deposit,
     retry,
-    refresh,
   };
 }
