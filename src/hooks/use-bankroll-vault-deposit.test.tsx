@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
-import { encodeFunctionData } from "viem";
+import { encodeFunctionData, erc4626Abi } from "viem";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const sdk = vi.hoisted(() => ({
@@ -28,7 +28,6 @@ const readyValues = (allowance = 0n) => ({
   safetyBuffer: 5000000000n,
   freeLiquidity: 20000000000n,
   maxWithdraw: 20000000000n,
-  maxRedeem: 20000000000n,
 });
 
 vi.mock("@/lib/base-sepolia", () => ({
@@ -37,31 +36,9 @@ vi.mock("@/lib/base-sepolia", () => ({
     waitForTransactionReceipt: (...args: unknown[]) => sdk.wait(...args),
   },
 }));
-vi.mock("@/lib/bankroll-vault", () => ({
+vi.mock("@/lib/bankroll-vault", async () => ({
   getBankrollVaultConfig: () => ({ tokenAddress: token, vaultAddress: vault }),
-  bankrollVaultAbi: [
-    {
-      type: "function",
-      name: "deposit",
-      stateMutability: "nonpayable",
-      inputs: [
-        { name: "assets", type: "uint256" },
-        { name: "receiver", type: "address" },
-      ],
-      outputs: [{ name: "shares", type: "uint256" }],
-    },
-    {
-      type: "function",
-      name: "withdraw",
-      stateMutability: "nonpayable",
-      inputs: [
-        { name: "assets", type: "uint256" },
-        { name: "receiver", type: "address" },
-        { name: "owner", type: "address" },
-      ],
-      outputs: [{ name: "shares", type: "uint256" }],
-    },
-  ],
+  bankrollVaultAbi: (await import("viem")).erc4626Abi,
   readBankrollVaultState: (...args: unknown[]) => sdk.read(...args),
 }));
 vi.mock("./use-privy-sponsored-transaction", () => ({
@@ -354,19 +331,7 @@ describe("useBankrollVaultDeposit", () => {
         to: vault,
         chainId: 84532,
         data: encodeFunctionData({
-          abi: [
-            {
-              type: "function",
-              name: "withdraw",
-              stateMutability: "nonpayable",
-              inputs: [
-                { name: "assets", type: "uint256" },
-                { name: "receiver", type: "address" },
-                { name: "owner", type: "address" },
-              ],
-              outputs: [{ name: "shares", type: "uint256" }],
-            },
-          ],
+          abi: erc4626Abi,
           functionName: "withdraw",
           args: [123n, wallet, wallet],
         }),
@@ -390,7 +355,8 @@ describe("useBankrollVaultDeposit", () => {
       await result.current.withdraw(123n);
     });
     expect(result.current.canWithdraw).toBe(false);
-    expect(result.current.withdrawalStatus).toBe("confirmation-unknown");
+    expect(result.current.withdrawalRecovery).toBe("confirmation-unknown");
+    expect(result.current.retryAction).toBe("withdrawal-receipt-check");
     await expect(result.current.deposit(50n)).resolves.toBe(false);
     await expect(result.current.withdraw(50n)).resolves.toBe(false);
     expect(sdk.submit).toHaveBeenCalledTimes(1);
@@ -420,7 +386,11 @@ describe("useBankrollVaultDeposit", () => {
       await result.current.withdraw(123n);
     });
     expect(result.current.maxWithdraw).toBe(50n);
+    expect(result.current.withdrawalRecovery).toBe("reverted-or-failed");
     expect(result.current.canWithdraw).toBe(true);
+    // A failed withdrawal must not lock out deposits — the one action that
+    // could restore free liquidity.
+    expect(result.current.canDeposit).toBe(true);
     expect(result.current.canRetry).toBe(false);
     await expect(result.current.retry()).resolves.toBe(false);
     expect(sdk.submit).toHaveBeenCalledTimes(1);
@@ -442,10 +412,71 @@ describe("useBankrollVaultDeposit", () => {
       await result.current.withdraw(123n);
     });
     expect(result.current.status).toBe("error");
-    expect(result.current.withdrawalStatus).toBe("refresh-after-confirmation");
+    expect(result.current.withdrawalRecovery).toBe(
+      "refresh-after-confirmation"
+    );
+    expect(result.current.retryAction).toBe(
+      "refresh-after-withdrawal-confirmation"
+    );
     await act(async () => {
       await result.current.retry();
     });
+    expect(sdk.submit).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBe("ready");
+    // Recovery copy must not linger to mislabel a later deposit error.
+    expect(result.current.withdrawalRecovery).toBeNull();
+  });
+
+  it("keeps the receipt-check retry available when a fresh read lowers the limit below the unresolved amount", async () => {
+    sdk.getSubmittedHash.mockReset().mockReturnValue("0xwithdraw");
+    sdk.wait
+      .mockReset()
+      .mockRejectedValueOnce(new Error("rpc timeout"))
+      .mockResolvedValueOnce({ status: "success" });
+    const { result } = renderHook(() => useBankrollVaultDeposit(wallet));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await act(async () => {
+      await result.current.withdraw(123n);
+    });
+    expect(result.current.withdrawalRecovery).toBe("confirmation-unknown");
+    sdk.read.mockResolvedValue({ ...readyValues(), maxWithdraw: 50n });
+    await act(async () => {
+      notifyWalletBalancesChanged();
+    });
+    await waitFor(() => expect(result.current.maxWithdraw).toBe(50n));
+    expect(result.current.canRetry).toBe(true);
+    expect(result.current.retryAction).toBe("withdrawal-receipt-check");
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(sdk.submit).toHaveBeenCalledTimes(1);
+    expect(sdk.wait).toHaveBeenNthCalledWith(2, { hash: "0xwithdraw" });
+  });
+
+  it("reports the failed post-revert refresh instead of claiming the limit was refreshed", async () => {
+    sdk.getSubmittedHash.mockReset().mockReturnValue("0xwithdraw");
+    sdk.read
+      .mockReset()
+      .mockResolvedValueOnce(readyValues())
+      .mockRejectedValueOnce(new Error("rpc"))
+      .mockResolvedValueOnce(readyValues());
+    sdk.wait.mockReset().mockResolvedValueOnce({ status: "reverted" });
+    const { result } = renderHook(() => useBankrollVaultDeposit(wallet));
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await act(async () => {
+      await result.current.withdraw(123n);
+    });
+    expect(result.current.status).toBe("error");
+    expect(result.current.withdrawalRecovery).toBeNull();
+    expect(result.current.error).toBe(
+      "Your LP withdrawal did not complete, and we couldn't reload your balances and limits. Retry reloads them."
+    );
+    expect(result.current.canWithdraw).toBe(false);
+    expect(result.current.retryAction).toBe("refresh");
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(result.current.status).toBe("ready");
     expect(sdk.submit).toHaveBeenCalledTimes(1);
   });
 

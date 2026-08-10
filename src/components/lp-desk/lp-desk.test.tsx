@@ -2,33 +2,20 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type {
+  BankrollVaultDepositStatus,
+  BankrollVaultRetryAction,
+  BankrollVaultWithdrawalRecovery,
+} from "@/hooks/use-bankroll-vault-deposit";
 
 type VaultFixture = {
-  status:
-    | "unavailable"
-    | "loading"
-    | "ready"
-    | "approval-submitting"
-    | "approval-pending"
-    | "deposit-submitting"
-    | "deposit-pending"
-    | "withdrawal-submitting"
-    | "withdrawal-pending"
-    | "withdrawal-confirmed"
-    | "confirmed"
-    | "error";
+  status: BankrollVaultDepositStatus;
   error: string | null;
   canDeposit: boolean;
   canWithdraw: boolean;
   canRetry: boolean;
-  withdrawalStatus:
-    | "idle"
-    | "submitting"
-    | "pending-receipt"
-    | "confirmed"
-    | "reverted-or-failed"
-    | "confirmation-unknown"
-    | "refresh-after-confirmation";
+  withdrawalRecovery: BankrollVaultWithdrawalRecovery | null;
+  retryAction: BankrollVaultRetryAction | null;
   tUsdBalance: bigint | undefined;
   shareBalance: bigint;
   assetsPerShare: bigint;
@@ -53,7 +40,8 @@ const sdk = vi.hoisted(() => {
     canDeposit: true,
     canWithdraw: true,
     canRetry: false,
-    withdrawalStatus: "idle",
+    withdrawalRecovery: null,
+    retryAction: null,
     tUsdBalance: 123450000n,
     shareBalance: 50000000n,
     assetsPerShare: 1000000n,
@@ -217,7 +205,6 @@ describe("LpDesk", () => {
     sdk.vault = {
       ...sdk.vault,
       status: "withdrawal-pending",
-      withdrawalStatus: "pending-receipt",
       canDeposit: false,
       canWithdraw: false,
     };
@@ -244,7 +231,6 @@ describe("LpDesk", () => {
     sdk.vault = {
       ...sdk.vault,
       status: "withdrawal-submitting",
-      withdrawalStatus: "submitting",
       canDeposit: false,
       canWithdraw: false,
     };
@@ -253,7 +239,6 @@ describe("LpDesk", () => {
     sdk.vault = {
       ...sdk.vault,
       status: "withdrawal-confirmed",
-      withdrawalStatus: "confirmed",
     };
     rerender(<LpDesk />);
     expect(
@@ -262,7 +247,8 @@ describe("LpDesk", () => {
     sdk.vault = {
       ...sdk.vault,
       status: "error",
-      withdrawalStatus: "confirmation-unknown",
+      withdrawalRecovery: "confirmation-unknown",
+      retryAction: "withdrawal-receipt-check",
       error: "receipt lookup timed out",
       canRetry: true,
     };
@@ -276,7 +262,8 @@ describe("LpDesk", () => {
     expect(sdk.vault.retry).toHaveBeenCalledOnce();
     sdk.vault = {
       ...sdk.vault,
-      withdrawalStatus: "reverted-or-failed",
+      withdrawalRecovery: "reverted-or-failed",
+      retryAction: "withdrawal",
       error: "reverted",
       canRetry: false,
       canWithdraw: true,
@@ -299,7 +286,8 @@ describe("LpDesk", () => {
     expect(sdk.vault.withdraw).toHaveBeenCalledWith(10000000n);
     sdk.vault = {
       ...sdk.vault,
-      withdrawalStatus: "refresh-after-confirmation",
+      withdrawalRecovery: "refresh-after-confirmation",
+      retryAction: "refresh-after-withdrawal-confirmation",
       error: "refresh failed",
       canRetry: true,
       canWithdraw: false,
@@ -327,12 +315,15 @@ describe("LpDesk", () => {
       error: "confirmed but refresh failed",
       canRetry: true,
       canDeposit: false,
+      retryAction: "refresh-after-confirmation",
     };
     rerender(<LpDesk />);
     expect(screen.getByRole("alert").textContent).toContain(
       "confirmed but refresh failed"
     );
-    fireEvent.click(screen.getByRole("button", { name: "Retry deposit" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Refresh confirmed deposit" })
+    );
     expect(sdk.vault.retry).toHaveBeenCalledOnce();
     sdk.vault = {
       ...sdk.vault,
@@ -344,11 +335,27 @@ describe("LpDesk", () => {
     expect(screen.getByRole("alert").textContent).toContain("not configured");
   });
 
-  it("does not let a stale confirmed withdrawal mask deposit recovery", () => {
+  it("labels a plain state-reload retry neutrally after a failed initial load", () => {
+    sdk.vault = {
+      ...sdk.ready(),
+      status: "error",
+      error: "load failed",
+      canDeposit: false,
+      canWithdraw: false,
+      canRetry: true,
+      retryAction: "refresh",
+    };
+    render(<LpDesk />);
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(sdk.vault.retry).toHaveBeenCalledOnce();
+  });
+
+  it("shows a deposit refresh error as itself right after a withdrawal flow", () => {
     sdk.vault = {
       ...sdk.vault,
       status: "error",
-      withdrawalStatus: "confirmed",
+      withdrawalRecovery: null,
+      retryAction: "refresh-after-confirmation",
       error:
         "Your deposit was confirmed, but we couldn't refresh the Bankroll Vault.",
       canDeposit: false,
@@ -362,15 +369,16 @@ describe("LpDesk", () => {
       screen.queryByText("LP withdrawal confirmed on Base Sepolia.")
     ).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Retry deposit" })
+      screen.getByRole("button", { name: "Refresh confirmed deposit" })
     ).not.toBeNull();
   });
 
-  it("clears stale withdrawal recovery copy after an authoritative refresh", () => {
+  it("never renders withdrawal recovery copy outside an error state", () => {
     sdk.vault = {
       ...sdk.vault,
       status: "ready",
-      withdrawalStatus: "refresh-after-confirmation",
+      withdrawalRecovery: "refresh-after-confirmation",
+      retryAction: null,
       error: null,
       canRetry: false,
     };

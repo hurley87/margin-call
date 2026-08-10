@@ -5,7 +5,8 @@ import { usePrivy } from "@privy-io/react-auth";
 import {
   useBankrollVaultDeposit,
   type BankrollVaultDepositStatus,
-  type BankrollVaultWithdrawalStatus,
+  type BankrollVaultRetryAction,
+  type BankrollVaultWithdrawalRecovery,
 } from "@/hooks/use-bankroll-vault-deposit";
 import {
   formatDeskDollars,
@@ -20,44 +21,34 @@ function formatAmount(value: bigint | undefined, unit: string) {
     : `${formatDeskDollars(value, TUSD_DECIMALS)} ${unit}`;
 }
 
+const depositAmountCopy = {
+  limitLoading: "Your Desk Dollars balance is still loading.",
+  overLimit: "Deposit amount cannot exceed your wallet Desk Dollars balance.",
+};
+
+const withdrawalAmountCopy = {
+  limitLoading: "Your withdrawable tUSD limit is still loading.",
+  overLimit:
+    "Withdrawal amount cannot exceed your immediately withdrawable tUSD limit.",
+};
+
 function validateAmount(
   amount: string,
   parsed: bigint | null,
-  balance: bigint | undefined,
-  status: BankrollVaultDepositStatus
+  limit: bigint | undefined,
+  status: BankrollVaultDepositStatus,
+  copy: { limitLoading: string; overLimit: string }
 ): string | null {
   if (amount.length === 0) return null;
   if (parsed === null)
     return `Enter a tUSD amount with no more than ${TUSD_DECIMALS} decimal places.`;
   if (parsed <= 0n) return "Enter a positive tUSD amount.";
-  if (balance === undefined) {
+  if (limit === undefined) {
     // Unavailable and load-error states already render their own notice;
     // only a load that is genuinely in progress warrants "still loading".
-    return status === "loading"
-      ? "Your Desk Dollars balance is still loading."
-      : null;
+    return status === "loading" ? copy.limitLoading : null;
   }
-  if (parsed > balance)
-    return "Deposit amount cannot exceed your wallet Desk Dollars balance.";
-  return null;
-}
-
-function validateWithdrawalAmount(
-  amount: string,
-  parsed: bigint | null,
-  maxWithdraw: bigint | undefined,
-  status: BankrollVaultDepositStatus
-): string | null {
-  if (amount.length === 0) return null;
-  if (parsed === null)
-    return `Enter a tUSD amount with no more than ${TUSD_DECIMALS} decimal places.`;
-  if (parsed <= 0n) return "Enter a positive tUSD amount.";
-  if (maxWithdraw === undefined)
-    return status === "loading"
-      ? "Your withdrawable tUSD limit is still loading."
-      : null;
-  if (parsed > maxWithdraw)
-    return "Withdrawal amount cannot exceed your immediately withdrawable tUSD limit.";
+  if (parsed > limit) return copy.overLimit;
   return null;
 }
 
@@ -72,19 +63,31 @@ const statusCopy: Partial<Record<BankrollVaultDepositStatus, string>> = {
   confirmed: "LP deposit confirmed on Base Sepolia.",
 };
 
-const withdrawalStatusCopy: Partial<
-  Record<BankrollVaultWithdrawalStatus, string>
-> = {
-  submitting: "Submitting your LP withdrawal…",
-  "pending-receipt":
-    "LP withdrawal pending until its Base Sepolia receipt succeeds. Wallet tUSD, shares, and limits will not update until confirmation.",
-  confirmed: "LP withdrawal confirmed on Base Sepolia.",
-  "confirmation-unknown":
-    "Your LP withdrawal was submitted, but its receipt is still unconfirmed. Retry checks that same withdrawal.",
-  "reverted-or-failed":
-    "LP withdrawal did not complete. Your authoritative withdrawable limit was refreshed; enter an amount within that limit to try again.",
-  "refresh-after-confirmation":
-    "LP withdrawal was confirmed, but the refreshed balances and limits could not be loaded. Retry refreshes the confirmed withdrawal state.",
+const withdrawalPhaseCopy: Partial<Record<BankrollVaultDepositStatus, string>> =
+  {
+    "withdrawal-submitting": "Submitting your LP withdrawal…",
+    "withdrawal-pending":
+      "LP withdrawal pending until its Base Sepolia receipt succeeds. Wallet tUSD, shares, and limits will not update until confirmation.",
+    "withdrawal-confirmed": "LP withdrawal confirmed on Base Sepolia.",
+  };
+
+const withdrawalRecoveryCopy: Record<BankrollVaultWithdrawalRecovery, string> =
+  {
+    "confirmation-unknown":
+      "Your LP withdrawal was submitted, but its receipt is still unconfirmed. Retry checks that same withdrawal.",
+    "reverted-or-failed":
+      "LP withdrawal did not complete. Your authoritative withdrawable limit was refreshed; enter an amount within that limit to try again.",
+    "refresh-after-confirmation":
+      "LP withdrawal was confirmed, but the refreshed balances and limits could not be loaded. Retry refreshes the confirmed withdrawal state.",
+  };
+
+const retryLabels: Record<BankrollVaultRetryAction, string> = {
+  refresh: "Retry",
+  "refresh-after-confirmation": "Refresh confirmed deposit",
+  "refresh-after-withdrawal-confirmation": "Refresh confirmed withdrawal",
+  deposit: "Retry deposit",
+  withdrawal: "Retry withdrawal",
+  "withdrawal-receipt-check": "Retry withdrawal receipt check",
 };
 
 export function LpDesk() {
@@ -98,16 +101,18 @@ export function LpDesk() {
     amount,
     parsedAmount,
     vault.tUsdBalance,
-    vault.status
+    vault.status,
+    depositAmountCopy
   );
   const canSubmit =
     vault.canDeposit && parsedAmount !== null && !validationError;
   const parsedWithdrawalAmount = parseTUsdInput(withdrawalAmount);
-  const withdrawalValidationError = validateWithdrawalAmount(
+  const withdrawalValidationError = validateAmount(
     withdrawalAmount,
     parsedWithdrawalAmount,
     vault.maxWithdraw,
-    vault.status
+    vault.status,
+    withdrawalAmountCopy
   );
   const canWithdraw =
     vault.canWithdraw &&
@@ -125,36 +130,21 @@ export function LpDesk() {
     void vault.withdraw(parsedWithdrawalAmount);
   };
 
-  const isWithdrawalStatus = vault.status.startsWith("withdrawal-");
-  const isWithdrawalRecoveryStatus =
-    vault.withdrawalStatus === "confirmation-unknown" ||
-    vault.withdrawalStatus === "reverted-or-failed" ||
-    vault.withdrawalStatus === "refresh-after-confirmation";
-  const showsWithdrawalStatus =
-    isWithdrawalStatus ||
-    (vault.status === "error" && isWithdrawalRecoveryStatus);
+  const withdrawalRecovery =
+    vault.status === "error" ? vault.withdrawalRecovery : null;
   const isAlert =
     vault.status === "unavailable" ||
-    (vault.status === "error" && !isWithdrawalRecoveryStatus);
+    (vault.status === "error" && !withdrawalRecovery);
   const statusMessage = isAlert
     ? vault.error
-    : isWithdrawalStatus
-      ? null
-      : (statusCopy[vault.status] ?? null);
-  const withdrawalMessage = showsWithdrawalStatus
-    ? (withdrawalStatusCopy[vault.withdrawalStatus] ??
-      (vault.status === "error" ? vault.error : null))
-    : null;
-  const withdrawalIsAlert =
-    vault.status === "error" && isWithdrawalRecoveryStatus;
-  const retryLabel =
-    vault.withdrawalStatus === "confirmation-unknown"
-      ? "Retry withdrawal receipt check"
-      : vault.withdrawalStatus === "refresh-after-confirmation"
-        ? "Refresh confirmed withdrawal"
-        : vault.withdrawalStatus === "reverted-or-failed"
-          ? "Retry withdrawal"
-          : "Retry deposit";
+    : (statusCopy[vault.status] ?? null);
+  const withdrawalMessage =
+    withdrawalPhaseCopy[vault.status] ??
+    (withdrawalRecovery ? withdrawalRecoveryCopy[withdrawalRecovery] : null);
+  const withdrawalIsAlert = withdrawalRecovery !== null;
+  const retryLabel = vault.retryAction
+    ? retryLabels[vault.retryAction]
+    : "Retry";
 
   return (
     <section
@@ -318,9 +308,9 @@ export function LpDesk() {
           disabled={!canWithdraw}
           type="submit"
         >
-          {vault.withdrawalStatus === "submitting"
+          {vault.status === "withdrawal-submitting"
             ? "Withdrawal submitting…"
-            : vault.withdrawalStatus === "pending-receipt"
+            : vault.status === "withdrawal-pending"
               ? "Withdrawal pending…"
               : "Withdraw tUSD"}
         </button>

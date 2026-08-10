@@ -49,13 +49,20 @@ contract BankrollVault is ERC4626 {
     /// @notice Returns the minimum gross-asset buffer that remains in the vault after LP withdrawals.
     /// @dev Rounds up so the buffer is never below 20% of gross assets.
     function safetyBuffer() public view returns (uint256) {
-        return grossAssets().mulDiv(SAFETY_BUFFER_NUMERATOR, SAFETY_BUFFER_DENOMINATOR, Math.Rounding.Ceil);
+        return _safetyBuffer(grossAssets());
     }
 
-    /// @notice Returns gross assets available for LP withdrawal after reservations and the safety buffer.
+    function _safetyBuffer(uint256 assets) internal pure returns (uint256) {
+        return assets.mulDiv(SAFETY_BUFFER_NUMERATOR, SAFETY_BUFFER_DENOMINATOR, Math.Rounding.Ceil);
+    }
+
+    /// @notice Returns gross assets available for LP withdrawal after player liabilities and the safety buffer.
+    /// @dev Protects reserved and pending payouts plus unrecognized margin — none of them are LP value, so
+    ///      withdrawals must never draw down the assets backing them.
     function freeLiquidity() public view returns (uint256) {
-        uint256 protectedAssets = reservedLiabilities + safetyBuffer();
         uint256 assets = grossAssets();
+        uint256 protectedAssets =
+            reservedLiabilities + pendingObligations + unrecognizedMargin + _safetyBuffer(assets);
 
         return assets > protectedAssets ? assets - protectedAssets : 0;
     }
@@ -63,11 +70,8 @@ contract BankrollVault is ERC4626 {
     /// @notice Returns the owner's immediately executable asset withdrawal limit.
     /// @dev This cap preserves ERC-4626 conversions while partitioning free liquidity by share ownership.
     function maxWithdraw(address owner) public view override returns (uint256) {
-        uint256 supply = totalSupply();
-        if (supply == 0) return 0;
-
-        uint256 ownerLimit = freeLiquidity().mulDiv(balanceOf(owner), supply);
-        return Math.min(convertToAssets(balanceOf(owner)), ownerLimit);
+        (uint256 maxAssets,) = _withdrawalLimits(owner);
+        return maxAssets;
     }
 
     /// @notice Returns the owner's immediately executable share redemption limit.
@@ -75,11 +79,22 @@ contract BankrollVault is ERC4626 {
     ///      redeemed assets do not exceed `maxWithdraw(owner)`.
     function maxRedeem(address owner) public view override returns (uint256) {
         uint256 ownerShares = balanceOf(owner);
-        uint256 maxAssets = maxWithdraw(owner);
+        (uint256 maxAssets, uint256 ownerAssets) = _withdrawalLimits(owner);
 
-        if (maxAssets == convertToAssets(ownerShares)) return ownerShares;
+        if (maxAssets == ownerAssets) return ownerShares;
 
-        uint256 maxShares = Math.mulDiv(maxAssets + 1, totalSupply() + 1, totalAssets() + 1, Math.Rounding.Ceil) - 1;
+        uint256 maxShares = _convertToShares(maxAssets + 1, Math.Rounding.Ceil) - 1;
         return Math.min(ownerShares, maxShares);
+    }
+
+    /// @dev Shared by `maxWithdraw` and `maxRedeem` so the owner's limit and full asset value come from one
+    ///      set of balance and supply reads.
+    function _withdrawalLimits(address owner) internal view returns (uint256 maxAssets, uint256 ownerAssets) {
+        uint256 supply = totalSupply();
+        if (supply == 0) return (0, 0);
+
+        uint256 ownerShares = balanceOf(owner);
+        ownerAssets = convertToAssets(ownerShares);
+        maxAssets = Math.min(ownerAssets, freeLiquidity().mulDiv(ownerShares, supply));
     }
 }

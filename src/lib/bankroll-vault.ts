@@ -81,21 +81,24 @@ type VaultViewName =
   | "unrecognizedMargin"
   | "reservedLiabilities"
   | "safetyBuffer"
-  | "freeLiquidity"
-  | "maxWithdraw"
-  | "maxRedeem";
+  | "freeLiquidity";
 
 export async function readBankrollVaultState(
   config: BankrollVaultConfig,
   walletAddress: Address
 ) {
-  const readVault = (functionName: VaultViewName, args?: readonly [Address]) =>
+  const readVault = (functionName: VaultViewName) =>
     baseSepoliaPublicClient.readContract({
       address: config.vaultAddress,
       abi: bankrollVaultAbi,
       functionName,
-      ...(args ? { args } : {}),
-    } as never) as Promise<bigint>;
+    });
+  // The deposits-only vault deployed today predates these accounting views.
+  // They degrade to undefined instead of failing the whole load, so the LP
+  // Desk (and deposits) keep working until the contract redeploy and the
+  // NEXT_PUBLIC_BANKROLL_VAULT_ADDRESS cutover land.
+  const readVaultIfDeployed = (functionName: VaultViewName) =>
+    readVault(functionName).catch(() => undefined);
   const [
     tUsdBalance,
     shareBalance,
@@ -110,7 +113,6 @@ export async function readBankrollVaultState(
     safetyBuffer,
     freeLiquidity,
     maxWithdraw,
-    maxRedeem,
   ] = await Promise.all([
     baseSepoliaPublicClient.readContract({
       address: config.tokenAddress,
@@ -136,11 +138,15 @@ export async function readBankrollVaultState(
     readVault("assetsPerShare"),
     readVault("pendingObligations"),
     readVault("unrecognizedMargin"),
-    readVault("reservedLiabilities"),
-    readVault("safetyBuffer"),
-    readVault("freeLiquidity"),
-    readVault("maxWithdraw", [walletAddress]),
-    readVault("maxRedeem", [walletAddress]),
+    readVaultIfDeployed("reservedLiabilities"),
+    readVaultIfDeployed("safetyBuffer"),
+    readVaultIfDeployed("freeLiquidity"),
+    baseSepoliaPublicClient.readContract({
+      address: config.vaultAddress,
+      abi: bankrollVaultAbi,
+      functionName: "maxWithdraw",
+      args: [walletAddress],
+    }),
   ]);
   return {
     tUsdBalance,
@@ -156,6 +162,5 @@ export async function readBankrollVaultState(
     safetyBuffer,
     freeLiquidity,
     maxWithdraw,
-    maxRedeem,
   };
 }

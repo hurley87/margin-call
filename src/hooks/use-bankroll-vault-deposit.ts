@@ -33,25 +33,31 @@ export type BankrollVaultDepositStatus =
   | "confirmed"
   | "error";
 
-export type BankrollVaultWithdrawalStatus =
-  | "idle"
-  | "submitting"
-  | "pending-receipt"
-  | "confirmed"
-  | "reverted-or-failed"
-  | "confirmation-unknown"
-  | "refresh-after-confirmation";
+// How a withdrawal that ended in `status: "error"` can recover. In-progress
+// withdrawal phases live in the `withdrawal-*` status values above; this field
+// only ever accompanies an error and is cleared when any new stage starts.
+export type BankrollVaultWithdrawalRecovery =
+  "confirmation-unknown" | "reverted-or-failed" | "refresh-after-confirmation";
+
+// What retry() will actually perform, so UI labels can describe it truthfully.
+export type BankrollVaultRetryAction =
+  | "refresh"
+  | "refresh-after-confirmation"
+  | "refresh-after-withdrawal-confirmation"
+  | "deposit"
+  | "withdrawal"
+  | "withdrawal-receipt-check";
 
 type Stage = "approval" | "deposit" | "withdrawal";
 type VaultValues = Awaited<ReturnType<typeof readBankrollVaultState>>;
 type State = Partial<VaultValues> & {
   status: BankrollVaultDepositStatus;
-  withdrawalStatus: BankrollVaultWithdrawalStatus;
+  withdrawalRecovery: BankrollVaultWithdrawalRecovery | null;
   error: string | null;
 };
 const initialState: State = {
   status: "loading",
-  withdrawalStatus: "idle",
+  withdrawalRecovery: null,
   error: null,
 };
 const unavailable =
@@ -61,6 +67,8 @@ const refreshFailed =
   "Your deposit was confirmed, but we couldn't refresh the Bankroll Vault. Please try again.";
 const withdrawalRefreshFailed =
   "Your withdrawal was confirmed, but we couldn't refresh the Bankroll Vault. Please try again.";
+const withdrawalFailedAndRefreshFailed =
+  "Your LP withdrawal did not complete, and we couldn't reload your balances and limits. Retry reloads them.";
 const stageCopy: Record<Stage, { failed: string; unconfirmed: string }> = {
   approval: {
     failed: "We couldn't approve this exact tUSD amount. Please try again.",
@@ -81,18 +89,39 @@ const stageCopy: Record<Stage, { failed: string; unconfirmed: string }> = {
   },
 };
 
+// Maps a sponsored-call outcome to the stage's error copy. Clears the pending
+// stage on any definitive outcome; an unknown confirmation keeps it as the
+// recovery handle for Retry.
+function applyStageResult(
+  pendingStage: { current: { stage: Stage; hash: Hex } | null },
+  stage: Stage,
+  result: SponsoredCallResult
+) {
+  if (result.outcome === "confirmed") {
+    pendingStage.current = null;
+    return;
+  }
+  if (result.outcome === "confirmation-unknown")
+    throw new Error(stageCopy[stage].unconfirmed);
+  pendingStage.current = null;
+  if (result.outcome === "submission-failed")
+    throw new Error(result.message ?? stageCopy[stage].failed);
+  throw new Error(stageCopy[stage].failed);
+}
+
 export function useBankrollVaultDeposit(walletAddress: Address | null) {
   const transaction = usePrivySponsoredTransaction();
   const config = useMemo(() => getBankrollVaultConfig(), []);
   const [state, setState] = useState<State>(initialState);
   const inFlight = useRef(false);
   const retryKind = useRef<
-    Stage | "refresh" | "refresh-after-confirmation" | null
+    | Stage
+    | "refresh"
+    | "refresh-after-confirmation"
+    | "refresh-after-withdrawal-confirmation"
+    | null
   >(null);
   const retryAmount = useRef<bigint | null>(null);
-  const confirmedRefreshOperation = useRef<"deposit" | "withdrawal" | null>(
-    null
-  );
   // A stage whose transaction was submitted but whose receipt is unresolved.
   // Retry must re-check this hash — resubmitting could double-deposit.
   const pendingStage = useRef<{ stage: Stage; hash: Hex } | null>(null);
@@ -108,25 +137,27 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
       try {
         const values = await readBankrollVaultState(config, walletAddress);
         retryKind.current = null;
-        confirmedRefreshOperation.current = null;
         setState((current) => ({
           ...current,
           ...values,
           status: "ready",
+          withdrawalRecovery: null,
           error: null,
         }));
         return true;
       } catch {
         retryKind.current = preserveConfirmation
-          ? "refresh-after-confirmation"
+          ? operation === "withdrawal"
+            ? "refresh-after-withdrawal-confirmation"
+            : "refresh-after-confirmation"
           : "refresh";
-        if (preserveConfirmation) confirmedRefreshOperation.current = operation;
         setState((current) => ({
           ...current,
           status: "error",
-          ...(preserveConfirmation && operation === "withdrawal"
-            ? { withdrawalStatus: "refresh-after-confirmation" as const }
-            : {}),
+          withdrawalRecovery:
+            preserveConfirmation && operation === "withdrawal"
+              ? "refresh-after-confirmation"
+              : null,
           error: preserveConfirmation
             ? operation === "withdrawal"
               ? withdrawalRefreshFailed
@@ -160,6 +191,31 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
     [config, walletAddress]
   );
 
+  // Shared submit → pending-receipt → outcome scaffolding for every stage.
+  // Starting a stage clears prior withdrawal-recovery copy so a stale flavor
+  // can never describe a newer operation's error.
+  const runStage = useCallback(
+    async (stage: Stage, request: { to: Address; data: Hex }) => {
+      retryKind.current = stage;
+      setState((current) => ({
+        ...current,
+        status: `${stage}-submitting`,
+        withdrawalRecovery: null,
+        error: null,
+      }));
+      const result = await submitSponsoredCall(transaction, request, (hash) => {
+        pendingStage.current = { stage, hash };
+        setState((current) => ({
+          ...current,
+          status: `${stage}-pending`,
+          error: null,
+        }));
+      });
+      applyStageResult(pendingStage, stage, result);
+    },
+    [transaction]
+  );
+
   const submitDeposit = useCallback(
     async (
       assets: bigint,
@@ -176,44 +232,6 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
       inFlight.current = true;
       retryAmount.current = assets;
 
-      const applyStageResult = (stage: Stage, result: SponsoredCallResult) => {
-        if (result.outcome === "confirmed") {
-          pendingStage.current = null;
-          return;
-        }
-        if (result.outcome === "confirmation-unknown")
-          throw new Error(stageCopy[stage].unconfirmed);
-        pendingStage.current = null;
-        if (result.outcome === "submission-failed")
-          throw new Error(result.message ?? stageCopy[stage].failed);
-        throw new Error(stageCopy[stage].failed);
-      };
-
-      const runStage = async (
-        stage: Stage,
-        request: { to: Address; data: Hex }
-      ) => {
-        retryKind.current = stage;
-        setState((current) => ({
-          ...current,
-          status: `${stage}-submitting`,
-          error: null,
-        }));
-        const result = await submitSponsoredCall(
-          transaction,
-          request,
-          (hash) => {
-            pendingStage.current = { stage, hash };
-            setState((current) => ({
-              ...current,
-              status: `${stage}-pending`,
-              error: null,
-            }));
-          }
-        );
-        applyStageResult(stage, result);
-      };
-
       try {
         let depositConfirmed = false;
         if (mode === "resume" && pending) {
@@ -221,9 +239,11 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
           setState((current) => ({
             ...current,
             status: `${pending.stage}-pending`,
+            withdrawalRecovery: null,
             error: null,
           }));
           applyStageResult(
+            pendingStage,
             pending.stage,
             await confirmSponsoredCall(pending.hash)
           );
@@ -269,7 +289,7 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
         inFlight.current = false;
       }
     },
-    [config, refresh, state.allowance, transaction, walletAddress]
+    [config, refresh, runStage, state.allowance, walletAddress]
   );
 
   const deposit = useCallback(
@@ -291,55 +311,32 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
       retryAmount.current = assets;
       retryKind.current = "withdrawal";
       try {
-        let result: SponsoredCallResult;
         if (mode === "resume") {
           setState((current) => ({
             ...current,
             status: "withdrawal-pending",
-            withdrawalStatus: "pending-receipt",
+            withdrawalRecovery: null,
             error: null,
           }));
-          result = await confirmSponsoredCall(pending!.hash);
-        } else {
-          setState((current) => ({
-            ...current,
-            status: "withdrawal-submitting",
-            withdrawalStatus: "submitting",
-            error: null,
-          }));
-          result = await submitSponsoredCall(
-            transaction,
-            {
-              to: config.vaultAddress,
-              data: encodeFunctionData({
-                abi: bankrollVaultAbi,
-                functionName: "withdraw",
-                args: [assets, walletAddress, walletAddress],
-              }) as Hex,
-            },
-            (hash) => {
-              pendingStage.current = { stage: "withdrawal", hash };
-              setState((current) => ({
-                ...current,
-                status: "withdrawal-pending",
-                withdrawalStatus: "pending-receipt",
-                error: null,
-              }));
-            }
+          applyStageResult(
+            pendingStage,
+            "withdrawal",
+            await confirmSponsoredCall(pending!.hash)
           );
+        } else {
+          await runStage("withdrawal", {
+            to: config.vaultAddress,
+            data: encodeFunctionData({
+              abi: bankrollVaultAbi,
+              functionName: "withdraw",
+              args: [assets, walletAddress, walletAddress],
+            }) as Hex,
+          });
         }
-        if (result.outcome === "confirmation-unknown")
-          throw new Error(stageCopy.withdrawal.unconfirmed);
-        pendingStage.current = null;
-        if (result.outcome === "submission-failed")
-          throw new Error(result.message ?? stageCopy.withdrawal.failed);
-        if (result.outcome === "reverted")
-          throw new Error(stageCopy.withdrawal.failed);
-
         setState((current) => ({
           ...current,
           status: "withdrawal-confirmed",
-          withdrawalStatus: "confirmed",
+          withdrawalRecovery: null,
           error: null,
         }));
         notifyWalletBalancesChanged();
@@ -357,23 +354,25 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
               ...current,
               ...values,
               status: "error",
-              withdrawalStatus: "reverted-or-failed",
+              withdrawalRecovery: "reverted-or-failed",
               error: message,
             }));
           } catch {
+            // The on-screen limit is stale, so don't invite a corrected
+            // amount; Retry reloads state before anything else can happen.
             retryKind.current = "refresh";
             setState((current) => ({
               ...current,
               status: "error",
-              withdrawalStatus: "reverted-or-failed",
-              error: loadFailed,
+              withdrawalRecovery: null,
+              error: withdrawalFailedAndRefreshFailed,
             }));
           }
         } else {
           setState((current) => ({
             ...current,
             status: "error",
-            withdrawalStatus: "confirmation-unknown",
+            withdrawalRecovery: "confirmation-unknown",
             error: message,
           }));
         }
@@ -382,12 +381,14 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
         inFlight.current = false;
       }
     },
-    [config, refresh, transaction, walletAddress]
+    [config, refresh, runStage, walletAddress]
   );
   const retry = useCallback(() => {
     if (retryKind.current === "refresh") return refresh();
     if (retryKind.current === "refresh-after-confirmation")
-      return refresh(true, confirmedRefreshOperation.current ?? "deposit");
+      return refresh(true);
+    if (retryKind.current === "refresh-after-withdrawal-confirmation")
+      return refresh(true, "withdrawal");
     const amount = retryAmount.current;
     if (!amount) return Promise.resolve(false);
     if (pendingStage.current?.stage === "withdrawal")
@@ -406,38 +407,54 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
     );
   }, [refresh, state.maxWithdraw, submitDeposit, withdraw]);
 
-  // After a resolved approval/deposit failure the form accepts a new amount.
-  // An unresolved receipt keeps deposits closed: Retry must settle it first.
-  const canDepositAfterError =
+  // After any resolved stage failure both forms accept a new amount — a failed
+  // withdrawal must not lock out the deposit that could restore liquidity. An
+  // unresolved receipt keeps both closed: Retry must settle it first.
+  const canSubmitAfterError =
     state.status === "error" &&
-    (retryKind.current === "approval" || retryKind.current === "deposit") &&
+    (retryKind.current === "approval" ||
+      retryKind.current === "deposit" ||
+      retryKind.current === "withdrawal") &&
     pendingStage.current === null;
-  const canWithdrawAfterError =
-    state.status === "error" &&
-    retryKind.current === "withdrawal" &&
-    pendingStage.current === null;
+  // An unresolved withdrawal hash is exempt from the limit gate: Retry only
+  // re-checks that receipt, which stays valid however the limit moves.
   const canRetryWithdrawal =
     retryKind.current !== "withdrawal" ||
+    pendingStage.current !== null ||
     ((retryAmount.current ?? 0n) > 0n &&
       (retryAmount.current ?? 0n) <= (state.maxWithdraw ?? 0n));
+  // Mirrors retry()'s dispatch so labels always describe the real action.
+  const retryAction: BankrollVaultRetryAction | null =
+    retryKind.current === null
+      ? null
+      : retryKind.current === "refresh" ||
+          retryKind.current === "refresh-after-confirmation" ||
+          retryKind.current === "refresh-after-withdrawal-confirmation"
+        ? retryKind.current
+        : pendingStage.current?.stage === "withdrawal"
+          ? "withdrawal-receipt-check"
+          : retryKind.current === "withdrawal"
+            ? "withdrawal"
+            : "deposit";
 
   return {
     ...state,
     canDeposit:
       !!config &&
       !!walletAddress &&
-      (state.status === "ready" || canDepositAfterError) &&
+      (state.status === "ready" || canSubmitAfterError) &&
       !inFlight.current,
     canWithdraw:
       !!config &&
       !!walletAddress &&
-      (state.status === "ready" || canWithdrawAfterError) &&
+      (state.status === "ready" || canSubmitAfterError) &&
       !inFlight.current,
     canRetry:
       state.status === "error" &&
       retryKind.current !== null &&
       canRetryWithdrawal &&
       !inFlight.current,
+    retryAction,
     deposit,
     withdraw,
     retry,

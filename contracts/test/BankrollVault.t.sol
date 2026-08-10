@@ -19,6 +19,10 @@ contract BankrollVaultHarness is BankrollVault {
     function setPendingObligationsForTest(uint256 amount) external {
         pendingObligations = amount;
     }
+
+    function setUnrecognizedMarginForTest(uint256 amount) external {
+        unrecognizedMargin = amount;
+    }
 }
 
 contract BankrollVaultTest is Test {
@@ -207,20 +211,42 @@ contract BankrollVaultTest is Test {
 
     function testMaxRedeemIncludesAllSharesWhoseRoundedDownAssetsFitTheLimitAfterALoss() public {
         vm.prank(ALICE);
+        vault.deposit(8, ALICE);
+
+        vault.setReservedLiabilitiesForTest(2);
+        vault.setPendingObligationsForTest(2);
+
+        assertEq(vault.totalSupply(), 8);
+        assertEq(vault.totalAssets(), 6);
+        assertEq(vault.freeLiquidity(), 2);
+        assertEq(vault.maxWithdraw(ALICE), 2);
+        assertEq(vault.previewRedeem(3), 2);
+        assertEq(vault.maxRedeem(ALICE), 3);
+        assertGt(vault.previewRedeem(vault.maxRedeem(ALICE) + 1), vault.maxWithdraw(ALICE));
+
+        vm.prank(ALICE);
+        assertEq(vault.redeem(3, ALICE, ALICE), 2);
+    }
+
+    function testFreeLiquidityProtectsPendingObligationsAndUnrecognizedMargin() public {
+        vm.prank(ALICE);
         vault.deposit(4, ALICE);
 
         vault.setReservedLiabilitiesForTest(2);
         vault.setPendingObligationsForTest(2);
 
-        assertEq(vault.totalSupply(), 4);
-        assertEq(vault.totalAssets(), 2);
-        assertEq(vault.maxWithdraw(ALICE), 1);
-        assertEq(vault.previewRedeem(3), 1);
-        assertEq(vault.maxRedeem(ALICE), 3);
-        assertGt(vault.previewRedeem(vault.maxRedeem(ALICE) + 1), vault.maxWithdraw(ALICE));
+        // Reserved plus pending payouts already equal gross assets, so no LP
+        // withdrawal may drain the funds owed to players. maxRedeem may allow
+        // dust shares whose rounded-down asset value is zero.
+        assertEq(vault.freeLiquidity(), 0);
+        assertEq(vault.maxWithdraw(ALICE), 0);
+        assertEq(vault.previewRedeem(vault.maxRedeem(ALICE)), 0);
 
-        vm.prank(ALICE);
-        assertEq(vault.redeem(3, ALICE, ALICE), 1);
+        vault.setPendingObligationsForTest(0);
+        vault.setUnrecognizedMarginForTest(2);
+
+        assertEq(vault.freeLiquidity(), 0);
+        assertEq(vault.maxWithdraw(ALICE), 0);
     }
 
     function testDelegatedWithdrawUsesOwnerLimitAndAllowance() public {
