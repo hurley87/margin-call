@@ -11,6 +11,12 @@ const sdk = vi.hoisted(() => ({
   wait: vi.fn(),
 }));
 
+vi.mock("@/lib/base-sepolia", () => ({
+  BASE_SEPOLIA_CHAIN_ID: 84532,
+  baseSepoliaPublicClient: {
+    waitForTransactionReceipt: (...args: unknown[]) => sdk.wait(...args),
+  },
+}));
 vi.mock("@/lib/desk-dollars", () => ({
   getDeskDollarsConfig: () => ({
     tokenAddress: "0x0000000000000000000000000000000000000001",
@@ -25,9 +31,6 @@ vi.mock("@/lib/desk-dollars", () => ({
       outputs: [],
     },
   ],
-  deskDollarsPublicClient: {
-    waitForTransactionReceipt: (...args: unknown[]) => sdk.wait(...args),
-  },
   readDeskDollarsState: (...args: unknown[]) => sdk.read(...args),
 }));
 vi.mock("./use-privy-sponsored-transaction", () => ({
@@ -99,6 +102,31 @@ describe("useDeskDollarsFaucet", () => {
     });
     expect(sdk.submit).toHaveBeenCalledTimes(2);
     expect(sdk.submit.mock.calls[1][0]).toEqual(sdk.submit.mock.calls[0][0]);
+  });
+
+  it("re-checks the same claim hash after a receipt-wait failure instead of resubmitting", async () => {
+    sdk.wait
+      .mockReset()
+      .mockRejectedValueOnce(new Error("rpc timeout"))
+      .mockResolvedValueOnce({ status: "success" });
+    const { result } = renderHook(() =>
+      useDeskDollarsFaucet("0x0000000000000000000000000000000000000003")
+    );
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await act(async () => {
+      await result.current.claim();
+    });
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe(
+      "Your claim was submitted, but we couldn't confirm it yet. Retry to check its status."
+    );
+    await act(async () => {
+      await result.current.retry();
+    });
+    expect(sdk.submit).toHaveBeenCalledTimes(1);
+    expect(sdk.wait).toHaveBeenCalledTimes(2);
+    expect(sdk.wait).toHaveBeenNthCalledWith(2, { hash: "0xabc" });
+    await waitFor(() => expect(result.current.status).toBe("ready"));
   });
 
   it("reports an initial read failure without claiming confirmation and retries only the read", async () => {

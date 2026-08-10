@@ -1,22 +1,11 @@
-import { createPublicClient, http, isAddress, type Address } from "viem";
-import { baseSepolia } from "viem/chains";
+import { erc20Abi, isAddress, type Address } from "viem";
+import { baseSepoliaPublicClient } from "./base-sepolia";
 
-export const deskDollarsAbi = [
-  {
-    type: "function",
-    name: "balanceOf",
-    stateMutability: "view",
-    inputs: [{ name: "account", type: "address" }],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "decimals",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint8" }],
-  },
-] as const;
+export const TUSD_DECIMALS = 6;
+
+// Desk Dollars is a plain ERC-20 to its consumers; the faucet ABI below is
+// the only custom surface.
+export const deskDollarsAbi = erc20Abi;
 
 export const deskDollarsFaucetAbi = [
   {
@@ -40,45 +29,41 @@ export type DeskDollarsConfig = {
   faucetAddress: Address;
 };
 
+/** Public address only. The static env reference is required for client inlining. */
+export function getDeskDollarsTokenAddress(): Address | null {
+  const tokenAddress = process.env.NEXT_PUBLIC_DESK_DOLLARS_ADDRESS;
+  return tokenAddress && isAddress(tokenAddress) ? tokenAddress : null;
+}
+
 /** Public addresses only. These static references are required for client inlining. */
 export function getDeskDollarsConfig(): DeskDollarsConfig | null {
-  const tokenAddress = process.env.NEXT_PUBLIC_DESK_DOLLARS_ADDRESS;
+  const tokenAddress = getDeskDollarsTokenAddress();
   const faucetAddress = process.env.NEXT_PUBLIC_DESK_DOLLARS_FAUCET_ADDRESS;
 
-  if (
-    !tokenAddress ||
-    !faucetAddress ||
-    !isAddress(tokenAddress) ||
-    !isAddress(faucetAddress)
-  ) {
+  if (!tokenAddress || !faucetAddress || !isAddress(faucetAddress)) {
     return null;
   }
 
   return { tokenAddress, faucetAddress };
 }
 
-export const deskDollarsPublicClient = createPublicClient({
-  chain: baseSepolia,
-  transport: http(process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL || undefined),
-});
-
 export async function readDeskDollarsState(
   config: DeskDollarsConfig,
   walletAddress: Address
 ) {
   const [balance, decimals, nextClaimAt] = await Promise.all([
-    deskDollarsPublicClient.readContract({
+    baseSepoliaPublicClient.readContract({
       address: config.tokenAddress,
       abi: deskDollarsAbi,
       functionName: "balanceOf",
       args: [walletAddress],
     }),
-    deskDollarsPublicClient.readContract({
+    baseSepoliaPublicClient.readContract({
       address: config.tokenAddress,
       abi: deskDollarsAbi,
       functionName: "decimals",
     }),
-    deskDollarsPublicClient.readContract({
+    baseSepoliaPublicClient.readContract({
       address: config.faucetAddress,
       abi: deskDollarsFaucetAbi,
       functionName: "nextClaimAt",
@@ -97,4 +82,17 @@ export function formatDeskDollars(value: bigint, decimals: number) {
     .padStart(decimals, "0")
     .replace(/0+$/, "");
   return fraction ? `${whole}.${fraction}` : whole.toString();
+}
+
+const TUSD_SCALE = 10n ** BigInt(TUSD_DECIMALS);
+const TUSD_INPUT_PATTERN = new RegExp(`^\\d+(?:\\.\\d{0,${TUSD_DECIMALS}})?$`);
+
+/** Parses a user-entered Desk Dollars amount without floating-point arithmetic. */
+export function parseTUsdInput(input: string): bigint | null {
+  if (!TUSD_INPUT_PATTERN.test(input)) return null;
+
+  const [whole, fraction = ""] = input.split(".");
+  return (
+    BigInt(whole) * TUSD_SCALE + BigInt(fraction.padEnd(TUSD_DECIMALS, "0"))
+  );
 }

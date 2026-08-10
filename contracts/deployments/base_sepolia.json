@@ -10,21 +10,31 @@
   "deploymentBlock": 45302565,
   "token": "0x78c9DfaA9288Dd9c1f757d336A88f4F8e9EfC35C",
   "faucet": "0x23f4C0622D9b88aA0Fe7469B34F1e780b5367c78",
+  "bankrollVault": "0xb82f4B3DcE7539d23ab77aBF9e3317269D3E92ff",
   "bankrollSeedRecipient": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
   "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
   "bankrollSeedAmount": 25000000000,
+  "bankrollVaultSeedDepositor": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "bankrollVaultSeedAssets": 25000000000,
+  "bankrollVaultMintedShares": 25000000000,
+  "bankrollVaultDeploymentBlock": 45304846,
+  "bankrollVaultDepositSelector": "0x6e553f65",
   "faucetClaimAmount": 100000000,
   "faucetClaimCooldown": 3600,
   "faucetConfigured": true,
   "faucetClaimSelector": "0x4e71d92d",
   "verification": {
     "token": "https://sepolia.basescan.org/address/0x78c9DfaA9288Dd9c1f757d336A88f4F8e9EfC35C#code",
-    "faucet": "https://sepolia.basescan.org/address/0x23f4C0622D9b88aA0Fe7469B34F1e780b5367c78#code"
+    "faucet": "https://sepolia.basescan.org/address/0x23f4C0622D9b88aA0Fe7469B34F1e780b5367c78#code",
+    "bankrollVault": "https://sepolia.basescan.org/address/0xb82f4B3DcE7539d23ab77aBF9e3317269D3E92ff#code"
   },
   "transactions": {
     "deployToken": "0x76d95c7f64a1f71c2b3cf32cd0e231fe695409838f5f1389e2b156a01c634162",
     "deployFaucet": "0xc1b0bb52b868fa95536c9c55e2a51ad9ba79e92c8ee0d099e6b4175dbb362b3f",
-    "configureFaucet": "0x9f6a159437bd29cae71c3a1b5a5e92687dcded05d77d5d561c11c392ed29c523"
+    "configureFaucet": "0x9f6a159437bd29cae71c3a1b5a5e92687dcded05d77d5d561c11c392ed29c523",
+    "deployBankrollVault": "0xd6ac12eb840aa031bc58a6c1005f6eb2e67e53f06aa2b26697370a6b52208538",
+    "approveBankrollVault": "0x8ce074a47a477967ca15e3a26ae272bd6b17d9e50a2d50bccc36dc58785d793c",
+    "seedBankrollVault": "0xe802a787c7bd87c7b0a3a7f91debf084a2789a358fcecabeef753c1c75f6af31"
   },
   "privySponsorship": {
     "appId": "cmmfbu7o900c10cjme09a31h4",
