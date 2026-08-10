@@ -34,6 +34,27 @@ export const bankrollVaultAbi = [
     inputs: [],
     outputs: [{ name: "", type: "uint256" }],
   },
+  {
+    type: "function",
+    name: "reservedLiabilities",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "safetyBuffer",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
+  {
+    type: "function",
+    name: "freeLiquidity",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+  },
 ] as const;
 
 export type BankrollVaultConfig = {
@@ -57,7 +78,10 @@ type VaultViewName =
   | "totalSupply"
   | "assetsPerShare"
   | "pendingObligations"
-  | "unrecognizedMargin";
+  | "unrecognizedMargin"
+  | "reservedLiabilities"
+  | "safetyBuffer"
+  | "freeLiquidity";
 
 export async function readBankrollVaultState(
   config: BankrollVaultConfig,
@@ -69,6 +93,12 @@ export async function readBankrollVaultState(
       abi: bankrollVaultAbi,
       functionName,
     });
+  // The deposits-only vault deployed today predates these accounting views.
+  // They degrade to undefined instead of failing the whole load, so the LP
+  // Desk (and deposits) keep working until the contract redeploy and the
+  // NEXT_PUBLIC_BANKROLL_VAULT_ADDRESS cutover land.
+  const readVaultIfDeployed = (functionName: VaultViewName) =>
+    readVault(functionName).catch(() => undefined);
   const [
     tUsdBalance,
     shareBalance,
@@ -79,6 +109,10 @@ export async function readBankrollVaultState(
     assetsPerShare,
     pendingObligations,
     unrecognizedMargin,
+    reservedLiabilities,
+    safetyBuffer,
+    freeLiquidity,
+    maxWithdraw,
   ] = await Promise.all([
     baseSepoliaPublicClient.readContract({
       address: config.tokenAddress,
@@ -104,6 +138,15 @@ export async function readBankrollVaultState(
     readVault("assetsPerShare"),
     readVault("pendingObligations"),
     readVault("unrecognizedMargin"),
+    readVaultIfDeployed("reservedLiabilities"),
+    readVaultIfDeployed("safetyBuffer"),
+    readVaultIfDeployed("freeLiquidity"),
+    baseSepoliaPublicClient.readContract({
+      address: config.vaultAddress,
+      abi: bankrollVaultAbi,
+      functionName: "maxWithdraw",
+      args: [walletAddress],
+    }),
   ]);
   return {
     tUsdBalance,
@@ -115,5 +158,9 @@ export async function readBankrollVaultState(
     assetsPerShare,
     pendingObligations,
     unrecognizedMargin,
+    reservedLiabilities,
+    safetyBuffer,
+    freeLiquidity,
+    maxWithdraw,
   };
 }
