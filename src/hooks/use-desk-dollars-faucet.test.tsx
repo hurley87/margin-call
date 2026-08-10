@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const sdk = vi.hoisted(() => ({
   submit: vi.fn(),
   getSubmittedHash: vi.fn(),
+  submissionError: null as string | null,
   read: vi.fn(),
   wait: vi.fn(),
 }));
@@ -33,7 +34,7 @@ vi.mock("./use-privy-sponsored-transaction", () => ({
   usePrivySponsoredTransaction: () => ({
     submit: sdk.submit,
     getSubmittedHash: sdk.getSubmittedHash,
-    error: null,
+    getSubmissionError: () => sdk.submissionError,
   }),
 }));
 
@@ -43,12 +44,16 @@ describe("useDeskDollarsFaucet", () => {
   beforeEach(() => {
     sdk.submit.mockReset().mockResolvedValue(true);
     sdk.getSubmittedHash.mockReset().mockReturnValue("0xabc");
+    sdk.submissionError = null;
     sdk.read
       .mockReset()
       .mockResolvedValue({ balance: 100000000n, decimals: 6, nextClaimAt: 0n });
     sdk.wait.mockReset().mockResolvedValue({ status: "success" });
   });
-  afterEach(() => cleanup());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it("keeps a claim pending until a successful receipt, then refreshes authoritative reads", async () => {
     let resolveReceipt: (value: { status: "success" }) => void;
@@ -166,6 +171,48 @@ describe("useDeskDollarsFaucet", () => {
       resolveSubmit!(true);
       await first!;
     });
+  });
+
+  it("surfaces the submission failure reason recorded by that same claim", async () => {
+    sdk.submit.mockImplementation(async () => {
+      sdk.submissionError = "Your wallet is not ready. Please try again.";
+      return false;
+    });
+    const { result } = renderHook(() =>
+      useDeskDollarsFaucet("0x0000000000000000000000000000000000000003")
+    );
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+    await act(async () => {
+      await result.current.claim();
+    });
+    expect(result.current.status).toBe("error");
+    expect(result.current.error).toBe(
+      "Your wallet is not ready. Please try again."
+    );
+  });
+
+  it("counts a pending cooldown down and re-enables claiming at the boundary", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000_000_000);
+    sdk.read.mockResolvedValue({
+      balance: 100000000n,
+      decimals: 6,
+      nextClaimAt: 1_000_000_002n,
+    });
+    const { result } = renderHook(() =>
+      useDeskDollarsFaucet("0x0000000000000000000000000000000000000003")
+    );
+    await act(async () => {});
+    expect(result.current.status).toBe("ready");
+    expect(result.current.eligible).toBe(false);
+    expect(result.current.canClaim).toBe(false);
+    expect(result.current.cooldownSeconds).toBe(2n);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_000);
+    });
+    expect(result.current.eligible).toBe(true);
+    expect(result.current.canClaim).toBe(true);
+    expect(result.current.cooldownSeconds).toBe(0n);
   });
 
   it("retries a submission failure with the same claim request", async () => {

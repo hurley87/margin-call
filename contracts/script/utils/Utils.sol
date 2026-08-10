@@ -9,7 +9,10 @@ contract Utils is Script {
     uint256 constant CHAIN_ID_BASE_SEPOLIA = 84_532;
 
     string constant OUTPUT_ANVIL_LOCALNET = "anvil_localnet";
+    // Curated, hand-maintained release record (checked in). Scripts must never
+    // write here directly — they write the *.run record for deliberate merging.
     string constant OUTPUT_BASE_SEPOLIA = "base_sepolia";
+    string constant OUTPUT_BASE_SEPOLIA_RUN = "base_sepolia.run";
     string constant OUTPUT_UNKNOWN = "unknown";
 
     function readInput(string memory inputFileName) internal view returns (string memory) {

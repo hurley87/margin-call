@@ -12,7 +12,7 @@ contract DeployDeskDollars is Utils {
     error UnsupportedChain(uint256 chainId);
     error DeploymentPostconditionFailed();
 
-    string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA;
+    string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_RUN;
 
     struct Deployment {
         uint256 chainId;
@@ -26,7 +26,9 @@ contract DeployDeskDollars is Utils {
         bool faucetConfigured;
     }
 
-    /// @notice Broadcasts the Base Sepolia deployment and writes its non-secret record to deployments/.
+    /// @notice Broadcasts the Base Sepolia deployment and writes its non-secret run record to
+    ///         deployments/base_sepolia.run.json (gitignored); merge it into the curated
+    ///         deployments/base_sepolia.json by hand so re-runs never clobber release provenance.
     function run(address bankrollSeedRecipient) external returns (Deployment memory deployment) {
         _requireBaseSepolia();
 

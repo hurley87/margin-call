@@ -40,6 +40,7 @@ export function usePrivySponsoredTransaction() {
   const [state, setState] = useState<SponsoredTransactionState>(initialState);
   const inFlight = useRef(false);
   const submittedHash = useRef<`0x${string}` | null>(null);
+  const submissionError = useRef<string | null>(null);
   const failedRequest = useRef<UnsignedTransactionRequest | null>(null);
   const walletAddress = getEvmWalletAddress(user);
   const ready = privyReady && authenticated && walletsReady && !!walletAddress;
@@ -50,6 +51,7 @@ export function usePrivySponsoredTransaction() {
 
       if (!ready || !walletAddress) {
         failedRequest.current = request;
+        submissionError.current = walletUnavailableError;
         setState({
           status: "error",
           hash: null,
@@ -60,6 +62,7 @@ export function usePrivySponsoredTransaction() {
 
       inFlight.current = true;
       submittedHash.current = null;
+      submissionError.current = null;
       setState({ status: "submitting", hash: null, error: null });
 
       try {
@@ -73,6 +76,7 @@ export function usePrivySponsoredTransaction() {
         return true;
       } catch {
         failedRequest.current = request;
+        submissionError.current = transactionFailedError;
         setState({
           status: "error",
           hash: null,
@@ -103,5 +107,8 @@ export function usePrivySponsoredTransaction() {
     submit,
     retry,
     getSubmittedHash: () => submittedHash.current,
+    // Ref-backed so a caller's closure reads the failure reason from the same
+    // submit() call, not a stale pre-submit render of this hook's state.
+    getSubmissionError: () => submissionError.current,
   };
 }
