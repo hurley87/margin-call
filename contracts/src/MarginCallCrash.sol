@@ -177,8 +177,12 @@ contract MarginCallCrash is ReentrancyGuard {
 
         uint256 maximumPayout = (margin * leverageBps) / LEVERAGE_SCALE;
         uint256 ticketId = nextTicketId++;
+        bool firstExposure = round.totalMargin == 0;
 
         vault.acceptEntry(roundId, ticketId, msg.sender, margin, leverageBps, maximumPayout);
+        if (firstExposure) {
+            vault.registerExposure(roundId, round.expiresAt);
+        }
 
         _tickets[ticketId] = Ticket({
             id: ticketId,
@@ -212,6 +216,9 @@ contract MarginCallCrash is ReentrancyGuard {
 
         e.reveal(euint256.wrap(round.crashRandom));
         round.status = RoundStatus.RevealRequested;
+        if (round.totalMargin > 0) {
+            vault.noteRevealRequested(roundId);
+        }
         emit RevealRequested(roundId, round.crashRandom);
     }
 
