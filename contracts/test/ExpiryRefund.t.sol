@@ -259,9 +259,7 @@ contract ExpiryRefundTest is Test {
         uint256 ticketId = _enter(0, ALICE, ONE_TUSD, 12_500);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                MarginCallCrash.InvalidRoundStatus.selector, 0, MarginCallCrash.RoundStatus.Open
-            )
+            abi.encodeWithSelector(MarginCallCrash.InvalidRoundStatus.selector, 0, MarginCallCrash.RoundStatus.Open)
         );
         game.refund(ticketId, address(0));
 
@@ -285,9 +283,7 @@ contract ExpiryRefundTest is Test {
         uint256 ticketId = _enterAndExpireFromOpen(0, ALICE, ONE_TUSD, 12_500);
 
         vm.expectRevert(
-            abi.encodeWithSelector(
-                MarginCallCrash.InvalidRoundStatus.selector, 0, MarginCallCrash.RoundStatus.Expired
-            )
+            abi.encodeWithSelector(MarginCallCrash.InvalidRoundStatus.selector, 0, MarginCallCrash.RoundStatus.Expired)
         );
         game.claim(ticketId, address(0));
     }
