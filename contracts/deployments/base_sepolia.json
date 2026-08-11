@@ -14,9 +14,9 @@
   "token": "0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085",
   "faucet": "0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356",
   "bankrollVault": "0xB5b599104650924Ec4b0f3aFC560e80A7DA93afe",
-  "marginCallCrash": "0x4677227a9DEF791BcBd60E5D73C12927363EA04f",
-  "marginCallCrashDeploymentBlock": 45342715,
-  "marginCallCrashEpochOrigin": 1786454100,
+  "marginCallCrash": "0x7DFec2b446DdDB485eb5DDE0C4d0709A4f96bA87",
+  "marginCallCrashDeploymentBlock": 45345367,
+  "marginCallCrashEpochOrigin": 1786459380,
   "marginCallCrashRoundDuration": 60,
   "marginCallCrashEntryWindow": 45,
   "marginCallCrashExpiryDelay": 900,
@@ -39,7 +39,7 @@
     "token": "https://sepolia.basescan.org/address/0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085#code",
     "faucet": "https://sepolia.basescan.org/address/0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356#code",
     "bankrollVault": "https://sepolia.basescan.org/address/0xB5b599104650924Ec4b0f3aFC560e80A7DA93afe#code",
-    "marginCallCrash": "https://sepolia.basescan.org/address/0x4677227a9DEF791BcBd60E5D73C12927363EA04f#code"
+    "marginCallCrash": "https://sepolia.basescan.org/address/0x7DFec2b446DdDB485eb5DDE0C4d0709A4f96bA87#code"
   },
   "transactions": {
     "deployToken": "0x52d47a026c289a580eb2fb329f31667bc6282af10c1bc345dcc99b4e7b6ae9cb",
@@ -48,7 +48,7 @@
     "deployBankrollVault": "0x41ee9bb43f7acd02f4cbe3d9b7bd7222d1f35482e24b551dde32bf625e19e3d4",
     "approveBankrollVault": "0xcfe51188a2040cd8f13e1f4c176b82e939b48519a257830a986a55d3062b00f4",
     "seedBankrollVault": "0x2675ceccfe5443da7bf1a67bdfe80bc08a518e5be54b22c5557e71db91fa31d3",
-    "deployMarginCallCrash": "0x982be82965b26a23bf583f36466d618ea19e151899dbd49327c173415a197485"
+    "deployMarginCallCrash": "0x0fb1eb320775dc6a39ccc5ae1294bc6c57b164f3412f0f286c45e404976e6e84"
   },
   "privySponsorship": {
     "appId": "cmmfbu7o900c10cjme09a31h4",
@@ -58,13 +58,36 @@
     "contractSelectorAllowlist": "not-exposed-by-dashboard"
   },
   "smokeTest": {
-    "status": "pending-live-preview-wallet-test"
+    "status": "passed-lifecycle-343",
+    "game": "0x7DFec2b446DdDB485eb5DDE0C4d0709A4f96bA87",
+    "issue": 343,
+    "verifiedSource": true,
+    "round0": {
+      "openTx": "0x7330bd04a58a5b6b1862f3e3d091dd412272a1503e0e1352262346093479cd24",
+      "revealTx": "0x95cd24e571e7533ae5a4795cad04513a18a618df3df06272cee7ff11af5a2703",
+      "finalizeTx": "0x5fa00ab3b3b9b3f3e958c89d693cf7a0ac0e83a5f76b742172544340fe695bc3",
+      "crashRandom": "0x223efd8388f83ad4be579c8215eb07c637c4fc48883bd9d3e7424b4385770800",
+      "plaintext": 1269,
+      "crashPointBps": 11338,
+      "status": 3
+    },
+    "round1": {
+      "openTx": "0x65660e7a6b605e28ce8bd31c04f81bbde2650b6a9f1b244d3134044698b63abb",
+      "expireTx": "0x6bdde357b0f19cbb2f7e31c8326fc1336a96b337905a7083beb4620d2dd0649b",
+      "status": 4
+    }
   },
   "supersedes": {
     "sourceCommit": "4b1108c4f5c806c67c189003b3093c4dd3ac0483",
     "token": "0x78c9DfaA9288Dd9c1f757d336A88f4F8e9EfC35C",
     "faucet": "0x23f4C0622D9b88aA0Fe7469B34F1e780b5367c78",
     "bankrollVault": "0xb82f4B3DcE7539d23ab77aBF9e3317269D3E92ff",
-    "marginCallCrash": "0x65123418A380f64647d8605537272d1B851a49b8"
-  }
+    "marginCallCrash": "0x4677227a9DEF791BcBd60E5D73C12927363EA04f",
+    "marginCallCrashDeploymentBlock": 45342715,
+    "marginCallCrashEpochOrigin": 1786454100,
+    "deployMarginCallCrash": "0x982be82965b26a23bf583f36466d618ea19e151899dbd49327c173415a197485"
+  },
+  "marginCallCrashRequestRevealSelector": "0x40261cdd",
+  "marginCallCrashFinalizeRoundSelector": "0x02c6266a",
+  "marginCallCrashExpireRoundSelector": "0x292672ea"
 }

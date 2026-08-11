@@ -19,6 +19,12 @@ vi.mock("./base-sepolia", () => ({
 const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000001";
 const OPENING_TRANSACTION_HASH =
   "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+const REVEAL_TRANSACTION_HASH =
+  "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+const FINALIZE_TRANSACTION_HASH =
+  "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+const EXPIRE_TRANSACTION_HASH =
+  "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd";
 const RANDOM_HANDLE =
   "0x000000000000000000000000000000000000000000000000000000000000cafe";
 
@@ -73,6 +79,26 @@ describe("MarginCallCrash public reads and phase math", () => {
     expect(getRoundCountdownSeconds(round, round.lockAt)).toBe(0);
   });
 
+  it("formats Crash Point display with the sub-1.00x product rule", async () => {
+    const { formatCrashPointBps, isCrashPointPublished } =
+      await import("./margin-call-crash");
+
+    expect(formatCrashPointBps(9_900n)).toBe("1.00x");
+    expect(formatCrashPointBps(10_000n)).toBe("1.00x");
+    expect(formatCrashPointBps(34_200n)).toBe("3.42x");
+    expect(formatCrashPointBps(100_000n)).toBe("10.00x");
+    expect(formatCrashPointBps(100_001n)).toBe("10.00x");
+    expect(
+      isCrashPointPublished(makeRound({ status: 3, crashPointBps: 9_900n }))
+    ).toBe(true);
+    expect(
+      isCrashPointPublished(makeRound({ status: 2, crashPointBps: 0n }))
+    ).toBe(false);
+    expect(
+      isCrashPointPublished(makeRound({ status: 4, crashPointBps: 0n }))
+    ).toBe(false);
+  });
+
   it("requires valid public address and deployment-block configuration", async () => {
     vi.stubEnv("NEXT_PUBLIC_MARGIN_CALL_CRASH_ADDRESS", CONTRACT_ADDRESS);
     vi.stubEnv("NEXT_PUBLIC_MARGIN_CALL_CRASH_DEPLOYMENT_BLOCK", "45314000");
@@ -111,6 +137,12 @@ describe("MarginCallCrash public reads and phase math", () => {
       currentRoundId: 3n,
       round: makeRound(),
       openingTransactionUrl: `https://sepolia.basescan.org/tx/${OPENING_TRANSACTION_HASH}`,
+      revealTransactionUrl: null,
+      finalizeTransactionUrl: null,
+      expireTransactionUrl: null,
+      gameContractUrl: `https://sepolia.basescan.org/address/${CONTRACT_ADDRESS}#code`,
+      incoContractUrl:
+        "https://sepolia.basescan.org/address/0x4b9911b0191B0b6a6eA8F2Ed562e20Cff5AC8624#code",
     });
     expect(sdk.readContract).toHaveBeenNthCalledWith(
       2,
@@ -135,6 +167,57 @@ describe("MarginCallCrash public reads and phase math", () => {
         toBlock: 100n,
       })
     );
+  });
+
+  it("resolves lifecycle transactions for finalized and expired rounds", async () => {
+    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
+    sdk.readContract
+      .mockResolvedValueOnce(900n)
+      .mockResolvedValueOnce(3n)
+      .mockResolvedValueOnce(makeRound({ status: 3, crashPointBps: 34_200n }));
+    sdk.getLogs
+      .mockResolvedValueOnce([{ transactionHash: OPENING_TRANSACTION_HASH }])
+      .mockResolvedValueOnce([{ transactionHash: REVEAL_TRANSACTION_HASH }])
+      .mockResolvedValueOnce([{ transactionHash: FINALIZE_TRANSACTION_HASH }]);
+    const { readCurrentCrashRound } = await import("./margin-call-crash");
+
+    await expect(
+      readCurrentCrashRound({
+        address: CONTRACT_ADDRESS,
+        deploymentBlock: 50n,
+      })
+    ).resolves.toMatchObject({
+      round: { status: 3, crashPointBps: 34_200n },
+      openingTransactionUrl: `https://sepolia.basescan.org/tx/${OPENING_TRANSACTION_HASH}`,
+      revealTransactionUrl: `https://sepolia.basescan.org/tx/${REVEAL_TRANSACTION_HASH}`,
+      finalizeTransactionUrl: `https://sepolia.basescan.org/tx/${FINALIZE_TRANSACTION_HASH}`,
+      expireTransactionUrl: null,
+    });
+
+    vi.resetModules();
+    sdk.getBlock.mockResolvedValue({ number: 101n, timestamp: 2_000n });
+    sdk.readContract
+      .mockResolvedValueOnce(900n)
+      .mockResolvedValueOnce(3n)
+      .mockResolvedValueOnce(makeRound({ status: 4 }));
+    sdk.getLogs
+      .mockResolvedValueOnce([{ transactionHash: OPENING_TRANSACTION_HASH }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ transactionHash: EXPIRE_TRANSACTION_HASH }]);
+    const { readCurrentCrashRound: readExpired } =
+      await import("./margin-call-crash");
+
+    await expect(
+      readExpired({
+        address: CONTRACT_ADDRESS,
+        deploymentBlock: 50n,
+      })
+    ).resolves.toMatchObject({
+      round: { status: 4 },
+      expireTransactionUrl: `https://sepolia.basescan.org/tx/${EXPIRE_TRANSACTION_HASH}`,
+      finalizeTransactionUrl: null,
+      revealTransactionUrl: null,
+    });
   });
 
   it("reuses immutable and already-observed reads across polls", async () => {
@@ -257,6 +340,29 @@ describe("MarginCallCrash public reads and phase math", () => {
         deploymentBlock: 50n,
       })
     ).rejects.toThrow("Expected one RoundOpened event for round 3");
+  });
+
+  it("rejects duplicate lifecycle events during reconstruction", async () => {
+    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
+    sdk.readContract
+      .mockResolvedValueOnce(900n)
+      .mockResolvedValueOnce(3n)
+      .mockResolvedValueOnce(makeRound({ status: 3, crashPointBps: 9_900n }));
+    sdk.getLogs
+      .mockResolvedValueOnce([{ transactionHash: OPENING_TRANSACTION_HASH }])
+      .mockResolvedValueOnce([{ transactionHash: REVEAL_TRANSACTION_HASH }])
+      .mockResolvedValueOnce([
+        { transactionHash: FINALIZE_TRANSACTION_HASH },
+        { transactionHash: FINALIZE_TRANSACTION_HASH },
+      ]);
+    const { readCurrentCrashRound } = await import("./margin-call-crash");
+
+    await expect(
+      readCurrentCrashRound({
+        address: CONTRACT_ADDRESS,
+        deploymentBlock: 50n,
+      })
+    ).rejects.toThrow("Expected one RoundFinalized event for round 3, found 2");
   });
 });
 

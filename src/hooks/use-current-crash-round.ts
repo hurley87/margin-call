@@ -4,11 +4,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Hex } from "viem";
 import {
   deriveRoundPhase,
+  formatCrashPointBps,
   getMarginCallCrashConfig,
   getRoundCountdownSeconds,
+  isCrashPointPublished,
   isRoundInitialized,
   readCurrentCrashRound,
   type CrashRoundPhase,
+  type CrashRoundStatus,
 } from "@/lib/margin-call-crash";
 
 type RoundSnapshot = Awaited<ReturnType<typeof readCurrentCrashRound>> & {
@@ -25,9 +28,17 @@ export type CurrentCrashRoundView = { retry: () => Promise<void> } & (
       status: "ready";
       roundId: bigint;
       phase: CrashRoundPhase;
+      chainStatus: CrashRoundStatus;
       countdownSeconds: number;
       crashRandom: Hex | null;
+      crashPointBps: bigint;
+      displayCrashPoint: string | null;
       openingTransactionUrl: string | null;
+      revealTransactionUrl: string | null;
+      finalizeTransactionUrl: string | null;
+      expireTransactionUrl: string | null;
+      gameContractUrl: string;
+      incoContractUrl: string;
       blockNumber: bigint;
     }
 );
@@ -80,10 +91,12 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
 
   if (status === "ready" && snapshot) {
     const chainTimestamp = correctedChainTimestamp(snapshot, clock);
+    const published = isCrashPointPublished(snapshot.round);
     return {
       status: "ready",
       roundId: snapshot.currentRoundId,
       phase: deriveRoundPhase(snapshot.round, chainTimestamp),
+      chainStatus: snapshot.round.status,
       countdownSeconds: getRoundCountdownSeconds(
         snapshot.round,
         chainTimestamp
@@ -91,7 +104,16 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
       crashRandom: isRoundInitialized(snapshot.round)
         ? snapshot.round.crashRandom
         : null,
+      crashPointBps: snapshot.round.crashPointBps,
+      displayCrashPoint: published
+        ? formatCrashPointBps(snapshot.round.crashPointBps)
+        : null,
       openingTransactionUrl: snapshot.openingTransactionUrl,
+      revealTransactionUrl: snapshot.revealTransactionUrl,
+      finalizeTransactionUrl: snapshot.finalizeTransactionUrl,
+      expireTransactionUrl: snapshot.expireTransactionUrl,
+      gameContractUrl: snapshot.gameContractUrl,
+      incoContractUrl: snapshot.incoContractUrl,
       blockNumber: snapshot.blockNumber,
       retry: refresh,
     };

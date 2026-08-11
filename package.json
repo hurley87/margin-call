@@ -22,7 +22,8 @@
     "audit:prod": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "audit:all:gated": "node scripts/audit-all-gated.mjs",
-    "prepare": "husky"
+    "prepare": "husky",
+    "smoke:crash-lifecycle": "node scripts/smoke-crash-lifecycle.cjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -46,6 +47,7 @@
   },
   "devDependencies": {
     "@inco/lightning": "1.0.2",
+    "@inco/lightning-js": "1.0.2",
     "@tailwindcss/postcss": "^4",
     "@testing-library/react": "^16.3.2",
     "@types/node": "^26",

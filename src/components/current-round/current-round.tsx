@@ -6,13 +6,15 @@ import {
 } from "@/hooks/use-current-crash-round";
 import type { CrashRoundPhase } from "@/lib/margin-call-crash";
 
+type ReadyRound = Extract<CurrentCrashRoundView, { status: "ready" }>;
+
 const phaseLabels: Record<CrashRoundPhase, string> = {
   prelaunch: "Epoch pending",
   uninitialized: "Awaiting opener",
   open: "Entry open",
   locked: "Entry locked",
-  "reveal-requested": "Reveal requested",
-  "expired-eligible": "Expiry available",
+  "reveal-requested": "Awaiting attestation",
+  "expired-eligible": "Past expiry",
   finalized: "Finalized",
   expired: "Expired",
 };
@@ -59,59 +61,178 @@ export function CurrentRound() {
             Round {round.roundId.toString()}
           </h2>
 
-          <div className="mt-6">
-            <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-              Public encrypted crash handle
-            </p>
-            {round.crashRandom ? (
-              <code className="mt-2 block break-all text-xs leading-5 text-[var(--t-accent)] sm:text-sm">
-                {round.crashRandom}
-              </code>
-            ) : (
-              <p className="mt-2 text-sm text-[var(--t-muted)]">
-                No handle has been pre-committed for this epoch yet.
-              </p>
-            )}
-            <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-              The ciphertext is public and auditable. Its plaintext remains
-              confidential until the contract reveal flow.
-            </p>
-          </div>
+          <PhasePrimaryContent round={round} />
+          <EncryptedHandle round={round} />
         </div>
 
         <div className="min-w-44 border-l border-[var(--t-divider)] pl-5 lg:text-right">
-          <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-            {phase === "open" ? "Entry closes in" : "Entry window"}
-          </p>
-          <p
-            aria-label={
-              phase === "open"
-                ? `${round.countdownSeconds} seconds until entry locks`
-                : "Entry is not open"
-            }
-            className="mc-live-value mt-2 text-4xl font-bold tabular-nums text-[var(--t-green-hot)]"
-          >
-            {phase === "open" ? formatCountdown(round.countdownSeconds) : "—:—"}
-          </p>
-          <p className="mt-5 text-xs text-[var(--t-muted)]">
-            Read at block {round.blockNumber.toString()}
-          </p>
-          {round.openingTransactionUrl ? (
-            <a
-              className="group mt-3 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--t-accent)] underline decoration-[var(--t-border)] underline-offset-4 hover:text-[var(--t-text)]"
-              href={round.openingTransactionUrl}
-              rel="noreferrer"
-              target="_blank"
-            >
-              View opening transaction
-              <span aria-hidden="true" className="wire-cta-bounce">
-                ↗
-              </span>
-            </a>
-          ) : null}
+          <PhaseSidebar round={round} />
         </div>
       </div>
     </section>
+  );
+}
+
+function PhasePrimaryContent({ round }: { round: ReadyRound }) {
+  switch (round.phase) {
+    case "finalized":
+      return (
+        <div className="mt-6">
+          <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+            Verified Crash Point
+          </p>
+          <p
+            aria-label={`Verified crash point ${round.displayCrashPoint}`}
+            className="mc-live-value mt-2 font-[family-name:var(--font-plex-sans)] text-5xl font-bold tabular-nums text-[var(--t-green-hot)] sm:text-6xl"
+          >
+            {round.displayCrashPoint}
+          </p>
+          <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
+            Attested onchain against the exact stored encrypted handle. The
+            finalization transaction is the public attestation record.
+          </p>
+        </div>
+      );
+    case "locked":
+      return (
+        <StatusCopy
+          title="Awaiting reveal request"
+          body="Entry is locked. The encrypted handle stays confidential until a permissionless reveal marks it for public attestation."
+        />
+      );
+    case "reveal-requested":
+      return (
+        <StatusCopy
+          title="Awaiting attestation"
+          body="Reveal has been requested. No Crash Point is shown until covalidator signatures finalize the exact stored handle."
+        />
+      );
+    case "expired-eligible":
+      return (
+        <StatusCopy
+          title="Past expiry"
+          body="This round can be marked expired. No Crash Point will be invented; original margin becomes refundable after expiry is recorded."
+        />
+      );
+    case "expired":
+      return (
+        <StatusCopy
+          title="Outcome unavailable"
+          body="This round expired without a verified Crash Point. Original margin is refundable once ticket refunds land in a later slice."
+        />
+      );
+    case "prelaunch":
+    case "uninitialized":
+    case "open":
+      return null;
+    default: {
+      const _exhaustive: never = round.phase;
+      return _exhaustive;
+    }
+  }
+}
+
+function EncryptedHandle({ round }: { round: ReadyRound }) {
+  return (
+    <div className="mt-6">
+      <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+        Public encrypted crash handle
+      </p>
+      {round.crashRandom ? (
+        <code className="mt-2 block break-all text-xs leading-5 text-[var(--t-accent)] sm:text-sm">
+          {round.crashRandom}
+        </code>
+      ) : (
+        <p className="mt-2 text-sm text-[var(--t-muted)]">
+          No handle has been pre-committed for this epoch yet.
+        </p>
+      )}
+      <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
+        The ciphertext is public and auditable. Its plaintext remains
+        confidential until attested finalization.
+      </p>
+    </div>
+  );
+}
+
+function PhaseSidebar({ round }: { round: ReadyRound }) {
+  const phase = round.phase;
+  return (
+    <>
+      <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+        {phase === "open" ? "Entry closes in" : "Entry window"}
+      </p>
+      <p
+        aria-label={
+          phase === "open"
+            ? `${round.countdownSeconds} seconds until entry locks`
+            : "Entry is not open"
+        }
+        className="mc-live-value mt-2 text-4xl font-bold tabular-nums text-[var(--t-green-hot)]"
+      >
+        {phase === "open" ? formatCountdown(round.countdownSeconds) : "—:—"}
+      </p>
+      <p className="mt-5 text-xs text-[var(--t-muted)]">
+        Read at block {round.blockNumber.toString()}
+      </p>
+      <VerificationLinks round={round} />
+    </>
+  );
+}
+
+function VerificationLinks({ round }: { round: ReadyRound }) {
+  const links = [
+    round.openingTransactionUrl
+      ? { href: round.openingTransactionUrl, label: "View opening transaction" }
+      : null,
+    round.revealTransactionUrl
+      ? { href: round.revealTransactionUrl, label: "View reveal transaction" }
+      : null,
+    round.finalizeTransactionUrl
+      ? {
+          href: round.finalizeTransactionUrl,
+          label: "View finalization transaction",
+        }
+      : null,
+    round.expireTransactionUrl
+      ? { href: round.expireTransactionUrl, label: "View expiry transaction" }
+      : null,
+    { href: round.gameContractUrl, label: "Verified game contract" },
+    { href: round.incoContractUrl, label: "Verified Inco Lightning" },
+  ].filter((link): link is { href: string; label: string } => link !== null);
+
+  return (
+    <ul className="mt-3 space-y-2">
+      {links.map((link) => (
+        <li key={link.label}>
+          <a
+            className="group inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--t-accent)] underline decoration-[var(--t-border)] underline-offset-4 hover:text-[var(--t-text)]"
+            href={link.href}
+            rel="noreferrer"
+            target="_blank"
+          >
+            {link.label}
+            <span aria-hidden="true" className="wire-cta-bounce">
+              ↗
+            </span>
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function StatusCopy({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="mt-6">
+      <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+        Round status
+      </p>
+      <p className="mt-2 text-lg font-bold text-[var(--t-text)]">{title}</p>
+      <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
+        {body}
+      </p>
+    </div>
   );
 }
 
