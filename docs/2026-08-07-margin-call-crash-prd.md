@@ -86,7 +86,7 @@ The secondary user is a testnet liquidity provider who wants to fund game capaci
 
 1. Log in with a phone number and SMS code. An embedded smart wallet on Base Sepolia is created automatically — no wallet app, browser extension, seed phrase, or test ETH.
 2. Claim `tUSD` from the in-app faucet. Gas is sponsored for every action in the app; the player never acquires ETH.
-3. Approve the configured vault spender — by default a bounded `1,000 tUSD` allowance that covers many entries, or an exact per-entry amount for the cautious — batched with entry into a single sponsored confirmation. The spender, cap, and contract address are always displayed, and an unlimited allowance is never requested.
+3. Approve the configured vault spender with a one-time bounded `1,000 tUSD` allowance when needed, then submit a separate sponsored `enter` transaction. Later entries reuse that allowance with enter-only sponsorship. The spender, cap, and contract address are always displayed, and an unlimited allowance is never requested.
 4. Choose `1`, `5`, or `10` tUSD of margin.
 5. Choose one of the six Arcade Leverage tiers.
 6. Confirm entry before lock. The margin is transferred directly into the vault and the ticket's maximum payout is reserved atomically.

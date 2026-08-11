@@ -21,6 +21,7 @@ optimizer = true
 # 1_000_000 stays under Blockscout/Etherscan's ~10M recompile ceiling while
 # matching LazerForge's guidance that bytecode is typically flat past ~1M runs.
 optimizer_runs = 1_000_000
+via_ir = true
 
 # Keep metadata out of the bytecode so builds are reproducible.
 bytecode_hash = "none"

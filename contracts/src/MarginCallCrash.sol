@@ -5,17 +5,22 @@ import {e, inco} from "@inco/lightning/src/Lib.sol";
 import {ETypes, euint256} from "@inco/lightning/src/Types.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
+import {IBankrollVault} from "./interfaces/IBankrollVault.sol";
+
 /// @notice Shared-round Crash game state on a fixed epoch grid.
-/// @dev This slice owns pre-committed randomness plus reveal, attested finalization, and expiry.
+/// @dev Owns pre-committed randomness, entry/reservation coordination, reveal, and expiry.
 contract MarginCallCrash is ReentrancyGuard {
     uint64 public immutable epochOrigin;
     uint64 public immutable roundDuration;
     uint64 public immutable entryWindow;
     uint64 public immutable expiryDelay;
+    IBankrollVault public immutable vault;
 
     uint256 internal constant CRASH_RANDOM_UPPER_BOUND = 10_000;
     uint256 internal constant CRASH_POINT_NUMERATOR = 99_000_000;
     uint256 internal constant MAX_CRASH_POINT_BPS = 100_000;
+    uint256 internal constant LEVERAGE_SCALE = 10_000;
+    uint256 internal constant ONE_TUSD = 1_000_000;
 
     enum RoundStatus {
         Uninitialized,
@@ -37,6 +42,18 @@ contract MarginCallCrash is ReentrancyGuard {
         RoundStatus status;
     }
 
+    struct Ticket {
+        uint256 id;
+        address player;
+        uint256 roundId;
+        uint256 margin;
+        uint256 leverageBps;
+        uint256 reservedPayout;
+        bool settled;
+        bool claimed;
+        bool refunded;
+    }
+
     error EpochNotStarted(uint256 currentTimestamp, uint64 epochOrigin);
     error InvalidRoundId(uint256 requestedRoundId, uint256 currentRoundId);
     error RoundAlreadyInitialized(uint256 roundId);
@@ -51,6 +68,11 @@ contract MarginCallCrash is ReentrancyGuard {
     error InvalidRoundStatus(uint256 roundId, RoundStatus status);
     error InvalidAttestation(uint256 roundId);
     error RandomOutOfRange(uint256 plaintext);
+    error ZeroVault();
+    error InvalidMargin(uint256 margin);
+    error InvalidLeverageTier(uint256 leverageBps);
+    error EntryClosed(uint256 roundId, uint64 lockAt, uint256 currentTimestamp);
+    error TicketAlreadyExists(uint256 roundId, address player);
 
     event RoundOpened(
         uint256 indexed roundId,
@@ -60,14 +82,28 @@ contract MarginCallCrash is ReentrancyGuard {
         uint64 lockAt,
         uint64 expiresAt
     );
+    event TicketEntered(
+        uint256 indexed roundId,
+        uint256 indexed ticketId,
+        address indexed player,
+        uint256 margin,
+        uint256 leverageBps,
+        uint256 reservedPayout
+    );
     event RevealRequested(uint256 indexed roundId, bytes32 crashRandom);
     event RoundFinalized(uint256 indexed roundId, bytes32 crashRandom, uint256 crashPointBps);
     event RoundExpired(uint256 indexed roundId);
 
     mapping(uint256 roundId => Round round) private _rounds;
+    mapping(uint256 ticketId => Ticket ticket) private _tickets;
+    mapping(uint256 roundId => mapping(address player => uint256 ticketId)) private _ticketIdByRoundAndPlayer;
+    uint256 public nextTicketId = 1;
 
-    constructor(uint64 epochOrigin_) {
+    constructor(uint64 epochOrigin_, IBankrollVault vault_) {
+        if (address(vault_) == address(0)) revert ZeroVault();
+
         epochOrigin = epochOrigin_;
+        vault = vault_;
         roundDuration = 60;
         entryWindow = 45;
         expiryDelay = 15 minutes;
@@ -89,9 +125,66 @@ contract MarginCallCrash is ReentrancyGuard {
         return _roundTimes(roundId);
     }
 
+    /// @notice Returns a stored ticket, or an empty ticket when none exists.
+    function getTicket(uint256 ticketId) external view returns (Ticket memory) {
+        return _tickets[ticketId];
+    }
+
+    /// @notice Returns the ticket id for a wallet in a round, or zero when none exists.
+    function getTicketId(uint256 roundId, address player) external view returns (uint256) {
+        return _ticketIdByRoundAndPlayer[roundId][player];
+    }
+
     /// @notice Permissionlessly materializes the current or next epoch.
     function openRound(uint256 roundId) external payable nonReentrant {
         _initializeRound(roundId, msg.sender, msg.value);
+    }
+
+    /// @notice Validates entry and atomically coordinates direct-to-vault margin plus reservation.
+    /// @dev Lazy-creates an uninitialized current/next round when `msg.value` covers the Inco fee.
+    ///      A fee-bearing call that loses the creation race refunds the entire `msg.value` and proceeds.
+    function enter(uint256 roundId, uint256 margin, uint256 leverageBps) external payable nonReentrant {
+        if (!_isSupportedMargin(margin)) revert InvalidMargin(margin);
+        if (!_isSupportedLeverage(leverageBps)) revert InvalidLeverageTier(leverageBps);
+
+        Round storage round = _rounds[roundId];
+        if (round.status == RoundStatus.Uninitialized) {
+            _initializeRound(roundId, msg.sender, msg.value);
+            round = _rounds[roundId];
+        } else if (msg.value > 0) {
+            (bool wasRefunded,) = payable(msg.sender).call{value: msg.value}("");
+            if (!wasRefunded) revert EthRefundFailed(msg.sender, msg.value);
+        }
+
+        if (round.status != RoundStatus.Open) revert InvalidRoundStatus(roundId, round.status);
+        if (block.timestamp >= round.lockAt) {
+            revert EntryClosed(roundId, round.lockAt, block.timestamp);
+        }
+        if (_ticketIdByRoundAndPlayer[roundId][msg.sender] != 0) {
+            revert TicketAlreadyExists(roundId, msg.sender);
+        }
+
+        uint256 maximumPayout = (margin * leverageBps) / LEVERAGE_SCALE;
+        uint256 ticketId = nextTicketId++;
+
+        vault.acceptEntry(roundId, ticketId, msg.sender, margin, leverageBps, maximumPayout);
+
+        _tickets[ticketId] = Ticket({
+            id: ticketId,
+            player: msg.sender,
+            roundId: roundId,
+            margin: margin,
+            leverageBps: leverageBps,
+            reservedPayout: maximumPayout,
+            settled: false,
+            claimed: false,
+            refunded: false
+        });
+        _ticketIdByRoundAndPlayer[roundId][msg.sender] = ticketId;
+        round.totalMargin += margin;
+        round.reservedPayout += maximumPayout;
+
+        emit TicketEntered(roundId, ticketId, msg.sender, margin, leverageBps, maximumPayout);
     }
 
     /// @notice Permissionlessly marks the round's stored handle for public reveal after lock.
@@ -148,7 +241,7 @@ contract MarginCallCrash is ReentrancyGuard {
         emit RoundExpired(roundId);
     }
 
-    /// @dev Shared initialization seam for the future lazy first-entry path.
+    /// @dev Shared initialization seam for openRound and lazy first-entry creation.
     function _initializeRound(uint256 roundId, address opener, uint256 suppliedValue) internal {
         uint256 activeRoundId = currentRoundId();
         if (roundId != activeRoundId && roundId != activeRoundId + 1) {
@@ -203,5 +296,14 @@ contract MarginCallCrash is ReentrancyGuard {
     function _crashPointFromRandom(uint256 randomValue) internal pure returns (uint256) {
         uint256 rawCrashBps = CRASH_POINT_NUMERATOR / (CRASH_RANDOM_UPPER_BOUND - randomValue);
         return rawCrashBps > MAX_CRASH_POINT_BPS ? MAX_CRASH_POINT_BPS : rawCrashBps;
+    }
+
+    function _isSupportedMargin(uint256 margin) internal pure returns (bool) {
+        return margin == ONE_TUSD || margin == 5 * ONE_TUSD || margin == 10 * ONE_TUSD;
+    }
+
+    function _isSupportedLeverage(uint256 leverageBps) internal pure returns (bool) {
+        return leverageBps == 12_500 || leverageBps == 15_000 || leverageBps == 20_000 || leverageBps == 30_000
+            || leverageBps == 50_000 || leverageBps == 100_000;
     }
 }

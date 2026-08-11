@@ -18,11 +18,41 @@ export const marginCallCrashAbi = parseAbi([
   "function currentRoundId() view returns (uint256)",
   "function roundTimes(uint256 roundId) view returns (uint64 openAt, uint64 lockAt, uint64 expiresAt)",
   "function getRound(uint256 roundId) view returns ((uint256 id, uint64 openAt, uint64 lockAt, uint64 expiresAt, bytes32 crashRandom, uint256 crashPointBps, uint256 totalMargin, uint256 reservedPayout, uint8 status))",
+  "function getTicket(uint256 ticketId) view returns ((uint256 id, address player, uint256 roundId, uint256 margin, uint256 leverageBps, uint256 reservedPayout, bool settled, bool claimed, bool refunded))",
+  "function getTicketId(uint256 roundId, address player) view returns (uint256)",
+  "function enter(uint256 roundId, uint256 margin, uint256 leverageBps) payable",
   "event RoundOpened(uint256 indexed roundId, address indexed opener, bytes32 crashRandom, uint64 openAt, uint64 lockAt, uint64 expiresAt)",
+  "event TicketEntered(uint256 indexed roundId, uint256 indexed ticketId, address indexed player, uint256 margin, uint256 leverageBps, uint256 reservedPayout)",
   "event RevealRequested(uint256 indexed roundId, bytes32 crashRandom)",
   "event RoundFinalized(uint256 indexed roundId, bytes32 crashRandom, uint256 crashPointBps)",
   "event RoundExpired(uint256 indexed roundId)",
 ]);
+
+const ONE_TUSD = 1_000_000n;
+const LEVERAGE_SCALE = 10_000n;
+
+/** Supported entry margins in tUSD base units (6 decimals). */
+export const ENTRY_MARGINS_TUSD = [
+  ONE_TUSD,
+  5n * ONE_TUSD,
+  10n * ONE_TUSD,
+] as const;
+
+/** Supported Arcade Leverage tiers in basis points. */
+export const ENTRY_LEVERAGE_TIERS_BPS = [
+  12_500n,
+  15_000n,
+  20_000n,
+  30_000n,
+  50_000n,
+  100_000n,
+] as const;
+
+/** One-time bounded tUSD approval offered by the entry UI. */
+export const BOUNDED_ENTRY_ALLOWANCE_TUSD = 1_000n * ONE_TUSD;
+
+/** Stop offering entry this many seconds before onchain lock. */
+export const ENTRY_CUTOFF_SECONDS = 5;
 
 const roundOpenedEvent = getAbiItem({
   abi: marginCallCrashAbi,
@@ -148,6 +178,70 @@ export function getRoundCountdownSeconds(
 ) {
   if (deriveRoundPhase(round, chainTimestamp) !== "open") return 0;
   return Number(round.lockAt - chainTimestamp);
+}
+
+export type CrashTicket = {
+  id: bigint;
+  player: Address;
+  roundId: bigint;
+  margin: bigint;
+  leverageBps: bigint;
+  reservedPayout: bigint;
+  settled: boolean;
+  claimed: boolean;
+  refunded: boolean;
+};
+
+export function computeMaximumPayout(margin: bigint, leverageBps: bigint) {
+  return (margin * leverageBps) / LEVERAGE_SCALE;
+}
+
+export function formatLeverageBps(leverageBps: bigint): string {
+  const hundredths = leverageBps / 100n;
+  const whole = hundredths / 100n;
+  const fraction = hundredths % 100n;
+  return `${whole.toString()}.${fraction.toString().padStart(2, "0")}x`;
+}
+
+export function isSupportedEntryMargin(margin: bigint) {
+  return (ENTRY_MARGINS_TUSD as readonly bigint[]).includes(margin);
+}
+
+export function isSupportedEntryLeverage(leverageBps: bigint) {
+  return (ENTRY_LEVERAGE_TIERS_BPS as readonly bigint[]).includes(leverageBps);
+}
+
+/**
+ * Entry is offered only into an initialized open round with more than the UI
+ * cutoff remaining before lock. Embedded wallets never create rounds.
+ */
+export function canOfferEntry(
+  phase: CrashRoundPhase,
+  countdownSeconds: number
+) {
+  return phase === "open" && countdownSeconds > ENTRY_CUTOFF_SECONDS;
+}
+
+export async function readPlayerTicket(
+  config: MarginCallCrashConfig,
+  roundId: bigint,
+  player: Address
+): Promise<CrashTicket | null> {
+  const ticketId = await baseSepoliaPublicClient.readContract({
+    address: config.address,
+    abi: marginCallCrashAbi,
+    functionName: "getTicketId",
+    args: [roundId, player],
+  });
+  if (ticketId === 0n) return null;
+
+  const ticket = await baseSepoliaPublicClient.readContract({
+    address: config.address,
+    abi: marginCallCrashAbi,
+    functionName: "getTicket",
+    args: [ticketId],
+  });
+  return ticket;
 }
 
 export function isRoundInitialized(round: CrashRound) {

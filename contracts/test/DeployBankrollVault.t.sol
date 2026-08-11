@@ -128,6 +128,15 @@ contract DeployBankrollVaultTest is Test {
         assertEq(vm.parseJsonUint(record, ".seedDepositorBalanceAfter"), 0);
         assertEq(vm.parseJsonString(record, ".vaultDepositSelector"), "0x6e553f65");
         assertEq(
+            vm.parseJsonString(record, ".acceptEntrySelector"),
+            vm.toString(abi.encodePacked(BankrollVault.acceptEntry.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".setAuthorizedGameSelector"),
+            vm.toString(abi.encodePacked(BankrollVault.setAuthorizedGame.selector))
+        );
+        assertEq(vm.parseJsonString(record, ".tUsdApproveSelector"), "0x095ea7b3");
+        assertEq(
             vm.parseJsonString(record, ".verification.vault"),
             string.concat("https://sepolia.basescan.org/address/", vm.toString(deployment.vault), "#code")
         );

@@ -3,16 +3,19 @@ pragma solidity 0.8.29;
 
 import {inco} from "@inco/lightning/src/Lib.sol";
 
+import {BankrollVault} from "../src/BankrollVault.sol";
+import {IBankrollVault} from "../src/interfaces/IBankrollVault.sol";
 import {MarginCallCrash} from "../src/MarginCallCrash.sol";
 import {Utils} from "./utils/Utils.sol";
 
-/// @notice Deploys MarginCallCrash on a minute-aligned Base Sepolia epoch.
+/// @notice Deploys MarginCallCrash on a minute-aligned Base Sepolia epoch and authorizes it on the vault.
 /// @dev The curated deployment record is input only. A successful run writes the gitignored
 ///      `deployments/base_sepolia.margin_call_crash.run.json` record for deliberate merging.
 contract DeployMarginCallCrash is Utils {
     error InvalidDeploymentRecord();
     error DeploymentPostconditionFailed();
     error InvalidEpochOrigin(uint256 epochOrigin, uint256 minimumEpochOrigin);
+    error VaultAlreadyAuthorized(address authorizedGame);
 
     string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_CRASH_RUN;
     string internal constant INCO_PACKAGE_VERSION = "1.0.2";
@@ -21,12 +24,14 @@ contract DeployMarginCallCrash is Utils {
     struct ExistingDeployment {
         uint256 chainId;
         address deployer;
+        address bankrollVault;
     }
 
     struct Deployment {
         uint256 chainId;
         address deployer;
         address marginCallCrash;
+        address bankrollVault;
         address incoLightning;
         uint64 epochOrigin;
         uint64 roundDuration;
@@ -34,7 +39,7 @@ contract DeployMarginCallCrash is Utils {
         uint64 expiryDelay;
     }
 
-    /// @notice Broadcasts the Crash game deployment from the recorded release deployer.
+    /// @notice Broadcasts the Crash game deployment and set-once vault authorization.
     function run() external returns (Deployment memory deployment) {
         _requireBaseSepolia();
         ExistingDeployment memory existing = existingDeployment();
@@ -42,7 +47,7 @@ contract DeployMarginCallCrash is Utils {
         uint64 epochOrigin = configuredEpochOrigin();
 
         vm.startBroadcast(existing.deployer);
-        deployment = _deploy(existing.deployer, epochOrigin);
+        deployment = _deploy(existing, epochOrigin);
         vm.stopBroadcast();
 
         writeOutput(deploymentRecord(deployment), OUTPUT_NAME);
@@ -52,7 +57,9 @@ contract DeployMarginCallCrash is Utils {
     function existingDeployment() public view returns (ExistingDeployment memory existing) {
         string memory record = readInput(OUTPUT_BASE_SEPOLIA);
         existing = ExistingDeployment({
-            chainId: vm.parseJsonUint(record, ".chainId"), deployer: vm.parseJsonAddress(record, ".deployer")
+            chainId: vm.parseJsonUint(record, ".chainId"),
+            deployer: vm.parseJsonAddress(record, ".deployer"),
+            bankrollVault: vm.parseJsonAddress(record, ".bankrollVault")
         });
     }
 
@@ -68,6 +75,9 @@ contract DeployMarginCallCrash is Utils {
             '",\n',
             '  "marginCallCrash": "',
             vm.toString(deployment.marginCallCrash),
+            '",\n',
+            '  "bankrollVault": "',
+            vm.toString(deployment.bankrollVault),
             '"'
         );
         record = string.concat(
@@ -102,6 +112,9 @@ contract DeployMarginCallCrash is Utils {
             '  "openRoundSelector": "',
             vm.toString(abi.encodePacked(MarginCallCrash.openRound.selector)),
             '",\n',
+            '  "enterSelector": "',
+            vm.toString(abi.encodePacked(MarginCallCrash.enter.selector)),
+            '",\n',
             '  "requestRevealSelector": "',
             vm.toString(abi.encodePacked(MarginCallCrash.requestReveal.selector)),
             '",\n',
@@ -110,6 +123,12 @@ contract DeployMarginCallCrash is Utils {
             '",\n',
             '  "expireRoundSelector": "',
             vm.toString(abi.encodePacked(MarginCallCrash.expireRound.selector)),
+            '",\n',
+            '  "acceptEntrySelector": "',
+            vm.toString(abi.encodePacked(BankrollVault.acceptEntry.selector)),
+            '",\n',
+            '  "setAuthorizedGameSelector": "',
+            vm.toString(abi.encodePacked(BankrollVault.setAuthorizedGame.selector)),
             '",\n',
             '  "verification": {\n',
             '    "marginCallCrash": "',
@@ -131,14 +150,24 @@ contract DeployMarginCallCrash is Utils {
         return uint64(configured);
     }
 
-    function _deploy(address deployer, uint64 epochOrigin) internal returns (Deployment memory deployment) {
+    function _deploy(ExistingDeployment memory existing, uint64 epochOrigin)
+        internal
+        returns (Deployment memory deployment)
+    {
         _validateEpochOrigin(epochOrigin);
-        MarginCallCrash game = new MarginCallCrash(epochOrigin);
+        BankrollVault vault = BankrollVault(existing.bankrollVault);
+        if (vault.authorizedGame() != address(0)) {
+            revert VaultAlreadyAuthorized(vault.authorizedGame());
+        }
+
+        MarginCallCrash game = new MarginCallCrash(epochOrigin, IBankrollVault(existing.bankrollVault));
+        vault.setAuthorizedGame(address(game));
 
         deployment = Deployment({
             chainId: block.chainid,
-            deployer: deployer,
+            deployer: existing.deployer,
             marginCallCrash: address(game),
+            bankrollVault: existing.bankrollVault,
             incoLightning: address(inco),
             epochOrigin: epochOrigin,
             roundDuration: game.roundDuration(),
@@ -146,22 +175,27 @@ contract DeployMarginCallCrash is Utils {
             expiryDelay: game.expiryDelay()
         });
 
-        _assertPostconditions(game, deployment);
+        _assertPostconditions(game, vault, deployment);
     }
 
-    function _validateExistingDeployment(ExistingDeployment memory existing) internal pure {
-        if (existing.chainId != CHAIN_ID_BASE_SEPOLIA || existing.deployer == address(0)) {
-            revert InvalidDeploymentRecord();
-        }
+    function _validateExistingDeployment(ExistingDeployment memory existing) internal view {
+        if (
+            existing.chainId != CHAIN_ID_BASE_SEPOLIA || existing.deployer == address(0)
+                || existing.bankrollVault == address(0) || existing.bankrollVault.code.length == 0
+        ) revert InvalidDeploymentRecord();
     }
 
-    function _assertPostconditions(MarginCallCrash game, Deployment memory deployment) internal view {
+    function _assertPostconditions(MarginCallCrash game, BankrollVault vault, Deployment memory deployment)
+        internal
+        view
+    {
         if (
             deployment.chainId != CHAIN_ID_BASE_SEPOLIA || deployment.deployer == address(0)
                 || deployment.marginCallCrash.code.length == 0 || deployment.incoLightning != address(inco)
                 || deployment.epochOrigin % 60 != 0 || game.epochOrigin() != deployment.epochOrigin
-                || deployment.roundDuration != 60 || deployment.entryWindow != 45
-                || deployment.expiryDelay != 15 minutes
+                || address(game.vault()) != deployment.bankrollVault || vault.authorizedGame() != address(game)
+                || vault.gameConfigurer() != deployment.deployer || deployment.roundDuration != 60
+                || deployment.entryWindow != 45 || deployment.expiryDelay != 15 minutes
         ) revert DeploymentPostconditionFailed();
     }
 

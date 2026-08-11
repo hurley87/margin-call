@@ -7,6 +7,10 @@ import {Vm} from "forge-std/Vm.sol";
 import {inco} from "@inco/lightning/src/Lib.sol";
 import {ETypes, euint256} from "@inco/lightning/src/Types.sol";
 import {DecryptionAttestation} from "@inco/lightning/src/lightning-parts/DecryptionAttester.types.sol";
+
+import {BankrollVault} from "../src/BankrollVault.sol";
+import {DeskDollars} from "../src/DeskDollars.sol";
+import {IBankrollVault} from "../src/interfaces/IBankrollVault.sol";
 import {MarginCallCrash} from "../src/MarginCallCrash.sol";
 
 contract IncoVerifierMock {
@@ -158,6 +162,8 @@ contract MarginCallCrashTest is Test {
     event RoundExpired(uint256 indexed roundId);
 
     MarginCallCrash internal game;
+    BankrollVault internal vault;
+    DeskDollars internal token;
     IncoRandomMock internal incoMock;
     IncoVerifierMock internal verifierMock;
 
@@ -170,7 +176,10 @@ contract MarginCallCrashTest is Test {
         verifierMock = new IncoVerifierMock();
         incoMock.setVerifier(address(verifierMock));
 
-        game = new MarginCallCrash(EPOCH_ORIGIN);
+        token = new DeskDollars(address(this));
+        vault = new BankrollVault(token);
+        game = new MarginCallCrash(EPOCH_ORIGIN, IBankrollVault(address(vault)));
+        vault.setAuthorizedGame(address(game));
     }
 
     function testOpenRoundStoresOnePrecommittedHandle() public {

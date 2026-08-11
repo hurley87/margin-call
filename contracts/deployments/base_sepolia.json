@@ -21,6 +21,13 @@
   "marginCallCrashEntryWindow": 45,
   "marginCallCrashExpiryDelay": 900,
   "marginCallCrashOpenRoundSelector": "0xbde22ae0",
+  "marginCallCrashEnterSelector": "0xbc208057",
+  "marginCallCrashRequestRevealSelector": "0x40261cdd",
+  "marginCallCrashFinalizeRoundSelector": "0x02c6266a",
+  "marginCallCrashExpireRoundSelector": "0x292672ea",
+  "bankrollVaultAcceptEntrySelector": "0x864f1156",
+  "bankrollVaultSetAuthorizedGameSelector": "0x1eb524b4",
+  "tUsdApproveSelector": "0x095ea7b3",
   "incoLightning": "0x4b9911b0191B0b6a6eA8F2Ed562e20Cff5AC8624",
   "incoPackageVersion": "1.0.2",
   "bankrollSeedRecipient": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
@@ -87,7 +94,5 @@
     "marginCallCrashEpochOrigin": 1786454100,
     "deployMarginCallCrash": "0x982be82965b26a23bf583f36466d618ea19e151899dbd49327c173415a197485"
   },
-  "marginCallCrashRequestRevealSelector": "0x40261cdd",
-  "marginCallCrashFinalizeRoundSelector": "0x02c6266a",
-  "marginCallCrashExpireRoundSelector": "0x292672ea"
+  "entryInterfaceNote": "enter/acceptEntry/approve selectors recorded for slice-6 wiring; production redeploy and live entry smoke remain issue #351. Privy contractSelectorAllowlist stays not-exposed-by-dashboard."
 }

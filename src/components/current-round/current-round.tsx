@@ -5,6 +5,7 @@ import {
   type CurrentCrashRoundView,
 } from "@/hooks/use-current-crash-round";
 import type { CrashRoundPhase } from "@/lib/margin-call-crash";
+import { CrashRoundEntry } from "./crash-round-entry";
 
 type ReadyRound = Extract<CurrentCrashRoundView, { status: "ready" }>;
 
@@ -63,6 +64,11 @@ export function CurrentRound() {
 
           <PhasePrimaryContent round={round} />
           <EncryptedHandle round={round} />
+          <CrashRoundEntry
+            countdownSeconds={round.countdownSeconds}
+            phase={phase}
+            roundId={round.roundId}
+          />
         </div>
 
         <div className="min-w-44 border-l border-[var(--t-divider)] pl-5 lg:text-right">
