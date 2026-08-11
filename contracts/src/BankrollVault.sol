@@ -485,13 +485,8 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
             cursor = _blocking[cursor].next;
         }
 
-        _blocking[roundId] = BlockingRound({
-            expiresAt: expiresAt,
-            revealFrozen: false,
-            prev: prev,
-            next: cursor,
-            present: true
-        });
+        _blocking[roundId] =
+            BlockingRound({expiresAt: expiresAt, revealFrozen: false, prev: prev, next: cursor, present: true});
 
         if (prev == NO_BLOCKING_ROUND) {
             _blockingHead = roundId;
