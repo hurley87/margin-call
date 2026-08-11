@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Hex } from "viem";
 import {
   deriveRoundPhase,
+  formatCrashPointBps,
   getMarginCallCrashConfig,
   getRoundCountdownSeconds,
+  isCrashPointPublished,
   isRoundInitialized,
   readCurrentCrashRound,
   type CrashRoundPhase,
@@ -27,7 +29,13 @@ export type CurrentCrashRoundView = { retry: () => Promise<void> } & (
       phase: CrashRoundPhase;
       countdownSeconds: number;
       crashRandom: Hex | null;
+      displayCrashPoint: string | null;
       openingTransactionUrl: string | null;
+      revealTransactionUrl: string | null;
+      finalizeTransactionUrl: string | null;
+      expireTransactionUrl: string | null;
+      gameContractUrl: string;
+      incoContractUrl: string;
       blockNumber: bigint;
     }
 );
@@ -80,6 +88,7 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
 
   if (status === "ready" && snapshot) {
     const chainTimestamp = correctedChainTimestamp(snapshot, clock);
+    const published = isCrashPointPublished(snapshot.round);
     return {
       status: "ready",
       roundId: snapshot.currentRoundId,
@@ -91,7 +100,15 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
       crashRandom: isRoundInitialized(snapshot.round)
         ? snapshot.round.crashRandom
         : null,
+      displayCrashPoint: published
+        ? formatCrashPointBps(snapshot.round.crashPointBps)
+        : null,
       openingTransactionUrl: snapshot.openingTransactionUrl,
+      revealTransactionUrl: snapshot.revealTransactionUrl,
+      finalizeTransactionUrl: snapshot.finalizeTransactionUrl,
+      expireTransactionUrl: snapshot.expireTransactionUrl,
+      gameContractUrl: snapshot.gameContractUrl,
+      incoContractUrl: snapshot.incoContractUrl,
       blockNumber: snapshot.blockNumber,
       retry: refresh,
     };

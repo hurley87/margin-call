@@ -124,6 +124,18 @@ contract DeployMarginCallCrashTest is Test {
             vm.toString(abi.encodePacked(MarginCallCrash.openRound.selector))
         );
         assertEq(
+            vm.parseJsonString(record, ".requestRevealSelector"),
+            vm.toString(abi.encodePacked(MarginCallCrash.requestReveal.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".finalizeRoundSelector"),
+            vm.toString(abi.encodePacked(MarginCallCrash.finalizeRound.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".expireRoundSelector"),
+            vm.toString(abi.encodePacked(MarginCallCrash.expireRound.selector))
+        );
+        assertEq(
             vm.parseJsonString(record, ".verification.marginCallCrash"),
             string.concat("https://sepolia.basescan.org/address/", vm.toString(deployment.marginCallCrash), "#code")
         );

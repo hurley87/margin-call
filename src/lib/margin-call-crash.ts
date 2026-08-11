@@ -8,7 +8,10 @@ import {
   type Hex,
 } from "viem";
 import { baseSepoliaPublicClient } from "./base-sepolia";
-import { getBaseSepoliaTransactionUrl } from "./base-sepolia-explorer";
+import {
+  getBaseSepoliaContractCodeUrl,
+  getBaseSepoliaTransactionUrl,
+} from "./base-sepolia-explorer";
 
 export const marginCallCrashAbi = parseAbi([
   "function epochOrigin() view returns (uint64)",
@@ -16,16 +19,38 @@ export const marginCallCrashAbi = parseAbi([
   "function roundTimes(uint256 roundId) view returns (uint64 openAt, uint64 lockAt, uint64 expiresAt)",
   "function getRound(uint256 roundId) view returns ((uint256 id, uint64 openAt, uint64 lockAt, uint64 expiresAt, bytes32 crashRandom, uint256 crashPointBps, uint256 totalMargin, uint256 reservedPayout, uint8 status))",
   "event RoundOpened(uint256 indexed roundId, address indexed opener, bytes32 crashRandom, uint64 openAt, uint64 lockAt, uint64 expiresAt)",
+  "event RevealRequested(uint256 indexed roundId, bytes32 crashRandom)",
+  "event RoundFinalized(uint256 indexed roundId, bytes32 crashRandom, uint256 crashPointBps)",
+  "event RoundExpired(uint256 indexed roundId)",
 ]);
 
 const roundOpenedEvent = getAbiItem({
   abi: marginCallCrashAbi,
   name: "RoundOpened",
 });
+const revealRequestedEvent = getAbiItem({
+  abi: marginCallCrashAbi,
+  name: "RevealRequested",
+});
+const roundFinalizedEvent = getAbiItem({
+  abi: marginCallCrashAbi,
+  name: "RoundFinalized",
+});
+const roundExpiredEvent = getAbiItem({
+  abi: marginCallCrashAbi,
+  name: "RoundExpired",
+});
+
 // A round can be initialized at most one 60-second epoch early. A 512-block
 // window provides ample Base Sepolia reorg/block-time margin without an
 // ever-growing deployment-to-latest scan on every client poll.
-const ROUND_OPENED_LOOKBACK_BLOCKS = 512n;
+const ROUND_EVENT_LOOKBACK_BLOCKS = 512n;
+const ONE_X_BPS = 10_000n;
+const MAX_CRASH_POINT_BPS = 100_000n;
+
+/** Base Sepolia Inco Lightning singleton from @inco/lightning@1.0.2. */
+export const BASE_SEPOLIA_INCO_LIGHTNING_ADDRESS =
+  "0x4b9911b0191B0b6a6eA8F2Ed562e20Cff5AC8624" as const satisfies Address;
 
 export type MarginCallCrashConfig = {
   address: Address;
@@ -56,6 +81,15 @@ export type CrashRoundPhase =
   | "finalized"
   | "expired";
 
+export type CrashRoundLifecycleUrls = {
+  openingTransactionUrl: string | null;
+  revealTransactionUrl: string | null;
+  finalizeTransactionUrl: string | null;
+  expireTransactionUrl: string | null;
+  gameContractUrl: string;
+  incoContractUrl: string;
+};
+
 const ROUND_STATUS = {
   uninitialized: 0,
   open: 1,
@@ -64,13 +98,23 @@ const ROUND_STATUS = {
   expired: 4,
 } as const satisfies Record<string, CrashRoundStatus>;
 
-// epochOrigin is immutable on-chain and the opening transaction of a round can
+type RoundLifecycleEvent =
+  | typeof roundOpenedEvent
+  | typeof revealRequestedEvent
+  | typeof roundFinalizedEvent
+  | typeof roundExpiredEvent;
+
+type LifecycleEventKey = "opening" | "reveal" | "finalize" | "expire";
+
+// epochOrigin is immutable on-chain and lifecycle transactions of a round can
 // never change once observed, so neither needs to be re-fetched on every poll.
+// A stored null marks an event that can no longer occur for the round (e.g. a
+// reveal never requested before expiry); absent keys are looked up again.
 const epochOriginCache = new Map<Address, bigint>();
-let openingTransactionCache: {
+let lifecycleTransactionCache: {
   address: Address;
   roundId: bigint;
-  hash: Hash;
+  hashes: Partial<Record<LifecycleEventKey, Hash | null>>;
 } | null = null;
 
 /** Public configuration only. Static env references allow Next.js client inlining. */
@@ -110,6 +154,28 @@ export function isRoundInitialized(round: CrashRound) {
   return round.status !== ROUND_STATUS.uninitialized;
 }
 
+/** True only after onchain finalization stores a verified Crash Point. */
+export function isCrashPointPublished(round: CrashRound) {
+  return round.status === ROUND_STATUS.finalized;
+}
+
+/**
+ * Formats stored Crash Point basis points for display.
+ * Values below 1.00x render as 1.00x without changing settlement math.
+ */
+export function formatCrashPointBps(crashPointBps: bigint): string {
+  const bounded =
+    crashPointBps < ONE_X_BPS
+      ? ONE_X_BPS
+      : crashPointBps > MAX_CRASH_POINT_BPS
+        ? MAX_CRASH_POINT_BPS
+        : crashPointBps;
+  const hundredths = bounded / 100n;
+  const whole = hundredths / 100n;
+  const fraction = hundredths % 100n;
+  return `${whole.toString()}.${fraction.toString().padStart(2, "0")}x`;
+}
+
 export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
   const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
   const epochOrigin = await readEpochOrigin(config.address, block.number);
@@ -139,7 +205,7 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
       chainTimestamp: block.timestamp,
       currentRoundId: 0n,
       round: pendingRound,
-      openingTransactionUrl: null,
+      ...emptyLifecycleUrls(config.address),
     };
   }
 
@@ -160,7 +226,7 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
     ...round,
     status: normalizeRoundStatus(round.status),
   };
-  const openingTransactionHash = await readOpeningTransactionHash(
+  const lifecycleUrls = await readLifecycleUrls(
     config,
     currentRoundId,
     normalizedRound,
@@ -172,9 +238,7 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
     chainTimestamp: block.timestamp,
     currentRoundId,
     round: normalizedRound,
-    openingTransactionUrl: openingTransactionHash
-      ? getBaseSepoliaTransactionUrl(openingTransactionHash)
-      : null,
+    ...lifecycleUrls,
   };
 }
 
@@ -195,48 +259,148 @@ async function readEpochOrigin(
   return epochOrigin;
 }
 
-async function readOpeningTransactionHash(
+async function readLifecycleUrls(
   config: MarginCallCrashConfig,
   roundId: bigint,
   round: CrashRound,
   toBlock: bigint
-): Promise<Hash | null> {
-  if (!isRoundInitialized(round)) return null;
-  if (
-    openingTransactionCache?.address === config.address &&
-    openingTransactionCache.roundId === roundId
-  ) {
-    return openingTransactionCache.hash;
-  }
+): Promise<CrashRoundLifecycleUrls> {
+  const urls = emptyLifecycleUrls(config.address);
+  if (!isRoundInitialized(round)) return urls;
 
+  const cached = getCachedLifecycle(config.address, roundId)?.hashes ?? {};
+  const fromBlock = getEventFromBlock(config.deploymentBlock, toBlock);
+  const revealPossible =
+    round.status === ROUND_STATUS.revealRequested ||
+    round.status === ROUND_STATUS.finalized ||
+    round.status === ROUND_STATUS.expired;
+  const lookups: Array<{
+    key: LifecycleEventKey;
+    event: RoundLifecycleEvent;
+    lookup: boolean;
+    required: boolean;
+  }> = [
+    { key: "opening", event: roundOpenedEvent, lookup: true, required: true },
+    {
+      key: "reveal",
+      event: revealRequestedEvent,
+      lookup: revealPossible,
+      // An expired round may have ended without any reveal request.
+      required: round.status !== ROUND_STATUS.expired,
+    },
+    {
+      key: "finalize",
+      event: roundFinalizedEvent,
+      lookup: round.status === ROUND_STATUS.finalized,
+      required: true,
+    },
+    {
+      key: "expire",
+      event: roundExpiredEvent,
+      lookup: round.status === ROUND_STATUS.expired,
+      required: true,
+    },
+  ];
+
+  const hashes: Partial<Record<LifecycleEventKey, Hash | null>> = {};
+  await Promise.all(
+    lookups.map(async ({ key, event, lookup, required }) => {
+      if (!lookup) return;
+      hashes[key] =
+        cached[key] !== undefined
+          ? cached[key]
+          : await readExactRoundEventHash({
+              config,
+              roundId,
+              event,
+              fromBlock,
+              toBlock,
+              required,
+            });
+    })
+  );
+  lifecycleTransactionCache = { address: config.address, roundId, hashes };
+
+  return {
+    ...urls,
+    openingTransactionUrl: toTransactionUrl(hashes.opening),
+    revealTransactionUrl: toTransactionUrl(hashes.reveal),
+    finalizeTransactionUrl: toTransactionUrl(hashes.finalize),
+    expireTransactionUrl: toTransactionUrl(hashes.expire),
+  };
+}
+
+function toTransactionUrl(hash: Hash | null | undefined): string | null {
+  return hash ? getBaseSepoliaTransactionUrl(hash) : null;
+}
+
+async function readExactRoundEventHash({
+  config,
+  roundId,
+  event,
+  fromBlock,
+  toBlock,
+  required,
+}: {
+  config: MarginCallCrashConfig;
+  roundId: bigint;
+  event: RoundLifecycleEvent;
+  fromBlock: bigint;
+  toBlock: bigint;
+  required: boolean;
+}): Promise<Hash | null> {
   const logs = await baseSepoliaPublicClient.getLogs({
     address: config.address,
-    event: roundOpenedEvent,
+    event,
     args: { roundId },
-    fromBlock: getOpeningEventFromBlock(config.deploymentBlock, toBlock),
+    fromBlock,
     toBlock,
     strict: true,
   });
-  if (logs.length !== 1 || !logs[0].transactionHash) {
-    throw new Error(`Expected one RoundOpened event for round ${roundId}`);
+
+  if (logs.length === 0) {
+    if (required) {
+      throw new Error(`Expected one ${event.name} event for round ${roundId}`);
+    }
+    return null;
   }
-  openingTransactionCache = {
-    address: config.address,
-    roundId,
-    hash: logs[0].transactionHash,
-  };
+  if (logs.length !== 1 || !logs[0].transactionHash) {
+    throw new Error(
+      `Expected one ${event.name} event for round ${roundId}, found ${logs.length}`
+    );
+  }
   return logs[0].transactionHash;
 }
 
-function getOpeningEventFromBlock(
-  deploymentBlock: bigint,
-  toBlock: bigint
-): bigint {
+function getCachedLifecycle(address: Address, roundId: bigint) {
+  if (
+    lifecycleTransactionCache?.address === address &&
+    lifecycleTransactionCache.roundId === roundId
+  ) {
+    return lifecycleTransactionCache;
+  }
+  return null;
+}
+
+function getEventFromBlock(deploymentBlock: bigint, toBlock: bigint): bigint {
   const recentFromBlock =
-    toBlock > ROUND_OPENED_LOOKBACK_BLOCKS
-      ? toBlock - ROUND_OPENED_LOOKBACK_BLOCKS
+    toBlock > ROUND_EVENT_LOOKBACK_BLOCKS
+      ? toBlock - ROUND_EVENT_LOOKBACK_BLOCKS
       : 0n;
   return deploymentBlock > recentFromBlock ? deploymentBlock : recentFromBlock;
+}
+
+function emptyLifecycleUrls(address: Address): CrashRoundLifecycleUrls {
+  return {
+    openingTransactionUrl: null,
+    revealTransactionUrl: null,
+    finalizeTransactionUrl: null,
+    expireTransactionUrl: null,
+    gameContractUrl: getBaseSepoliaContractCodeUrl(address),
+    incoContractUrl: getBaseSepoliaContractCodeUrl(
+      BASE_SEPOLIA_INCO_LIGHTNING_ADDRESS
+    ),
+  };
 }
 
 function normalizeRoundStatus(status: number): CrashRoundStatus {

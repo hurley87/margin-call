@@ -5,7 +5,15 @@ Foundry scaffolding for the future Margin Call Crash implementation described in
 - [`../docs/2026-08-08-margin-call-crash-technical-design.md`](../docs/2026-08-08-margin-call-crash-technical-design.md)
 - [`../docs/2026-08-07-margin-call-crash-prd.md`](../docs/2026-08-07-margin-call-crash-prd.md)
 
-The retired Pack Rip contracts, scripts, deployments, and tests have been removed. `MarginCallCrash` currently implements only the fixed epoch grid and pre-committed confidential round creation; entry, reveal, settlement, and expiry arrive in later slices.
+The retired Pack Rip contracts, scripts, deployments, and tests have been removed. `MarginCallCrash` currently implements the fixed epoch grid, pre-committed confidential round creation, permissionless reveal, attested finalization, and expiry. Entry, tickets, vault settlement, and refunds arrive in later slices.
+
+After deploying a replacement game contract, a Base Sepolia lifecycle smoke can be run with:
+
+```bash
+pnpm smoke:crash-lifecycle
+# or, for an already-opened unresolved round after expiresAt:
+# SMOKE_EXPIRE_ROUND_ID=<id> node scripts/smoke-crash-expire.mjs
+```
 
 ## Prerequisites
 
