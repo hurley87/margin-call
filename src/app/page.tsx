@@ -3,6 +3,8 @@ import { CurrentRound } from "@/components/current-round/current-round";
 import { CrashTicketRefund } from "@/components/current-round/crash-ticket-refund";
 import { CrashTicketSettlement } from "@/components/current-round/crash-ticket-settlement";
 import { DeskDollarsPanel } from "@/components/desk-dollars/desk-dollars-panel";
+import { GlobalHistory } from "@/components/history/global-history";
+import { PersonalHistory } from "@/components/history/personal-history";
 import { LpDesk } from "@/components/lp-desk/lp-desk";
 
 export default function Home() {
@@ -20,11 +22,13 @@ export default function Home() {
         </p>
 
         <CurrentRound />
+        <GlobalHistory />
 
         <div className="mx-auto max-w-xl">
           <AuthGate>
             <CrashTicketSettlement />
             <CrashTicketRefund />
+            <PersonalHistory />
             <DeskDollarsPanel />
             <LpDesk />
           </AuthGate>
