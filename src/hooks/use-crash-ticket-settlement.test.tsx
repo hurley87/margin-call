@@ -12,9 +12,8 @@ const sdk = vi.hoisted(() => ({
     deploymentBlock: 1n,
   })),
   readContract: vi.fn(),
+  waitForTransactionReceipt: vi.fn(),
   readPlayerRecentTicket: vi.fn(),
-  submitSponsoredCall: vi.fn(),
-  confirmSponsoredCall: vi.fn(),
   fetchCrashAttestation: vi.fn(),
   notifyWalletBalancesChanged: vi.fn(),
   subscribeToWalletBalanceChanges: vi.fn(() => () => undefined),
@@ -48,22 +47,11 @@ vi.mock("@/lib/margin-call-crash", async () => {
 vi.mock("@/lib/base-sepolia", () => ({
   baseSepoliaPublicClient: {
     readContract: (...args: unknown[]) => sdk.readContract(...args),
+    waitForTransactionReceipt: (...args: unknown[]) =>
+      sdk.waitForTransactionReceipt(...args),
   },
   BASE_SEPOLIA_CHAIN_ID: 84532,
 }));
-
-vi.mock("@/lib/sponsored-call", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/sponsored-call")>(
-    "@/lib/sponsored-call"
-  );
-  return {
-    ...actual,
-    submitSponsoredCall: (...args: unknown[]) =>
-      sdk.submitSponsoredCall(...args),
-    confirmSponsoredCall: (...args: unknown[]) =>
-      sdk.confirmSponsoredCall(...args),
-  };
-});
 
 vi.mock("@/lib/inco-attestation", () => ({
   requestCrashAttestation: (...args: unknown[]) =>
@@ -110,20 +98,20 @@ const finalizedRound = {
 describe("useCrashTicketSettlement", () => {
   beforeEach(() => {
     sdk.readContract.mockReset();
+    sdk.waitForTransactionReceipt.mockReset();
     sdk.readPlayerRecentTicket.mockReset();
-    sdk.submitSponsoredCall.mockReset();
-    sdk.confirmSponsoredCall.mockReset();
     sdk.fetchCrashAttestation.mockReset();
     sdk.notifyWalletBalancesChanged.mockReset();
+    sdk.transaction.submit.mockReset();
+    sdk.transaction.getSubmittedHash.mockReset();
     sdk.readContract.mockResolvedValue(12n);
     sdk.readPlayerRecentTicket.mockResolvedValue({
       ticket,
       round: finalizedRound,
     });
-    sdk.submitSponsoredCall.mockResolvedValue({
-      outcome: "confirmed",
-      hash: "0xabc",
-    });
+    sdk.transaction.submit.mockResolvedValue(true);
+    sdk.transaction.getSubmittedHash.mockReturnValue("0xabc");
+    sdk.waitForTransactionReceipt.mockResolvedValue({ status: "success" });
   });
 
   it("loads a returning player's ticket and claims a win", async () => {
@@ -137,12 +125,11 @@ describe("useCrashTicketSettlement", () => {
       await result.current.claim();
     });
 
-    expect(sdk.submitSponsoredCall).toHaveBeenCalledWith(
-      sdk.transaction,
+    expect(sdk.transaction.submit).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "0x0000000000000000000000000000000000000001",
-      }),
-      expect.any(Function)
+        chainId: 84532,
+      })
     );
     expect(sdk.notifyWalletBalancesChanged).toHaveBeenCalled();
   });
@@ -158,6 +145,6 @@ describe("useCrashTicketSettlement", () => {
     await act(async () => {
       await result.current.settleLoss();
     });
-    expect(sdk.submitSponsoredCall).toHaveBeenCalled();
+    expect(sdk.transaction.submit).toHaveBeenCalled();
   });
 });

@@ -5,40 +5,13 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {inco} from "@inco/lightning/src/Lib.sol";
-import {DecryptionAttestation} from "@inco/lightning/src/lightning-parts/DecryptionAttester.types.sol";
 
 import {BankrollVault} from "../src/BankrollVault.sol";
 import {DeskDollars} from "../src/DeskDollars.sol";
 import {IBankrollVault} from "../src/interfaces/IBankrollVault.sol";
 import {MarginCallCrash} from "../src/MarginCallCrash.sol";
 import {IncoRandomMock} from "./mocks/IncoRandomMock.sol";
-
-contract IncoVerifierMock {
-    bool public validAttestation = true;
-    bytes32 public expectedHandle;
-    uint256 public expectedValue;
-    bool public enforceExpected;
-
-    function setValidAttestation(bool validAttestation_) external {
-        validAttestation = validAttestation_;
-    }
-
-    function setExpectedAttestation(bytes32 handle, uint256 value) external {
-        expectedHandle = handle;
-        expectedValue = value;
-        enforceExpected = true;
-    }
-
-    function isValidDecryptionAttestation(DecryptionAttestation memory decryption, bytes[] calldata)
-        external
-        view
-        returns (bool)
-    {
-        if (!validAttestation) return false;
-        if (!enforceExpected) return true;
-        return decryption.handle == expectedHandle && uint256(decryption.value) == expectedValue;
-    }
-}
+import {IncoVerifierMock} from "./mocks/IncoVerifierMock.sol";
 
 contract RejectingRoundOpener {
     function open(MarginCallCrash game, uint256 roundId) external payable {

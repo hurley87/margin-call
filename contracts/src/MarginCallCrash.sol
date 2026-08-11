@@ -237,36 +237,38 @@ contract MarginCallCrash is ReentrancyGuard {
     /// @notice Permissionlessly pays a winning ticket. Third parties may only route to the owner.
     /// @dev The owner may pass `receiver = address(0)` for themselves, or any non-zero address.
     function claim(uint256 ticketId, address receiver) external nonReentrant {
-        Ticket storage ticket = _tickets[ticketId];
-        if (ticket.player == address(0)) revert TicketNotFound(ticketId);
-        if (ticket.settled) revert TicketAlreadySettled(ticketId);
-
-        Round storage round = _rounds[ticket.roundId];
-        if (round.status != RoundStatus.Finalized) revert InvalidRoundStatus(ticket.roundId, round.status);
+        (Ticket storage ticket, Round storage round) = _settleableTicket(ticketId);
         if (ticket.leverageBps > round.crashPointBps) revert TicketDidNotWin(ticketId);
 
+        uint256 roundId = ticket.roundId;
         address payoutReceiver = _resolveClaimReceiver(ticket.player, receiver);
-        uint256 payout = (ticket.margin * ticket.leverageBps) / LEVERAGE_SCALE;
+        uint256 payout = ticket.reservedPayout;
 
         ticket.settled = true;
         ticket.claimed = true;
-        vault.payClaim(ticket.roundId, ticketId, payoutReceiver, payout);
-        emit TicketClaimed(ticket.roundId, ticketId, ticket.player, payoutReceiver, payout);
+        vault.payClaim(roundId, ticketId, payoutReceiver, payout);
+        emit TicketClaimed(roundId, ticketId, ticket.player, payoutReceiver, payout);
     }
 
     /// @notice Permissionlessly settles a losing ticket without transferring tUSD.
     function settleLoss(uint256 ticketId) external nonReentrant {
-        Ticket storage ticket = _tickets[ticketId];
+        (Ticket storage ticket, Round storage round) = _settleableTicket(ticketId);
+        if (ticket.leverageBps <= round.crashPointBps) revert TicketDidNotLose(ticketId);
+
+        uint256 roundId = ticket.roundId;
+        ticket.settled = true;
+        vault.settleLoss(roundId, ticketId);
+        emit TicketLossSettled(roundId, ticketId, ticket.player);
+    }
+
+    /// @dev Shared settlement guards: the ticket exists, is unsettled, and its round is finalized.
+    function _settleableTicket(uint256 ticketId) internal view returns (Ticket storage ticket, Round storage round) {
+        ticket = _tickets[ticketId];
         if (ticket.player == address(0)) revert TicketNotFound(ticketId);
         if (ticket.settled) revert TicketAlreadySettled(ticketId);
 
-        Round storage round = _rounds[ticket.roundId];
+        round = _rounds[ticket.roundId];
         if (round.status != RoundStatus.Finalized) revert InvalidRoundStatus(ticket.roundId, round.status);
-        if (ticket.leverageBps <= round.crashPointBps) revert TicketDidNotLose(ticketId);
-
-        ticket.settled = true;
-        vault.settleLoss(ticket.roundId, ticketId);
-        emit TicketLossSettled(ticket.roundId, ticketId, ticket.player);
     }
 
     /// @notice Permissionlessly marks an unresolved round expired once the exclusive boundary is reached.

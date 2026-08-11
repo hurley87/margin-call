@@ -85,36 +85,27 @@ export async function requestCrashAttestation(
   };
 }
 
+type LightningModule = {
+  Lightning?: {
+    baseSepoliaTestnet: (opts: {
+      hostChainRpcUrls: string[];
+    }) => Promise<LightningClient>;
+  };
+  default?: LightningModule;
+};
+
 async function loadLightningClient(rpcUrl: string): Promise<LightningClient> {
   // Prefer the CJS lite build used by the smoke script; fall back to package root.
+  let mod: LightningModule;
   try {
-    const mod = (await import("@inco/lightning-js/lite")) as unknown as {
-      Lightning: {
-        baseSepoliaTestnet: (opts: {
-          hostChainRpcUrls: string[];
-        }) => Promise<LightningClient>;
-      };
-    };
-    return mod.Lightning.baseSepoliaTestnet({ hostChainRpcUrls: [rpcUrl] });
+    mod =
+      (await import("@inco/lightning-js/lite")) as unknown as LightningModule;
   } catch {
-    const mod = (await import("@inco/lightning-js")) as unknown as {
-      Lightning: {
-        baseSepoliaTestnet: (opts: {
-          hostChainRpcUrls: string[];
-        }) => Promise<LightningClient>;
-      };
-      default?: {
-        Lightning: {
-          baseSepoliaTestnet: (opts: {
-            hostChainRpcUrls: string[];
-          }) => Promise<LightningClient>;
-        };
-      };
-    };
-    const Lightning = mod.Lightning ?? mod.default?.Lightning;
-    if (!Lightning) {
-      throw new Error("Unable to load Inco Lightning client");
-    }
-    return Lightning.baseSepoliaTestnet({ hostChainRpcUrls: [rpcUrl] });
+    mod = (await import("@inco/lightning-js")) as unknown as LightningModule;
   }
+  const Lightning = mod.Lightning ?? mod.default?.Lightning;
+  if (!Lightning) {
+    throw new Error("Unable to load Inco Lightning client");
+  }
+  return Lightning.baseSepoliaTestnet({ hostChainRpcUrls: [rpcUrl] });
 }

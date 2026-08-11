@@ -196,11 +196,9 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         if (payout > reservation.maximumPayout) {
             revert PayoutExceedsReservation(payout, reservation.maximumPayout);
         }
-        if (payout > pendingObligations) {
-            // Invariant: marked winning liability funds every winning claim.
-            revert PayoutExceedsReservation(payout, pendingObligations);
-        }
 
+        // Marked winning liability funds every winning claim; checked
+        // subtraction enforces the invariant.
         pendingObligations -= payout;
         emit LiabilityReleased(roundId, ticketId, reservation.player, reservation.maximumPayout, payout);
         IERC20(asset()).safeTransfer(recipient, payout);

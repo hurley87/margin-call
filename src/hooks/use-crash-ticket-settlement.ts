@@ -6,22 +6,24 @@ import { encodeFunctionData, zeroAddress, type Address, type Hex } from "viem";
 import { baseSepoliaPublicClient } from "@/lib/base-sepolia";
 import { requestCrashAttestation } from "@/lib/inco-attestation";
 import {
+  computeCrashPointBps,
   computeTicketPayout,
   deriveRoundPhase,
   deriveTicketOutcome,
   formatCrashPointBps,
   getMarginCallCrashConfig,
+  isCrashPointPublished,
   marginCallCrashAbi,
   readPlayerRecentTicket,
+  ROUND_STATUS,
   type CrashRound,
   type CrashTicket,
   type TicketOutcome,
 } from "@/lib/margin-call-crash";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import {
-  applyStageResult,
-  confirmSponsoredCall,
-  submitSponsoredCall,
+  resumeSponsoredStage,
+  runSponsoredStage,
   type StageErrorCopy,
 } from "@/lib/sponsored-call";
 import {
@@ -160,79 +162,52 @@ export function useCrashTicketSettlement() {
 
   useEffect(() => {
     if (!state.ticket || state.ticket.settled) return;
+    // Time only moves the phase before finalization or expiry.
+    if (
+      state.round &&
+      (state.round.status === ROUND_STATUS.finalized ||
+        state.round.status === ROUND_STATUS.expired)
+    ) {
+      return;
+    }
     const tick = window.setInterval(() => setClock(Date.now()), 1_000);
     return () => window.clearInterval(tick);
-  }, [state.ticket]);
+  }, [state.round, state.ticket]);
 
   const runStage = useCallback(
-    async (stage: Stage, request: { to: Address; data: Hex }) => {
+    (stage: Stage, request: { to: Address; data: Hex }) => {
       retryKind.current = stage;
-      setState((current) => ({
-        ...current,
-        status: `${stage}-submitting`,
-        error: null,
-      }));
-      const result = await submitSponsoredCall(transaction, request, (hash) => {
-        pendingStage.current = { stage, hash };
-        setState((current) => ({
-          ...current,
-          status: `${stage}-pending`,
-          error: null,
-        }));
+      return runSponsoredStage({
+        transaction,
+        pendingStage,
+        stage,
+        copy: stageCopy[stage],
+        request,
+        onStatus: (status) =>
+          setState((current) => ({ ...current, status, error: null })),
       });
-      applyStageResult(pendingStage, stageCopy[stage], result);
     },
     [transaction]
   );
 
-  const resumePending = useCallback(async () => {
-    const pending = pendingStage.current;
-    if (!pending) return null;
-    retryKind.current = pending.stage;
-    setState((current) => ({
-      ...current,
-      status: `${pending.stage}-pending`,
-      error: null,
-    }));
-    applyStageResult(
-      pendingStage,
-      stageCopy[pending.stage],
-      await confirmSponsoredCall(pending.hash)
-    );
-    return pending.stage;
-  }, []);
+  const resumePending = useCallback(
+    () =>
+      resumeSponsoredStage({
+        pendingStage,
+        copyByStage: stageCopy,
+        onStatus: (status, stage) => {
+          retryKind.current = stage;
+          setState((current) => ({ ...current, status, error: null }));
+        },
+      }),
+    []
+  );
 
-  const settleTicket = useCallback(
-    async (mode: "claim" | "settle" | "resume" = "claim"): Promise<boolean> => {
-      if (!gameConfig || !walletAddress || !state.ticket || inFlight.current) {
-        return false;
-      }
-      if (pendingStage.current && mode !== "resume") return false;
-
+  const runSettlementFlow = useCallback(
+    async (fallback: string, flow: () => Promise<void>): Promise<boolean> => {
       inFlight.current = true;
       try {
-        if (mode === "resume") {
-          await resumePending();
-        } else if (mode === "claim") {
-          await runStage("claim", {
-            to: gameConfig.address,
-            data: encodeFunctionData({
-              abi: marginCallCrashAbi,
-              functionName: "claim",
-              args: [state.ticket.id, zeroAddress],
-            }) as Hex,
-          });
-        } else {
-          await runStage("settle", {
-            to: gameConfig.address,
-            data: encodeFunctionData({
-              abi: marginCallCrashAbi,
-              functionName: "settleLoss",
-              args: [state.ticket.id],
-            }) as Hex,
-          });
-        }
-
+        await flow();
         setState((current) => ({
           ...current,
           status: "confirmed",
@@ -241,8 +216,7 @@ export function useCrashTicketSettlement() {
         notifyWalletBalancesChanged();
         return refresh();
       } catch (error) {
-        const message =
-          error instanceof Error ? error.message : stageCopy.claim.failed;
+        const message = error instanceof Error ? error.message : fallback;
         setState((current) => ({
           ...current,
           status: "error",
@@ -253,7 +227,38 @@ export function useCrashTicketSettlement() {
         inFlight.current = false;
       }
     },
-    [gameConfig, refresh, resumePending, runStage, state.ticket, walletAddress]
+    [refresh]
+  );
+
+  const settleTicket = useCallback(
+    async (mode: "claim" | "settle" | "resume" = "claim"): Promise<boolean> => {
+      if (!gameConfig || !walletAddress || !state.ticket || inFlight.current) {
+        return false;
+      }
+      if (pendingStage.current && mode !== "resume") return false;
+
+      const ticketId = state.ticket.id;
+      return runSettlementFlow(stageCopy.claim.failed, async () => {
+        if (mode === "resume") {
+          await resumePending();
+        } else if (mode === "claim") {
+          await runStage("claim", claimRequest(gameConfig.address, ticketId));
+        } else {
+          await runStage(
+            "settle",
+            settleLossRequest(gameConfig.address, ticketId)
+          );
+        }
+      });
+    },
+    [
+      gameConfig,
+      resumePending,
+      runSettlementFlow,
+      runStage,
+      state.ticket,
+      walletAddress,
+    ]
   );
 
   const verifyAndSettle = useCallback(async (): Promise<boolean> => {
@@ -263,12 +268,13 @@ export function useCrashTicketSettlement() {
     if (inFlight.current) return false;
     if (pendingStage.current) return settleTicket("resume");
 
-    inFlight.current = true;
+    const ticket = state.ticket;
+    const startingRound = state.round;
     retryKind.current = "verify";
-    try {
-      let round = state.round;
+    return runSettlementFlow(stageCopy.finalize.failed, async () => {
+      let round = startingRound;
       // Locked rounds still store Open until reveal is requested.
-      if (round.status === 1) {
+      if (round.status === ROUND_STATUS.open) {
         await runStage("reveal", {
           to: gameConfig.address,
           data: encodeFunctionData({
@@ -277,11 +283,11 @@ export function useCrashTicketSettlement() {
             args: [round.id],
           }) as Hex,
         });
-        round = { ...round, status: 2 };
+        round = { ...round, status: ROUND_STATUS.revealRequested };
         setState((current) => ({ ...current, round }));
       }
 
-      if (round.status === 2) {
+      if (round.status === ROUND_STATUS.revealRequested) {
         setState((current) => ({
           ...current,
           status: "attesting",
@@ -298,55 +304,25 @@ export function useCrashTicketSettlement() {
         });
         round = {
           ...round,
-          status: 3,
-          crashPointBps: computeCrashPoint(attestation.plaintext),
+          status: ROUND_STATUS.finalized,
+          crashPointBps: computeCrashPointBps(attestation.plaintext),
         };
         setState((current) => ({ ...current, round }));
       }
 
-      const outcome = deriveTicketOutcome(state.ticket, round);
+      const outcome = deriveTicketOutcome(ticket, round);
       if (outcome === "won") {
-        await runStage("claim", {
-          to: gameConfig.address,
-          data: encodeFunctionData({
-            abi: marginCallCrashAbi,
-            functionName: "claim",
-            args: [state.ticket.id, zeroAddress],
-          }) as Hex,
-        });
+        await runStage("claim", claimRequest(gameConfig.address, ticket.id));
       } else if (outcome === "lost") {
-        await runStage("settle", {
-          to: gameConfig.address,
-          data: encodeFunctionData({
-            abi: marginCallCrashAbi,
-            functionName: "settleLoss",
-            args: [state.ticket.id],
-          }) as Hex,
-        });
+        await runStage(
+          "settle",
+          settleLossRequest(gameConfig.address, ticket.id)
+        );
       }
-
-      setState((current) => ({
-        ...current,
-        status: "confirmed",
-        error: null,
-      }));
-      notifyWalletBalancesChanged();
-      return refresh();
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : stageCopy.finalize.failed;
-      setState((current) => ({
-        ...current,
-        status: "error",
-        error: message,
-      }));
-      return false;
-    } finally {
-      inFlight.current = false;
-    }
+    });
   }, [
     gameConfig,
-    refresh,
+    runSettlementFlow,
     runStage,
     settleTicket,
     state.round,
@@ -368,10 +344,11 @@ export function useCrashTicketSettlement() {
 
   const ticket = state.ticket ?? null;
   const round = state.round ?? null;
+  const finalized = round !== null && isCrashPointPublished(round);
   const outcome: TicketOutcome | null =
     ticket && round ? deriveTicketOutcome(ticket, round) : null;
   const payout =
-    ticket && round && round.status === 3
+    ticket && round && finalized
       ? computeTicketPayout(
           ticket.margin,
           ticket.leverageBps,
@@ -385,31 +362,24 @@ export function useCrashTicketSettlement() {
     !!ticket &&
     !ticket.settled &&
     (phase === "locked" || phase === "reveal-requested");
-  const canClaim = outcome === "won";
-  const canSettle = outcome === "lost";
   const canSubmitAfterError =
     state.status === "error" &&
     retryKind.current !== null &&
     retryKind.current !== "refresh";
+  const canAct =
+    (state.status === "ready" || canSubmitAfterError) && !inFlight.current;
 
+  const pendingReceiptStage = pendingStage.current?.stage ?? null;
   const retryAction: CrashSettlementRetryAction | null =
     retryKind.current === null
       ? null
       : retryKind.current === "refresh"
         ? "refresh"
-        : pendingStage.current?.stage === "reveal"
-          ? "reveal-receipt-check"
-          : pendingStage.current?.stage === "finalize"
-            ? "finalize-receipt-check"
-            : pendingStage.current?.stage === "claim"
-              ? "claim-receipt-check"
-              : pendingStage.current?.stage === "settle"
-                ? "settle-receipt-check"
-                : retryKind.current === "verify"
-                  ? "verify"
-                  : retryKind.current === "settle"
-                    ? "settle"
-                    : "claim";
+        : pendingReceiptStage
+          ? `${pendingReceiptStage}-receipt-check`
+          : retryKind.current === "verify" || retryKind.current === "settle"
+            ? retryKind.current
+            : "claim";
 
   return {
     status: state.status,
@@ -421,21 +391,10 @@ export function useCrashTicketSettlement() {
     payout,
     phase,
     displayCrashPoint:
-      round && round.status === 3
-        ? formatCrashPointBps(round.crashPointBps)
-        : null,
-    canVerify:
-      canVerify &&
-      (state.status === "ready" || canSubmitAfterError) &&
-      !inFlight.current,
-    canClaim:
-      canClaim &&
-      (state.status === "ready" || canSubmitAfterError) &&
-      !inFlight.current,
-    canSettle:
-      canSettle &&
-      (state.status === "ready" || canSubmitAfterError) &&
-      !inFlight.current,
+      round && finalized ? formatCrashPointBps(round.crashPointBps) : null,
+    canVerify: canVerify && canAct,
+    canClaim: outcome === "won" && canAct,
+    canSettle: outcome === "lost" && canAct,
     canRetry:
       state.status === "error" &&
       retryKind.current !== null &&
@@ -449,7 +408,24 @@ export function useCrashTicketSettlement() {
   };
 }
 
-function computeCrashPoint(plaintext: bigint): bigint {
-  const raw = 99_000_000n / (10_000n - plaintext);
-  return raw > 100_000n ? 100_000n : raw;
+function claimRequest(to: Address, ticketId: bigint) {
+  return {
+    to,
+    data: encodeFunctionData({
+      abi: marginCallCrashAbi,
+      functionName: "claim",
+      args: [ticketId, zeroAddress],
+    }) as Hex,
+  };
+}
+
+function settleLossRequest(to: Address, ticketId: bigint) {
+  return {
+    to,
+    data: encodeFunctionData({
+      abi: marginCallCrashAbi,
+      functionName: "settleLoss",
+      args: [ticketId],
+    }) as Hex,
+  };
 }

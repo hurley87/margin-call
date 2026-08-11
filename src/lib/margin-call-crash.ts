@@ -126,7 +126,7 @@ export type CrashRoundLifecycleUrls = {
   incoContractUrl: string;
 };
 
-const ROUND_STATUS = {
+export const ROUND_STATUS = {
   uninitialized: 0,
   open: 1,
   revealRequested: 2,
@@ -216,6 +216,12 @@ export function computeTicketPayout(
     : 0n;
 }
 
+/** Mirrors MarginCallCrash._crashPointFromRandom: 99,000,000 / (10,000 - r), capped at 10.00x. */
+export function computeCrashPointBps(crashRandom: bigint): bigint {
+  const raw = 99_000_000n / (10_000n - crashRandom);
+  return raw > MAX_CRASH_POINT_BPS ? MAX_CRASH_POINT_BPS : raw;
+}
+
 export type TicketOutcome =
   "pending" | "won" | "lost" | "settled-win" | "settled-loss";
 
@@ -287,25 +293,51 @@ export async function readPlayerRecentTicket(
     currentRoundId > BigInt(PLAYER_TICKET_LOOKBACK_ROUNDS)
       ? currentRoundId - BigInt(PLAYER_TICKET_LOOKBACK_ROUNDS)
       : 0n;
-
-  let settledFallback: { ticket: CrashTicket; round: CrashRound } | null = null;
+  const roundIds: bigint[] = [];
   for (let roundId = currentRoundId; roundId >= start; roundId--) {
-    const ticket = await readPlayerTicket(address, roundId, player);
-    if (!ticket) continue;
-    const round = await baseSepoliaPublicClient.readContract({
-      address,
-      abi: marginCallCrashAbi,
-      functionName: "getRound",
-      args: [roundId],
-    });
-    const normalized = {
-      ...round,
-      status: normalizeRoundStatus(round.status),
-    };
-    if (!ticket.settled) return { ticket, round: normalized };
-    if (!settledFallback) settledFallback = { ticket, round: normalized };
+    roundIds.push(roundId);
   }
-  return settledFallback;
+
+  // Concurrent reads let the client's multicall batching collapse the scan
+  // into a couple of RPC requests instead of one round trip per round.
+  const ticketIds = await Promise.all(
+    roundIds.map((roundId) =>
+      baseSepoliaPublicClient.readContract({
+        address,
+        abi: marginCallCrashAbi,
+        functionName: "getTicketId",
+        args: [roundId, player],
+      })
+    )
+  );
+  const found = await Promise.all(
+    roundIds.flatMap((roundId, index) => {
+      const ticketId = ticketIds[index];
+      if (ticketId === 0n) return [];
+      return [
+        Promise.all([
+          baseSepoliaPublicClient.readContract({
+            address,
+            abi: marginCallCrashAbi,
+            functionName: "getTicket",
+            args: [ticketId],
+          }),
+          baseSepoliaPublicClient.readContract({
+            address,
+            abi: marginCallCrashAbi,
+            functionName: "getRound",
+            args: [roundId],
+          }),
+        ]).then(([ticket, round]) => ({
+          ticket,
+          round: { ...round, status: normalizeRoundStatus(round.status) },
+        })),
+      ];
+    })
+  );
+
+  // roundIds are descending, so the first match is the most recent.
+  return found.find(({ ticket }) => !ticket.settled) ?? found[0] ?? null;
 }
 
 export function isRoundInitialized(round: CrashRound) {

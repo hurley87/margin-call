@@ -5,25 +5,14 @@ import {Test} from "forge-std/Test.sol";
 import {Vm} from "forge-std/Vm.sol";
 
 import {inco} from "@inco/lightning/src/Lib.sol";
-import {DecryptionAttestation} from "@inco/lightning/src/lightning-parts/DecryptionAttester.types.sol";
 
 import {BankrollVault} from "../src/BankrollVault.sol";
 import {DeskDollars} from "../src/DeskDollars.sol";
 import {IBankrollVault} from "../src/interfaces/IBankrollVault.sol";
+import {LeverageTiers} from "../src/libraries/LeverageTiers.sol";
 import {MarginCallCrash} from "../src/MarginCallCrash.sol";
 import {IncoRandomMock} from "./mocks/IncoRandomMock.sol";
-
-contract IncoSettlementVerifierMock {
-    bool public validAttestation = true;
-
-    function setValidAttestation(bool validAttestation_) external {
-        validAttestation = validAttestation_;
-    }
-
-    function isValidDecryptionAttestation(DecryptionAttestation memory, bytes[] calldata) external view returns (bool) {
-        return validAttestation;
-    }
-}
+import {IncoVerifierMock} from "./mocks/IncoVerifierMock.sol";
 
 /// @dev Desk Dollars that can refuse transfers so claim retryability is testable.
 contract RejectingDeskDollars is DeskDollars {
@@ -78,7 +67,7 @@ contract SettlementTest is Test {
         incoMock = IncoRandomMock(address(inco));
         incoMock.configure(INCO_FEE, RANDOM_HANDLE);
 
-        IncoSettlementVerifierMock verifier = new IncoSettlementVerifierMock();
+        IncoVerifierMock verifier = new IncoVerifierMock();
         incoMock.setVerifier(address(verifier));
 
         token = new DeskDollars(LP);
@@ -180,7 +169,7 @@ contract SettlementTest is Test {
 
     function testAllEighteenMarginTierPayouts() public {
         uint256[3] memory margins = [ONE_TUSD, 5 * ONE_TUSD, 10 * ONE_TUSD];
-        uint256[6] memory tiers = [uint256(12_500), 15_000, 20_000, 30_000, 50_000, 100_000];
+        uint256[6] memory tiers = LeverageTiers.all();
         // Plaintexts that just reach each tier (equality wins).
         uint256[6] memory plaintexts = [uint256(2_080), 3_400, 5_050, 6_700, 8_020, 9_010];
 
@@ -218,7 +207,7 @@ contract SettlementTest is Test {
     }
 
     function testDistributionSamplesMatchExactReachProbabilities() public pure {
-        uint256[6] memory tiers = [uint256(12_500), 15_000, 20_000, 30_000, 50_000, 100_000];
+        uint256[6] memory tiers = LeverageTiers.all();
         uint256[6] memory expected = [uint256(7_920), 6_600, 4_950, 3_300, 1_980, 990];
         uint256[6] memory counts;
 
