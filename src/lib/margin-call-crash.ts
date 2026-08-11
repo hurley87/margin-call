@@ -45,6 +45,7 @@ export type CrashRound = {
 };
 
 export type CrashRoundPhase =
+  | "prelaunch"
   | "uninitialized"
   | "open"
   | "locked"
@@ -76,7 +77,9 @@ export function deriveRoundPhase(
   round: CrashRound,
   chainTimestamp: bigint
 ): CrashRoundPhase {
-  if (round.status === ROUND_STATUS.uninitialized) return "uninitialized";
+  if (round.status === ROUND_STATUS.uninitialized) {
+    return chainTimestamp < round.openAt ? "prelaunch" : "uninitialized";
+  }
   if (round.status === ROUND_STATUS.finalized) return "finalized";
   if (round.status === ROUND_STATUS.expired) return "expired";
   if (chainTimestamp >= round.expiresAt) return "expired-eligible";
@@ -94,6 +97,38 @@ export function getRoundCountdownSeconds(
 
 export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
   const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
+  const epochOrigin = await baseSepoliaPublicClient.readContract({
+    address: config.address,
+    abi: marginCallCrashAbi,
+    functionName: "epochOrigin",
+    blockNumber: block.number,
+  });
+  if (block.timestamp < epochOrigin) {
+    const [entryWindow, expiryDelay] = await Promise.all([
+      readTimingValue(config.address, "entryWindow", block.number),
+      readTimingValue(config.address, "expiryDelay", block.number),
+    ]);
+    const pendingRound: CrashRound = {
+      id: 0n,
+      openAt: epochOrigin,
+      lockAt: epochOrigin + entryWindow,
+      expiresAt: epochOrigin + entryWindow + expiryDelay,
+      crashRandom:
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+      crashPointBps: 0n,
+      totalMargin: 0n,
+      reservedPayout: 0n,
+      status: ROUND_STATUS.uninitialized,
+    };
+
+    return buildCurrentRoundState({
+      block,
+      currentRoundId: 0n,
+      round: pendingRound,
+      openingTransactionHash: null,
+    });
+  }
+
   const currentRoundId = await baseSepoliaPublicClient.readContract({
     address: config.address,
     abi: marginCallCrashAbi,
@@ -118,21 +153,50 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
     block.number
   );
 
+  return buildCurrentRoundState({
+    block,
+    currentRoundId,
+    round: normalizedRound,
+    openingTransactionHash,
+  });
+}
+
+function buildCurrentRoundState({
+  block,
+  currentRoundId,
+  round,
+  openingTransactionHash,
+}: {
+  block: { number: bigint; timestamp: bigint };
+  currentRoundId: bigint;
+  round: CrashRound;
+  openingTransactionHash: Hash | null;
+}) {
   return {
     blockNumber: block.number,
     chainTimestamp: block.timestamp,
     currentRoundId,
-    round: normalizedRound,
-    phase: deriveRoundPhase(normalizedRound, block.timestamp),
-    countdownSeconds: getRoundCountdownSeconds(
-      normalizedRound,
-      block.timestamp
-    ),
+    round,
+    phase: deriveRoundPhase(round, block.timestamp),
+    countdownSeconds: getRoundCountdownSeconds(round, block.timestamp),
     openingTransactionHash,
     openingTransactionUrl: openingTransactionHash
       ? getBaseSepoliaTransactionUrl(openingTransactionHash)
       : null,
   };
+}
+
+function readTimingValue(
+  address: Address,
+  functionName: "entryWindow" | "expiryDelay",
+  blockNumber: bigint
+) {
+  return baseSepoliaPublicClient.readContract({
+    address,
+    abi: marginCallCrashAbi,
+    functionName,
+    blockNumber,
+  });
 }
 
 async function readOpeningTransactionHash(

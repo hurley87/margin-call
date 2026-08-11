@@ -91,6 +91,7 @@ describe("MarginCallCrash public reads and phase math", () => {
   it("reads one block-consistent round and resolves its exact opening transaction", async () => {
     sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
     sdk.readContract
+      .mockResolvedValueOnce(900n)
       .mockResolvedValueOnce(3n)
       .mockResolvedValueOnce(makeRound());
     sdk.getLogs.mockResolvedValue([
@@ -113,14 +114,14 @@ describe("MarginCallCrash public reads and phase math", () => {
       openingTransactionUrl: `https://sepolia.basescan.org/tx/${OPENING_TRANSACTION_HASH}`,
     });
     expect(sdk.readContract).toHaveBeenNthCalledWith(
-      1,
+      2,
       expect.objectContaining({
         functionName: "currentRoundId",
         blockNumber: 100n,
       })
     );
     expect(sdk.readContract).toHaveBeenNthCalledWith(
-      2,
+      3,
       expect.objectContaining({
         functionName: "getRound",
         args: [3n],
@@ -140,6 +141,7 @@ describe("MarginCallCrash public reads and phase math", () => {
   it("skips event lookup for an uninitialized current epoch", async () => {
     sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
     sdk.readContract
+      .mockResolvedValueOnce(900n)
       .mockResolvedValueOnce(3n)
       .mockResolvedValueOnce(makeRound({ status: 0 }));
     const { readCurrentCrashRound } = await import("./margin-call-crash");
@@ -157,9 +159,42 @@ describe("MarginCallCrash public reads and phase math", () => {
     expect(sdk.getLogs).not.toHaveBeenCalled();
   });
 
+  it("represents a configured future epoch without calling the reverting current-round view", async () => {
+    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
+    sdk.readContract
+      .mockResolvedValueOnce(1_200n)
+      .mockResolvedValueOnce(45n)
+      .mockResolvedValueOnce(900n);
+    const { readCurrentCrashRound } = await import("./margin-call-crash");
+
+    await expect(
+      readCurrentCrashRound({
+        address: CONTRACT_ADDRESS,
+        deploymentBlock: 50n,
+      })
+    ).resolves.toMatchObject({
+      currentRoundId: 0n,
+      phase: "prelaunch",
+      countdownSeconds: 0,
+      round: {
+        openAt: 1_200n,
+        lockAt: 1_245n,
+        expiresAt: 2_145n,
+        status: 0,
+      },
+    });
+    expect(
+      sdk.readContract.mock.calls.some(
+        ([request]) => request.functionName === "currentRoundId"
+      )
+    ).toBe(false);
+    expect(sdk.getLogs).not.toHaveBeenCalled();
+  });
+
   it("rejects initialized state without exactly one reconstructable opening event", async () => {
     sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
     sdk.readContract
+      .mockResolvedValueOnce(900n)
       .mockResolvedValueOnce(3n)
       .mockResolvedValueOnce(makeRound());
     sdk.getLogs.mockResolvedValue([]);
