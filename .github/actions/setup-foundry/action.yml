@@ -9,6 +9,21 @@ runs:
         # Match contracts/REPRODUCIBILITY.md — pin for identical solc/forge across CI machines.
         version: "v1.4.3"
 
+    - name: Install pnpm
+      uses: pnpm/action-setup@v6.0.10
+      with:
+        version: 10.0.0
+
+    - name: Install Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version-file: ".nvmrc"
+        cache: pnpm
+
+    - name: Install npm contract dependencies
+      shell: bash
+      run: cd "${{ github.workspace }}" && pnpm install --frozen-lockfile
+
     - name: Install forge dependencies
       shell: bash
       # Shared installer reads contracts/foundry.deps.json (forge-std, OpenZeppelin).

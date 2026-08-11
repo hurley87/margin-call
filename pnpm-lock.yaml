@@ -5,6 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
+  '@safe-global/safe-smart-account': 1.5.0
   axios: '>=1.16.0'
   ws@<8: '>=7.5.11'
   ws@>=8: '>=8.21.0'
@@ -2077,9 +2078,8 @@ packages:
     engines: {node: '>=16'}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
-  '@safe-global/safe-smart-account@git+https://git@github.com:safe-global/safe-smart-account.git#dc437e8':
-    resolution: {commit: dc437e8, repo: git@github.com:safe-global/safe-smart-account.git, type: git}
-    version: 1.5.0
+  '@safe-global/safe-smart-account@1.5.0':
+    resolution: {integrity: sha512-VIMWxoeY/kNuZVsQVvAeOFKcQS3eojCXg0ecGnesBSLn5ypYshmBhVEEU5XiurJJGTs/MrcoLTbTxhs9W9GvdQ==}
 
   '@scure/base@1.1.9':
     resolution: {integrity: sha512-8YKhl8GHiNI/pU2VMaofa2Tor7PJRAjwQLBBuilkJ9L5+13yVbC7JO/wS7piioAvPSwR3JKM1IJ/u4xQzbcXKg==}
@@ -8324,7 +8324,7 @@ snapshots:
       '@inco/shared': 0.1.0
       '@openzeppelin/contracts': 5.4.0
       '@openzeppelin/contracts-upgradeable': 5.4.0(@openzeppelin/contracts@5.4.0)
-      '@safe-global/safe-smart-account': git+https://git@github.com:safe-global/safe-smart-account.git#dc437e8
+      '@safe-global/safe-smart-account': 1.5.0
       ds-test: https://codeload.github.com/dapphub/ds-test/tar.gz/e282159
       forge-std: https://codeload.github.com/foundry-rs/forge-std/tar.gz/2f05b30
       tsx: 4.20.6
@@ -9662,7 +9662,7 @@ snapshots:
 
   '@safe-global/safe-gateway-typescript-sdk@3.23.1': {}
 
-  '@safe-global/safe-smart-account@git+https://git@github.com:safe-global/safe-smart-account.git#dc437e8': {}
+  '@safe-global/safe-smart-account@1.5.0': {}
 
   '@scure/base@1.1.9': {}
 
