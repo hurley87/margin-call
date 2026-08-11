@@ -2,6 +2,7 @@ import {
   getAbiItem,
   isAddress,
   parseAbi,
+  zeroHash,
   type Address,
   type Hash,
   type Hex,
@@ -11,9 +12,6 @@ import { getBaseSepoliaTransactionUrl } from "./base-sepolia-explorer";
 
 export const marginCallCrashAbi = parseAbi([
   "function epochOrigin() view returns (uint64)",
-  "function roundDuration() view returns (uint64)",
-  "function entryWindow() view returns (uint64)",
-  "function expiryDelay() view returns (uint64)",
   "function currentRoundId() view returns (uint256)",
   "function roundTimes(uint256 roundId) view returns (uint64 openAt, uint64 lockAt, uint64 expiresAt)",
   "function getRound(uint256 roundId) view returns ((uint256 id, uint64 openAt, uint64 lockAt, uint64 expiresAt, bytes32 crashRandom, uint256 crashPointBps, uint256 totalMargin, uint256 reservedPayout, uint8 status))",
@@ -66,6 +64,15 @@ const ROUND_STATUS = {
   expired: 4,
 } as const satisfies Record<string, CrashRoundStatus>;
 
+// epochOrigin is immutable on-chain and the opening transaction of a round can
+// never change once observed, so neither needs to be re-fetched on every poll.
+const epochOriginCache = new Map<Address, bigint>();
+let openingTransactionCache: {
+  address: Address;
+  roundId: bigint;
+  hash: Hash;
+} | null = null;
+
 /** Public configuration only. Static env references allow Next.js client inlining. */
 export function getMarginCallCrashConfig(): MarginCallCrashConfig | null {
   const address = process.env.NEXT_PUBLIC_MARGIN_CALL_CRASH_ADDRESS;
@@ -99,38 +106,41 @@ export function getRoundCountdownSeconds(
   return Number(round.lockAt - chainTimestamp);
 }
 
+export function isRoundInitialized(round: CrashRound) {
+  return round.status !== ROUND_STATUS.uninitialized;
+}
+
 export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
   const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
-  const epochOrigin = await baseSepoliaPublicClient.readContract({
-    address: config.address,
-    abi: marginCallCrashAbi,
-    functionName: "epochOrigin",
-    blockNumber: block.number,
-  });
+  const epochOrigin = await readEpochOrigin(config.address, block.number);
   if (block.timestamp < epochOrigin) {
-    const [entryWindow, expiryDelay] = await Promise.all([
-      readTimingValue(config.address, "entryWindow", block.number),
-      readTimingValue(config.address, "expiryDelay", block.number),
-    ]);
+    const [openAt, lockAt, expiresAt] =
+      await baseSepoliaPublicClient.readContract({
+        address: config.address,
+        abi: marginCallCrashAbi,
+        functionName: "roundTimes",
+        args: [0n],
+        blockNumber: block.number,
+      });
     const pendingRound: CrashRound = {
       id: 0n,
-      openAt: epochOrigin,
-      lockAt: epochOrigin + entryWindow,
-      expiresAt: epochOrigin + entryWindow + expiryDelay,
-      crashRandom:
-        "0x0000000000000000000000000000000000000000000000000000000000000000",
+      openAt,
+      lockAt,
+      expiresAt,
+      crashRandom: zeroHash,
       crashPointBps: 0n,
       totalMargin: 0n,
       reservedPayout: 0n,
       status: ROUND_STATUS.uninitialized,
     };
 
-    return buildCurrentRoundState({
-      block,
+    return {
+      blockNumber: block.number,
+      chainTimestamp: block.timestamp,
       currentRoundId: 0n,
       round: pendingRound,
-      openingTransactionHash: null,
-    });
+      openingTransactionUrl: null,
+    };
   }
 
   const currentRoundId = await baseSepoliaPublicClient.readContract({
@@ -153,63 +163,51 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
   const openingTransactionHash = await readOpeningTransactionHash(
     config,
     currentRoundId,
-    normalizedRound.status,
+    normalizedRound,
     block.number
   );
 
-  return buildCurrentRoundState({
-    block,
-    currentRoundId,
-    round: normalizedRound,
-    openingTransactionHash,
-  });
-}
-
-function buildCurrentRoundState({
-  block,
-  currentRoundId,
-  round,
-  openingTransactionHash,
-}: {
-  block: { number: bigint; timestamp: bigint };
-  currentRoundId: bigint;
-  round: CrashRound;
-  openingTransactionHash: Hash | null;
-}) {
   return {
     blockNumber: block.number,
     chainTimestamp: block.timestamp,
     currentRoundId,
-    round,
-    phase: deriveRoundPhase(round, block.timestamp),
-    countdownSeconds: getRoundCountdownSeconds(round, block.timestamp),
-    openingTransactionHash,
+    round: normalizedRound,
     openingTransactionUrl: openingTransactionHash
       ? getBaseSepoliaTransactionUrl(openingTransactionHash)
       : null,
   };
 }
 
-function readTimingValue(
+async function readEpochOrigin(
   address: Address,
-  functionName: "entryWindow" | "expiryDelay",
   blockNumber: bigint
-) {
-  return baseSepoliaPublicClient.readContract({
+): Promise<bigint> {
+  const cached = epochOriginCache.get(address);
+  if (cached !== undefined) return cached;
+
+  const epochOrigin = await baseSepoliaPublicClient.readContract({
     address,
     abi: marginCallCrashAbi,
-    functionName,
+    functionName: "epochOrigin",
     blockNumber,
   });
+  epochOriginCache.set(address, epochOrigin);
+  return epochOrigin;
 }
 
 async function readOpeningTransactionHash(
   config: MarginCallCrashConfig,
   roundId: bigint,
-  status: number,
+  round: CrashRound,
   toBlock: bigint
 ): Promise<Hash | null> {
-  if (status === ROUND_STATUS.uninitialized) return null;
+  if (!isRoundInitialized(round)) return null;
+  if (
+    openingTransactionCache?.address === config.address &&
+    openingTransactionCache.roundId === roundId
+  ) {
+    return openingTransactionCache.hash;
+  }
 
   const logs = await baseSepoliaPublicClient.getLogs({
     address: config.address,
@@ -222,6 +220,11 @@ async function readOpeningTransactionHash(
   if (logs.length !== 1 || !logs[0].transactionHash) {
     throw new Error(`Expected one RoundOpened event for round ${roundId}`);
   }
+  openingTransactionCache = {
+    address: config.address,
+    roundId,
+    hash: logs[0].transactionHash,
+  };
   return logs[0].transactionHash;
 }
 

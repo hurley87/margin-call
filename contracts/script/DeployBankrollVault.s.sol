@@ -20,8 +20,6 @@ contract DeployBankrollVault is Utils {
     error DeploymentPostconditionFailed();
 
     string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_VAULT_RUN;
-    string internal constant BASESCAN_ADDRESS_PREFIX = "https://sepolia.basescan.org/address/";
-    string internal constant BASESCAN_CODE_SUFFIX = "#code";
 
     struct ExistingDeployment {
         uint256 chainId;

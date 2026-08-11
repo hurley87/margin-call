@@ -16,8 +16,6 @@ contract DeployMarginCallCrash is Utils {
 
     string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_CRASH_RUN;
     string internal constant INCO_PACKAGE_VERSION = "1.0.2";
-    string internal constant BASESCAN_ADDRESS_PREFIX = "https://sepolia.basescan.org/address/";
-    string internal constant BASESCAN_CODE_SUFFIX = "#code";
     uint256 internal constant MINIMUM_EPOCH_LEAD_TIME = 5 minutes;
 
     struct ExistingDeployment {

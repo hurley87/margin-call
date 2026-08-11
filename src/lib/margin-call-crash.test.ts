@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { zeroHash } from "viem";
 import type { CrashRound } from "./margin-call-crash";
 
 const sdk = vi.hoisted(() => ({
@@ -108,9 +109,7 @@ describe("MarginCallCrash public reads and phase math", () => {
       blockNumber: 100n,
       chainTimestamp: 1_020n,
       currentRoundId: 3n,
-      phase: "open",
-      countdownSeconds: 25,
-      openingTransactionHash: OPENING_TRANSACTION_HASH,
+      round: makeRound(),
       openingTransactionUrl: `https://sepolia.basescan.org/tx/${OPENING_TRANSACTION_HASH}`,
     });
     expect(sdk.readContract).toHaveBeenNthCalledWith(
@@ -138,6 +137,29 @@ describe("MarginCallCrash public reads and phase math", () => {
     );
   });
 
+  it("reuses immutable and already-observed reads across polls", async () => {
+    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
+    sdk.readContract.mockImplementation(({ functionName }) => {
+      if (functionName === "epochOrigin") return Promise.resolve(900n);
+      if (functionName === "currentRoundId") return Promise.resolve(3n);
+      return Promise.resolve(makeRound());
+    });
+    sdk.getLogs.mockResolvedValue([
+      { transactionHash: OPENING_TRANSACTION_HASH },
+    ]);
+    const { readCurrentCrashRound } = await import("./margin-call-crash");
+    const config = { address: CONTRACT_ADDRESS, deploymentBlock: 50n } as const;
+
+    await readCurrentCrashRound(config);
+    await readCurrentCrashRound(config);
+
+    const epochOriginReads = sdk.readContract.mock.calls.filter(
+      ([request]) => request.functionName === "epochOrigin"
+    );
+    expect(epochOriginReads).toHaveLength(1);
+    expect(sdk.getLogs).toHaveBeenCalledOnce();
+  });
+
   it("skips event lookup for an uninitialized current epoch", async () => {
     sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
     sdk.readContract
@@ -152,8 +174,7 @@ describe("MarginCallCrash public reads and phase math", () => {
         deploymentBlock: 50n,
       })
     ).resolves.toMatchObject({
-      phase: "uninitialized",
-      openingTransactionHash: null,
+      round: { status: 0 },
       openingTransactionUrl: null,
     });
     expect(sdk.getLogs).not.toHaveBeenCalled();
@@ -187,8 +208,7 @@ describe("MarginCallCrash public reads and phase math", () => {
     sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
     sdk.readContract
       .mockResolvedValueOnce(1_200n)
-      .mockResolvedValueOnce(45n)
-      .mockResolvedValueOnce(900n);
+      .mockResolvedValueOnce([1_200n, 1_245n, 2_145n]);
     const { readCurrentCrashRound } = await import("./margin-call-crash");
 
     await expect(
@@ -198,15 +218,22 @@ describe("MarginCallCrash public reads and phase math", () => {
       })
     ).resolves.toMatchObject({
       currentRoundId: 0n,
-      phase: "prelaunch",
-      countdownSeconds: 0,
       round: {
         openAt: 1_200n,
         lockAt: 1_245n,
         expiresAt: 2_145n,
+        crashRandom: zeroHash,
         status: 0,
       },
     });
+    expect(sdk.readContract).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        functionName: "roundTimes",
+        args: [0n],
+        blockNumber: 100n,
+      })
+    );
     expect(
       sdk.readContract.mock.calls.some(
         ([request]) => request.functionName === "currentRoundId"
@@ -234,10 +261,6 @@ describe("MarginCallCrash public reads and phase math", () => {
 });
 
 function makeRound(overrides: Partial<CrashRound> = {}): CrashRound {
-  return { ...makeRoundBase(), ...overrides };
-}
-
-function makeRoundBase(): CrashRound {
   return {
     id: 3n,
     openAt: 1_000n,
@@ -248,5 +271,6 @@ function makeRoundBase(): CrashRound {
     totalMargin: 0n,
     reservedPayout: 0n,
     status: 1,
+    ...overrides,
   };
 }

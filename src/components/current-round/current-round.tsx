@@ -32,12 +32,9 @@ export function CurrentRound() {
   const round = useCurrentCrashRound();
 
   if (round.status === "loading") return <CurrentRoundLoading />;
+  if (round.status !== "ready") return <CurrentRoundFailure round={round} />;
 
-  if (round.status === "unavailable" || round.status === "error") {
-    return <CurrentRoundFailure round={round} />;
-  }
-
-  const phase = round.phase ?? "uninitialized";
+  const phase = round.phase;
   return (
     <section
       aria-labelledby="current-round-heading"
@@ -59,7 +56,7 @@ export function CurrentRound() {
             id="current-round-heading"
             className="mt-4 font-[family-name:var(--font-plex-sans)] text-4xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-6xl"
           >
-            Round {round.roundId?.toString()}
+            Round {round.roundId.toString()}
           </h2>
 
           <div className="mt-6">
@@ -97,7 +94,7 @@ export function CurrentRound() {
             {phase === "open" ? formatCountdown(round.countdownSeconds) : "—:—"}
           </p>
           <p className="mt-5 text-xs text-[var(--t-muted)]">
-            Read at block {round.blockNumber?.toString()}
+            Read at block {round.blockNumber.toString()}
           </p>
           {round.openingTransactionUrl ? (
             <a
@@ -135,7 +132,11 @@ function CurrentRoundLoading() {
   );
 }
 
-function CurrentRoundFailure({ round }: { round: CurrentCrashRoundView }) {
+function CurrentRoundFailure({
+  round,
+}: {
+  round: Extract<CurrentCrashRoundView, { status: "error" | "unavailable" }>;
+}) {
   return (
     <section
       aria-labelledby="current-round-failure"

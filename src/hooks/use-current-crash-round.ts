@@ -6,8 +6,8 @@ import {
   deriveRoundPhase,
   getMarginCallCrashConfig,
   getRoundCountdownSeconds,
+  isRoundInitialized,
   readCurrentCrashRound,
-  type CrashRound,
   type CrashRoundPhase,
 } from "@/lib/margin-call-crash";
 
@@ -18,17 +18,19 @@ type RoundSnapshot = Awaited<ReturnType<typeof readCurrentCrashRound>> & {
 export type CurrentCrashRoundStatus =
   "loading" | "ready" | "error" | "unavailable";
 
-export type CurrentCrashRoundView = {
-  status: CurrentCrashRoundStatus;
-  error: string | null;
-  roundId: bigint | null;
-  phase: CrashRoundPhase | null;
-  countdownSeconds: number;
-  crashRandom: Hex | null;
-  openingTransactionUrl: string | null;
-  blockNumber: bigint | null;
-  retry: () => Promise<void>;
-};
+export type CurrentCrashRoundView = { retry: () => Promise<void> } & (
+  | { status: "loading" }
+  | { status: "error" | "unavailable"; error: string }
+  | {
+      status: "ready";
+      roundId: bigint;
+      phase: CrashRoundPhase;
+      countdownSeconds: number;
+      crashRandom: Hex | null;
+      openingTransactionUrl: string | null;
+      blockNumber: bigint;
+    }
+);
 
 const POLL_INTERVAL_MS = 10_000;
 const loadError =
@@ -40,7 +42,6 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
   const config = useMemo(() => getMarginCallCrashConfig(), []);
   const [snapshot, setSnapshot] = useState<RoundSnapshot | null>(null);
   const [status, setStatus] = useState<CurrentCrashRoundStatus>("loading");
-  const [error, setError] = useState<string | null>(null);
   const [clock, setClock] = useState(Date.now);
   const inFlight = useRef(false);
 
@@ -52,10 +53,8 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
       const next = await readCurrentCrashRound(config);
       setSnapshot({ ...next, receivedAt: Date.now() });
       setStatus("ready");
-      setError(null);
     } catch {
       setStatus("error");
-      setError(loadError);
     } finally {
       inFlight.current = false;
     }
@@ -64,7 +63,6 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
   useEffect(() => {
     if (!config) {
       setStatus("unavailable");
-      setError(configurationError);
       return;
     }
 
@@ -73,35 +71,36 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
     return () => window.clearInterval(poll);
   }, [config, refresh]);
 
+  const hasSnapshot = snapshot !== null;
   useEffect(() => {
-    if (!snapshot) return;
+    if (!hasSnapshot) return;
     const tick = window.setInterval(() => setClock(Date.now()), 1_000);
     return () => window.clearInterval(tick);
-  }, [snapshot]);
+  }, [hasSnapshot]);
 
-  const round = snapshot?.round ?? null;
-  const chainTimestamp = snapshot
-    ? correctedChainTimestamp(snapshot, clock)
-    : null;
-  const phase =
-    round && chainTimestamp !== null
-      ? deriveRoundPhase(round, chainTimestamp)
-      : null;
-
-  return {
-    status,
-    error,
-    roundId: snapshot?.currentRoundId ?? null,
-    phase,
-    countdownSeconds:
-      round && chainTimestamp !== null
-        ? getRoundCountdownSeconds(round, chainTimestamp)
-        : 0,
-    crashRandom: initializedHandle(round),
-    openingTransactionUrl: snapshot?.openingTransactionUrl ?? null,
-    blockNumber: snapshot?.blockNumber ?? null,
-    retry: refresh,
-  };
+  if (status === "ready" && snapshot) {
+    const chainTimestamp = correctedChainTimestamp(snapshot, clock);
+    return {
+      status: "ready",
+      roundId: snapshot.currentRoundId,
+      phase: deriveRoundPhase(snapshot.round, chainTimestamp),
+      countdownSeconds: getRoundCountdownSeconds(
+        snapshot.round,
+        chainTimestamp
+      ),
+      crashRandom: isRoundInitialized(snapshot.round)
+        ? snapshot.round.crashRandom
+        : null,
+      openingTransactionUrl: snapshot.openingTransactionUrl,
+      blockNumber: snapshot.blockNumber,
+      retry: refresh,
+    };
+  }
+  if (status === "error") return { status, error: loadError, retry: refresh };
+  if (status === "unavailable") {
+    return { status, error: configurationError, retry: refresh };
+  }
+  return { status: "loading", retry: refresh };
 }
 
 function correctedChainTimestamp(
@@ -113,8 +112,4 @@ function correctedChainTimestamp(
     Math.floor((clock - snapshot.receivedAt) / 1_000)
   );
   return snapshot.chainTimestamp + BigInt(elapsedSeconds);
-}
-
-function initializedHandle(round: CrashRound | null): Hex | null {
-  return round && round.status !== 0 ? round.crashRandom : null;
 }

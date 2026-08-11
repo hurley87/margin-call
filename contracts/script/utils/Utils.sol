@@ -21,6 +21,11 @@ contract Utils is Script {
     string constant OUTPUT_BASE_SEPOLIA_CRASH_RUN = "base_sepolia.margin_call_crash.run";
     string constant OUTPUT_UNKNOWN = "unknown";
 
+    // Shared verification-URL fragments for the provenance records deploy
+    // scripts write; each script appends its own contract address.
+    string constant BASESCAN_ADDRESS_PREFIX = "https://sepolia.basescan.org/address/";
+    string constant BASESCAN_CODE_SUFFIX = "#code";
+
     function _requireBaseSepolia() internal view {
         if (block.chainid != CHAIN_ID_BASE_SEPOLIA) revert UnsupportedChain(block.chainid);
     }
