@@ -11,7 +11,6 @@ import {
   isRoundInitialized,
   readCurrentCrashRound,
   type CrashRoundPhase,
-  type CrashRoundStatus,
 } from "@/lib/margin-call-crash";
 
 type RoundSnapshot = Awaited<ReturnType<typeof readCurrentCrashRound>> & {
@@ -28,10 +27,8 @@ export type CurrentCrashRoundView = { retry: () => Promise<void> } & (
       status: "ready";
       roundId: bigint;
       phase: CrashRoundPhase;
-      chainStatus: CrashRoundStatus;
       countdownSeconds: number;
       crashRandom: Hex | null;
-      crashPointBps: bigint;
       displayCrashPoint: string | null;
       openingTransactionUrl: string | null;
       revealTransactionUrl: string | null;
@@ -96,7 +93,6 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
       status: "ready",
       roundId: snapshot.currentRoundId,
       phase: deriveRoundPhase(snapshot.round, chainTimestamp),
-      chainStatus: snapshot.round.status,
       countdownSeconds: getRoundCountdownSeconds(
         snapshot.round,
         chainTimestamp
@@ -104,7 +100,6 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
       crashRandom: isRoundInitialized(snapshot.round)
         ? snapshot.round.crashRandom
         : null,
-      crashPointBps: snapshot.round.crashPointBps,
       displayCrashPoint: published
         ? formatCrashPointBps(snapshot.round.crashPointBps)
         : null,

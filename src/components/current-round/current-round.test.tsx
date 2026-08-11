@@ -10,11 +10,9 @@ const sdk = vi.hoisted(() => {
       status: "ready",
       roundId: 12n,
       phase: "open",
-      chainStatus: 1,
       countdownSeconds: 18,
       crashRandom:
         "0x000000000000000000000000000000000000000000000000000000000000cafe",
-      crashPointBps: 0n,
       displayCrashPoint: null,
       openingTransactionUrl:
         "https://sepolia.basescan.org/tx/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -69,9 +67,7 @@ describe("CurrentRound", () => {
     sdk.round = {
       ...ready,
       phase: "finalized",
-      chainStatus: 3,
       countdownSeconds: 0,
-      crashPointBps: 34_200n,
       displayCrashPoint: "3.42x",
       revealTransactionUrl:
         "https://sepolia.basescan.org/tx/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -103,7 +99,6 @@ describe("CurrentRound", () => {
     sdk.round = {
       ...ready,
       phase: "reveal-requested",
-      chainStatus: 2,
       countdownSeconds: 0,
       revealTransactionUrl:
         "https://sepolia.basescan.org/tx/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
@@ -135,7 +130,6 @@ describe("CurrentRound", () => {
     sdk.round = {
       ...ready,
       phase: "expired",
-      chainStatus: 4,
       countdownSeconds: 0,
       expireTransactionUrl:
         "https://sepolia.basescan.org/tx/0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",

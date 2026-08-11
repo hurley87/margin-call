@@ -25,10 +25,6 @@ contract IncoVerifierMock {
         enforceExpected = true;
     }
 
-    function clearExpectedAttestation() external {
-        enforceExpected = false;
-    }
-
     function isValidDecryptionAttestation(DecryptionAttestation memory decryption, bytes[] calldata)
         external
         view

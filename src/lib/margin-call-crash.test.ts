@@ -243,6 +243,40 @@ describe("MarginCallCrash public reads and phase math", () => {
     expect(sdk.getLogs).toHaveBeenCalledOnce();
   });
 
+  it("caches a permanently absent reveal for expired rounds", async () => {
+    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 2_000n });
+    sdk.readContract.mockImplementation(({ functionName }) => {
+      if (functionName === "epochOrigin") return Promise.resolve(900n);
+      if (functionName === "currentRoundId") return Promise.resolve(3n);
+      return Promise.resolve(makeRound({ status: 4 }));
+    });
+    sdk.getLogs.mockImplementation(({ event }) =>
+      Promise.resolve(
+        event.name === "RevealRequested"
+          ? []
+          : [
+              {
+                transactionHash:
+                  event.name === "RoundOpened"
+                    ? OPENING_TRANSACTION_HASH
+                    : EXPIRE_TRANSACTION_HASH,
+              },
+            ]
+      )
+    );
+    const { readCurrentCrashRound } = await import("./margin-call-crash");
+    const config = { address: CONTRACT_ADDRESS, deploymentBlock: 50n } as const;
+
+    await expect(readCurrentCrashRound(config)).resolves.toMatchObject({
+      revealTransactionUrl: null,
+      expireTransactionUrl: `https://sepolia.basescan.org/tx/${EXPIRE_TRANSACTION_HASH}`,
+    });
+    expect(sdk.getLogs).toHaveBeenCalledTimes(3);
+
+    await readCurrentCrashRound(config);
+    expect(sdk.getLogs).toHaveBeenCalledTimes(3);
+  });
+
   it("skips event lookup for an uninitialized current epoch", async () => {
     sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
     sdk.readContract

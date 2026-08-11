@@ -98,16 +98,23 @@ const ROUND_STATUS = {
   expired: 4,
 } as const satisfies Record<string, CrashRoundStatus>;
 
+type RoundLifecycleEvent =
+  | typeof roundOpenedEvent
+  | typeof revealRequestedEvent
+  | typeof roundFinalizedEvent
+  | typeof roundExpiredEvent;
+
+type LifecycleEventKey = "opening" | "reveal" | "finalize" | "expire";
+
 // epochOrigin is immutable on-chain and lifecycle transactions of a round can
 // never change once observed, so neither needs to be re-fetched on every poll.
+// A stored null marks an event that can no longer occur for the round (e.g. a
+// reveal never requested before expiry); absent keys are looked up again.
 const epochOriginCache = new Map<Address, bigint>();
 let lifecycleTransactionCache: {
   address: Address;
   roundId: bigint;
-  opening: Hash | null;
-  reveal: Hash | null;
-  finalize: Hash | null;
-  expire: Hash | null;
+  hashes: Partial<Record<LifecycleEventKey, Hash | null>>;
 } | null = null;
 
 /** Public configuration only. Static env references allow Next.js client inlining. */
@@ -258,129 +265,86 @@ async function readLifecycleUrls(
   round: CrashRound,
   toBlock: bigint
 ): Promise<CrashRoundLifecycleUrls> {
-  const verificationUrls = {
-    gameContractUrl: getBaseSepoliaContractCodeUrl(config.address),
-    incoContractUrl: getBaseSepoliaContractCodeUrl(
-      BASE_SEPOLIA_INCO_LIGHTNING_ADDRESS
-    ),
-  };
+  const urls = emptyLifecycleUrls(config.address);
+  if (!isRoundInitialized(round)) return urls;
 
-  if (!isRoundInitialized(round)) {
-    return {
-      openingTransactionUrl: null,
-      revealTransactionUrl: null,
-      finalizeTransactionUrl: null,
-      expireTransactionUrl: null,
-      ...verificationUrls,
-    };
-  }
-
-  const cached = getCachedLifecycle(config.address, roundId);
+  const cached = getCachedLifecycle(config.address, roundId)?.hashes ?? {};
   const fromBlock = getEventFromBlock(config.deploymentBlock, toBlock);
-
-  const openingHash =
-    cached?.opening ??
-    (await readExactRoundEventHash({
-      config,
-      roundId,
-      event: roundOpenedEvent,
-      eventName: "RoundOpened",
-      fromBlock,
-      toBlock,
-      required: true,
-    }));
-
-  const shouldLookupReveal =
+  const revealPossible =
     round.status === ROUND_STATUS.revealRequested ||
     round.status === ROUND_STATUS.finalized ||
     round.status === ROUND_STATUS.expired;
-  const revealRequired =
-    round.status === ROUND_STATUS.revealRequested ||
-    round.status === ROUND_STATUS.finalized;
-  const revealHash = !shouldLookupReveal
-    ? null
-    : (cached?.reveal ??
-      (await readExactRoundEventHash({
-        config,
-        roundId,
-        event: revealRequestedEvent,
-        eventName: "RevealRequested",
-        fromBlock,
-        toBlock,
-        required: revealRequired,
-      })));
+  const lookups: Array<{
+    key: LifecycleEventKey;
+    event: RoundLifecycleEvent;
+    lookup: boolean;
+    required: boolean;
+  }> = [
+    { key: "opening", event: roundOpenedEvent, lookup: true, required: true },
+    {
+      key: "reveal",
+      event: revealRequestedEvent,
+      lookup: revealPossible,
+      // An expired round may have ended without any reveal request.
+      required: round.status !== ROUND_STATUS.expired,
+    },
+    {
+      key: "finalize",
+      event: roundFinalizedEvent,
+      lookup: round.status === ROUND_STATUS.finalized,
+      required: true,
+    },
+    {
+      key: "expire",
+      event: roundExpiredEvent,
+      lookup: round.status === ROUND_STATUS.expired,
+      required: true,
+    },
+  ];
 
-  const finalizeHash =
-    cached?.finalize ??
-    (round.status === ROUND_STATUS.finalized
-      ? await readExactRoundEventHash({
-          config,
-          roundId,
-          event: roundFinalizedEvent,
-          eventName: "RoundFinalized",
-          fromBlock,
-          toBlock,
-          required: true,
-        })
-      : null);
-
-  const expireHash =
-    cached?.expire ??
-    (round.status === ROUND_STATUS.expired
-      ? await readExactRoundEventHash({
-          config,
-          roundId,
-          event: roundExpiredEvent,
-          eventName: "RoundExpired",
-          fromBlock,
-          toBlock,
-          required: true,
-        })
-      : null);
-
-  lifecycleTransactionCache = {
-    address: config.address,
-    roundId,
-    opening: openingHash,
-    reveal: revealHash,
-    finalize: finalizeHash,
-    expire: expireHash,
-  };
+  const hashes: Partial<Record<LifecycleEventKey, Hash | null>> = {};
+  await Promise.all(
+    lookups.map(async ({ key, event, lookup, required }) => {
+      if (!lookup) return;
+      hashes[key] =
+        cached[key] !== undefined
+          ? cached[key]
+          : await readExactRoundEventHash({
+              config,
+              roundId,
+              event,
+              fromBlock,
+              toBlock,
+              required,
+            });
+    })
+  );
+  lifecycleTransactionCache = { address: config.address, roundId, hashes };
 
   return {
-    openingTransactionUrl: openingHash
-      ? getBaseSepoliaTransactionUrl(openingHash)
-      : null,
-    revealTransactionUrl: revealHash
-      ? getBaseSepoliaTransactionUrl(revealHash)
-      : null,
-    finalizeTransactionUrl: finalizeHash
-      ? getBaseSepoliaTransactionUrl(finalizeHash)
-      : null,
-    expireTransactionUrl: expireHash
-      ? getBaseSepoliaTransactionUrl(expireHash)
-      : null,
-    ...verificationUrls,
+    ...urls,
+    openingTransactionUrl: toTransactionUrl(hashes.opening),
+    revealTransactionUrl: toTransactionUrl(hashes.reveal),
+    finalizeTransactionUrl: toTransactionUrl(hashes.finalize),
+    expireTransactionUrl: toTransactionUrl(hashes.expire),
   };
+}
+
+function toTransactionUrl(hash: Hash | null | undefined): string | null {
+  return hash ? getBaseSepoliaTransactionUrl(hash) : null;
 }
 
 async function readExactRoundEventHash({
   config,
   roundId,
   event,
-  eventName,
   fromBlock,
   toBlock,
   required,
 }: {
   config: MarginCallCrashConfig;
   roundId: bigint;
-  event:
-    | typeof roundOpenedEvent
-    | typeof revealRequestedEvent
-    | typeof roundFinalizedEvent
-    | typeof roundExpiredEvent;
-  eventName: string;
+  event: RoundLifecycleEvent;
   fromBlock: bigint;
   toBlock: bigint;
   required: boolean;
@@ -396,13 +360,13 @@ async function readExactRoundEventHash({
 
   if (logs.length === 0) {
     if (required) {
-      throw new Error(`Expected one ${eventName} event for round ${roundId}`);
+      throw new Error(`Expected one ${event.name} event for round ${roundId}`);
     }
     return null;
   }
   if (logs.length !== 1 || !logs[0].transactionHash) {
     throw new Error(
-      `Expected one ${eventName} event for round ${roundId}, found ${logs.length}`
+      `Expected one ${event.name} event for round ${roundId}, found ${logs.length}`
     );
   }
   return logs[0].transactionHash;
