@@ -1,52 +1,26 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback } from "react";
 import { encodeFunctionData, zeroAddress, type Address, type Hex } from "viem";
-import { baseSepoliaPublicClient } from "@/lib/base-sepolia";
 import { requestCrashAttestation } from "@/lib/inco-attestation";
 import {
   computeCrashPointBps,
   computeTicketPayout,
-  deriveRoundPhase,
   deriveTicketOutcome,
   formatCrashPointBps,
-  getMarginCallCrashConfig,
   isCrashPointPublished,
   marginCallCrashAbi,
-  readPlayerRecentTicket,
   ROUND_STATUS,
-  type CrashRound,
-  type CrashTicket,
-  type TicketOutcome,
 } from "@/lib/margin-call-crash";
-import { getEvmWalletAddress } from "@/lib/privy/wallet";
+import { type StageErrorCopy } from "@/lib/sponsored-call";
 import {
-  resumeSponsoredStage,
-  runSponsoredStage,
-  type StageErrorCopy,
-} from "@/lib/sponsored-call";
-import {
-  notifyWalletBalancesChanged,
-  subscribeToWalletBalanceChanges,
-} from "@/lib/wallet-balance-sync";
-import { usePrivySponsoredTransaction } from "./use-privy-sponsored-transaction";
+  useCrashTicketStages,
+  type CrashTicketStageStatus,
+} from "./use-crash-ticket-stages";
 
-export type CrashSettlementStatus =
-  | "unavailable"
-  | "loading"
-  | "ready"
-  | "reveal-submitting"
-  | "reveal-pending"
-  | "attesting"
-  | "finalize-submitting"
-  | "finalize-pending"
-  | "claim-submitting"
-  | "claim-pending"
-  | "settle-submitting"
-  | "settle-pending"
-  | "confirmed"
-  | "error";
+type Stage = "reveal" | "finalize" | "claim" | "settle";
+
+export type CrashSettlementStatus = CrashTicketStageStatus<Stage, "attesting">;
 
 export type CrashSettlementRetryAction =
   | "refresh"
@@ -58,16 +32,6 @@ export type CrashSettlementRetryAction =
   | "claim-receipt-check"
   | "settle-receipt-check";
 
-type Stage = "reveal" | "finalize" | "claim" | "settle";
-
-type State = {
-  ticket?: CrashTicket;
-  round?: CrashRound;
-  status: CrashSettlementStatus;
-  error: string | null;
-};
-
-const initialState: State = { status: "loading", error: null };
 const unavailable =
   "Crash settlement is not configured for this Base Sepolia deployment.";
 const loadFailed =
@@ -100,145 +64,46 @@ const stageCopy: Record<Stage, StageErrorCopy> = {
  * through receipt-confirmed sponsored transactions.
  */
 export function useCrashTicketSettlement() {
-  const { user } = usePrivy();
-  const walletAddress = getEvmWalletAddress(user);
-  const transaction = usePrivySponsoredTransaction();
-  const gameConfig = useMemo(() => getMarginCallCrashConfig(), []);
-  const [state, setState] = useState<State>(initialState);
-  const [, setClock] = useState(Date.now);
-  const inFlight = useRef(false);
-  const retryKind = useRef<Stage | "refresh" | "verify" | null>(null);
-  const pendingStage = useRef<{ stage: Stage; hash: Hex } | null>(null);
-
-  const refresh = useCallback(async (): Promise<boolean> => {
-    if (!gameConfig || !walletAddress) return false;
-    setState((current) => ({ ...current, status: "loading", error: null }));
-    try {
-      const currentRoundId = await baseSepoliaPublicClient.readContract({
-        address: gameConfig.address,
-        abi: marginCallCrashAbi,
-        functionName: "currentRoundId",
-      });
-      const found = await readPlayerRecentTicket(
-        gameConfig.address,
-        currentRoundId,
-        walletAddress
-      );
-      retryKind.current = null;
-      setState({
-        ticket: found?.ticket,
-        round: found?.round,
-        status: "ready",
-        error: null,
-      });
-      return true;
-    } catch {
-      retryKind.current = "refresh";
-      setState((current) => ({
-        ...current,
-        status: "error",
-        error: loadFailed,
-      }));
-      return false;
-    }
-  }, [gameConfig, walletAddress]);
-
-  useEffect(() => {
-    if (!gameConfig) {
-      setState({ ...initialState, status: "unavailable", error: unavailable });
-      return;
-    }
-    if (walletAddress) void refresh();
-  }, [gameConfig, refresh, walletAddress]);
-
-  useEffect(
-    () =>
-      subscribeToWalletBalanceChanges(() => {
-        if (!gameConfig || !walletAddress || inFlight.current) return;
-        void refresh();
-      }),
-    [gameConfig, refresh, walletAddress]
-  );
-
-  useEffect(() => {
-    if (!state.ticket || state.ticket.settled) return;
-    // Time only moves the phase before finalization or expiry.
-    if (
-      state.round &&
-      (state.round.status === ROUND_STATUS.finalized ||
-        state.round.status === ROUND_STATUS.expired)
-    ) {
-      return;
-    }
-    const tick = window.setInterval(() => setClock(Date.now()), 1_000);
-    return () => window.clearInterval(tick);
-  }, [state.round, state.ticket]);
-
-  const runStage = useCallback(
-    (stage: Stage, request: { to: Address; data: Hex }) => {
-      retryKind.current = stage;
-      return runSponsoredStage({
-        transaction,
-        pendingStage,
-        stage,
-        copy: stageCopy[stage],
-        request,
-        onStatus: (status) =>
-          setState((current) => ({ ...current, status, error: null })),
-      });
-    },
-    [transaction]
-  );
-
-  const resumePending = useCallback(
-    () =>
-      resumeSponsoredStage({
-        pendingStage,
-        copyByStage: stageCopy,
-        onStatus: (status, stage) => {
-          retryKind.current = stage;
-          setState((current) => ({ ...current, status, error: null }));
-        },
-      }),
-    []
-  );
-
-  const runSettlementFlow = useCallback(
-    async (fallback: string, flow: () => Promise<void>): Promise<boolean> => {
-      inFlight.current = true;
-      try {
-        await flow();
-        setState((current) => ({
-          ...current,
-          status: "confirmed",
-          error: null,
-        }));
-        notifyWalletBalancesChanged();
-        return refresh();
-      } catch (error) {
-        const message = error instanceof Error ? error.message : fallback;
-        setState((current) => ({
-          ...current,
-          status: "error",
-          error: message,
-        }));
-        return false;
-      } finally {
-        inFlight.current = false;
-      }
-    },
-    [refresh]
-  );
+  const {
+    walletAddress,
+    gameConfig,
+    state,
+    setState,
+    inFlightRef,
+    retryKindRef,
+    pendingStageRef,
+    retryKind,
+    pendingReceiptStage,
+    refresh,
+    runStage,
+    resumePending,
+    runFlow,
+    ticket,
+    round,
+    phase,
+    outcome,
+    canAct,
+    canRetry,
+  } = useCrashTicketStages<Stage, "verify", "attesting">({
+    stages: stageCopy,
+    unavailable,
+    loadFailed,
+  });
 
   const settleTicket = useCallback(
     async (mode: "claim" | "settle" | "resume" = "claim"): Promise<boolean> => {
-      if (!gameConfig || !walletAddress || !state.ticket || inFlight.current) {
+      if (
+        !gameConfig ||
+        !walletAddress ||
+        !state.ticket ||
+        inFlightRef.current
+      ) {
         return false;
       }
-      if (pendingStage.current && mode !== "resume") return false;
+      if (pendingStageRef.current && mode !== "resume") return false;
 
       const ticketId = state.ticket.id;
-      return runSettlementFlow(stageCopy.claim.failed, async () => {
+      return runFlow(stageCopy.claim.failed, async () => {
         if (mode === "resume") {
           await resumePending();
         } else if (mode === "claim") {
@@ -253,8 +118,10 @@ export function useCrashTicketSettlement() {
     },
     [
       gameConfig,
+      inFlightRef,
+      pendingStageRef,
       resumePending,
-      runSettlementFlow,
+      runFlow,
       runStage,
       state.ticket,
       walletAddress,
@@ -265,13 +132,13 @@ export function useCrashTicketSettlement() {
     if (!gameConfig || !walletAddress || !state.ticket || !state.round) {
       return false;
     }
-    if (inFlight.current) return false;
-    if (pendingStage.current) return settleTicket("resume");
+    if (inFlightRef.current) return false;
+    if (pendingStageRef.current) return settleTicket("resume");
 
     const ticket = state.ticket;
     const startingRound = state.round;
-    retryKind.current = "verify";
-    return runSettlementFlow(stageCopy.finalize.failed, async () => {
+    retryKindRef.current = "verify";
+    return runFlow(stageCopy.finalize.failed, async () => {
       let round = startingRound;
       // Locked rounds still store Open until reveal is requested.
       if (round.status === ROUND_STATUS.open) {
@@ -322,8 +189,12 @@ export function useCrashTicketSettlement() {
     });
   }, [
     gameConfig,
-    runSettlementFlow,
+    inFlightRef,
+    pendingStageRef,
+    retryKindRef,
+    runFlow,
     runStage,
+    setState,
     settleTicket,
     state.round,
     state.ticket,
@@ -334,19 +205,15 @@ export function useCrashTicketSettlement() {
   const settleLoss = useCallback(() => settleTicket("settle"), [settleTicket]);
 
   const retry = useCallback(() => {
-    if (retryKind.current === "refresh") return refresh();
-    if (pendingStage.current) return settleTicket("resume");
-    if (retryKind.current === "verify") return verifyAndSettle();
-    if (retryKind.current === "settle") return settleTicket("settle");
-    if (retryKind.current === "claim") return settleTicket("claim");
+    if (retryKindRef.current === "refresh") return refresh();
+    if (pendingStageRef.current) return settleTicket("resume");
+    if (retryKindRef.current === "verify") return verifyAndSettle();
+    if (retryKindRef.current === "settle") return settleTicket("settle");
+    if (retryKindRef.current === "claim") return settleTicket("claim");
     return refresh();
-  }, [refresh, settleTicket, verifyAndSettle]);
+  }, [pendingStageRef, refresh, retryKindRef, settleTicket, verifyAndSettle]);
 
-  const ticket = state.ticket ?? null;
-  const round = state.round ?? null;
   const finalized = round !== null && isCrashPointPublished(round);
-  const outcome: TicketOutcome | null =
-    ticket && round ? deriveTicketOutcome(ticket, round) : null;
   const payout =
     ticket && round && finalized
       ? computeTicketPayout(
@@ -355,30 +222,20 @@ export function useCrashTicketSettlement() {
           round.crashPointBps
         )
       : (ticket?.reservedPayout ?? null);
-  const phase = round
-    ? deriveRoundPhase(round, BigInt(Math.floor(Date.now() / 1000)))
-    : null;
   const canVerify =
     !!ticket &&
     !ticket.settled &&
     (phase === "locked" || phase === "reveal-requested");
-  const canSubmitAfterError =
-    state.status === "error" &&
-    retryKind.current !== null &&
-    retryKind.current !== "refresh";
-  const canAct =
-    (state.status === "ready" || canSubmitAfterError) && !inFlight.current;
 
-  const pendingReceiptStage = pendingStage.current?.stage ?? null;
   const retryAction: CrashSettlementRetryAction | null =
-    retryKind.current === null
+    retryKind === null
       ? null
-      : retryKind.current === "refresh"
+      : retryKind === "refresh"
         ? "refresh"
         : pendingReceiptStage
           ? `${pendingReceiptStage}-receipt-check`
-          : retryKind.current === "verify" || retryKind.current === "settle"
-            ? retryKind.current
+          : retryKind === "verify" || retryKind === "settle"
+            ? retryKind
             : "claim";
 
   return {
@@ -395,10 +252,7 @@ export function useCrashTicketSettlement() {
     canVerify: canVerify && canAct,
     canClaim: outcome === "won" && canAct,
     canSettle: outcome === "lost" && canAct,
-    canRetry:
-      state.status === "error" &&
-      retryKind.current !== null &&
-      !inFlight.current,
+    canRetry,
     retryAction,
     verifyAndSettle,
     claim,

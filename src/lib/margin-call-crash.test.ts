@@ -139,6 +139,56 @@ describe("MarginCallCrash public reads and phase math", () => {
         makeRound({ status: 3, crashPointBps: 12_500n })
       )
     ).toBe("won");
+    expect(
+      deriveTicketOutcome(
+        {
+          id: 2n,
+          player: CONTRACT_ADDRESS,
+          roundId: 4n,
+          margin: 1_000_000n,
+          leverageBps: 12_500n,
+          reservedPayout: 1_250_000n,
+          settled: false,
+          claimed: false,
+        },
+        makeRound({ status: 4, crashPointBps: 0n })
+      )
+    ).toBe("refundable");
+    expect(
+      deriveTicketOutcome(
+        {
+          id: 3n,
+          player: CONTRACT_ADDRESS,
+          roundId: 4n,
+          margin: 1_000_000n,
+          leverageBps: 12_500n,
+          reservedPayout: 1_250_000n,
+          settled: true,
+          claimed: false,
+        },
+        makeRound({ status: 4, crashPointBps: 0n })
+      )
+    ).toBe("refunded");
+  });
+
+  it("exposes expiry refund eligibility helpers", async () => {
+    const { canExpireRound, isRefundable } =
+      await import("./margin-call-crash");
+    const ticket = {
+      id: 1n,
+      player: CONTRACT_ADDRESS as `0x${string}`,
+      roundId: 3n,
+      margin: 1_000_000n,
+      leverageBps: 12_500n,
+      reservedPayout: 1_250_000n,
+      settled: false,
+      claimed: false,
+    };
+    const expiredEligible = makeRound({ status: 1, expiresAt: 1_000n });
+    expect(canExpireRound(expiredEligible, 1_000n)).toBe(true);
+    expect(canExpireRound(expiredEligible, 999n)).toBe(false);
+    expect(isRefundable(ticket, makeRound({ status: 4 }))).toBe(true);
+    expect(isRefundable(ticket, makeRound({ status: 3 }))).toBe(false);
   });
 
   it("requires valid public address and deployment-block configuration", async () => {

@@ -5,6 +5,7 @@ import {
   type CrashSettlementRetryAction,
   type CrashSettlementStatus,
 } from "@/hooks/use-crash-ticket-settlement";
+import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
 import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashSettlementStatus, string>> = {
@@ -54,6 +55,8 @@ export function CrashTicketSettlement() {
     );
   }
   if (!settlement.ticket) return null;
+
+  if (isExpiryRefundTicket(settlement.phase, settlement.outcome)) return null;
 
   const statusMessage =
     settlement.status === "error"

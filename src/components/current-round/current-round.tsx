@@ -124,7 +124,7 @@ function PhasePrimaryContent({ round }: { round: ReadyRound }) {
       return (
         <StatusCopy
           title="Outcome unavailable"
-          body="This round expired without a verified Crash Point. Original margin is refundable once ticket refunds land in a later slice."
+          body="This round expired without a verified Crash Point. Ticket owners can pull back exactly their original margin."
         />
       );
     case "prelaunch":

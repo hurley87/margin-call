@@ -15,6 +15,8 @@ type CrashLiveTicketProps = {
   canVerify?: boolean;
   canClaim?: boolean;
   canSettle?: boolean;
+  canExpire?: boolean;
+  canRefund?: boolean;
   statusMessage?: string | null;
   isAlert?: boolean;
   canRetry?: boolean;
@@ -22,6 +24,8 @@ type CrashLiveTicketProps = {
   onVerify?: () => void;
   onClaim?: () => void;
   onSettle?: () => void;
+  onExpire?: () => void;
+  onRefund?: () => void;
   onRetry?: () => void;
 };
 
@@ -31,6 +35,18 @@ const outcomeCopy: Record<TicketOutcome, string> = {
   lost: "Lost — settle the ticket",
   "settled-win": "Payout claimed",
   "settled-loss": "Loss settled",
+  refundable: "Round expired — refund your margin",
+  refunded: "Margin refunded",
+};
+
+const amountLabelCopy: Record<TicketOutcome, string> = {
+  pending: "Reserved maximum payout",
+  won: "Payout",
+  lost: "Reserved maximum payout",
+  "settled-win": "Payout",
+  "settled-loss": "Reserved maximum payout",
+  refundable: "Refundable margin",
+  refunded: "Refundable margin",
 };
 
 /** Confirmed onchain ticket with optional settlement actions for the signed-in player. */
@@ -42,6 +58,8 @@ export function CrashLiveTicket({
   canVerify = false,
   canClaim = false,
   canSettle = false,
+  canExpire = false,
+  canRefund = false,
   statusMessage = null,
   isAlert = false,
   canRetry = false,
@@ -49,6 +67,8 @@ export function CrashLiveTicket({
   onVerify,
   onClaim,
   onSettle,
+  onExpire,
+  onRefund,
   onRetry,
 }: CrashLiveTicketProps) {
   return (
@@ -97,9 +117,7 @@ export function CrashLiveTicket({
         ) : null}
         <div className={displayCrashPoint ? undefined : "sm:col-span-2"}>
           <dt className="text-[var(--t-muted)]">
-            {outcome === "won" || outcome === "settled-win"
-              ? "Payout"
-              : "Reserved maximum payout"}
+            {outcome ? amountLabelCopy[outcome] : "Reserved maximum payout"}
           </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
             {formatDeskDollars(payout ?? ticket.reservedPayout, TUSD_DECIMALS)}{" "}
@@ -140,6 +158,24 @@ export function CrashLiveTicket({
             type="button"
           >
             Settle loss
+          </button>
+        ) : null}
+        {canExpire ? (
+          <button
+            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
+            onClick={onExpire}
+            type="button"
+          >
+            Mark round expired
+          </button>
+        ) : null}
+        {canRefund ? (
+          <button
+            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
+            onClick={onRefund}
+            type="button"
+          >
+            Refund margin
           </button>
         ) : null}
         {canRetry ? (

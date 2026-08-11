@@ -22,4 +22,11 @@ interface IBankrollVault {
 
     /// @notice Releases a losing ticket's reservation without transferring tUSD.
     function settleLoss(uint256 roundId, uint256 ticketId) external;
+
+    /// @notice Marks an expired round's margins into pending refund obligations.
+    /// @dev Moves `totalMargin` from unrecognizedMargin to pendingObligations with no share-price change.
+    function markRoundExpired(uint256 roundId, uint256 totalMargin) external;
+
+    /// @notice Returns original margin to a ticket owner and consumes its reservation.
+    function refundMargin(uint256 roundId, uint256 ticketId, address recipient, uint256 margin) external;
 }
