@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "fcf71bb9dc37b2a46c61545d98be78b6f2fce774",
+  "sourceCommit": "7b81008537122c06ba18a9ad7bc133133653c0db",
   "chainId": 84532,
   "frontend": {
     "url": "https://margincall.fun",
@@ -14,6 +14,15 @@
   "token": "0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085",
   "faucet": "0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356",
   "bankrollVault": "0xB5b599104650924Ec4b0f3aFC560e80A7DA93afe",
+  "marginCallCrash": "0x65123418A380f64647d8605537272d1B851a49b8",
+  "marginCallCrashDeploymentBlock": 45341472,
+  "marginCallCrashEpochOrigin": 1786451880,
+  "marginCallCrashRoundDuration": 60,
+  "marginCallCrashEntryWindow": 45,
+  "marginCallCrashExpiryDelay": 900,
+  "marginCallCrashOpenRoundSelector": "0xbde22ae0",
+  "incoLightning": "0x4b9911b0191B0b6a6eA8F2Ed562e20Cff5AC8624",
+  "incoPackageVersion": "1.0.2",
   "bankrollSeedRecipient": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
   "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
   "bankrollSeedAmount": 25000000000,
@@ -29,7 +38,8 @@
   "verification": {
     "token": "https://sepolia.basescan.org/address/0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085#code",
     "faucet": "https://sepolia.basescan.org/address/0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356#code",
-    "bankrollVault": "https://sepolia.basescan.org/address/0xB5b599104650924Ec4b0f3aFC560e80A7DA93afe#code"
+    "bankrollVault": "https://sepolia.basescan.org/address/0xB5b599104650924Ec4b0f3aFC560e80A7DA93afe#code",
+    "marginCallCrash": "https://sepolia.basescan.org/address/0x65123418A380f64647d8605537272d1B851a49b8#code"
   },
   "transactions": {
     "deployToken": "0x52d47a026c289a580eb2fb329f31667bc6282af10c1bc345dcc99b4e7b6ae9cb",
@@ -37,7 +47,8 @@
     "configureFaucet": "0xb67efea780bc376f1fac20433fc666793d3dab3099635f52b2683cb424a8d348",
     "deployBankrollVault": "0x41ee9bb43f7acd02f4cbe3d9b7bd7222d1f35482e24b551dde32bf625e19e3d4",
     "approveBankrollVault": "0xcfe51188a2040cd8f13e1f4c176b82e939b48519a257830a986a55d3062b00f4",
-    "seedBankrollVault": "0x2675ceccfe5443da7bf1a67bdfe80bc08a518e5be54b22c5557e71db91fa31d3"
+    "seedBankrollVault": "0x2675ceccfe5443da7bf1a67bdfe80bc08a518e5be54b22c5557e71db91fa31d3",
+    "deployMarginCallCrash": "0x43a0cc62c5209b18b04be3b7fee6543d6ad6b2ead5d1bdab8b6af8e52c88c706"
   },
   "privySponsorship": {
     "appId": "cmmfbu7o900c10cjme09a31h4",
