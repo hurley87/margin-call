@@ -240,7 +240,7 @@ contract MarginCallCrash is ReentrancyGuard {
     /// @notice Permissionlessly pays a winning ticket. Third parties may only route to the owner.
     /// @dev The owner may pass `receiver = address(0)` for themselves, or any non-zero address.
     function claim(uint256 ticketId, address receiver) external nonReentrant {
-        (Ticket storage ticket, Round storage round) = _settleableTicket(ticketId);
+        (Ticket storage ticket, Round storage round) = _unsettledTicket(ticketId, RoundStatus.Finalized);
         if (ticket.leverageBps > round.crashPointBps) revert TicketDidNotWin(ticketId);
 
         uint256 roundId = ticket.roundId;
@@ -255,7 +255,7 @@ contract MarginCallCrash is ReentrancyGuard {
 
     /// @notice Permissionlessly settles a losing ticket without transferring tUSD.
     function settleLoss(uint256 ticketId) external nonReentrant {
-        (Ticket storage ticket, Round storage round) = _settleableTicket(ticketId);
+        (Ticket storage ticket, Round storage round) = _unsettledTicket(ticketId, RoundStatus.Finalized);
         if (ticket.leverageBps <= round.crashPointBps) revert TicketDidNotLose(ticketId);
 
         uint256 roundId = ticket.roundId;
@@ -264,14 +264,18 @@ contract MarginCallCrash is ReentrancyGuard {
         emit TicketLossSettled(roundId, ticketId, ticket.player);
     }
 
-    /// @dev Shared settlement guards: the ticket exists, is unsettled, and its round is finalized.
-    function _settleableTicket(uint256 ticketId) internal view returns (Ticket storage ticket, Round storage round) {
+    /// @dev Shared resolution guards: the ticket exists, is unsettled, and its round is in `required` status.
+    function _unsettledTicket(uint256 ticketId, RoundStatus required)
+        internal
+        view
+        returns (Ticket storage ticket, Round storage round)
+    {
         ticket = _tickets[ticketId];
         if (ticket.player == address(0)) revert TicketNotFound(ticketId);
         if (ticket.settled) revert TicketAlreadySettled(ticketId);
 
         round = _rounds[ticket.roundId];
-        if (round.status != RoundStatus.Finalized) revert InvalidRoundStatus(ticket.roundId, round.status);
+        if (round.status != required) revert InvalidRoundStatus(ticket.roundId, round.status);
     }
 
     /// @notice Permissionlessly marks an unresolved round expired once the exclusive boundary is reached.
@@ -288,8 +292,9 @@ contract MarginCallCrash is ReentrancyGuard {
         }
 
         round.status = RoundStatus.Expired;
-        if (round.totalMargin > 0) {
-            vault.markRoundExpired(roundId, round.totalMargin);
+        uint256 totalMargin = round.totalMargin;
+        if (totalMargin > 0) {
+            vault.markRoundExpired(roundId, totalMargin);
         }
         emit RoundExpired(roundId);
     }
@@ -297,25 +302,16 @@ contract MarginCallCrash is ReentrancyGuard {
     /// @notice Pulls original margin for an expired ticket. Third parties may only route to the owner.
     /// @dev The owner may pass `receiver = address(0)` for themselves, or any non-zero address.
     function refund(uint256 ticketId, address receiver) external nonReentrant {
-        (Ticket storage ticket,) = _refundableTicket(ticketId);
+        (Ticket storage ticket,) = _unsettledTicket(ticketId, RoundStatus.Expired);
 
         uint256 roundId = ticket.roundId;
-        address refundReceiver = _resolveClaimReceiver(ticket.player, receiver);
+        address player = ticket.player;
+        address refundReceiver = _resolveClaimReceiver(player, receiver);
         uint256 margin = ticket.margin;
 
         ticket.settled = true;
         vault.refundMargin(roundId, ticketId, refundReceiver, margin);
-        emit TicketRefunded(roundId, ticketId, ticket.player, refundReceiver, margin);
-    }
-
-    /// @dev Shared refund guards: the ticket exists, is unsettled, and its round is expired.
-    function _refundableTicket(uint256 ticketId) internal view returns (Ticket storage ticket, Round storage round) {
-        ticket = _tickets[ticketId];
-        if (ticket.player == address(0)) revert TicketNotFound(ticketId);
-        if (ticket.settled) revert TicketAlreadySettled(ticketId);
-
-        round = _rounds[ticket.roundId];
-        if (round.status != RoundStatus.Expired) revert InvalidRoundStatus(ticket.roundId, round.status);
+        emit TicketRefunded(roundId, ticketId, player, refundReceiver, margin);
     }
 
     function _resolveClaimReceiver(address owner, address receiver) internal view returns (address) {

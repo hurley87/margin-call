@@ -261,6 +261,23 @@ export function canExpireRound(round: CrashRound, chainTimestamp: bigint) {
   return deriveRoundPhase(round, chainTimestamp) === "expired-eligible";
 }
 
+/**
+ * Routes a recovered ticket to its resolution surface: the expiry-refund UI
+ * owns expiry-eligible, expired, and refunded tickets; settlement owns the
+ * rest. Both surfaces consult this so neither or both can claim a ticket.
+ */
+export function isExpiryRefundTicket(
+  phase: CrashRoundPhase | null,
+  outcome: TicketOutcome | null
+) {
+  return (
+    phase === "expired" ||
+    phase === "expired-eligible" ||
+    outcome === "refundable" ||
+    outcome === "refunded"
+  );
+}
+
 export function formatLeverageBps(leverageBps: bigint): string {
   const hundredths = leverageBps / 100n;
   const whole = hundredths / 100n;

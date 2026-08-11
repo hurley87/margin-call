@@ -39,6 +39,16 @@ const outcomeCopy: Record<TicketOutcome, string> = {
   refunded: "Margin refunded",
 };
 
+const amountLabelCopy: Record<TicketOutcome, string> = {
+  pending: "Reserved maximum payout",
+  won: "Payout",
+  lost: "Reserved maximum payout",
+  "settled-win": "Payout",
+  "settled-loss": "Reserved maximum payout",
+  refundable: "Refundable margin",
+  refunded: "Refundable margin",
+};
+
 /** Confirmed onchain ticket with optional settlement actions for the signed-in player. */
 export function CrashLiveTicket({
   ticket,
@@ -107,11 +117,7 @@ export function CrashLiveTicket({
         ) : null}
         <div className={displayCrashPoint ? undefined : "sm:col-span-2"}>
           <dt className="text-[var(--t-muted)]">
-            {outcome === "won" || outcome === "settled-win"
-              ? "Payout"
-              : outcome === "refundable" || outcome === "refunded"
-                ? "Refundable margin"
-                : "Reserved maximum payout"}
+            {outcome ? amountLabelCopy[outcome] : "Reserved maximum payout"}
           </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
             {formatDeskDollars(payout ?? ticket.reservedPayout, TUSD_DECIMALS)}{" "}

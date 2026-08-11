@@ -5,6 +5,7 @@ import {
   type CrashRefundRetryAction,
   type CrashRefundStatus,
 } from "@/hooks/use-crash-ticket-refund";
+import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
 import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashRefundStatus, string>> = {
@@ -39,14 +40,7 @@ export function CrashTicketRefund() {
   }
   if (!refund.ticket) return null;
 
-  // Settlement owns finalized / in-progress verify paths; this surface owns
-  // expiry-eligible, expired, and already-refunded tickets.
-  const ownsTicket =
-    refund.phase === "expired-eligible" ||
-    refund.phase === "expired" ||
-    refund.outcome === "refundable" ||
-    refund.outcome === "refunded";
-  if (!ownsTicket) return null;
+  if (!isExpiryRefundTicket(refund.phase, refund.outcome)) return null;
 
   const statusMessage =
     refund.status === "error"

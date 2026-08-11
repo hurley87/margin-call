@@ -178,15 +178,7 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     /// @dev Winning liability is the O(tiers) sum of reserved payouts at or below `crashPointBps`.
     function markRoundFinalized(uint256 roundId, uint256 totalMargin, uint256 crashPointBps) external nonReentrant {
         _requireAuthorizedGameCaller();
-        if (_roundObligationsMarked[roundId]) revert RoundAlreadyMarked(roundId);
-        if (totalMargin > unrecognizedMargin) {
-            revert UnrecognizedMarginUnderflow(unrecognizedMargin, totalMargin);
-        }
-
-        uint256 winningLiability = _winningLiability(roundId, crashPointBps);
-        _roundObligationsMarked[roundId] = true;
-        unrecognizedMargin -= totalMargin;
-        pendingObligations += winningLiability;
+        _markRoundObligations(roundId, totalMargin, _winningLiability(roundId, crashPointBps));
     }
 
     /// @notice Marks an expired round's margins into pending refund obligations.
@@ -194,14 +186,21 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     ///      pendingObligations move by the same amount.
     function markRoundExpired(uint256 roundId, uint256 totalMargin) external nonReentrant {
         _requireAuthorizedGameCaller();
+        _markRoundObligations(roundId, totalMargin, totalMargin);
+    }
+
+    /// @dev Moves a round's margin out of unrecognizedMargin and records its payout obligation.
+    ///      Enforces the once-per-round marking invariant shared by finalize and expire.
+    function _markRoundObligations(uint256 roundId, uint256 totalMargin, uint256 obligation) internal {
         if (_roundObligationsMarked[roundId]) revert RoundAlreadyMarked(roundId);
-        if (totalMargin > unrecognizedMargin) {
-            revert UnrecognizedMarginUnderflow(unrecognizedMargin, totalMargin);
+        uint256 currentUnrecognized = unrecognizedMargin;
+        if (totalMargin > currentUnrecognized) {
+            revert UnrecognizedMarginUnderflow(currentUnrecognized, totalMargin);
         }
 
         _roundObligationsMarked[roundId] = true;
-        unrecognizedMargin -= totalMargin;
-        pendingObligations += totalMargin;
+        unrecognizedMargin = currentUnrecognized - totalMargin;
+        pendingObligations += obligation;
     }
 
     /// @notice Pays a winning ticket within its reservation and consumes the reservation.

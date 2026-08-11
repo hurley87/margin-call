@@ -2,7 +2,6 @@
 pragma solidity 0.8.29;
 
 import {Test} from "forge-std/Test.sol";
-import {Vm} from "forge-std/Vm.sol";
 
 import {inco} from "@inco/lightning/src/Lib.sol";
 
@@ -222,34 +221,20 @@ contract ExpiryRefundTest is Test {
 
         assertEq(vault.pendingObligations(), 6 * ONE_TUSD);
 
-        vm.recordLogs();
         vm.prank(ALICE);
+        vm.expectEmit(true, true, true, true, address(vault));
+        emit LiabilityReleased(0, aliceTicket, ALICE, 1_250_000, ONE_TUSD);
+        vm.expectEmit(true, true, true, true, address(game));
+        emit TicketRefunded(0, aliceTicket, ALICE, ALICE, ONE_TUSD);
         game.refund(aliceTicket, address(0));
-        vm.prank(BOB);
-        game.refund(bobTicket, address(0));
-        Vm.Log[] memory logs = vm.getRecordedLogs();
 
-        bool sawRefundAlice;
-        bool sawRefundBob;
-        bool sawReleaseAlice;
-        bool sawReleaseBob;
-        for (uint256 i = 0; i < logs.length; ++i) {
-            bytes32 topic0 = logs[i].topics[0];
-            if (topic0 == TicketRefunded.selector) {
-                address player = address(uint160(uint256(logs[i].topics[3])));
-                if (player == ALICE) sawRefundAlice = true;
-                if (player == BOB) sawRefundBob = true;
-            }
-            if (topic0 == LiabilityReleased.selector) {
-                address player = address(uint160(uint256(logs[i].topics[3])));
-                if (player == ALICE) sawReleaseAlice = true;
-                if (player == BOB) sawReleaseBob = true;
-            }
-        }
-        assertTrue(sawRefundAlice);
-        assertTrue(sawRefundBob);
-        assertTrue(sawReleaseAlice);
-        assertTrue(sawReleaseBob);
+        vm.prank(BOB);
+        vm.expectEmit(true, true, true, true, address(vault));
+        emit LiabilityReleased(1, bobTicket, BOB, 10 * ONE_TUSD, 5 * ONE_TUSD);
+        vm.expectEmit(true, true, true, true, address(game));
+        emit TicketRefunded(1, bobTicket, BOB, BOB, 5 * ONE_TUSD);
+        game.refund(bobTicket, address(0));
+
         assertEq(vault.pendingObligations(), 0);
         assertEq(vault.unrecognizedMargin(), 0);
         assertEq(vault.reservedLiabilities(), 0);
