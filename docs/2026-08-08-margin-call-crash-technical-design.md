@@ -207,18 +207,19 @@ The vault records reservation by ticket, aggregate reservation by round, and agg
 
 ### Winning claim
 
-1. The caller invokes `claim`; the recipient is the ticket owner or an owner-selected receiver covered by authorization.
-2. The game requires a finalized round, winning comparison, and an unsettled ticket.
-3. The game computes the payout and invokes the ticket-scoped vault payment.
-4. The vault verifies the caller is the authorized game, the reservation matches the ticket and round, and `payout <= reservedPayout`.
-5. State marks the reservation consumed, reduces `pendingObligations` by the payout, and marks the ticket settled before safe transfer.
-6. The vault transfers the exact payout from its tUSD balance.
+1. The caller invokes `claim(ticketId, receiver)`.
+2. The game requires a finalized round, winning comparison (`leverageBps <= crashPointBps`), and an unsettled ticket.
+3. Recipient resolution: the ticket owner may pass `receiver = address(0)` for themselves or any non-zero address; a third-party caller may only route to the ticket owner (any other `receiver` reverts).
+4. The game computes the payout and invokes the ticket-scoped vault payment.
+5. The vault verifies the caller is the authorized game, the reservation matches the ticket and round, and `payout <= reservedPayout`.
+6. State marks the reservation consumed, reduces `pendingObligations` by the payout, and marks the ticket settled before safe transfer.
+7. The vault transfers the exact payout from its tUSD balance.
 
 The transaction is atomic. A failed transfer rolls back both game and vault state, so the claim remains retryable. Any reservation excess created by rounding is released in the same transaction.
 
 ### Losing settlement
 
-A permissionless `claim` or `settleLoss` verifies the finalized loss, marks the ticket settled, and tells the vault to release the full reservation. No tUSD moves; the posted margin already remains in vault assets. A losing ticket cannot later claim or refund.
+A permissionless `settleLoss(ticketId)` verifies the finalized loss, marks the ticket settled, and tells the vault to release the full reservation. No tUSD moves; the posted margin already remains in vault assets. A losing ticket cannot later claim or refund.
 
 ### Expiry refund
 
@@ -304,15 +305,16 @@ Exact Solidity signatures may vary, but equivalent behaviour and access boundari
 - `enter(roundId, margin, leverageBps)` — validate entry and atomically coordinate direct-to-vault margin plus reservation.
 - `requestReveal(roundId)` — permissionlessly begin reveal after lock and strictly before expiry.
 - `finalizeRound(roundId, plaintext, signatures)` — verify the attestation and finalize the exact stored handle, strictly before expiry.
-- `claim(roundId)` — atomically pay a win or settle a loss.
-- `settleLoss(roundId, player)` — optional permissionless explicit loss settlement.
+- `claim(ticketId, receiver)` — permissionlessly pay a win to the ticket owner, or to an owner-selected receiver when the owner is the caller.
+- `settleLoss(ticketId)` — permissionlessly release a losing ticket's reservation without transfer.
 - `expireRound(roundId)` — permissionlessly mark an eligible unresolved round expired.
 - `refund(roundId)` — return original margin to the owner after expiry.
 - Reads for current/next round, round details, ticket, claimability, refundability, and history pagination.
 
 ### Vault game-only interface
 
-- `acceptEntry(roundId, ticketId, player, margin, maximumPayout)` — pull margin directly into the vault, enforce limits, and reserve.
+- `acceptEntry(roundId, ticketId, player, margin, leverageBps, maximumPayout)` — pull margin directly into the vault, enforce limits, and reserve.
+- `markRoundFinalized(roundId, totalMargin, crashPointBps)` — release unrecognized margin and mark winning liability into `pendingObligations` in O(tiers).
 - `payClaim(roundId, ticketId, recipient, payout)` — pay no more than the ticket reservation and consume it.
 - `settleLoss(roundId, ticketId)` — release the reservation without transfer.
 - `refundMargin(roundId, ticketId, recipient, margin)` — return no more than original margin and consume the reservation.

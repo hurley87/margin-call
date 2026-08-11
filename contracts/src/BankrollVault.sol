@@ -53,16 +53,23 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     mapping(uint256 roundId => uint256 reservedPayout) public reservedPayoutByRound;
     mapping(uint256 roundId => mapping(uint256 leverageBps => uint256 reservedPayout)) public
         reservedPayoutByRoundAndTier;
+    mapping(uint256 roundId => bool marked) private _roundFinalized;
 
     error UnauthorizedGameConfigurer(address caller);
     error AuthorizedGameAlreadySet();
     error ZeroAuthorizedGame();
     error UnauthorizedGameCaller(address caller);
     error ZeroPlayer();
+    error ZeroRecipient();
     error InvalidMargin(uint256 margin);
     error InvalidMaximumPayout(uint256 margin, uint256 maximumPayout);
     error InvalidLeverageTier(uint256 leverageBps);
     error TicketReservationExists(uint256 ticketId);
+    error TicketReservationMissing(uint256 ticketId);
+    error TicketReservationMismatch(uint256 ticketId, uint256 roundId, address player);
+    error PayoutExceedsReservation(uint256 payout, uint256 maximumPayout);
+    error RoundAlreadyMarked(uint256 roundId);
+    error UnrecognizedMarginUnderflow(uint256 unrecognizedMargin, uint256 totalMargin);
     error EntryFloorNotMet(uint256 grossAssets, uint256 required);
     error InsufficientFreeLiquidity(uint256 freeLiquidity, uint256 required);
     error RoundReservationExceeded(uint256 roundId, uint256 reservedPayout, uint256 limit);
@@ -76,6 +83,13 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         uint256 margin,
         uint256 maximumPayout,
         uint256 leverageBps
+    );
+    event LiabilityReleased(
+        uint256 indexed roundId,
+        uint256 indexed ticketId,
+        address indexed player,
+        uint256 releasedReservation,
+        uint256 paidAmount
     );
 
     constructor(IERC20 asset_) ERC20("Margin Call Bankroll Share", "mcLP") ERC4626(asset_) {
@@ -156,6 +170,72 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         _storeReservation(roundId, ticketId, player, margin, leverageBps, maximumPayout);
 
         emit LiabilityReserved(roundId, ticketId, player, margin, maximumPayout, leverageBps);
+    }
+
+    /// @notice Marks a finalized round into share pricing before any claim is pulled.
+    /// @dev Winning liability is the O(tiers) sum of reserved payouts at or below `crashPointBps`.
+    function markRoundFinalized(uint256 roundId, uint256 totalMargin, uint256 crashPointBps) external nonReentrant {
+        _requireAuthorizedGameCaller();
+        if (_roundFinalized[roundId]) revert RoundAlreadyMarked(roundId);
+        if (totalMargin > unrecognizedMargin) {
+            revert UnrecognizedMarginUnderflow(unrecognizedMargin, totalMargin);
+        }
+
+        uint256 winningLiability = _winningLiability(roundId, crashPointBps);
+        _roundFinalized[roundId] = true;
+        unrecognizedMargin -= totalMargin;
+        pendingObligations += winningLiability;
+    }
+
+    /// @notice Pays a winning ticket within its reservation and consumes the reservation.
+    function payClaim(uint256 roundId, uint256 ticketId, address recipient, uint256 payout) external nonReentrant {
+        _requireAuthorizedGameCaller();
+        if (recipient == address(0)) revert ZeroRecipient();
+
+        TicketReservation memory reservation = _consumeReservation(roundId, ticketId);
+        if (payout > reservation.maximumPayout) {
+            revert PayoutExceedsReservation(payout, reservation.maximumPayout);
+        }
+        if (payout > pendingObligations) {
+            // Invariant: marked winning liability funds every winning claim.
+            revert PayoutExceedsReservation(payout, pendingObligations);
+        }
+
+        pendingObligations -= payout;
+        emit LiabilityReleased(roundId, ticketId, reservation.player, reservation.maximumPayout, payout);
+        IERC20(asset()).safeTransfer(recipient, payout);
+    }
+
+    /// @notice Releases a losing ticket reservation without transferring tUSD.
+    function settleLoss(uint256 roundId, uint256 ticketId) external nonReentrant {
+        _requireAuthorizedGameCaller();
+        TicketReservation memory reservation = _consumeReservation(roundId, ticketId);
+        emit LiabilityReleased(roundId, ticketId, reservation.player, reservation.maximumPayout, 0);
+    }
+
+    function _winningLiability(uint256 roundId, uint256 crashPointBps) internal view returns (uint256 liability) {
+        uint256[6] memory tiers = LeverageTiers.all();
+        for (uint256 i = 0; i < tiers.length; ++i) {
+            if (tiers[i] <= crashPointBps) {
+                liability += reservedPayoutByRoundAndTier[roundId][tiers[i]];
+            }
+        }
+    }
+
+    function _consumeReservation(uint256 roundId, uint256 ticketId)
+        internal
+        returns (TicketReservation memory reservation)
+    {
+        reservation = _reservations[ticketId];
+        if (reservation.player == address(0)) revert TicketReservationMissing(ticketId);
+        if (reservation.roundId != roundId) {
+            revert TicketReservationMismatch(ticketId, roundId, reservation.player);
+        }
+
+        delete _reservations[ticketId];
+        reservedLiabilities -= reservation.maximumPayout;
+        reservedPayoutByRound[roundId] -= reservation.maximumPayout;
+        reservedPayoutByRoundAndTier[roundId][reservation.leverageBps] -= reservation.maximumPayout;
     }
 
     function _requireAuthorizedGameCaller() internal view {

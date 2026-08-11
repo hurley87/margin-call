@@ -1,14 +1,56 @@
 "use client";
 
 import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
-import { formatLeverageBps, type CrashTicket } from "@/lib/margin-call-crash";
+import {
+  formatLeverageBps,
+  type CrashTicket,
+  type TicketOutcome,
+} from "@/lib/margin-call-crash";
 
 type CrashLiveTicketProps = {
   ticket: CrashTicket;
+  outcome?: TicketOutcome | null;
+  payout?: bigint | null;
+  displayCrashPoint?: string | null;
+  canVerify?: boolean;
+  canClaim?: boolean;
+  canSettle?: boolean;
+  statusMessage?: string | null;
+  isAlert?: boolean;
+  canRetry?: boolean;
+  retryLabel?: string;
+  onVerify?: () => void;
+  onClaim?: () => void;
+  onSettle?: () => void;
+  onRetry?: () => void;
 };
 
-/** Confirmed onchain ticket for the signed-in player in the current round. */
-export function CrashLiveTicket({ ticket }: CrashLiveTicketProps) {
+const outcomeCopy: Record<TicketOutcome, string> = {
+  pending: "Awaiting verified Crash Point",
+  won: "Won — claim your payout",
+  lost: "Lost — settle the ticket",
+  "settled-win": "Payout claimed",
+  "settled-loss": "Loss settled",
+};
+
+/** Confirmed onchain ticket with optional settlement actions for the signed-in player. */
+export function CrashLiveTicket({
+  ticket,
+  outcome = null,
+  payout = null,
+  displayCrashPoint = null,
+  canVerify = false,
+  canClaim = false,
+  canSettle = false,
+  statusMessage = null,
+  isAlert = false,
+  canRetry = false,
+  retryLabel = "Retry",
+  onVerify,
+  onClaim,
+  onSettle,
+  onRetry,
+}: CrashLiveTicketProps) {
   return (
     <div
       aria-labelledby="live-ticket-heading"
@@ -45,17 +87,86 @@ export function CrashLiveTicket({ ticket }: CrashLiveTicketProps) {
             {formatLeverageBps(ticket.leverageBps)}
           </dd>
         </div>
-        <div className="sm:col-span-2">
-          <dt className="text-[var(--t-muted)]">Reserved maximum payout</dt>
+        {displayCrashPoint ? (
+          <div>
+            <dt className="text-[var(--t-muted)]">Verified Crash Point</dt>
+            <dd className="tabular-nums text-[var(--t-green-hot)]">
+              {displayCrashPoint}
+            </dd>
+          </div>
+        ) : null}
+        <div className={displayCrashPoint ? undefined : "sm:col-span-2"}>
+          <dt className="text-[var(--t-muted)]">
+            {outcome === "won" || outcome === "settled-win"
+              ? "Payout"
+              : "Reserved maximum payout"}
+          </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {formatDeskDollars(ticket.reservedPayout, TUSD_DECIMALS)} tUSD
+            {formatDeskDollars(payout ?? ticket.reservedPayout, TUSD_DECIMALS)}{" "}
+            tUSD
           </dd>
         </div>
+        {outcome ? (
+          <div className="sm:col-span-2">
+            <dt className="text-[var(--t-muted)]">Outcome</dt>
+            <dd className="text-[var(--t-text)]">{outcomeCopy[outcome]}</dd>
+          </div>
+        ) : null}
       </dl>
-      <p className="mt-4 text-xs leading-5 text-[var(--t-muted)]">
-        One ticket per wallet per round. Settlement and claims land in later
-        slices after the verified Crash Point is attested.
-      </p>
+
+      <div className="mt-4 flex flex-wrap gap-3">
+        {canVerify ? (
+          <button
+            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
+            onClick={onVerify}
+            type="button"
+          >
+            Verify and settle
+          </button>
+        ) : null}
+        {canClaim ? (
+          <button
+            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
+            onClick={onClaim}
+            type="button"
+          >
+            Claim payout
+          </button>
+        ) : null}
+        {canSettle ? (
+          <button
+            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
+            onClick={onSettle}
+            type="button"
+          >
+            Settle loss
+          </button>
+        ) : null}
+        {canRetry ? (
+          <button
+            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
+            onClick={onRetry}
+            type="button"
+          >
+            {retryLabel}
+          </button>
+        ) : null}
+      </div>
+
+      {statusMessage ? (
+        <p
+          aria-live={isAlert ? undefined : "polite"}
+          className="mt-4 text-xs leading-5 text-[var(--t-muted)]"
+          role={isAlert ? "alert" : undefined}
+        >
+          {statusMessage}
+        </p>
+      ) : (
+        <p className="mt-4 text-xs leading-5 text-[var(--t-muted)]">
+          One ticket per wallet per round. You can leave and return later —
+          settlement never depends on watching the animation.
+        </p>
+      )}
     </div>
   );
 }
