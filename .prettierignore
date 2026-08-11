@@ -1,5 +1,8 @@
 # Forge-written deployment records — keep forge/JSON formatting as-is.
 contracts/deployments/
 
+# Foundry owns Solidity formatting via `forge fmt`.
+**/*.sol
+
 # Keep pnpm's canonical lockfile serialization.
 pnpm-lock.yaml
