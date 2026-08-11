@@ -68,8 +68,9 @@ contract DeployBankrollVault is Utils {
     }
 
     /// @notice Returns the non-secret provenance record written after a successful run.
+    /// @dev Built in two halves; a single string.concat this large exceeds the compiler's stack.
     function deploymentRecord(Deployment memory deployment) public pure returns (string memory) {
-        return string.concat(
+        string memory provenance = string.concat(
             "{\n",
             '  "chainId": ',
             vm.toString(deployment.chainId),
@@ -94,9 +95,21 @@ contract DeployBankrollVault is Utils {
             ",\n",
             '  "seedDepositorBalanceAfter": ',
             vm.toString(deployment.seedDepositorBalanceAfter),
-            ",\n",
+            ",\n"
+        );
+        return string.concat(
+            provenance,
             '  "vaultDepositSelector": "',
             vm.toString(abi.encodePacked(IERC4626.deposit.selector)),
+            '",\n',
+            '  "acceptEntrySelector": "',
+            vm.toString(abi.encodePacked(BankrollVault.acceptEntry.selector)),
+            '",\n',
+            '  "setAuthorizedGameSelector": "',
+            vm.toString(abi.encodePacked(BankrollVault.setAuthorizedGame.selector)),
+            '",\n',
+            '  "tUsdApproveSelector": "',
+            vm.toString(abi.encodePacked(IERC20.approve.selector)),
             '",\n',
             '  "verification": {\n',
             '    "vault": "',

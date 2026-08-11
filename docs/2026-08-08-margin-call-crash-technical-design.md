@@ -167,8 +167,8 @@ Tests cover `r = 0`, `r = 9999`, the cap boundary, rejection of non-tier leverag
 
 ### Atomic sequence
 
-1. The player grants a bounded tUSD allowance to `BankrollVault` — default `1,000 tUSD`, with an exact per-entry amount available. The interface never requests an unlimited allowance.
-2. The player calls `MarginCallCrash.enter(roundId, margin, leverageBps)`.
+1. The player grants a one-time bounded `1,000 tUSD` allowance to `BankrollVault` when current allowance is below the selected margin. Subsequent entries reuse that allowance. The interface never requests an unlimited allowance and does not offer exact-per-entry approval or atomic approve+enter batching.
+2. The player calls `MarginCallCrash.enter(roundId, margin, leverageBps)` as a separate sponsored transaction.
 3. The game validates round, time, supported margin, leverage, and duplicate-entry rules.
 4. The game derives `maximumPayout` and calls a game-only vault method with the player, round, ticket, margin, and maximum payout.
 5. The vault transfers `margin` directly from the player into itself.
@@ -361,7 +361,7 @@ Keeper outage behaviour is explicit. If pre-opening stalls while players are act
 ### Identity, wallets, and sponsored gas
 
 - Login is phone-number-only through Privy (SMS OTP); no other login method is enabled. A successful login provisions an embedded smart wallet on Base Sepolia. Players and LPs never install a wallet, hold a seed phrase, or acquire test ETH.
-- Every app-driven transaction — faucet claim, entry, claim, refund, LP deposit and withdrawal, and permissionless recovery transitions offered by the UI — executes from the Privy embedded wallet with Privy-native sponsorship requested through `sponsor: true`. The Privy app-pays configuration enables Base Sepolia client transactions; no application-owned paymaster endpoint, proxy, or selector policy is required. Approval and entry batch into a single sponsored confirmation; the bounded-allowance rule is unchanged.
+- Every app-driven transaction — faucet claim, entry, claim, refund, LP deposit and withdrawal, and permissionless recovery transitions offered by the UI — executes from the Privy embedded wallet with Privy-native sponsorship requested through `sponsor: true`. The Privy app-pays configuration enables Base Sepolia client transactions; no application-owned paymaster endpoint, proxy, or selector policy is required. Entry uses a one-time bounded `1,000 tUSD` approval when allowance is insufficient, then a separate sponsored `enter`; the interface never requests an unlimited allowance.
 - Server-side identity is derived from the verified Privy access token's DID only, mapped to a Convex identity; no identity token or Privy user object is persisted or forwarded, and the app stores only the DID and wallet address. The previously scaffolded SIWA signature/nonce flow is retired and removed. Privy's client session object does expose the linked phone number in the browser, so the app-side guarantee is scoped precisely: phone numbers and auth headers are redacted from app-controlled logs, analytics, and error reporting — verified by telemetry-payload tests, not only source inspection — and never appear onchain, in app databases, or in the repository. The embedded wallet address is the only onchain identity.
 - A paymaster sponsors gas but cannot supply `msg.value`, so an embedded wallet cannot be a round creator (ADR 0006). The interface offers entry only into rounds that already exist; keeper pre-opening (§11) keeps that gap to seconds, and any ETH-holding wallet can still create rounds permissionlessly.
 
@@ -377,7 +377,7 @@ Keeper outage behaviour is explicit. If pre-opening stalls while players are act
 - The replay is a deterministic pure function of the finalized crash point and a fixed easing profile: a client arriving mid-replay seeks to the correct frame, and reduced-motion clients render the same data as a static result card.
 - An indexer may serve history but must preserve delayed and expired states and link back to raw events and transactions. Event fan-out for the live ticket tape and replay trigger may push `TicketEntered` and `RoundFinalized` into Convex for reactive subscriptions; contract reads remain authoritative.
 - The interface never silently changes the signed round ID after a missed lock.
-- Approval and entry batch into a single sponsored operation that shows spender, cap, and contract address before confirmation; a standalone bounded approval remains available.
+- Entry shows spender, cap, and contract address before confirmation. When allowance is below the selected margin, the client submits a one-time bounded `1,000 tUSD` approval, waits for its receipt, then submits sponsored `enter`; later entries are enter-only. Unlimited allowance is never requested.
 - The interface offers entry only into initialized rounds, so player entries never carry the Inco fee. The contract's round-creating entry path remains for ETH-holding callers, and a fee-bearing entry that loses the creation race is refunded automatically with the entry still succeeding — no user action needed.
 - Reduced-motion, colour-independent status, and sound-independent text are required.
 

@@ -9,9 +9,10 @@ import {
 } from "@/lib/bankroll-vault";
 import { deskDollarsAbi } from "@/lib/desk-dollars";
 import {
+  applyStageResult,
   confirmSponsoredCall,
   submitSponsoredCall,
-  type SponsoredCallResult,
+  type StageErrorCopy,
 } from "@/lib/sponsored-call";
 import {
   notifyWalletBalancesChanged,
@@ -69,7 +70,7 @@ const withdrawalRefreshFailed =
   "Your withdrawal was confirmed, but we couldn't refresh the Bankroll Vault. Please try again.";
 const withdrawalFailedAndRefreshFailed =
   "Your LP withdrawal did not complete, and we couldn't reload your balances and limits. Retry reloads them.";
-const stageCopy: Record<Stage, { failed: string; unconfirmed: string }> = {
+const stageCopy: Record<Stage, StageErrorCopy> = {
   approval: {
     failed: "We couldn't approve this exact tUSD amount. Please try again.",
     unconfirmed:
@@ -88,26 +89,6 @@ const stageCopy: Record<Stage, { failed: string; unconfirmed: string }> = {
       "Your LP withdrawal was submitted, but we couldn't confirm it yet. Retry to check its status.",
   },
 };
-
-// Maps a sponsored-call outcome to the stage's error copy. Clears the pending
-// stage on any definitive outcome; an unknown confirmation keeps it as the
-// recovery handle for Retry.
-function applyStageResult(
-  pendingStage: { current: { stage: Stage; hash: Hex } | null },
-  stage: Stage,
-  result: SponsoredCallResult
-) {
-  if (result.outcome === "confirmed") {
-    pendingStage.current = null;
-    return;
-  }
-  if (result.outcome === "confirmation-unknown")
-    throw new Error(stageCopy[stage].unconfirmed);
-  pendingStage.current = null;
-  if (result.outcome === "submission-failed")
-    throw new Error(result.message ?? stageCopy[stage].failed);
-  throw new Error(stageCopy[stage].failed);
-}
 
 export function useBankrollVaultDeposit(walletAddress: Address | null) {
   const transaction = usePrivySponsoredTransaction();
@@ -211,7 +192,7 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
           error: null,
         }));
       });
-      applyStageResult(pendingStage, stage, result);
+      applyStageResult(pendingStage, stageCopy[stage], result);
     },
     [transaction]
   );
@@ -244,7 +225,7 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
           }));
           applyStageResult(
             pendingStage,
-            pending.stage,
+            stageCopy[pending.stage],
             await confirmSponsoredCall(pending.hash)
           );
           depositConfirmed = pending.stage === "deposit";
@@ -320,7 +301,7 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
           }));
           applyStageResult(
             pendingStage,
-            "withdrawal",
+            stageCopy.withdrawal,
             await confirmSponsoredCall(pending!.hash)
           );
         } else {

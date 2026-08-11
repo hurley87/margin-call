@@ -4,19 +4,28 @@ pragma solidity 0.8.29;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {ERC4626} from "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-/// @notice ERC-4626 LP share vault for Desk Dollars.
-/// @dev This deposits-only slice deliberately leaves game accounting at zero. Future game-only operations
-///      will update the accounting state without changing the standard ERC-4626 conversion functions.
-contract BankrollVault is ERC4626 {
+import {LeverageTiers} from "./libraries/LeverageTiers.sol";
+
+/// @notice ERC-4626 LP share vault for Desk Dollars with game-only entry reservation.
+/// @dev Share pricing uses net `totalAssets()`. Capacity and free-liquidity math use live `grossAssets`.
+contract BankrollVault is ERC4626, ReentrancyGuard {
     using Math for uint256;
+    using SafeERC20 for IERC20;
 
     uint256 internal constant SAFETY_BUFFER_NUMERATOR = 20;
     uint256 internal constant SAFETY_BUFFER_DENOMINATOR = 100;
+    uint256 internal constant ROUND_RESERVATION_NUMERATOR = 25;
+    uint256 internal constant ROUND_RESERVATION_DENOMINATOR = 100;
+    uint256 internal constant TICKET_RESERVATION_NUMERATOR = 1;
+    uint256 internal constant TICKET_RESERVATION_DENOMINATOR = 100;
+    uint256 public constant MIN_GROSS_ASSETS_FOR_ENTRY = 10_000 * 10 ** 6;
+    uint256 public constant MAX_TICKET_RESERVATION = 100 * 10 ** 6;
 
     /// @notice Total maximum payouts reserved for unresolved player tickets.
-    /// @dev Reservation mutation is restricted to the future game-only entry and settlement paths.
     uint256 public reservedLiabilities;
 
     /// @notice Payouts owed from finalized or expired tickets but not yet transferred.
@@ -25,7 +34,63 @@ contract BankrollVault is ERC4626 {
     /// @notice Received player margin that has not yet been recognized as vault value.
     uint256 public unrecognizedMargin;
 
-    constructor(IERC20 asset_) ERC20("Margin Call Bankroll Share", "mcLP") ERC4626(asset_) {}
+    /// @notice Deployer allowed to set the authorized game exactly once.
+    address public immutable gameConfigurer;
+
+    /// @notice Sole caller permitted to invoke game-only vault methods.
+    address public authorizedGame;
+
+    /// @dev A reservation exists iff `player` is non-zero; `acceptEntry` rejects a zero player.
+    struct TicketReservation {
+        uint256 roundId;
+        address player;
+        uint256 margin;
+        uint256 maximumPayout;
+        uint256 leverageBps;
+    }
+
+    mapping(uint256 ticketId => TicketReservation reservation) private _reservations;
+    mapping(uint256 roundId => uint256 reservedPayout) public reservedPayoutByRound;
+    mapping(uint256 roundId => mapping(uint256 leverageBps => uint256 reservedPayout)) public
+        reservedPayoutByRoundAndTier;
+
+    error UnauthorizedGameConfigurer(address caller);
+    error AuthorizedGameAlreadySet();
+    error ZeroAuthorizedGame();
+    error UnauthorizedGameCaller(address caller);
+    error ZeroPlayer();
+    error InvalidMargin(uint256 margin);
+    error InvalidMaximumPayout(uint256 margin, uint256 maximumPayout);
+    error InvalidLeverageTier(uint256 leverageBps);
+    error TicketReservationExists(uint256 ticketId);
+    error EntryFloorNotMet(uint256 grossAssets, uint256 required);
+    error InsufficientFreeLiquidity(uint256 freeLiquidity, uint256 required);
+    error RoundReservationExceeded(uint256 roundId, uint256 reservedPayout, uint256 limit);
+    error TicketReservationExceeded(uint256 maximumPayout, uint256 limit);
+
+    event AuthorizedGameChanged(address indexed previousGame, address indexed newGame);
+    event LiabilityReserved(
+        uint256 indexed roundId,
+        uint256 indexed ticketId,
+        address indexed player,
+        uint256 margin,
+        uint256 maximumPayout,
+        uint256 leverageBps
+    );
+
+    constructor(IERC20 asset_) ERC20("Margin Call Bankroll Share", "mcLP") ERC4626(asset_) {
+        gameConfigurer = msg.sender;
+    }
+
+    /// @notice Wires the authorized game address exactly once after deployment.
+    function setAuthorizedGame(address game) external {
+        if (msg.sender != gameConfigurer) revert UnauthorizedGameConfigurer(msg.sender);
+        if (authorizedGame != address(0)) revert AuthorizedGameAlreadySet();
+        if (game == address(0)) revert ZeroAuthorizedGame();
+
+        authorizedGame = game;
+        emit AuthorizedGameChanged(address(0), game);
+    }
 
     /// @notice Returns the live Desk Dollars balance held by this vault before liability accounting.
     function grossAssets() public view returns (uint256) {
@@ -59,9 +124,7 @@ contract BankrollVault is ERC4626 {
     /// @notice Returns gross assets available for LP withdrawal after reservations and the safety buffer.
     /// @dev Reservations transitively cover pending obligations and unrecognized margin: a reservation is
     ///      consumed only when its payout or refund actually transfers, so `pendingObligations +
-    ///      unrecognizedMargin` never exceeds `reservedLiabilities` (technical design §8). The game-only
-    ///      mutation paths must preserve that invariant; subtracting those terms here as well would
-    ///      double-count liabilities and suppress valid LP withdrawals.
+    ///      unrecognizedMargin` never exceeds `reservedLiabilities` (technical design §8).
     function freeLiquidity() public view returns (uint256) {
         uint256 assets = grossAssets();
         uint256 protectedAssets = reservedLiabilities + _safetyBuffer(assets);
@@ -69,16 +132,101 @@ contract BankrollVault is ERC4626 {
         return assets > protectedAssets ? assets - protectedAssets : 0;
     }
 
+    /// @notice Returns a stored ticket reservation, or an empty record when none exists.
+    function getReservation(uint256 ticketId) external view returns (TicketReservation memory) {
+        return _reservations[ticketId];
+    }
+
+    /// @notice Pulls player margin, enforces capacity limits, and records a ticket reservation.
+    /// @dev Caller must be the authorized game. Share pricing is unchanged because margin is
+    ///      added to both `grossAssets` and `unrecognizedMargin`.
+    function acceptEntry(
+        uint256 roundId,
+        uint256 ticketId,
+        address player,
+        uint256 margin,
+        uint256 leverageBps,
+        uint256 maximumPayout
+    ) external nonReentrant {
+        _requireAuthorizedGameCaller();
+        _validateEntryArgs(ticketId, player, margin, leverageBps, maximumPayout);
+
+        IERC20(asset()).safeTransferFrom(player, address(this), margin);
+        _enforceCapacityLimits(roundId, margin, maximumPayout);
+        _storeReservation(roundId, ticketId, player, margin, leverageBps, maximumPayout);
+
+        emit LiabilityReserved(roundId, ticketId, player, margin, maximumPayout, leverageBps);
+    }
+
+    function _requireAuthorizedGameCaller() internal view {
+        if (msg.sender != authorizedGame) revert UnauthorizedGameCaller(msg.sender);
+    }
+
+    function _validateEntryArgs(
+        uint256 ticketId,
+        address player,
+        uint256 margin,
+        uint256 leverageBps,
+        uint256 maximumPayout
+    ) internal view {
+        if (player == address(0)) revert ZeroPlayer();
+        if (margin == 0) revert InvalidMargin(margin);
+        if (maximumPayout < margin) revert InvalidMaximumPayout(margin, maximumPayout);
+        if (!LeverageTiers.isSupported(leverageBps)) revert InvalidLeverageTier(leverageBps);
+        if (_reservations[ticketId].player != address(0)) revert TicketReservationExists(ticketId);
+    }
+
+    function _enforceCapacityLimits(uint256 roundId, uint256 margin, uint256 maximumPayout) internal view {
+        uint256 assetsAfterTransfer = grossAssets();
+        if (assetsAfterTransfer < MIN_GROSS_ASSETS_FOR_ENTRY) {
+            revert EntryFloorNotMet(assetsAfterTransfer, MIN_GROSS_ASSETS_FOR_ENTRY);
+        }
+
+        uint256 reservedAfterEntry = reservedLiabilities + maximumPayout;
+        if (reservedAfterEntry + _safetyBuffer(assetsAfterTransfer) > assetsAfterTransfer) {
+            // The margin transfer has already executed, so freeLiquidity() is the post-entry view.
+            revert InsufficientFreeLiquidity(freeLiquidity(), maximumPayout - margin);
+        }
+
+        uint256 roundReservedAfterEntry = reservedPayoutByRound[roundId] + maximumPayout;
+        uint256 roundLimit = assetsAfterTransfer.mulDiv(ROUND_RESERVATION_NUMERATOR, ROUND_RESERVATION_DENOMINATOR);
+        if (roundReservedAfterEntry > roundLimit) {
+            revert RoundReservationExceeded(roundId, roundReservedAfterEntry, roundLimit);
+        }
+
+        uint256 ticketLimit = Math.min(
+            MAX_TICKET_RESERVATION,
+            assetsAfterTransfer.mulDiv(TICKET_RESERVATION_NUMERATOR, TICKET_RESERVATION_DENOMINATOR)
+        );
+        if (maximumPayout > ticketLimit) {
+            revert TicketReservationExceeded(maximumPayout, ticketLimit);
+        }
+    }
+
+    function _storeReservation(
+        uint256 roundId,
+        uint256 ticketId,
+        address player,
+        uint256 margin,
+        uint256 leverageBps,
+        uint256 maximumPayout
+    ) internal {
+        _reservations[ticketId] = TicketReservation({
+            roundId: roundId, player: player, margin: margin, maximumPayout: maximumPayout, leverageBps: leverageBps
+        });
+        reservedLiabilities += maximumPayout;
+        unrecognizedMargin += margin;
+        reservedPayoutByRound[roundId] += maximumPayout;
+        reservedPayoutByRoundAndTier[roundId][leverageBps] += maximumPayout;
+    }
+
     /// @notice Returns the owner's immediately executable asset withdrawal limit.
-    /// @dev This cap preserves ERC-4626 conversions while partitioning free liquidity by share ownership.
     function maxWithdraw(address owner) public view override returns (uint256) {
         (uint256 maxAssets,) = _withdrawalLimits(owner);
         return maxAssets;
     }
 
     /// @notice Returns the owner's immediately executable share redemption limit.
-    /// @dev Inverts ERC-4626's virtual-share `previewRedeem` rounding so this is the greatest share amount whose
-    ///      redeemed assets do not exceed `maxWithdraw(owner)`.
     function maxRedeem(address owner) public view override returns (uint256) {
         uint256 ownerShares = balanceOf(owner);
         (uint256 maxAssets, uint256 ownerAssets) = _withdrawalLimits(owner);
@@ -89,8 +237,6 @@ contract BankrollVault is ERC4626 {
         return Math.min(ownerShares, maxShares);
     }
 
-    /// @dev Shared by `maxWithdraw` and `maxRedeem` so the owner's limit and full asset value come from one
-    ///      set of balance and supply reads.
     function _withdrawalLimits(address owner) internal view returns (uint256 maxAssets, uint256 ownerAssets) {
         uint256 supply = totalSupply();
         if (supply == 0) return (0, 0);

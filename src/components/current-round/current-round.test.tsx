@@ -33,6 +33,20 @@ vi.mock("@/hooks/use-current-crash-round", () => ({
   useCurrentCrashRound: () => sdk.round,
 }));
 
+vi.mock("./crash-round-entry", () => ({
+  CrashRoundEntry: ({
+    phase,
+    countdownSeconds,
+  }: {
+    phase: string;
+    countdownSeconds: number;
+  }) => (
+    <div data-testid="crash-round-entry">
+      entry:{phase}:{countdownSeconds}
+    </div>
+  ),
+}));
+
 import { CurrentRound } from "./current-round";
 
 describe("CurrentRound", () => {
@@ -60,6 +74,9 @@ describe("CurrentRound", () => {
         .getByRole("link", { name: "Verified game contract" })
         .getAttribute("href")
     ).toBe(ready.gameContractUrl);
+    expect(screen.getByTestId("crash-round-entry").textContent).toBe(
+      "entry:open:18"
+    );
   });
 
   it("renders finalized Crash Point and attestation verification links", () => {

@@ -3,6 +3,8 @@ pragma solidity 0.8.29;
 
 import {Test} from "forge-std/Test.sol";
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 import {BankrollVault} from "../src/BankrollVault.sol";
 import {DeskDollars} from "../src/DeskDollars.sol";
 import {DeployBankrollVault} from "../script/DeployBankrollVault.s.sol";
@@ -127,6 +129,17 @@ contract DeployBankrollVaultTest is Test {
         assertEq(vm.parseJsonUint(record, ".seedDepositorBalanceBefore"), 25_000_000_000);
         assertEq(vm.parseJsonUint(record, ".seedDepositorBalanceAfter"), 0);
         assertEq(vm.parseJsonString(record, ".vaultDepositSelector"), "0x6e553f65");
+        assertEq(
+            vm.parseJsonString(record, ".acceptEntrySelector"),
+            vm.toString(abi.encodePacked(BankrollVault.acceptEntry.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".setAuthorizedGameSelector"),
+            vm.toString(abi.encodePacked(BankrollVault.setAuthorizedGame.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".tUsdApproveSelector"), vm.toString(abi.encodePacked(IERC20.approve.selector))
+        );
         assertEq(
             vm.parseJsonString(record, ".verification.vault"),
             string.concat("https://sepolia.basescan.org/address/", vm.toString(deployment.vault), "#code")

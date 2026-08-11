@@ -44,6 +44,36 @@ export async function submitSponsoredCall(
   return confirmSponsoredCall(hash);
 }
 
+export type StageErrorCopy = {
+  failed: string;
+  unconfirmed: string;
+  /** Overrides `failed` when the transaction reverted onchain. */
+  reverted?: string;
+};
+
+/**
+ * Maps a sponsored-call outcome to the stage's error copy. Clears the pending
+ * stage on any definitive outcome; an unknown confirmation keeps it as the
+ * recovery handle for Retry — the caller must re-check that hash rather than
+ * resubmit, because the transaction may have mined.
+ */
+export function applyStageResult<Stage extends string>(
+  pendingStage: { current: { stage: Stage; hash: Hex } | null },
+  copy: StageErrorCopy,
+  result: SponsoredCallResult
+): void {
+  if (result.outcome === "confirmed") {
+    pendingStage.current = null;
+    return;
+  }
+  if (result.outcome === "confirmation-unknown")
+    throw new Error(copy.unconfirmed);
+  pendingStage.current = null;
+  if (result.outcome === "submission-failed")
+    throw new Error(result.message ?? copy.failed);
+  throw new Error(copy.reverted ?? copy.failed);
+}
+
 /** Resolves the receipt for an already-submitted sponsored call. */
 export async function confirmSponsoredCall(
   hash: Hex

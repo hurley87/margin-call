@@ -99,6 +99,26 @@ describe("MarginCallCrash public reads and phase math", () => {
     ).toBe(false);
   });
 
+  it("computes payout math and entry offer rules for the bounded UI", async () => {
+    const {
+      BOUNDED_ENTRY_ALLOWANCE_TUSD,
+      canOfferEntry,
+      computeMaximumPayout,
+      ENTRY_CUTOFF_SECONDS,
+      formatLeverageBps,
+    } = await import("./margin-call-crash");
+
+    expect(computeMaximumPayout(1_000_000n, 12_500n)).toBe(1_250_000n);
+    expect(computeMaximumPayout(10_000_000n, 100_000n)).toBe(100_000_000n);
+    expect(formatLeverageBps(12_500n)).toBe("1.25x");
+    expect(formatLeverageBps(100_000n)).toBe("10.00x");
+    expect(BOUNDED_ENTRY_ALLOWANCE_TUSD).toBe(1_000_000_000n);
+    expect(ENTRY_CUTOFF_SECONDS).toBe(5);
+    expect(canOfferEntry("open", 6)).toBe(true);
+    expect(canOfferEntry("open", 5)).toBe(false);
+    expect(canOfferEntry("uninitialized", 40)).toBe(false);
+  });
+
   it("requires valid public address and deployment-block configuration", async () => {
     vi.stubEnv("NEXT_PUBLIC_MARGIN_CALL_CRASH_ADDRESS", CONTRACT_ADDRESS);
     vi.stubEnv("NEXT_PUBLIC_MARGIN_CALL_CRASH_DEPLOYMENT_BLOCK", "45314000");
