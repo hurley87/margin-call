@@ -1,7 +1,9 @@
 import {
+  encodeFunctionData,
   getAbiItem,
   isAddress,
   parseAbi,
+  zeroAddress,
   zeroHash,
   type Address,
   type Hash,
@@ -81,6 +83,18 @@ const roundExpiredEvent = getAbiItem({
   abi: marginCallCrashAbi,
   name: "RoundExpired",
 });
+const ticketEnteredEvent = getAbiItem({
+  abi: marginCallCrashAbi,
+  name: "TicketEntered",
+});
+const ticketClaimedEvent = getAbiItem({
+  abi: marginCallCrashAbi,
+  name: "TicketClaimed",
+});
+const ticketRefundedEvent = getAbiItem({
+  abi: marginCallCrashAbi,
+  name: "TicketRefunded",
+});
 
 // A round can be initialized at most one 60-second epoch early. A 512-block
 // window provides ample Base Sepolia reorg/block-time margin without an
@@ -131,6 +145,40 @@ export type CrashRoundLifecycleUrls = {
   incoContractUrl: string;
 };
 
+/** Honest history labels — never invent a multiplier for delayed/expired. */
+export type RoundHistoryState = "open" | "delayed" | "finalized" | "expired";
+
+export type RoundHistoryItem = {
+  round: CrashRound;
+  phase: CrashRoundPhase;
+  historyState: RoundHistoryState;
+  displayCrashPoint: string | null;
+};
+
+export type RoundHistoryDetail = RoundHistoryItem &
+  CrashRoundLifecycleUrls & {
+    ticketEnteredTransactionUrls: string[];
+    ticketClaimedTransactionUrls: string[];
+    ticketRefundedTransactionUrls: string[];
+  };
+
+export type PlayerTicketHistoryItem = {
+  ticket: CrashTicket;
+  round: CrashRound;
+  phase: CrashRoundPhase;
+  outcome: TicketOutcome;
+  displayCrashPoint: string | null;
+  payout: bigint | null;
+  /** Which amount the row should display for this outcome. */
+  amountKind: "refund" | "payout" | "reserved";
+  displayAmount: bigint;
+  canClaim: boolean;
+  canSettle: boolean;
+  canVerify: boolean;
+  canExpire: boolean;
+  canRefund: boolean;
+};
+
 export const ROUND_STATUS = {
   uninitialized: 0,
   open: 1,
@@ -138,6 +186,9 @@ export const ROUND_STATUS = {
   finalized: 3,
   expired: 4,
 } as const satisfies Record<string, CrashRoundStatus>;
+
+/** How many prior epochs to surface in global history. */
+export const GLOBAL_HISTORY_LOOKBACK_ROUNDS = 20;
 
 type RoundLifecycleEvent =
   | typeof roundOpenedEvent
@@ -152,11 +203,10 @@ type LifecycleEventKey = "opening" | "reveal" | "finalize" | "expire";
 // A stored null marks an event that can no longer occur for the round (e.g. a
 // reveal never requested before expiry); absent keys are looked up again.
 const epochOriginCache = new Map<Address, bigint>();
-let lifecycleTransactionCache: {
-  address: Address;
-  roundId: bigint;
-  hashes: Partial<Record<LifecycleEventKey, Hash | null>>;
-} | null = null;
+const lifecycleTransactionCache = new Map<
+  string,
+  Partial<Record<LifecycleEventKey, Hash | null>>
+>();
 
 /** Public configuration only. Static env references allow Next.js client inlining. */
 export function getMarginCallCrashConfig(): MarginCallCrashConfig | null {
@@ -302,6 +352,82 @@ export function canOfferEntry(
   return phase === "open" && countdownSeconds > ENTRY_CUTOFF_SECONDS;
 }
 
+export type CrashCallRequest = { to: Address; data: Hex };
+
+export function revealRequest(to: Address, roundId: bigint): CrashCallRequest {
+  return {
+    to,
+    data: encodeFunctionData({
+      abi: marginCallCrashAbi,
+      functionName: "requestReveal",
+      args: [roundId],
+    }) as Hex,
+  };
+}
+
+export function finalizeRequest(
+  to: Address,
+  roundId: bigint,
+  plaintext: bigint,
+  signatures: readonly Hex[]
+): CrashCallRequest {
+  return {
+    to,
+    data: encodeFunctionData({
+      abi: marginCallCrashAbi,
+      functionName: "finalizeRound",
+      args: [roundId, plaintext, signatures],
+    }) as Hex,
+  };
+}
+
+export function claimRequest(to: Address, ticketId: bigint): CrashCallRequest {
+  return {
+    to,
+    data: encodeFunctionData({
+      abi: marginCallCrashAbi,
+      functionName: "claim",
+      args: [ticketId, zeroAddress],
+    }) as Hex,
+  };
+}
+
+export function settleLossRequest(
+  to: Address,
+  ticketId: bigint
+): CrashCallRequest {
+  return {
+    to,
+    data: encodeFunctionData({
+      abi: marginCallCrashAbi,
+      functionName: "settleLoss",
+      args: [ticketId],
+    }) as Hex,
+  };
+}
+
+export function expireRequest(to: Address, roundId: bigint): CrashCallRequest {
+  return {
+    to,
+    data: encodeFunctionData({
+      abi: marginCallCrashAbi,
+      functionName: "expireRound",
+      args: [roundId],
+    }) as Hex,
+  };
+}
+
+export function refundRequest(to: Address, ticketId: bigint): CrashCallRequest {
+  return {
+    to,
+    data: encodeFunctionData({
+      abi: marginCallCrashAbi,
+      functionName: "refund",
+      args: [ticketId, zeroAddress],
+    }) as Hex,
+  };
+}
+
 export async function readPlayerTicket(
   address: Address,
   roundId: bigint,
@@ -327,27 +453,32 @@ export async function readPlayerTicket(
 /** How many prior epochs to scan when recovering a returning player's ticket. */
 export const PLAYER_TICKET_LOOKBACK_ROUNDS = 20;
 
-/**
- * Finds the player's most recent unsettled ticket within the lookback window,
- * then their most recent settled ticket if none remain open. Lets a judge return
- * after the app advances past their entry round.
- */
-export async function readPlayerRecentTicket(
-  address: Address,
-  currentRoundId: bigint,
-  player: Address
-): Promise<{ ticket: CrashTicket; round: CrashRound } | null> {
+/** Round ids in the lookback window ending at `currentRoundId`, newest first. */
+function lookbackRoundIds(currentRoundId: bigint, lookback: number): bigint[] {
   const start =
-    currentRoundId > BigInt(PLAYER_TICKET_LOOKBACK_ROUNDS)
-      ? currentRoundId - BigInt(PLAYER_TICKET_LOOKBACK_ROUNDS)
-      : 0n;
+    currentRoundId > BigInt(lookback) ? currentRoundId - BigInt(lookback) : 0n;
   const roundIds: bigint[] = [];
   for (let roundId = currentRoundId; roundId >= start; roundId--) {
     roundIds.push(roundId);
   }
+  return roundIds;
+}
 
-  // Concurrent reads let the client's multicall batching collapse the scan
-  // into a couple of RPC requests instead of one round trip per round.
+/**
+ * Loads every ticket the player holds in the lookback window, newest first.
+ * Concurrent reads let the client's multicall batching collapse the scan
+ * into a couple of RPC requests instead of one round trip per round.
+ */
+async function scanPlayerTickets(
+  address: Address,
+  currentRoundId: bigint,
+  player: Address,
+  blockNumber?: bigint
+): Promise<Array<{ ticket: CrashTicket; round: CrashRound }>> {
+  const roundIds = lookbackRoundIds(
+    currentRoundId,
+    PLAYER_TICKET_LOOKBACK_ROUNDS
+  );
   const ticketIds = await Promise.all(
     roundIds.map((roundId) =>
       baseSepoliaPublicClient.readContract({
@@ -355,10 +486,11 @@ export async function readPlayerRecentTicket(
         abi: marginCallCrashAbi,
         functionName: "getTicketId",
         args: [roundId, player],
+        blockNumber,
       })
     )
   );
-  const found = await Promise.all(
+  return Promise.all(
     roundIds.flatMap((roundId, index) => {
       const ticketId = ticketIds[index];
       if (ticketId === 0n) return [];
@@ -369,12 +501,14 @@ export async function readPlayerRecentTicket(
             abi: marginCallCrashAbi,
             functionName: "getTicket",
             args: [ticketId],
+            blockNumber,
           }),
           baseSepoliaPublicClient.readContract({
             address,
             abi: marginCallCrashAbi,
             functionName: "getRound",
             args: [roundId],
+            blockNumber,
           }),
         ]).then(([ticket, round]) => ({
           ticket,
@@ -383,9 +517,203 @@ export async function readPlayerRecentTicket(
       ];
     })
   );
+}
 
-  // roundIds are descending, so the first match is the most recent.
+/**
+ * Finds the player's most recent unsettled ticket within the lookback window,
+ * then their most recent settled ticket if none remain open. Lets a judge return
+ * after the app advances past their entry round.
+ */
+export async function readPlayerRecentTicket(
+  address: Address,
+  currentRoundId: bigint,
+  player: Address
+): Promise<{ ticket: CrashTicket; round: CrashRound } | null> {
+  const found = await scanPlayerTickets(address, currentRoundId, player);
+  // Tickets are newest first, so the first match is the most recent.
   return found.find(({ ticket }) => !ticket.settled) ?? found[0] ?? null;
+}
+
+/**
+ * Returns every ticket the player holds within the lookback window, newest
+ * first, with claim/refund/verify flags derived from receipt-backed state.
+ */
+export async function readPlayerTicketHistory(
+  config: MarginCallCrashConfig,
+  player: Address
+): Promise<PlayerTicketHistoryItem[]> {
+  const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
+  const currentRoundId = await baseSepoliaPublicClient.readContract({
+    address: config.address,
+    abi: marginCallCrashAbi,
+    functionName: "currentRoundId",
+    blockNumber: block.number,
+  });
+  const found = await scanPlayerTickets(
+    config.address,
+    currentRoundId,
+    player,
+    block.number
+  );
+  return found.map(({ ticket, round }) =>
+    toPlayerTicketHistoryItem(ticket, round, block.timestamp)
+  );
+}
+
+/** Loads initialized rounds in the global lookback, newest first. */
+export async function readRecentRoundHistory(
+  config: MarginCallCrashConfig
+): Promise<RoundHistoryItem[]> {
+  const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
+  const currentRoundId = await baseSepoliaPublicClient.readContract({
+    address: config.address,
+    abi: marginCallCrashAbi,
+    functionName: "currentRoundId",
+    blockNumber: block.number,
+  });
+  const roundIds = lookbackRoundIds(
+    currentRoundId,
+    GLOBAL_HISTORY_LOOKBACK_ROUNDS
+  );
+
+  const rounds = await Promise.all(
+    roundIds.map((roundId) =>
+      baseSepoliaPublicClient
+        .readContract({
+          address: config.address,
+          abi: marginCallCrashAbi,
+          functionName: "getRound",
+          args: [roundId],
+          blockNumber: block.number,
+        })
+        .then((round) => ({
+          ...round,
+          status: normalizeRoundStatus(round.status),
+        }))
+    )
+  );
+
+  return rounds
+    .filter((round) => isRoundInitialized(round))
+    .map((round) => toRoundHistoryItem(round, block.timestamp));
+}
+
+/**
+ * Full verification record for one round: aggregates, handle, attestation,
+ * lifecycle and settlement transaction BaseScan links.
+ */
+export async function readRoundHistoryDetail(
+  config: MarginCallCrashConfig,
+  roundId: bigint
+): Promise<RoundHistoryDetail | null> {
+  const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
+  const round = await baseSepoliaPublicClient.readContract({
+    address: config.address,
+    abi: marginCallCrashAbi,
+    functionName: "getRound",
+    args: [roundId],
+    blockNumber: block.number,
+  });
+  const normalized: CrashRound = {
+    ...round,
+    status: normalizeRoundStatus(round.status),
+  };
+  if (!isRoundInitialized(normalized)) return null;
+
+  const [lifecycleUrls, settlementUrls] = await Promise.all([
+    readLifecycleUrls(config, roundId, normalized, block.number, {
+      fromDeployment: true,
+    }),
+    readSettlementTransactionUrls(config, roundId, block.number),
+  ]);
+
+  return {
+    ...toRoundHistoryItem(normalized, block.timestamp),
+    ...lifecycleUrls,
+    ...settlementUrls,
+  };
+}
+
+function toRoundHistoryItem(
+  round: CrashRound,
+  chainTimestamp: bigint
+): RoundHistoryItem {
+  const phase = deriveRoundPhase(round, chainTimestamp);
+  const historyState = deriveHistoryState(phase);
+  const published = isCrashPointPublished(round);
+  return {
+    round,
+    phase,
+    historyState,
+    displayCrashPoint: published
+      ? formatCrashPointBps(round.crashPointBps)
+      : null,
+  };
+}
+
+function deriveHistoryState(phase: CrashRoundPhase): RoundHistoryState {
+  switch (phase) {
+    case "finalized":
+      return "finalized";
+    case "expired":
+      return "expired";
+    case "open":
+    case "prelaunch":
+    case "uninitialized":
+      return "open";
+    case "locked":
+    case "reveal-requested":
+    case "expired-eligible":
+      return "delayed";
+    default: {
+      const _exhaustive: never = phase;
+      return _exhaustive;
+    }
+  }
+}
+
+function toPlayerTicketHistoryItem(
+  ticket: CrashTicket,
+  round: CrashRound,
+  chainTimestamp: bigint
+): PlayerTicketHistoryItem {
+  const phase = deriveRoundPhase(round, chainTimestamp);
+  const outcome = deriveTicketOutcome(ticket, round);
+  const published = isCrashPointPublished(round);
+  const payout = published
+    ? computeTicketPayout(
+        ticket.margin,
+        ticket.leverageBps,
+        round.crashPointBps
+      )
+    : null;
+  const amountKind =
+    outcome === "refundable" || outcome === "refunded"
+      ? "refund"
+      : outcome === "won" || outcome === "settled-win"
+        ? "payout"
+        : "reserved";
+  return {
+    ticket,
+    round,
+    phase,
+    outcome,
+    displayCrashPoint: published
+      ? formatCrashPointBps(round.crashPointBps)
+      : null,
+    payout,
+    amountKind,
+    displayAmount:
+      amountKind === "refund"
+        ? ticket.margin
+        : (payout ?? ticket.reservedPayout),
+    canClaim: outcome === "won",
+    canSettle: outcome === "lost",
+    canVerify:
+      !ticket.settled && (phase === "locked" || phase === "reveal-requested"),
+    canExpire: !ticket.settled && phase === "expired-eligible",
+    canRefund: outcome === "refundable",
+  };
 }
 
 export function isRoundInitialized(round: CrashRound) {
@@ -517,13 +845,17 @@ async function readLifecycleUrls(
   config: MarginCallCrashConfig,
   roundId: bigint,
   round: CrashRound,
-  toBlock: bigint
+  toBlock: bigint,
+  options: { fromDeployment?: boolean } = {}
 ): Promise<CrashRoundLifecycleUrls> {
   const urls = emptyLifecycleUrls(config.address);
   if (!isRoundInitialized(round)) return urls;
 
-  const cached = getCachedLifecycle(config.address, roundId)?.hashes ?? {};
-  const fromBlock = getEventFromBlock(config.deploymentBlock, toBlock);
+  const cacheKey = lifecycleCacheKey(config.address, roundId);
+  const cached = lifecycleTransactionCache.get(cacheKey) ?? {};
+  const fromBlock = options.fromDeployment
+    ? config.deploymentBlock
+    : getEventFromBlock(config.deploymentBlock, toBlock);
   const revealPossible =
     round.status === ROUND_STATUS.revealRequested ||
     round.status === ROUND_STATUS.finalized ||
@@ -556,24 +888,25 @@ async function readLifecycleUrls(
     },
   ];
 
-  const hashes: Partial<Record<LifecycleEventKey, Hash | null>> = {};
+  const hashes: Partial<Record<LifecycleEventKey, Hash | null>> = { ...cached };
   await Promise.all(
     lookups.map(async ({ key, event, lookup, required }) => {
       if (!lookup) return;
-      hashes[key] =
-        cached[key] !== undefined
-          ? cached[key]
-          : await readExactRoundEventHash({
-              config,
-              roundId,
-              event,
-              fromBlock,
-              toBlock,
-              required,
-            });
+      if (cached[key] !== undefined) {
+        hashes[key] = cached[key];
+        return;
+      }
+      hashes[key] = await readExactRoundEventHash({
+        config,
+        roundId,
+        event,
+        fromBlock,
+        toBlock,
+        required,
+      });
     })
   );
-  lifecycleTransactionCache = { address: config.address, roundId, hashes };
+  lifecycleTransactionCache.set(cacheKey, hashes);
 
   return {
     ...urls,
@@ -582,6 +915,63 @@ async function readLifecycleUrls(
     finalizeTransactionUrl: toTransactionUrl(hashes.finalize),
     expireTransactionUrl: toTransactionUrl(hashes.expire),
   };
+}
+
+async function readSettlementTransactionUrls(
+  config: MarginCallCrashConfig,
+  roundId: bigint,
+  toBlock: bigint
+): Promise<{
+  ticketEnteredTransactionUrls: string[];
+  ticketClaimedTransactionUrls: string[];
+  ticketRefundedTransactionUrls: string[];
+}> {
+  const fromBlock = config.deploymentBlock;
+  const [entered, claimed, refunded] = await Promise.all([
+    baseSepoliaPublicClient.getLogs({
+      address: config.address,
+      event: ticketEnteredEvent,
+      args: { roundId },
+      fromBlock,
+      toBlock,
+      strict: true,
+    }),
+    baseSepoliaPublicClient.getLogs({
+      address: config.address,
+      event: ticketClaimedEvent,
+      args: { roundId },
+      fromBlock,
+      toBlock,
+      strict: true,
+    }),
+    baseSepoliaPublicClient.getLogs({
+      address: config.address,
+      event: ticketRefundedEvent,
+      args: { roundId },
+      fromBlock,
+      toBlock,
+      strict: true,
+    }),
+  ]);
+
+  return {
+    ticketEnteredTransactionUrls: uniqueTransactionUrls(entered),
+    ticketClaimedTransactionUrls: uniqueTransactionUrls(claimed),
+    ticketRefundedTransactionUrls: uniqueTransactionUrls(refunded),
+  };
+}
+
+function uniqueTransactionUrls(
+  logs: ReadonlyArray<{ transactionHash: Hash | null }>
+): string[] {
+  const urls: string[] = [];
+  const seen = new Set<string>();
+  for (const log of logs) {
+    if (!log.transactionHash || seen.has(log.transactionHash)) continue;
+    seen.add(log.transactionHash);
+    urls.push(getBaseSepoliaTransactionUrl(log.transactionHash));
+  }
+  return urls;
 }
 
 function toTransactionUrl(hash: Hash | null | undefined): string | null {
@@ -626,14 +1016,8 @@ async function readExactRoundEventHash({
   return logs[0].transactionHash;
 }
 
-function getCachedLifecycle(address: Address, roundId: bigint) {
-  if (
-    lifecycleTransactionCache?.address === address &&
-    lifecycleTransactionCache.roundId === roundId
-  ) {
-    return lifecycleTransactionCache;
-  }
-  return null;
+function lifecycleCacheKey(address: Address, roundId: bigint) {
+  return `${address.toLowerCase()}:${roundId.toString()}`;
 }
 
 function getEventFromBlock(deploymentBlock: bigint, toBlock: bigint): bigint {

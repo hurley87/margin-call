@@ -1,16 +1,13 @@
 "use client";
 
 import { useCallback } from "react";
-import { encodeFunctionData, zeroAddress, type Address, type Hex } from "viem";
-import { requestCrashAttestation } from "@/lib/inco-attestation";
+import { runVerifyAndSettleFlow } from "@/lib/crash-settlement-flow";
 import {
-  computeCrashPointBps,
+  claimRequest,
   computeTicketPayout,
-  deriveTicketOutcome,
   formatCrashPointBps,
   isCrashPointPublished,
-  marginCallCrashAbi,
-  ROUND_STATUS,
+  settleLossRequest,
 } from "@/lib/margin-call-crash";
 import { type StageErrorCopy } from "@/lib/sponsored-call";
 import {
@@ -138,55 +135,22 @@ export function useCrashTicketSettlement() {
     const ticket = state.ticket;
     const startingRound = state.round;
     retryKindRef.current = "verify";
-    return runFlow(stageCopy.finalize.failed, async () => {
-      let round = startingRound;
-      // Locked rounds still store Open until reveal is requested.
-      if (round.status === ROUND_STATUS.open) {
-        await runStage("reveal", {
-          to: gameConfig.address,
-          data: encodeFunctionData({
-            abi: marginCallCrashAbi,
-            functionName: "requestReveal",
-            args: [round.id],
-          }) as Hex,
-        });
-        round = { ...round, status: ROUND_STATUS.revealRequested };
-        setState((current) => ({ ...current, round }));
-      }
-
-      if (round.status === ROUND_STATUS.revealRequested) {
-        setState((current) => ({
-          ...current,
-          status: "attesting",
-          error: null,
-        }));
-        const attestation = await requestCrashAttestation(round.crashRandom);
-        await runStage("finalize", {
-          to: gameConfig.address,
-          data: encodeFunctionData({
-            abi: marginCallCrashAbi,
-            functionName: "finalizeRound",
-            args: [round.id, attestation.plaintext, attestation.signatures],
-          }) as Hex,
-        });
-        round = {
-          ...round,
-          status: ROUND_STATUS.finalized,
-          crashPointBps: computeCrashPointBps(attestation.plaintext),
-        };
-        setState((current) => ({ ...current, round }));
-      }
-
-      const outcome = deriveTicketOutcome(ticket, round);
-      if (outcome === "won") {
-        await runStage("claim", claimRequest(gameConfig.address, ticket.id));
-      } else if (outcome === "lost") {
-        await runStage(
-          "settle",
-          settleLossRequest(gameConfig.address, ticket.id)
-        );
-      }
-    });
+    return runFlow(stageCopy.finalize.failed, () =>
+      runVerifyAndSettleFlow({
+        contractAddress: gameConfig.address,
+        ticket,
+        round: startingRound,
+        runStage,
+        onAttesting: () =>
+          setState((current) => ({
+            ...current,
+            status: "attesting",
+            error: null,
+          })),
+        onRoundChange: (round) =>
+          setState((current) => ({ ...current, round })),
+      })
+    );
   }, [
     gameConfig,
     inFlightRef,
@@ -259,27 +223,5 @@ export function useCrashTicketSettlement() {
     settleLoss,
     retry,
     refresh,
-  };
-}
-
-function claimRequest(to: Address, ticketId: bigint) {
-  return {
-    to,
-    data: encodeFunctionData({
-      abi: marginCallCrashAbi,
-      functionName: "claim",
-      args: [ticketId, zeroAddress],
-    }) as Hex,
-  };
-}
-
-function settleLossRequest(to: Address, ticketId: bigint) {
-  return {
-    to,
-    data: encodeFunctionData({
-      abi: marginCallCrashAbi,
-      functionName: "settleLoss",
-      args: [ticketId],
-    }) as Hex,
   };
 }

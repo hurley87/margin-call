@@ -490,6 +490,269 @@ describe("MarginCallCrash public reads and phase math", () => {
       })
     ).rejects.toThrow("Expected one RoundFinalized event for round 3, found 2");
   });
+
+  it("reads global history with honest crash points for delayed and expired rounds", async () => {
+    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 2_000n });
+    sdk.readContract.mockImplementation(({ functionName, args }) => {
+      if (functionName === "currentRoundId") return Promise.resolve(5n);
+      if (functionName === "getRound") {
+        const roundId = args?.[0] as bigint;
+        if (roundId === 5n) {
+          return Promise.resolve(
+            makeRound({
+              id: 5n,
+              status: 2,
+              lockAt: 1_000n,
+              expiresAt: 5_000n,
+              crashPointBps: 0n,
+            })
+          );
+        }
+        if (roundId === 4n) {
+          return Promise.resolve(
+            makeRound({ id: 4n, status: 4, crashPointBps: 0n })
+          );
+        }
+        if (roundId === 3n) {
+          return Promise.resolve(
+            makeRound({ id: 3n, status: 3, crashPointBps: 34_200n })
+          );
+        }
+        if (roundId === 2n) {
+          return Promise.resolve(makeRound({ id: 2n, status: 0 }));
+        }
+        if (roundId === 1n) {
+          return Promise.resolve(
+            makeRound({ id: 1n, status: 3, crashPointBps: 12_500n })
+          );
+        }
+        return Promise.resolve(makeRound({ id: roundId, status: 0 }));
+      }
+      return Promise.reject(new Error(`unexpected ${functionName}`));
+    });
+    const { GLOBAL_HISTORY_LOOKBACK_ROUNDS, readRecentRoundHistory } =
+      await import("./margin-call-crash");
+
+    expect(GLOBAL_HISTORY_LOOKBACK_ROUNDS).toBe(20);
+    const history = await readRecentRoundHistory({
+      address: CONTRACT_ADDRESS,
+      deploymentBlock: 50n,
+    });
+
+    expect(history.map((item) => item.round.id)).toEqual([5n, 4n, 3n, 1n]);
+    expect(history[0]).toMatchObject({
+      historyState: "delayed",
+      displayCrashPoint: null,
+      phase: "reveal-requested",
+    });
+    expect(history[1]).toMatchObject({
+      historyState: "expired",
+      displayCrashPoint: null,
+    });
+    expect(history[2]).toMatchObject({
+      historyState: "finalized",
+      displayCrashPoint: "3.42x",
+    });
+    expect(history[3]).toMatchObject({
+      historyState: "finalized",
+      displayCrashPoint: "1.25x",
+    });
+  });
+
+  it("loads round verification detail with lifecycle and settlement BaseScan links", async () => {
+    const CLAIM_HASH =
+      "0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee";
+    const ENTER_HASH =
+      "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff";
+    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 2_000n });
+    sdk.readContract.mockResolvedValue(
+      makeRound({
+        id: 3n,
+        status: 3,
+        crashPointBps: 34_200n,
+        totalMargin: 5_000_000n,
+        reservedPayout: 6_250_000n,
+      })
+    );
+    sdk.getLogs.mockImplementation(({ event }) => {
+      if (event.name === "RoundOpened") {
+        return Promise.resolve([{ transactionHash: OPENING_TRANSACTION_HASH }]);
+      }
+      if (event.name === "RevealRequested") {
+        return Promise.resolve([{ transactionHash: REVEAL_TRANSACTION_HASH }]);
+      }
+      if (event.name === "RoundFinalized") {
+        return Promise.resolve([
+          { transactionHash: FINALIZE_TRANSACTION_HASH },
+        ]);
+      }
+      if (event.name === "TicketEntered") {
+        return Promise.resolve([{ transactionHash: ENTER_HASH }]);
+      }
+      if (event.name === "TicketClaimed") {
+        return Promise.resolve([{ transactionHash: CLAIM_HASH }]);
+      }
+      if (event.name === "TicketRefunded") {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([]);
+    });
+    const { readRoundHistoryDetail } = await import("./margin-call-crash");
+
+    await expect(
+      readRoundHistoryDetail(
+        { address: CONTRACT_ADDRESS, deploymentBlock: 50n },
+        3n
+      )
+    ).resolves.toMatchObject({
+      historyState: "finalized",
+      displayCrashPoint: "3.42x",
+      round: {
+        id: 3n,
+        totalMargin: 5_000_000n,
+        reservedPayout: 6_250_000n,
+        crashRandom: RANDOM_HANDLE,
+        crashPointBps: 34_200n,
+      },
+      openingTransactionUrl: `https://sepolia.basescan.org/tx/${OPENING_TRANSACTION_HASH}`,
+      revealTransactionUrl: `https://sepolia.basescan.org/tx/${REVEAL_TRANSACTION_HASH}`,
+      finalizeTransactionUrl: `https://sepolia.basescan.org/tx/${FINALIZE_TRANSACTION_HASH}`,
+      ticketEnteredTransactionUrls: [
+        `https://sepolia.basescan.org/tx/${ENTER_HASH}`,
+      ],
+      ticketClaimedTransactionUrls: [
+        `https://sepolia.basescan.org/tx/${CLAIM_HASH}`,
+      ],
+      ticketRefundedTransactionUrls: [],
+    });
+    expect(sdk.getLogs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromBlock: 50n,
+        toBlock: 100n,
+        args: { roundId: 3n },
+      })
+    );
+  });
+
+  it("reads every player ticket in the lookback with actionable settlement state", async () => {
+    const player = "0x00000000000000000000000000000000000000aa" as const;
+    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 2_000n });
+    sdk.readContract.mockImplementation(({ functionName, args }) => {
+      if (functionName === "currentRoundId") return Promise.resolve(4n);
+      if (functionName === "getTicketId") {
+        const roundId = args?.[0] as bigint;
+        if (roundId === 4n) return Promise.resolve(40n);
+        if (roundId === 3n) return Promise.resolve(30n);
+        if (roundId === 2n) return Promise.resolve(0n);
+        if (roundId === 1n) return Promise.resolve(10n);
+        return Promise.resolve(0n);
+      }
+      if (functionName === "getTicket") {
+        const ticketId = args?.[0] as bigint;
+        if (ticketId === 40n) {
+          return Promise.resolve({
+            id: 40n,
+            player,
+            roundId: 4n,
+            margin: 1_000_000n,
+            leverageBps: 12_500n,
+            reservedPayout: 1_250_000n,
+            settled: false,
+            claimed: false,
+          });
+        }
+        if (ticketId === 30n) {
+          return Promise.resolve({
+            id: 30n,
+            player,
+            roundId: 3n,
+            margin: 5_000_000n,
+            leverageBps: 20_000n,
+            reservedPayout: 10_000_000n,
+            settled: false,
+            claimed: false,
+          });
+        }
+        if (ticketId === 10n) {
+          return Promise.resolve({
+            id: 10n,
+            player,
+            roundId: 1n,
+            margin: 1_000_000n,
+            leverageBps: 12_500n,
+            reservedPayout: 1_250_000n,
+            settled: true,
+            claimed: true,
+          });
+        }
+        return Promise.reject(new Error(`unexpected ticket ${ticketId}`));
+      }
+      if (functionName === "getRound") {
+        const roundId = args?.[0] as bigint;
+        if (roundId === 4n) {
+          return Promise.resolve(
+            makeRound({ id: 4n, status: 4, crashPointBps: 0n })
+          );
+        }
+        if (roundId === 3n) {
+          return Promise.resolve(
+            makeRound({ id: 3n, status: 3, crashPointBps: 34_200n })
+          );
+        }
+        if (roundId === 1n) {
+          return Promise.resolve(
+            makeRound({ id: 1n, status: 3, crashPointBps: 12_500n })
+          );
+        }
+        return Promise.resolve(makeRound({ id: roundId, status: 0 }));
+      }
+      return Promise.reject(new Error(`unexpected ${functionName}`));
+    });
+    const { readPlayerTicketHistory } = await import("./margin-call-crash");
+
+    const history = await readPlayerTicketHistory(
+      { address: CONTRACT_ADDRESS, deploymentBlock: 50n },
+      player
+    );
+
+    expect(history).toHaveLength(3);
+    expect(history[0]).toMatchObject({
+      ticket: { id: 40n },
+      outcome: "refundable",
+      displayCrashPoint: null,
+      payout: null,
+      amountKind: "refund",
+      displayAmount: 1_000_000n,
+      canRefund: true,
+      canClaim: false,
+      canVerify: false,
+      canExpire: false,
+    });
+    expect(history[1]).toMatchObject({
+      ticket: { id: 30n },
+      outcome: "won",
+      displayCrashPoint: "3.42x",
+      payout: 10_000_000n,
+      amountKind: "payout",
+      displayAmount: 10_000_000n,
+      canClaim: true,
+      canSettle: false,
+      canVerify: false,
+      canRefund: false,
+      canExpire: false,
+    });
+    expect(history[2]).toMatchObject({
+      ticket: { id: 10n },
+      outcome: "settled-win",
+      displayCrashPoint: "1.25x",
+      payout: 1_250_000n,
+      amountKind: "payout",
+      displayAmount: 1_250_000n,
+      canClaim: false,
+      canRefund: false,
+      canExpire: false,
+    });
+  });
 });
 
 function makeRound(overrides: Partial<CrashRound> = {}): CrashRound {

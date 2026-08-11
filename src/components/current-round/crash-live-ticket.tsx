@@ -29,7 +29,7 @@ type CrashLiveTicketProps = {
   onRetry?: () => void;
 };
 
-const outcomeCopy: Record<TicketOutcome, string> = {
+export const ticketOutcomeCopy: Record<TicketOutcome, string> = {
   pending: "Awaiting verified Crash Point",
   won: "Won — claim your payout",
   lost: "Lost — settle the ticket",
@@ -127,7 +127,9 @@ export function CrashLiveTicket({
         {outcome ? (
           <div className="sm:col-span-2">
             <dt className="text-[var(--t-muted)]">Outcome</dt>
-            <dd className="text-[var(--t-text)]">{outcomeCopy[outcome]}</dd>
+            <dd className="text-[var(--t-text)]">
+              {ticketOutcomeCopy[outcome]}
+            </dd>
           </div>
         ) : null}
       </dl>
