@@ -18,6 +18,7 @@ contract Utils is Script {
     // Each deploy script writes its own run record so one workflow's output
     // never clobbers another's before it is merged into the curated record.
     string constant OUTPUT_BASE_SEPOLIA_VAULT_RUN = "base_sepolia.bankroll_vault.run";
+    string constant OUTPUT_BASE_SEPOLIA_CRASH_RUN = "base_sepolia.margin_call_crash.run";
     string constant OUTPUT_UNKNOWN = "unknown";
 
     function _requireBaseSepolia() internal view {
