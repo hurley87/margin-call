@@ -20,11 +20,7 @@ contract IncoSettlementVerifierMock {
         validAttestation = validAttestation_;
     }
 
-    function isValidDecryptionAttestation(DecryptionAttestation memory, bytes[] calldata)
-        external
-        view
-        returns (bool)
-    {
+    function isValidDecryptionAttestation(DecryptionAttestation memory, bytes[] calldata) external view returns (bool) {
         return validAttestation;
     }
 }
@@ -60,11 +56,7 @@ contract SettlementTest is Test {
     address internal constant RECEIVER = address(0x6EC);
 
     event TicketClaimed(
-        uint256 indexed roundId,
-        uint256 indexed ticketId,
-        address indexed player,
-        address receiver,
-        uint256 payout
+        uint256 indexed roundId, uint256 indexed ticketId, address indexed player, address receiver, uint256 payout
     );
     event TicketLossSettled(uint256 indexed roundId, uint256 indexed ticketId, address indexed player);
     event LiabilityReleased(
@@ -318,8 +310,7 @@ contract SettlementTest is Test {
     function testClaimTransferFailureRollsBackAndStaysRetryable() public {
         RejectingDeskDollars rejecting = new RejectingDeskDollars(LP);
         BankrollVault rejectingVault = new BankrollVault(rejecting);
-        MarginCallCrash rejectingGame =
-            new MarginCallCrash(EPOCH_ORIGIN, IBankrollVault(address(rejectingVault)));
+        MarginCallCrash rejectingGame = new MarginCallCrash(EPOCH_ORIGIN, IBankrollVault(address(rejectingVault)));
         rejectingVault.setAuthorizedGame(address(rejectingGame));
 
         vm.startPrank(LP);
