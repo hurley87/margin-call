@@ -159,6 +159,30 @@ describe("MarginCallCrash public reads and phase math", () => {
     expect(sdk.getLogs).not.toHaveBeenCalled();
   });
 
+  it("bounds opening-event lookup to recent blocks on aged deployments", async () => {
+    sdk.getBlock.mockResolvedValue({ number: 1_000n, timestamp: 1_020n });
+    sdk.readContract
+      .mockResolvedValueOnce(900n)
+      .mockResolvedValueOnce(3n)
+      .mockResolvedValueOnce(makeRound());
+    sdk.getLogs.mockResolvedValue([
+      { transactionHash: OPENING_TRANSACTION_HASH },
+    ]);
+    const { readCurrentCrashRound } = await import("./margin-call-crash");
+
+    await readCurrentCrashRound({
+      address: CONTRACT_ADDRESS,
+      deploymentBlock: 50n,
+    });
+
+    expect(sdk.getLogs).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fromBlock: 488n,
+        toBlock: 1_000n,
+      })
+    );
+  });
+
   it("represents a configured future epoch without calling the reverting current-round view", async () => {
     sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 1_020n });
     sdk.readContract

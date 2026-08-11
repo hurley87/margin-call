@@ -11,7 +11,8 @@ contract IncoRandomMock {
     uint256 public fee;
     bytes32 public randomHandle;
     bool public shouldRevertRandom;
-    mapping(bytes32 handle => mapping(address account => bool isAllowed)) internal _allowances;
+    mapping(bytes32 handle => mapping(address account => bool isAllowed)) internal _transientAllowances;
+    mapping(bytes32 handle => mapping(address account => bool isAllowed)) internal _persistentAllowances;
 
     function configure(uint256 fee_, bytes32 randomHandle_) external {
         fee = fee_;
@@ -35,12 +36,23 @@ contract IncoRandomMock {
         require(msg.value == fee, "wrong fee");
         require(upperBound == bytes32(uint256(10_000)), "wrong bound");
         require(randomType == ETypes.Uint256, "wrong type");
-        _allowances[randomHandle][msg.sender] = true;
+        _transientAllowances[randomHandle][msg.sender] = true;
         return randomHandle;
     }
 
+    function allow(bytes32 handle, address account) external {
+        require(
+            _transientAllowances[handle][msg.sender] || _persistentAllowances[handle][msg.sender], "sender not allowed"
+        );
+        _persistentAllowances[handle][account] = true;
+    }
+
+    function persistAllowed(bytes32 handle, address account) external view returns (bool) {
+        return _persistentAllowances[handle][account];
+    }
+
     function isAllowed(bytes32 handle, address account) external view returns (bool) {
-        return _allowances[handle][account];
+        return _transientAllowances[handle][account] || _persistentAllowances[handle][account];
     }
 }
 
@@ -313,6 +325,7 @@ contract MarginCallCrashTest is Test {
         vm.prank(opener);
         game.openRound{value: INCO_FEE}(0);
 
+        assertTrue(incoMock.persistAllowed(RANDOM_HANDLE, address(game)));
         assertTrue(incoMock.isAllowed(RANDOM_HANDLE, address(game)));
         assertFalse(incoMock.isAllowed(RANDOM_HANDLE, opener));
         assertFalse(incoMock.isAllowed(RANDOM_HANDLE, address(this)));

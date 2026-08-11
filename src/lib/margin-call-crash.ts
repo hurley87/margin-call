@@ -24,6 +24,10 @@ const roundOpenedEvent = getAbiItem({
   abi: marginCallCrashAbi,
   name: "RoundOpened",
 });
+// A round can be initialized at most one 60-second epoch early. A 512-block
+// window provides ample Base Sepolia reorg/block-time margin without an
+// ever-growing deployment-to-latest scan on every client poll.
+const ROUND_OPENED_LOOKBACK_BLOCKS = 512n;
 
 export type MarginCallCrashConfig = {
   address: Address;
@@ -211,7 +215,7 @@ async function readOpeningTransactionHash(
     address: config.address,
     event: roundOpenedEvent,
     args: { roundId },
-    fromBlock: config.deploymentBlock,
+    fromBlock: getOpeningEventFromBlock(config.deploymentBlock, toBlock),
     toBlock,
     strict: true,
   });
@@ -219,6 +223,17 @@ async function readOpeningTransactionHash(
     throw new Error(`Expected one RoundOpened event for round ${roundId}`);
   }
   return logs[0].transactionHash;
+}
+
+function getOpeningEventFromBlock(
+  deploymentBlock: bigint,
+  toBlock: bigint
+): bigint {
+  const recentFromBlock =
+    toBlock > ROUND_OPENED_LOOKBACK_BLOCKS
+      ? toBlock - ROUND_OPENED_LOOKBACK_BLOCKS
+      : 0n;
+  return deploymentBlock > recentFromBlock ? deploymentBlock : recentFromBlock;
 }
 
 function normalizeRoundStatus(status: number): CrashRoundStatus {

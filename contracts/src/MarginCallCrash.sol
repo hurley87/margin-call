@@ -97,6 +97,9 @@ contract MarginCallCrash is ReentrancyGuard {
         euint256 upperBound = inco.asEuint256(CRASH_RANDOM_UPPER_BOUND);
         bytes32 crashRandom = inco.eRandBounded{value: fee}(euint256.unwrap(upperBound), ETypes.Uint256);
         if (crashRandom == bytes32(0)) revert InvalidIncoHandle();
+        // Inco operation results grant only transaction-scoped access. Persist this
+        // contract's permission so a later reveal transaction can use the handle.
+        inco.allow(crashRandom, address(this));
 
         _rounds[roundId] = Round({
             id: roundId,
