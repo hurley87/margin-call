@@ -108,12 +108,26 @@ Finalized rounds cannot expire. Expired rounds cannot finalize. A round past `ex
 The Game Jam deployment uses immutable constructor values:
 
 ```text
+epochOrigin = deployment-configured Unix timestamp
 roundDuration = 60 seconds
 entryWindow = 45 seconds
 expiryDelay = 15 minutes after lockAt
 ```
 
-Round timing derives from the fixed epoch grid. A round is created in one of two equivalent ways: permissionless `openRound(roundId)` initializes an explicitly named epoch — validated to be the current or next epoch on the grid, anything else reverts — or the epoch's first `enter` creates the round inline. Both creation paths require the caller to supply the Inco fee (`msg.value >= inco.getFee()`), consume exactly the fee, refund any excess in the same transaction, and store exactly one encrypted randomness handle before any ticket is accepted. `openRound` rejects an already-initialized epoch. `enter` is race-tolerant instead: if the epoch was concurrently initialized between a player's simulation and inclusion — by a keeper pre-open or a competing first entry — it refunds the entire `msg.value` and proceeds with the entry, so losing the creation race never costs a player the 45-second window. The game contract sponsors no fees: fee accounting uses only the current call's `msg.value`, never pre-existing contract balance, and successful flows retain no caller-supplied ETH. ETH forced in from outside (for example via `SELFDESTRUCT`) is inert — it can neither fund a round nor change any refund. Permissionless pre-opening therefore cannot drain operator funding: whoever materializes a round — keeper, player, or stranger — pays its randomness fee. An untouched epoch — no pre-open and no entry — creates no round state; a pre-opened round that never receives a ticket carries no vault exposure, requires no maintenance, and may be expired purely for hygiene. Timing checks use `block.timestamp`.
+Round ids are zero-based relative to `epochOrigin`. Calls before that origin revert. At or after the origin, timing is derived without mutable scheduling state:
+
+```text
+currentRoundId = floor((block.timestamp - epochOrigin) / roundDuration)
+openAt(roundId) = epochOrigin + roundId × roundDuration
+lockAt(roundId) = openAt(roundId) + entryWindow
+expiresAt(roundId) = lockAt(roundId) + expiryDelay
+```
+
+At any timestamp only `currentRoundId` and `currentRoundId + 1` may be initialized; past or farther-future ids revert. Entry is open strictly while `block.timestamp < lockAt`. Interface phase is derived from these contract timestamps and is distinct from stored lifecycle status: for example, a round may retain stored status `Open` after `lockAt` until a later transition while the interface correctly displays that entry is locked.
+
+A round is created in one of two equivalent ways: permissionless `openRound(roundId)` initializes an explicitly named valid epoch, or the epoch's first `enter` creates the round inline. Both creation paths require the caller to supply the Inco fee (`msg.value >= inco.getFee()`), consume exactly the fee, refund any excess in the same transaction, and store exactly one encrypted randomness handle before any ticket is accepted. The encrypted handle is public ciphertext and remains inspectable onchain; confidentiality means that no player, opener, operator, or administrator receives permission to decrypt its plaintext while entry is open. Solidity visibility is not a confidentiality boundary.
+
+`openRound` rejects an already-initialized epoch. `enter` is race-tolerant instead: if the epoch was concurrently initialized between a player's simulation and inclusion — by a keeper pre-open or a competing first entry — it refunds the entire `msg.value` and proceeds with the entry, so losing the creation race never costs a player the 45-second window. The game contract sponsors no fees: fee accounting uses only the current call's `msg.value`, never pre-existing contract balance, and successful flows retain no caller-supplied ETH. ETH forced in from outside (for example via `SELFDESTRUCT`) is inert — it can neither fund a round nor change any refund. Permissionless pre-opening therefore cannot drain operator funding: whoever materializes a round — keeper, player, or stranger — pays its randomness fee. An untouched epoch — no pre-open and no entry — creates no round state; a pre-opened round that never receives a ticket carries no vault exposure, requires no maintenance, and may be expired purely for hygiene. Timing checks use `block.timestamp`.
 
 `requestReveal` is permissionless after `lockAt`, idempotent at the workflow level, and changes only `Open` to `RevealRequested`. It marks the stored handle for public reveal; it does not accept a replacement handle.
 
@@ -312,7 +326,7 @@ Exact Solidity signatures may vary, but equivalent behaviour and access boundari
 
 Events include indexed round, ticket, request, and wallet identifiers plus amounts needed to reconstruct state:
 
-- `RoundOpened`
+- `RoundOpened` includes the indexed round id, indexed opener, exact stored encrypted handle in an indexer-consumable representation, `openAt`, `lockAt`, and `expiresAt`
 - `TicketEntered`
 - `RevealRequested`
 - `RoundFinalized`
@@ -326,7 +340,7 @@ Events include indexed round, ticket, request, and wallet identifiers plus amoun
 - `VaultWithdrawal`
 - `AuthorizedGameChanged`, if future-game replacement is supported
 
-No event exposes private plaintext before finalization.
+`RoundOpened` is sufficient to reconstruct the initialized round without transaction traces. Events may expose encrypted handles, which are public ciphertext, but no event exposes private plaintext before finalization or grants decryption access.
 
 ## 11. Keeper and automation
 

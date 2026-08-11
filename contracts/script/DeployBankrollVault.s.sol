@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.28;
+pragma solidity 0.8.29;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC4626} from "@openzeppelin/contracts/interfaces/IERC4626.sol";
@@ -20,8 +20,6 @@ contract DeployBankrollVault is Utils {
     error DeploymentPostconditionFailed();
 
     string internal constant OUTPUT_NAME = OUTPUT_BASE_SEPOLIA_VAULT_RUN;
-    string internal constant BASESCAN_ADDRESS_PREFIX = "https://sepolia.basescan.org/address/";
-    string internal constant BASESCAN_CODE_SUFFIX = "#code";
 
     struct ExistingDeployment {
         uint256 chainId;

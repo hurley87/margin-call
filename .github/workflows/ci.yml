@@ -76,7 +76,10 @@ jobs:
         run: forge fmt --check
 
       - name: Forge build
-        run: forge build --sizes
+        # IncoLightning is vendor source for the already-deployed fixed-address
+        # service, not a contract this repository deploys. Keep the EIP-170
+        # size gate on every repository contract while excluding that vendor.
+        run: forge build --sizes --skip IncoLightning.sol
 
       - name: Forge test
         run: FOUNDRY_PROFILE=ci forge test

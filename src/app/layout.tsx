@@ -20,16 +20,19 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   ),
   title: "MARGIN CALL",
-  description: "Margin Call is being rebuilt.",
+  description:
+    "A shared-round Crash game with pre-committed encrypted outcomes on Base Sepolia.",
   openGraph: {
     title: "MARGIN CALL",
-    description: "Margin Call is being rebuilt.",
+    description:
+      "A shared-round Crash game with pre-committed encrypted outcomes on Base Sepolia.",
     type: "website",
   },
   twitter: {
     card: "summary",
     title: "MARGIN CALL",
-    description: "Margin Call is being rebuilt.",
+    description:
+      "A shared-round Crash game with pre-committed encrypted outcomes on Base Sepolia.",
   },
 };
 
