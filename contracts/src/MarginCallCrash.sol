@@ -102,6 +102,9 @@ contract MarginCallCrash is ReentrancyGuard {
         uint256 indexed roundId, uint256 indexed ticketId, address indexed player, address receiver, uint256 payout
     );
     event TicketLossSettled(uint256 indexed roundId, uint256 indexed ticketId, address indexed player);
+    event TicketRefunded(
+        uint256 indexed roundId, uint256 indexed ticketId, address indexed player, address receiver, uint256 margin
+    );
 
     mapping(uint256 roundId => Round round) private _rounds;
     mapping(uint256 ticketId => Ticket ticket) private _tickets;
@@ -272,6 +275,8 @@ contract MarginCallCrash is ReentrancyGuard {
     }
 
     /// @notice Permissionlessly marks an unresolved round expired once the exclusive boundary is reached.
+    /// @dev Exposed rounds move `totalMargin` into pending refund obligations. Ticketless rounds are
+    ///      game-only hygiene with no vault effect.
     function expireRound(uint256 roundId) external nonReentrant {
         Round storage round = _rounds[roundId];
         if (round.status == RoundStatus.Uninitialized) revert RoundNotInitialized(roundId);
@@ -283,7 +288,34 @@ contract MarginCallCrash is ReentrancyGuard {
         }
 
         round.status = RoundStatus.Expired;
+        if (round.totalMargin > 0) {
+            vault.markRoundExpired(roundId, round.totalMargin);
+        }
         emit RoundExpired(roundId);
+    }
+
+    /// @notice Pulls original margin for an expired ticket. Third parties may only route to the owner.
+    /// @dev The owner may pass `receiver = address(0)` for themselves, or any non-zero address.
+    function refund(uint256 ticketId, address receiver) external nonReentrant {
+        (Ticket storage ticket,) = _refundableTicket(ticketId);
+
+        uint256 roundId = ticket.roundId;
+        address refundReceiver = _resolveClaimReceiver(ticket.player, receiver);
+        uint256 margin = ticket.margin;
+
+        ticket.settled = true;
+        vault.refundMargin(roundId, ticketId, refundReceiver, margin);
+        emit TicketRefunded(roundId, ticketId, ticket.player, refundReceiver, margin);
+    }
+
+    /// @dev Shared refund guards: the ticket exists, is unsettled, and its round is expired.
+    function _refundableTicket(uint256 ticketId) internal view returns (Ticket storage ticket, Round storage round) {
+        ticket = _tickets[ticketId];
+        if (ticket.player == address(0)) revert TicketNotFound(ticketId);
+        if (ticket.settled) revert TicketAlreadySettled(ticketId);
+
+        round = _rounds[ticket.roundId];
+        if (round.status != RoundStatus.Expired) revert InvalidRoundStatus(ticket.roundId, round.status);
     }
 
     function _resolveClaimReceiver(address owner, address receiver) internal view returns (address) {
@@ -329,11 +361,11 @@ contract MarginCallCrash is ReentrancyGuard {
 
         emit RoundOpened(roundId, opener, crashRandom, openAt, lockAt, expiresAt);
 
-        uint256 refund = suppliedValue - fee;
-        if (refund == 0) return;
+        uint256 excess = suppliedValue - fee;
+        if (excess == 0) return;
 
-        (bool wasRefunded,) = payable(opener).call{value: refund}("");
-        if (!wasRefunded) revert EthRefundFailed(opener, refund);
+        (bool wasRefunded,) = payable(opener).call{value: excess}("");
+        if (!wasRefunded) revert EthRefundFailed(opener, excess);
     }
 
     function _roundTimes(uint256 roundId) internal view returns (uint64 openAt, uint64 lockAt, uint64 expiresAt) {

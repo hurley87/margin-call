@@ -53,7 +53,8 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     mapping(uint256 roundId => uint256 reservedPayout) public reservedPayoutByRound;
     mapping(uint256 roundId => mapping(uint256 leverageBps => uint256 reservedPayout)) public
         reservedPayoutByRoundAndTier;
-    mapping(uint256 roundId => bool marked) private _roundFinalized;
+    /// @dev Shared guard for finalize and expire: a round's obligations may be marked exactly once.
+    mapping(uint256 roundId => bool marked) private _roundObligationsMarked;
 
     error UnauthorizedGameConfigurer(address caller);
     error AuthorizedGameAlreadySet();
@@ -68,6 +69,7 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     error TicketReservationMissing(uint256 ticketId);
     error TicketReservationMismatch(uint256 ticketId, uint256 roundId, address player);
     error PayoutExceedsReservation(uint256 payout, uint256 maximumPayout);
+    error RefundMarginMismatch(uint256 provided, uint256 expected);
     error RoundAlreadyMarked(uint256 roundId);
     error UnrecognizedMarginUnderflow(uint256 unrecognizedMargin, uint256 totalMargin);
     error EntryFloorNotMet(uint256 grossAssets, uint256 required);
@@ -176,15 +178,30 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     /// @dev Winning liability is the O(tiers) sum of reserved payouts at or below `crashPointBps`.
     function markRoundFinalized(uint256 roundId, uint256 totalMargin, uint256 crashPointBps) external nonReentrant {
         _requireAuthorizedGameCaller();
-        if (_roundFinalized[roundId]) revert RoundAlreadyMarked(roundId);
+        if (_roundObligationsMarked[roundId]) revert RoundAlreadyMarked(roundId);
         if (totalMargin > unrecognizedMargin) {
             revert UnrecognizedMarginUnderflow(unrecognizedMargin, totalMargin);
         }
 
         uint256 winningLiability = _winningLiability(roundId, crashPointBps);
-        _roundFinalized[roundId] = true;
+        _roundObligationsMarked[roundId] = true;
         unrecognizedMargin -= totalMargin;
         pendingObligations += winningLiability;
+    }
+
+    /// @notice Marks an expired round's margins into pending refund obligations.
+    /// @dev Pricing-neutral: `totalAssets()` is unchanged because both unrecognizedMargin and
+    ///      pendingObligations move by the same amount.
+    function markRoundExpired(uint256 roundId, uint256 totalMargin) external nonReentrant {
+        _requireAuthorizedGameCaller();
+        if (_roundObligationsMarked[roundId]) revert RoundAlreadyMarked(roundId);
+        if (totalMargin > unrecognizedMargin) {
+            revert UnrecognizedMarginUnderflow(unrecognizedMargin, totalMargin);
+        }
+
+        _roundObligationsMarked[roundId] = true;
+        unrecognizedMargin -= totalMargin;
+        pendingObligations += totalMargin;
     }
 
     /// @notice Pays a winning ticket within its reservation and consumes the reservation.
@@ -209,6 +226,22 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         _requireAuthorizedGameCaller();
         TicketReservation memory reservation = _consumeReservation(roundId, ticketId);
         emit LiabilityReleased(roundId, ticketId, reservation.player, reservation.maximumPayout, 0);
+    }
+
+    /// @notice Returns original margin for an expired ticket and consumes its reservation.
+    /// @dev Requires `margin` to equal the stored reservation margin exactly.
+    function refundMargin(uint256 roundId, uint256 ticketId, address recipient, uint256 margin) external nonReentrant {
+        _requireAuthorizedGameCaller();
+        if (recipient == address(0)) revert ZeroRecipient();
+
+        TicketReservation memory reservation = _consumeReservation(roundId, ticketId);
+        if (margin != reservation.margin) {
+            revert RefundMarginMismatch(margin, reservation.margin);
+        }
+
+        pendingObligations -= margin;
+        emit LiabilityReleased(roundId, ticketId, reservation.player, reservation.maximumPayout, margin);
+        IERC20(asset()).safeTransfer(recipient, margin);
     }
 
     function _winningLiability(uint256 roundId, uint256 crashPointBps) internal view returns (uint256 liability) {

@@ -25,6 +25,8 @@ export const marginCallCrashAbi = parseAbi([
   "function finalizeRound(uint256 roundId, uint256 plaintext, bytes[] signatures)",
   "function claim(uint256 ticketId, address receiver)",
   "function settleLoss(uint256 ticketId)",
+  "function expireRound(uint256 roundId)",
+  "function refund(uint256 ticketId, address receiver)",
   "event RoundOpened(uint256 indexed roundId, address indexed opener, bytes32 crashRandom, uint64 openAt, uint64 lockAt, uint64 expiresAt)",
   "event TicketEntered(uint256 indexed roundId, uint256 indexed ticketId, address indexed player, uint256 margin, uint256 leverageBps, uint256 reservedPayout)",
   "event RevealRequested(uint256 indexed roundId, bytes32 crashRandom)",
@@ -32,6 +34,7 @@ export const marginCallCrashAbi = parseAbi([
   "event RoundExpired(uint256 indexed roundId)",
   "event TicketClaimed(uint256 indexed roundId, uint256 indexed ticketId, address indexed player, address receiver, uint256 payout)",
   "event TicketLossSettled(uint256 indexed roundId, uint256 indexed ticketId, address indexed player)",
+  "event TicketRefunded(uint256 indexed roundId, uint256 indexed ticketId, address indexed player, address receiver, uint256 margin)",
 ]);
 
 const ONE_TUSD = 1_000_000n;
@@ -223,17 +226,39 @@ export function computeCrashPointBps(crashRandom: bigint): bigint {
 }
 
 export type TicketOutcome =
-  "pending" | "won" | "lost" | "settled-win" | "settled-loss";
+  | "pending"
+  | "won"
+  | "lost"
+  | "settled-win"
+  | "settled-loss"
+  | "refundable"
+  | "refunded";
 
 export function deriveTicketOutcome(
   ticket: CrashTicket,
   round: CrashRound | null
 ): TicketOutcome {
-  if (ticket.settled) return ticket.claimed ? "settled-win" : "settled-loss";
-  if (!round || round.status !== ROUND_STATUS.finalized) return "pending";
+  if (ticket.settled) {
+    if (ticket.claimed) return "settled-win";
+    if (round?.status === ROUND_STATUS.expired) return "refunded";
+    return "settled-loss";
+  }
+  if (!round) return "pending";
+  if (round.status === ROUND_STATUS.expired) return "refundable";
+  if (round.status !== ROUND_STATUS.finalized) return "pending";
   return isWinningTicket(ticket.leverageBps, round.crashPointBps)
     ? "won"
     : "lost";
+}
+
+/** True when an unsettled ticket belongs to an expired round and can be refunded. */
+export function isRefundable(ticket: CrashTicket, round: CrashRound | null) {
+  return deriveTicketOutcome(ticket, round) === "refundable";
+}
+
+/** True when a round may be permissionlessly marked expired. */
+export function canExpireRound(round: CrashRound, chainTimestamp: bigint) {
+  return deriveRoundPhase(round, chainTimestamp) === "expired-eligible";
 }
 
 export function formatLeverageBps(leverageBps: bigint): string {

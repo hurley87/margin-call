@@ -55,6 +55,16 @@ export function CrashTicketSettlement() {
   }
   if (!settlement.ticket) return null;
 
+  // Expiry refund UI owns expired / expiry-eligible tickets.
+  if (
+    settlement.phase === "expired" ||
+    settlement.phase === "expired-eligible" ||
+    settlement.outcome === "refundable" ||
+    settlement.outcome === "refunded"
+  ) {
+    return null;
+  }
+
   const statusMessage =
     settlement.status === "error"
       ? settlement.error

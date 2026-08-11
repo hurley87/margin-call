@@ -1,5 +1,6 @@
 import { AuthGate } from "@/components/auth/auth-gate";
 import { CurrentRound } from "@/components/current-round/current-round";
+import { CrashTicketRefund } from "@/components/current-round/crash-ticket-refund";
 import { CrashTicketSettlement } from "@/components/current-round/crash-ticket-settlement";
 import { DeskDollarsPanel } from "@/components/desk-dollars/desk-dollars-panel";
 import { LpDesk } from "@/components/lp-desk/lp-desk";
@@ -23,6 +24,7 @@ export default function Home() {
         <div className="mx-auto max-w-xl">
           <AuthGate>
             <CrashTicketSettlement />
+            <CrashTicketRefund />
             <DeskDollarsPanel />
             <LpDesk />
           </AuthGate>
