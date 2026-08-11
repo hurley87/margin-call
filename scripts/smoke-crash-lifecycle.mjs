@@ -1,11 +1,10 @@
+#!/usr/bin/env node
 /**
  * Base Sepolia lifecycle smoke for MarginCallCrash #343.
  * Opens a round, reveals after lock, attests via Inco, finalizes, and optionally expires.
  */
-const { createRequire } = require("node:module");
-const requireFromHere = createRequire(__filename);
-const { Lightning } = requireFromHere("@inco/lightning-js/lite");
-const {
+import { createRequire } from "node:module";
+import {
   createPublicClient,
   createWalletClient,
   encodeFunctionData,
@@ -13,9 +12,13 @@ const {
   http,
   parseAbi,
   toHex,
-} = require("viem");
-const { privateKeyToAccount } = require("viem/accounts");
-const { baseSepolia } = require("viem/chains");
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
+
+// @inco/lightning-js ESM entry is incomplete in 1.0.2; load the CJS build.
+const require = createRequire(import.meta.url);
+const { Lightning } = require("@inco/lightning-js/lite");
 
 const GAME =
   process.env.SMOKE_GAME_ADDRESS ??

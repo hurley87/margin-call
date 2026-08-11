@@ -1,15 +1,16 @@
+#!/usr/bin/env node
 /**
  * Expire-only follow-up for an already-opened unresolved Crash round.
  */
-const {
+import {
   createPublicClient,
   createWalletClient,
   encodeFunctionData,
   http,
   parseAbi,
-} = require("viem");
-const { privateKeyToAccount } = require("viem/accounts");
-const { baseSepolia } = require("viem/chains");
+} from "viem";
+import { privateKeyToAccount } from "viem/accounts";
+import { baseSepolia } from "viem/chains";
 
 const GAME =
   process.env.SMOKE_GAME_ADDRESS ??

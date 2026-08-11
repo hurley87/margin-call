@@ -12,7 +12,7 @@ After deploying a replacement game contract, a Base Sepolia lifecycle smoke can 
 ```bash
 pnpm smoke:crash-lifecycle
 # or, for an already-opened unresolved round after expiresAt:
-# SMOKE_EXPIRE_ROUND_ID=<id> node scripts/smoke-crash-expire.cjs
+# SMOKE_EXPIRE_ROUND_ID=<id> node scripts/smoke-crash-expire.mjs
 ```
 
 ## Prerequisites
