@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "7b81008537122c06ba18a9ad7bc133133653c0db",
+  "sourceCommit": "1e3b424596772559034c7a54f2cf7180bf1799fc",
   "chainId": 84532,
   "frontend": {
     "url": "https://margincall.fun",
@@ -14,9 +14,9 @@
   "token": "0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085",
   "faucet": "0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356",
   "bankrollVault": "0xB5b599104650924Ec4b0f3aFC560e80A7DA93afe",
-  "marginCallCrash": "0x65123418A380f64647d8605537272d1B851a49b8",
-  "marginCallCrashDeploymentBlock": 45341472,
-  "marginCallCrashEpochOrigin": 1786451880,
+  "marginCallCrash": "0x4677227a9DEF791BcBd60E5D73C12927363EA04f",
+  "marginCallCrashDeploymentBlock": 45342715,
+  "marginCallCrashEpochOrigin": 1786454100,
   "marginCallCrashRoundDuration": 60,
   "marginCallCrashEntryWindow": 45,
   "marginCallCrashExpiryDelay": 900,
@@ -39,7 +39,7 @@
     "token": "https://sepolia.basescan.org/address/0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085#code",
     "faucet": "https://sepolia.basescan.org/address/0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356#code",
     "bankrollVault": "https://sepolia.basescan.org/address/0xB5b599104650924Ec4b0f3aFC560e80A7DA93afe#code",
-    "marginCallCrash": "https://sepolia.basescan.org/address/0x65123418A380f64647d8605537272d1B851a49b8#code"
+    "marginCallCrash": "https://sepolia.basescan.org/address/0x4677227a9DEF791BcBd60E5D73C12927363EA04f#code"
   },
   "transactions": {
     "deployToken": "0x52d47a026c289a580eb2fb329f31667bc6282af10c1bc345dcc99b4e7b6ae9cb",
@@ -48,7 +48,7 @@
     "deployBankrollVault": "0x41ee9bb43f7acd02f4cbe3d9b7bd7222d1f35482e24b551dde32bf625e19e3d4",
     "approveBankrollVault": "0xcfe51188a2040cd8f13e1f4c176b82e939b48519a257830a986a55d3062b00f4",
     "seedBankrollVault": "0x2675ceccfe5443da7bf1a67bdfe80bc08a518e5be54b22c5557e71db91fa31d3",
-    "deployMarginCallCrash": "0x43a0cc62c5209b18b04be3b7fee6543d6ad6b2ead5d1bdab8b6af8e52c88c706"
+    "deployMarginCallCrash": "0x982be82965b26a23bf583f36466d618ea19e151899dbd49327c173415a197485"
   },
   "privySponsorship": {
     "appId": "cmmfbu7o900c10cjme09a31h4",
@@ -64,6 +64,7 @@
     "sourceCommit": "4b1108c4f5c806c67c189003b3093c4dd3ac0483",
     "token": "0x78c9DfaA9288Dd9c1f757d336A88f4F8e9EfC35C",
     "faucet": "0x23f4C0622D9b88aA0Fe7469B34F1e780b5367c78",
-    "bankrollVault": "0xb82f4B3DcE7539d23ab77aBF9e3317269D3E92ff"
+    "bankrollVault": "0xb82f4B3DcE7539d23ab77aBF9e3317269D3E92ff",
+    "marginCallCrash": "0x65123418A380f64647d8605537272d1B851a49b8"
   }
 }
