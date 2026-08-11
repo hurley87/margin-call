@@ -4,45 +4,12 @@ pragma solidity 0.8.29;
 import {Test} from "forge-std/Test.sol";
 
 import {inco} from "@inco/lightning/src/Lib.sol";
-import {ETypes, euint256} from "@inco/lightning/src/Types.sol";
 
 import {BankrollVault} from "../src/BankrollVault.sol";
 import {DeskDollars} from "../src/DeskDollars.sol";
 import {IBankrollVault} from "../src/interfaces/IBankrollVault.sol";
 import {MarginCallCrash} from "../src/MarginCallCrash.sol";
-
-contract IncoRandomMock {
-    uint256 public fee;
-    bytes32 public randomHandle;
-    mapping(bytes32 handle => mapping(address account => bool isAllowed)) internal _transientAllowances;
-    mapping(bytes32 handle => mapping(address account => bool isAllowed)) internal _persistentAllowances;
-
-    function configure(uint256 fee_, bytes32 randomHandle_) external {
-        fee = fee_;
-        randomHandle = randomHandle_;
-    }
-
-    function getFee() external view returns (uint256) {
-        return fee;
-    }
-
-    function asEuint256(uint256 value) external pure returns (euint256) {
-        return euint256.wrap(bytes32(value));
-    }
-
-    function eRandBounded(bytes32, ETypes) external payable returns (bytes32) {
-        require(msg.value == fee, "wrong fee");
-        _transientAllowances[randomHandle][msg.sender] = true;
-        return randomHandle;
-    }
-
-    function allow(bytes32 handle, address account) external {
-        require(
-            _transientAllowances[handle][msg.sender] || _persistentAllowances[handle][msg.sender], "sender not allowed"
-        );
-        _persistentAllowances[handle][account] = true;
-    }
-}
+import {IncoRandomMock} from "./mocks/IncoRandomMock.sol";
 
 contract EntryIntegrationTest is Test {
     uint64 internal constant EPOCH_ORIGIN = 1_000_000;
@@ -334,7 +301,7 @@ contract EntryIntegrationTest is Test {
         assertEq(token.balanceOf(ALICE), aliceBefore);
         assertEq(vault.reservedLiabilities(), reservedBefore);
         assertEq(vault.unrecognizedMargin(), unrecognizedBefore);
-        assertFalse(vault.getReservation(999).exists);
+        assertEq(vault.getReservation(999).player, address(0));
     }
 
     function testTicketEnteredAndLiabilityReservedAreReconstructable() public {
@@ -364,7 +331,6 @@ contract EntryIntegrationTest is Test {
         assertEq(reservation.margin, margin);
         assertEq(reservation.maximumPayout, reservedPayout);
         assertEq(reservation.leverageBps, leverageBps);
-        assertTrue(reservation.exists);
     }
 
     function testLazyEnterCreatesRoundThenAcceptsTicket() public {

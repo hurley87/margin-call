@@ -93,6 +93,5 @@
     "marginCallCrashDeploymentBlock": 45342715,
     "marginCallCrashEpochOrigin": 1786454100,
     "deployMarginCallCrash": "0x982be82965b26a23bf583f36466d618ea19e151899dbd49327c173415a197485"
-  },
-  "entryInterfaceNote": "enter/acceptEntry/approve selectors recorded for slice-6 wiring; production redeploy and live entry smoke remain issue #351. Privy contractSelectorAllowlist stays not-exposed-by-dashboard."
+  }
 }

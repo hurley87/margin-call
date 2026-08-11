@@ -90,13 +90,7 @@ describe("useCrashRoundEntry", () => {
   afterEach(() => cleanup());
 
   it("approves a bounded 1,000 tUSD allowance once, then enters", async () => {
-    const { result } = renderHook(() =>
-      useCrashRoundEntry({
-        roundId,
-        phase: "open",
-        countdownSeconds: 20,
-      })
-    );
+    const { result } = renderHook(() => useCrashRoundEntry({ roundId }));
     await waitFor(() => expect(result.current.status).toBe("ready"));
     await act(async () => {
       await result.current.enter();
@@ -126,13 +120,7 @@ describe("useCrashRoundEntry", () => {
   it("skips approval when allowance already covers the selected margin", async () => {
     mockBalances(1_000_000n);
     sdk.getSubmittedHash.mockReset().mockReturnValue("0xbbb");
-    const { result } = renderHook(() =>
-      useCrashRoundEntry({
-        roundId,
-        phase: "open",
-        countdownSeconds: 20,
-      })
-    );
+    const { result } = renderHook(() => useCrashRoundEntry({ roundId }));
     await waitFor(() => expect(result.current.status).toBe("ready"));
     expect(result.current.needsApproval).toBe(false);
     await act(async () => {
@@ -150,13 +138,7 @@ describe("useCrashRoundEntry", () => {
     sdk.wait
       .mockRejectedValueOnce(new Error("rpc timeout"))
       .mockResolvedValueOnce({ status: "success" });
-    const { result } = renderHook(() =>
-      useCrashRoundEntry({
-        roundId,
-        phase: "open",
-        countdownSeconds: 20,
-      })
-    );
+    const { result } = renderHook(() => useCrashRoundEntry({ roundId }));
     await waitFor(() => expect(result.current.status).toBe("ready"));
     await act(async () => {
       await result.current.enter();
@@ -176,13 +158,7 @@ describe("useCrashRoundEntry", () => {
     mockBalances(1_000_000n);
     sdk.getSubmittedHash.mockReset().mockReturnValue("0xentry");
     sdk.wait.mockResolvedValue({ status: "reverted" });
-    const { result } = renderHook(() =>
-      useCrashRoundEntry({
-        roundId,
-        phase: "open",
-        countdownSeconds: 20,
-      })
-    );
+    const { result } = renderHook(() => useCrashRoundEntry({ roundId }));
     await waitFor(() => expect(result.current.status).toBe("ready"));
     await act(async () => {
       await result.current.enter();
@@ -192,13 +168,7 @@ describe("useCrashRoundEntry", () => {
   });
 
   it("refreshes on external wallet balance notifications", async () => {
-    const { result } = renderHook(() =>
-      useCrashRoundEntry({
-        roundId,
-        phase: "open",
-        countdownSeconds: 20,
-      })
-    );
+    const { result } = renderHook(() => useCrashRoundEntry({ roundId }));
     await waitFor(() => expect(result.current.status).toBe("ready"));
     const readsBefore = sdk.readContract.mock.calls.length;
     mockBalances(5_000_000n, 50_000_000n);

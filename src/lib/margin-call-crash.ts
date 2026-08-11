@@ -18,7 +18,7 @@ export const marginCallCrashAbi = parseAbi([
   "function currentRoundId() view returns (uint256)",
   "function roundTimes(uint256 roundId) view returns (uint64 openAt, uint64 lockAt, uint64 expiresAt)",
   "function getRound(uint256 roundId) view returns ((uint256 id, uint64 openAt, uint64 lockAt, uint64 expiresAt, bytes32 crashRandom, uint256 crashPointBps, uint256 totalMargin, uint256 reservedPayout, uint8 status))",
-  "function getTicket(uint256 ticketId) view returns ((uint256 id, address player, uint256 roundId, uint256 margin, uint256 leverageBps, uint256 reservedPayout, bool settled, bool claimed, bool refunded))",
+  "function getTicket(uint256 ticketId) view returns ((uint256 id, address player, uint256 roundId, uint256 margin, uint256 leverageBps, uint256 reservedPayout))",
   "function getTicketId(uint256 roundId, address player) view returns (uint256)",
   "function enter(uint256 roundId, uint256 margin, uint256 leverageBps) payable",
   "event RoundOpened(uint256 indexed roundId, address indexed opener, bytes32 crashRandom, uint64 openAt, uint64 lockAt, uint64 expiresAt)",
@@ -187,9 +187,6 @@ export type CrashTicket = {
   margin: bigint;
   leverageBps: bigint;
   reservedPayout: bigint;
-  settled: boolean;
-  claimed: boolean;
-  refunded: boolean;
 };
 
 export function computeMaximumPayout(margin: bigint, leverageBps: bigint) {
@@ -201,14 +198,6 @@ export function formatLeverageBps(leverageBps: bigint): string {
   const whole = hundredths / 100n;
   const fraction = hundredths % 100n;
   return `${whole.toString()}.${fraction.toString().padStart(2, "0")}x`;
-}
-
-export function isSupportedEntryMargin(margin: bigint) {
-  return (ENTRY_MARGINS_TUSD as readonly bigint[]).includes(margin);
-}
-
-export function isSupportedEntryLeverage(leverageBps: bigint) {
-  return (ENTRY_LEVERAGE_TIERS_BPS as readonly bigint[]).includes(leverageBps);
 }
 
 /**
@@ -223,12 +212,12 @@ export function canOfferEntry(
 }
 
 export async function readPlayerTicket(
-  config: MarginCallCrashConfig,
+  address: Address,
   roundId: bigint,
   player: Address
 ): Promise<CrashTicket | null> {
   const ticketId = await baseSepoliaPublicClient.readContract({
-    address: config.address,
+    address,
     abi: marginCallCrashAbi,
     functionName: "getTicketId",
     args: [roundId, player],
@@ -236,7 +225,7 @@ export async function readPlayerTicket(
   if (ticketId === 0n) return null;
 
   const ticket = await baseSepoliaPublicClient.readContract({
-    address: config.address,
+    address,
     abi: marginCallCrashAbi,
     functionName: "getTicket",
     args: [ticketId],

@@ -6,6 +6,8 @@ import {
   type CrashEntryStatus,
 } from "@/hooks/use-crash-round-entry";
 import {
+  BOUNDED_ENTRY_ALLOWANCE_TUSD,
+  canOfferEntry,
   ENTRY_LEVERAGE_TIERS_BPS,
   ENTRY_MARGINS_TUSD,
   formatLeverageBps,
@@ -39,6 +41,10 @@ type CrashRoundEntryProps = {
   countdownSeconds: number;
 };
 
+function formatTUsd(value: bigint) {
+  return formatDeskDollars(value, TUSD_DECIMALS);
+}
+
 /**
  * Player entry surface for the current Crash round.
  * Offers 1/5/10 tUSD margins and six leverage tiers only into initialized
@@ -49,7 +55,7 @@ export function CrashRoundEntry({
   phase,
   countdownSeconds,
 }: CrashRoundEntryProps) {
-  const entry = useCrashRoundEntry({ roundId, phase, countdownSeconds });
+  const entry = useCrashRoundEntry({ roundId });
 
   if (phase === "uninitialized" || phase === "prelaunch") {
     return (
@@ -63,7 +69,7 @@ export function CrashRoundEntry({
     );
   }
 
-  if (entry.hasTicket && entry.ticket) {
+  if (entry.ticket) {
     return (
       <EntryShell>
         <CrashLiveTicket ticket={entry.ticket} />
@@ -71,7 +77,11 @@ export function CrashRoundEntry({
     );
   }
 
-  if (phase === "open" && !entry.entryOffered) {
+  if (phase !== "open") {
+    return null;
+  }
+
+  if (!canOfferEntry(phase, countdownSeconds)) {
     return (
       <EntryShell>
         <p className="text-sm text-[var(--t-amber-hot)]" role="status">
@@ -80,10 +90,6 @@ export function CrashRoundEntry({
         </p>
       </EntryShell>
     );
-  }
-
-  if (phase !== "open") {
-    return null;
   }
 
   if (!entry.walletAddress) {
@@ -121,79 +127,50 @@ export function CrashRoundEntry({
         reservation, not a guaranteed return.
       </p>
 
-      <fieldset className="mt-5">
-        <legend className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-          Margin
-        </legend>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {ENTRY_MARGINS_TUSD.map((margin) => {
-            const selected = entry.selectedMargin === margin;
-            const label = formatDeskDollars(margin, TUSD_DECIMALS);
-            return (
-              <button
-                aria-pressed={selected}
-                className={`border px-3 py-2 text-sm font-bold tabular-nums ${
-                  selected
-                    ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
-                    : "border-[var(--t-border)] text-[var(--t-text)] hover:border-[var(--t-accent)]"
-                }`}
-                key={margin.toString()}
-                onClick={() => entry.selectMargin(margin)}
-                type="button"
-              >
-                {label} tUSD
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      <OptionGroup
+        legend="Margin"
+        options={ENTRY_MARGINS_TUSD}
+        selected={entry.selectedMargin}
+        format={(margin) => `${formatTUsd(margin)} tUSD`}
+        onSelect={entry.selectMargin}
+      />
 
-      <fieldset className="mt-5">
-        <legend className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-          Arcade Leverage
-        </legend>
-        <div className="mt-3 flex flex-wrap gap-2">
-          {ENTRY_LEVERAGE_TIERS_BPS.map((tier) => {
-            const selected = entry.selectedLeverageBps === tier;
-            return (
-              <button
-                aria-pressed={selected}
-                className={`border px-3 py-2 text-sm font-bold tabular-nums ${
-                  selected
-                    ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
-                    : "border-[var(--t-border)] text-[var(--t-text)] hover:border-[var(--t-accent)]"
-                }`}
-                key={tier.toString()}
-                onClick={() => entry.selectLeverage(tier)}
-                type="button"
-              >
-                {formatLeverageBps(tier)}
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      <OptionGroup
+        legend="Arcade Leverage"
+        options={ENTRY_LEVERAGE_TIERS_BPS}
+        selected={entry.selectedLeverageBps}
+        format={formatLeverageBps}
+        onSelect={entry.selectLeverage}
+      />
 
       <dl className="mt-5 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
         <div>
           <dt className="text-[var(--t-muted)]">Wallet Desk Dollars</dt>
-          <dd className="tabular-nums">{entry.formattedBalance ?? "—"} tUSD</dd>
+          <dd className="tabular-nums">
+            {entry.tUsdBalance === undefined
+              ? "—"
+              : formatTUsd(entry.tUsdBalance)}{" "}
+            tUSD
+          </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Expected maximum payout</dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {entry.formattedExpectedPayout} tUSD
+            {formatTUsd(entry.expectedPayout)} tUSD
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Current vault allowance</dt>
           <dd className="tabular-nums">
-            {entry.formattedAllowance ?? "—"} tUSD
+            {entry.allowance === undefined ? "—" : formatTUsd(entry.allowance)}{" "}
+            tUSD
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Selected margin</dt>
-          <dd className="tabular-nums">{entry.formattedMargin} tUSD</dd>
+          <dd className="tabular-nums">
+            {formatTUsd(entry.selectedMargin)} tUSD
+          </dd>
         </div>
       </dl>
 
@@ -210,8 +187,8 @@ export function CrashRoundEntry({
           ) : null}
         </p>
         <p className="mt-2">
-          One-time bounded approval: {entry.formattedBoundedAllowance} tUSD.
-          Later entries reuse this allowance with sponsored enter-only
+          One-time bounded approval: {formatTUsd(BOUNDED_ENTRY_ALLOWANCE_TUSD)}{" "}
+          tUSD. Later entries reuse this allowance with sponsored enter-only
           transactions. This interface never requests an unlimited allowance.
         </p>
         <p className="mt-2">
@@ -270,6 +247,48 @@ export function CrashRoundEntry({
         ) : null}
       </div>
     </EntryShell>
+  );
+}
+
+function OptionGroup({
+  legend,
+  options,
+  selected,
+  format,
+  onSelect,
+}: {
+  legend: string;
+  options: readonly bigint[];
+  selected: bigint;
+  format: (option: bigint) => string;
+  onSelect: (option: bigint) => void;
+}) {
+  return (
+    <fieldset className="mt-5">
+      <legend className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+        {legend}
+      </legend>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {options.map((option) => {
+          const isSelected = selected === option;
+          return (
+            <button
+              aria-pressed={isSelected}
+              className={`border px-3 py-2 text-sm font-bold tabular-nums ${
+                isSelected
+                  ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
+                  : "border-[var(--t-border)] text-[var(--t-text)] hover:border-[var(--t-accent)]"
+              }`}
+              key={option.toString()}
+              onClick={() => onSelect(option)}
+              type="button"
+            >
+              {format(option)}
+            </button>
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 

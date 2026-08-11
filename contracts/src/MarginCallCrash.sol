@@ -6,6 +6,7 @@ import {ETypes, euint256} from "@inco/lightning/src/Types.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 import {IBankrollVault} from "./interfaces/IBankrollVault.sol";
+import {LeverageTiers} from "./libraries/LeverageTiers.sol";
 
 /// @notice Shared-round Crash game state on a fixed epoch grid.
 /// @dev Owns pre-committed randomness, entry/reservation coordination, reveal, and expiry.
@@ -49,9 +50,6 @@ contract MarginCallCrash is ReentrancyGuard {
         uint256 margin;
         uint256 leverageBps;
         uint256 reservedPayout;
-        bool settled;
-        bool claimed;
-        bool refunded;
     }
 
     error EpochNotStarted(uint256 currentTimestamp, uint64 epochOrigin);
@@ -145,12 +143,11 @@ contract MarginCallCrash is ReentrancyGuard {
     ///      A fee-bearing call that loses the creation race refunds the entire `msg.value` and proceeds.
     function enter(uint256 roundId, uint256 margin, uint256 leverageBps) external payable nonReentrant {
         if (!_isSupportedMargin(margin)) revert InvalidMargin(margin);
-        if (!_isSupportedLeverage(leverageBps)) revert InvalidLeverageTier(leverageBps);
+        if (!LeverageTiers.isSupported(leverageBps)) revert InvalidLeverageTier(leverageBps);
 
         Round storage round = _rounds[roundId];
         if (round.status == RoundStatus.Uninitialized) {
             _initializeRound(roundId, msg.sender, msg.value);
-            round = _rounds[roundId];
         } else if (msg.value > 0) {
             (bool wasRefunded,) = payable(msg.sender).call{value: msg.value}("");
             if (!wasRefunded) revert EthRefundFailed(msg.sender, msg.value);
@@ -175,10 +172,7 @@ contract MarginCallCrash is ReentrancyGuard {
             roundId: roundId,
             margin: margin,
             leverageBps: leverageBps,
-            reservedPayout: maximumPayout,
-            settled: false,
-            claimed: false,
-            refunded: false
+            reservedPayout: maximumPayout
         });
         _ticketIdByRoundAndPlayer[roundId][msg.sender] = ticketId;
         round.totalMargin += margin;
@@ -300,10 +294,5 @@ contract MarginCallCrash is ReentrancyGuard {
 
     function _isSupportedMargin(uint256 margin) internal pure returns (bool) {
         return margin == ONE_TUSD || margin == 5 * ONE_TUSD || margin == 10 * ONE_TUSD;
-    }
-
-    function _isSupportedLeverage(uint256 leverageBps) internal pure returns (bool) {
-        return leverageBps == 12_500 || leverageBps == 15_000 || leverageBps == 20_000 || leverageBps == 30_000
-            || leverageBps == 50_000 || leverageBps == 100_000;
     }
 }

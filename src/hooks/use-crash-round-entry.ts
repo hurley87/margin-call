@@ -5,28 +5,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 import { getBankrollVaultConfig } from "@/lib/bankroll-vault";
 import { baseSepoliaPublicClient } from "@/lib/base-sepolia";
-import {
-  deskDollarsAbi,
-  formatDeskDollars,
-  TUSD_DECIMALS,
-} from "@/lib/desk-dollars";
+import { deskDollarsAbi } from "@/lib/desk-dollars";
 import {
   BOUNDED_ENTRY_ALLOWANCE_TUSD,
-  canOfferEntry,
   computeMaximumPayout,
   ENTRY_LEVERAGE_TIERS_BPS,
   ENTRY_MARGINS_TUSD,
   getMarginCallCrashConfig,
   marginCallCrashAbi,
   readPlayerTicket,
-  type CrashRoundPhase,
   type CrashTicket,
 } from "@/lib/margin-call-crash";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import {
+  applyStageResult,
   confirmSponsoredCall,
   submitSponsoredCall,
-  type SponsoredCallResult,
+  type StageErrorCopy,
 } from "@/lib/sponsored-call";
 import {
   notifyWalletBalancesChanged,
@@ -77,9 +72,7 @@ const initialState: State = {
 const unavailable =
   "Crash entry is not configured for this Base Sepolia deployment.";
 const loadFailed = "We couldn't load your entry state. Please try again.";
-const lateEntryError =
-  "Entry closed before your transaction landed. This is a normal outcome near lock.";
-const stageCopy: Record<Stage, { failed: string; unconfirmed: string }> = {
+const stageCopy: Record<Stage, StageErrorCopy> = {
   approval: {
     failed:
       "We couldn't approve the bounded 1,000 tUSD allowance. Please try again.",
@@ -90,37 +83,12 @@ const stageCopy: Record<Stage, { failed: string; unconfirmed: string }> = {
     failed: "We couldn't complete your entry. Please try again.",
     unconfirmed:
       "Your entry was submitted, but we couldn't confirm it yet. Retry to check its status.",
+    // Entry reverts near lock are the expected cutoff race; treat them as a
+    // normal outcome rather than an infrastructure failure.
+    reverted:
+      "Entry closed before your transaction landed. This is a normal outcome near lock.",
   },
 };
-
-function submittingStatus(stage: Stage): CrashEntryStatus {
-  return stage === "approval" ? "approval-submitting" : "entry-submitting";
-}
-
-function pendingStatus(stage: Stage): CrashEntryStatus {
-  return stage === "approval" ? "approval-pending" : "entry-pending";
-}
-
-function applyStageResult(
-  pendingStage: { current: { stage: Stage; hash: Hex } | null },
-  stage: Stage,
-  result: SponsoredCallResult
-) {
-  if (result.outcome === "confirmed") {
-    pendingStage.current = null;
-    return;
-  }
-  if (result.outcome === "confirmation-unknown") {
-    throw new Error(stageCopy[stage].unconfirmed);
-  }
-  pendingStage.current = null;
-  if (result.outcome === "submission-failed") {
-    throw new Error(result.message ?? stageCopy[stage].failed);
-  }
-  // Entry reverts near lock are the expected cutoff race; treat them as a
-  // normal outcome rather than an infrastructure failure.
-  throw new Error(stage === "entry" ? lateEntryError : stageCopy[stage].failed);
-}
 
 async function readEntryState(
   gameAddress: Address,
@@ -142,11 +110,7 @@ async function readEntryState(
       functionName: "allowance",
       args: [walletAddress, vaultAddress],
     }),
-    readPlayerTicket(
-      { address: gameAddress, deploymentBlock: 0n },
-      roundId,
-      walletAddress
-    ),
+    readPlayerTicket(gameAddress, roundId, walletAddress),
   ]);
   return { tUsdBalance, allowance, ticket };
 }
@@ -156,15 +120,7 @@ async function readEntryState(
  * Approval is requested once when allowance is below the selected margin; entry never
  * requests an unlimited allowance.
  */
-export function useCrashRoundEntry({
-  roundId,
-  phase,
-  countdownSeconds,
-}: {
-  roundId: bigint | null;
-  phase: CrashRoundPhase | null;
-  countdownSeconds: number;
-}) {
+export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
   const { user } = usePrivy();
   const walletAddress = getEvmWalletAddress(user);
   const transaction = usePrivySponsoredTransaction();
@@ -173,15 +129,12 @@ export function useCrashRoundEntry({
   const [state, setState] = useState<State>(initialState);
   const inFlight = useRef(false);
   const retryKind = useRef<Stage | "refresh" | null>(null);
+  // A stage whose transaction was submitted but whose receipt is unresolved.
+  // Retry must re-check this hash — resubmitting could double-enter.
   const pendingStage = useRef<{ stage: Stage; hash: Hex } | null>(null);
-  const lastEntryArgs = useRef<{ margin: bigint; leverageBps: bigint } | null>(
-    null
-  );
 
   const refresh = useCallback(async () => {
-    if (!gameConfig || !vaultConfig || !walletAddress || roundId === null) {
-      return false;
-    }
+    if (!gameConfig || !vaultConfig || !walletAddress) return false;
     setState((current) => ({ ...current, status: "loading", error: null }));
     try {
       const values = await readEntryState(
@@ -215,19 +168,13 @@ export function useCrashRoundEntry({
       setState({ ...initialState, status: "unavailable", error: unavailable });
       return;
     }
-    if (walletAddress && roundId !== null) void refresh();
-  }, [gameConfig, refresh, roundId, vaultConfig, walletAddress]);
+    if (walletAddress) void refresh();
+  }, [gameConfig, refresh, vaultConfig, walletAddress]);
 
   useEffect(
     () =>
       subscribeToWalletBalanceChanges(() => {
-        if (
-          !gameConfig ||
-          !vaultConfig ||
-          !walletAddress ||
-          roundId === null ||
-          inFlight.current
-        ) {
+        if (!gameConfig || !vaultConfig || !walletAddress || inFlight.current) {
           return;
         }
         void readEntryState(
@@ -248,18 +195,18 @@ export function useCrashRoundEntry({
       retryKind.current = stage;
       setState((current) => ({
         ...current,
-        status: submittingStatus(stage),
+        status: `${stage}-submitting`,
         error: null,
       }));
       const result = await submitSponsoredCall(transaction, request, (hash) => {
         pendingStage.current = { stage, hash };
         setState((current) => ({
           ...current,
-          status: pendingStatus(stage),
+          status: `${stage}-pending`,
           error: null,
         }));
       });
-      applyStageResult(pendingStage, stage, result);
+      applyStageResult(pendingStage, stageCopy[stage], result);
     },
     [transaction]
   );
@@ -276,13 +223,7 @@ export function useCrashRoundEntry({
     async (
       mode: "auto" | "skip-approval" | "resume" = "auto"
     ): Promise<boolean> => {
-      if (
-        !gameConfig ||
-        !vaultConfig ||
-        !walletAddress ||
-        roundId === null ||
-        inFlight.current
-      ) {
+      if (!gameConfig || !vaultConfig || !walletAddress || inFlight.current) {
         return false;
       }
       const pending = pendingStage.current;
@@ -291,7 +232,6 @@ export function useCrashRoundEntry({
 
       const margin = state.selectedMargin;
       const leverageBps = state.selectedLeverageBps;
-      lastEntryArgs.current = { margin, leverageBps };
       inFlight.current = true;
 
       try {
@@ -300,12 +240,12 @@ export function useCrashRoundEntry({
           retryKind.current = pending.stage;
           setState((current) => ({
             ...current,
-            status: pendingStatus(pending.stage),
+            status: `${pending.stage}-pending`,
             error: null,
           }));
           applyStageResult(
             pendingStage,
-            pending.stage,
+            stageCopy[pending.stage],
             await confirmSponsoredCall(pending.hash)
           );
           entryConfirmed = pending.stage === "entry";
@@ -381,8 +321,6 @@ export function useCrashRoundEntry({
     state.selectedLeverageBps
   );
   const needsApproval = (state.allowance ?? 0n) < state.selectedMargin;
-  const entryOffered = phase !== null && canOfferEntry(phase, countdownSeconds);
-  const hasTicket = !!state.ticket;
   const canSubmitAfterError =
     state.status === "error" &&
     (retryKind.current === "approval" || retryKind.current === "entry") &&
@@ -403,31 +341,13 @@ export function useCrashRoundEntry({
     walletAddress,
     expectedPayout,
     needsApproval,
-    boundedAllowance: BOUNDED_ENTRY_ALLOWANCE_TUSD,
     vaultAddress: vaultConfig?.vaultAddress ?? null,
     gameAddress: gameConfig?.address ?? null,
-    entryOffered,
-    hasTicket,
-    formattedBalance:
-      state.tUsdBalance === undefined
-        ? null
-        : formatDeskDollars(state.tUsdBalance, TUSD_DECIMALS),
-    formattedAllowance:
-      state.allowance === undefined
-        ? null
-        : formatDeskDollars(state.allowance, TUSD_DECIMALS),
-    formattedMargin: formatDeskDollars(state.selectedMargin, TUSD_DECIMALS),
-    formattedExpectedPayout: formatDeskDollars(expectedPayout, TUSD_DECIMALS),
-    formattedBoundedAllowance: formatDeskDollars(
-      BOUNDED_ENTRY_ALLOWANCE_TUSD,
-      TUSD_DECIMALS
-    ),
     canEnter:
       !!gameConfig &&
       !!vaultConfig &&
       !!walletAddress &&
-      entryOffered &&
-      !hasTicket &&
+      !state.ticket &&
       (state.status === "ready" || canSubmitAfterError) &&
       (state.tUsdBalance ?? 0n) >= state.selectedMargin &&
       !inFlight.current,
@@ -440,6 +360,5 @@ export function useCrashRoundEntry({
     selectLeverage,
     enter,
     retry,
-    refresh,
   };
 }

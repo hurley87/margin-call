@@ -8,6 +8,8 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+import {LeverageTiers} from "./libraries/LeverageTiers.sol";
+
 /// @notice ERC-4626 LP share vault for Desk Dollars with game-only entry reservation.
 /// @dev Share pricing uses net `totalAssets()`. Capacity and free-liquidity math use live `grossAssets`.
 contract BankrollVault is ERC4626, ReentrancyGuard {
@@ -38,13 +40,13 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     /// @notice Sole caller permitted to invoke game-only vault methods.
     address public authorizedGame;
 
+    /// @dev A reservation exists iff `player` is non-zero; `acceptEntry` rejects a zero player.
     struct TicketReservation {
         uint256 roundId;
         address player;
         uint256 margin;
         uint256 maximumPayout;
         uint256 leverageBps;
-        bool exists;
     }
 
     mapping(uint256 ticketId => TicketReservation reservation) private _reservations;
@@ -170,8 +172,8 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         if (player == address(0)) revert ZeroPlayer();
         if (margin == 0) revert InvalidMargin(margin);
         if (maximumPayout < margin) revert InvalidMaximumPayout(margin, maximumPayout);
-        if (!_isSupportedLeverage(leverageBps)) revert InvalidLeverageTier(leverageBps);
-        if (_reservations[ticketId].exists) revert TicketReservationExists(ticketId);
+        if (!LeverageTiers.isSupported(leverageBps)) revert InvalidLeverageTier(leverageBps);
+        if (_reservations[ticketId].player != address(0)) revert TicketReservationExists(ticketId);
     }
 
     function _enforceCapacityLimits(uint256 roundId, uint256 margin, uint256 maximumPayout) internal view {
@@ -181,12 +183,9 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         }
 
         uint256 reservedAfterEntry = reservedLiabilities + maximumPayout;
-        uint256 safetyBufferAfterEntry = _safetyBuffer(assetsAfterTransfer);
-        if (reservedAfterEntry + safetyBufferAfterEntry > assetsAfterTransfer) {
-            uint256 protectedBefore = reservedLiabilities + safetyBufferAfterEntry;
-            uint256 freeLiquidityAfterEntry =
-                assetsAfterTransfer > protectedBefore ? assetsAfterTransfer - protectedBefore : 0;
-            revert InsufficientFreeLiquidity(freeLiquidityAfterEntry, maximumPayout - margin);
+        if (reservedAfterEntry + _safetyBuffer(assetsAfterTransfer) > assetsAfterTransfer) {
+            // The margin transfer has already executed, so freeLiquidity() is the post-entry view.
+            revert InsufficientFreeLiquidity(freeLiquidity(), maximumPayout - margin);
         }
 
         uint256 roundReservedAfterEntry = reservedPayoutByRound[roundId] + maximumPayout;
@@ -217,8 +216,7 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
             player: player,
             margin: margin,
             maximumPayout: maximumPayout,
-            leverageBps: leverageBps,
-            exists: true
+            leverageBps: leverageBps
         });
         reservedLiabilities += maximumPayout;
         unrecognizedMargin += margin;
@@ -252,8 +250,4 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         maxAssets = Math.min(ownerAssets, freeLiquidity().mulDiv(ownerShares, supply));
     }
 
-    function _isSupportedLeverage(uint256 leverageBps) internal pure returns (bool) {
-        return leverageBps == 12_500 || leverageBps == 15_000 || leverageBps == 20_000 || leverageBps == 30_000
-            || leverageBps == 50_000 || leverageBps == 100_000;
-    }
 }

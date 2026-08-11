@@ -106,18 +106,12 @@ describe("MarginCallCrash public reads and phase math", () => {
       computeMaximumPayout,
       ENTRY_CUTOFF_SECONDS,
       formatLeverageBps,
-      isSupportedEntryLeverage,
-      isSupportedEntryMargin,
     } = await import("./margin-call-crash");
 
     expect(computeMaximumPayout(1_000_000n, 12_500n)).toBe(1_250_000n);
     expect(computeMaximumPayout(10_000_000n, 100_000n)).toBe(100_000_000n);
     expect(formatLeverageBps(12_500n)).toBe("1.25x");
     expect(formatLeverageBps(100_000n)).toBe("10.00x");
-    expect(isSupportedEntryMargin(1_000_000n)).toBe(true);
-    expect(isSupportedEntryMargin(2_000_000n)).toBe(false);
-    expect(isSupportedEntryLeverage(20_000n)).toBe(true);
-    expect(isSupportedEntryLeverage(25_000n)).toBe(false);
     expect(BOUNDED_ENTRY_ALLOWANCE_TUSD).toBe(1_000_000_000n);
     expect(ENTRY_CUTOFF_SECONDS).toBe(5);
     expect(canOfferEntry("open", 6)).toBe(true);

@@ -20,16 +20,8 @@ const sdk = vi.hoisted(() => {
       walletAddress: "0x0000000000000000000000000000000000000003",
       expectedPayout: 1_250_000n,
       needsApproval: true,
-      boundedAllowance: 1_000_000_000n,
       vaultAddress: "0x0000000000000000000000000000000000000002",
       gameAddress: "0x0000000000000000000000000000000000000001",
-      entryOffered: true,
-      hasTicket: false,
-      formattedBalance: "100.000000",
-      formattedAllowance: "0.000000",
-      formattedMargin: "1.000000",
-      formattedExpectedPayout: "1.250000",
-      formattedBoundedAllowance: "1000.000000",
       canEnter: true,
       canRetry: false,
       retryAction: null,
@@ -37,7 +29,6 @@ const sdk = vi.hoisted(() => {
       selectLeverage: vi.fn(),
       enter: vi.fn(),
       retry: vi.fn(),
-      refresh: vi.fn(),
       ...overrides,
     }) as Entry;
 
@@ -75,7 +66,6 @@ describe("CrashRoundEntry", () => {
 
   it("shows the five-second cutoff instead of the entry form", () => {
     sdk.props.countdownSeconds = 4;
-    sdk.entry = sdk.makeEntry({ entryOffered: false });
     render(<CrashRoundEntry {...sdk.props} />);
     expect(screen.getByText(/Entry cutoff/)).toBeTruthy();
     expect(
@@ -90,7 +80,7 @@ describe("CrashRoundEntry", () => {
       screen.getByText(/0x0000000000000000000000000000000000000002/)
     ).toBeTruthy();
     expect(
-      screen.getByText(/One-time bounded approval: 1000.000000 tUSD/)
+      screen.getByText(/One-time bounded approval: 1000 tUSD/)
     ).toBeTruthy();
     expect(
       screen.getByText(/never requests an unlimited allowance/)
@@ -104,7 +94,6 @@ describe("CrashRoundEntry", () => {
 
   it("renders the confirmed live ticket instead of the form", () => {
     sdk.entry = sdk.makeEntry({
-      hasTicket: true,
       ticket: {
         id: 7n,
         player: "0x0000000000000000000000000000000000000003",
@@ -112,9 +101,6 @@ describe("CrashRoundEntry", () => {
         margin: 5_000_000n,
         leverageBps: 20_000n,
         reservedPayout: 10_000_000n,
-        settled: false,
-        claimed: false,
-        refunded: false,
       },
       canEnter: false,
     });
