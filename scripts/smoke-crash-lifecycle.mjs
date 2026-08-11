@@ -68,10 +68,21 @@ async function main() {
   const zap = await Lightning.baseSepoliaTestnet({
     hostChainRpcUrls: [RPC_URL],
   });
-  console.log("requesting attestedReveal…");
-  const attestations = await zap.attestedReveal([round.crashRandom]);
-  const attestation = attestations[0];
-  if (!attestation) throw new Error("No attestation returned");
+  // Inco covalidators can lag the onchain Reveal event briefly with ACL denials.
+  let attestation = null;
+  for (let attempt = 1; attempt <= 12; attempt++) {
+    try {
+      console.log(`requesting attestedReveal (attempt ${attempt})…`);
+      const attestations = await zap.attestedReveal([round.crashRandom]);
+      attestation = attestations[0] ?? null;
+      if (attestation) break;
+    } catch (error) {
+      const detail = error?.cause?.message ?? error?.message ?? String(error);
+      console.error(`attestedReveal attempt ${attempt} failed: ${detail}`);
+      await new Promise((resolve) => setTimeout(resolve, 10_000));
+    }
+  }
+  if (!attestation) throw new Error("No attestation returned after retries");
   const plaintext = BigInt(attestation.plaintext.value);
   const signatures = attestation.covalidatorSignatures.map((signature) =>
     toHex(signature)
