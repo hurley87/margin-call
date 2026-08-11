@@ -138,8 +138,7 @@ contract DeployBankrollVaultTest is Test {
             vm.toString(abi.encodePacked(BankrollVault.setAuthorizedGame.selector))
         );
         assertEq(
-            vm.parseJsonString(record, ".tUsdApproveSelector"),
-            vm.toString(abi.encodePacked(IERC20.approve.selector))
+            vm.parseJsonString(record, ".tUsdApproveSelector"), vm.toString(abi.encodePacked(IERC20.approve.selector))
         );
         assertEq(
             vm.parseJsonString(record, ".verification.vault"),

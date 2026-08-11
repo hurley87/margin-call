@@ -212,11 +212,7 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         uint256 maximumPayout
     ) internal {
         _reservations[ticketId] = TicketReservation({
-            roundId: roundId,
-            player: player,
-            margin: margin,
-            maximumPayout: maximumPayout,
-            leverageBps: leverageBps
+            roundId: roundId, player: player, margin: margin, maximumPayout: maximumPayout, leverageBps: leverageBps
         });
         reservedLiabilities += maximumPayout;
         unrecognizedMargin += margin;
@@ -249,5 +245,4 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         ownerAssets = convertToAssets(ownerShares);
         maxAssets = Math.min(ownerAssets, freeLiquidity().mulDiv(ownerShares, supply));
     }
-
 }
