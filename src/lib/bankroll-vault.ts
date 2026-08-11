@@ -5,9 +5,9 @@ import {
   ENTRY_LEVERAGE_TIERS_BPS,
   formatLeverageBps,
   getMarginCallCrashConfig,
+  LEVERAGE_SCALE,
   marginCallCrashAbi,
-  ROUND_STATUS,
-  type CrashRound,
+  ONE_TUSD,
 } from "./margin-call-crash";
 
 // Standard ERC-20/4626 entries come from viem; only the vault-specific
@@ -72,13 +72,6 @@ export const bankrollVaultAbi = [
   },
   {
     type: "function",
-    name: "frozenRoundCount",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
     name: "oldestBlockingRound",
     stateMutability: "view",
     inputs: [],
@@ -93,14 +86,7 @@ export const bankrollVaultAbi = [
   },
   {
     type: "function",
-    name: "NO_BLOCKING_ROUND",
-    stateMutability: "view",
-    inputs: [],
-    outputs: [{ name: "", type: "uint256" }],
-  },
-  {
-    type: "function",
-    name: "roundExposure",
+    name: "reservedPayoutByRound",
     stateMutability: "view",
     inputs: [{ name: "roundId", type: "uint256" }],
     outputs: [{ name: "", type: "uint256" }],
@@ -123,9 +109,8 @@ export const bankrollVaultAbi = [
 export const NO_BLOCKING_ROUND =
   0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffn;
 
-const ONE_TUSD = 1_000_000n;
+/** Mirrors BankrollVault.MAX_TICKET_RESERVATION. */
 const MAX_TICKET_RESERVATION = 100n * ONE_TUSD;
-const LEVERAGE_SCALE = 10_000n;
 
 export type BankrollVaultConfig = {
   tokenAddress: Address;
@@ -168,21 +153,16 @@ type VaultViewName =
   | "safetyBuffer"
   | "freeLiquidity"
   | "realizedGamePnl"
-  | "frozenRoundCount"
-  | "oldestBlockingRound"
-  | "NO_BLOCKING_ROUND";
+  | "oldestBlockingRound";
 
 /**
  * Utilization of vault capacity by reserved liabilities, in basis points of
  * gross assets. Advisory display only.
  */
 export function computeUtilizationBps(
-  reservedLiabilities: bigint | undefined,
-  grossAssets: bigint | undefined
-): bigint | undefined {
-  if (reservedLiabilities === undefined || grossAssets === undefined) {
-    return undefined;
-  }
+  reservedLiabilities: bigint,
+  grossAssets: bigint
+): bigint {
   if (grossAssets === 0n) return 0n;
   return (reservedLiabilities * LEVERAGE_SCALE) / grossAssets;
 }
@@ -225,19 +205,12 @@ export function computeTierPlayerCapacity(
 export async function readBlockingRounds(
   config: BankrollVaultConfig,
   chainTimestamp: bigint,
-  noBlockingRound: bigint = NO_BLOCKING_ROUND
+  oldestBlockingRound: bigint
 ): Promise<BlockingRoundDetail[]> {
-  const oldest = await baseSepoliaPublicClient.readContract({
-    address: config.vaultAddress,
-    abi: bankrollVaultAbi,
-    functionName: "oldestBlockingRound",
-  });
-  if (oldest === noBlockingRound) return [];
-
   const rounds: BlockingRoundDetail[] = [];
-  let cursor = oldest;
+  let cursor = oldestBlockingRound;
   // Bound the walk so a corrupted list cannot hang the LP Desk.
-  for (let i = 0; i < 256 && cursor !== noBlockingRound; i++) {
+  for (let i = 0; i < 256 && cursor !== NO_BLOCKING_ROUND; i++) {
     const [present, expiresAt, revealFrozen, nextRoundId] =
       await baseSepoliaPublicClient.readContract({
         address: config.vaultAddress,
@@ -272,9 +245,10 @@ export async function readBankrollVaultState(
     readVault(functionName).catch(() => undefined);
 
   const gameConfig = getMarginCallCrashConfig();
-  const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
 
+  // One batched round trip: the block plus every independent token/vault view.
   const [
+    block,
     tUsdBalance,
     shareBalance,
     allowance,
@@ -288,12 +262,11 @@ export async function readBankrollVaultState(
     safetyBuffer,
     freeLiquidity,
     realizedGamePnl,
-    frozenRoundCount,
     oldestBlockingRound,
-    noBlockingRound,
+    shareOperationsFrozen,
     maxWithdraw,
-    currentRoundId,
   ] = await Promise.all([
+    baseSepoliaPublicClient.getBlock({ blockTag: "latest" }),
     baseSepoliaPublicClient.readContract({
       address: config.tokenAddress,
       abi: deskDollarsAbi,
@@ -322,56 +295,61 @@ export async function readBankrollVaultState(
     readVaultIfDeployed("safetyBuffer"),
     readVaultIfDeployed("freeLiquidity"),
     readVaultIfDeployed("realizedGamePnl"),
-    readVaultIfDeployed("frozenRoundCount"),
     readVaultIfDeployed("oldestBlockingRound"),
-    readVaultIfDeployed("NO_BLOCKING_ROUND"),
+    baseSepoliaPublicClient
+      .readContract({
+        address: config.vaultAddress,
+        abi: bankrollVaultAbi,
+        functionName: "shareOperationsFrozen",
+      })
+      .catch(() => undefined),
     baseSepoliaPublicClient.readContract({
       address: config.vaultAddress,
       abi: bankrollVaultAbi,
       functionName: "maxWithdraw",
       args: [walletAddress],
     }),
-    gameConfig
-      ? baseSepoliaPublicClient
-          .readContract({
-            address: gameConfig.address,
-            abi: marginCallCrashAbi,
-            functionName: "currentRoundId",
-            blockNumber: block.number,
-          })
-          .catch(() => undefined)
-      : Promise.resolve(undefined),
   ]);
 
-  const shareOperationsFrozen = await baseSepoliaPublicClient
-    .readContract({
-      address: config.vaultAddress,
-      abi: bankrollVaultAbi,
-      functionName: "shareOperationsFrozen",
-    })
-    .catch(() => undefined);
-
-  const sentinel = noBlockingRound ?? NO_BLOCKING_ROUND;
-  const roundExposure =
-    currentRoundId === undefined
-      ? undefined
-      : await baseSepoliaPublicClient
-          .readContract({
-            address: config.vaultAddress,
-            abi: bankrollVaultAbi,
-            functionName: "roundExposure",
-            args: [currentRoundId],
-          })
-          .catch(() => undefined);
-
-  const shouldLoadBlockers =
-    shareOperationsFrozen === true ||
-    (oldestBlockingRound !== undefined && oldestBlockingRound !== sentinel);
-  const blockingRounds = shouldLoadBlockers
-    ? await readBlockingRounds(config, block.timestamp, sentinel).catch(
-        () => []
-      )
-    : [];
+  // Dependent reads run concurrently: the current round's exposure and the
+  // blocking-round walk only need results from the batch above.
+  const readCurrentRoundExposure = async () => {
+    if (!gameConfig)
+      return { currentRoundId: undefined, roundExposure: undefined };
+    const currentRoundId = await baseSepoliaPublicClient
+      .readContract({
+        address: gameConfig.address,
+        abi: marginCallCrashAbi,
+        functionName: "currentRoundId",
+        blockNumber: block.number,
+      })
+      .catch(() => undefined);
+    if (currentRoundId === undefined) {
+      return { currentRoundId, roundExposure: undefined };
+    }
+    const roundExposure = await baseSepoliaPublicClient
+      .readContract({
+        address: config.vaultAddress,
+        abi: bankrollVaultAbi,
+        functionName: "reservedPayoutByRound",
+        args: [currentRoundId],
+      })
+      .catch(() => undefined);
+    return { currentRoundId, roundExposure };
+  };
+  const [{ currentRoundId, roundExposure }, blockingRounds] = await Promise.all(
+    [
+      readCurrentRoundExposure(),
+      oldestBlockingRound !== undefined &&
+      oldestBlockingRound !== NO_BLOCKING_ROUND
+        ? readBlockingRounds(
+            config,
+            block.timestamp,
+            oldestBlockingRound
+          ).catch(() => [])
+        : Promise.resolve<BlockingRoundDetail[]>([]),
+    ]
+  );
 
   const utilizationBps =
     reservedLiabilities !== undefined
@@ -392,14 +370,6 @@ export async function readBankrollVaultState(
       ? computeTierPlayerCapacity(remainingPayoutCapacity)
       : undefined;
 
-  const earliestExpiry =
-    blockingRounds.length > 0
-      ? blockingRounds.reduce(
-          (min, round) => (round.expiresAt < min ? round.expiresAt : min),
-          blockingRounds[0]!.expiresAt
-        )
-      : undefined;
-
   return {
     tUsdBalance,
     shareBalance,
@@ -414,38 +384,15 @@ export async function readBankrollVaultState(
     safetyBuffer,
     freeLiquidity,
     realizedGamePnl,
-    frozenRoundCount,
-    oldestBlockingRound,
     shareOperationsFrozen: shareOperationsFrozen ?? false,
-    noBlockingRound: sentinel,
     maxWithdraw,
     currentRoundId,
     roundExposure,
     blockingRounds,
-    earliestExpiry,
     utilizationBps,
     remainingPayoutCapacity,
     tierCapacity,
     chainTimestamp: block.timestamp,
-  };
-}
-
-/** Loads a game round for LP finalize/expire actions. */
-export async function readCrashRoundForLp(
-  roundId: bigint
-): Promise<CrashRound | null> {
-  const gameConfig = getMarginCallCrashConfig();
-  if (!gameConfig) return null;
-  const round = await baseSepoliaPublicClient.readContract({
-    address: gameConfig.address,
-    abi: marginCallCrashAbi,
-    functionName: "getRound",
-    args: [roundId],
-  });
-  if (round.status === ROUND_STATUS.uninitialized) return null;
-  return {
-    ...round,
-    status: round.status as CrashRound["status"],
   };
 }
 

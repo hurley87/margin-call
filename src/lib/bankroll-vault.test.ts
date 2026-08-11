@@ -91,14 +91,10 @@ describe("Bankroll Vault public configuration and reads", () => {
           return Promise.resolve(18_750_000_000n);
         case "realizedGamePnl":
           return Promise.resolve(-250_000n);
-        case "frozenRoundCount":
-          return Promise.resolve(0n);
         case "oldestBlockingRound":
           return Promise.resolve(noBlocking);
         case "shareOperationsFrozen":
           return Promise.resolve(false);
-        case "NO_BLOCKING_ROUND":
-          return Promise.resolve(noBlocking);
         case "maxWithdraw":
           return Promise.resolve(13n);
         default:
@@ -154,11 +150,9 @@ describe("Bankroll Vault public configuration and reads", () => {
       "safetyBuffer",
       "freeLiquidity",
       "realizedGamePnl",
-      "frozenRoundCount",
       "oldestBlockingRound",
       "shareOperationsFrozen",
-      "NO_BLOCKING_ROUND",
-      "roundExposure",
+      "reservedPayoutByRound",
     ];
     sdk.readContract.mockImplementation(({ functionName }) =>
       legacyViews.includes(functionName)

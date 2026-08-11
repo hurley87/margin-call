@@ -350,12 +350,6 @@ contract RevealWindowFreezeTest is Test {
         assertEq(vault.realizedGamePnl(), int256(ONE_TUSD) + int256(ONE_TUSD) - int256(1_250_000));
     }
 
-    function testRoundExposureMatchesReservedPayout() public {
-        _enter(0, ALICE, ONE_TUSD, 12_500);
-        assertEq(vault.roundExposure(0), 1_250_000);
-        assertEq(vault.roundExposure(1), 0);
-    }
-
     function _assertFreezeInvariants() internal view {
         uint256 count;
         uint256 cursor = vault.oldestBlockingRound();

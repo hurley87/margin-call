@@ -1,21 +1,18 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { encodeFunctionData, type Address, type Hex } from "viem";
+import { encodeFunctionData, type Hex } from "viem";
 import { requestCrashAttestation } from "@/lib/inco-attestation";
-import {
-  readCrashRoundForLp,
-  type BlockingRoundDetail,
-} from "@/lib/bankroll-vault";
+import type { BlockingRoundDetail } from "@/lib/bankroll-vault";
 import {
   getMarginCallCrashConfig,
   marginCallCrashAbi,
+  readCrashRoundForLp,
   ROUND_STATUS,
 } from "@/lib/margin-call-crash";
 import {
-  applyStageResult,
-  confirmSponsoredCall,
-  submitSponsoredCall,
+  resumeSponsoredStage,
+  runSponsoredStage,
   type StageErrorCopy,
 } from "@/lib/sponsored-call";
 import { notifyWalletBalancesChanged } from "@/lib/wallet-balance-sync";
@@ -49,9 +46,10 @@ const stageCopy: Record<Stage, StageErrorCopy> = {
 
 /**
  * Drives LP Desk one-click finalize/expire against a blocking round using the
- * same sponsored receipt-confirmed stage machine as player settlement.
+ * same sponsored receipt-confirmed stage machine as player settlement. On
+ * success it notifies wallet-balance subscribers, which re-read vault state.
  */
-export function useLpFreezeActions(onResolved?: () => void) {
+export function useLpFreezeActions() {
   const transaction = usePrivySponsoredTransaction();
   const gameConfig = getMarginCallCrashConfig();
   const [status, setStatus] = useState<LpFreezeActionStatus>("idle");
@@ -62,28 +60,47 @@ export function useLpFreezeActions(onResolved?: () => void) {
   const retryRoundId = useRef<bigint | null>(null);
   const pendingStage = useRef<{ stage: Stage; hash: Hex } | null>(null);
 
-  const runStage = useCallback(
-    async (stage: Stage, request: { to: Address; data: Hex }) => {
-      retryKind.current = stage;
-      setStatus(`${stage}-submitting`);
-      setError(null);
-      const result = await submitSponsoredCall(transaction, request, (hash) => {
-        pendingStage.current = { stage, hash };
-        setStatus(`${stage}-pending`);
-      });
-      applyStageResult(pendingStage, stageCopy[stage], result);
-    },
-    [transaction]
-  );
-
-  const finalizeRound = useCallback(
-    async (roundId: bigint): Promise<boolean> => {
-      if (!gameConfig || inFlight.current) return false;
-      if (pendingStage.current) return false;
+  const runAction = useCallback(
+    async (
+      stage: Stage,
+      roundId: bigint,
+      prepareCallData: () => Promise<Hex>
+    ): Promise<boolean> => {
+      if (!gameConfig || inFlight.current || pendingStage.current) return false;
       inFlight.current = true;
       retryRoundId.current = roundId;
       setActiveRoundId(roundId);
+      setError(null);
       try {
+        const data = await prepareCallData();
+        retryKind.current = stage;
+        await runSponsoredStage<Stage>({
+          transaction,
+          pendingStage,
+          stage,
+          copy: stageCopy[stage],
+          request: { to: gameConfig.address, data },
+          onStatus: setStatus,
+        });
+        setStatus("confirmed");
+        notifyWalletBalancesChanged();
+        return true;
+      } catch (caught) {
+        setStatus("error");
+        setError(
+          caught instanceof Error ? caught.message : stageCopy[stage].failed
+        );
+        return false;
+      } finally {
+        inFlight.current = false;
+      }
+    },
+    [gameConfig, transaction]
+  );
+
+  const finalizeRound = useCallback(
+    (roundId: bigint) =>
+      runAction("finalize", roundId, async () => {
         const round = await readCrashRoundForLp(roundId);
         if (!round) throw new Error("Blocking round is no longer available.");
         if (round.status !== ROUND_STATUS.revealRequested) {
@@ -92,64 +109,29 @@ export function useLpFreezeActions(onResolved?: () => void) {
           );
         }
         setStatus("attesting");
-        setError(null);
         const attestation = await requestCrashAttestation(round.crashRandom);
-        await runStage("finalize", {
-          to: gameConfig.address,
-          data: encodeFunctionData({
-            abi: marginCallCrashAbi,
-            functionName: "finalizeRound",
-            args: [roundId, attestation.plaintext, attestation.signatures],
-          }) as Hex,
-        });
-        setStatus("confirmed");
-        notifyWalletBalancesChanged();
-        onResolved?.();
-        return true;
-      } catch (caught) {
-        setStatus("error");
-        setError(
-          caught instanceof Error ? caught.message : stageCopy.finalize.failed
-        );
-        return false;
-      } finally {
-        inFlight.current = false;
-      }
-    },
-    [gameConfig, onResolved, runStage]
+        return encodeFunctionData({
+          abi: marginCallCrashAbi,
+          functionName: "finalizeRound",
+          args: [roundId, attestation.plaintext, attestation.signatures],
+        }) as Hex;
+      }),
+    [runAction]
   );
 
   const expireRound = useCallback(
-    async (roundId: bigint): Promise<boolean> => {
-      if (!gameConfig || inFlight.current) return false;
-      if (pendingStage.current) return false;
-      inFlight.current = true;
-      retryRoundId.current = roundId;
-      setActiveRoundId(roundId);
-      try {
-        await runStage("expire", {
-          to: gameConfig.address,
-          data: encodeFunctionData({
+    (roundId: bigint) =>
+      runAction(
+        "expire",
+        roundId,
+        async () =>
+          encodeFunctionData({
             abi: marginCallCrashAbi,
             functionName: "expireRound",
             args: [roundId],
-          }) as Hex,
-        });
-        setStatus("confirmed");
-        notifyWalletBalancesChanged();
-        onResolved?.();
-        return true;
-      } catch (caught) {
-        setStatus("error");
-        setError(
-          caught instanceof Error ? caught.message : stageCopy.expire.failed
-        );
-        return false;
-      } finally {
-        inFlight.current = false;
-      }
-    },
-    [gameConfig, onResolved, runStage]
+          }) as Hex
+      ),
+    [runAction]
   );
 
   const resolveBlockingRound = useCallback(
@@ -167,17 +149,15 @@ export function useLpFreezeActions(onResolved?: () => void) {
     if (pending) {
       inFlight.current = true;
       setActiveRoundId(retryRoundId.current);
+      setError(null);
       try {
-        setStatus(`${pending.stage}-pending`);
-        setError(null);
-        applyStageResult(
+        await resumeSponsoredStage({
           pendingStage,
-          stageCopy[pending.stage],
-          await confirmSponsoredCall(pending.hash)
-        );
+          copyByStage: stageCopy,
+          onStatus: setStatus,
+        });
         setStatus("confirmed");
         notifyWalletBalancesChanged();
-        onResolved?.();
         return true;
       } catch (caught) {
         setStatus("error");
@@ -196,7 +176,7 @@ export function useLpFreezeActions(onResolved?: () => void) {
     return retryKind.current === "expire"
       ? expireRound(roundId)
       : finalizeRound(roundId);
-  }, [expireRound, finalizeRound, onResolved]);
+  }, [expireRound, finalizeRound]);
 
   const pendingReceiptStage = pendingStage.current?.stage ?? null;
   const retryAction: LpFreezeRetryAction | null =

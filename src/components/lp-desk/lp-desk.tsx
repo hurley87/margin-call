@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import {
   useBankrollVaultDeposit,
@@ -19,6 +19,7 @@ import {
   parseTUsdInput,
   TUSD_DECIMALS,
 } from "@/lib/desk-dollars";
+import { formatHundredths } from "@/lib/margin-call-crash";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 
 function formatAmount(value: bigint | undefined, unit: string) {
@@ -35,10 +36,7 @@ function formatSignedAmount(value: bigint | undefined) {
 }
 
 function formatUtilization(bps: bigint | undefined) {
-  if (bps === undefined) return "—";
-  const whole = bps / 100n;
-  const fraction = bps % 100n;
-  return `${whole.toString()}.${fraction.toString().padStart(2, "0")}%`;
+  return bps === undefined ? "—" : `${formatHundredths(bps)}%`;
 }
 
 function formatExpiry(expiresAt: bigint | undefined, chainTimestamp?: bigint) {
@@ -152,15 +150,15 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function FreezeBanner({
   blockingRounds,
-  earliestExpiry,
   chainTimestamp,
   freeze,
 }: {
   blockingRounds: BlockingRoundDetail[];
-  earliestExpiry: bigint | undefined;
   chainTimestamp: bigint | undefined;
   freeze: ReturnType<typeof useLpFreezeActions>;
 }) {
+  // The contract's blocking list is ordered, so the head expires first.
+  const earliestExpiry = blockingRounds[0]?.expiresAt;
   return (
     <div
       role="alert"
@@ -266,11 +264,9 @@ export function LpDesk() {
   const { user } = usePrivy();
   const walletAddress = getEvmWalletAddress(user);
   const vault = useBankrollVaultDeposit(walletAddress);
-  const refreshVaultBalances = vault.refresh;
-  const refreshVault = useCallback(() => {
-    void refreshVaultBalances();
-  }, [refreshVaultBalances]);
-  const freeze = useLpFreezeActions(refreshVault);
+  // Freeze resolutions notify wallet-balance subscribers, which re-read the
+  // vault state above — no explicit refresh wiring is needed.
+  const freeze = useLpFreezeActions();
   const [amount, setAmount] = useState("");
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
   const parsedAmount = parseTUsdInput(amount);
@@ -349,7 +345,6 @@ export function LpDesk() {
       {isFrozen ? (
         <FreezeBanner
           blockingRounds={blockingRounds}
-          earliestExpiry={vault.earliestExpiry}
           chainTimestamp={vault.chainTimestamp}
           freeze={freeze}
         />

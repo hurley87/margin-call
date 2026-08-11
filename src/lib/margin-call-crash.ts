@@ -37,8 +37,10 @@ export const marginCallCrashAbi = parseAbi([
   "event TicketRefunded(uint256 indexed roundId, uint256 indexed ticketId, address indexed player, address receiver, uint256 margin)",
 ]);
 
-const ONE_TUSD = 1_000_000n;
-const LEVERAGE_SCALE = 10_000n;
+/** One Desk Dollar in 6-decimal base units. */
+export const ONE_TUSD = 1_000_000n;
+/** Basis-point denominator shared by leverage and Crash Point math. */
+export const LEVERAGE_SCALE = 10_000n;
 
 /** Supported entry margins in tUSD base units (6 decimals). */
 export const ENTRY_MARGINS_TUSD = [
@@ -278,11 +280,15 @@ export function isExpiryRefundTicket(
   );
 }
 
-export function formatLeverageBps(leverageBps: bigint): string {
-  const hundredths = leverageBps / 100n;
+/** Renders a hundredths-scaled value as "W.FF" (e.g. 125 → "1.25"). */
+export function formatHundredths(hundredths: bigint): string {
   const whole = hundredths / 100n;
   const fraction = hundredths % 100n;
-  return `${whole.toString()}.${fraction.toString().padStart(2, "0")}x`;
+  return `${whole.toString()}.${fraction.toString().padStart(2, "0")}`;
+}
+
+export function formatLeverageBps(leverageBps: bigint): string {
+  return `${formatHundredths(leverageBps / 100n)}x`;
 }
 
 /**
@@ -402,10 +408,26 @@ export function formatCrashPointBps(crashPointBps: bigint): string {
       : crashPointBps > MAX_CRASH_POINT_BPS
         ? MAX_CRASH_POINT_BPS
         : crashPointBps;
-  const hundredths = bounded / 100n;
-  const whole = hundredths / 100n;
-  const fraction = hundredths % 100n;
-  return `${whole.toString()}.${fraction.toString().padStart(2, "0")}x`;
+  return `${formatHundredths(bounded / 100n)}x`;
+}
+
+/** Loads a game round for LP finalize/expire actions. */
+export async function readCrashRoundForLp(
+  roundId: bigint
+): Promise<CrashRound | null> {
+  const config = getMarginCallCrashConfig();
+  if (!config) return null;
+  const round = await baseSepoliaPublicClient.readContract({
+    address: config.address,
+    abi: marginCallCrashAbi,
+    functionName: "getRound",
+    args: [roundId],
+  });
+  if (round.status === ROUND_STATUS.uninitialized) return null;
+  return {
+    ...round,
+    status: normalizeRoundStatus(round.status),
+  };
 }
 
 export async function readCurrentCrashRound(config: MarginCallCrashConfig) {

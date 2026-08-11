@@ -173,11 +173,6 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         return assets > protectedAssets ? assets - protectedAssets : 0;
     }
 
-    /// @notice Returns reserved maximum payout for a round, or zero when none remains.
-    function roundExposure(uint256 roundId) external view returns (uint256) {
-        return reservedPayoutByRound[roundId];
-    }
-
     /// @notice Oldest unresolved exposed round id, or `NO_BLOCKING_ROUND` when none remain.
     function oldestBlockingRound() public view returns (uint256) {
         return _blockingHead;

@@ -33,16 +33,6 @@ vi.mock("@/lib/inco-attestation", () => ({
   requestCrashAttestation: sdk.requestCrashAttestation,
 }));
 
-vi.mock("@/lib/bankroll-vault", async () => {
-  const actual = await vi.importActual<typeof import("@/lib/bankroll-vault")>(
-    "@/lib/bankroll-vault"
-  );
-  return {
-    ...actual,
-    readCrashRoundForLp: sdk.readCrashRoundForLp,
-  };
-});
-
 vi.mock("@/lib/margin-call-crash", async () => {
   const actual = await vi.importActual<
     typeof import("@/lib/margin-call-crash")
@@ -53,6 +43,7 @@ vi.mock("@/lib/margin-call-crash", async () => {
       address: "0x00000000000000000000000000000000000000c8",
       deploymentBlock: 1n,
     }),
+    readCrashRoundForLp: sdk.readCrashRoundForLp,
   };
 });
 
@@ -88,8 +79,7 @@ describe("useLpFreezeActions", () => {
       totalMargin: 1n,
       reservedPayout: 1n,
     });
-    const onResolved = vi.fn();
-    const { result } = renderHook(() => useLpFreezeActions(onResolved));
+    const { result } = renderHook(() => useLpFreezeActions());
 
     await act(async () => {
       await result.current.finalizeRound(7n);
@@ -98,7 +88,6 @@ describe("useLpFreezeActions", () => {
     expect(sdk.requestCrashAttestation).toHaveBeenCalled();
     expect(sdk.transaction.submit).toHaveBeenCalled();
     expect(sdk.notifyWalletBalancesChanged).toHaveBeenCalled();
-    expect(onResolved).toHaveBeenCalled();
     expect(result.current.status).toBe("confirmed");
   });
 

@@ -36,7 +36,6 @@ type VaultFixture = {
     revealFrozen: boolean;
     expiryEligible: boolean;
   }>;
-  earliestExpiry: bigint | undefined;
   chainTimestamp: bigint | undefined;
   utilizationBps: bigint;
   tierCapacity: Array<{
@@ -74,7 +73,6 @@ const sdk = vi.hoisted(() => {
     realizedGamePnl: -250000n,
     shareOperationsFrozen: false,
     blockingRounds: [],
-    earliestExpiry: undefined,
     chainTimestamp: 1_000_000n,
     utilizationBps: 500n,
     tierCapacity: [
@@ -194,7 +192,6 @@ describe("LpDesk", () => {
       canDeposit: false,
       canWithdraw: false,
       shareOperationsFrozen: true,
-      earliestExpiry: 1_000_900n,
       blockingRounds: [
         {
           roundId: 4n,
