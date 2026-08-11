@@ -232,7 +232,7 @@ The Game Jam MVP is complete when:
 3. A fresh phone number can log in, receive an embedded wallet, claim `tUSD` from the rate-limited in-app faucet, approve, post `1`, `5`, or `10` tUSD, select an Arcade Leverage tier, and receive one ticket in an open round — without installing a wallet or holding ETH.
 4. Player margin is received directly by `BankrollVault`; `MarginCallCrash` never holds general bankroll custody.
 5. An accepted entry atomically reserves its maximum payout, and an undercollateralized or exposure-breaking entry reverts without retaining funds.
-6. The encrypted crash handle is created before any ticket is accepted and cannot be publicly read while entry is open.
+6. The encrypted crash handle is created before any ticket is accepted and remains publicly inspectable, while no player, operator, administrator, or opener can decrypt its plaintext while entry is open.
 7. Entry closes onchain after 45 seconds of the 60-second round.
 8. Finalization verifies an Inco attestation bound to the exact stored handle.
 9. Crash and payout boundary and distribution tests pass, including equality and the `10.00x` cap.
