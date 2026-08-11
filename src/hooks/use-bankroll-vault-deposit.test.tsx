@@ -28,6 +28,11 @@ const readyValues = (allowance = 0n) => ({
   safetyBuffer: 5000000000n,
   freeLiquidity: 20000000000n,
   maxWithdraw: 20000000000n,
+  shareOperationsFrozen: false,
+  realizedGamePnl: 0n,
+  blockingRounds: [],
+  utilizationBps: 0n,
+  tierCapacity: [],
 });
 
 vi.mock("@/lib/base-sepolia", () => ({

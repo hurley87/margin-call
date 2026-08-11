@@ -28,9 +28,25 @@ type VaultFixture = {
   safetyBuffer: bigint;
   freeLiquidity: bigint;
   maxWithdraw: bigint;
+  realizedGamePnl: bigint;
+  shareOperationsFrozen: boolean;
+  blockingRounds: Array<{
+    roundId: bigint;
+    expiresAt: bigint;
+    revealFrozen: boolean;
+    expiryEligible: boolean;
+  }>;
+  chainTimestamp: bigint | undefined;
+  utilizationBps: bigint;
+  tierCapacity: Array<{
+    leverageBps: bigint;
+    label: string;
+    maxMargin: bigint;
+  }>;
   deposit: ReturnType<typeof vi.fn>;
   withdraw: ReturnType<typeof vi.fn>;
   retry: ReturnType<typeof vi.fn>;
+  refresh: ReturnType<typeof vi.fn>;
 };
 
 const sdk = vi.hoisted(() => {
@@ -54,11 +70,40 @@ const sdk = vi.hoisted(() => {
     safetyBuffer: 5000000000n,
     freeLiquidity: 18750000000n,
     maxWithdraw: 37500000n,
+    realizedGamePnl: -250000n,
+    shareOperationsFrozen: false,
+    blockingRounds: [],
+    chainTimestamp: 1_000_000n,
+    utilizationBps: 500n,
+    tierCapacity: [
+      { leverageBps: 12_500n, label: "1.25x", maxMargin: 80_000_000n },
+      { leverageBps: 15_000n, label: "1.50x", maxMargin: 66_666_666n },
+      { leverageBps: 20_000n, label: "2.00x", maxMargin: 50_000_000n },
+      { leverageBps: 30_000n, label: "3.00x", maxMargin: 33_333_333n },
+      { leverageBps: 50_000n, label: "5.00x", maxMargin: 20_000_000n },
+      { leverageBps: 100_000n, label: "10.00x", maxMargin: 10_000_000n },
+    ],
     deposit: vi.fn(),
     withdraw: vi.fn(),
     retry: vi.fn(),
+    refresh: vi.fn(),
   });
-  return { vault: ready(), ready };
+  return {
+    vault: ready(),
+    ready,
+    freeze: {
+      status: "idle" as const,
+      error: null as string | null,
+      activeRoundId: null as bigint | null,
+      canAct: true,
+      canRetry: false,
+      retryAction: null as null,
+      finalizeRound: vi.fn(),
+      expireRound: vi.fn(),
+      resolveBlockingRound: vi.fn(),
+      retry: vi.fn(),
+    },
+  };
 });
 
 vi.mock("@privy-io/react-auth", () => ({
@@ -75,16 +120,27 @@ vi.mock("@privy-io/react-auth", () => ({
 vi.mock("@/hooks/use-bankroll-vault-deposit", () => ({
   useBankrollVaultDeposit: () => sdk.vault,
 }));
+vi.mock("@/hooks/use-lp-freeze-actions", () => ({
+  useLpFreezeActions: () => sdk.freeze,
+}));
 
 import { LpDesk } from "./lp-desk";
 
 beforeEach(() => {
   sdk.vault = sdk.ready();
+  sdk.freeze.resolveBlockingRound.mockReset();
+  sdk.freeze.retry.mockReset();
+  sdk.freeze.status = "idle";
+  sdk.freeze.error = null;
+  sdk.freeze.canAct = true;
+  sdk.freeze.canRetry = false;
+  sdk.freeze.retryAction = null;
+  sdk.freeze.activeRoundId = null;
 });
 afterEach(() => cleanup());
 
 describe("LpDesk", () => {
-  it("shows the authenticated wallet and meaningful pre-game vault accounting", () => {
+  it("shows the authenticated wallet and complete vault risk display", () => {
     render(<LpDesk />);
     expect(
       screen.getByText("Wallet Desk Dollars").nextElementSibling?.textContent
@@ -96,6 +152,10 @@ describe("LpDesk", () => {
       screen.getByText("Share price (assets per share)").nextElementSibling
         ?.textContent
     ).toBe("1 tUSD");
+    expect(
+      screen.getByText("Realized vault gain/loss").nextElementSibling
+        ?.textContent
+    ).toBe("−0.25 tUSD");
     expect(
       screen.getByText("Gross assets").nextElementSibling?.textContent
     ).toBe("25000 tUSD");
@@ -109,18 +169,82 @@ describe("LpDesk", () => {
       screen.getByText("Global free liquidity").nextElementSibling?.textContent
     ).toBe("18750 tUSD");
     expect(
+      screen.getByText("Utilization").nextElementSibling?.textContent
+    ).toBe("5.00%");
+    expect(
       screen.getByText("Your immediately withdrawable tUSD").nextElementSibling
         ?.textContent
     ).toBe("37.5 tUSD");
+    expect(screen.getByText("1.25x")).not.toBeNull();
+    expect(screen.getByText(/80 tUSD max margin/)).not.toBeNull();
     expect(
       screen.getByText(/Global free liquidity is the vault-wide capacity/)
     ).not.toBeNull();
     expect(
-      screen.getByText(
-        /vault-share value can decline as game results are realized/i
-      )
+      screen.getByText(/Liquidity providers can lose tUSD when players win/i)
     ).not.toBeNull();
     expect(screen.getByText(/Base Sepolia/)).not.toBeNull();
+  });
+
+  it("shows the freeze banner with honest overlapping-outage copy and actions", () => {
+    sdk.vault = {
+      ...sdk.ready(),
+      canDeposit: false,
+      canWithdraw: false,
+      shareOperationsFrozen: true,
+      blockingRounds: [
+        {
+          roundId: 4n,
+          expiresAt: 1_000_900n,
+          revealFrozen: true,
+          expiryEligible: false,
+        },
+        {
+          roundId: 5n,
+          expiresAt: 1_001_000n,
+          revealFrozen: false,
+          expiryEligible: true,
+        },
+      ],
+    };
+    render(<LpDesk />);
+    expect(
+      screen.getByText(/Reveal-window freeze — LP deposits and withdrawals/)
+    ).not.toBeNull();
+    expect(
+      screen.getByText((_, element) =>
+        element?.tagName === "P"
+          ? /bounds one round's freeze, not the total/i.test(
+              element.textContent ?? ""
+            )
+          : false
+      )
+    ).not.toBeNull();
+    expect(screen.getByText(/frozen indefinitely/i)).not.toBeNull();
+    expect(screen.getByText("Round 4")).not.toBeNull();
+    expect(screen.getByText("Round 5")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Finalize round" }));
+    expect(sdk.freeze.resolveBlockingRound).toHaveBeenCalledWith(
+      expect.objectContaining({ roundId: 4n })
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Expire round" }));
+    expect(sdk.freeze.resolveBlockingRound).toHaveBeenCalledWith(
+      expect.objectContaining({ roundId: 5n })
+    );
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Deposits frozen",
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Withdrawals frozen",
+        }) as HTMLButtonElement
+      ).disabled
+    ).toBe(true);
   });
 
   it("validates an exact six-decimal asset amount against the wallet balance", () => {

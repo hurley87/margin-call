@@ -424,11 +424,13 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
       !!config &&
       !!walletAddress &&
       (state.status === "ready" || canSubmitAfterError) &&
+      !state.shareOperationsFrozen &&
       !inFlight.current,
     canWithdraw:
       !!config &&
       !!walletAddress &&
       (state.status === "ready" || canSubmitAfterError) &&
+      !state.shareOperationsFrozen &&
       !inFlight.current,
     canRetry:
       state.status === "error" &&
@@ -439,5 +441,6 @@ export function useBankrollVaultDeposit(walletAddress: Address | null) {
     deposit,
     withdraw,
     retry,
+    refresh,
   };
 }

@@ -12,6 +12,13 @@ interface IBankrollVault {
         uint256 maximumPayout
     ) external;
 
+    /// @notice Records an exposed round so share ops can freeze at reveal or expiry.
+    /// @dev Called exactly once, on the round's first accepted ticket.
+    function registerExposure(uint256 roundId, uint64 expiresAt) external;
+
+    /// @notice Increments the reveal-window freeze for an already-registered exposed round.
+    function noteRevealRequested(uint256 roundId) external;
+
     /// @notice Marks a round's result into share pricing before any claim.
     /// @dev Releases `totalMargin` from unrecognizedMargin and adds O(tiers) winning
     ///      liability at or below `crashPointBps` into pendingObligations.

@@ -34,6 +34,16 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     /// @notice Received player margin that has not yet been recognized as vault value.
     uint256 public unrecognizedMargin;
 
+    /// @notice Cumulative verified game P&L: sum over finalizations of `totalMargin − winningLiability`.
+    /// @dev Expiry is pricing-neutral and does not change this value. Positive means LPs gained.
+    int256 public realizedGamePnl;
+
+    /// @notice Number of exposed rounds currently in `RevealRequested` that still block share ops.
+    uint256 public frozenRoundCount;
+
+    /// @notice Sentinel for an empty blocking-round list / end of traversal.
+    uint256 public constant NO_BLOCKING_ROUND = type(uint256).max;
+
     /// @notice Deployer allowed to set the authorized game exactly once.
     address public immutable gameConfigurer;
 
@@ -49,12 +59,23 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         uint256 leverageBps;
     }
 
+    /// @dev Unresolved exposed rounds ordered by round id (expiresAt is monotone in id).
+    struct BlockingRound {
+        uint64 expiresAt;
+        bool revealFrozen;
+        uint256 prev;
+        uint256 next;
+        bool present;
+    }
+
     mapping(uint256 ticketId => TicketReservation reservation) private _reservations;
     mapping(uint256 roundId => uint256 reservedPayout) public reservedPayoutByRound;
     mapping(uint256 roundId => mapping(uint256 leverageBps => uint256 reservedPayout)) public
         reservedPayoutByRoundAndTier;
     /// @dev Shared guard for finalize and expire: a round's obligations may be marked exactly once.
     mapping(uint256 roundId => bool marked) private _roundObligationsMarked;
+    mapping(uint256 roundId => BlockingRound blocking) private _blocking;
+    uint256 private _blockingHead = NO_BLOCKING_ROUND;
 
     error UnauthorizedGameConfigurer(address caller);
     error AuthorizedGameAlreadySet();
@@ -76,6 +97,10 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
     error InsufficientFreeLiquidity(uint256 freeLiquidity, uint256 required);
     error RoundReservationExceeded(uint256 roundId, uint256 reservedPayout, uint256 limit);
     error TicketReservationExceeded(uint256 maximumPayout, uint256 limit);
+    error ShareOperationsFrozen(uint256 oldestBlockingRound_, uint256 frozenRoundCount_);
+    error BlockingRoundAlreadyRegistered(uint256 roundId);
+    error BlockingRoundMissing(uint256 roundId);
+    error BlockingRoundAlreadyRevealFrozen(uint256 roundId);
 
     event AuthorizedGameChanged(address indexed previousGame, address indexed newGame);
     event LiabilityReserved(
@@ -148,6 +173,30 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         return assets > protectedAssets ? assets - protectedAssets : 0;
     }
 
+    /// @notice Oldest unresolved exposed round id, or `NO_BLOCKING_ROUND` when none remain.
+    function oldestBlockingRound() public view returns (uint256) {
+        return _blockingHead;
+    }
+
+    /// @notice True while any exposed reveal is outstanding or an exposed round is expiry-eligible.
+    function shareOperationsFrozen() public view returns (bool) {
+        if (frozenRoundCount > 0) return true;
+        uint256 head = _blockingHead;
+        if (head == NO_BLOCKING_ROUND) return false;
+        return block.timestamp >= _blocking[head].expiresAt;
+    }
+
+    /// @notice Blocking-round cursor for LP Desk traversal. `nextRoundId` is `NO_BLOCKING_ROUND` at end.
+    function getBlockingRound(uint256 roundId)
+        external
+        view
+        returns (bool present, uint64 expiresAt, bool revealFrozen, uint256 nextRoundId)
+    {
+        BlockingRound storage blocking = _blocking[roundId];
+        if (!blocking.present) return (false, 0, false, NO_BLOCKING_ROUND);
+        return (true, blocking.expiresAt, blocking.revealFrozen, blocking.next);
+    }
+
     /// @notice Returns a stored ticket reservation, or an empty record when none exists.
     function getReservation(uint256 ticketId) external view returns (TicketReservation memory) {
         return _reservations[ticketId];
@@ -174,11 +223,34 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         emit LiabilityReserved(roundId, ticketId, player, margin, maximumPayout, leverageBps);
     }
 
+    /// @notice Records an exposed round so share ops freeze on its reveal or expiry eligibility.
+    function registerExposure(uint256 roundId, uint64 expiresAt) external nonReentrant {
+        _requireAuthorizedGameCaller();
+        if (_blocking[roundId].present) revert BlockingRoundAlreadyRegistered(roundId);
+        _insertBlockingRound(roundId, expiresAt);
+    }
+
+    /// @notice Increments the reveal freeze for a registered exposed round exactly once.
+    function noteRevealRequested(uint256 roundId) external nonReentrant {
+        _requireAuthorizedGameCaller();
+        BlockingRound storage blocking = _blocking[roundId];
+        if (!blocking.present) revert BlockingRoundMissing(roundId);
+        if (blocking.revealFrozen) revert BlockingRoundAlreadyRevealFrozen(roundId);
+
+        blocking.revealFrozen = true;
+        unchecked {
+            ++frozenRoundCount;
+        }
+    }
+
     /// @notice Marks a finalized round into share pricing before any claim is pulled.
     /// @dev Winning liability is the O(tiers) sum of reserved payouts at or below `crashPointBps`.
     function markRoundFinalized(uint256 roundId, uint256 totalMargin, uint256 crashPointBps) external nonReentrant {
         _requireAuthorizedGameCaller();
-        _markRoundObligations(roundId, totalMargin, _winningLiability(roundId, crashPointBps));
+        uint256 winningLiability = _winningLiability(roundId, crashPointBps);
+        // Checked arithmetic: liability never exceeds total reserved payout for the round.
+        realizedGamePnl += int256(totalMargin) - int256(winningLiability);
+        _markRoundObligations(roundId, totalMargin, winningLiability);
     }
 
     /// @notice Marks an expired round's margins into pending refund obligations.
@@ -191,6 +263,7 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
 
     /// @dev Moves a round's margin out of unrecognizedMargin and records its payout obligation.
     ///      Enforces the once-per-round marking invariant shared by finalize and expire.
+    ///      Clears that round's freeze contribution atomically after obligations update.
     function _markRoundObligations(uint256 roundId, uint256 totalMargin, uint256 obligation) internal {
         if (_roundObligationsMarked[roundId]) revert RoundAlreadyMarked(roundId);
         uint256 currentUnrecognized = unrecognizedMargin;
@@ -201,6 +274,7 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         _roundObligationsMarked[roundId] = true;
         unrecognizedMargin = currentUnrecognized - totalMargin;
         pendingObligations += obligation;
+        _clearBlockingRound(roundId);
     }
 
     /// @notice Pays a winning ticket within its reservation and consumes the reservation.
@@ -330,14 +404,26 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         reservedPayoutByRoundAndTier[roundId][leverageBps] += maximumPayout;
     }
 
+    /// @notice Returns the maximum assets a depositor may add right now.
+    function maxDeposit(address) public view override returns (uint256) {
+        return shareOperationsFrozen() ? 0 : type(uint256).max;
+    }
+
+    /// @notice Returns the maximum shares a depositor may mint right now.
+    function maxMint(address) public view override returns (uint256) {
+        return shareOperationsFrozen() ? 0 : type(uint256).max;
+    }
+
     /// @notice Returns the owner's immediately executable asset withdrawal limit.
     function maxWithdraw(address owner) public view override returns (uint256) {
+        if (shareOperationsFrozen()) return 0;
         (uint256 maxAssets,) = _withdrawalLimits(owner);
         return maxAssets;
     }
 
     /// @notice Returns the owner's immediately executable share redemption limit.
     function maxRedeem(address owner) public view override returns (uint256) {
+        if (shareOperationsFrozen()) return 0;
         uint256 ownerShares = balanceOf(owner);
         (uint256 maxAssets, uint256 ownerAssets) = _withdrawalLimits(owner);
 
@@ -347,6 +433,30 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         return Math.min(ownerShares, maxShares);
     }
 
+    /// @inheritdoc ERC4626
+    function deposit(uint256 assets, address receiver) public override returns (uint256) {
+        _requireShareOperationsThawed();
+        return super.deposit(assets, receiver);
+    }
+
+    /// @inheritdoc ERC4626
+    function mint(uint256 shares, address receiver) public override returns (uint256) {
+        _requireShareOperationsThawed();
+        return super.mint(shares, receiver);
+    }
+
+    /// @inheritdoc ERC4626
+    function withdraw(uint256 assets, address receiver, address owner) public override returns (uint256) {
+        _requireShareOperationsThawed();
+        return super.withdraw(assets, receiver, owner);
+    }
+
+    /// @inheritdoc ERC4626
+    function redeem(uint256 shares, address receiver, address owner) public override returns (uint256) {
+        _requireShareOperationsThawed();
+        return super.redeem(shares, receiver, owner);
+    }
+
     function _withdrawalLimits(address owner) internal view returns (uint256 maxAssets, uint256 ownerAssets) {
         uint256 supply = totalSupply();
         if (supply == 0) return (0, 0);
@@ -354,5 +464,56 @@ contract BankrollVault is ERC4626, ReentrancyGuard {
         uint256 ownerShares = balanceOf(owner);
         ownerAssets = convertToAssets(ownerShares);
         maxAssets = Math.min(ownerAssets, freeLiquidity().mulDiv(ownerShares, supply));
+    }
+
+    function _requireShareOperationsThawed() internal view {
+        if (!shareOperationsFrozen()) return;
+        revert ShareOperationsFrozen(oldestBlockingRound(), frozenRoundCount);
+    }
+
+    /// @dev Inserts `roundId` into the ascending linked list of unresolved exposed rounds.
+    function _insertBlockingRound(uint256 roundId, uint64 expiresAt) internal {
+        uint256 prev = NO_BLOCKING_ROUND;
+        uint256 cursor = _blockingHead;
+        while (cursor != NO_BLOCKING_ROUND && cursor < roundId) {
+            prev = cursor;
+            cursor = _blocking[cursor].next;
+        }
+
+        _blocking[roundId] =
+            BlockingRound({expiresAt: expiresAt, revealFrozen: false, prev: prev, next: cursor, present: true});
+
+        if (prev == NO_BLOCKING_ROUND) {
+            _blockingHead = roundId;
+        } else {
+            _blocking[prev].next = roundId;
+        }
+        if (cursor != NO_BLOCKING_ROUND) {
+            _blocking[cursor].prev = roundId;
+        }
+    }
+
+    /// @dev Removes a marked round from the freeze list and decrements the reveal counter when needed.
+    function _clearBlockingRound(uint256 roundId) internal {
+        BlockingRound storage blocking = _blocking[roundId];
+        if (!blocking.present) return;
+
+        if (blocking.revealFrozen) {
+            unchecked {
+                --frozenRoundCount;
+            }
+        }
+
+        uint256 prev = blocking.prev;
+        uint256 next = blocking.next;
+        if (prev == NO_BLOCKING_ROUND) {
+            _blockingHead = next;
+        } else {
+            _blocking[prev].next = next;
+        }
+        if (next != NO_BLOCKING_ROUND) {
+            _blocking[next].prev = prev;
+        }
+        delete _blocking[roundId];
     }
 }
