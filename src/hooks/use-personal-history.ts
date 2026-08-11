@@ -1,20 +1,21 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import {
-  getMarginCallCrashConfig,
   readPlayerTicketHistory,
+  type MarginCallCrashConfig,
   type PlayerTicketHistoryItem,
 } from "@/lib/margin-call-crash";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { subscribeToWalletBalanceChanges } from "@/lib/wallet-balance-sync";
+import {
+  historyConfigurationError,
+  usePolledCrashRead,
+} from "./use-polled-crash-read";
 
-const POLL_INTERVAL_MS = 10_000;
 const loadError =
   "Personal history could not be refreshed from Base Sepolia. Retry the read.";
-const configurationError =
-  "Crash history reads are not configured for this Base Sepolia deployment.";
 
 export type PersonalHistoryView = { retry: () => Promise<void> } & (
   | { status: "loading"; walletAddress: string | null }
@@ -33,51 +34,19 @@ export type PersonalHistoryView = { retry: () => Promise<void> } & (
 export function usePersonalHistory(): PersonalHistoryView {
   const { user } = usePrivy();
   const walletAddress = getEvmWalletAddress(user);
-  const config = useMemo(() => getMarginCallCrashConfig(), []);
-  const [tickets, setTickets] = useState<PlayerTicketHistoryItem[] | null>(
-    null
+  const read = useMemo(
+    () =>
+      walletAddress
+        ? (config: MarginCallCrashConfig) =>
+            readPlayerTicketHistory(config, walletAddress)
+        : null,
+    [walletAddress]
   );
-  const [status, setStatus] = useState<
-    "loading" | "ready" | "error" | "unavailable"
-  >("loading");
-  const inFlight = useRef(false);
-
-  const refresh = useCallback(async () => {
-    if (!config || !walletAddress || inFlight.current) return;
-    inFlight.current = true;
-    try {
-      const next = await readPlayerTicketHistory(config, walletAddress);
-      setTickets(next);
-      setStatus("ready");
-    } catch {
-      setStatus("error");
-    } finally {
-      inFlight.current = false;
-    }
-  }, [config, walletAddress]);
-
-  useEffect(() => {
-    if (!config) {
-      setStatus("unavailable");
-      return;
-    }
-    if (!walletAddress) {
-      setTickets(null);
-      setStatus("loading");
-      return;
-    }
-    void refresh();
-    const poll = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => window.clearInterval(poll);
-  }, [config, refresh, walletAddress]);
+  const { data: tickets, status, refresh } = usePolledCrashRead(read);
 
   useEffect(
-    () =>
-      subscribeToWalletBalanceChanges(() => {
-        if (!config || !walletAddress || inFlight.current) return;
-        void refresh();
-      }),
-    [config, refresh, walletAddress]
+    () => subscribeToWalletBalanceChanges(() => void refresh()),
+    [refresh]
   );
 
   if (!walletAddress) {
@@ -92,7 +61,7 @@ export function usePersonalHistory(): PersonalHistoryView {
   if (status === "unavailable") {
     return {
       status,
-      error: configurationError,
+      error: historyConfigurationError,
       walletAddress,
       retry: refresh,
     };

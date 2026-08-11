@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { encodeFunctionData, zeroAddress, type Address, type Hex } from "viem";
-import { marginCallCrashAbi } from "@/lib/margin-call-crash";
+import { expireRequest, refundRequest } from "@/lib/margin-call-crash";
 import { type StageErrorCopy } from "@/lib/sponsored-call";
 import {
   useCrashTicketStages,
@@ -129,27 +128,5 @@ export function useCrashTicketRefund() {
     refund: () => submitStage("refund"),
     retry,
     refresh,
-  };
-}
-
-function expireRequest(to: Address, roundId: bigint) {
-  return {
-    to,
-    data: encodeFunctionData({
-      abi: marginCallCrashAbi,
-      functionName: "expireRound",
-      args: [roundId],
-    }) as Hex,
-  };
-}
-
-function refundRequest(to: Address, ticketId: bigint) {
-  return {
-    to,
-    data: encodeFunctionData({
-      abi: marginCallCrashAbi,
-      functionName: "refund",
-      args: [ticketId, zeroAddress],
-    }) as Hex,
   };
 }

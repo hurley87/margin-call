@@ -6,14 +6,8 @@ import type {
   RoundHistoryItem,
   RoundHistoryState,
 } from "@/lib/margin-call-crash";
+import { historyStateCopy } from "./history-state-copy";
 import { RoundVerificationRecord } from "./round-verification-record";
-
-const historyStateLabels: Record<RoundHistoryState, string> = {
-  open: "Open",
-  delayed: "Delayed",
-  finalized: "Finalized",
-  expired: "Expired",
-};
 
 const historyStateColors: Record<RoundHistoryState, string> = {
   open: "text-[var(--t-green-hot)] border-[var(--t-green)]/50",
@@ -95,30 +89,25 @@ export function GlobalHistory() {
         </p>
       ) : (
         <ul className="mt-6 divide-y divide-[var(--t-divider)] border-y border-[var(--t-divider)]">
-          {history.rounds.map((item) => (
-            <HistoryRoundRow
-              detail={
-                history.selectedRoundId === item.round.id
-                  ? history.detail
-                  : null
-              }
-              detailStatus={
-                history.selectedRoundId === item.round.id
-                  ? history.detailStatus
-                  : "idle"
-              }
-              item={item}
-              key={item.round.id.toString()}
-              onSelect={() => {
-                if (history.selectedRoundId === item.round.id) {
-                  history.clearSelection();
-                  return;
-                }
-                history.selectRound(item.round.id);
-              }}
-              selected={history.selectedRoundId === item.round.id}
-            />
-          ))}
+          {history.rounds.map((item) => {
+            const isSelected = history.selectedRoundId === item.round.id;
+            return (
+              <HistoryRoundRow
+                detail={isSelected ? history.detail : null}
+                detailStatus={isSelected ? history.detailStatus : "idle"}
+                item={item}
+                key={item.round.id.toString()}
+                onSelect={() => {
+                  if (isSelected) {
+                    history.clearSelection();
+                    return;
+                  }
+                  history.selectRound(item.round.id);
+                }}
+                selected={isSelected}
+              />
+            );
+          })}
         </ul>
       )}
     </section>
@@ -162,7 +151,7 @@ function HistoryRoundRow({
           <span
             className={`inline-flex border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] ${historyStateColors[item.historyState]}`}
           >
-            {historyStateLabels[item.historyState]}
+            {historyStateCopy[item.historyState].badge}
           </span>
         </div>
         <span

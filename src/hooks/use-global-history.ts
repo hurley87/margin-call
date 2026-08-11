@@ -1,19 +1,19 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import {
-  getMarginCallCrashConfig,
   readRecentRoundHistory,
   readRoundHistoryDetail,
   type RoundHistoryDetail,
   type RoundHistoryItem,
 } from "@/lib/margin-call-crash";
+import {
+  historyConfigurationError,
+  usePolledCrashRead,
+} from "./use-polled-crash-read";
 
-const POLL_INTERVAL_MS = 10_000;
 const loadError =
   "Round history could not be refreshed from Base Sepolia. Retry the read.";
-const configurationError =
-  "Crash history reads are not configured for this Base Sepolia deployment.";
 
 export type GlobalHistoryView = { retry: () => Promise<void> } & (
   | { status: "loading" }
@@ -30,32 +30,18 @@ export type GlobalHistoryView = { retry: () => Promise<void> } & (
 );
 
 export function useGlobalHistory(): GlobalHistoryView {
-  const config = useMemo(() => getMarginCallCrashConfig(), []);
-  const [rounds, setRounds] = useState<RoundHistoryItem[] | null>(null);
-  const [status, setStatus] = useState<
-    "loading" | "ready" | "error" | "unavailable"
-  >("loading");
+  const {
+    config,
+    data: rounds,
+    status,
+    refresh,
+  } = usePolledCrashRead(readRecentRoundHistory);
   const [selectedRoundId, setSelectedRoundId] = useState<bigint | null>(null);
   const [detail, setDetail] = useState<RoundHistoryDetail | null>(null);
   const [detailStatus, setDetailStatus] = useState<
     "idle" | "loading" | "ready" | "error"
   >("idle");
-  const inFlight = useRef(false);
   const detailInFlight = useRef(false);
-
-  const refresh = useCallback(async () => {
-    if (!config || inFlight.current) return;
-    inFlight.current = true;
-    try {
-      const next = await readRecentRoundHistory(config);
-      setRounds(next);
-      setStatus("ready");
-    } catch {
-      setStatus("error");
-    } finally {
-      inFlight.current = false;
-    }
-  }, [config]);
 
   const loadDetail = useCallback(
     async (roundId: bigint) => {
@@ -75,16 +61,6 @@ export function useGlobalHistory(): GlobalHistoryView {
     },
     [config]
   );
-
-  useEffect(() => {
-    if (!config) {
-      setStatus("unavailable");
-      return;
-    }
-    void refresh();
-    const poll = window.setInterval(() => void refresh(), POLL_INTERVAL_MS);
-    return () => window.clearInterval(poll);
-  }, [config, refresh]);
 
   const selectRound = useCallback(
     (roundId: bigint) => {
@@ -114,7 +90,7 @@ export function useGlobalHistory(): GlobalHistoryView {
   }
   if (status === "error") return { status, error: loadError, retry: refresh };
   if (status === "unavailable") {
-    return { status, error: configurationError, retry: refresh };
+    return { status, error: historyConfigurationError, retry: refresh };
   }
   return { status: "loading", retry: refresh };
 }

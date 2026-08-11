@@ -1,26 +1,21 @@
 "use client";
 
-import { useCallback } from "react";
-import { useHistoryTicketActions } from "@/hooks/use-history-ticket-actions";
+import {
+  useHistoryTicketActions,
+  type HistoryTicketActionStatus,
+} from "@/hooks/use-history-ticket-actions";
 import { usePersonalHistory } from "@/hooks/use-personal-history";
 import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
 import {
   formatLeverageBps,
   type PlayerTicketHistoryItem,
-  type TicketOutcome,
 } from "@/lib/margin-call-crash";
+import { ticketOutcomeCopy } from "../current-round/crash-live-ticket";
 
-const outcomeCopy: Record<TicketOutcome, string> = {
-  pending: "Awaiting verified Crash Point",
-  won: "Won — claim your payout",
-  lost: "Lost — settle the ticket",
-  "settled-win": "Payout claimed",
-  "settled-loss": "Loss settled",
-  refundable: "Round expired — refund your margin",
-  refunded: "Margin refunded",
-};
-
-const statusCopy: Record<string, string> = {
+const statusCopy: Record<
+  Exclude<HistoryTicketActionStatus, "idle" | "error">,
+  string
+> = {
   "reveal-submitting": "Submitting reveal request…",
   "reveal-pending": "Reveal pending until its Base Sepolia receipt succeeds…",
   attesting: "Fetching the covalidator attestation…",
@@ -41,16 +36,18 @@ const statusCopy: Record<string, string> = {
   confirmed: "Confirmed on Base Sepolia.",
 };
 
+const amountLabels: Record<PlayerTicketHistoryItem["amountKind"], string> = {
+  refund: "Refund",
+  payout: "Payout",
+  reserved: "Reserved payout",
+};
+
 /**
  * Wallet-scoped ticket history with receipt-backed claim/refund actions.
  */
 export function PersonalHistory() {
   const history = usePersonalHistory();
-  const refresh = history.retry;
-  const onSettled = useCallback(() => {
-    void refresh();
-  }, [refresh]);
-  const actions = useHistoryTicketActions(onSettled);
+  const actions = useHistoryTicketActions(history.retry);
 
   if (!history.walletAddress) return null;
 
@@ -132,17 +129,46 @@ function PersonalHistoryRow({
   actions: ReturnType<typeof useHistoryTicketActions>;
 }) {
   const isActive = actions.activeTicketId === item.ticket.id;
-  const statusMessage = isActive
-    ? actions.status === "error"
+  const statusMessage = !isActive
+    ? null
+    : actions.status === "error"
       ? actions.error
-      : (statusCopy[actions.status] ?? null)
-    : null;
-  const canActOnRow =
-    !actions.busy || actions.activeTicketId === item.ticket.id;
-  const amount =
-    item.outcome === "refundable" || item.outcome === "refunded"
-      ? item.ticket.margin
-      : (item.payout ?? item.ticket.reservedPayout);
+      : actions.status === "idle"
+        ? null
+        : statusCopy[actions.status];
+  const canActOnRow = !actions.busy || isActive;
+  const rowActions = [
+    {
+      show: item.canVerify,
+      label: "Verify and settle",
+      accent: true,
+      run: () => actions.verifyAndSettle(item.ticket, item.round),
+    },
+    {
+      show: item.canClaim,
+      label: "Claim payout",
+      accent: true,
+      run: () => actions.claim(item.ticket),
+    },
+    {
+      show: item.canSettle,
+      label: "Settle loss",
+      accent: false,
+      run: () => actions.settleLoss(item.ticket),
+    },
+    {
+      show: item.canExpire,
+      label: "Mark round expired",
+      accent: false,
+      run: () => actions.expireRound(item.ticket, item.round),
+    },
+    {
+      show: item.canRefund,
+      label: "Refund margin",
+      accent: true,
+      run: () => actions.refund(item.ticket),
+    },
+  ];
 
   return (
     <li className="border border-[var(--t-border)] bg-[var(--t-panel)] p-4">
@@ -185,75 +211,38 @@ function PersonalHistoryRow({
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">
-            {item.outcome === "refundable" || item.outcome === "refunded"
-              ? "Refund"
-              : item.outcome === "won" || item.outcome === "settled-win"
-                ? "Payout"
-                : "Reserved payout"}
+            {amountLabels[item.amountKind]}
           </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {formatDeskDollars(amount, TUSD_DECIMALS)} tUSD
+            {formatDeskDollars(item.displayAmount, TUSD_DECIMALS)} tUSD
           </dd>
         </div>
         <div className="sm:col-span-2">
           <dt className="text-[var(--t-muted)]">State</dt>
-          <dd className="text-[var(--t-text)]">{outcomeCopy[item.outcome]}</dd>
+          <dd className="text-[var(--t-text)]">
+            {ticketOutcomeCopy[item.outcome]}
+          </dd>
         </div>
       </dl>
 
       <div className="mt-4 flex flex-wrap gap-3">
-        {item.canVerify && canActOnRow ? (
-          <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
-            disabled={actions.busy && isActive}
-            onClick={() =>
-              void actions.verifyAndSettle(item.ticket, item.round)
-            }
-            type="button"
-          >
-            Verify and settle
-          </button>
-        ) : null}
-        {item.canClaim && canActOnRow ? (
-          <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
-            disabled={actions.busy && isActive}
-            onClick={() => void actions.claim(item.ticket)}
-            type="button"
-          >
-            Claim payout
-          </button>
-        ) : null}
-        {item.canSettle && canActOnRow ? (
-          <button
-            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
-            disabled={actions.busy && isActive}
-            onClick={() => void actions.settleLoss(item.ticket)}
-            type="button"
-          >
-            Settle loss
-          </button>
-        ) : null}
-        {item.canExpire && canActOnRow ? (
-          <button
-            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
-            disabled={actions.busy && isActive}
-            onClick={() => void actions.expireRound(item.ticket, item.round)}
-            type="button"
-          >
-            Mark round expired
-          </button>
-        ) : null}
-        {item.canRefund && canActOnRow ? (
-          <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
-            disabled={actions.busy && isActive}
-            onClick={() => void actions.refund(item.ticket, item.round)}
-            type="button"
-          >
-            Refund margin
-          </button>
-        ) : null}
+        {rowActions
+          .filter((action) => action.show && canActOnRow)
+          .map((action) => (
+            <button
+              className={
+                action.accent
+                  ? "rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
+                  : "rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
+              }
+              disabled={actions.busy}
+              key={action.label}
+              onClick={() => void action.run()}
+              type="button"
+            >
+              {action.label}
+            </button>
+          ))}
         {isActive && actions.status === "error" ? (
           <button
             className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"

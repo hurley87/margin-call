@@ -2,10 +2,21 @@
 
 import type { RoundHistoryDetail } from "@/lib/margin-call-crash";
 import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { historyStateCopy } from "./history-state-copy";
 
 type RoundVerificationRecordProps = {
   detail: RoundHistoryDetail;
 };
+
+function txLinks(urls: string[], noun: string) {
+  return urls.map((href, index) => ({
+    href,
+    label:
+      urls.length === 1
+        ? `View ${noun} transaction`
+        : `View ${noun} transaction ${index + 1}`,
+  }));
+}
 
 /**
  * Public verification record: timestamps, aggregates, handle, attestation,
@@ -34,27 +45,9 @@ export function RoundVerificationRecord({
     detail.expireTransactionUrl
       ? { href: detail.expireTransactionUrl, label: "View expiry transaction" }
       : null,
-    ...detail.ticketEnteredTransactionUrls.map((href, index) => ({
-      href,
-      label:
-        detail.ticketEnteredTransactionUrls.length === 1
-          ? "View entry transaction"
-          : `View entry transaction ${index + 1}`,
-    })),
-    ...detail.ticketClaimedTransactionUrls.map((href, index) => ({
-      href,
-      label:
-        detail.ticketClaimedTransactionUrls.length === 1
-          ? "View claim transaction"
-          : `View claim transaction ${index + 1}`,
-    })),
-    ...detail.ticketRefundedTransactionUrls.map((href, index) => ({
-      href,
-      label:
-        detail.ticketRefundedTransactionUrls.length === 1
-          ? "View refund transaction"
-          : `View refund transaction ${index + 1}`,
-    })),
+    ...txLinks(detail.ticketEnteredTransactionUrls, "entry"),
+    ...txLinks(detail.ticketClaimedTransactionUrls, "claim"),
+    ...txLinks(detail.ticketRefundedTransactionUrls, "refund"),
     { href: detail.gameContractUrl, label: "Verified game contract" },
     { href: detail.incoContractUrl, label: "Verified Inco Lightning" },
   ].filter((link): link is { href: string; label: string } => link !== null);
@@ -92,7 +85,9 @@ export function RoundVerificationRecord({
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">History state</dt>
-          <dd className="text-[var(--t-text)]">{historyStateLabel(detail)}</dd>
+          <dd className="text-[var(--t-text)]">
+            {historyStateCopy[detail.historyState].detail}
+          </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Aggregate margin</dt>
@@ -106,21 +101,19 @@ export function RoundVerificationRecord({
             {formatDeskDollars(round.reservedPayout, TUSD_DECIMALS)} tUSD
           </dd>
         </div>
-        {detail.displayCrashPoint ? (
-          <div>
-            <dt className="text-[var(--t-muted)]">Attested Crash Point</dt>
-            <dd className="tabular-nums text-[var(--t-green-hot)]">
-              {detail.displayCrashPoint}
-            </dd>
-          </div>
-        ) : (
-          <div>
-            <dt className="text-[var(--t-muted)]">Attested Crash Point</dt>
-            <dd className="text-[var(--t-muted)]">
-              Not available — round is not finalized
-            </dd>
-          </div>
-        )}
+        <div>
+          <dt className="text-[var(--t-muted)]">Attested Crash Point</dt>
+          <dd
+            className={
+              detail.displayCrashPoint
+                ? "tabular-nums text-[var(--t-green-hot)]"
+                : "text-[var(--t-muted)]"
+            }
+          >
+            {detail.displayCrashPoint ??
+              "Not available — round is not finalized"}
+          </dd>
+        </div>
         <div className="sm:col-span-2">
           <dt className="text-[var(--t-muted)]">Encrypted handle</dt>
           <dd className="break-all font-mono text-xs text-[var(--t-text)]">
@@ -148,23 +141,6 @@ export function RoundVerificationRecord({
       </ul>
     </div>
   );
-}
-
-function historyStateLabel(detail: RoundHistoryDetail) {
-  switch (detail.historyState) {
-    case "finalized":
-      return "Finalized";
-    case "expired":
-      return "Expired — no invented multiplier";
-    case "delayed":
-      return "Delayed — awaiting attestation";
-    case "open":
-      return "Open";
-    default: {
-      const _exhaustive: never = detail.historyState;
-      return _exhaustive;
-    }
-  }
 }
 
 function formatUnix(seconds: bigint) {
