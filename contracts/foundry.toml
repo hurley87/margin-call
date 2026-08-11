@@ -5,15 +5,17 @@
 [profile.default]
 src = "src"
 out = "out"
-libs = ["lib"]
+libs = ["lib", "../node_modules"]
 remappings = [
+    "@inco/=../node_modules/@inco/",
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
+    "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
     "forge-std/=lib/forge-std/src/",
 ]
 
 # Never let the toolchain pick a compiler for us.
 auto_detect_solc = false
-solc_version = "0.8.28"
+solc_version = "0.8.29"
 evm_version = "cancun"
 optimizer = true
 # 1_000_000 stays under Blockscout/Etherscan's ~10M recompile ceiling while

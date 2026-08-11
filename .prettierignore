@@ -1,2 +1,5 @@
 # Forge-written deployment records — keep forge/JSON formatting as-is.
 contracts/deployments/
+
+# Keep pnpm's canonical lockfile serialization.
+pnpm-lock.yaml

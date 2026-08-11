@@ -5,6 +5,10 @@
   },
   "openzeppelin-contracts": {
     "repo": "OpenZeppelin/openzeppelin-contracts",
-    "tag": "v5.2.0"
+    "tag": "v5.4.0"
+  },
+  "openzeppelin-contracts-upgradeable": {
+    "repo": "OpenZeppelin/openzeppelin-contracts-upgradeable",
+    "tag": "v5.4.0"
   }
 }
