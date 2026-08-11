@@ -222,7 +222,8 @@ export function LpDesk() {
       </dl>
       <p className="mt-3 text-xs text-[var(--t-muted)]">
         Gross assets are live vault tUSD. Net total assets price shares after
-        pending obligations and unrecognized margin.
+        pending obligations and unrecognized margin. Share price marks to market
+        the moment a round finalizes — before any claim is pulled.
       </p>
       <p className="mt-2 text-xs text-[var(--t-muted)]">
         Global free liquidity is the vault-wide capacity after reservations and

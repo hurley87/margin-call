@@ -18,14 +18,20 @@ export const marginCallCrashAbi = parseAbi([
   "function currentRoundId() view returns (uint256)",
   "function roundTimes(uint256 roundId) view returns (uint64 openAt, uint64 lockAt, uint64 expiresAt)",
   "function getRound(uint256 roundId) view returns ((uint256 id, uint64 openAt, uint64 lockAt, uint64 expiresAt, bytes32 crashRandom, uint256 crashPointBps, uint256 totalMargin, uint256 reservedPayout, uint8 status))",
-  "function getTicket(uint256 ticketId) view returns ((uint256 id, address player, uint256 roundId, uint256 margin, uint256 leverageBps, uint256 reservedPayout))",
+  "function getTicket(uint256 ticketId) view returns ((uint256 id, address player, uint256 roundId, uint256 margin, uint256 leverageBps, uint256 reservedPayout, bool settled, bool claimed))",
   "function getTicketId(uint256 roundId, address player) view returns (uint256)",
   "function enter(uint256 roundId, uint256 margin, uint256 leverageBps) payable",
+  "function requestReveal(uint256 roundId)",
+  "function finalizeRound(uint256 roundId, uint256 plaintext, bytes[] signatures)",
+  "function claim(uint256 ticketId, address receiver)",
+  "function settleLoss(uint256 ticketId)",
   "event RoundOpened(uint256 indexed roundId, address indexed opener, bytes32 crashRandom, uint64 openAt, uint64 lockAt, uint64 expiresAt)",
   "event TicketEntered(uint256 indexed roundId, uint256 indexed ticketId, address indexed player, uint256 margin, uint256 leverageBps, uint256 reservedPayout)",
   "event RevealRequested(uint256 indexed roundId, bytes32 crashRandom)",
   "event RoundFinalized(uint256 indexed roundId, bytes32 crashRandom, uint256 crashPointBps)",
   "event RoundExpired(uint256 indexed roundId)",
+  "event TicketClaimed(uint256 indexed roundId, uint256 indexed ticketId, address indexed player, address receiver, uint256 payout)",
+  "event TicketLossSettled(uint256 indexed roundId, uint256 indexed ticketId, address indexed player)",
 ]);
 
 const ONE_TUSD = 1_000_000n;
@@ -120,7 +126,7 @@ export type CrashRoundLifecycleUrls = {
   incoContractUrl: string;
 };
 
-const ROUND_STATUS = {
+export const ROUND_STATUS = {
   uninitialized: 0,
   open: 1,
   revealRequested: 2,
@@ -187,10 +193,47 @@ export type CrashTicket = {
   margin: bigint;
   leverageBps: bigint;
   reservedPayout: bigint;
+  settled: boolean;
+  claimed: boolean;
 };
 
 export function computeMaximumPayout(margin: bigint, leverageBps: bigint) {
   return (margin * leverageBps) / LEVERAGE_SCALE;
+}
+
+/** Equality wins: the ticket pays when leverage is at or below the Crash Point. */
+export function isWinningTicket(leverageBps: bigint, crashPointBps: bigint) {
+  return leverageBps <= crashPointBps;
+}
+
+export function computeTicketPayout(
+  margin: bigint,
+  leverageBps: bigint,
+  crashPointBps: bigint
+) {
+  return isWinningTicket(leverageBps, crashPointBps)
+    ? computeMaximumPayout(margin, leverageBps)
+    : 0n;
+}
+
+/** Mirrors MarginCallCrash._crashPointFromRandom: 99,000,000 / (10,000 - r), capped at 10.00x. */
+export function computeCrashPointBps(crashRandom: bigint): bigint {
+  const raw = 99_000_000n / (10_000n - crashRandom);
+  return raw > MAX_CRASH_POINT_BPS ? MAX_CRASH_POINT_BPS : raw;
+}
+
+export type TicketOutcome =
+  "pending" | "won" | "lost" | "settled-win" | "settled-loss";
+
+export function deriveTicketOutcome(
+  ticket: CrashTicket,
+  round: CrashRound | null
+): TicketOutcome {
+  if (ticket.settled) return ticket.claimed ? "settled-win" : "settled-loss";
+  if (!round || round.status !== ROUND_STATUS.finalized) return "pending";
+  return isWinningTicket(ticket.leverageBps, round.crashPointBps)
+    ? "won"
+    : "lost";
 }
 
 export function formatLeverageBps(leverageBps: bigint): string {
@@ -231,6 +274,70 @@ export async function readPlayerTicket(
     args: [ticketId],
   });
   return ticket;
+}
+
+/** How many prior epochs to scan when recovering a returning player's ticket. */
+export const PLAYER_TICKET_LOOKBACK_ROUNDS = 20;
+
+/**
+ * Finds the player's most recent unsettled ticket within the lookback window,
+ * then their most recent settled ticket if none remain open. Lets a judge return
+ * after the app advances past their entry round.
+ */
+export async function readPlayerRecentTicket(
+  address: Address,
+  currentRoundId: bigint,
+  player: Address
+): Promise<{ ticket: CrashTicket; round: CrashRound } | null> {
+  const start =
+    currentRoundId > BigInt(PLAYER_TICKET_LOOKBACK_ROUNDS)
+      ? currentRoundId - BigInt(PLAYER_TICKET_LOOKBACK_ROUNDS)
+      : 0n;
+  const roundIds: bigint[] = [];
+  for (let roundId = currentRoundId; roundId >= start; roundId--) {
+    roundIds.push(roundId);
+  }
+
+  // Concurrent reads let the client's multicall batching collapse the scan
+  // into a couple of RPC requests instead of one round trip per round.
+  const ticketIds = await Promise.all(
+    roundIds.map((roundId) =>
+      baseSepoliaPublicClient.readContract({
+        address,
+        abi: marginCallCrashAbi,
+        functionName: "getTicketId",
+        args: [roundId, player],
+      })
+    )
+  );
+  const found = await Promise.all(
+    roundIds.flatMap((roundId, index) => {
+      const ticketId = ticketIds[index];
+      if (ticketId === 0n) return [];
+      return [
+        Promise.all([
+          baseSepoliaPublicClient.readContract({
+            address,
+            abi: marginCallCrashAbi,
+            functionName: "getTicket",
+            args: [ticketId],
+          }),
+          baseSepoliaPublicClient.readContract({
+            address,
+            abi: marginCallCrashAbi,
+            functionName: "getRound",
+            args: [roundId],
+          }),
+        ]).then(([ticket, round]) => ({
+          ticket,
+          round: { ...round, status: normalizeRoundStatus(round.status) },
+        })),
+      ];
+    })
+  );
+
+  // roundIds are descending, so the first match is the most recent.
+  return found.find(({ ticket }) => !ticket.settled) ?? found[0] ?? null;
 }
 
 export function isRoundInitialized(round: CrashRound) {

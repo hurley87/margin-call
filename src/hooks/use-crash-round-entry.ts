@@ -18,9 +18,8 @@ import {
 } from "@/lib/margin-call-crash";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import {
-  applyStageResult,
-  confirmSponsoredCall,
-  submitSponsoredCall,
+  resumeSponsoredStage,
+  runSponsoredStage,
   type StageErrorCopy,
 } from "@/lib/sponsored-call";
 import {
@@ -191,22 +190,17 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
   );
 
   const runStage = useCallback(
-    async (stage: Stage, request: { to: Address; data: Hex }) => {
+    (stage: Stage, request: { to: Address; data: Hex }) => {
       retryKind.current = stage;
-      setState((current) => ({
-        ...current,
-        status: `${stage}-submitting`,
-        error: null,
-      }));
-      const result = await submitSponsoredCall(transaction, request, (hash) => {
-        pendingStage.current = { stage, hash };
-        setState((current) => ({
-          ...current,
-          status: `${stage}-pending`,
-          error: null,
-        }));
+      return runSponsoredStage({
+        transaction,
+        pendingStage,
+        stage,
+        copy: stageCopy[stage],
+        request,
+        onStatus: (status) =>
+          setState((current) => ({ ...current, status, error: null })),
       });
-      applyStageResult(pendingStage, stageCopy[stage], result);
     },
     [transaction]
   );
@@ -236,19 +230,16 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
 
       try {
         let entryConfirmed = false;
-        if (mode === "resume" && pending) {
-          retryKind.current = pending.stage;
-          setState((current) => ({
-            ...current,
-            status: `${pending.stage}-pending`,
-            error: null,
-          }));
-          applyStageResult(
+        if (mode === "resume") {
+          const resumed = await resumeSponsoredStage({
             pendingStage,
-            stageCopy[pending.stage],
-            await confirmSponsoredCall(pending.hash)
-          );
-          entryConfirmed = pending.stage === "entry";
+            copyByStage: stageCopy,
+            onStatus: (status, stage) => {
+              retryKind.current = stage;
+              setState((current) => ({ ...current, status, error: null }));
+            },
+          });
+          entryConfirmed = resumed === "entry";
         }
 
         if (!entryConfirmed) {

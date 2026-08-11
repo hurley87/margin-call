@@ -104,12 +104,19 @@ describe("MarginCallCrash public reads and phase math", () => {
       BOUNDED_ENTRY_ALLOWANCE_TUSD,
       canOfferEntry,
       computeMaximumPayout,
+      computeTicketPayout,
+      deriveTicketOutcome,
       ENTRY_CUTOFF_SECONDS,
       formatLeverageBps,
+      isWinningTicket,
     } = await import("./margin-call-crash");
 
     expect(computeMaximumPayout(1_000_000n, 12_500n)).toBe(1_250_000n);
     expect(computeMaximumPayout(10_000_000n, 100_000n)).toBe(100_000_000n);
+    expect(isWinningTicket(12_500n, 12_500n)).toBe(true);
+    expect(isWinningTicket(12_500n, 12_499n)).toBe(false);
+    expect(computeTicketPayout(1_000_000n, 12_500n, 12_500n)).toBe(1_250_000n);
+    expect(computeTicketPayout(1_000_000n, 12_500n, 9_900n)).toBe(0n);
     expect(formatLeverageBps(12_500n)).toBe("1.25x");
     expect(formatLeverageBps(100_000n)).toBe("10.00x");
     expect(BOUNDED_ENTRY_ALLOWANCE_TUSD).toBe(1_000_000_000n);
@@ -117,6 +124,21 @@ describe("MarginCallCrash public reads and phase math", () => {
     expect(canOfferEntry("open", 6)).toBe(true);
     expect(canOfferEntry("open", 5)).toBe(false);
     expect(canOfferEntry("uninitialized", 40)).toBe(false);
+    expect(
+      deriveTicketOutcome(
+        {
+          id: 1n,
+          player: CONTRACT_ADDRESS,
+          roundId: 3n,
+          margin: 1_000_000n,
+          leverageBps: 12_500n,
+          reservedPayout: 1_250_000n,
+          settled: false,
+          claimed: false,
+        },
+        makeRound({ status: 3, crashPointBps: 12_500n })
+      )
+    ).toBe("won");
   });
 
   it("requires valid public address and deployment-block configuration", async () => {

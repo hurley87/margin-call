@@ -12,7 +12,7 @@ export type SponsoredCallResult =
   | { outcome: "confirmation-unknown"; hash: Hex }
   | { outcome: "submission-failed"; message: string | null };
 
-type SponsoredTransaction = {
+export type SponsoredTransaction = {
   submit: (request: {
     to: Address;
     data: Hex;
@@ -20,6 +20,11 @@ type SponsoredTransaction = {
   }) => Promise<boolean>;
   getSubmittedHash: () => Hex | null;
   getSubmissionError: () => string | null;
+};
+
+/** Mutable handle to the stage whose submitted transaction is awaiting a receipt. */
+export type SponsoredStageRef<Stage extends string> = {
+  current: { stage: Stage; hash: Hex } | null;
 };
 
 /** Submits a sponsored Base Sepolia call and resolves its receipt without throwing. */
@@ -72,6 +77,48 @@ export function applyStageResult<Stage extends string>(
   if (result.outcome === "submission-failed")
     throw new Error(result.message ?? copy.failed);
   throw new Error(copy.reverted ?? copy.failed);
+}
+
+/**
+ * Runs one sponsored transaction stage: reports `<stage>-submitting`, records
+ * the pending hash and reports `<stage>-pending` once submitted, then applies
+ * the result — throwing the stage's error copy on any failure.
+ */
+export async function runSponsoredStage<Stage extends string>(options: {
+  transaction: SponsoredTransaction;
+  pendingStage: SponsoredStageRef<Stage>;
+  stage: Stage;
+  copy: StageErrorCopy;
+  request: { to: Address; data: Hex };
+  onStatus: (status: `${Stage}-submitting` | `${Stage}-pending`) => void;
+}): Promise<void> {
+  const { transaction, pendingStage, stage, copy, request, onStatus } = options;
+  onStatus(`${stage}-submitting`);
+  const result = await submitSponsoredCall(transaction, request, (hash) => {
+    pendingStage.current = { stage, hash };
+    onStatus(`${stage}-pending`);
+  });
+  applyStageResult(pendingStage, copy, result);
+}
+
+/**
+ * Re-checks the receipt of a stage whose transaction was already submitted —
+ * never resubmits. Returns the resumed stage, or null when nothing was pending.
+ */
+export async function resumeSponsoredStage<Stage extends string>(options: {
+  pendingStage: SponsoredStageRef<Stage>;
+  copyByStage: Record<Stage, StageErrorCopy>;
+  onStatus: (status: `${Stage}-pending`, stage: Stage) => void;
+}): Promise<Stage | null> {
+  const pending = options.pendingStage.current;
+  if (!pending) return null;
+  options.onStatus(`${pending.stage}-pending`, pending.stage);
+  applyStageResult(
+    options.pendingStage,
+    options.copyByStage[pending.stage],
+    await confirmSponsoredCall(pending.hash)
+  );
+  return pending.stage;
 }
 
 /** Resolves the receipt for an already-submitted sponsored call. */

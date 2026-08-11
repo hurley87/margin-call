@@ -50,6 +50,8 @@ contract MarginCallCrash is ReentrancyGuard {
         uint256 margin;
         uint256 leverageBps;
         uint256 reservedPayout;
+        bool settled;
+        bool claimed;
     }
 
     error EpochNotStarted(uint256 currentTimestamp, uint64 epochOrigin);
@@ -71,6 +73,11 @@ contract MarginCallCrash is ReentrancyGuard {
     error InvalidLeverageTier(uint256 leverageBps);
     error EntryClosed(uint256 roundId, uint64 lockAt, uint256 currentTimestamp);
     error TicketAlreadyExists(uint256 roundId, address player);
+    error TicketNotFound(uint256 ticketId);
+    error TicketAlreadySettled(uint256 ticketId);
+    error TicketDidNotWin(uint256 ticketId);
+    error TicketDidNotLose(uint256 ticketId);
+    error UnauthorizedClaimReceiver(address caller, address receiver);
 
     event RoundOpened(
         uint256 indexed roundId,
@@ -91,6 +98,10 @@ contract MarginCallCrash is ReentrancyGuard {
     event RevealRequested(uint256 indexed roundId, bytes32 crashRandom);
     event RoundFinalized(uint256 indexed roundId, bytes32 crashRandom, uint256 crashPointBps);
     event RoundExpired(uint256 indexed roundId);
+    event TicketClaimed(
+        uint256 indexed roundId, uint256 indexed ticketId, address indexed player, address receiver, uint256 payout
+    );
+    event TicketLossSettled(uint256 indexed roundId, uint256 indexed ticketId, address indexed player);
 
     mapping(uint256 roundId => Round round) private _rounds;
     mapping(uint256 ticketId => Ticket ticket) private _tickets;
@@ -172,7 +183,9 @@ contract MarginCallCrash is ReentrancyGuard {
             roundId: roundId,
             margin: margin,
             leverageBps: leverageBps,
-            reservedPayout: maximumPayout
+            reservedPayout: maximumPayout,
+            settled: false,
+            claimed: false
         });
         _ticketIdByRoundAndPlayer[roundId][msg.sender] = ticketId;
         round.totalMargin += margin;
@@ -200,7 +213,7 @@ contract MarginCallCrash is ReentrancyGuard {
     }
 
     /// @notice Permissionlessly finalizes a revealed round with a covalidator attestation.
-    /// @dev The contract binds the attestation to the exact stored handle; callers cannot substitute one.
+    /// @dev Marks the vault to market in O(tiers) before any claim. Callers cannot substitute the handle.
     function finalizeRound(uint256 roundId, uint256 plaintext, bytes[] calldata signatures) external nonReentrant {
         Round storage round = _rounds[roundId];
         if (round.status == RoundStatus.Uninitialized) revert RoundNotInitialized(roundId);
@@ -217,7 +230,45 @@ contract MarginCallCrash is ReentrancyGuard {
         uint256 crashPointBps = _crashPointFromRandom(plaintext);
         round.crashPointBps = crashPointBps;
         round.status = RoundStatus.Finalized;
+        vault.markRoundFinalized(roundId, round.totalMargin, crashPointBps);
         emit RoundFinalized(roundId, round.crashRandom, crashPointBps);
+    }
+
+    /// @notice Permissionlessly pays a winning ticket. Third parties may only route to the owner.
+    /// @dev The owner may pass `receiver = address(0)` for themselves, or any non-zero address.
+    function claim(uint256 ticketId, address receiver) external nonReentrant {
+        (Ticket storage ticket, Round storage round) = _settleableTicket(ticketId);
+        if (ticket.leverageBps > round.crashPointBps) revert TicketDidNotWin(ticketId);
+
+        uint256 roundId = ticket.roundId;
+        address payoutReceiver = _resolveClaimReceiver(ticket.player, receiver);
+        uint256 payout = ticket.reservedPayout;
+
+        ticket.settled = true;
+        ticket.claimed = true;
+        vault.payClaim(roundId, ticketId, payoutReceiver, payout);
+        emit TicketClaimed(roundId, ticketId, ticket.player, payoutReceiver, payout);
+    }
+
+    /// @notice Permissionlessly settles a losing ticket without transferring tUSD.
+    function settleLoss(uint256 ticketId) external nonReentrant {
+        (Ticket storage ticket, Round storage round) = _settleableTicket(ticketId);
+        if (ticket.leverageBps <= round.crashPointBps) revert TicketDidNotLose(ticketId);
+
+        uint256 roundId = ticket.roundId;
+        ticket.settled = true;
+        vault.settleLoss(roundId, ticketId);
+        emit TicketLossSettled(roundId, ticketId, ticket.player);
+    }
+
+    /// @dev Shared settlement guards: the ticket exists, is unsettled, and its round is finalized.
+    function _settleableTicket(uint256 ticketId) internal view returns (Ticket storage ticket, Round storage round) {
+        ticket = _tickets[ticketId];
+        if (ticket.player == address(0)) revert TicketNotFound(ticketId);
+        if (ticket.settled) revert TicketAlreadySettled(ticketId);
+
+        round = _rounds[ticket.roundId];
+        if (round.status != RoundStatus.Finalized) revert InvalidRoundStatus(ticket.roundId, round.status);
     }
 
     /// @notice Permissionlessly marks an unresolved round expired once the exclusive boundary is reached.
@@ -233,6 +284,16 @@ contract MarginCallCrash is ReentrancyGuard {
 
         round.status = RoundStatus.Expired;
         emit RoundExpired(roundId);
+    }
+
+    function _resolveClaimReceiver(address owner, address receiver) internal view returns (address) {
+        if (msg.sender == owner) {
+            return receiver == address(0) ? owner : receiver;
+        }
+        if (receiver != address(0) && receiver != owner) {
+            revert UnauthorizedClaimReceiver(msg.sender, receiver);
+        }
+        return owner;
     }
 
     /// @dev Shared initialization seam for openRound and lazy first-entry creation.

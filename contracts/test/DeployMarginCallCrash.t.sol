@@ -159,8 +159,27 @@ contract DeployMarginCallCrashTest is Test {
             vm.toString(abi.encodePacked(MarginCallCrash.expireRound.selector))
         );
         assertEq(
+            vm.parseJsonString(record, ".claimSelector"), vm.toString(abi.encodePacked(MarginCallCrash.claim.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".settleLossSelector"),
+            vm.toString(abi.encodePacked(MarginCallCrash.settleLoss.selector))
+        );
+        assertEq(
             vm.parseJsonString(record, ".acceptEntrySelector"),
             vm.toString(abi.encodePacked(BankrollVault.acceptEntry.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".markRoundFinalizedSelector"),
+            vm.toString(abi.encodePacked(BankrollVault.markRoundFinalized.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".payClaimSelector"),
+            vm.toString(abi.encodePacked(BankrollVault.payClaim.selector))
+        );
+        assertEq(
+            vm.parseJsonString(record, ".vaultSettleLossSelector"),
+            vm.toString(abi.encodePacked(BankrollVault.settleLoss.selector))
         );
         assertEq(
             vm.parseJsonString(record, ".setAuthorizedGameSelector"),
