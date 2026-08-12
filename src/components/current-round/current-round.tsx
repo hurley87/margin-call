@@ -4,22 +4,16 @@ import {
   useCurrentCrashRound,
   type CurrentCrashRoundView,
 } from "@/hooks/use-current-crash-round";
-import type { CrashRoundPhase } from "@/lib/margin-call-crash";
+import { isPreLockPhase, type CrashRoundPhase } from "@/lib/margin-call-crash";
+import {
+  formatEntriesReopenNotice,
+  roundPhaseCopy,
+} from "@/lib/round-phase-copy";
+import type { RoundTimeline } from "@/lib/round-timeline";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { CrashRoundEntry } from "./crash-round-entry";
 
 type ReadyRound = Extract<CurrentCrashRoundView, { status: "ready" }>;
-
-const phaseLabels: Record<CrashRoundPhase, string> = {
-  prelaunch: "Epoch pending",
-  uninitialized: "Awaiting opener",
-  open: "Entry open",
-  locked: "Entry locked",
-  "reveal-requested": "Awaiting attestation",
-  "expired-eligible": "Past expiry",
-  finalized: "Finalized",
-  expired: "Expired",
-};
 
 const phaseColors: Record<CrashRoundPhase, string> = {
   prelaunch: "text-[var(--t-blue)] border-[var(--t-blue)]/50",
@@ -55,9 +49,15 @@ export function CurrentRound() {
             Current round
           </p>
           <span
-            className={`inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${phaseColors[phase]}`}
+            className={`inline-flex items-center gap-1.5 border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${phaseColors[phase]}`}
           >
-            {phaseLabels[phase]}
+            {phase === "open" ? (
+              <span
+                aria-hidden="true"
+                className="live-pulse h-1.5 w-1.5 bg-[var(--t-green-hot)]"
+              />
+            ) : null}
+            {roundPhaseCopy[phase].badge}
           </span>
         </div>
         <h2
@@ -68,6 +68,7 @@ export function CurrentRound() {
         </h2>
 
         <PhaseStatusCopy phase={phase} />
+        <NextRoundNotice phase={phase} timeline={round.timeline} />
         <CrashRoundEntry
           countdownSeconds={round.countdownSeconds}
           phase={phase}
@@ -84,51 +85,28 @@ export function CurrentRound() {
 }
 
 function PhaseStatusCopy({ phase }: { phase: CrashRoundPhase }) {
-  switch (phase) {
-    case "locked":
-      return (
-        <StatusCopy
-          title="Awaiting reveal request"
-          body="Entry is locked. The encrypted handle stays confidential until a permissionless reveal marks it for public attestation."
-        />
-      );
-    case "reveal-requested":
-      return (
-        <StatusCopy
-          title="Awaiting attestation"
-          body="Reveal has been requested. No Crash Point is shown until covalidator signatures finalize the exact stored handle."
-        />
-      );
-    case "expired-eligible":
-      return (
-        <StatusCopy
-          title="Past expiry"
-          body="This round can be marked expired. No Crash Point will be invented; original margin becomes refundable after expiry is recorded."
-        />
-      );
-    case "expired":
-      return (
-        <StatusCopy
-          title="Outcome unavailable"
-          body="This round expired without a verified Crash Point. Ticket owners can pull back exactly their original margin."
-        />
-      );
-    case "finalized":
-      return (
-        <StatusCopy
-          title="Finalized"
-          body="The attested Crash Point is on the floor chart. Claim or settle from your ticket below."
-        />
-      );
-    case "prelaunch":
-    case "uninitialized":
-    case "open":
-      return null;
-    default: {
-      const _exhaustive: never = phase;
-      return _exhaustive;
-    }
-  }
+  const copy = roundPhaseCopy[phase];
+  return <StatusCopy title={copy.title} body={copy.body} />;
+}
+
+/** Post-lock affordance: when and where entry comes back. */
+function NextRoundNotice({
+  phase,
+  timeline,
+}: {
+  phase: CrashRoundPhase;
+  timeline: RoundTimeline;
+}) {
+  if (isPreLockPhase(phase)) return null;
+  return (
+    <p
+      aria-live="polite"
+      className="mt-2 text-xs font-bold tabular-nums text-[var(--t-green-hot)]"
+      data-testid="next-round-notice"
+    >
+      {formatEntriesReopenNotice(timeline)}
+    </p>
+  );
 }
 
 function EncryptedHandle({ round }: { round: ReadyRound }) {
@@ -212,6 +190,7 @@ function CurrentRoundLoading() {
       >
         Reading current round from Base Sepolia…
       </p>
+      <div aria-hidden="true" className="mc-shimmer mt-4 h-1.5 w-40" />
     </section>
   );
 }

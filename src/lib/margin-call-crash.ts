@@ -193,8 +193,8 @@ export const ROUND_STATUS = {
 /** How many prior epochs to surface in global history. */
 export const GLOBAL_HISTORY_LOOKBACK_ROUNDS = 20;
 
-/** How many prior epochs to scan for Open-phase ambiance replay. */
-const AMBIANCE_LOOKBACK_ROUNDS = 5;
+/** How many prior epochs to walk for Open-phase previous-round replay. */
+export const AMBIANCE_LOOKBACK_ROUNDS = 5;
 
 /** One public TicketEntered row for the live ticket tape / tier pops. */
 export type TicketTapeEntry = {
@@ -902,6 +902,22 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
     ...round,
     status: normalizeRoundStatus(round.status),
   };
+  // An uninitialized round's stored struct is zeroed; fill the immutable grid
+  // times so phase and timeline math stay meaningful before an opener arrives.
+  if (normalizedRound.status === ROUND_STATUS.uninitialized) {
+    const [openAt, lockAt, expiresAt] =
+      await baseSepoliaPublicClient.readContract({
+        address: config.address,
+        abi: marginCallCrashAbi,
+        functionName: "roundTimes",
+        args: [currentRoundId],
+        blockNumber: block.number,
+      });
+    normalizedRound.id = currentRoundId;
+    normalizedRound.openAt = openAt;
+    normalizedRound.lockAt = lockAt;
+    normalizedRound.expiresAt = expiresAt;
+  }
   const lifecycleUrls = await readLifecycleUrls(
     config,
     currentRoundId,
@@ -977,7 +993,8 @@ export async function readRoundTicketTape(
 
 /**
  * Newest finalized round within the ambiance lookback, for Open-phase
- * previous-round replay. Returns null when none exist.
+ * previous-round replay. Walks newest-first from the previous round so a
+ * typical hit is one `getRound`. Returns null when none exist.
  */
 export async function readLatestFinalizedReplayRound(
   config: MarginCallCrashConfig
@@ -989,9 +1006,11 @@ export async function readLatestFinalizedReplayRound(
     functionName: "currentRoundId",
     blockNumber,
   });
-  const roundIds = lookbackRoundIds(currentRoundId, AMBIANCE_LOOKBACK_ROUNDS);
 
-  for (const roundId of roundIds) {
+  for (let offset = 1; offset <= AMBIANCE_LOOKBACK_ROUNDS; offset++) {
+    const roundId = currentRoundId - BigInt(offset);
+    if (roundId <= 0n) break;
+
     const round = await baseSepoliaPublicClient.readContract({
       address: config.address,
       abi: marginCallCrashAbi,

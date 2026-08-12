@@ -1,6 +1,7 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
+import { FlashValue } from "@/components/ui/flash-value";
 import { formatDeskDollarsBalanceLabel } from "@/lib/desk-dollars";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { useDeskDollarsFaucet } from "@/hooks/use-desk-dollars-faucet";
@@ -28,7 +29,14 @@ export function DeskDollarsPanel() {
       >
         Desk Dollars (tUSD)
       </h2>
-      <p className="mt-2 text-sm text-[var(--t-text)]">Balance: {balance}</p>
+      <p className="mt-2 text-sm text-[var(--t-text)]">
+        Balance:{" "}
+        {faucet.balance !== null ? (
+          <FlashValue value={faucet.balance}>{balance}</FlashValue>
+        ) : (
+          balance
+        )}
+      </p>
       <p className="mt-2 text-xs text-[var(--t-muted)]">
         Base Sepolia only. Desk Dollars have no real value.
       </p>

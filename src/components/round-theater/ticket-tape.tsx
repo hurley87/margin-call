@@ -22,7 +22,12 @@ export function TicketTape({
         <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
           {theaterCopy.openTape}
         </p>
-        <p className="mt-2 text-xs text-[var(--t-muted)]">No Tickets yet.</p>
+        <p className="mt-2 text-xs text-[var(--t-muted)]">
+          No Tickets yet.
+          <span aria-hidden="true" className="cursor-blink ml-1">
+            ▮
+          </span>
+        </p>
       </div>
     );
   }

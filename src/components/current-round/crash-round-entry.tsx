@@ -1,10 +1,13 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import {
   useCrashRoundEntry,
   type CrashEntryRetryAction,
   type CrashEntryStatus,
 } from "@/hooks/use-crash-round-entry";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
+import { getTheaterAudio } from "@/lib/theater-audio";
 import {
   BOUNDED_ENTRY_ALLOWANCE_TUSD,
   canOfferEntry,
@@ -57,6 +60,20 @@ export function CrashRoundEntry({
   countdownSeconds,
 }: CrashRoundEntryProps) {
   const entry = useCrashRoundEntry({ roundId });
+  const reducedMotion = useReducedMotion();
+
+  // Entry-confirmed moment: one chirp when the receipt lands this session.
+  const previousStatus = useRef(entry.status);
+  useEffect(() => {
+    if (
+      !reducedMotion &&
+      entry.status === "confirmed" &&
+      previousStatus.current !== "confirmed"
+    ) {
+      getTheaterAudio().playEntryConfirm();
+    }
+    previousStatus.current = entry.status;
+  }, [entry.status, reducedMotion]);
 
   if (phase === "uninitialized" || phase === "prelaunch") {
     return (
@@ -71,9 +88,13 @@ export function CrashRoundEntry({
   }
 
   if (entry.ticket) {
+    // Confirmed this session → green inset flash on the fresh ticket.
+    const justEntered = entry.status === "confirmed";
     return (
       <EntryShell>
-        <CrashLiveTicket ticket={entry.ticket} />
+        <div className={justEntered ? "mc-onboard-flash" : undefined}>
+          <CrashLiveTicket ticket={entry.ticket} />
+        </div>
       </EntryShell>
     );
   }

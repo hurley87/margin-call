@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   useCurrentCrashRound,
   type CurrentCrashRoundView,
@@ -17,61 +17,94 @@ import {
   type RoundTicketTape,
   type TierExposure,
 } from "@/lib/margin-call-crash";
+import { roundPhaseCopy } from "@/lib/round-phase-copy";
+import { isReplayHoldActive } from "@/lib/round-replay";
+import type { RoundTimeline } from "@/lib/round-timeline";
 
-export type TheaterStageKind =
-  | "loading"
-  | "error"
-  | "unavailable"
-  | "open"
-  | "delayed"
-  | "finalized"
-  | "expired";
+export type TheaterLive =
+  | { kind: "loading" }
+  | { kind: "error" | "unavailable"; error: string }
+  | {
+      kind: "open";
+      roundId: bigint;
+      tape: RoundTicketTape | null;
+      timeline: RoundTimeline;
+    }
+  | {
+      kind: "delayed";
+      roundId: bigint;
+      phaseLabel: "locked" | "reveal-requested" | "expired-eligible";
+      tape: RoundTicketTape | null;
+      timeline: RoundTimeline;
+    }
+  | {
+      kind: "finalized";
+      roundId: bigint;
+      crashPointBps: bigint;
+      displayCrashPoint: string;
+      finalizedAtSeconds: bigint | null;
+      chainTimestamp: bigint;
+      finalizeTransactionUrl: string | null;
+      tape: RoundTicketTape | null;
+      tiers: TierExposure[];
+      timeline: RoundTimeline;
+    }
+  | {
+      kind: "expired";
+      roundId: bigint;
+      tape: RoundTicketTape | null;
+      timeline: RoundTimeline;
+    };
 
-type TheaterBase = {
-  retry: () => Promise<void>;
-  reducedMotion: boolean;
+export type TheaterReplayHero = {
+  type: "replay";
+  roundId: bigint;
+  crashPointBps: bigint;
+  displayCrashPoint: string;
+  finalizedAtSeconds: bigint | null;
+  chainTimestamp: bigint;
+  finalizeTransactionUrl: string | null;
+  tape: RoundTicketTape | null;
+  tiers: TierExposure[];
 };
 
-export type TheaterStage = TheaterBase &
-  (
-    | { kind: "loading" }
-    | { kind: "error" | "unavailable"; error: string }
-    | {
-        kind: "open";
-        roundId: bigint;
-        countdownSeconds: number;
-        tape: RoundTicketTape | null;
-        ambiance: FinalizedReplayRound | null;
-      }
-    | {
-        kind: "delayed";
-        roundId: bigint;
-        phaseLabel: "locked" | "reveal-requested" | "expired-eligible";
-        tape: RoundTicketTape | null;
-      }
-    | {
-        kind: "finalized";
-        roundId: bigint;
-        crashPointBps: bigint;
-        displayCrashPoint: string;
-        finalizedAtSeconds: bigint | null;
-        chainTimestamp: bigint;
-        finalizeTransactionUrl: string | null;
-        tape: RoundTicketTape | null;
-        tiers: TierExposure[];
-      }
-    | {
-        kind: "expired";
-        roundId: bigint;
-        tape: RoundTicketTape | null;
-      }
-  );
+export type TheaterHero =
+  | { type: "empty" }
+  | { type: "pending"; title: string; body?: string }
+  | TheaterReplayHero
+  | {
+      type: "ambiance";
+      roundId: bigint;
+      crashPointBps: bigint;
+      displayCrashPoint: string;
+    };
+
+export type TheaterView = {
+  reducedMotion: boolean;
+  retry: () => Promise<void>;
+  live: TheaterLive;
+  hero: TheaterHero;
+};
+
+/** Frozen copy of the last fully-finalized round, for the display hold. */
+type RetainedFinalized = {
+  roundId: bigint;
+  crashPointBps: bigint;
+  displayCrashPoint: string;
+  finalizedAtSeconds: bigint;
+  finalizeTransactionUrl: string | null;
+  tape: RoundTicketTape | null;
+  tiers: TierExposure[];
+};
 
 /**
  * Presentation-only theater state. Composes public round reads and ticket tape
  * — never imports settlement or entry transaction hooks.
+ *
+ * `live` is always chain truth. `hero` is what the chart shows: a held previous
+ * replay, this round's replay, looping ambiance, or a pending/empty panel.
  */
-export function useRoundTheater(): TheaterStage {
+export function useRoundTheater(): TheaterView {
   const round = useCurrentCrashRound();
   const reducedMotion = useReducedMotion();
 
@@ -85,31 +118,51 @@ export function useRoundTheater(): TheaterStage {
 
   const tapePoll = usePolledCrashRead(tapeRead);
 
-  const needsAmbiance = round.status === "ready" && isPreLockPhase(round.phase);
+  // Retain the newest fully-finalized round we've seen so its replay can hold
+  // the hero across the epoch flip. Overwritten by supersession, never
+  // cleared. Adjusted during render (guarded) per the React "state from
+  // previous renders" pattern — no effect, no extra render pass when idle.
+  const [retained, setRetained] = useState<RetainedFinalized | null>(null);
+  const candidate = deriveRetainedCandidate(round, tapePoll.data);
+  if (
+    candidate !== null &&
+    (retained === null ||
+      retained.roundId !== candidate.roundId ||
+      retained.tape !== candidate.tape)
+  ) {
+    setRetained(candidate);
+  }
 
-  const ambianceRead = useCallback(
-    (config: Parameters<typeof readLatestFinalizedReplayRound>[0]) =>
-      readLatestFinalizedReplayRound(config),
-    []
-  );
+  // Mid-arrival only: retained already is the previous result, and the hold
+  // covers the epoch flip. Poll lookback solely when open has nothing to show.
+  const needsAmbiance =
+    round.status === "ready" &&
+    isPreLockPhase(round.phase) &&
+    retained === null;
 
-  const ambiancePoll = usePolledCrashRead(needsAmbiance ? ambianceRead : null);
+  const ambianceRead = useMemo(() => {
+    if (!needsAmbiance) return null;
+    return (config: MarginCallCrashConfig) =>
+      readLatestFinalizedReplayRound(config);
+  }, [needsAmbiance]);
+  const ambiancePoll = usePolledCrashRead(ambianceRead);
 
   return useMemo(
     () =>
-      toTheaterStage({
+      toTheaterView({
         round,
         reducedMotion,
         tape: tapePoll.data,
-        ambiance: needsAmbiance ? ambiancePoll.data : null,
+        ambiance: ambiancePoll.data,
+        retained,
         retryTape: tapePoll.refresh,
         retryAmbiance: ambiancePoll.refresh,
       }),
     [
       ambiancePoll.data,
       ambiancePoll.refresh,
-      needsAmbiance,
       reducedMotion,
+      retained,
       round,
       tapePoll.data,
       tapePoll.refresh,
@@ -117,15 +170,49 @@ export function useRoundTheater(): TheaterStage {
   );
 }
 
-function toTheaterStage(options: {
+function ambianceFromRetained(retained: RetainedFinalized): TheaterHero {
+  return {
+    type: "ambiance",
+    roundId: retained.roundId,
+    crashPointBps: retained.crashPointBps,
+    displayCrashPoint: retained.displayCrashPoint,
+  };
+}
+
+function deriveRetainedCandidate(
+  round: CurrentCrashRoundView,
+  tape: RoundTicketTape | null
+): RetainedFinalized | null {
+  if (round.status !== "ready" || round.phase !== "finalized") return null;
+  if (
+    round.crashPointBps === null ||
+    round.displayCrashPoint === null ||
+    round.finalizedAtSeconds === null
+  ) {
+    return null;
+  }
+  const roundTape = tape?.roundId === round.roundId ? tape : null;
+  return {
+    roundId: round.roundId,
+    crashPointBps: round.crashPointBps,
+    displayCrashPoint: round.displayCrashPoint,
+    finalizedAtSeconds: round.finalizedAtSeconds,
+    finalizeTransactionUrl: round.finalizeTransactionUrl,
+    tape: roundTape,
+    tiers: roundTape?.tiers ?? aggregateTierExposure([]),
+  };
+}
+
+function toTheaterView(options: {
   round: CurrentCrashRoundView;
   reducedMotion: boolean;
   tape: RoundTicketTape | null;
   ambiance: FinalizedReplayRound | null;
+  retained: RetainedFinalized | null;
   retryTape: () => Promise<void>;
   retryAmbiance: () => Promise<void>;
-}): TheaterStage {
-  const { round, reducedMotion, tape, ambiance } = options;
+}): TheaterView {
+  const { round, reducedMotion, tape, ambiance, retained } = options;
   const retry = async () => {
     await round.retry();
     await options.retryTape();
@@ -134,11 +221,16 @@ function toTheaterStage(options: {
 
   if (round.status !== "ready") {
     if (round.status === "loading") {
-      return { kind: "loading", reducedMotion, retry };
+      return {
+        live: { kind: "loading" },
+        hero: { type: "empty" },
+        reducedMotion,
+        retry,
+      };
     }
     return {
-      kind: round.status,
-      error: round.error,
+      live: { kind: round.status, error: round.error },
+      hero: { type: "empty" },
       reducedMotion,
       retry,
     };
@@ -147,12 +239,38 @@ function toTheaterStage(options: {
   const phase = round.phase;
 
   if (isPreLockPhase(phase)) {
-    return {
+    const live: Extract<TheaterLive, { kind: "open" }> = {
       kind: "open",
       roundId: round.roundId,
-      countdownSeconds: round.countdownSeconds,
       tape,
-      ambiance,
+      timeline: round.timeline,
+    };
+
+    // Display-round hold: keep the just-finished result playing out into the
+    // next entry window. Live stays the open round; hero keeps N-1.
+    if (
+      retained !== null &&
+      retained.roundId === round.roundId - 1n &&
+      isReplayHoldActive(
+        retained.finalizedAtSeconds,
+        retained.crashPointBps,
+        round.chainTimestamp
+      )
+    ) {
+      return {
+        live,
+        hero: replayHeroFromRetained(retained, round.chainTimestamp),
+        reducedMotion,
+        retry,
+      };
+    }
+
+    return {
+      live,
+      hero:
+        retained !== null
+          ? ambianceFromRetained(retained)
+          : ambianceHero(ambiance),
       reducedMotion,
       retry,
     };
@@ -163,11 +281,16 @@ function toTheaterStage(options: {
     phase === "reveal-requested" ||
     phase === "expired-eligible"
   ) {
+    const copy = roundPhaseCopy[phase];
     return {
-      kind: "delayed",
-      roundId: round.roundId,
-      phaseLabel: phase,
-      tape,
+      live: {
+        kind: "delayed",
+        roundId: round.roundId,
+        phaseLabel: phase,
+        tape,
+        timeline: round.timeline,
+      },
+      hero: { type: "pending", title: copy.title, body: copy.body },
       reducedMotion,
       retry,
     };
@@ -175,16 +298,21 @@ function toTheaterStage(options: {
 
   if (phase === "finalized") {
     if (round.crashPointBps === null || round.displayCrashPoint === null) {
+      const copy = roundPhaseCopy["reveal-requested"];
       return {
-        kind: "delayed",
-        roundId: round.roundId,
-        phaseLabel: "reveal-requested",
-        tape,
+        live: {
+          kind: "delayed",
+          roundId: round.roundId,
+          phaseLabel: "reveal-requested",
+          tape,
+          timeline: round.timeline,
+        },
+        hero: { type: "pending", title: copy.title, body: copy.body },
         reducedMotion,
         retry,
       };
     }
-    return {
+    const live: Extract<TheaterLive, { kind: "finalized" }> = {
       kind: "finalized",
       roundId: round.roundId,
       crashPointBps: round.crashPointBps,
@@ -194,16 +322,26 @@ function toTheaterStage(options: {
       finalizeTransactionUrl: round.finalizeTransactionUrl,
       tape,
       tiers: tape?.tiers ?? aggregateTierExposure([]),
+      timeline: round.timeline,
+    };
+    return {
+      live,
+      hero: replayHeroFromLive(live),
       reducedMotion,
       retry,
     };
   }
 
   if (phase === "expired") {
+    const copy = roundPhaseCopy.expired;
     return {
-      kind: "expired",
-      roundId: round.roundId,
-      tape,
+      live: {
+        kind: "expired",
+        roundId: round.roundId,
+        tape,
+        timeline: round.timeline,
+      },
+      hero: { type: "pending", title: copy.title, body: copy.body },
       reducedMotion,
       retry,
     };
@@ -211,4 +349,47 @@ function toTheaterStage(options: {
 
   const _exhaustive: never = phase;
   return _exhaustive;
+}
+
+function ambianceHero(ambiance: FinalizedReplayRound | null): TheaterHero {
+  if (ambiance === null) return { type: "empty" };
+  return {
+    type: "ambiance",
+    roundId: ambiance.round.id,
+    crashPointBps: ambiance.round.crashPointBps,
+    displayCrashPoint: ambiance.displayCrashPoint,
+  };
+}
+
+function replayHeroFromRetained(
+  retained: RetainedFinalized,
+  chainTimestamp: bigint
+): TheaterReplayHero {
+  return {
+    type: "replay",
+    roundId: retained.roundId,
+    crashPointBps: retained.crashPointBps,
+    displayCrashPoint: retained.displayCrashPoint,
+    finalizedAtSeconds: retained.finalizedAtSeconds,
+    chainTimestamp,
+    finalizeTransactionUrl: retained.finalizeTransactionUrl,
+    tape: retained.tape,
+    tiers: retained.tiers,
+  };
+}
+
+function replayHeroFromLive(
+  live: Extract<TheaterLive, { kind: "finalized" }>
+): TheaterReplayHero {
+  return {
+    type: "replay",
+    roundId: live.roundId,
+    crashPointBps: live.crashPointBps,
+    displayCrashPoint: live.displayCrashPoint,
+    finalizedAtSeconds: live.finalizedAtSeconds,
+    chainTimestamp: live.chainTimestamp,
+    finalizeTransactionUrl: live.finalizeTransactionUrl,
+    tape: live.tape,
+    tiers: live.tiers,
+  };
 }

@@ -8,8 +8,10 @@ import {
   getReplayProgress,
   getTierCloseProgress,
   isReplayComplete,
+  isReplayHoldActive,
   REPLAY_DURATION_MAX_MS,
   REPLAY_DURATION_MIN_MS,
+  REPLAY_HOLD_BEAT_SECONDS,
 } from "./round-replay";
 
 const ONE_X = 10_000n;
@@ -94,5 +96,26 @@ describe("round-replay math", () => {
     expect(path.startsWith("M ")).toBe(true);
     expect(path.includes(" L ")).toBe(true);
     expect(getReplayPath(30_000n, 0).startsWith("M ")).toBe(true);
+  });
+
+  it("holds the display round through the replay plus the result beat", () => {
+    const finalizedAt = 5_000n;
+    const crash = ONE_X; // 4s replay
+    const holdSeconds = 4n + BigInt(REPLAY_HOLD_BEAT_SECONDS);
+
+    expect(isReplayHoldActive(finalizedAt, crash, finalizedAt)).toBe(true);
+    expect(
+      isReplayHoldActive(finalizedAt, crash, finalizedAt + holdSeconds - 1n)
+    ).toBe(true);
+    expect(
+      isReplayHoldActive(finalizedAt, crash, finalizedAt + holdSeconds)
+    ).toBe(false);
+  });
+
+  it("holds longer for higher Crash Points (longer replays)", () => {
+    const finalizedAt = 5_000n;
+    const probe = finalizedAt + 10n; // past 4s+beat, inside 12s+beat
+    expect(isReplayHoldActive(finalizedAt, ONE_X, probe)).toBe(false);
+    expect(isReplayHoldActive(finalizedAt, 100_000n, probe)).toBe(true);
   });
 });

@@ -2,6 +2,7 @@
 
 import { useLogin, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCallback, useRef, useState } from "react";
+import { FlashValue } from "@/components/ui/flash-value";
 import { formatDeskDollarsBalanceLabel } from "@/lib/desk-dollars";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { formatShortAddress } from "@/lib/utils";
@@ -74,8 +75,10 @@ export function AuthControls() {
           <span className="text-[var(--t-text)]">
             {formatShortAddress(walletAddress)}
           </span>
-          {balanceLabel ? (
-            <span className="text-[var(--t-green-hot)]">{balanceLabel}</span>
+          {balanceLabel && balance !== null ? (
+            <FlashValue className="text-[var(--t-green-hot)]" value={balance}>
+              {balanceLabel}
+            </FlashValue>
           ) : null}
         </div>
       ) : null}

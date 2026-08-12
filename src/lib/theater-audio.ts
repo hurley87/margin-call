@@ -43,6 +43,10 @@ type TheaterAudioEngine = {
   playTierClose: () => void;
   playCrashBell: () => void;
   playPhoneRing: () => void;
+  playEntryConfirm: () => void;
+  playLockThunk: () => void;
+  playWinRegister: () => void;
+  playCountdownTick: () => void;
   dispose: () => void;
 };
 
@@ -123,6 +127,31 @@ export function getTheaterAudio(): TheaterAudioEngine {
       window.setTimeout(() => {
         tone(440, 180, { type: "square", gain: 0.05 });
       }, 220);
+    },
+    playEntryConfirm() {
+      // Order accepted — rising chirp.
+      tone(520, 70, { type: "triangle", gain: 0.05 });
+      window.setTimeout(() => {
+        tone(780, 110, { type: "triangle", gain: 0.06 });
+      }, 90);
+    },
+    playLockThunk() {
+      // Entry gate drops — low thud.
+      tone(180, 140, { type: "square", gain: 0.06, slideTo: 90 });
+    },
+    playWinRegister() {
+      // Cash register — major arpeggio up.
+      tone(1046, 90, { type: "triangle", gain: 0.06 });
+      window.setTimeout(() => {
+        tone(1318, 90, { type: "triangle", gain: 0.06 });
+      }, 100);
+      window.setTimeout(() => {
+        tone(1568, 220, { type: "triangle", gain: 0.08 });
+      }, 200);
+    },
+    playCountdownTick() {
+      // Soft woodblock for the final entry seconds.
+      tone(1200, 30, { type: "square", gain: 0.03 });
     },
     dispose() {
       void context?.close();
