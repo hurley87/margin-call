@@ -5,9 +5,12 @@ import {
   type CurrentCrashRoundView,
 } from "@/hooks/use-current-crash-round";
 import { isPreLockPhase, type CrashRoundPhase } from "@/lib/margin-call-crash";
-import { roundPhaseCopy } from "@/lib/round-phase-copy";
+import {
+  formatEntriesReopenNotice,
+  roundPhaseCopy,
+} from "@/lib/round-phase-copy";
 import type { RoundTimeline } from "@/lib/round-timeline";
-import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
+import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { CrashRoundEntry } from "./crash-round-entry";
 
 type ReadyRound = Extract<CurrentCrashRoundView, { status: "ready" }>;
@@ -95,16 +98,13 @@ function NextRoundNotice({
   timeline: RoundTimeline;
 }) {
   if (isPreLockPhase(phase)) return null;
-  const nextRoundId = (timeline.roundId + 1n).toString();
   return (
     <p
       aria-live="polite"
       className="mt-2 text-xs font-bold tabular-nums text-[var(--t-green-hot)]"
       data-testid="next-round-notice"
     >
-      {timeline.nextRoundOpensInSeconds > 0
-        ? `Entries reopen in ${formatCountdown(timeline.nextRoundOpensInSeconds)} · Round ${nextRoundId}`
-        : `Round ${nextRoundId} opening…`}
+      {formatEntriesReopenNotice(timeline)}
     </p>
   );
 }

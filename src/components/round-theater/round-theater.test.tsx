@@ -34,7 +34,6 @@ const sdk = vi.hoisted(() => {
       { id: "next" as const, state: "upcoming" as const, progress: null },
     ],
     countdown,
-    nextRoundOpensInSeconds: 38,
     expiresInSeconds: null,
   });
 

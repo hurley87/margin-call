@@ -17,10 +17,11 @@ import {
   formatLeverageBps,
   type CrashTicket,
 } from "@/lib/margin-call-crash";
-import type {
-  RoundTimeline,
-  RoundTimelineCountdown,
-} from "@/lib/round-timeline";
+import {
+  formatNextRoundHandoff,
+  formatTimelineCountdownLabel,
+} from "@/lib/round-phase-copy";
+import type { RoundTimeline } from "@/lib/round-timeline";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { theaterCopy } from "./theater-copy";
@@ -239,10 +240,7 @@ function OpenStage({
   reducedMotion: boolean;
 }) {
   const countdown = live.timeline.countdown;
-  const countdownLabel =
-    countdown.kind === "entry-closes"
-      ? theaterCopy.openCountdown
-      : "Next round opens in";
+  const countdownLabel = formatTimelineCountdownLabel(live.timeline);
   const countdownAriaLabel =
     countdown.kind === "entry-closes"
       ? `${countdown.seconds} seconds until entry locks`
@@ -509,10 +507,16 @@ function replayHandoffLabel(
   switch (live.kind) {
     case "open":
       return hero.roundId !== live.roundId
-        ? nextRoundLabel(live.roundId, live.timeline.countdown)
+        ? formatNextRoundHandoff({
+            roundId: live.roundId,
+            countdown: live.timeline.countdown,
+          })
         : null;
     case "finalized":
-      return nextRoundLabel(live.roundId + 1n, live.timeline.countdown);
+      return formatNextRoundHandoff({
+        roundId: live.roundId + 1n,
+        countdown: live.timeline.countdown,
+      });
     case "delayed":
     case "expired":
     case "loading":
@@ -524,22 +528,6 @@ function replayHandoffLabel(
       return _exhaustive;
     }
   }
-}
-
-function nextRoundLabel(
-  roundId: bigint,
-  countdown: RoundTimelineCountdown
-): string {
-  const id = roundId.toString();
-  if (countdown.kind === "entry-closes") {
-    return theaterCopy.nextRoundEntryOpen(
-      id,
-      formatCountdown(countdown.seconds)
-    );
-  }
-  return countdown.seconds > 0
-    ? theaterCopy.nextRoundOpens(id, formatCountdown(countdown.seconds))
-    : theaterCopy.nextRoundOpening(id);
 }
 
 function ExpiredStage({
