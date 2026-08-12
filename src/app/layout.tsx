@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans_Condensed } from "next/font/google";
+import { AppShell } from "@/components/app-shell/app-shell";
 import { MarginCallPrivyProvider } from "@/components/providers/privy-provider";
 import "./globals.css";
 
@@ -44,7 +45,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${plexMono.variable} ${plexSans.variable} antialiased`}>
-        <MarginCallPrivyProvider>{children}</MarginCallPrivyProvider>
+        <MarginCallPrivyProvider>
+          <AppShell>{children}</AppShell>
+        </MarginCallPrivyProvider>
       </body>
     </html>
   );

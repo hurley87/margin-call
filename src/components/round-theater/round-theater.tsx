@@ -9,7 +9,7 @@ import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { delayedPhaseCopy, theaterCopy } from "./theater-copy";
 import { FinalizeLink } from "./finalize-link";
-import { ReplayCurve } from "./replay-curve";
+import { ReplayCurve, ReplayCurveEmpty } from "./replay-curve";
 import { RoundResultCard } from "./round-result-card";
 import { TheaterSoundToggle } from "./theater-sound-toggle";
 import { TicketTape } from "./ticket-tape";
@@ -25,10 +25,10 @@ export function RoundTheater() {
   return (
     <section
       aria-labelledby="round-theater-heading"
-      className="mt-10 border-y border-[var(--t-border)] bg-[var(--t-panel)] text-left"
+      className="border-y border-[var(--t-border)] bg-[var(--t-panel)] text-left"
       data-testid="round-theater"
     >
-      <div className="px-5 py-6 sm:px-8 sm:py-8">
+      <div className="px-4 py-5 sm:px-6 sm:py-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <p className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]">
@@ -36,7 +36,7 @@ export function RoundTheater() {
             </p>
             <h2
               id="round-theater-heading"
-              className="mt-2 font-[family-name:var(--font-plex-sans)] text-3xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-4xl"
+              className="mt-2 font-[family-name:var(--font-plex-sans)] text-2xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-3xl"
             >
               {theaterCopy.heading}
             </h2>
@@ -44,7 +44,7 @@ export function RoundTheater() {
           <TheaterSoundToggle />
         </div>
 
-        <div className="mt-6">
+        <div className="mt-5">
           <TheaterBody stage={stage} />
         </div>
       </div>
@@ -56,20 +56,21 @@ function TheaterBody({ stage }: { stage: TheaterStage }) {
   switch (stage.kind) {
     case "loading":
       return (
-        <p
-          aria-busy="true"
-          className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]"
-        >
-          {theaterCopy.loading}
-        </p>
+        <ReplayCurveEmpty
+          body={theaterCopy.loading}
+          testId="theater-loading"
+          title={theaterCopy.loading}
+        />
       );
     case "error":
     case "unavailable":
       return (
         <div>
-          <p className="text-sm text-[var(--t-red)]" role="alert">
-            {stage.error}
-          </p>
+          <ReplayCurveEmpty
+            body={stage.error}
+            testId="theater-error"
+            title="Theater unavailable"
+          />
           <button
             className={`mt-4 ${TERMINAL_ACTION_BUTTON_CLASS}`}
             onClick={() => void stage.retry()}
@@ -102,37 +103,42 @@ function OpenStage({
   const ambiance = stage.ambiance;
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
-      <div>
-        <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-          {theaterCopy.openCountdown}
-        </p>
-        <p
-          aria-label={`${stage.countdownSeconds} seconds until entry locks`}
-          className="mc-live-value mt-2 text-5xl font-bold tabular-nums text-[var(--t-green-hot)]"
-          data-testid="theater-countdown"
-        >
-          {formatCountdown(stage.countdownSeconds)}
-        </p>
-        <TicketTape entries={stage.tape?.entries ?? []} />
-      </div>
-      <div>
-        {ambiance && !stage.reducedMotion ? (
-          <AmbianceReplay crashPointBps={ambiance.round.crashPointBps} />
-        ) : ambiance && stage.reducedMotion ? (
-          <div className="terminal-panel p-4">
-            <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-              {theaterCopy.openAmbiance}
-            </p>
-            <p className="mc-live-value mt-2 text-3xl font-bold text-[var(--t-green-hot)]">
-              {ambiance.displayCrashPoint}
-            </p>
-          </div>
-        ) : (
-          <div className="terminal-panel p-4 text-xs text-[var(--t-muted)]">
-            {theaterCopy.openAmbianceEmpty}
-          </div>
-        )}
+    <div className="space-y-4">
+      {ambiance && !stage.reducedMotion ? (
+        <AmbianceReplay crashPointBps={ambiance.round.crashPointBps} />
+      ) : ambiance && stage.reducedMotion ? (
+        <div className="terminal-panel min-h-[22rem] p-5 lg:min-h-[28rem]">
+          <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+            {theaterCopy.openAmbiance}
+          </p>
+          <p className="mc-live-value mt-2 font-[family-name:var(--font-plex-sans)] text-5xl font-bold text-[var(--t-green-hot)] sm:text-6xl">
+            {ambiance.displayCrashPoint}
+          </p>
+        </div>
+      ) : (
+        <ReplayCurveEmpty
+          body={theaterCopy.openAmbianceEmpty}
+          testId="theater-ambiance-empty"
+          title={theaterCopy.openAmbiance}
+        />
+      )}
+
+      <div className="flex flex-wrap items-end justify-between gap-4 border-t border-[var(--t-divider)] pt-4">
+        <div>
+          <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+            {theaterCopy.openCountdown}
+          </p>
+          <p
+            aria-label={`${stage.countdownSeconds} seconds until entry locks`}
+            className="mc-live-value mt-1 text-4xl font-bold tabular-nums text-[var(--t-green-hot)] sm:text-5xl"
+            data-testid="theater-countdown"
+          >
+            {formatCountdown(stage.countdownSeconds)}
+          </p>
+        </div>
+        <div className="min-w-0 flex-1">
+          <TicketTape entries={stage.tape?.entries ?? []} />
+        </div>
       </div>
     </div>
   );
@@ -155,6 +161,7 @@ function AmbianceReplay({ crashPointBps }: { crashPointBps: bigint }) {
       ambiance
       crashPointBps={crashPointBps}
       progress={clock.progress}
+      size="hero"
     />
   );
 }
@@ -166,17 +173,9 @@ function DelayedStage({
 }) {
   const copy = delayedPhaseCopy[stage.phaseLabel];
   return (
-    <div data-testid="theater-delayed">
-      <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        Round status
-      </p>
-      <p className="mt-2 text-lg font-bold text-[var(--t-amber-hot)]">
-        {copy.title}
-      </p>
-      <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-        {copy.body}
-      </p>
+    <div className="space-y-4" data-testid="theater-delayed">
       {/* Never invent a multiplier or start a climb while delayed. */}
+      <ReplayCurveEmpty body={copy.body} title={copy.title} />
       <TicketTape entries={stage.tape?.entries ?? []} />
     </div>
   );
@@ -218,17 +217,18 @@ function FinalizedStage({
   }
 
   return (
-    <div data-testid="theater-finalized-replay">
+    <div className="space-y-4" data-testid="theater-finalized-replay">
       <ReplayCurve
         crashPointBps={stage.crashPointBps}
         progress={clock.progress}
+        size="hero"
       />
       <TierCloseBoard
         crashPointBps={stage.crashPointBps}
         progress={clock.progress}
         tiers={stage.tiers}
       />
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <button
           className={TERMINAL_ACTION_BUTTON_CLASS}
           onClick={() => setRestartNonce((n) => n + 1)}
@@ -248,16 +248,11 @@ function ExpiredStage({
   stage: Extract<TheaterStage, { kind: "expired" }>;
 }) {
   return (
-    <div data-testid="theater-expired">
-      <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        Round status
-      </p>
-      <p className="mt-2 text-lg font-bold text-[var(--t-muted)]">
-        {theaterCopy.expired}
-      </p>
-      <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-        {theaterCopy.expiredDetail}
-      </p>
+    <div className="space-y-4" data-testid="theater-expired">
+      <ReplayCurveEmpty
+        body={theaterCopy.expiredDetail}
+        title={theaterCopy.expired}
+      />
       <TicketTape entries={stage.tape?.entries ?? []} />
     </div>
   );

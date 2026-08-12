@@ -20,11 +20,24 @@ import { theaterCopy } from "./theater-copy";
 const VIEW_W = 100;
 const VIEW_H = 56;
 
+export type ReplayCurveSize = "hero" | "thumb";
+
 export type ReplayCurveProps = {
   crashPointBps: bigint;
   progress: number;
-  /** Dimmed looping ambiance mode (Open phase). */
+  /** Open-phase previous-round ambiance (same hero size, different label). */
   ambiance?: boolean;
+  size?: ReplayCurveSize;
+};
+
+const sizeClass: Record<ReplayCurveSize, string> = {
+  hero: "min-h-[22rem] lg:min-h-[28rem]",
+  thumb: "h-14 w-28",
+};
+
+const svgClass: Record<ReplayCurveSize, string> = {
+  hero: "mt-4 h-[14rem] w-full sm:h-[18rem] lg:h-[22rem]",
+  thumb: "h-full w-full",
 };
 
 /**
@@ -35,6 +48,7 @@ export function ReplayCurve({
   crashPointBps,
   progress,
   ambiance = false,
+  size = "hero",
 }: ReplayCurveProps) {
   // `progress` moves every animation frame, so memoizing on it buys nothing.
   const points = getReplayPathPoints(crashPointBps, progress, {
@@ -47,6 +61,7 @@ export function ReplayCurve({
   const displayMultiplier = formatCrashPointBps(multiplierBps);
   const isComplete = isReplayComplete(progress);
   const crashLabel = formatCrashPointBps(crashPointBps);
+  const isThumb = size === "thumb";
 
   const tierLines = useMemo(
     () =>
@@ -60,9 +75,36 @@ export function ReplayCurve({
     [crashPointBps]
   );
 
+  if (isThumb) {
+    return (
+      <div
+        aria-hidden="true"
+        className={`terminal-panel relative overflow-hidden p-1 ${sizeClass.thumb}`}
+        data-testid="replay-curve-thumb"
+      >
+        <svg
+          className={svgClass.thumb}
+          preserveAspectRatio="none"
+          viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+        >
+          <path
+            d={path}
+            fill="none"
+            stroke="var(--t-green-hot)"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.4"
+          />
+          <circle cx={head.x} cy={head.y} fill="var(--t-red-hot)" r="1.6" />
+        </svg>
+      </div>
+    );
+  }
+
   return (
     <div
-      className={`terminal-panel relative overflow-hidden p-3 sm:p-4 ${ambiance ? "opacity-70" : ""}`}
+      className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${sizeClass.hero}`}
+      data-testid={ambiance ? "replay-curve-ambiance" : "replay-curve"}
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -73,7 +115,7 @@ export function ReplayCurve({
           </p>
           <p
             aria-live="polite"
-            className={`mc-live-value mt-1 font-[family-name:var(--font-plex-sans)] text-4xl font-bold tabular-nums sm:text-5xl ${
+            className={`mc-live-value mt-1 font-[family-name:var(--font-plex-sans)] text-5xl font-bold tabular-nums sm:text-6xl lg:text-7xl ${
               isComplete
                 ? "text-[var(--t-red-hot)]"
                 : "text-[var(--t-green-hot)]"
@@ -99,7 +141,7 @@ export function ReplayCurve({
 
       <svg
         aria-hidden="true"
-        className="mt-4 h-40 w-full sm:h-52"
+        className={svgClass.hero}
         preserveAspectRatio="none"
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       >
@@ -162,6 +204,56 @@ export function ReplayCurve({
           {theaterCopy.replayLabel}. {theaterCopy.replayDetail}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Empty chart workspace while the round has no climb to show (delayed /
+ * expired / loading). Keeps the floor from collapsing into a text block.
+ */
+export function ReplayCurveEmpty({
+  title,
+  body,
+  testId,
+}: {
+  title: string;
+  body: string;
+  testId?: string;
+}) {
+  return (
+    <div
+      className="terminal-panel relative flex min-h-[22rem] flex-col justify-center overflow-hidden p-5 sm:p-8 lg:min-h-[28rem]"
+      data-testid={testId}
+    >
+      <svg
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 h-full w-full opacity-40"
+        preserveAspectRatio="none"
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      >
+        {[0.2, 0.4, 0.6, 0.8].map((t) => (
+          <line
+            key={t}
+            stroke="var(--t-divider)"
+            strokeDasharray="1 2"
+            strokeWidth="0.25"
+            x1="0"
+            x2={VIEW_W}
+            y1={VIEW_H * t}
+            y2={VIEW_H * t}
+          />
+        ))}
+      </svg>
+      <div className="relative max-w-xl">
+        <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+          Round status
+        </p>
+        <p className="mt-3 font-[family-name:var(--font-plex-sans)] text-2xl font-bold text-[var(--t-amber-hot)] sm:text-3xl">
+          {title}
+        </p>
+        <p className="mt-3 text-xs leading-5 text-[var(--t-muted)]">{body}</p>
+      </div>
     </div>
   );
 }
