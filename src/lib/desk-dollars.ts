@@ -74,6 +74,28 @@ export async function readDeskDollarsState(
   return { balance, decimals, nextClaimAt };
 }
 
+/** Balance-only read for display surfaces that don't need faucet state. */
+export async function readDeskDollarsBalance(
+  tokenAddress: Address,
+  walletAddress: Address
+) {
+  const [balance, decimals] = await Promise.all([
+    baseSepoliaPublicClient.readContract({
+      address: tokenAddress,
+      abi: deskDollarsAbi,
+      functionName: "balanceOf",
+      args: [walletAddress],
+    }),
+    baseSepoliaPublicClient.readContract({
+      address: tokenAddress,
+      abi: deskDollarsAbi,
+      functionName: "decimals",
+    }),
+  ]);
+
+  return { balance, decimals };
+}
+
 export function formatDeskDollars(value: bigint, decimals: number) {
   const scale = 10n ** BigInt(decimals);
   const whole = value / scale;
@@ -82,6 +104,16 @@ export function formatDeskDollars(value: bigint, decimals: number) {
     .padStart(decimals, "0")
     .replace(/0+$/, "");
   return fraction ? `${whole}.${fraction}` : whole.toString();
+}
+
+/** "100 tUSD" once both reads have landed, null while either is pending. */
+export function formatDeskDollarsBalanceLabel(
+  balance: bigint | null,
+  decimals: number | null
+): string | null {
+  return balance !== null && decimals !== null
+    ? `${formatDeskDollars(balance, decimals)} tUSD`
+    : null;
 }
 
 const TUSD_SCALE = 10n ** BigInt(TUSD_DECIMALS);

@@ -25,11 +25,10 @@ vi.mock("@privy-io/react-auth", () => ({
   useWallets: () => sdk.wallets,
 }));
 
-vi.mock("@/hooks/use-desk-dollars-faucet", () => ({
-  useDeskDollarsFaucet: () => ({
+vi.mock("@/hooks/use-desk-dollars-balance", () => ({
+  useDeskDollarsBalance: () => ({
     balance: null,
     decimals: null,
-    status: "loading",
   }),
 }));
 

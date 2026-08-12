@@ -2,10 +2,10 @@
 
 import { useLogin, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCallback, useRef, useState } from "react";
-import { formatDeskDollars } from "@/lib/desk-dollars";
+import { formatDeskDollarsBalanceLabel } from "@/lib/desk-dollars";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { formatShortAddress } from "@/lib/utils";
-import { useDeskDollarsFaucet } from "@/hooks/use-desk-dollars-faucet";
+import { useDeskDollarsBalance } from "@/hooks/use-desk-dollars-balance";
 import { getAuthBoundaryState } from "./auth-boundary";
 
 /**
@@ -23,7 +23,7 @@ export function AuthControls() {
     onError: () => setLoginError(true),
   });
   const walletAddress = getEvmWalletAddress(user);
-  const faucet = useDeskDollarsFaucet(
+  const { balance, decimals } = useDeskDollarsBalance(
     authenticated && walletAddress ? walletAddress : null
   );
   const state = getAuthBoundaryState({
@@ -58,10 +58,7 @@ export function AuthControls() {
     }
   }, [logout]);
 
-  const balanceLabel =
-    faucet.balance !== null && faucet.decimals !== null
-      ? `${formatDeskDollars(faucet.balance, faucet.decimals)} tUSD`
-      : null;
+  const balanceLabel = formatDeskDollarsBalanceLabel(balance, decimals);
 
   return (
     <div

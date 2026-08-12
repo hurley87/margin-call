@@ -21,9 +21,6 @@ export function AuthGate({
     authenticated,
     walletsReady,
     walletAddress,
-    loginError: false,
-    logoutPending: false,
-    logoutError: false,
   });
 
   if (state.status !== "signed-in") return null;

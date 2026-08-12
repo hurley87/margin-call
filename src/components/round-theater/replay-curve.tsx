@@ -20,25 +20,18 @@ import { theaterCopy } from "./theater-copy";
 const VIEW_W = 100;
 const VIEW_H = 56;
 
-export type ReplayCurveSize = "hero" | "thumb";
-
 export type ReplayCurveProps = {
   crashPointBps: bigint;
   progress: number;
   /** Open-phase previous-round ambiance (same hero size, different label). */
   ambiance?: boolean;
-  size?: ReplayCurveSize;
 };
 
-const sizeClass: Record<ReplayCurveSize, string> = {
-  hero: "min-h-[22rem] lg:min-h-[28rem]",
-  thumb: "h-14 w-28",
-};
-
-const svgClass: Record<ReplayCurveSize, string> = {
-  hero: "mt-4 h-[14rem] w-full sm:h-[18rem] lg:h-[22rem]",
-  thumb: "h-full w-full",
-};
+/**
+ * Every chart-slot state (live curve, empty, reduced-motion panel) shares this
+ * footprint so the floor layout never jumps between phases.
+ */
+export const REPLAY_HERO_MIN_H = "min-h-[22rem] lg:min-h-[28rem]";
 
 /**
  * SVG multiplier climb. Axes rescale with the live multiplier; hard stop at
@@ -48,7 +41,6 @@ export function ReplayCurve({
   crashPointBps,
   progress,
   ambiance = false,
-  size = "hero",
 }: ReplayCurveProps) {
   // `progress` moves every animation frame, so memoizing on it buys nothing.
   const points = getReplayPathPoints(crashPointBps, progress, {
@@ -61,7 +53,6 @@ export function ReplayCurve({
   const displayMultiplier = formatCrashPointBps(multiplierBps);
   const isComplete = isReplayComplete(progress);
   const crashLabel = formatCrashPointBps(crashPointBps);
-  const isThumb = size === "thumb";
 
   const tierLines = useMemo(
     () =>
@@ -75,35 +66,9 @@ export function ReplayCurve({
     [crashPointBps]
   );
 
-  if (isThumb) {
-    return (
-      <div
-        aria-hidden="true"
-        className={`terminal-panel relative overflow-hidden p-1 ${sizeClass.thumb}`}
-        data-testid="replay-curve-thumb"
-      >
-        <svg
-          className={svgClass.thumb}
-          preserveAspectRatio="none"
-          viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
-        >
-          <path
-            d={path}
-            fill="none"
-            stroke="var(--t-green-hot)"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="1.4"
-          />
-          <circle cx={head.x} cy={head.y} fill="var(--t-red-hot)" r="1.6" />
-        </svg>
-      </div>
-    );
-  }
-
   return (
     <div
-      className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${sizeClass.hero}`}
+      className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${REPLAY_HERO_MIN_H}`}
       data-testid={ambiance ? "replay-curve-ambiance" : "replay-curve"}
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -141,7 +106,7 @@ export function ReplayCurve({
 
       <svg
         aria-hidden="true"
-        className={svgClass.hero}
+        className="mt-4 h-[14rem] w-full sm:h-[18rem] lg:h-[22rem]"
         preserveAspectRatio="none"
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       >
@@ -209,6 +174,47 @@ export function ReplayCurve({
 }
 
 /**
+ * Static history sparkline: the full curve at its final frame. Kept separate
+ * from ReplayCurve so list rows skip the hero's multiplier/tier work.
+ */
+export function ReplayCurveThumb({ crashPointBps }: { crashPointBps: bigint }) {
+  const { path, head } = useMemo(() => {
+    const points = getReplayPathPoints(crashPointBps, 1, {
+      width: VIEW_W,
+      height: VIEW_H,
+    });
+    return {
+      path: replayPathD(points),
+      head: points[points.length - 1] ?? { x: 0, y: VIEW_H },
+    };
+  }, [crashPointBps]);
+
+  return (
+    <div
+      aria-hidden="true"
+      className="terminal-panel relative h-14 w-28 overflow-hidden p-1"
+      data-testid="replay-curve-thumb"
+    >
+      <svg
+        className="h-full w-full"
+        preserveAspectRatio="none"
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      >
+        <path
+          d={path}
+          fill="none"
+          stroke="var(--t-green-hot)"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.4"
+        />
+        <circle cx={head.x} cy={head.y} fill="var(--t-red-hot)" r="1.6" />
+      </svg>
+    </div>
+  );
+}
+
+/**
  * Empty chart workspace while the round has no climb to show (delayed /
  * expired / loading). Keeps the floor from collapsing into a text block.
  */
@@ -218,12 +224,12 @@ export function ReplayCurveEmpty({
   testId,
 }: {
   title: string;
-  body: string;
+  body?: string;
   testId?: string;
 }) {
   return (
     <div
-      className="terminal-panel relative flex min-h-[22rem] flex-col justify-center overflow-hidden p-5 sm:p-8 lg:min-h-[28rem]"
+      className={`terminal-panel relative flex flex-col justify-center overflow-hidden p-5 sm:p-8 ${REPLAY_HERO_MIN_H}`}
       data-testid={testId}
     >
       <svg
@@ -252,7 +258,9 @@ export function ReplayCurveEmpty({
         <p className="mt-3 font-[family-name:var(--font-plex-sans)] text-2xl font-bold text-[var(--t-amber-hot)] sm:text-3xl">
           {title}
         </p>
-        <p className="mt-3 text-xs leading-5 text-[var(--t-muted)]">{body}</p>
+        {body ? (
+          <p className="mt-3 text-xs leading-5 text-[var(--t-muted)]">{body}</p>
+        ) : null}
       </div>
     </div>
   );

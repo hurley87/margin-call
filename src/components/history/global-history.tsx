@@ -6,7 +6,7 @@ import type {
   RoundHistoryItem,
   RoundHistoryState,
 } from "@/lib/margin-call-crash";
-import { ReplayCurve } from "@/components/round-theater/replay-curve";
+import { ReplayCurveThumb } from "@/components/round-theater/replay-curve";
 import { historyStateCopy } from "./history-state-copy";
 import { RoundVerificationRecord } from "./round-verification-record";
 
@@ -152,11 +152,7 @@ function HistoryRoundRow({
       >
         <div className="flex min-w-0 flex-wrap items-center gap-3">
           {showThumb ? (
-            <ReplayCurve
-              crashPointBps={item.round.crashPointBps}
-              progress={1}
-              size="thumb"
-            />
+            <ReplayCurveThumb crashPointBps={item.round.crashPointBps} />
           ) : null}
           <span className="font-[family-name:var(--font-plex-sans)] text-lg font-bold tabular-nums text-[var(--t-text)]">
             Round {item.round.id.toString()}

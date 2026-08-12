@@ -9,7 +9,11 @@ import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { delayedPhaseCopy, theaterCopy } from "./theater-copy";
 import { FinalizeLink } from "./finalize-link";
-import { ReplayCurve, ReplayCurveEmpty } from "./replay-curve";
+import {
+  REPLAY_HERO_MIN_H,
+  ReplayCurve,
+  ReplayCurveEmpty,
+} from "./replay-curve";
 import { RoundResultCard } from "./round-result-card";
 import { TheaterSoundToggle } from "./theater-sound-toggle";
 import { TicketTape } from "./ticket-tape";
@@ -57,7 +61,6 @@ function TheaterBody({ stage }: { stage: TheaterStage }) {
     case "loading":
       return (
         <ReplayCurveEmpty
-          body={theaterCopy.loading}
           testId="theater-loading"
           title={theaterCopy.loading}
         />
@@ -107,7 +110,7 @@ function OpenStage({
       {ambiance && !stage.reducedMotion ? (
         <AmbianceReplay crashPointBps={ambiance.round.crashPointBps} />
       ) : ambiance && stage.reducedMotion ? (
-        <div className="terminal-panel min-h-[22rem] p-5 lg:min-h-[28rem]">
+        <div className={`terminal-panel p-5 ${REPLAY_HERO_MIN_H}`}>
           <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
             {theaterCopy.openAmbiance}
           </p>
@@ -161,7 +164,6 @@ function AmbianceReplay({ crashPointBps }: { crashPointBps: bigint }) {
       ambiance
       crashPointBps={crashPointBps}
       progress={clock.progress}
-      size="hero"
     />
   );
 }
@@ -221,7 +223,6 @@ function FinalizedStage({
       <ReplayCurve
         crashPointBps={stage.crashPointBps}
         progress={clock.progress}
-        size="hero"
       />
       <TierCloseBoard
         crashPointBps={stage.crashPointBps}
