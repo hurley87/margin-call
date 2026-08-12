@@ -14,8 +14,9 @@ import {
 /** Epoch grid spacing: a new round opens every 60 seconds (immutable onchain). */
 export const ROUND_INTERVAL_SECONDS = 60n;
 
-export type RoundTimelineSegmentId =
-  "entry" | "locked" | "reveal" | "result" | "next";
+const SEGMENT_IDS = ["entry", "locked", "reveal", "result", "next"] as const;
+
+export type RoundTimelineSegmentId = (typeof SEGMENT_IDS)[number];
 
 export type RoundTimelineSegmentState =
   "done" | "active" | "upcoming" | "skipped";
@@ -45,6 +46,58 @@ export type RoundTimeline = {
   expiresInSeconds: number | null;
 };
 
+type TimelinePhaseLayout = {
+  active: RoundTimelineSegmentId;
+  skipped: readonly RoundTimelineSegmentId[];
+  clocks: {
+    countdown: RoundTimelineCountdown["kind"];
+    expiresInSeconds: boolean;
+  };
+};
+
+const PHASE_TIMELINE: Record<CrashRoundPhase, TimelinePhaseLayout> = {
+  prelaunch: {
+    active: "entry",
+    skipped: [],
+    clocks: { countdown: "entry-closes", expiresInSeconds: false },
+  },
+  uninitialized: {
+    active: "entry",
+    skipped: [],
+    clocks: { countdown: "entry-closes", expiresInSeconds: false },
+  },
+  open: {
+    active: "entry",
+    skipped: [],
+    clocks: { countdown: "entry-closes", expiresInSeconds: false },
+  },
+  locked: {
+    active: "locked",
+    skipped: [],
+    clocks: { countdown: "next-opens", expiresInSeconds: true },
+  },
+  "reveal-requested": {
+    active: "reveal",
+    skipped: [],
+    clocks: { countdown: "next-opens", expiresInSeconds: true },
+  },
+  finalized: {
+    active: "next",
+    skipped: [],
+    clocks: { countdown: "next-opens", expiresInSeconds: false },
+  },
+  "expired-eligible": {
+    active: "next",
+    skipped: ["reveal", "result"],
+    clocks: { countdown: "next-opens", expiresInSeconds: true },
+  },
+  expired: {
+    active: "next",
+    skipped: ["reveal", "result"],
+    clocks: { countdown: "next-opens", expiresInSeconds: false },
+  },
+};
+
 function clampSeconds(value: bigint): number {
   return value > 0n ? Number(value) : 0;
 }
@@ -61,11 +114,46 @@ function segment(
   return { id, state, progress };
 }
 
+function activeProgress(
+  id: RoundTimelineSegmentId,
+  entryProgress: number,
+  nextProgress: number
+): number | null {
+  if (id === "entry") return entryProgress;
+  if (id === "next") return nextProgress;
+  return null;
+}
+
+function mapTimelineSegments(
+  layout: TimelinePhaseLayout,
+  entryProgress: number,
+  nextProgress: number
+): RoundTimelineSegment[] {
+  const activeIndex = SEGMENT_IDS.indexOf(layout.active);
+  const skipped = new Set(layout.skipped);
+
+  return SEGMENT_IDS.map((id, index) => {
+    if (skipped.has(id)) return segment(id, "skipped");
+    if (id === layout.active) {
+      return segment(
+        id,
+        "active",
+        activeProgress(id, entryProgress, nextProgress)
+      );
+    }
+    if (index < activeIndex) {
+      return segment(id, "done", id === "entry" ? 1 : null);
+    }
+    return segment(id, "upcoming");
+  });
+}
+
 export function getRoundTimeline(
   round: CrashRound,
   chainTimestamp: bigint
 ): RoundTimeline {
   const phase = deriveRoundPhase(round, chainTimestamp);
+  const layout = PHASE_TIMELINE[phase];
   const nextOpensAt = round.openAt + ROUND_INTERVAL_SECONDS;
   const nextRoundOpensInSeconds = clampSeconds(nextOpensAt - chainTimestamp);
   const entryClosesInSeconds = clampSeconds(round.lockAt - chainTimestamp);
@@ -83,95 +171,20 @@ export function getRoundTimeline(
     seconds: nextRoundOpensInSeconds,
   };
 
-  switch (phase) {
-    case "prelaunch":
-    case "uninitialized":
-    case "open": {
-      // A stale uninitialized epoch past its lock can no longer accept entry;
-      // the only deterministic thing left is the next epoch boundary.
-      const pastLock = chainTimestamp >= round.lockAt;
-      return {
-        roundId: round.id,
-        phase,
-        segments: [
-          segment("entry", "active", entryProgress),
-          segment("locked", "upcoming"),
-          segment("reveal", "upcoming"),
-          segment("result", "upcoming"),
-          segment("next", "upcoming"),
-        ],
-        countdown: pastLock
-          ? nextOpensCountdown
-          : { kind: "entry-closes", seconds: entryClosesInSeconds },
-        nextRoundOpensInSeconds,
-        expiresInSeconds: null,
-      };
-    }
-    case "locked":
-      return {
-        roundId: round.id,
-        phase,
-        segments: [
-          segment("entry", "done", 1),
-          segment("locked", "active"),
-          segment("reveal", "upcoming"),
-          segment("result", "upcoming"),
-          segment("next", "upcoming"),
-        ],
-        countdown: nextOpensCountdown,
-        nextRoundOpensInSeconds,
-        expiresInSeconds,
-      };
-    case "reveal-requested":
-      return {
-        roundId: round.id,
-        phase,
-        segments: [
-          segment("entry", "done", 1),
-          segment("locked", "done"),
-          segment("reveal", "active"),
-          segment("result", "upcoming"),
-          segment("next", "upcoming"),
-        ],
-        countdown: nextOpensCountdown,
-        nextRoundOpensInSeconds,
-        expiresInSeconds,
-      };
-    case "finalized":
-      return {
-        roundId: round.id,
-        phase,
-        segments: [
-          segment("entry", "done", 1),
-          segment("locked", "done"),
-          segment("reveal", "done"),
-          segment("result", "done"),
-          segment("next", "active", nextProgress),
-        ],
-        countdown: nextOpensCountdown,
-        nextRoundOpensInSeconds,
-        expiresInSeconds: null,
-      };
-    case "expired-eligible":
-    case "expired":
-      return {
-        roundId: round.id,
-        phase,
-        segments: [
-          segment("entry", "done", 1),
-          segment("locked", "done"),
-          segment("reveal", "skipped"),
-          segment("result", "skipped"),
-          segment("next", "active", nextProgress),
-        ],
-        countdown: nextOpensCountdown,
-        nextRoundOpensInSeconds,
-        expiresInSeconds:
-          phase === "expired-eligible" ? expiresInSeconds : null,
-      };
-    default: {
-      const _exhaustive: never = phase;
-      return _exhaustive;
-    }
-  }
+  // A stale uninitialized epoch past its lock can no longer accept entry;
+  // the only deterministic thing left is the next epoch boundary.
+  const pastLock = chainTimestamp >= round.lockAt;
+  const countdown: RoundTimelineCountdown =
+    layout.clocks.countdown === "entry-closes" && !pastLock
+      ? { kind: "entry-closes", seconds: entryClosesInSeconds }
+      : nextOpensCountdown;
+
+  return {
+    roundId: round.id,
+    phase,
+    segments: mapTimelineSegments(layout, entryProgress, nextProgress),
+    countdown,
+    nextRoundOpensInSeconds,
+    expiresInSeconds: layout.clocks.expiresInSeconds ? expiresInSeconds : null,
+  };
 }
