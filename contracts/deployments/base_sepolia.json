@@ -1,22 +1,22 @@
 {
-  "sourceCommit": "1e3b424596772559034c7a54f2cf7180bf1799fc",
+  "sourceCommit": "a791b5a962eecdec2b7e9df91cfb3bd1d55344d9",
   "chainId": 84532,
   "frontend": {
     "url": "https://margincall.fun",
     "status": "production-ready",
-    "productionDeploymentId": "dpl_7z8kZMjPQxUnjwvYZb5aKK1BZ4hY",
-    "productionCommit": "7aa0af13af0f553db33e8bd55ab1a2524b739e8a",
-    "previewUrl": "https://margin-call-jue644mdu-dhurls99-s-team.vercel.app",
-    "previewDeploymentId": "dpl_692TtHm1RKerzqo2ovN7NFgGSvs3",
-    "previewStatus": "ready-with-deployment-protection"
+    "productionDeploymentId": "dpl_FpJaVGBtRJYSYtJjfYHapdp6fNur",
+    "productionCommit": "a791b5a962eecdec2b7e9df91cfb3bd1d55344d9",
+    "previewUrl": "https://margin-call-7bi23vvrb-dhurls99-s-team.vercel.app",
+    "previewDeploymentId": "dpl_FpJaVGBtRJYSYtJjfYHapdp6fNur",
+    "previewStatus": "ready"
   },
-  "tokenDeploymentBlock": 45313049,
-  "token": "0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085",
-  "faucet": "0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356",
-  "bankrollVault": "0xc3d6ffa7eE1635F94bd545e05c9aCFabB01A4c21",
-  "marginCallCrash": "0xD74a89e199da9E45399ec913441b25A1b4120d44",
-  "marginCallCrashDeploymentBlock": 45351025,
-  "marginCallCrashEpochOrigin": 1786470660,
+  "tokenDeploymentBlock": 45385960,
+  "token": "0x4Ff4a2d64C53BE0b6f0B77B191579E7CEC026d56",
+  "faucet": "0x16434C92223baEDE8301b2F117DeD0F56147Bb99",
+  "bankrollVault": "0x75Db0b7865060c0d59a9801c4396ebfc430A740a",
+  "marginCallCrash": "0x2E7eb3B6Ac8E1ebF0C4B90067F584B21F22C2b3d",
+  "marginCallCrashDeploymentBlock": 45385985,
+  "marginCallCrashEpochOrigin": 1786540800,
   "marginCallCrashRoundDuration": 60,
   "marginCallCrashEntryWindow": 45,
   "marginCallCrashExpiryDelay": 900,
@@ -34,57 +34,104 @@
   "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
   "bankrollSeedAmount": 25000000000,
   "bankrollVaultSeedDepositor": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
-  "bankrollVaultSeedAssets": 20000000000,
-  "bankrollVaultMintedShares": 20000000000,
-  "bankrollVaultDeploymentBlock": 45351004,
+  "bankrollVaultSeedAssets": 25000000000,
+  "bankrollVaultMintedShares": 25000000000,
+  "bankrollVaultDeploymentBlock": 45385977,
   "bankrollVaultDepositSelector": "0x6e553f65",
   "faucetClaimAmount": 100000000,
   "faucetClaimCooldown": 3600,
   "faucetConfigured": true,
   "faucetClaimSelector": "0x4e71d92d",
   "verification": {
-    "token": "https://sepolia.basescan.org/address/0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085#code",
-    "faucet": "https://sepolia.basescan.org/address/0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356#code",
-    "bankrollVault": "https://sepolia.basescan.org/address/0xc3d6ffa7eE1635F94bd545e05c9aCFabB01A4c21#code",
-    "marginCallCrash": "https://sepolia.basescan.org/address/0xD74a89e199da9E45399ec913441b25A1b4120d44#code"
+    "token": "https://sepolia.basescan.org/address/0x4Ff4a2d64C53BE0b6f0B77B191579E7CEC026d56#code",
+    "faucet": "https://sepolia.basescan.org/address/0x16434C92223baEDE8301b2F117DeD0F56147Bb99#code",
+    "bankrollVault": "https://sepolia.basescan.org/address/0x75Db0b7865060c0d59a9801c4396ebfc430A740a#code",
+    "marginCallCrash": "https://sepolia.basescan.org/address/0x2E7eb3B6Ac8E1ebF0C4B90067F584B21F22C2b3d#code"
   },
   "transactions": {
-    "deployToken": "0x52d47a026c289a580eb2fb329f31667bc6282af10c1bc345dcc99b4e7b6ae9cb",
-    "deployFaucet": "0xcd278e2676df8fea5e43dd8d8521b8ce931c4a8917c0e5351009ab79c01bae1a",
-    "configureFaucet": "0xb67efea780bc376f1fac20433fc666793d3dab3099635f52b2683cb424a8d348",
-    "deployBankrollVault": "0x270e4fe7724217535f237eeb963151946a9e614161929da116a43ca873828105",
-    "approveBankrollVault": "0xcfe51188a2040cd8f13e1f4c176b82e939b48519a257830a986a55d3062b00f4",
-    "seedBankrollVault": "0x2675ceccfe5443da7bf1a67bdfe80bc08a518e5be54b22c5557e71db91fa31d3",
-    "deployMarginCallCrash": "0x1d83518ce4d39cba9083400d5ef4a03fd8ddb499c01d6a3d4a320a60cc06f0df",
+    "deployToken": "0xa3db1c6e2a82c64fa8c995c49639ef493ad127a432da57d46b821368201d5eae",
+    "deployFaucet": "0xa1f642385a413d134f557556320653cba51c2b48e96ddb48c93ef2be7f06f333",
+    "configureFaucet": "0x9a1438bc9cae97c0e0665af7ceb9d5776a6d5dfe1778a4a7675d81edb6a018d0",
+    "deployBankrollVault": "0x87a0783ac1414b164afa47deb6d99d08a0ee3269e806e4cfdb427fd89f8b7935",
+    "approveBankrollVault": "0xe346739475c94e2b1931c4f56a0be98f8887ba98813c6d449479a0c5febc5c21",
+    "seedBankrollVault": "0x970aff1df865d36afd0be0e9d8188efb60c8aa045cc402d9bb7395985b9732cc",
+    "deployMarginCallCrash": "0xc537f61073c3883a84c865c9a92f2a2fff68a0fee7ed4107512d102d437ea63a",
     "withdrawOldBankrollVault": "0x9b4beaa1ca892d5ae54ff419df6e8c3525ba6cde8477e68994062441017dd0b3",
-    "setAuthorizedGame": "0x3fb1e6165dbe5ee2b27d10299205005b7b27dc61f9458d62bc3fceace871e78d",
+    "setAuthorizedGame": "0x4e9a920d3e49e8cc4491fe289f11733f37ceda013b5b7634576abc0f4e8aa312",
     "openRound0": "0xb2b0f1103bbab6482018c4a62fb5e91d9d628789d1209813c64601c8608bcda9",
-    "openRound1": "0x221fc558fed98f1106c5b39e53b177d94006aa04cec8b1bfb821fc92bf4f4e31"
+    "openRound1": "0x221fc558fed98f1106c5b39e53b177d94006aa04cec8b1bfb821fc92bf4f4e31",
+    "requestReveal0": "0x0eb42b2628706009a184587335f6c417ecb9fdbd92a7aaf5bc54c4269022f939",
+    "finalizeRound0": "0x02cd64610a0752a0d1c3d9271aa4fe7f9ba754c1cba0e9ccb3f4fe08e1af5c69"
   },
   "privySponsorship": {
     "appId": "cmmfbu7o900c10cjme09a31h4",
     "mode": "app-pays",
     "chain": "Base Sepolia",
     "clientTransactionsAllowed": true,
-    "contractSelectorAllowlist": "not-exposed-by-dashboard"
+    "policyId": "pending-dashboard-apply",
+    "permittedContracts": [
+      "0x4Ff4a2d64C53BE0b6f0B77B191579E7CEC026d56",
+      "0x16434C92223baEDE8301b2F117DeD0F56147Bb99",
+      "0x75Db0b7865060c0d59a9801c4396ebfc430A740a",
+      "0x2E7eb3B6Ac8E1ebF0C4B90067F584B21F22C2b3d"
+    ],
+    "permittedSelectors": [
+      "0x02c6266a",
+      "0x095ea7b3",
+      "0x292672ea",
+      "0x40261cdd",
+      "0x4e71d92d",
+      "0x6e553f65",
+      "0x7ad226dc",
+      "0x864f1156",
+      "0xb460af94",
+      "0xbc208057",
+      "0xbcc5e2f6",
+      "0xbde22ae0",
+      "0xddd5e1b2"
+    ]
   },
   "smokeTest": {
-    "status": "rounds-preopened-pending-ui-entry",
-    "game": "0xD74a89e199da9E45399ec913441b25A1b4120d44",
-    "vault": "0xc3d6ffa7eE1635F94bd545e05c9aCFabB01A4c21",
+    "status": "history-seeded-pending-privy-player-smoke",
     "issue": 351,
-    "openRound0": "0xb2b0f1103bbab6482018c4a62fb5e91d9d628789d1209813c64601c8608bcda9",
-    "openRound1": "0x221fc558fed98f1106c5b39e53b177d94006aa04cec8b1bfb821fc92bf4f4e31"
+    "game": "0x2E7eb3B6Ac8E1ebF0C4B90067F584B21F22C2b3d",
+    "vault": "0x75Db0b7865060c0d59a9801c4396ebfc430A740a",
+    "operatorLifecycle": {
+      "requestReveal": "0x0eb42b2628706009a184587335f6c417ecb9fdbd92a7aaf5bc54c4269022f939",
+      "finalizeRound": "0x02cd64610a0752a0d1c3d9271aa4fe7f9ba754c1cba0e9ccb3f4fe08e1af5c69",
+      "finalizedRoundId": 0,
+      "crashPointBps": 21023
+    },
+    "liveObservations": {
+      "overlappingRoundsVerified": true,
+      "overlappingRoundsNote": "Observed rounds 2/3/4 simultaneously Open (status=1) at unix ~1786540986 while round 1 Finalized; currentRoundId=3.",
+      "idleEpochNoStateVerified": true,
+      "idleEpochNote": "getRound(53) returned uninitialized status=0 with zero times/handle.",
+      "ticketlessPreopenNoExposureVerified": true,
+      "ticketlessPreopenNote": "Pre-opened rounds 3 and 4 had totalMargin=0 reservedPayout=0; vault reservedLiabilities=0 unrecognizedMargin=0 with grossAssets=25000000000.",
+      "globalHistoryFinalizedRounds": 20,
+      "globalHistoryNote": "Operator forward-seed finalized \u226520 rounds on the new game (seed-forward-finalized.mjs). Verify UI at https://margincall.fun shows \u226520 finalized entries.",
+      "zeroEthWalletThroughout": false,
+      "transactionPendingRecoveryAudited": false,
+      "pendingHumanPlayerSmoke": true
+    },
+    "sponsorshipVerification": {
+      "inPolicySponsoredCallsSucceeded": false,
+      "outOfPolicyCallRejected": false,
+      "pendingPrivyDashboardApply": true,
+      "policyId": "pending-dashboard-apply"
+    }
   },
   "supersedes": {
-    "sourceCommit": "4b1108c4f5c806c67c189003b3093c4dd3ac0483",
-    "token": "0x78c9DfaA9288Dd9c1f757d336A88f4F8e9EfC35C",
-    "faucet": "0x23f4C0622D9b88aA0Fe7469B34F1e780b5367c78",
-    "bankrollVault": "0xb82f4B3DcE7539d23ab77aBF9e3317269D3E92ff",
-    "marginCallCrash": "0x4677227a9DEF791BcBd60E5D73C12927363EA04f",
-    "marginCallCrashDeploymentBlock": 45342715,
-    "marginCallCrashEpochOrigin": 1786454100,
-    "deployMarginCallCrash": "0x982be82965b26a23bf583f36466d618ea19e151899dbd49327c173415a197485"
+    "sourceCommit": "1e3b424596772559034c7a54f2cf7180bf1799fc",
+    "token": "0xDa0A5f6FC5238c6D8018fc1d22846460c2cFd085",
+    "faucet": "0xcfc9Bf8Ea84c153C518DA6Cc4E35D8a212d8E356",
+    "bankrollVault": "0xc3d6ffa7eE1635F94bd545e05c9aCFabB01A4c21",
+    "marginCallCrash": "0xD74a89e199da9E45399ec913441b25A1b4120d44",
+    "marginCallCrashDeploymentBlock": 45351025,
+    "marginCallCrashEpochOrigin": 1786470660,
+    "bankrollVaultSeedAssets": 20000000000,
+    "deployMarginCallCrash": "0x1d83518ce4d39cba9083400d5ef4a03fd8ddb499c01d6a3d4a320a60cc06f0df"
   },
   "supersededLiveBeforeEntryRedeploy": {
     "bankrollVault": "0xB5b599104650924Ec4b0f3aFC560e80A7DA93afe",
@@ -104,5 +151,7 @@
       "deployMarginCallCrash": "0x0fb1eb320775dc6a39ccc5ae1294bc6c57b164f3412f0f286c45e404976e6e84"
     }
   },
-  "entryInterfaceNote": "Live entry redeploy after slice-6: vault+game with acceptEntry/enter; seeded with 20,000 tUSD withdrawn from prior vault (5k remains as old-vault buffer)."
+  "entryInterfaceNote": "Fresh stack redeploy for issue #351; prior live addresses retained under supersedes.",
+  "contractOwner": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "keeperAddress": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c"
 }

@@ -23,7 +23,10 @@
     "audit:all": "pnpm audit --audit-level=high",
     "audit:all:gated": "node scripts/audit-all-gated.mjs",
     "prepare": "husky",
-    "smoke:crash-lifecycle": "node scripts/smoke-crash-lifecycle.mjs"
+    "smoke:crash-lifecycle": "node scripts/smoke-crash-lifecycle.mjs",
+    "seed:finalized-rounds": "node scripts/seed-finalized-rounds.mjs",
+    "validate:base-sepolia-release": "node scripts/validate-base-sepolia-release.mjs",
+    "seed:forward-finalized": "node scripts/seed-forward-finalized.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
