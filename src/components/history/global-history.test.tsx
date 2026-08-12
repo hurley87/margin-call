@@ -139,6 +139,8 @@ describe("GlobalHistory", () => {
     expect(screen.getByText("3.42x")).toBeTruthy();
     expect(screen.getByText("Expired — no result")).toBeTruthy();
     expect(screen.queryByText("0.00x")).toBeNull();
+    // Finalized rows get a static curve thumb; delayed/empty/expired do not.
+    expect(screen.getAllByTestId("replay-curve-thumb")).toHaveLength(1);
   });
 
   it("expands a verification record with BaseScan lifecycle links", () => {

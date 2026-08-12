@@ -65,24 +65,21 @@ describe("CurrentRound", () => {
 
     expect(screen.getByText("Round 12")).toBeTruthy();
     expect(screen.getByText("Entry open")).toBeTruthy();
-    expect(screen.getByText("00:18")).toBeTruthy();
+    // Countdown and Crash Point live on the theater chart, not this rail.
+    expect(screen.queryByText("00:18")).toBeNull();
     expect(screen.getByText(ready.crashRandom as string)).toBeTruthy();
     expect(
-      screen
-        .getByRole("link", { name: "View opening transaction" })
-        .getAttribute("href")
+      screen.getByRole("link", { name: "Opening tx" }).getAttribute("href")
     ).toBe(ready.openingTransactionUrl);
     expect(
-      screen
-        .getByRole("link", { name: "Verified game contract" })
-        .getAttribute("href")
+      screen.getByRole("link", { name: "Game contract" }).getAttribute("href")
     ).toBe(ready.gameContractUrl);
     expect(screen.getByTestId("crash-round-entry").textContent).toBe(
       "entry:open:18"
     );
   });
 
-  it("renders finalized Crash Point and attestation verification links", () => {
+  it("renders finalized status without duplicating the Crash Point", () => {
     const ready = sdk.makeReadyRound();
     sdk.round = {
       ...ready,
@@ -96,21 +93,16 @@ describe("CurrentRound", () => {
     };
     render(<CurrentRound />);
 
-    expect(screen.getByText("Finalized")).toBeTruthy();
-    expect(screen.getByText("Verified Crash Point")).toBeTruthy();
-    expect(screen.getByLabelText("Verified crash point 3.42x")).toBeTruthy();
-    expect(screen.queryByText("Awaiting attestation")).toBeNull();
+    expect(screen.getAllByText("Finalized").length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText("Verified crash point 3.42x")).toBeNull();
+    expect(screen.queryByText("Verified Crash Point")).toBeNull();
     expect(
-      screen
-        .getByRole("link", { name: "View finalization transaction" })
-        .getAttribute("href")
+      screen.getByRole("link", { name: "Finalization tx" }).getAttribute("href")
     ).toBe(
       "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     );
     expect(
-      screen
-        .getByRole("link", { name: "Verified Inco Lightning" })
-        .getAttribute("href")
+      screen.getByRole("link", { name: "Inco Lightning" }).getAttribute("href")
     ).toBe(ready.incoContractUrl);
   });
 
@@ -158,9 +150,7 @@ describe("CurrentRound", () => {
     expect(screen.getByText("Outcome unavailable")).toBeTruthy();
     expect(screen.queryByText("Verified Crash Point")).toBeNull();
     expect(
-      screen
-        .getByRole("link", { name: "View expiry transaction" })
-        .getAttribute("href")
+      screen.getByRole("link", { name: "Expiry tx" }).getAttribute("href")
     ).toBe(
       "https://sepolia.basescan.org/tx/0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
     );

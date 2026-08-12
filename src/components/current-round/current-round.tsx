@@ -5,7 +5,7 @@ import {
   type CurrentCrashRoundView,
 } from "@/hooks/use-current-crash-round";
 import type { CrashRoundPhase } from "@/lib/margin-call-crash";
-import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
+import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { CrashRoundEntry } from "./crash-round-entry";
 
 type ReadyRound = Extract<CurrentCrashRoundView, { status: "ready" }>;
@@ -32,6 +32,10 @@ const phaseColors: Record<CrashRoundPhase, string> = {
   expired: "text-[var(--t-muted)] border-[var(--t-muted)]/40",
 };
 
+/**
+ * Action rail for the current round: phase, entry, compact verification.
+ * Countdown and Crash Point live on the Round Theater chart.
+ */
 export function CurrentRound() {
   const round = useCurrentCrashRound();
 
@@ -42,64 +46,45 @@ export function CurrentRound() {
   return (
     <section
       aria-labelledby="current-round-heading"
-      className="mt-10 border-y border-[var(--t-border)] bg-[var(--t-panel)] text-left"
+      className="border border-[var(--t-border)] bg-[var(--t-panel)] text-left"
+      data-testid="current-round"
     >
-      <div className="grid gap-8 px-5 py-6 sm:px-8 lg:grid-cols-[1fr_auto] lg:items-start lg:py-8">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]">
-              Base Sepolia · Current round
-            </p>
-            <span
-              className={`inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${phaseColors[phase]}`}
-            >
-              {phaseLabels[phase]}
-            </span>
-          </div>
-          <h2
-            id="current-round-heading"
-            className="mt-4 font-[family-name:var(--font-plex-sans)] text-4xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-6xl"
+      <div className="px-4 py-5 sm:px-5">
+        <div className="flex flex-wrap items-center gap-3">
+          <p className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]">
+            Current round
+          </p>
+          <span
+            className={`inline-flex border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${phaseColors[phase]}`}
           >
-            Round {round.roundId.toString()}
-          </h2>
-
-          <PhasePrimaryContent round={round} />
-          <EncryptedHandle round={round} />
-          <CrashRoundEntry
-            countdownSeconds={round.countdownSeconds}
-            phase={phase}
-            roundId={round.roundId}
-          />
+            {phaseLabels[phase]}
+          </span>
         </div>
+        <h2
+          id="current-round-heading"
+          className="mt-3 font-[family-name:var(--font-plex-sans)] text-3xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-4xl"
+        >
+          Round {round.roundId.toString()}
+        </h2>
 
-        <div className="min-w-44 border-l border-[var(--t-divider)] pl-5 lg:text-right">
-          <PhaseSidebar round={round} />
-        </div>
+        <PhaseStatusCopy phase={phase} />
+        <CrashRoundEntry
+          countdownSeconds={round.countdownSeconds}
+          phase={phase}
+          roundId={round.roundId}
+        />
+        <EncryptedHandle round={round} />
+        <VerificationLinks round={round} />
+        <p className="mt-4 text-[10px] text-[var(--t-muted)]">
+          Read at block {round.blockNumber.toString()}
+        </p>
       </div>
     </section>
   );
 }
 
-function PhasePrimaryContent({ round }: { round: ReadyRound }) {
-  switch (round.phase) {
-    case "finalized":
-      return (
-        <div className="mt-6">
-          <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-            Verified Crash Point
-          </p>
-          <p
-            aria-label={`Verified crash point ${round.displayCrashPoint}`}
-            className="mc-live-value mt-2 font-[family-name:var(--font-plex-sans)] text-5xl font-bold tabular-nums text-[var(--t-green-hot)] sm:text-6xl"
-          >
-            {round.displayCrashPoint}
-          </p>
-          <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-            Attested onchain against the exact stored encrypted handle. The
-            finalization transaction is the public attestation record.
-          </p>
-        </div>
-      );
+function PhaseStatusCopy({ phase }: { phase: CrashRoundPhase }) {
+  switch (phase) {
     case "locked":
       return (
         <StatusCopy
@@ -128,12 +113,19 @@ function PhasePrimaryContent({ round }: { round: ReadyRound }) {
           body="This round expired without a verified Crash Point. Ticket owners can pull back exactly their original margin."
         />
       );
+    case "finalized":
+      return (
+        <StatusCopy
+          title="Finalized"
+          body="The attested Crash Point is on the floor chart. Claim or settle from your ticket below."
+        />
+      );
     case "prelaunch":
     case "uninitialized":
     case "open":
       return null;
     default: {
-      const _exhaustive: never = round.phase;
+      const _exhaustive: never = phase;
       return _exhaustive;
     }
   }
@@ -141,85 +133,53 @@ function PhasePrimaryContent({ round }: { round: ReadyRound }) {
 
 function EncryptedHandle({ round }: { round: ReadyRound }) {
   return (
-    <div className="mt-6">
+    <div className="mt-5 border-t border-[var(--t-divider)] pt-4">
       <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        Public encrypted crash handle
+        Encrypted crash handle
       </p>
       {round.crashRandom ? (
-        <code className="mt-2 block break-all text-xs leading-5 text-[var(--t-accent)] sm:text-sm">
+        <code className="mt-2 block break-all text-[10px] leading-4 text-[var(--t-accent)] sm:text-xs">
           {round.crashRandom}
         </code>
       ) : (
-        <p className="mt-2 text-sm text-[var(--t-muted)]">
+        <p className="mt-2 text-xs text-[var(--t-muted)]">
           No handle has been pre-committed for this epoch yet.
         </p>
       )}
-      <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-        The ciphertext is public and auditable. Its plaintext remains
-        confidential until attested finalization.
-      </p>
     </div>
-  );
-}
-
-function PhaseSidebar({ round }: { round: ReadyRound }) {
-  const phase = round.phase;
-  return (
-    <>
-      <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        {phase === "open" ? "Entry closes in" : "Entry window"}
-      </p>
-      <p
-        aria-label={
-          phase === "open"
-            ? `${round.countdownSeconds} seconds until entry locks`
-            : "Entry is not open"
-        }
-        className="mc-live-value mt-2 text-4xl font-bold tabular-nums text-[var(--t-green-hot)]"
-      >
-        {phase === "open" ? formatCountdown(round.countdownSeconds) : "—:—"}
-      </p>
-      <p className="mt-5 text-xs text-[var(--t-muted)]">
-        Read at block {round.blockNumber.toString()}
-      </p>
-      <VerificationLinks round={round} />
-    </>
   );
 }
 
 function VerificationLinks({ round }: { round: ReadyRound }) {
   const links = [
     round.openingTransactionUrl
-      ? { href: round.openingTransactionUrl, label: "View opening transaction" }
+      ? { href: round.openingTransactionUrl, label: "Opening tx" }
       : null,
     round.revealTransactionUrl
-      ? { href: round.revealTransactionUrl, label: "View reveal transaction" }
+      ? { href: round.revealTransactionUrl, label: "Reveal tx" }
       : null,
     round.finalizeTransactionUrl
-      ? {
-          href: round.finalizeTransactionUrl,
-          label: "View finalization transaction",
-        }
+      ? { href: round.finalizeTransactionUrl, label: "Finalization tx" }
       : null,
     round.expireTransactionUrl
-      ? { href: round.expireTransactionUrl, label: "View expiry transaction" }
+      ? { href: round.expireTransactionUrl, label: "Expiry tx" }
       : null,
-    { href: round.gameContractUrl, label: "Verified game contract" },
-    { href: round.incoContractUrl, label: "Verified Inco Lightning" },
+    { href: round.gameContractUrl, label: "Game contract" },
+    { href: round.incoContractUrl, label: "Inco Lightning" },
   ].filter((link): link is { href: string; label: string } => link !== null);
 
   return (
-    <ul className="mt-3 space-y-2">
+    <ul className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
       {links.map((link) => (
         <li key={link.label}>
           <a
-            className="group inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-[var(--t-accent)] underline decoration-[var(--t-border)] underline-offset-4 hover:text-[var(--t-text)]"
+            className="text-[10px] font-bold uppercase tracking-[0.12em] text-[var(--t-accent)] underline decoration-[var(--t-border)] underline-offset-4 hover:text-[var(--t-text)]"
             href={link.href}
             rel="noreferrer"
             target="_blank"
           >
             {link.label}
-            <span aria-hidden="true" className="wire-cta-bounce">
+            <span aria-hidden="true" className="ml-1">
               ↗
             </span>
           </a>
@@ -231,14 +191,9 @@ function VerificationLinks({ round }: { round: ReadyRound }) {
 
 function StatusCopy({ title, body }: { title: string; body: string }) {
   return (
-    <div className="mt-6">
-      <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        Round status
-      </p>
-      <p className="mt-2 text-lg font-bold text-[var(--t-text)]">{title}</p>
-      <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-        {body}
-      </p>
+    <div className="mt-4">
+      <p className="text-sm font-bold text-[var(--t-text)]">{title}</p>
+      <p className="mt-2 text-xs leading-5 text-[var(--t-muted)]">{body}</p>
     </div>
   );
 }
@@ -248,7 +203,8 @@ function CurrentRoundLoading() {
     <section
       aria-busy="true"
       aria-labelledby="current-round-loading"
-      className="mt-10 border-y border-[var(--t-border)] px-5 py-10 text-left sm:px-8"
+      className="border border-[var(--t-border)] px-4 py-8 text-left sm:px-5"
+      data-testid="current-round"
     >
       <p
         id="current-round-loading"
@@ -268,11 +224,12 @@ function CurrentRoundFailure({
   return (
     <section
       aria-labelledby="current-round-failure"
-      className="mt-10 border-y border-[var(--t-border)] px-5 py-8 text-left sm:px-8"
+      className="border border-[var(--t-border)] px-4 py-6 text-left sm:px-5"
+      data-testid="current-round"
     >
       <h2
         id="current-round-failure"
-        className="font-[family-name:var(--font-plex-sans)] text-2xl font-bold uppercase text-[var(--t-text)]"
+        className="font-[family-name:var(--font-plex-sans)] text-xl font-bold uppercase text-[var(--t-text)]"
       >
         Current round
       </h2>

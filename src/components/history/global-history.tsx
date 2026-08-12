@@ -6,6 +6,7 @@ import type {
   RoundHistoryItem,
   RoundHistoryState,
 } from "@/lib/margin-call-crash";
+import { ReplayCurveThumb } from "@/components/round-theater/replay-curve";
 import { historyStateCopy } from "./history-state-copy";
 import { RoundVerificationRecord } from "./round-verification-record";
 
@@ -29,7 +30,7 @@ export function GlobalHistory() {
       <section
         aria-busy="true"
         aria-labelledby="global-history-loading"
-        className="mt-10 border-y border-[var(--t-border)] px-5 py-8 text-left sm:px-8"
+        className="border-y border-[var(--t-border)] px-5 py-8 text-left sm:px-8"
       >
         <p
           id="global-history-loading"
@@ -45,7 +46,7 @@ export function GlobalHistory() {
     return (
       <section
         aria-labelledby="global-history-error"
-        className="mt-10 border-y border-[var(--t-border)] px-5 py-8 text-left sm:px-8"
+        className="border-y border-[var(--t-border)] px-5 py-8 text-left sm:px-8"
       >
         <p
           id="global-history-error"
@@ -68,7 +69,7 @@ export function GlobalHistory() {
   return (
     <section
       aria-labelledby="global-history-heading"
-      className="mt-10 border-y border-[var(--t-border)] bg-[var(--t-panel)] px-5 py-6 text-left sm:px-8 sm:py-8"
+      className="border-y border-[var(--t-border)] bg-[var(--t-panel)] px-5 py-6 text-left sm:px-8 sm:py-8"
     >
       <p className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]">
         Base Sepolia · Global history
@@ -138,6 +139,8 @@ function HistoryRoundRow({
           : item.historyState === "expired"
             ? "Expired — no result"
             : "—";
+  const showThumb =
+    item.historyState === "finalized" && item.round.crashPointBps > 0n;
 
   return (
     <li className="py-4">
@@ -147,7 +150,10 @@ function HistoryRoundRow({
         onClick={onSelect}
         type="button"
       >
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex min-w-0 flex-wrap items-center gap-3">
+          {showThumb ? (
+            <ReplayCurveThumb crashPointBps={item.round.crashPointBps} />
+          ) : null}
           <span className="font-[family-name:var(--font-plex-sans)] text-lg font-bold tabular-nums text-[var(--t-text)]">
             Round {item.round.id.toString()}
           </span>

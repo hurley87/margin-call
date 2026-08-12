@@ -1,7 +1,7 @@
 "use client";
 
 import { usePrivy } from "@privy-io/react-auth";
-import { formatDeskDollars } from "@/lib/desk-dollars";
+import { formatDeskDollarsBalanceLabel } from "@/lib/desk-dollars";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { useDeskDollarsFaucet } from "@/hooks/use-desk-dollars-faucet";
 
@@ -15,9 +15,7 @@ export function DeskDollarsPanel() {
   const walletAddress = getEvmWalletAddress(user);
   const faucet = useDeskDollarsFaucet(walletAddress);
   const balance =
-    faucet.balance !== null && faucet.decimals !== null
-      ? `${formatDeskDollars(faucet.balance, faucet.decimals)} tUSD`
-      : "— tUSD";
+    formatDeskDollarsBalanceLabel(faucet.balance, faucet.decimals) ?? "— tUSD";
 
   return (
     <section

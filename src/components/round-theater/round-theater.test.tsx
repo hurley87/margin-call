@@ -33,7 +33,21 @@ const sdk = vi.hoisted(() => {
       ],
       tiers: emptyTiers(),
     },
-    ambiance: null,
+    ambiance: {
+      round: {
+        id: 11n,
+        openAt: 900n,
+        lockAt: 945n,
+        expiresAt: 1_845n,
+        crashRandom:
+          "0x000000000000000000000000000000000000000000000000000000000000bbbb",
+        crashPointBps: 25_000n,
+        totalMargin: 1_000_000n,
+        reservedPayout: 1_250_000n,
+        status: 3,
+      },
+      displayCrashPoint: "2.50x",
+    },
     reducedMotion: false,
     retry: vi.fn(),
   });
@@ -92,12 +106,14 @@ describe("RoundTheater", () => {
 
   afterEach(cleanup);
 
-  it("shows the Open stage with contract-derived countdown and ticket tape", () => {
+  it("shows the Open stage with hero previous-round chart, countdown, and ticket tape", () => {
     render(<RoundTheater />);
 
     expect(screen.getByTestId("round-theater")).toBeTruthy();
     expect(screen.getByTestId("theater-countdown").textContent).toBe("00:22");
     expect(screen.getByText("Live ticket tape")).toBeTruthy();
+    expect(screen.getByTestId("replay-curve-ambiance")).toBeTruthy();
+    expect(screen.getByText("Previous round replay")).toBeTruthy();
     expect(
       screen.getAllByText((_, el) => el?.textContent === "1 tUSD").length
     ).toBeGreaterThan(0);

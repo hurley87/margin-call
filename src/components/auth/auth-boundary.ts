@@ -3,9 +3,11 @@ export type AuthBoundaryInput = {
   authenticated: boolean;
   walletsReady: boolean;
   walletAddress: `0x${string}` | null;
-  loginError: boolean;
-  logoutPending: boolean;
-  logoutError: boolean;
+  // Only surfaces that own login/logout actions (AuthControls) have these;
+  // read-only consumers like AuthGate omit them.
+  loginError?: boolean;
+  logoutPending?: boolean;
+  logoutError?: boolean;
 };
 
 export type AuthBoundaryState = {

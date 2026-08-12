@@ -23,9 +23,15 @@ const VIEW_H = 56;
 export type ReplayCurveProps = {
   crashPointBps: bigint;
   progress: number;
-  /** Dimmed looping ambiance mode (Open phase). */
+  /** Open-phase previous-round ambiance (same hero size, different label). */
   ambiance?: boolean;
 };
+
+/**
+ * Every chart-slot state (live curve, empty, reduced-motion panel) shares this
+ * footprint so the floor layout never jumps between phases.
+ */
+export const REPLAY_HERO_MIN_H = "min-h-[22rem] lg:min-h-[28rem]";
 
 /**
  * SVG multiplier climb. Axes rescale with the live multiplier; hard stop at
@@ -62,7 +68,8 @@ export function ReplayCurve({
 
   return (
     <div
-      className={`terminal-panel relative overflow-hidden p-3 sm:p-4 ${ambiance ? "opacity-70" : ""}`}
+      className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${REPLAY_HERO_MIN_H}`}
+      data-testid={ambiance ? "replay-curve-ambiance" : "replay-curve"}
     >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
@@ -73,7 +80,7 @@ export function ReplayCurve({
           </p>
           <p
             aria-live="polite"
-            className={`mc-live-value mt-1 font-[family-name:var(--font-plex-sans)] text-4xl font-bold tabular-nums sm:text-5xl ${
+            className={`mc-live-value mt-1 font-[family-name:var(--font-plex-sans)] text-5xl font-bold tabular-nums sm:text-6xl lg:text-7xl ${
               isComplete
                 ? "text-[var(--t-red-hot)]"
                 : "text-[var(--t-green-hot)]"
@@ -99,7 +106,7 @@ export function ReplayCurve({
 
       <svg
         aria-hidden="true"
-        className="mt-4 h-40 w-full sm:h-52"
+        className="mt-4 h-[14rem] w-full sm:h-[18rem] lg:h-[22rem]"
         preserveAspectRatio="none"
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       >
@@ -162,6 +169,99 @@ export function ReplayCurve({
           {theaterCopy.replayLabel}. {theaterCopy.replayDetail}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Static history sparkline: the full curve at its final frame. Kept separate
+ * from ReplayCurve so list rows skip the hero's multiplier/tier work.
+ */
+export function ReplayCurveThumb({ crashPointBps }: { crashPointBps: bigint }) {
+  const { path, head } = useMemo(() => {
+    const points = getReplayPathPoints(crashPointBps, 1, {
+      width: VIEW_W,
+      height: VIEW_H,
+    });
+    return {
+      path: replayPathD(points),
+      head: points[points.length - 1] ?? { x: 0, y: VIEW_H },
+    };
+  }, [crashPointBps]);
+
+  return (
+    <div
+      aria-hidden="true"
+      className="terminal-panel relative h-14 w-28 overflow-hidden p-1"
+      data-testid="replay-curve-thumb"
+    >
+      <svg
+        className="h-full w-full"
+        preserveAspectRatio="none"
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      >
+        <path
+          d={path}
+          fill="none"
+          stroke="var(--t-green-hot)"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.4"
+        />
+        <circle cx={head.x} cy={head.y} fill="var(--t-red-hot)" r="1.6" />
+      </svg>
+    </div>
+  );
+}
+
+/**
+ * Empty chart workspace while the round has no climb to show (delayed /
+ * expired / loading). Keeps the floor from collapsing into a text block.
+ */
+export function ReplayCurveEmpty({
+  title,
+  body,
+  testId,
+}: {
+  title: string;
+  body?: string;
+  testId?: string;
+}) {
+  return (
+    <div
+      className={`terminal-panel relative flex flex-col justify-center overflow-hidden p-5 sm:p-8 ${REPLAY_HERO_MIN_H}`}
+      data-testid={testId}
+    >
+      <svg
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 h-full w-full opacity-40"
+        preserveAspectRatio="none"
+        viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+      >
+        {[0.2, 0.4, 0.6, 0.8].map((t) => (
+          <line
+            key={t}
+            stroke="var(--t-divider)"
+            strokeDasharray="1 2"
+            strokeWidth="0.25"
+            x1="0"
+            x2={VIEW_W}
+            y1={VIEW_H * t}
+            y2={VIEW_H * t}
+          />
+        ))}
+      </svg>
+      <div className="relative max-w-xl">
+        <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+          Round status
+        </p>
+        <p className="mt-3 font-[family-name:var(--font-plex-sans)] text-2xl font-bold text-[var(--t-amber-hot)] sm:text-3xl">
+          {title}
+        </p>
+        {body ? (
+          <p className="mt-3 text-xs leading-5 text-[var(--t-muted)]">{body}</p>
+        ) : null}
+      </div>
     </div>
   );
 }
