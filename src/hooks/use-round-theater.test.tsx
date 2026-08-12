@@ -51,12 +51,22 @@ const sdk = vi.hoisted(() => {
     makeTimeline,
     makeReady,
     round: makeReady({}) as CurrentCrashRoundView,
-    poll: {
+    tapePoll: {
       config: null,
       data: null,
       status: "ready" as const,
       refresh: vi.fn(async () => {}),
     },
+    ambiancePoll: {
+      config: null,
+      data: null as {
+        round: { id: bigint; crashPointBps: bigint };
+        displayCrashPoint: string;
+      } | null,
+      status: "ready" as const,
+      refresh: vi.fn(async () => {}),
+    },
+    polledReads: [] as unknown[],
   };
 });
 
@@ -65,7 +75,10 @@ vi.mock("@/hooks/use-current-crash-round", () => ({
 }));
 
 vi.mock("@/hooks/use-polled-crash-read", () => ({
-  usePolledCrashRead: () => sdk.poll,
+  usePolledCrashRead: (read: unknown) => {
+    sdk.polledReads.push(read);
+    return sdk.polledReads.length % 2 === 1 ? sdk.tapePoll : sdk.ambiancePoll;
+  },
 }));
 
 vi.mock("@/hooks/use-reduced-motion", () => ({
@@ -78,6 +91,9 @@ import { useRoundTheater } from "./use-round-theater";
 describe("useRoundTheater display-round hold", () => {
   beforeEach(() => {
     sdk.round = sdk.makeReady({});
+    sdk.polledReads = [];
+    sdk.tapePoll.data = null;
+    sdk.ambiancePoll.data = null;
   });
 
   it("keeps the finished round on stage into the next entry window", () => {
@@ -120,6 +136,13 @@ describe("useRoundTheater display-round hold", () => {
     });
     rerender();
     expect(result.current.kind).toBe("open");
+    const opened = result.current;
+    if (opened.kind !== "open") throw new Error("unreachable");
+    expect(opened.ambiance).toEqual({
+      round: { id: 12n, crashPointBps: 25_000n },
+      displayCrashPoint: "2.50x",
+    });
+    expect(sdk.polledReads.at(-1)).toBeNull();
   });
 
   it("never holds across more than one epoch", () => {
@@ -137,6 +160,13 @@ describe("useRoundTheater display-round hold", () => {
     });
     rerender();
     expect(result.current.kind).toBe("open");
+    const opened = result.current;
+    if (opened.kind !== "open") throw new Error("unreachable");
+    expect(opened.ambiance).toEqual({
+      round: { id: 12n, crashPointBps: 25_000n },
+      displayCrashPoint: "2.50x",
+    });
+    expect(sdk.polledReads.at(-1)).toBeNull();
   });
 
   it("skips the hold when the next round is already locked", () => {
@@ -165,5 +195,31 @@ describe("useRoundTheater display-round hold", () => {
       roundId: 13n,
       countdown: { kind: "entry-closes", seconds: 30 },
     });
+  });
+
+  it("polls ambiance lookback only for mid-arrival open with no retained", () => {
+    sdk.round = sdk.makeReady({
+      roundId: 13n,
+      phase: "open",
+      countdownSeconds: 30,
+      crashPointBps: null,
+      displayCrashPoint: null,
+      finalizedAtSeconds: null,
+      chainTimestamp: 1_100n,
+      timeline: sdk.makeTimeline("open", 13n),
+    });
+    sdk.ambiancePoll.data = {
+      round: { id: 12n, crashPointBps: 18_000n },
+      displayCrashPoint: "1.80x",
+    };
+
+    const { result } = renderHook(() => useRoundTheater());
+    expect(result.current.kind).toBe("open");
+    if (result.current.kind !== "open") throw new Error("unreachable");
+    expect(result.current.ambiance).toEqual({
+      round: { id: 12n, crashPointBps: 18_000n },
+      displayCrashPoint: "1.80x",
+    });
+    expect(typeof sdk.polledReads.at(-1)).toBe("function");
   });
 });

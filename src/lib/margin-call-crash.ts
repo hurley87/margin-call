@@ -190,8 +190,11 @@ export const ROUND_STATUS = {
   expired: 4,
 } as const satisfies Record<string, CrashRoundStatus>;
 
-/** How many prior epochs to surface in global history and ambiance replay. */
+/** How many prior epochs to surface in global history. */
 export const GLOBAL_HISTORY_LOOKBACK_ROUNDS = 20;
+
+/** How many prior epochs to walk for Open-phase previous-round replay. */
+export const AMBIANCE_LOOKBACK_ROUNDS = 5;
 
 /** One public TicketEntered row for the live ticket tape / tier pops. */
 export type TicketTapeEntry = {
@@ -989,8 +992,9 @@ export async function readRoundTicketTape(
 }
 
 /**
- * Newest finalized round within the global lookback, for Open-phase
- * previous-round replay. Returns null when none exist.
+ * Newest finalized round within the ambiance lookback, for Open-phase
+ * previous-round replay. Walks newest-first from the previous round so a
+ * typical hit is one `getRound`. Returns null when none exist.
  */
 export async function readLatestFinalizedReplayRound(
   config: MarginCallCrashConfig
@@ -1002,26 +1006,18 @@ export async function readLatestFinalizedReplayRound(
     functionName: "currentRoundId",
     blockNumber,
   });
-  const roundIds = lookbackRoundIds(
-    currentRoundId,
-    GLOBAL_HISTORY_LOOKBACK_ROUNDS
-  );
 
-  // Concurrent reads collapse into a multicall batch; ids are newest-first,
-  // so the first finalized hit is the latest one.
-  const rounds = await Promise.all(
-    roundIds.map((roundId) =>
-      baseSepoliaPublicClient.readContract({
-        address: config.address,
-        abi: marginCallCrashAbi,
-        functionName: "getRound",
-        args: [roundId],
-        blockNumber,
-      })
-    )
-  );
+  for (let offset = 1; offset <= AMBIANCE_LOOKBACK_ROUNDS; offset++) {
+    const roundId = currentRoundId - BigInt(offset);
+    if (roundId <= 0n) break;
 
-  for (const round of rounds) {
+    const round = await baseSepoliaPublicClient.readContract({
+      address: config.address,
+      abi: marginCallCrashAbi,
+      functionName: "getRound",
+      args: [roundId],
+      blockNumber,
+    });
     const normalized: CrashRound = {
       ...round,
       status: normalizeRoundStatus(round.status),

@@ -59,15 +59,7 @@ const sdk = vi.hoisted(() => {
     ambiance: {
       round: {
         id: 11n,
-        openAt: 900n,
-        lockAt: 945n,
-        expiresAt: 1_845n,
-        crashRandom:
-          "0x000000000000000000000000000000000000000000000000000000000000bbbb",
         crashPointBps: 25_000n,
-        totalMargin: 1_000_000n,
-        reservedPayout: 1_250_000n,
-        status: 3,
       },
       displayCrashPoint: "2.50x",
     },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useCurrentCrashRound,
   type CurrentCrashRoundView,
@@ -12,7 +12,6 @@ import {
   isPreLockPhase,
   readLatestFinalizedReplayRound,
   readRoundTicketTape,
-  type FinalizedReplayRound,
   type MarginCallCrashConfig,
   type RoundTicketTape,
   type TierExposure,
@@ -43,6 +42,12 @@ export type TheaterNextRound = {
   countdown: RoundTimelineCountdown;
 };
 
+/** Previous-result replay shown during Open. */
+export type TheaterOpenAmbiance = {
+  round: { id: bigint; crashPointBps: bigint };
+  displayCrashPoint: string;
+};
+
 export type TheaterStage = TheaterBase &
   (
     | { kind: "loading" }
@@ -52,7 +57,7 @@ export type TheaterStage = TheaterBase &
         roundId: bigint;
         countdownSeconds: number;
         tape: RoundTicketTape | null;
-        ambiance: FinalizedReplayRound | null;
+        ambiance: TheaterOpenAmbiance | null;
         timeline: RoundTimeline;
       }
     | {
@@ -114,15 +119,6 @@ export function useRoundTheater(): TheaterStage {
 
   const tapePoll = usePolledCrashRead(tapeRead);
 
-  // Always polled (not just pre-lock) so ambiance is warm the instant the
-  // phase flips back to open, instead of flashing to the empty panel.
-  const ambianceRead = useCallback(
-    (config: Parameters<typeof readLatestFinalizedReplayRound>[0]) =>
-      readLatestFinalizedReplayRound(config),
-    []
-  );
-  const ambiancePoll = usePolledCrashRead(ambianceRead);
-
   // Retain the newest fully-finalized round we've seen so its replay can hold
   // the hero across the epoch flip. Overwritten by supersession, never
   // cleared. Adjusted during render (guarded) per the React "state from
@@ -137,6 +133,20 @@ export function useRoundTheater(): TheaterStage {
   ) {
     setRetained(candidate);
   }
+
+  // Mid-arrival only: retained already is the previous result, and the hold
+  // covers the epoch flip. Poll lookback solely when open has nothing to show.
+  const needsAmbiance =
+    round.status === "ready" &&
+    isPreLockPhase(round.phase) &&
+    retained === null;
+
+  const ambianceRead = useMemo(() => {
+    if (!needsAmbiance) return null;
+    return (config: MarginCallCrashConfig) =>
+      readLatestFinalizedReplayRound(config);
+  }, [needsAmbiance]);
+  const ambiancePoll = usePolledCrashRead(ambianceRead);
 
   return useMemo(
     () =>
@@ -159,6 +169,18 @@ export function useRoundTheater(): TheaterStage {
       tapePoll.refresh,
     ]
   );
+}
+
+function ambianceFromRetained(
+  retained: RetainedFinalized
+): TheaterOpenAmbiance {
+  return {
+    round: {
+      id: retained.roundId,
+      crashPointBps: retained.crashPointBps,
+    },
+    displayCrashPoint: retained.displayCrashPoint,
+  };
 }
 
 function deriveRetainedCandidate(
@@ -189,7 +211,7 @@ function toTheaterStage(options: {
   round: CurrentCrashRoundView;
   reducedMotion: boolean;
   tape: RoundTicketTape | null;
-  ambiance: FinalizedReplayRound | null;
+  ambiance: TheaterOpenAmbiance | null;
   retained: RetainedFinalized | null;
   retryTape: () => Promise<void>;
   retryAmbiance: () => Promise<void>;
@@ -251,7 +273,7 @@ function toTheaterStage(options: {
       roundId: round.roundId,
       countdownSeconds: round.countdownSeconds,
       tape,
-      ambiance,
+      ambiance: retained !== null ? ambianceFromRetained(retained) : ambiance,
       timeline: round.timeline,
       reducedMotion,
       retry,
