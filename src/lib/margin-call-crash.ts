@@ -147,8 +147,9 @@ export type CrashRoundLifecycleUrls = {
   incoContractUrl: string;
 };
 
-/** Honest history labels — never invent a multiplier for delayed/expired. */
-export type RoundHistoryState = "open" | "delayed" | "finalized" | "expired";
+/** Honest history labels — never invent a multiplier for delayed/expired/empty. */
+export type RoundHistoryState =
+  "open" | "delayed" | "empty" | "finalized" | "expired";
 
 export type RoundHistoryItem = {
   round: CrashRound;
@@ -724,7 +725,7 @@ function toRoundHistoryItem(
   chainTimestamp: bigint
 ): RoundHistoryItem {
   const phase = deriveRoundPhase(round, chainTimestamp);
-  const historyState = deriveHistoryState(phase);
+  const historyState = deriveHistoryState(phase, round);
   const published = isCrashPointPublished(round);
   return {
     round,
@@ -736,7 +737,14 @@ function toRoundHistoryItem(
   };
 }
 
-function deriveHistoryState(phase: CrashRoundPhase): RoundHistoryState {
+/**
+ * Map phase → public history label. Ticketless post-lock rounds are "empty"
+ * (no attestation owed), not "delayed".
+ */
+function deriveHistoryState(
+  phase: CrashRoundPhase,
+  round: CrashRound
+): RoundHistoryState {
   switch (phase) {
     case "finalized":
       return "finalized";
@@ -749,7 +757,7 @@ function deriveHistoryState(phase: CrashRoundPhase): RoundHistoryState {
     case "locked":
     case "reveal-requested":
     case "expired-eligible":
-      return "delayed";
+      return round.totalMargin === 0n ? "empty" : "delayed";
     default: {
       const _exhaustive: never = phase;
       return _exhaustive;

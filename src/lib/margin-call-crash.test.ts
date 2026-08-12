@@ -500,12 +500,24 @@ describe("MarginCallCrash public reads and phase math", () => {
     ).rejects.toThrow("Expected one RoundFinalized event for round 3, found 2");
   });
 
-  it("reads global history with honest crash points for delayed and expired rounds", async () => {
+  it("reads global history with honest crash points for delayed, empty, and expired rounds", async () => {
     sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 2_000n });
     sdk.readContract.mockImplementation(({ functionName, args }) => {
-      if (functionName === "currentRoundId") return Promise.resolve(5n);
+      if (functionName === "currentRoundId") return Promise.resolve(6n);
       if (functionName === "getRound") {
         const roundId = args?.[0] as bigint;
+        if (roundId === 6n) {
+          return Promise.resolve(
+            makeRound({
+              id: 6n,
+              status: 1,
+              lockAt: 1_000n,
+              expiresAt: 5_000n,
+              crashPointBps: 0n,
+              totalMargin: 0n,
+            })
+          );
+        }
         if (roundId === 5n) {
           return Promise.resolve(
             makeRound({
@@ -514,6 +526,8 @@ describe("MarginCallCrash public reads and phase math", () => {
               lockAt: 1_000n,
               expiresAt: 5_000n,
               crashPointBps: 0n,
+              totalMargin: 1_000_000n,
+              reservedPayout: 1_250_000n,
             })
           );
         }
@@ -548,21 +562,26 @@ describe("MarginCallCrash public reads and phase math", () => {
       deploymentBlock: 50n,
     });
 
-    expect(history.map((item) => item.round.id)).toEqual([5n, 4n, 3n, 1n]);
+    expect(history.map((item) => item.round.id)).toEqual([6n, 5n, 4n, 3n, 1n]);
     expect(history[0]).toMatchObject({
+      historyState: "empty",
+      displayCrashPoint: null,
+      phase: "locked",
+    });
+    expect(history[1]).toMatchObject({
       historyState: "delayed",
       displayCrashPoint: null,
       phase: "reveal-requested",
     });
-    expect(history[1]).toMatchObject({
+    expect(history[2]).toMatchObject({
       historyState: "expired",
       displayCrashPoint: null,
     });
-    expect(history[2]).toMatchObject({
+    expect(history[3]).toMatchObject({
       historyState: "finalized",
       displayCrashPoint: "3.42x",
     });
-    expect(history[3]).toMatchObject({
+    expect(history[4]).toMatchObject({
       historyState: "finalized",
       displayCrashPoint: "1.25x",
     });
