@@ -15,6 +15,7 @@ import { getTierCloseProgress } from "@/lib/round-replay";
 import {
   ENTRY_LEVERAGE_TIERS_BPS,
   formatLeverageBps,
+  isWinningTicket,
   type CrashTicket,
 } from "@/lib/margin-call-crash";
 import {
@@ -408,6 +409,10 @@ function ReplayStage({
 }) {
   const [restartNonce, setRestartNonce] = useState(0);
   const playerTierBps = playerTicket?.leverageBps ?? null;
+  const playerWon =
+    playerTicket === null
+      ? null
+      : isWinningTicket(playerTicket.leverageBps, hero.crashPointBps);
   const clock = useReplayClock({
     crashPointBps: hero.crashPointBps,
     finalizedAtSeconds: hero.finalizedAtSeconds,
@@ -432,6 +437,8 @@ function ReplayStage({
           crashPointBps={hero.crashPointBps}
           displayCrashPoint={hero.displayCrashPoint}
           finalizeTransactionUrl={hero.finalizeTransactionUrl}
+          playerTierBps={playerTierBps}
+          playerWon={playerWon}
           tiers={hero.tiers}
         />
         <ResultHandoffRow hero={hero} live={live} />
@@ -446,6 +453,7 @@ function ReplayStage({
         <ReplayCurve
           crashPointBps={hero.crashPointBps}
           playerTierBps={playerTierBps}
+          playerWon={playerWon}
           progress={clock.progress}
         />
       </div>

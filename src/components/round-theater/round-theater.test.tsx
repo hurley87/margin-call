@@ -286,7 +286,12 @@ describe("RoundTheater", () => {
     expect(screen.getByTestId("theater-next-round").textContent).toBe(
       "Next round 13 opens in 00:05"
     );
-    expect(screen.getByText("2.50x")).toBeTruthy();
+    // Spectator freeze: Crash Point stays the hero; no personal outcome stamp.
+    expect(screen.getByTestId("replay-curve-crash-point").textContent).toBe(
+      "2.50x"
+    );
+    expect(screen.queryByTestId("replay-curve-outcome")).toBeNull();
+    expect(screen.getByText("Margin call")).toBeTruthy();
     expect(screen.getByText("Closed 2.00x — paid")).toBeTruthy();
     expect(screen.getByText("Closed 1.25x — paid")).toBeTruthy();
     expect(screen.getByText("3.00x — margin call")).toBeTruthy();
@@ -297,6 +302,112 @@ describe("RoundTheater", () => {
         .getAttribute("href")
     ).toContain("0xcccccccccccccccc");
     expect(screen.queryByRole("button", { name: /claim/i })).toBeNull();
+  });
+
+  it("freezes the climb on Won when the signed-in player's tier closed", () => {
+    sdk.view = {
+      live: {
+        kind: "finalized",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl: null,
+        tape: null,
+        tiers: sdk.emptyTiers(),
+        timeline: sdk.makeTimeline("finalized", {
+          kind: "next-opens",
+          seconds: 5,
+        }),
+      },
+      hero: {
+        type: "replay",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl: null,
+        tape: null,
+        tiers: sdk.emptyTiers(),
+      },
+      reducedMotion: false,
+      retry: vi.fn(),
+    };
+    sdk.playerTicket = {
+      id: 7n,
+      player: "0x00000000000000000000000000000000000000aa",
+      roundId: 12n,
+      margin: 5_000_000n,
+      leverageBps: 20_000n, // 2.00x ≤ 2.50x → won
+      reservedPayout: 10_000_000n,
+      settled: false,
+      claimed: false,
+    };
+    render(<RoundTheater />);
+
+    expect(screen.getByTestId("replay-curve-outcome").textContent).toBe("Won");
+    expect(
+      screen.getByTestId("replay-curve-crash-point-supporting").textContent
+    ).toBe("Crash Point 2.50x");
+    expect(screen.queryByTestId("replay-curve-crash-point")).toBeNull();
+    expect(screen.queryByText("Margin call")).toBeNull();
+    expect(screen.getByRole("button", { name: "Replay" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /claim/i })).toBeNull();
+  });
+
+  it("freezes the climb on Margin called when the signed-in player's tier stayed open", () => {
+    sdk.view = {
+      live: {
+        kind: "finalized",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl: null,
+        tape: null,
+        tiers: sdk.emptyTiers(),
+        timeline: sdk.makeTimeline("finalized", {
+          kind: "next-opens",
+          seconds: 5,
+        }),
+      },
+      hero: {
+        type: "replay",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl: null,
+        tape: null,
+        tiers: sdk.emptyTiers(),
+      },
+      reducedMotion: false,
+      retry: vi.fn(),
+    };
+    sdk.playerTicket = {
+      id: 8n,
+      player: "0x00000000000000000000000000000000000000aa",
+      roundId: 12n,
+      margin: 5_000_000n,
+      leverageBps: 50_000n, // 5.00x > 2.50x → margin called
+      reservedPayout: 25_000_000n,
+      settled: false,
+      claimed: false,
+    };
+    render(<RoundTheater />);
+
+    expect(screen.getByTestId("replay-curve-outcome").textContent).toBe(
+      "Margin called"
+    );
+    expect(
+      screen.getByTestId("replay-curve-crash-point-supporting").textContent
+    ).toBe("Crash Point 2.50x");
+    expect(screen.getByText("Margin call")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /settle/i })).toBeNull();
   });
 
   it("renders a held previous replay while live stays the open round", () => {
@@ -381,6 +492,57 @@ describe("RoundTheater", () => {
     expect(screen.getByText("3.00x — margin call")).toBeTruthy();
     expect(screen.getByText("Margin call")).toBeTruthy();
     expect(screen.queryByTestId("theater-finalized-replay")).toBeNull();
+  });
+
+  it("shows Won on the reduced-motion card when the signed-in player won", () => {
+    sdk.view = {
+      live: {
+        kind: "finalized",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl: null,
+        tape: null,
+        tiers: sdk.emptyTiers(),
+        timeline: sdk.makeTimeline("finalized", {
+          kind: "next-opens",
+          seconds: 5,
+        }),
+      },
+      hero: {
+        type: "replay",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl: null,
+        tape: null,
+        tiers: sdk.emptyTiers(),
+      },
+      reducedMotion: true,
+      retry: vi.fn(),
+    };
+    sdk.playerTicket = {
+      id: 7n,
+      player: "0x00000000000000000000000000000000000000aa",
+      roundId: 12n,
+      margin: 5_000_000n,
+      leverageBps: 12_500n,
+      reservedPayout: 6_250_000n,
+      settled: false,
+      claimed: false,
+    };
+    render(<RoundTheater />);
+
+    expect(screen.getByTestId("static-outcome").textContent).toBe("Won");
+    expect(
+      screen.getByTestId("static-crash-point-supporting").textContent
+    ).toBe("Crash Point 2.50x");
+    expect(screen.queryByTestId("static-crash-point")).toBeNull();
+    expect(screen.queryByText("Margin call")).toBeNull();
   });
 
   it("defaults the sound toggle to off and can enable it", () => {

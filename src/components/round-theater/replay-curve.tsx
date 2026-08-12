@@ -27,6 +27,11 @@ export type ReplayCurveProps = {
   ambiance?: { roundId: bigint } | null;
   /** Signed-in player's Arcade Leverage tier, highlighted on the chart. */
   playerTierBps?: bigint | null;
+  /**
+   * Personal landing frame after the climb finishes.
+   * `true` → Won, `false` → Margin called, `null` → spectator (Crash Point).
+   */
+  playerWon?: boolean | null;
 };
 
 /**
@@ -37,13 +42,15 @@ export const REPLAY_HERO_MIN_H = "min-h-[22rem] lg:min-h-[28rem]";
 
 /**
  * SVG multiplier climb. Axes rescale with the live multiplier; hard stop at
- * the Crash Point with a margin-call phone stamp.
+ * the Crash Point. Signed-in players freeze on Won / Margin called; spectators
+ * keep the Crash Point number and margin-call phone.
  */
 export function ReplayCurve({
   crashPointBps,
   progress,
   ambiance = null,
   playerTierBps = null,
+  playerWon = null,
 }: ReplayCurveProps) {
   // `progress` moves every animation frame, so memoizing on it buys nothing.
   const points = getReplayPathPoints(crashPointBps, progress, {
@@ -73,11 +80,38 @@ export function ReplayCurve({
   // the player's outcome (green closed-in-time, red margin-called, amber none).
   const crashMoment = isComplete && !ambiance;
   const momentColor =
-    playerTierBps === null
+    playerWon === null
       ? "var(--t-amber-hot)"
-      : playerTierBps <= crashPointBps
+      : playerWon
         ? "var(--t-safe)"
         : "var(--t-threat)";
+
+  // Landing frame: personal outcome for ticket holders, Crash Point for everyone else.
+  const showPlayerOutcome = crashMoment && playerWon !== null;
+  const showPhoneStamp = crashMoment && playerWon !== true;
+  const heroLabel = ambiance
+    ? theaterCopy.openAmbiance(ambiance.roundId.toString())
+    : showPlayerOutcome
+      ? theaterCopy.yourTicket
+      : theaterCopy.verifiedCrashPoint;
+  const heroValue = showPlayerOutcome
+    ? playerWon
+      ? theaterCopy.playerWon
+      : theaterCopy.playerMarginCalled
+    : isComplete
+      ? crashLabel
+      : displayMultiplier;
+  const heroColor = !isComplete
+    ? "text-[var(--t-green-hot)]"
+    : showPlayerOutcome && playerWon
+      ? "text-[var(--t-green-hot)]"
+      : "text-[var(--t-red-hot)]";
+  const outcomeDetail =
+    showPlayerOutcome && playerWon
+      ? theaterCopy.playerWonDetail
+      : showPlayerOutcome
+        ? theaterCopy.playerMarginCalledDetail
+        : null;
 
   return (
     <div
@@ -96,22 +130,38 @@ export function ReplayCurve({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-            {ambiance
-              ? theaterCopy.openAmbiance(ambiance.roundId.toString())
-              : theaterCopy.verifiedCrashPoint}
+            {heroLabel}
           </p>
           <p
             aria-live="polite"
-            className={`mc-live-value mt-1 font-[family-name:var(--font-plex-sans)] text-5xl font-bold tabular-nums sm:text-6xl lg:text-7xl ${
-              isComplete
-                ? "text-[var(--t-red-hot)]"
-                : "text-[var(--t-green-hot)]"
-            }`}
+            className={`mc-live-value mt-1 font-[family-name:var(--font-plex-sans)] text-5xl font-bold sm:text-6xl lg:text-7xl ${
+              showPlayerOutcome ? "" : "tabular-nums"
+            } ${heroColor}`}
+            data-testid={
+              showPlayerOutcome
+                ? "replay-curve-outcome"
+                : isComplete && !ambiance
+                  ? "replay-curve-crash-point"
+                  : undefined
+            }
           >
-            {isComplete ? crashLabel : displayMultiplier}
+            {heroValue}
           </p>
+          {showPlayerOutcome ? (
+            <p
+              className="mt-1 text-sm font-bold tabular-nums text-[var(--t-muted)]"
+              data-testid="replay-curve-crash-point-supporting"
+            >
+              {theaterCopy.crashPointSupporting(crashLabel)}
+            </p>
+          ) : null}
+          {outcomeDetail ? (
+            <p className="mt-1 max-w-[20rem] text-[10px] leading-4 text-[var(--t-muted)]">
+              {outcomeDetail}
+            </p>
+          ) : null}
         </div>
-        {isComplete && !ambiance ? (
+        {showPhoneStamp ? (
           <div className="flex items-center gap-3">
             <MarginCallPhone ringing />
             <div>
@@ -119,7 +169,9 @@ export function ReplayCurve({
                 {theaterCopy.marginCall}
               </p>
               <p className="mt-1 max-w-[14rem] text-[10px] leading-4 text-[var(--t-muted)]">
-                {theaterCopy.marginCallDetail}
+                {playerWon === false
+                  ? theaterCopy.playerMarginCalledDetail
+                  : theaterCopy.marginCallDetail}
               </p>
             </div>
           </div>

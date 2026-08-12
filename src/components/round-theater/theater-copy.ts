@@ -24,6 +24,17 @@ export const theaterCopy = {
   nextRoundOpening: countdownCopy.nextRoundOpeningNamed,
   nextRoundEntryOpen: countdownCopy.nextRoundEntryOpen,
   verifiedCrashPoint: "Verified Crash Point",
+  /** Eyebrow above a personal Won / Margin called freeze. */
+  yourTicket: "Your Ticket",
+  /** Supporting line under a personal outcome freeze: `Crash Point 2.50x`. */
+  crashPointSupporting: (crashPoint: string) => `Crash Point ${crashPoint}`,
+  /** Signed-in player landed: Ticket closed at or below the Crash Point. */
+  playerWon: "Won",
+  playerWonDetail:
+    "Your Arcade Leverage closed at or below the verified Crash Point.",
+  /** Signed-in player landed: Ticket still open when the market died. */
+  playerMarginCalled: "Margin called",
+  playerMarginCalledDetail: "The Crash Point died below your Arcade Leverage.",
   marginCall: "Margin call",
   marginCallDetail:
     "Hard stop — every Ticket still open takes the margin call.",
