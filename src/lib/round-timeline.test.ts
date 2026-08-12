@@ -141,6 +141,87 @@ describe("getRoundTimeline", () => {
     expect(timeline.expiresInSeconds).toBe(0);
     expect(timeline.countdown.kind).toBe("next-opens");
   });
+
+  it("locks active, skipped, and expiry clocks for every phase", () => {
+    const cases = [
+      {
+        round: { status: ROUND_STATUS.uninitialized },
+        ts: OPEN_AT - 10n,
+        phase: "prelaunch",
+        active: "entry",
+        skipped: [],
+        expiresOn: false,
+      },
+      {
+        round: { status: ROUND_STATUS.uninitialized },
+        ts: OPEN_AT + 1n,
+        phase: "uninitialized",
+        active: "entry",
+        skipped: [],
+        expiresOn: false,
+      },
+      {
+        round: {},
+        ts: OPEN_AT,
+        phase: "open",
+        active: "entry",
+        skipped: [],
+        expiresOn: false,
+      },
+      {
+        round: {},
+        ts: LOCK_AT,
+        phase: "locked",
+        active: "locked",
+        skipped: [],
+        expiresOn: true,
+      },
+      {
+        round: { status: ROUND_STATUS.revealRequested },
+        ts: LOCK_AT + 1n,
+        phase: "reveal-requested",
+        active: "reveal",
+        skipped: [],
+        expiresOn: true,
+      },
+      {
+        round: { status: ROUND_STATUS.finalized, crashPointBps: 25_000n },
+        ts: LOCK_AT + 1n,
+        phase: "finalized",
+        active: "next",
+        skipped: [],
+        expiresOn: false,
+      },
+      {
+        round: {},
+        ts: EXPIRES_AT + 1n,
+        phase: "expired-eligible",
+        active: "next",
+        skipped: ["reveal", "result"],
+        expiresOn: true,
+      },
+      {
+        round: { status: ROUND_STATUS.expired },
+        ts: EXPIRES_AT + 1n,
+        phase: "expired",
+        active: "next",
+        skipped: ["reveal", "result"],
+        expiresOn: false,
+      },
+    ] as const;
+
+    for (const c of cases) {
+      const timeline = getRoundTimeline(makeRound(c.round), c.ts);
+      expect(timeline.phase).toBe(c.phase);
+      expect(
+        timeline.segments.filter((s) => s.state === "active").map((s) => s.id)
+      ).toEqual([c.active]);
+      expect(
+        timeline.segments.filter((s) => s.state === "skipped").map((s) => s.id)
+      ).toEqual([...c.skipped]);
+      expect(timeline.expiresInSeconds !== null).toBe(c.expiresOn);
+    }
+  });
 });
 
 describe("countdown formatters", () => {
