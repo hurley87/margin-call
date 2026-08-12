@@ -50,7 +50,6 @@ export type TheaterStage = TheaterBase &
     | {
         kind: "open";
         roundId: bigint;
-        countdownSeconds: number;
         tape: RoundTicketTape | null;
         ambiance: FinalizedReplayRound | null;
         timeline: RoundTimeline;
@@ -249,7 +248,6 @@ function toTheaterStage(options: {
     return {
       kind: "open",
       roundId: round.roundId,
-      countdownSeconds: round.countdownSeconds,
       tape,
       ambiance,
       timeline: round.timeline,

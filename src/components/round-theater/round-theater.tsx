@@ -15,7 +15,11 @@ import {
   formatLeverageBps,
   type CrashTicket,
 } from "@/lib/margin-call-crash";
-import { roundPhaseCopy } from "@/lib/round-phase-copy";
+import {
+  formatNextRoundHandoff,
+  formatTimelineCountdownLabel,
+  roundPhaseCopy,
+} from "@/lib/round-phase-copy";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { theaterCopy } from "./theater-copy";
@@ -165,10 +169,7 @@ function OpenStage({
   const ambiance = stage.ambiance;
 
   const countdown = stage.timeline.countdown;
-  const countdownLabel =
-    countdown.kind === "entry-closes"
-      ? theaterCopy.openCountdown
-      : "Next round opens in";
+  const countdownLabel = formatTimelineCountdownLabel(stage.timeline);
   const countdownAriaLabel =
     countdown.kind === "entry-closes"
       ? `${countdown.seconds} seconds until entry locks`
@@ -398,27 +399,11 @@ function ResultHandoffRow({
           className="text-xs font-bold tabular-nums text-[var(--t-green-hot)]"
           data-testid="theater-next-round"
         >
-          {nextRoundLabel(next)}
+          {formatNextRoundHandoff(next)}
         </p>
       ) : null}
     </div>
   );
-}
-
-function nextRoundLabel(next: TheaterNextRound): string {
-  const roundId = next.roundId.toString();
-  if (next.countdown.kind === "entry-closes") {
-    return theaterCopy.nextRoundEntryOpen(
-      roundId,
-      formatCountdown(next.countdown.seconds)
-    );
-  }
-  return next.countdown.seconds > 0
-    ? theaterCopy.nextRoundOpens(
-        roundId,
-        formatCountdown(next.countdown.seconds)
-      )
-    : theaterCopy.nextRoundOpening(roundId);
 }
 
 function ExpiredStage({

@@ -3,6 +3,8 @@
  * Crash Point, Replay, Tier, Margin, Ticket, Arcade Leverage.
  */
 
+import { countdownCopy } from "@/lib/round-phase-copy";
+
 export const theaterCopy = {
   heading: "Round theater",
   replayLabel: "Replay of an attested onchain result",
@@ -11,18 +13,16 @@ export const theaterCopy = {
   expired: "Outcome unavailable",
   expiredDetail:
     "This round expired without a verified Crash Point. Ticket owners can pull back exactly their original margin.",
-  openCountdown: "Entry closes in",
+  openCountdown: countdownCopy.entryClosesIn,
   openTape: "Live ticket tape",
   openAmbiance: (roundId: string) => `Round ${roundId} replay`,
   openAmbianceLabel: "Previous round replay",
   openAmbianceNote: "Previous result — not the live round.",
   openAmbianceEmpty: "No prior finalized round to replay yet.",
   resultCaption: (roundId: string) => `Round ${roundId} result`,
-  nextRoundOpens: (roundId: string, countdown: string) =>
-    `Next round ${roundId} opens in ${countdown}`,
-  nextRoundOpening: (roundId: string) => `Next round ${roundId} opening…`,
-  nextRoundEntryOpen: (roundId: string, countdown: string) =>
-    `Round ${roundId} entry is open — closes in ${countdown}`,
+  nextRoundOpens: countdownCopy.nextRoundOpensNamed,
+  nextRoundOpening: countdownCopy.nextRoundOpeningNamed,
+  nextRoundEntryOpen: countdownCopy.nextRoundEntryOpen,
   verifiedCrashPoint: "Verified Crash Point",
   marginCall: "Margin call",
   marginCallDetail:

@@ -16,7 +16,6 @@ const sdk = vi.hoisted(() => {
       { id: "next" as const, state: "upcoming" as const, progress: null },
     ],
     countdown: { kind: "entry-closes" as const, seconds: 18 },
-    nextRoundOpensInSeconds: 33,
     expiresInSeconds: null,
   });
   const makeReadyRound = () =>
@@ -107,6 +106,11 @@ describe("CurrentRound", () => {
       phase: "finalized",
       countdownSeconds: 0,
       displayCrashPoint: "3.42x",
+      timeline: {
+        ...ready.timeline,
+        phase: "finalized",
+        countdown: { kind: "next-opens", seconds: 33 },
+      },
       revealTransactionUrl:
         "https://sepolia.basescan.org/tx/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
       finalizeTransactionUrl:
@@ -133,6 +137,11 @@ describe("CurrentRound", () => {
       ...ready,
       phase: "reveal-requested",
       countdownSeconds: 0,
+      timeline: {
+        ...ready.timeline,
+        phase: "reveal-requested",
+        countdown: { kind: "next-opens", seconds: 33 },
+      },
       revealTransactionUrl:
         "https://sepolia.basescan.org/tx/0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     };
@@ -147,6 +156,11 @@ describe("CurrentRound", () => {
       ...ready,
       phase: "locked",
       countdownSeconds: 0,
+      timeline: {
+        ...ready.timeline,
+        phase: "locked",
+        countdown: { kind: "next-opens", seconds: 33 },
+      },
     };
     rerender(<CurrentRound />);
     expect(screen.getByText("Awaiting reveal request")).toBeTruthy();
@@ -158,6 +172,11 @@ describe("CurrentRound", () => {
       ...ready,
       phase: "expired-eligible",
       countdownSeconds: 0,
+      timeline: {
+        ...ready.timeline,
+        phase: "expired-eligible",
+        countdown: { kind: "next-opens", seconds: 33 },
+      },
     };
     rerender(<CurrentRound />);
     expect(screen.getAllByText("Past expiry").length).toBeGreaterThan(0);
@@ -167,6 +186,11 @@ describe("CurrentRound", () => {
       ...ready,
       phase: "expired",
       countdownSeconds: 0,
+      timeline: {
+        ...ready.timeline,
+        phase: "expired",
+        countdown: { kind: "next-opens", seconds: 33 },
+      },
       expireTransactionUrl:
         "https://sepolia.basescan.org/tx/0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     };

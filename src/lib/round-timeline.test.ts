@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { ROUND_STATUS, type CrashRound } from "./margin-call-crash";
+import {
+  formatEntriesReopenNotice,
+  formatNextRoundHandoff,
+  formatTimelineCountdown,
+} from "./round-phase-copy";
 import { getRoundTimeline, ROUND_INTERVAL_SECONDS } from "./round-timeline";
 
 const OPEN_AT = 1_000n;
@@ -44,7 +49,6 @@ describe("getRoundTimeline", () => {
     expect(entry.state).toBe("active");
     expect(entry.progress).toBeCloseTo(22 / 45, 5);
     expect(timeline.countdown).toEqual({ kind: "entry-closes", seconds: 23 });
-    expect(timeline.nextRoundOpensInSeconds).toBe(38);
     expect(timeline.expiresInSeconds).toBeNull();
   });
 
@@ -115,7 +119,6 @@ describe("getRoundTimeline", () => {
       round,
       OPEN_AT + ROUND_INTERVAL_SECONDS + 30n
     );
-    expect(timeline.nextRoundOpensInSeconds).toBe(0);
     expect(timeline.countdown).toEqual({ kind: "next-opens", seconds: 0 });
     expect(timeline.segments[4].progress).toBe(1);
   });
@@ -137,5 +140,31 @@ describe("getRoundTimeline", () => {
     expect(timeline.phase).toBe("expired-eligible");
     expect(timeline.expiresInSeconds).toBe(0);
     expect(timeline.countdown.kind).toBe("next-opens");
+  });
+});
+
+describe("countdown formatters", () => {
+  it("formats the strip sentence from timeline.countdown", () => {
+    const open = getRoundTimeline(makeRound(), OPEN_AT + 22n);
+    expect(formatTimelineCountdown(open)).toBe("Entry closes in 00:23");
+
+    const locked = getRoundTimeline(makeRound(), LOCK_AT + 3n);
+    expect(formatTimelineCountdown(locked)).toBe("Next round opens in 00:12");
+  });
+
+  it("formats the rail notice from next-opens seconds", () => {
+    const locked = getRoundTimeline(makeRound(), LOCK_AT + 3n);
+    expect(formatEntriesReopenNotice(locked)).toBe(
+      "Entries reopen in 00:12 · Round 13"
+    );
+  });
+
+  it("names the upcoming round on the result handoff", () => {
+    expect(
+      formatNextRoundHandoff({
+        roundId: 13n,
+        countdown: { kind: "next-opens", seconds: 5 },
+      })
+    ).toBe("Next round 13 opens in 00:05");
   });
 });

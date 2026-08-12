@@ -33,14 +33,12 @@ const sdk = vi.hoisted(() => {
       { id: "next" as const, state: "upcoming" as const, progress: null },
     ],
     countdown,
-    nextRoundOpensInSeconds: 38,
     expiresInSeconds: null,
   });
 
   const makeOpen = (): TheaterStage => ({
     kind: "open",
     roundId: 12n,
-    countdownSeconds: 22,
     timeline: makeTimeline(),
     tape: {
       roundId: 12n,

@@ -39,8 +39,6 @@ export type RoundTimeline = {
   segments: RoundTimelineSegment[];
   /** Headline countdown for the active moment; never negative. */
   countdown: RoundTimelineCountdown;
-  /** Grid-derived, clamped ≥ 0; 0 means the next epoch is due ("opening…"). */
-  nextRoundOpensInSeconds: number;
   /** Seconds until the round can be marked expired; null once past or moot. */
   expiresInSeconds: number | null;
 };
@@ -103,7 +101,6 @@ export function getRoundTimeline(
         countdown: pastLock
           ? nextOpensCountdown
           : { kind: "entry-closes", seconds: entryClosesInSeconds },
-        nextRoundOpensInSeconds,
         expiresInSeconds: null,
       };
     }
@@ -119,7 +116,6 @@ export function getRoundTimeline(
           segment("next", "upcoming"),
         ],
         countdown: nextOpensCountdown,
-        nextRoundOpensInSeconds,
         expiresInSeconds,
       };
     case "reveal-requested":
@@ -134,7 +130,6 @@ export function getRoundTimeline(
           segment("next", "upcoming"),
         ],
         countdown: nextOpensCountdown,
-        nextRoundOpensInSeconds,
         expiresInSeconds,
       };
     case "finalized":
@@ -149,7 +144,6 @@ export function getRoundTimeline(
           segment("next", "active", nextProgress),
         ],
         countdown: nextOpensCountdown,
-        nextRoundOpensInSeconds,
         expiresInSeconds: null,
       };
     case "expired-eligible":
@@ -165,7 +159,6 @@ export function getRoundTimeline(
           segment("next", "active", nextProgress),
         ],
         countdown: nextOpensCountdown,
-        nextRoundOpensInSeconds,
         expiresInSeconds:
           phase === "expired-eligible" ? expiresInSeconds : null,
       };

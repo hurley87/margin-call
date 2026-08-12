@@ -1,13 +1,15 @@
 "use client";
 
-import { roundPhaseCopy } from "@/lib/round-phase-copy";
+import {
+  formatTimelineCountdown,
+  roundPhaseCopy,
+} from "@/lib/round-phase-copy";
 import type {
   RoundTimeline,
   RoundTimelineSegment,
   RoundTimelineSegmentId,
 } from "@/lib/round-timeline";
 import { formatCountdown } from "@/lib/utils";
-import { theaterCopy } from "./theater-copy";
 
 const segmentLabels: Record<RoundTimelineSegmentId, string> = {
   entry: "Entry",
@@ -49,7 +51,7 @@ export function RoundTimelineStrip({ timeline }: { timeline: RoundTimeline }) {
           className="text-xs font-bold tabular-nums text-[var(--t-green-hot)]"
           data-testid="round-timeline-countdown"
         >
-          {countdownLabel(timeline)}
+          {formatTimelineCountdown(timeline)}
         </p>
       </div>
 
@@ -111,14 +113,4 @@ function SegmentTrack({ segment }: { segment: RoundTimelineSegment }) {
       )}
     </div>
   );
-}
-
-function countdownLabel(timeline: RoundTimeline): string {
-  const { countdown } = timeline;
-  if (countdown.kind === "entry-closes") {
-    return `${theaterCopy.openCountdown} ${formatCountdown(countdown.seconds)}`;
-  }
-  return countdown.seconds > 0
-    ? `Next round opens in ${formatCountdown(countdown.seconds)}`
-    : "Next round opening…";
 }
