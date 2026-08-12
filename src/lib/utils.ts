@@ -20,6 +20,19 @@ export function dialogPopupClass(size: keyof typeof DIALOG_POPUP_SIZE_CLASS) {
   return `${DIALOG_POPUP_BASE_CLASS} ${DIALOG_POPUP_SIZE_CLASS[size]}`;
 }
 
+export const TERMINAL_ACTION_BUTTON_CLASS =
+  "border border-[var(--t-accent)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]";
+
+/** mm:ss countdown; negative inputs clamp to 00:00. */
+export function formatCountdown(seconds: number): string {
+  const safe = Math.max(0, seconds);
+  const minutes = Math.floor(safe / 60);
+  const remainingSeconds = safe % 60;
+  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds
+    .toString()
+    .padStart(2, "0")}`;
+}
+
 const USDC_FORMATTER = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",

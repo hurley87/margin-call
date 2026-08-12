@@ -4,6 +4,7 @@ import type { CrashRound } from "./margin-call-crash";
 
 const sdk = vi.hoisted(() => ({
   getBlock: vi.fn(),
+  getBlockNumber: vi.fn(),
   getLogs: vi.fn(),
   readContract: vi.fn(),
 }));
@@ -11,6 +12,7 @@ const sdk = vi.hoisted(() => ({
 vi.mock("./base-sepolia", () => ({
   baseSepoliaPublicClient: {
     getBlock: (...args: unknown[]) => sdk.getBlock(...args),
+    getBlockNumber: (...args: unknown[]) => sdk.getBlockNumber(...args),
     getLogs: (...args: unknown[]) => sdk.getLogs(...args),
     readContract: (...args: unknown[]) => sdk.readContract(...args),
   },
@@ -33,6 +35,7 @@ describe("MarginCallCrash public reads and phase math", () => {
     vi.resetModules();
     vi.unstubAllEnvs();
     sdk.getBlock.mockReset();
+    sdk.getBlockNumber.mockReset();
     sdk.getLogs.mockReset();
     sdk.readContract.mockReset();
   });
@@ -270,7 +273,12 @@ describe("MarginCallCrash public reads and phase math", () => {
     sdk.getLogs
       .mockResolvedValueOnce([{ transactionHash: OPENING_TRANSACTION_HASH }])
       .mockResolvedValueOnce([{ transactionHash: REVEAL_TRANSACTION_HASH }])
-      .mockResolvedValueOnce([{ transactionHash: FINALIZE_TRANSACTION_HASH }]);
+      .mockResolvedValueOnce([
+        {
+          transactionHash: FINALIZE_TRANSACTION_HASH,
+          blockNumber: 95n,
+        },
+      ]);
     const { readCurrentCrashRound } = await import("./margin-call-crash");
 
     await expect(
@@ -280,6 +288,7 @@ describe("MarginCallCrash public reads and phase math", () => {
       })
     ).resolves.toMatchObject({
       round: { status: 3, crashPointBps: 34_200n },
+      finalizedAtSeconds: 1_020n,
       openingTransactionUrl: `https://sepolia.basescan.org/tx/${OPENING_TRANSACTION_HASH}`,
       revealTransactionUrl: `https://sepolia.basescan.org/tx/${REVEAL_TRANSACTION_HASH}`,
       finalizeTransactionUrl: `https://sepolia.basescan.org/tx/${FINALIZE_TRANSACTION_HASH}`,
@@ -752,6 +761,175 @@ describe("MarginCallCrash public reads and phase math", () => {
       canRefund: false,
       canExpire: false,
     });
+  });
+  it("aggregates TicketEntered rows into per-tier exposure using reservedPayout", async () => {
+    const { aggregateTierExposure, ENTRY_LEVERAGE_TIERS_BPS } =
+      await import("./margin-call-crash");
+
+    const tiers = aggregateTierExposure([
+      {
+        leverageBps: 12_500n,
+        margin: 1_000_000n,
+        reservedPayout: 1_250_000n,
+      },
+      {
+        leverageBps: 12_500n,
+        margin: 5_000_000n,
+        reservedPayout: 6_250_000n,
+      },
+      {
+        leverageBps: 20_000n,
+        margin: 10_000_000n,
+        reservedPayout: 20_000_000n,
+      },
+      // Unknown leverage is skipped (contracts reject it at entry).
+      {
+        leverageBps: 11_000n,
+        margin: 1_000_000n,
+        reservedPayout: 1_100_000n,
+      },
+    ]);
+
+    expect(tiers).toHaveLength(ENTRY_LEVERAGE_TIERS_BPS.length);
+    expect(tiers[0]).toEqual({
+      leverageBps: 12_500n,
+      ticketCount: 2,
+      totalMargin: 6_000_000n,
+      reservedPayout: 7_500_000n,
+    });
+    expect(tiers[2]).toEqual({
+      leverageBps: 20_000n,
+      ticketCount: 1,
+      totalMargin: 10_000_000n,
+      reservedPayout: 20_000_000n,
+    });
+    expect(tiers[1]?.ticketCount).toBe(0);
+    expect(tiers[5]?.ticketCount).toBe(0);
+  });
+
+  it("reads the ticket tape and per-tier aggregates for a round", async () => {
+    const playerA = "0x00000000000000000000000000000000000000aa";
+    const playerB = "0x00000000000000000000000000000000000000bb";
+    sdk.getBlockNumber.mockResolvedValue(100n);
+    sdk.getLogs.mockResolvedValue([
+      {
+        args: {
+          roundId: 3n,
+          ticketId: 10n,
+          player: playerA,
+          margin: 1_000_000n,
+          leverageBps: 12_500n,
+          reservedPayout: 1_250_000n,
+        },
+        transactionHash: OPENING_TRANSACTION_HASH,
+      },
+      {
+        args: {
+          roundId: 3n,
+          ticketId: 11n,
+          player: playerB,
+          margin: 5_000_000n,
+          leverageBps: 20_000n,
+          reservedPayout: 10_000_000n,
+        },
+        transactionHash: REVEAL_TRANSACTION_HASH,
+      },
+    ]);
+    const { readRoundTicketTape } = await import("./margin-call-crash");
+
+    const tape = await readRoundTicketTape(
+      { address: CONTRACT_ADDRESS, deploymentBlock: 50n },
+      3n
+    );
+
+    expect(tape.roundId).toBe(3n);
+    expect(tape.entries).toHaveLength(2);
+    expect(tape.entries[0]).toMatchObject({
+      ticketId: 10n,
+      player: playerA,
+      leverageBps: 12_500n,
+      reservedPayout: 1_250_000n,
+    });
+    expect(tape.tiers[0]?.ticketCount).toBe(1);
+    expect(tape.tiers[2]?.ticketCount).toBe(1);
+    expect(tape.tiers[2]?.reservedPayout).toBe(10_000_000n);
+  });
+
+  it("finds the latest finalized round for ambiance replay", async () => {
+    sdk.getBlockNumber.mockResolvedValue(100n);
+    sdk.readContract.mockImplementation(({ functionName, args }) => {
+      if (functionName === "currentRoundId") return Promise.resolve(5n);
+      if (functionName === "getRound") {
+        const roundId = args?.[0] as bigint;
+        if (roundId === 5n) {
+          return Promise.resolve(
+            makeRound({ id: 5n, status: 1, crashPointBps: 0n })
+          );
+        }
+        if (roundId === 4n) {
+          return Promise.resolve(
+            makeRound({ id: 4n, status: 2, crashPointBps: 0n })
+          );
+        }
+        if (roundId === 3n) {
+          return Promise.resolve(
+            makeRound({ id: 3n, status: 3, crashPointBps: 34_200n })
+          );
+        }
+        return Promise.resolve(makeRound({ id: roundId, status: 0 }));
+      }
+      return Promise.reject(new Error(`unexpected ${functionName}`));
+    });
+    const { readLatestFinalizedReplayRound } =
+      await import("./margin-call-crash");
+
+    const ambiance = await readLatestFinalizedReplayRound({
+      address: CONTRACT_ADDRESS,
+      deploymentBlock: 50n,
+    });
+
+    expect(ambiance).toMatchObject({
+      displayCrashPoint: "3.42x",
+      round: { id: 3n, crashPointBps: 34_200n, status: 3 },
+    });
+  });
+
+  it("caches the finalize timestamp and returns it from current-round reads", async () => {
+    vi.stubEnv("NEXT_PUBLIC_MARGIN_CALL_CRASH_ADDRESS", CONTRACT_ADDRESS);
+    vi.stubEnv("NEXT_PUBLIC_MARGIN_CALL_CRASH_DEPLOYMENT_BLOCK", "50");
+    sdk.getBlock
+      .mockResolvedValueOnce({ number: 100n, timestamp: 2_000n })
+      .mockResolvedValueOnce({ number: 95n, timestamp: 1_950n });
+    sdk.readContract
+      .mockResolvedValueOnce(1_000n) // epochOrigin
+      .mockResolvedValueOnce(3n) // currentRoundId
+      .mockResolvedValueOnce(makeRound({ status: 3, crashPointBps: 25_000n }));
+    sdk.getLogs.mockImplementation(({ event }) => {
+      if (event.name === "RoundOpened") {
+        return Promise.resolve([{ transactionHash: OPENING_TRANSACTION_HASH }]);
+      }
+      if (event.name === "RevealRequested") {
+        return Promise.resolve([{ transactionHash: REVEAL_TRANSACTION_HASH }]);
+      }
+      if (event.name === "RoundFinalized") {
+        return Promise.resolve([
+          {
+            transactionHash: FINALIZE_TRANSACTION_HASH,
+            blockNumber: 95n,
+          },
+        ]);
+      }
+      return Promise.resolve([]);
+    });
+    const { readCurrentCrashRound } = await import("./margin-call-crash");
+
+    const result = await readCurrentCrashRound({
+      address: CONTRACT_ADDRESS,
+      deploymentBlock: 50n,
+    });
+
+    expect(result.finalizedAtSeconds).toBe(1_950n);
+    expect(result.round.crashPointBps).toBe(25_000n);
   });
 });
 

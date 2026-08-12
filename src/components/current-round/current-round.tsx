@@ -5,6 +5,7 @@ import {
   type CurrentCrashRoundView,
 } from "@/hooks/use-current-crash-round";
 import type { CrashRoundPhase } from "@/lib/margin-call-crash";
+import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { CrashRoundEntry } from "./crash-round-entry";
 
 type ReadyRound = Extract<CurrentCrashRoundView, { status: "ready" }>;
@@ -280,7 +281,7 @@ function CurrentRoundFailure({
       </p>
       {round.status === "error" ? (
         <button
-          className="mt-5 border border-[var(--t-accent)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
+          className={`mt-5 ${TERMINAL_ACTION_BUTTON_CLASS}`}
           onClick={() => void round.retry()}
           type="button"
         >
@@ -289,12 +290,4 @@ function CurrentRoundFailure({
       ) : null}
     </section>
   );
-}
-
-function formatCountdown(seconds: number) {
-  const minutes = Math.floor(seconds / 60);
-  const remainingSeconds = seconds % 60;
-  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds
-    .toString()
-    .padStart(2, "0")}`;
 }

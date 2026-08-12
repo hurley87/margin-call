@@ -13,7 +13,10 @@ const sdk = vi.hoisted(() => {
       countdownSeconds: 18,
       crashRandom:
         "0x000000000000000000000000000000000000000000000000000000000000cafe",
+      crashPointBps: null,
       displayCrashPoint: null,
+      finalizedAtSeconds: null,
+      chainTimestamp: 1_000n,
       openingTransactionUrl:
         "https://sepolia.basescan.org/tx/0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
       revealTransactionUrl: null,
