@@ -47,7 +47,13 @@ afterEach(() => cleanup());
 describe("DeskDollarsPanel", () => {
   it("uses required testnet/value copy and never presents the balance as USD", () => {
     render(<DeskDollarsPanel />);
-    expect(screen.getByText("Balance: 123.45 tUSD")).not.toBeNull();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent === "Balance: 123.45 tUSD"
+      )
+    ).not.toBeNull();
     expect(screen.getByText(/Base Sepolia only/)).not.toBeNull();
     expect(screen.getByText(/no real value/)).not.toBeNull();
     expect(

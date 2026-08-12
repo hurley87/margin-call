@@ -5,12 +5,27 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CurrentCrashRoundView } from "@/hooks/use-current-crash-round";
 
 const sdk = vi.hoisted(() => {
+  const makeTimeline = () => ({
+    roundId: 12n,
+    phase: "open" as const,
+    segments: [
+      { id: "entry" as const, state: "active" as const, progress: 0.5 },
+      { id: "locked" as const, state: "upcoming" as const, progress: null },
+      { id: "reveal" as const, state: "upcoming" as const, progress: null },
+      { id: "result" as const, state: "upcoming" as const, progress: null },
+      { id: "next" as const, state: "upcoming" as const, progress: null },
+    ],
+    countdown: { kind: "entry-closes" as const, seconds: 18 },
+    nextRoundOpensInSeconds: 33,
+    expiresInSeconds: null,
+  });
   const makeReadyRound = () =>
     ({
       status: "ready",
       roundId: 12n,
       phase: "open",
       countdownSeconds: 18,
+      timeline: makeTimeline(),
       crashRandom:
         "0x000000000000000000000000000000000000000000000000000000000000cafe",
       crashPointBps: null,
@@ -64,7 +79,13 @@ describe("CurrentRound", () => {
     render(<CurrentRound />);
 
     expect(screen.getByText("Round 12")).toBeTruthy();
-    expect(screen.getByText("Entry open")).toBeTruthy();
+    expect(screen.getAllByText("Entry open").length).toBeGreaterThan(0);
+    // Open phase now explains itself instead of rendering nothing.
+    expect(
+      screen.getByText(/Commit Margin at an Arcade Leverage/)
+    ).toBeTruthy();
+    // Entry is still open, so no reopen notice.
+    expect(screen.queryByTestId("next-round-notice")).toBeNull();
     // Countdown and Crash Point live on the theater chart, not this rail.
     expect(screen.queryByText("00:18")).toBeNull();
     expect(screen.getByText(ready.crashRandom as string)).toBeTruthy();
@@ -129,6 +150,9 @@ describe("CurrentRound", () => {
     };
     rerender(<CurrentRound />);
     expect(screen.getByText("Awaiting reveal request")).toBeTruthy();
+    expect(screen.getByTestId("next-round-notice").textContent).toBe(
+      "Entries reopen in 00:33 · Round 13"
+    );
 
     sdk.round = {
       ...ready,

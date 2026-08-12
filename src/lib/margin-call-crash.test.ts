@@ -383,7 +383,9 @@ describe("MarginCallCrash public reads and phase math", () => {
     sdk.readContract
       .mockResolvedValueOnce(900n)
       .mockResolvedValueOnce(3n)
-      .mockResolvedValueOnce(makeRound({ status: 0 }));
+      .mockResolvedValueOnce(makeRound({ status: 0 }))
+      // roundTimes backfills the zeroed struct with the immutable grid.
+      .mockResolvedValueOnce([1_080n, 1_125n, 2_025n]);
     const { readCurrentCrashRound } = await import("./margin-call-crash");
 
     await expect(
@@ -392,7 +394,7 @@ describe("MarginCallCrash public reads and phase math", () => {
         deploymentBlock: 50n,
       })
     ).resolves.toMatchObject({
-      round: { status: 0 },
+      round: { status: 0, id: 3n, openAt: 1_080n, lockAt: 1_125n },
       openingTransactionUrl: null,
     });
     expect(sdk.getLogs).not.toHaveBeenCalled();

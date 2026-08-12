@@ -184,6 +184,29 @@ export function isReplayComplete(progress: number): boolean {
   return progress >= 1;
 }
 
+/** Seconds the finished result stays on screen after the climb completes. */
+export const REPLAY_HOLD_BEAT_SECONDS = 4;
+
+/**
+ * True while a finalized round's replay (plus its result beat) is still
+ * playing out relative to chain time. Drives the theater's display-round
+ * hold: the previous round's result keeps the hero until this goes false,
+ * and a mid-arrival client computes the same answer from the same chain data.
+ */
+export function isReplayHoldActive(
+  finalizedAtSeconds: bigint,
+  crashPointBps: bigint,
+  chainTimestamp: bigint
+): boolean {
+  const replaySeconds = BigInt(
+    Math.ceil(getReplayDurationMs(crashPointBps) / 1_000)
+  );
+  return (
+    chainTimestamp <
+    finalizedAtSeconds + replaySeconds + BigInt(REPLAY_HOLD_BEAT_SECONDS)
+  );
+}
+
 /** Tiers that have closed at or before the given progress. */
 export function getClosedTiersAtProgress(
   progress: number,

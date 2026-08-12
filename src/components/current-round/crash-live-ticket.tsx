@@ -49,6 +49,32 @@ const amountLabelCopy: Record<TicketOutcome, string> = {
   refunded: "Refundable margin",
 };
 
+// Decorative desk stamp per settled outcome; the Outcome row carries the fact.
+const outcomeStamps: Partial<
+  Record<TicketOutcome, { label: string; className: string }>
+> = {
+  won: {
+    label: "WON",
+    className: "border-[var(--t-green-hot)] text-[var(--t-green-hot)]",
+  },
+  "settled-win": {
+    label: "PAID",
+    className: "border-[var(--t-green-hot)] text-[var(--t-green-hot)]",
+  },
+  lost: {
+    label: "MARGIN CALLED",
+    className: "border-[var(--t-red-hot)] text-[var(--t-red-hot)]",
+  },
+  "settled-loss": {
+    label: "MARGIN CALLED",
+    className: "border-[var(--t-red-hot)] text-[var(--t-red-hot)]",
+  },
+  refunded: {
+    label: "REFUNDED",
+    className: "border-[var(--t-muted)] text-[var(--t-muted)]",
+  },
+};
+
 /** Confirmed onchain ticket with optional settlement actions for the signed-in player. */
 export function CrashLiveTicket({
   ticket,
@@ -71,11 +97,24 @@ export function CrashLiveTicket({
   onRefund,
   onRetry,
 }: CrashLiveTicketProps) {
+  const stamp = outcome ? outcomeStamps[outcome] : undefined;
+
   return (
     <div
       aria-labelledby="live-ticket-heading"
-      className="border border-[var(--t-green)]/40 bg-[var(--t-panel)] p-4"
+      className={`relative border border-[var(--t-green)]/40 bg-[var(--t-panel)] p-4 ${
+        outcome === "lost" ? "mc-shake" : ""
+      }`}
     >
+      {stamp ? (
+        <span
+          aria-hidden="true"
+          className={`mc-stamp-in pointer-events-none absolute right-3 top-3 border-2 px-2 py-0.5 text-[11px] font-black uppercase tracking-[0.2em] ${stamp.className}`}
+          data-testid="ticket-outcome-stamp"
+        >
+          {stamp.label}
+        </span>
+      ) : null}
       <p
         id="live-ticket-heading"
         className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-green)]"

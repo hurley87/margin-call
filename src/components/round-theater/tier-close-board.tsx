@@ -14,6 +14,8 @@ export type TierCloseBoardProps = {
   crashPointBps: bigint;
   /** Live climb progress; pass 1 for the static/reduced-motion card. */
   progress: number;
+  /** Signed-in player's tier — its row is marked "your Ticket". */
+  playerTierBps?: bigint | null;
 };
 
 /**
@@ -23,6 +25,7 @@ export function TierCloseBoard({
   tiers,
   crashPointBps,
   progress,
+  playerTierBps = null,
 }: TierCloseBoardProps) {
   return (
     <ul className="mt-4 space-y-1.5" aria-label="Arcade Leverage tier closes">
@@ -31,6 +34,8 @@ export function TierCloseBoard({
         const wins = isWinningTicket(tier.leverageBps, crashPointBps);
         const closed = closeAt !== null && closeAt <= progress;
         const label = formatLeverageBps(tier.leverageBps);
+        const isPlayerTier =
+          playerTierBps !== null && tier.leverageBps === playerTierBps;
         const status = !wins
           ? theaterCopy.tierOpen(label)
           : closed
@@ -41,15 +46,25 @@ export function TierCloseBoard({
           <li
             className={`flex flex-wrap items-center justify-between gap-2 border px-3 py-2 text-xs ${
               closed && wins
-                ? "mc-tier-pop border-[var(--t-green)]/50 bg-[var(--t-green)]/10 text-[var(--t-green-hot)]"
+                ? `border-[var(--t-green)]/50 bg-[var(--t-green)]/10 text-[var(--t-green-hot)] ${
+                    isPlayerTier ? "mc-feed-enter-high" : "mc-tier-pop"
+                  }`
                 : !wins && progress >= 1
                   ? "border-[var(--t-red)]/40 text-[var(--t-red-hot)]"
                   : "border-[var(--t-divider)] text-[var(--t-muted)]"
-            }`}
+            } ${isPlayerTier ? "border-l-2 border-l-[var(--t-accent)]" : ""}`}
             key={tier.leverageBps.toString()}
+            style={
+              isPlayerTier && closed && wins
+                ? ({
+                    "--mc-feed-edge": "var(--t-green-hot)",
+                  } as React.CSSProperties)
+                : undefined
+            }
           >
             <span className="font-bold uppercase tracking-[0.12em]">
               {status}
+              {isPlayerTier ? " · your Ticket" : ""}
             </span>
             <span className="tabular-nums">
               {tier.ticketCount === 0

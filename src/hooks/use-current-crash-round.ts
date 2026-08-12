@@ -12,6 +12,11 @@ import {
   readCurrentCrashRound,
   type CrashRoundPhase,
 } from "@/lib/margin-call-crash";
+import {
+  getRoundTimeline,
+  ROUND_INTERVAL_SECONDS,
+  type RoundTimeline,
+} from "@/lib/round-timeline";
 
 type RoundSnapshot = Awaited<ReturnType<typeof readCurrentCrashRound>> & {
   receivedAt: number;
@@ -36,6 +41,8 @@ export type CurrentCrashRoundView = { retry: () => Promise<void> } & (
       finalizedAtSeconds: bigint | null;
       /** Client-corrected chain time used for phase and countdown. */
       chainTimestamp: bigint;
+      /** Deterministic lifecycle strip model derived from the epoch grid. */
+      timeline: RoundTimeline;
       openingTransactionUrl: string | null;
       revealTransactionUrl: string | null;
       finalizeTransactionUrl: string | null;
@@ -92,6 +99,22 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
     return () => window.clearInterval(tick);
   }, [hasSnapshot]);
 
+  // Refresh just after the next deterministic grid boundary (entry lock, next
+  // epoch) so those phase flips don't wait out the 10-second poll.
+  useEffect(() => {
+    if (!snapshot) return;
+    const chainTimestamp = correctedChainTimestamp(snapshot, Date.now());
+    const boundaries = [
+      snapshot.round.lockAt,
+      snapshot.round.openAt + ROUND_INTERVAL_SECONDS,
+    ].filter((boundary) => boundary > chainTimestamp);
+    if (boundaries.length === 0) return;
+    const next = boundaries.reduce((a, b) => (a < b ? a : b));
+    const delayMs = (Number(next - chainTimestamp) + 1) * 1_000;
+    const timer = window.setTimeout(() => void refresh(), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [snapshot, refresh]);
+
   if (status === "ready" && snapshot) {
     const chainTimestamp = correctedChainTimestamp(snapshot, clock);
     const published = isCrashPointPublished(snapshot.round);
@@ -112,6 +135,7 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
         : null,
       finalizedAtSeconds: published ? snapshot.finalizedAtSeconds : null,
       chainTimestamp,
+      timeline: getRoundTimeline(snapshot.round, chainTimestamp),
       openingTransactionUrl: snapshot.openingTransactionUrl,
       revealTransactionUrl: snapshot.revealTransactionUrl,
       finalizeTransactionUrl: snapshot.finalizeTransactionUrl,

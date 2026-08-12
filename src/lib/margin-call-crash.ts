@@ -190,11 +190,8 @@ export const ROUND_STATUS = {
   expired: 4,
 } as const satisfies Record<string, CrashRoundStatus>;
 
-/** How many prior epochs to surface in global history. */
+/** How many prior epochs to surface in global history and ambiance replay. */
 export const GLOBAL_HISTORY_LOOKBACK_ROUNDS = 20;
-
-/** How many prior epochs to scan for Open-phase ambiance replay. */
-const AMBIANCE_LOOKBACK_ROUNDS = 5;
 
 /** One public TicketEntered row for the live ticket tape / tier pops. */
 export type TicketTapeEntry = {
@@ -902,6 +899,22 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
     ...round,
     status: normalizeRoundStatus(round.status),
   };
+  // An uninitialized round's stored struct is zeroed; fill the immutable grid
+  // times so phase and timeline math stay meaningful before an opener arrives.
+  if (normalizedRound.status === ROUND_STATUS.uninitialized) {
+    const [openAt, lockAt, expiresAt] =
+      await baseSepoliaPublicClient.readContract({
+        address: config.address,
+        abi: marginCallCrashAbi,
+        functionName: "roundTimes",
+        args: [currentRoundId],
+        blockNumber: block.number,
+      });
+    normalizedRound.id = currentRoundId;
+    normalizedRound.openAt = openAt;
+    normalizedRound.lockAt = lockAt;
+    normalizedRound.expiresAt = expiresAt;
+  }
   const lifecycleUrls = await readLifecycleUrls(
     config,
     currentRoundId,
@@ -976,7 +989,7 @@ export async function readRoundTicketTape(
 }
 
 /**
- * Newest finalized round within the ambiance lookback, for Open-phase
+ * Newest finalized round within the global lookback, for Open-phase
  * previous-round replay. Returns null when none exist.
  */
 export async function readLatestFinalizedReplayRound(
@@ -989,16 +1002,26 @@ export async function readLatestFinalizedReplayRound(
     functionName: "currentRoundId",
     blockNumber,
   });
-  const roundIds = lookbackRoundIds(currentRoundId, AMBIANCE_LOOKBACK_ROUNDS);
+  const roundIds = lookbackRoundIds(
+    currentRoundId,
+    GLOBAL_HISTORY_LOOKBACK_ROUNDS
+  );
 
-  for (const roundId of roundIds) {
-    const round = await baseSepoliaPublicClient.readContract({
-      address: config.address,
-      abi: marginCallCrashAbi,
-      functionName: "getRound",
-      args: [roundId],
-      blockNumber,
-    });
+  // Concurrent reads collapse into a multicall batch; ids are newest-first,
+  // so the first finalized hit is the latest one.
+  const rounds = await Promise.all(
+    roundIds.map((roundId) =>
+      baseSepoliaPublicClient.readContract({
+        address: config.address,
+        abi: marginCallCrashAbi,
+        functionName: "getRound",
+        args: [roundId],
+        blockNumber,
+      })
+    )
+  );
+
+  for (const round of rounds) {
     const normalized: CrashRound = {
       ...round,
       status: normalizeRoundStatus(round.status),

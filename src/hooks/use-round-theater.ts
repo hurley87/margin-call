@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   useCurrentCrashRound,
   type CurrentCrashRoundView,
@@ -17,6 +17,11 @@ import {
   type RoundTicketTape,
   type TierExposure,
 } from "@/lib/margin-call-crash";
+import { isReplayHoldActive } from "@/lib/round-replay";
+import type {
+  RoundTimeline,
+  RoundTimelineCountdown,
+} from "@/lib/round-timeline";
 
 export type TheaterStageKind =
   | "loading"
@@ -32,6 +37,12 @@ type TheaterBase = {
   reducedMotion: boolean;
 };
 
+/** Live info about the upcoming round shown alongside a finished result. */
+export type TheaterNextRound = {
+  roundId: bigint;
+  countdown: RoundTimelineCountdown;
+};
+
 export type TheaterStage = TheaterBase &
   (
     | { kind: "loading" }
@@ -42,12 +53,14 @@ export type TheaterStage = TheaterBase &
         countdownSeconds: number;
         tape: RoundTicketTape | null;
         ambiance: FinalizedReplayRound | null;
+        timeline: RoundTimeline;
       }
     | {
         kind: "delayed";
         roundId: bigint;
         phaseLabel: "locked" | "reveal-requested" | "expired-eligible";
         tape: RoundTicketTape | null;
+        timeline: RoundTimeline;
       }
     | {
         kind: "finalized";
@@ -59,13 +72,29 @@ export type TheaterStage = TheaterBase &
         finalizeTransactionUrl: string | null;
         tape: RoundTicketTape | null;
         tiers: TierExposure[];
+        timeline: RoundTimeline;
+        /** Non-null while this result is held past its own epoch, or while the
+         * next epoch counts down — always sourced from the live round. */
+        next: TheaterNextRound | null;
       }
     | {
         kind: "expired";
         roundId: bigint;
         tape: RoundTicketTape | null;
+        timeline: RoundTimeline;
       }
   );
+
+/** Frozen copy of the last fully-finalized round, for the display hold. */
+type RetainedFinalized = {
+  roundId: bigint;
+  crashPointBps: bigint;
+  displayCrashPoint: string;
+  finalizedAtSeconds: bigint;
+  finalizeTransactionUrl: string | null;
+  tape: RoundTicketTape | null;
+  tiers: TierExposure[];
+};
 
 /**
  * Presentation-only theater state. Composes public round reads and ticket tape
@@ -85,15 +114,29 @@ export function useRoundTheater(): TheaterStage {
 
   const tapePoll = usePolledCrashRead(tapeRead);
 
-  const needsAmbiance = round.status === "ready" && isPreLockPhase(round.phase);
-
+  // Always polled (not just pre-lock) so ambiance is warm the instant the
+  // phase flips back to open, instead of flashing to the empty panel.
   const ambianceRead = useCallback(
     (config: Parameters<typeof readLatestFinalizedReplayRound>[0]) =>
       readLatestFinalizedReplayRound(config),
     []
   );
+  const ambiancePoll = usePolledCrashRead(ambianceRead);
 
-  const ambiancePoll = usePolledCrashRead(needsAmbiance ? ambianceRead : null);
+  // Retain the newest fully-finalized round we've seen so its replay can hold
+  // the hero across the epoch flip. Overwritten by supersession, never
+  // cleared. Adjusted during render (guarded) per the React "state from
+  // previous renders" pattern — no effect, no extra render pass when idle.
+  const [retained, setRetained] = useState<RetainedFinalized | null>(null);
+  const candidate = deriveRetainedCandidate(round, tapePoll.data);
+  if (
+    candidate !== null &&
+    (retained === null ||
+      retained.roundId !== candidate.roundId ||
+      retained.tape !== candidate.tape)
+  ) {
+    setRetained(candidate);
+  }
 
   return useMemo(
     () =>
@@ -101,15 +144,16 @@ export function useRoundTheater(): TheaterStage {
         round,
         reducedMotion,
         tape: tapePoll.data,
-        ambiance: needsAmbiance ? ambiancePoll.data : null,
+        ambiance: ambiancePoll.data,
+        retained,
         retryTape: tapePoll.refresh,
         retryAmbiance: ambiancePoll.refresh,
       }),
     [
       ambiancePoll.data,
       ambiancePoll.refresh,
-      needsAmbiance,
       reducedMotion,
+      retained,
       round,
       tapePoll.data,
       tapePoll.refresh,
@@ -117,15 +161,40 @@ export function useRoundTheater(): TheaterStage {
   );
 }
 
+function deriveRetainedCandidate(
+  round: CurrentCrashRoundView,
+  tape: RoundTicketTape | null
+): RetainedFinalized | null {
+  if (round.status !== "ready" || round.phase !== "finalized") return null;
+  if (
+    round.crashPointBps === null ||
+    round.displayCrashPoint === null ||
+    round.finalizedAtSeconds === null
+  ) {
+    return null;
+  }
+  const roundTape = tape?.roundId === round.roundId ? tape : null;
+  return {
+    roundId: round.roundId,
+    crashPointBps: round.crashPointBps,
+    displayCrashPoint: round.displayCrashPoint,
+    finalizedAtSeconds: round.finalizedAtSeconds,
+    finalizeTransactionUrl: round.finalizeTransactionUrl,
+    tape: roundTape,
+    tiers: roundTape?.tiers ?? aggregateTierExposure([]),
+  };
+}
+
 function toTheaterStage(options: {
   round: CurrentCrashRoundView;
   reducedMotion: boolean;
   tape: RoundTicketTape | null;
   ambiance: FinalizedReplayRound | null;
+  retained: RetainedFinalized | null;
   retryTape: () => Promise<void>;
   retryAmbiance: () => Promise<void>;
 }): TheaterStage {
-  const { round, reducedMotion, tape, ambiance } = options;
+  const { round, reducedMotion, tape, ambiance, retained } = options;
   const retry = async () => {
     await round.retry();
     await options.retryTape();
@@ -147,12 +216,43 @@ function toTheaterStage(options: {
   const phase = round.phase;
 
   if (isPreLockPhase(phase)) {
+    // Display-round hold: keep the just-finished result playing out into the
+    // next entry window, with the live round's countdown alongside.
+    if (
+      retained !== null &&
+      retained.roundId === round.roundId - 1n &&
+      isReplayHoldActive(
+        retained.finalizedAtSeconds,
+        retained.crashPointBps,
+        round.chainTimestamp
+      )
+    ) {
+      return {
+        kind: "finalized",
+        roundId: retained.roundId,
+        crashPointBps: retained.crashPointBps,
+        displayCrashPoint: retained.displayCrashPoint,
+        finalizedAtSeconds: retained.finalizedAtSeconds,
+        chainTimestamp: round.chainTimestamp,
+        finalizeTransactionUrl: retained.finalizeTransactionUrl,
+        tape: retained.tape,
+        tiers: retained.tiers,
+        timeline: round.timeline,
+        next: {
+          roundId: round.roundId,
+          countdown: round.timeline.countdown,
+        },
+        reducedMotion,
+        retry,
+      };
+    }
     return {
       kind: "open",
       roundId: round.roundId,
       countdownSeconds: round.countdownSeconds,
       tape,
       ambiance,
+      timeline: round.timeline,
       reducedMotion,
       retry,
     };
@@ -168,6 +268,7 @@ function toTheaterStage(options: {
       roundId: round.roundId,
       phaseLabel: phase,
       tape,
+      timeline: round.timeline,
       reducedMotion,
       retry,
     };
@@ -180,6 +281,7 @@ function toTheaterStage(options: {
         roundId: round.roundId,
         phaseLabel: "reveal-requested",
         tape,
+        timeline: round.timeline,
         reducedMotion,
         retry,
       };
@@ -194,6 +296,11 @@ function toTheaterStage(options: {
       finalizeTransactionUrl: round.finalizeTransactionUrl,
       tape,
       tiers: tape?.tiers ?? aggregateTierExposure([]),
+      timeline: round.timeline,
+      next: {
+        roundId: round.roundId + 1n,
+        countdown: round.timeline.countdown,
+      },
       reducedMotion,
       retry,
     };
@@ -204,6 +311,7 @@ function toTheaterStage(options: {
       kind: "expired",
       roundId: round.roundId,
       tape,
+      timeline: round.timeline,
       reducedMotion,
       retry,
     };

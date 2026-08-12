@@ -1,11 +1,14 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import {
   useCrashTicketSettlement,
   type CrashSettlementRetryAction,
   type CrashSettlementStatus,
 } from "@/hooks/use-crash-ticket-settlement";
+import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
+import { getTheaterAudio } from "@/lib/theater-audio";
 import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashSettlementStatus, string>> = {
@@ -42,6 +45,22 @@ const retryLabels: Record<CrashSettlementRetryAction, string> = {
  */
 export function CrashTicketSettlement() {
   const settlement = useCrashTicketSettlement();
+  const reducedMotion = useReducedMotion();
+
+  // Payout landed → ring the register once (balance flash follows via the
+  // wallet-balance sync).
+  const previousStatus = useRef(settlement.status);
+  useEffect(() => {
+    if (
+      !reducedMotion &&
+      settlement.status === "confirmed" &&
+      previousStatus.current !== "confirmed" &&
+      settlement.outcome === "settled-win"
+    ) {
+      getTheaterAudio().playWinRegister();
+    }
+    previousStatus.current = settlement.status;
+  }, [reducedMotion, settlement.outcome, settlement.status]);
 
   if (!settlement.walletAddress) return null;
   if (settlement.status === "unavailable") return null;

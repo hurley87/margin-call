@@ -23,8 +23,10 @@ const VIEW_H = 56;
 export type ReplayCurveProps = {
   crashPointBps: bigint;
   progress: number;
-  /** Open-phase previous-round ambiance (same hero size, different label). */
-  ambiance?: boolean;
+  /** Open-phase previous-round ambiance (same hero size, labeled by round). */
+  ambiance?: { roundId: bigint } | null;
+  /** Signed-in player's Arcade Leverage tier, highlighted on the chart. */
+  playerTierBps?: bigint | null;
 };
 
 /**
@@ -40,7 +42,8 @@ export const REPLAY_HERO_MIN_H = "min-h-[22rem] lg:min-h-[28rem]";
 export function ReplayCurve({
   crashPointBps,
   progress,
-  ambiance = false,
+  ambiance = null,
+  playerTierBps = null,
 }: ReplayCurveProps) {
   // `progress` moves every animation frame, so memoizing on it buys nothing.
   const points = getReplayPathPoints(crashPointBps, progress, {
@@ -66,16 +69,35 @@ export function ReplayCurve({
     [crashPointBps]
   );
 
+  // Crash-moment juice: shake the panel and flash its edge once, colored by
+  // the player's outcome (green closed-in-time, red margin-called, amber none).
+  const crashMoment = isComplete && !ambiance;
+  const momentColor =
+    playerTierBps === null
+      ? "var(--t-amber-hot)"
+      : playerTierBps <= crashPointBps
+        ? "var(--t-safe)"
+        : "var(--t-threat)";
+
   return (
     <div
-      className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${REPLAY_HERO_MIN_H}`}
+      className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${REPLAY_HERO_MIN_H} ${
+        crashMoment ? "mc-shake" : ""
+      }`}
       data-testid={ambiance ? "replay-curve-ambiance" : "replay-curve"}
     >
+      {crashMoment ? (
+        <div
+          aria-hidden="true"
+          className="mc-moment-edge pointer-events-none absolute inset-0"
+          style={{ "--mc-moment-color": momentColor } as React.CSSProperties}
+        />
+      ) : null}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
             {ambiance
-              ? theaterCopy.openAmbiance
+              ? theaterCopy.openAmbiance(ambiance.roundId.toString())
               : theaterCopy.verifiedCrashPoint}
           </p>
           <p
@@ -117,31 +139,35 @@ export function ReplayCurve({
           </linearGradient>
         </defs>
         {tierLines.map(({ tier, closeAt, y }) => {
+          const isPlayerTier = playerTierBps !== null && tier === playerTierBps;
           return (
             <g key={tier.toString()}>
               <line
-                stroke="var(--t-divider)"
-                strokeDasharray="1 1.5"
-                strokeWidth="0.25"
+                stroke={isPlayerTier ? "var(--t-accent)" : "var(--t-divider)"}
+                strokeDasharray={isPlayerTier ? undefined : "1 1.5"}
+                strokeWidth={isPlayerTier ? "0.4" : "0.25"}
                 x1="0"
                 x2={VIEW_W}
                 y1={y}
                 y2={y}
               />
               <text
-                fill="var(--t-muted)"
+                fill={isPlayerTier ? "var(--t-accent)" : "var(--t-muted)"}
                 fontSize="2.4"
+                fontWeight={isPlayerTier ? "bold" : undefined}
                 x="1"
                 y={Math.max(3, y - 1)}
               >
-                {formatLeverageBps(tier)}
+                {isPlayerTier
+                  ? `${formatLeverageBps(tier)} · YOU`
+                  : formatLeverageBps(tier)}
               </text>
               {closeAt <= progress ? (
                 <circle
                   cx={closeAt * VIEW_W}
                   cy={y}
                   fill="var(--t-amber-hot)"
-                  r="0.9"
+                  r={isPlayerTier ? 1.3 : 0.9}
                 />
               ) : null}
             </g>
@@ -164,11 +190,11 @@ export function ReplayCurve({
         />
       </svg>
 
-      {!ambiance ? (
-        <p className="mt-2 text-[10px] leading-4 text-[var(--t-muted)]">
-          {theaterCopy.replayLabel}. {theaterCopy.replayDetail}
-        </p>
-      ) : null}
+      <p className="mt-2 text-[10px] leading-4 text-[var(--t-muted)]">
+        {ambiance
+          ? theaterCopy.openAmbianceNote
+          : `${theaterCopy.replayLabel}. ${theaterCopy.replayDetail}`}
+      </p>
     </div>
   );
 }
@@ -222,10 +248,13 @@ export function ReplayCurveEmpty({
   title,
   body,
   testId,
+  busy = false,
 }: {
   title: string;
   body?: string;
   testId?: string;
+  /** Loading state: adds a shimmer bar under the copy. */
+  busy?: boolean;
 }) {
   return (
     <div
@@ -260,6 +289,9 @@ export function ReplayCurveEmpty({
         </p>
         {body ? (
           <p className="mt-3 text-xs leading-5 text-[var(--t-muted)]">{body}</p>
+        ) : null}
+        {busy ? (
+          <div aria-hidden="true" className="mc-shimmer mt-4 h-1.5 w-48" />
         ) : null}
       </div>
     </div>
