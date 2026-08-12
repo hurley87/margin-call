@@ -6,6 +6,7 @@ import { DeskDollarsPanel } from "@/components/desk-dollars/desk-dollars-panel";
 import { GlobalHistory } from "@/components/history/global-history";
 import { PersonalHistory } from "@/components/history/personal-history";
 import { LpDesk } from "@/components/lp-desk/lp-desk";
+import { NoRealValueDisclosure } from "@/components/no-real-value-disclosure";
 import { RoundTheater } from "@/components/round-theater/round-theater";
 
 export default function Home() {
@@ -21,6 +22,7 @@ export default function Home() {
         <p className="mx-auto mt-5 max-w-xl text-sm leading-6 text-[var(--t-muted)]">
           Watch each encrypted crash point commit onchain before entry closes.
         </p>
+        <NoRealValueDisclosure />
 
         <RoundTheater />
         <CurrentRound />

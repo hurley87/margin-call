@@ -93,10 +93,15 @@ export function readRound(roundId) {
 }
 
 export async function sendGameTransaction(functionName, args, value = 0n) {
+  const nonce = await publicClient.getTransactionCount({
+    address: account.address,
+    blockTag: "pending",
+  });
   const hash = await walletClient.sendTransaction({
     to: GAME_ADDRESS,
     data: encodeFunctionData({ abi: gameAbi, functionName, args }),
     value,
+    nonce,
   });
   const receipt = await publicClient.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") {

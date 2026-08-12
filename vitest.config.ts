@@ -9,6 +9,7 @@ export default defineConfig({
       "src/**/*.test.tsx",
       "packages/shared/**/*.test.ts",
       "tests/convex/**/*.test.ts",
+      "tests/scripts/**/*.test.ts",
     ],
     exclude: ["**/node_modules/**"],
   },

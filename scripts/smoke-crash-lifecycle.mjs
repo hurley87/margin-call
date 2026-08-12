@@ -43,7 +43,13 @@ async function main() {
 
   const existing = await readRound(roundId);
   if (existing.status === ROUND_STATUS.uninitialized) {
-    await sendGameTransaction("openRound", [roundId], fee);
+    try {
+      await sendGameTransaction("openRound", [roundId], fee);
+    } catch (error) {
+      const message = String(error?.shortMessage ?? error?.message ?? error);
+      if (!message.includes("RoundAlreadyInitialized")) throw error;
+      console.log(`round ${roundId} opened concurrently; continuing`);
+    }
   } else {
     console.log(`round ${roundId} already status=${existing.status}`);
   }
@@ -51,9 +57,14 @@ async function main() {
   const expireRoundId = roundId + 1n;
   const expireExisting = await readRound(expireRoundId);
   if (expireExisting.status === ROUND_STATUS.uninitialized) {
-    await sendGameTransaction("openRound", [expireRoundId], fee);
+    try {
+      await sendGameTransaction("openRound", [expireRoundId], fee);
+    } catch (error) {
+      const message = String(error?.shortMessage ?? error?.message ?? error);
+      if (!message.includes("RoundAlreadyInitialized")) throw error;
+      console.log(`round ${expireRoundId} opened concurrently; continuing`);
+    }
   }
-
   let round = await readRound(roundId);
   console.log(
     `round ${roundId}: lockAt=${round.lockAt} expiresAt=${round.expiresAt} handle=${round.crashRandom}`
