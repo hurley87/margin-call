@@ -67,22 +67,67 @@ const sdk = vi.hoisted(() => {
     retry: vi.fn(),
   });
 
+  const FINALIZE_URL =
+    "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+  const makeFinalized = ({
+    reducedMotion = false,
+    finalizeUrl = FINALIZE_URL as string | null,
+  }: {
+    reducedMotion?: boolean;
+    finalizeUrl?: string | null;
+  } = {}): TheaterView => ({
+    live: {
+      kind: "finalized",
+      roundId: 12n,
+      crashPointBps: 25_000n,
+      displayCrashPoint: "2.50x",
+      finalizedAtSeconds: 900n,
+      chainTimestamp: 910n,
+      finalizeTransactionUrl: finalizeUrl,
+      tape: null,
+      tiers: emptyTiers(),
+      timeline: makeTimeline("finalized", {
+        kind: "next-opens",
+        seconds: 5,
+      }),
+    },
+    hero: {
+      type: "replay",
+      roundId: 12n,
+      crashPointBps: 25_000n,
+      displayCrashPoint: "2.50x",
+      finalizedAtSeconds: 900n,
+      chainTimestamp: 910n,
+      finalizeTransactionUrl: finalizeUrl,
+      tape: null,
+      tiers: emptyTiers(),
+    },
+    reducedMotion,
+    retry: vi.fn(),
+  });
+
+  const makeTicket = (leverageBps: bigint) => ({
+    id: 7n,
+    player: "0x00000000000000000000000000000000000000aa",
+    roundId: 12n,
+    margin: 5_000_000n,
+    leverageBps,
+    reservedPayout: (5_000_000n * leverageBps) / 10_000n,
+    settled: false,
+    claimed: false,
+  });
+
   return {
     emptyTiers,
     makeTimeline,
     makeOpen,
+    makeFinalized,
+    makeTicket,
+    FINALIZE_URL,
     view: makeOpen() as TheaterView,
     ticketRoundId: null as bigint | null,
-    playerTicket: null as {
-      id: bigint;
-      player: string;
-      roundId: bigint;
-      margin: bigint;
-      leverageBps: bigint;
-      reservedPayout: bigint;
-      settled: boolean;
-      claimed: boolean;
-    } | null,
+    playerTicket: null as ReturnType<typeof makeTicket> | null,
   };
 });
 
@@ -248,38 +293,7 @@ describe("RoundTheater", () => {
   });
 
   it("renders the animated replay for finalized rounds with tier closes", () => {
-    sdk.view = {
-      live: {
-        kind: "finalized",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl:
-          "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        tape: null,
-        tiers: sdk.emptyTiers(),
-        timeline: sdk.makeTimeline("finalized", {
-          kind: "next-opens",
-          seconds: 5,
-        }),
-      },
-      hero: {
-        type: "replay",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl:
-          "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        tape: null,
-        tiers: sdk.emptyTiers(),
-      },
-      reducedMotion: false,
-      retry: vi.fn(),
-    };
+    sdk.view = sdk.makeFinalized();
     render(<RoundTheater />);
 
     expect(screen.getByTestId("theater-finalized-replay")).toBeTruthy();
@@ -305,46 +319,8 @@ describe("RoundTheater", () => {
   });
 
   it("freezes the climb on Won when the signed-in player's tier closed", () => {
-    sdk.view = {
-      live: {
-        kind: "finalized",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl: null,
-        tape: null,
-        tiers: sdk.emptyTiers(),
-        timeline: sdk.makeTimeline("finalized", {
-          kind: "next-opens",
-          seconds: 5,
-        }),
-      },
-      hero: {
-        type: "replay",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl: null,
-        tape: null,
-        tiers: sdk.emptyTiers(),
-      },
-      reducedMotion: false,
-      retry: vi.fn(),
-    };
-    sdk.playerTicket = {
-      id: 7n,
-      player: "0x00000000000000000000000000000000000000aa",
-      roundId: 12n,
-      margin: 5_000_000n,
-      leverageBps: 20_000n, // 2.00x ≤ 2.50x → won
-      reservedPayout: 10_000_000n,
-      settled: false,
-      claimed: false,
-    };
+    sdk.view = sdk.makeFinalized({ finalizeUrl: null });
+    sdk.playerTicket = sdk.makeTicket(20_000n); // 2.00x ≤ 2.50x → won
     render(<RoundTheater />);
 
     expect(screen.getByTestId("replay-curve-outcome").textContent).toBe("Won");
@@ -358,46 +334,8 @@ describe("RoundTheater", () => {
   });
 
   it("freezes the climb on Margin called when the signed-in player's tier stayed open", () => {
-    sdk.view = {
-      live: {
-        kind: "finalized",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl: null,
-        tape: null,
-        tiers: sdk.emptyTiers(),
-        timeline: sdk.makeTimeline("finalized", {
-          kind: "next-opens",
-          seconds: 5,
-        }),
-      },
-      hero: {
-        type: "replay",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl: null,
-        tape: null,
-        tiers: sdk.emptyTiers(),
-      },
-      reducedMotion: false,
-      retry: vi.fn(),
-    };
-    sdk.playerTicket = {
-      id: 8n,
-      player: "0x00000000000000000000000000000000000000aa",
-      roundId: 12n,
-      margin: 5_000_000n,
-      leverageBps: 50_000n, // 5.00x > 2.50x → margin called
-      reservedPayout: 25_000_000n,
-      settled: false,
-      claimed: false,
-    };
+    sdk.view = sdk.makeFinalized({ finalizeUrl: null });
+    sdk.playerTicket = sdk.makeTicket(50_000n); // 5.00x > 2.50x → margin called
     render(<RoundTheater />);
 
     expect(screen.getByTestId("replay-curve-outcome").textContent).toBe(
@@ -407,6 +345,16 @@ describe("RoundTheater", () => {
       screen.getByTestId("replay-curve-crash-point-supporting").textContent
     ).toBe("Crash Point 2.50x");
     expect(screen.getByText("Margin call")).toBeTruthy();
+    // Personal why once under the hero; stamp keeps market-die copy.
+    expect(
+      screen.getAllByText("The Crash Point died below your Arcade Leverage.")
+        .length
+    ).toBe(1);
+    expect(
+      screen.getByText(
+        "Hard stop — every Ticket still open takes the margin call."
+      )
+    ).toBeTruthy();
     expect(screen.queryByRole("button", { name: /settle/i })).toBeNull();
   });
 
@@ -451,38 +399,7 @@ describe("RoundTheater", () => {
   });
 
   it("renders the static result card under reduced motion with identical facts", () => {
-    sdk.view = {
-      live: {
-        kind: "finalized",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl:
-          "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        tape: null,
-        tiers: sdk.emptyTiers(),
-        timeline: sdk.makeTimeline("finalized", {
-          kind: "next-opens",
-          seconds: 5,
-        }),
-      },
-      hero: {
-        type: "replay",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl:
-          "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-        tape: null,
-        tiers: sdk.emptyTiers(),
-      },
-      reducedMotion: true,
-      retry: vi.fn(),
-    };
+    sdk.view = sdk.makeFinalized({ reducedMotion: true });
     render(<RoundTheater />);
 
     expect(screen.getByTestId("theater-finalized-static")).toBeTruthy();
@@ -495,46 +412,8 @@ describe("RoundTheater", () => {
   });
 
   it("shows Won on the reduced-motion card when the signed-in player won", () => {
-    sdk.view = {
-      live: {
-        kind: "finalized",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl: null,
-        tape: null,
-        tiers: sdk.emptyTiers(),
-        timeline: sdk.makeTimeline("finalized", {
-          kind: "next-opens",
-          seconds: 5,
-        }),
-      },
-      hero: {
-        type: "replay",
-        roundId: 12n,
-        crashPointBps: 25_000n,
-        displayCrashPoint: "2.50x",
-        finalizedAtSeconds: 900n,
-        chainTimestamp: 910n,
-        finalizeTransactionUrl: null,
-        tape: null,
-        tiers: sdk.emptyTiers(),
-      },
-      reducedMotion: true,
-      retry: vi.fn(),
-    };
-    sdk.playerTicket = {
-      id: 7n,
-      player: "0x00000000000000000000000000000000000000aa",
-      roundId: 12n,
-      margin: 5_000_000n,
-      leverageBps: 12_500n,
-      reservedPayout: 6_250_000n,
-      settled: false,
-      claimed: false,
-    };
+    sdk.view = sdk.makeFinalized({ reducedMotion: true, finalizeUrl: null });
+    sdk.playerTicket = sdk.makeTicket(12_500n);
     render(<RoundTheater />);
 
     expect(screen.getByTestId("static-outcome").textContent).toBe("Won");
@@ -543,6 +422,24 @@ describe("RoundTheater", () => {
     ).toBe("Crash Point 2.50x");
     expect(screen.queryByTestId("static-crash-point")).toBeNull();
     expect(screen.queryByText("Margin call")).toBeNull();
+  });
+
+  it("shows Margin called on the reduced-motion card when the signed-in player lost", () => {
+    sdk.view = sdk.makeFinalized({ reducedMotion: true, finalizeUrl: null });
+    sdk.playerTicket = sdk.makeTicket(50_000n);
+    render(<RoundTheater />);
+
+    expect(screen.getByTestId("static-outcome").textContent).toBe(
+      "Margin called"
+    );
+    expect(
+      screen.getByTestId("static-crash-point-supporting").textContent
+    ).toBe("Crash Point 2.50x");
+    expect(screen.getByText("Margin call")).toBeTruthy();
+    expect(
+      screen.getAllByText("The Crash Point died below your Arcade Leverage.")
+        .length
+    ).toBe(1);
   });
 
   it("defaults the sound toggle to off and can enable it", () => {

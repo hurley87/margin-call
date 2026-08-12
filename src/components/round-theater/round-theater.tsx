@@ -15,7 +15,6 @@ import { getTierCloseProgress } from "@/lib/round-replay";
 import {
   ENTRY_LEVERAGE_TIERS_BPS,
   formatLeverageBps,
-  isWinningTicket,
   type CrashTicket,
 } from "@/lib/margin-call-crash";
 import {
@@ -25,6 +24,7 @@ import {
 import type { RoundTimeline } from "@/lib/round-timeline";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
+import { ticketLanding } from "./landing-frame";
 import { theaterCopy } from "./theater-copy";
 import { FinalizeLink } from "./finalize-link";
 import {
@@ -409,10 +409,7 @@ function ReplayStage({
 }) {
   const [restartNonce, setRestartNonce] = useState(0);
   const playerTierBps = playerTicket?.leverageBps ?? null;
-  const playerWon =
-    playerTicket === null
-      ? null
-      : isWinningTicket(playerTicket.leverageBps, hero.crashPointBps);
+  const landing = ticketLanding(playerTicket, hero.crashPointBps);
   const clock = useReplayClock({
     crashPointBps: hero.crashPointBps,
     finalizedAtSeconds: hero.finalizedAtSeconds,
@@ -437,8 +434,8 @@ function ReplayStage({
           crashPointBps={hero.crashPointBps}
           displayCrashPoint={hero.displayCrashPoint}
           finalizeTransactionUrl={hero.finalizeTransactionUrl}
+          landing={landing}
           playerTierBps={playerTierBps}
-          playerWon={playerWon}
           tiers={hero.tiers}
         />
         <ResultHandoffRow hero={hero} live={live} />
@@ -452,8 +449,8 @@ function ReplayStage({
       <div className="mc-crt-reveal" key={restartNonce}>
         <ReplayCurve
           crashPointBps={hero.crashPointBps}
+          landing={landing}
           playerTierBps={playerTierBps}
-          playerWon={playerWon}
           progress={clock.progress}
         />
       </div>
