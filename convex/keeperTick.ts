@@ -2,18 +2,22 @@
 
 import {
   KEEPER_ROUND_STATUS,
+  failedAttestationAlert,
   missingCredentialsAlert,
   planKeeperTick,
   type KeeperAction,
   type KeeperAlert,
   type KeeperRoundSnapshot,
+  type KeeperRoundStatus,
   type KeeperSnapshot,
   type KeeperVaultSnapshot,
 } from "@margin-call/shared/crash-keeper";
+import { parseAddress } from "@margin-call/shared/address";
+import { parsePrivateKey } from "@margin-call/shared/parse-private-key";
 import {
   createPublicClient,
   createWalletClient,
-  encodeFunctionData,
+  getContract,
   http,
   parseAbi,
   type Address,
@@ -22,16 +26,14 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { v } from "convex/values";
+import deployments from "../contracts/deployments/base_sepolia.json";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 
-/** Defaults from contracts/deployments/base_sepolia.json — override via Convex env. */
-const DEFAULT_GAME =
-  "0xD74a89e199da9E45399ec913441b25A1b4120d44" as const satisfies Address;
-const DEFAULT_VAULT =
-  "0xc3d6ffa7eE1635F94bd545e05c9aCFabB01A4c21" as const satisfies Address;
-const DEFAULT_INCO =
-  "0x4b9911b0191B0b6a6eA8F2Ed562e20Cff5AC8624" as const satisfies Address;
+/** Defaults from the curated Base Sepolia record — override via Convex env. */
+const DEFAULT_GAME = deployments.marginCallCrash as Address;
+const DEFAULT_VAULT = deployments.bankrollVault as Address;
+const DEFAULT_INCO = deployments.incoLightning as Address;
 
 /** Scan this many prior epochs for overdue expiry / delayed reveal work. */
 const WORK_LOOKBACK = 20n;
@@ -60,9 +62,11 @@ const vaultAbi = parseAbi([
 const incoAbi = parseAbi(["function getFee() view returns (uint256)"]);
 
 function envAddress(name: string, fallback: Address): Address {
-  const value = process.env[name];
-  if (!value) return fallback;
-  return value as Address;
+  try {
+    return parseAddress(process.env[name]) ?? fallback;
+  } catch {
+    throw new Error(`${name} format`);
+  }
 }
 
 function readCredentials():
@@ -85,26 +89,21 @@ function readCredentials():
   if (!rpcUrl) {
     return { ok: false, detail: "BASE_SEPOLIA_RPC_URL" };
   }
-  let normalized: Hex;
   try {
-    normalized = (
-      privateKey.startsWith("0x") ? privateKey : `0x${privateKey}`
-    ) as Hex;
-    if (!/^0x[0-9a-fA-F]{64}$/.test(normalized)) {
-      return { ok: false, detail: "KEEPER_PRIVATE_KEY format" };
-    }
-  } catch {
-    return { ok: false, detail: "KEEPER_PRIVATE_KEY format" };
+    return {
+      ok: true,
+      privateKey: parsePrivateKey(privateKey),
+      rpcUrl,
+      game: envAddress("MARGIN_CALL_CRASH_ADDRESS", DEFAULT_GAME),
+      vault: envAddress("BANKROLL_VAULT_ADDRESS", DEFAULT_VAULT),
+      inco: envAddress("INCO_LIGHTNING_ADDRESS", DEFAULT_INCO),
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      detail: error instanceof Error ? error.message : "invalid keeper env",
+    };
   }
-
-  return {
-    ok: true,
-    privateKey: normalized,
-    rpcUrl,
-    game: envAddress("MARGIN_CALL_CRASH_ADDRESS", DEFAULT_GAME),
-    vault: envAddress("BANKROLL_VAULT_ADDRESS", DEFAULT_VAULT),
-    inco: envAddress("INCO_LIGHTNING_ADDRESS", DEFAULT_INCO),
-  };
 }
 
 function stubRound(id: bigint): KeeperRoundSnapshot {
@@ -118,6 +117,16 @@ function stubRound(id: bigint): KeeperRoundSnapshot {
   };
 }
 
+function toStoredAlert(alert: KeeperAlert) {
+  return {
+    kind: alert.kind,
+    severity: alert.severity,
+    message: alert.message,
+    roundId: alert.roundId?.toString(),
+    fingerprint: alert.fingerprint,
+  };
+}
+
 async function postWebhook(alerts: KeeperAlert[]): Promise<void> {
   const url = process.env.KEEPER_ALERT_WEBHOOK_URL;
   if (!url || alerts.length === 0) return;
@@ -127,10 +136,7 @@ async function postWebhook(alerts: KeeperAlert[]): Promise<void> {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         source: "margin-call-keeper",
-        alerts: alerts.map((alert) => ({
-          ...alert,
-          roundId: alert.roundId?.toString(),
-        })),
+        alerts: alerts.map(toStoredAlert),
       }),
     });
   } catch (error) {
@@ -138,6 +144,7 @@ async function postWebhook(alerts: KeeperAlert[]): Promise<void> {
   }
 }
 
+/** Single attempt per tick — the cron re-plans finalize from chain state 20s later. */
 async function fetchAttestation(
   crashRandom: Hex
 ): Promise<{ plaintext: bigint; signatures: Hex[] }> {
@@ -146,40 +153,26 @@ async function fetchAttestation(
   if (!base) {
     throw new Error("KEEPER_ATTESTATION_URL (or NEXT_PUBLIC_APP_URL) unset");
   }
-  const attempts = 3;
-  let lastError: unknown = null;
-  for (let attempt = 1; attempt <= attempts; attempt++) {
-    try {
-      const response = await fetch(
-        new URL("/api/crash-attestation", base).toString(),
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ crashRandom }),
-        }
-      );
-      const body = (await response.json()) as {
-        plaintext?: string;
-        signatures?: Hex[];
-        error?: string;
-      };
-      if (!response.ok || !body.plaintext || !body.signatures) {
-        throw new Error(body.error ?? "Attestation request failed");
-      }
-      return {
-        plaintext: BigInt(body.plaintext),
-        signatures: body.signatures,
-      };
-    } catch (error) {
-      lastError = error;
-      if (attempt < attempts) {
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
-      }
+  const response = await fetch(
+    new URL("/api/crash-attestation", base).toString(),
+    {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ crashRandom }),
     }
+  );
+  const body = (await response.json()) as {
+    plaintext?: string;
+    signatures?: Hex[];
+    error?: string;
+  };
+  if (!response.ok || !body.plaintext || !body.signatures) {
+    throw new Error(body.error ?? "Attestation request failed");
   }
-  throw lastError instanceof Error
-    ? lastError
-    : new Error("Attestation request failed");
+  return {
+    plaintext: BigInt(body.plaintext),
+    signatures: body.signatures,
+  };
 }
 
 function isBenignRevert(error: unknown): boolean {
@@ -200,32 +193,28 @@ export const run = internalAction({
     const startedAt = Date.now();
     const credentials = readCredentials();
     if (!credentials.ok) {
-      const alert = missingCredentialsAlert(credentials.detail);
-      await ctx.runMutation(internal.keeperAlerts.recordAlerts, {
-        observedAt: startedAt,
-        alerts: [
-          {
-            kind: alert.kind,
-            severity: alert.severity,
-            message: alert.message,
-            fingerprint: alert.fingerprint,
-          },
-        ],
-      });
-      await ctx.runMutation(internal.keeperAlerts.recordRun, {
-        startedAt,
-        finishedAt: Date.now(),
-        actionCount: 0,
-        alertCount: 1,
-        txHashes: [],
-        skippedReason: `missing_credentials:${credentials.detail}`,
-        sessionActive: false,
-      });
-      return {
-        actionCount: 0,
-        alertCount: 1,
-        skippedReason: `missing_credentials:${credentials.detail}`,
-      };
+      const skippedReason = `missing_credentials:${credentials.detail}`;
+      const inserted = await ctx.runMutation(
+        internal.keeperAlerts.recordAlerts,
+        {
+          observedAt: startedAt,
+          alerts: [toStoredAlert(missingCredentialsAlert(credentials.detail))],
+        }
+      );
+      // Only record a run when the alert was fresh — a permanently
+      // unconfigured deployment must not grow keeperRuns every 20s.
+      if (inserted > 0) {
+        await ctx.runMutation(internal.keeperAlerts.recordRun, {
+          startedAt,
+          finishedAt: Date.now(),
+          actionCount: 0,
+          alertCount: 1,
+          txHashes: [],
+          skippedReason,
+          sessionActive: false,
+        });
+      }
+      return { actionCount: 0, alertCount: 1, skippedReason };
     }
 
     const account = privateKeyToAccount(credentials.privateKey);
@@ -238,22 +227,18 @@ export const run = internalAction({
       chain: baseSepolia,
       transport: http(credentials.rpcUrl),
     });
+    const game = getContract({
+      address: credentials.game,
+      abi: gameAbi,
+      client: { public: publicClient, wallet: walletClient },
+    });
+    const vaultContract = getContract({
+      address: credentials.vault,
+      abi: vaultAbi,
+      client: publicClient,
+    });
 
-    const sendGameTx = async (
-      functionName:
-        "openRound" | "requestReveal" | "finalizeRound" | "expireRound",
-      args: readonly unknown[],
-      value = 0n
-    ): Promise<Hex> => {
-      const hash = await walletClient.sendTransaction({
-        to: credentials.game,
-        data: encodeFunctionData({
-          abi: gameAbi,
-          functionName,
-          args: args as never,
-        }),
-        value,
-      });
+    const confirmTx = async (hash: Hex): Promise<Hex> => {
       const receipt = await publicClient.waitForTransactionReceipt({ hash });
       if (receipt.status !== "success") {
         throw new Error(`Keeper tx failed: ${hash}`);
@@ -261,23 +246,9 @@ export const run = internalAction({
       return hash;
     };
 
-    const currentRoundId = await publicClient.readContract({
-      address: credentials.game,
-      abi: gameAbi,
-      functionName: "currentRoundId",
-    });
-
-    const block = await publicClient.getBlock({ blockTag: "latest" });
-    const now = block.timestamp;
-
-    const roundIds = new Set<bigint>();
-    const startId =
-      currentRoundId > WORK_LOOKBACK ? currentRoundId - WORK_LOOKBACK : 1n;
-    for (let id = startId; id <= currentRoundId + 1n; id++) {
-      roundIds.add(id);
-    }
-
     const [
+      currentRoundId,
+      block,
       grossAssets,
       freeLiquidity,
       shareOperationsFrozen,
@@ -285,93 +256,70 @@ export const run = internalAction({
       frozenRoundCount,
       keeperEthWei,
     ] = await Promise.all([
-      publicClient.readContract({
-        address: credentials.vault,
-        abi: vaultAbi,
-        functionName: "grossAssets",
-      }),
-      publicClient.readContract({
-        address: credentials.vault,
-        abi: vaultAbi,
-        functionName: "freeLiquidity",
-      }),
-      publicClient.readContract({
-        address: credentials.vault,
-        abi: vaultAbi,
-        functionName: "shareOperationsFrozen",
-      }),
-      publicClient.readContract({
-        address: credentials.vault,
-        abi: vaultAbi,
-        functionName: "oldestBlockingRound",
-      }),
-      publicClient.readContract({
-        address: credentials.vault,
-        abi: vaultAbi,
-        functionName: "frozenRoundCount",
-      }),
+      game.read.currentRoundId(),
+      publicClient.getBlock({ blockTag: "latest" }),
+      vaultContract.read.grossAssets(),
+      vaultContract.read.freeLiquidity(),
+      vaultContract.read.shareOperationsFrozen(),
+      vaultContract.read.oldestBlockingRound(),
+      vaultContract.read.frozenRoundCount(),
       publicClient.getBalance({ address: account.address }),
     ]);
+    const now = block.timestamp;
+
+    // Current + next always present so pre-open planning sees them.
+    const roundIds = new Set<bigint>([currentRoundId, currentRoundId + 1n]);
+    const startId =
+      currentRoundId > WORK_LOOKBACK ? currentRoundId - WORK_LOOKBACK : 1n;
+    for (let id = startId; id <= currentRoundId; id++) {
+      roundIds.add(id);
+    }
 
     let oldestBlockingExpiresAt: bigint | null = null;
     if (oldestBlockingRound !== NO_BLOCKING_ROUND) {
       roundIds.add(oldestBlockingRound);
-      const blocking = await publicClient.readContract({
-        address: credentials.vault,
-        abi: vaultAbi,
-        functionName: "getBlockingRound",
-        args: [oldestBlockingRound],
-      });
+      const blocking = await vaultContract.read.getBlockingRound([
+        oldestBlockingRound,
+      ]);
       if (blocking[0]) {
         oldestBlockingExpiresAt = BigInt(blocking[1]);
         let next = blocking[3];
         let guard = 0;
         while (next !== NO_BLOCKING_ROUND && guard < 32) {
           roundIds.add(next);
-          const row = await publicClient.readContract({
-            address: credentials.vault,
-            abi: vaultAbi,
-            functionName: "getBlockingRound",
-            args: [next],
-          });
+          const row = await vaultContract.read.getBlockingRound([next]);
           next = row[3];
           guard += 1;
         }
       }
     }
 
+    const sortedIds = [...roundIds].sort((a, b) =>
+      a < b ? -1 : a > b ? 1 : 0
+    );
+    const roundReads = await Promise.all(
+      sortedIds.map(async (id) => ({
+        id,
+        raw: await game.read.getRound([id]).catch(() => null),
+      }))
+    );
+
     const rounds: KeeperRoundSnapshot[] = [];
     const crashRandomByRound = new Map<bigint, Hex>();
-    for (const id of [...roundIds].sort((a, b) =>
-      a < b ? -1 : a > b ? 1 : 0
-    )) {
-      try {
-        const raw = await publicClient.readContract({
-          address: credentials.game,
-          abi: gameAbi,
-          functionName: "getRound",
-          args: [id],
-        });
-        rounds.push({
-          id: raw.id,
-          status: Number(raw.status) as KeeperRoundSnapshot["status"],
-          openAt: BigInt(raw.openAt),
-          lockAt: BigInt(raw.lockAt),
-          expiresAt: BigInt(raw.expiresAt),
-          totalMargin: raw.totalMargin,
-        });
-        crashRandomByRound.set(id, raw.crashRandom);
-      } catch {
+    for (const { id, raw } of roundReads) {
+      if (!raw) {
         rounds.push(stubRound(id));
+        continue;
       }
-    }
-
-    // Ensure current + next exist for pre-open planning.
-    if (!rounds.some((r) => r.id === currentRoundId)) {
-      rounds.push(stubRound(currentRoundId));
-    }
-    if (!rounds.some((r) => r.id === currentRoundId + 1n)) {
-      rounds.push(stubRound(currentRoundId + 1n));
+      rounds.push({
+        id: raw.id,
+        status: Number(raw.status) as KeeperRoundStatus,
+        openAt: BigInt(raw.openAt),
+        lockAt: BigInt(raw.lockAt),
+        expiresAt: BigInt(raw.expiresAt),
+        totalMargin: raw.totalMargin,
+      });
+      crashRandomByRound.set(id, raw.crashRandom);
     }
 
     const vault: KeeperVaultSnapshot = {
@@ -383,13 +331,20 @@ export const run = internalAction({
       oldestBlockingExpiresAt,
     };
 
-    const spendBudgetWei = process.env.KEEPER_PAYMASTER_SPEND_BUDGET_WEI;
+    const spendBudgetEnv = process.env.KEEPER_PAYMASTER_SPEND_BUDGET_WEI;
+    let spendBudgetWei: bigint | null = null;
+    if (spendBudgetEnv) {
+      try {
+        spendBudgetWei = BigInt(spendBudgetEnv);
+      } catch {
+        console.error(
+          "[keeper] KEEPER_PAYMASTER_SPEND_BUDGET_WEI is not a wei integer; spend alerts disabled"
+        );
+      }
+    }
     const sponsorshipSample = await ctx.runQuery(
       internal.keeperSponsorship.getSponsorshipWindowSample,
-      {
-        now: startedAt,
-        spendBudgetWei: spendBudgetWei ?? undefined,
-      }
+      { now: startedAt }
     );
 
     const snapshot: KeeperSnapshot = {
@@ -402,31 +357,26 @@ export const run = internalAction({
       sponsorship: {
         failuresInWindow: sponsorshipSample.failuresInWindow,
         spendWeiInWindow: BigInt(sponsorshipSample.spendWeiInWindow),
-        spendBudgetWei:
-          sponsorshipSample.spendBudgetWei === null
-            ? null
-            : BigInt(sponsorshipSample.spendBudgetWei),
+        spendBudgetWei,
       },
     };
 
     const plan = planKeeperTick(snapshot);
     const txHashes: string[] = [];
-    const attestationFailures: bigint[] = [];
+    const alerts: KeeperAlert[] = [...plan.alerts];
     let incoFee: bigint | null = null;
 
-    const execute = async (action: KeeperAction): Promise<void> => {
+    const execute = async (action: KeeperAction): Promise<Hex | null> => {
       try {
         switch (action.type) {
-          case "expire": {
-            const hash = await sendGameTx("expireRound", [action.roundId]);
-            txHashes.push(hash);
-            return;
-          }
-          case "requestReveal": {
-            const hash = await sendGameTx("requestReveal", [action.roundId]);
-            txHashes.push(hash);
-            return;
-          }
+          case "expire":
+            return await confirmTx(
+              await game.write.expireRound([action.roundId])
+            );
+          case "requestReveal":
+            return await confirmTx(
+              await game.write.requestReveal([action.roundId])
+            );
           case "finalize": {
             const crashRandom = crashRandomByRound.get(action.roundId);
             if (!crashRandom) {
@@ -434,35 +384,30 @@ export const run = internalAction({
                 `Missing crashRandom for round ${action.roundId}`
               );
             }
+            let attestation;
             try {
-              const attestation = await fetchAttestation(crashRandom);
-              const hash = await sendGameTx("finalizeRound", [
+              attestation = await fetchAttestation(crashRandom);
+            } catch (error) {
+              alerts.push(failedAttestationAlert(action.roundId));
+              throw error;
+            }
+            return await confirmTx(
+              await game.write.finalizeRound([
                 action.roundId,
                 attestation.plaintext,
                 attestation.signatures,
-              ]);
-              txHashes.push(hash);
-            } catch (error) {
-              attestationFailures.push(action.roundId);
-              throw error;
-            }
-            return;
+              ])
+            );
           }
           case "openRound": {
-            if (incoFee === null) {
-              incoFee = await publicClient.readContract({
-                address: credentials.inco,
-                abi: incoAbi,
-                functionName: "getFee",
-              });
-            }
-            const hash = await sendGameTx(
-              "openRound",
-              [action.roundId],
-              incoFee
+            incoFee ??= await publicClient.readContract({
+              address: credentials.inco,
+              abi: incoAbi,
+              functionName: "getFee",
+            });
+            return await confirmTx(
+              await game.write.openRound([action.roundId], { value: incoFee })
             );
-            txHashes.push(hash);
-            return;
           }
           default: {
             const _exhaustive: never = action;
@@ -472,56 +417,46 @@ export const run = internalAction({
       } catch (error) {
         if (isBenignRevert(error)) {
           console.error(
-            `[keeper] benign revert on ${action.type} ${"roundId" in action ? action.roundId : ""}`,
+            `[keeper] benign revert on ${action.type} ${action.roundId}`,
             error
           );
-          return;
+        } else {
+          console.error(
+            `[keeper] action failed: ${action.type}`,
+            error instanceof Error ? error.message : error
+          );
         }
-        console.error(
-          `[keeper] action failed: ${action.type}`,
-          error instanceof Error ? error.message : error
-        );
+        return null;
       }
     };
 
     for (const action of plan.actions) {
-      await execute(action);
-    }
-
-    const alerts: KeeperAlert[] = [...plan.alerts];
-    if (attestationFailures.length > 0) {
-      const retrySnapshot: KeeperSnapshot = {
-        ...snapshot,
-        attestationFailures,
-      };
-      alerts.push(
-        ...planKeeperTick(retrySnapshot).alerts.filter(
-          (alert) => alert.kind === "failed_attestation"
-        )
-      );
+      const hash = await execute(action);
+      if (hash) txHashes.push(hash);
     }
 
     await postWebhook(alerts);
 
-    await ctx.runMutation(internal.keeperAlerts.recordAlerts, {
-      observedAt: Date.now(),
-      alerts: alerts.map((alert) => ({
-        kind: alert.kind,
-        severity: alert.severity,
-        message: alert.message,
-        roundId: alert.roundId?.toString(),
-        fingerprint: alert.fingerprint,
-      })),
-    });
+    const insertedAlerts =
+      alerts.length === 0
+        ? 0
+        : await ctx.runMutation(internal.keeperAlerts.recordAlerts, {
+            observedAt: Date.now(),
+            alerts: alerts.map(toStoredAlert),
+          });
 
-    await ctx.runMutation(internal.keeperAlerts.recordRun, {
-      startedAt,
-      finishedAt: Date.now(),
-      actionCount: plan.actions.length,
-      alertCount: alerts.length,
-      txHashes,
-      sessionActive: plan.sessionActive,
-    });
+    // Idle ticks (no actions, nothing newly alerted) leave no keeperRuns row —
+    // a 20s cron would otherwise grow the table without bound.
+    if (plan.actions.length > 0 || insertedAlerts > 0) {
+      await ctx.runMutation(internal.keeperAlerts.recordRun, {
+        startedAt,
+        finishedAt: Date.now(),
+        actionCount: plan.actions.length,
+        alertCount: alerts.length,
+        txHashes,
+        sessionActive: plan.sessionActive,
+      });
+    }
 
     return {
       actionCount: plan.actions.length,

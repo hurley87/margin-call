@@ -31,7 +31,7 @@ export const KEEPER_THRESHOLDS = {
 
 export type KeeperRoundSnapshot = {
   id: bigint;
-  status: number;
+  status: KeeperRoundStatus;
   openAt: bigint;
   lockAt: bigint;
   expiresAt: bigint;
@@ -65,8 +65,6 @@ export type KeeperSnapshot = {
   /** Operator flag: keep current+next pre-opened during demo/judged sessions. */
   preopenEnabled: boolean;
   sponsorship: KeeperSponsorshipSample | null;
-  /** Rounds whose attestation fetch failed on a prior attempt this window. */
-  attestationFailures?: readonly bigint[];
 };
 
 export type KeeperAction =
@@ -215,17 +213,6 @@ export function classifyKeeperAlerts(snapshot: KeeperSnapshot): KeeperAlert[] {
     }
   }
 
-  for (const roundId of snapshot.attestationFailures ?? []) {
-    alerts.push(
-      alert(
-        "failed_attestation",
-        "warning",
-        `Attestation failed for round ${roundId}; finalize will retry`,
-        roundId
-      )
-    );
-  }
-
   if (
     vault.shareOperationsFrozen &&
     vault.oldestBlockingExpiresAt !== null &&
@@ -324,33 +311,22 @@ export function planKeeperTick(snapshot: KeeperSnapshot): KeeperPlan {
   const actions: KeeperAction[] = [];
   const { now, currentRoundId, rounds } = snapshot;
 
-  const expireCandidates = rounds
-    .filter((round) => isExpireEligible(round, now) && isExposed(round))
-    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-
-  for (const round of expireCandidates) {
-    actions.push({ type: "expire", roundId: round.id });
-  }
-
-  const remaining = rounds.filter(
-    (round) => !(isExpireEligible(round, now) && isExposed(round))
+  const sorted = [...rounds].sort((a, b) =>
+    a.id < b.id ? -1 : a.id > b.id ? 1 : 0
   );
 
-  for (const round of [...remaining].sort((a, b) =>
-    a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  )) {
-    if (isRevealEligible(round, now)) {
-      actions.push({ type: "requestReveal", roundId: round.id });
+  const reveals: KeeperAction[] = [];
+  const finalizes: KeeperAction[] = [];
+  for (const round of sorted) {
+    if (isExpireEligible(round, now) && isExposed(round)) {
+      actions.push({ type: "expire", roundId: round.id });
+    } else if (isRevealEligible(round, now)) {
+      reveals.push({ type: "requestReveal", roundId: round.id });
+    } else if (isFinalizeEligible(round, now)) {
+      finalizes.push({ type: "finalize", roundId: round.id });
     }
   }
-
-  for (const round of [...remaining].sort((a, b) =>
-    a.id < b.id ? -1 : a.id > b.id ? 1 : 0
-  )) {
-    if (isFinalizeEligible(round, now)) {
-      actions.push({ type: "finalize", roundId: round.id });
-    }
-  }
+  actions.push(...reveals, ...finalizes);
 
   if (sessionActive) {
     const current = roundById(rounds, currentRoundId);
@@ -378,5 +354,15 @@ export function missingCredentialsAlert(detail: string): KeeperAlert {
     "missing_credentials",
     "critical",
     `Keeper credentials missing or invalid: ${detail}`
+  );
+}
+
+/** Build a failed-attestation alert for a finalize attempt whose fetch failed. */
+export function failedAttestationAlert(roundId: bigint): KeeperAlert {
+  return alert(
+    "failed_attestation",
+    "warning",
+    `Attestation failed for round ${roundId}; finalize will retry`,
+    roundId
   );
 }

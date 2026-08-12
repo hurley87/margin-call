@@ -69,15 +69,11 @@ describe("keeper alerts + sponsorship", () => {
 
     const sample = await t.query(
       internal.keeperSponsorship.getSponsorshipWindowSample,
-      {
-        now,
-        spendBudgetWei: "1200",
-      }
+      { now }
     );
 
     expect(sample.failuresInWindow).toBe(1);
     expect(sample.spendWeiInWindow).toBe("1500");
-    expect(sample.spendBudgetWei).toBe("1200");
   });
 
   it("records keeper runs without becoming settlement authority", async () => {

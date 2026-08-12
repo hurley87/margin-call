@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 
 /** Rolling window used for paymaster failure/spend alerts (ms). */
-export const SPONSORSHIP_WINDOW_MS = 60 * 60 * 1000;
+const SPONSORSHIP_WINDOW_MS = 60 * 60 * 1000;
 
 /**
  * Record a Privy sponsorship failure or spend sample.
@@ -29,17 +29,13 @@ export const reportSponsorshipEvent = internalMutation({
 export const getSponsorshipWindowSample = internalQuery({
   args: {
     now: v.number(),
-    windowMs: v.optional(v.number()),
-    spendBudgetWei: v.optional(v.string()),
   },
   returns: v.object({
     failuresInWindow: v.number(),
     spendWeiInWindow: v.string(),
-    spendBudgetWei: v.union(v.string(), v.null()),
   }),
   handler: async (ctx, args) => {
-    const windowMs = args.windowMs ?? SPONSORSHIP_WINDOW_MS;
-    const since = args.now - windowMs;
+    const since = args.now - SPONSORSHIP_WINDOW_MS;
     const events = await ctx.db
       .query("keeperSponsorshipEvents")
       .withIndex("by_observedAt", (q) => q.gte("observedAt", since))
@@ -62,7 +58,6 @@ export const getSponsorshipWindowSample = internalQuery({
     return {
       failuresInWindow,
       spendWeiInWindow: spendWei.toString(),
-      spendBudgetWei: args.spendBudgetWei ?? null,
     };
   },
 });

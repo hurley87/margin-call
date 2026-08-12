@@ -34,13 +34,8 @@ export const recordAlerts = internalMutation({
       if (recent.length > 0) continue;
 
       await ctx.db.insert("keeperAlerts", {
-        kind: alert.kind,
-        severity: alert.severity,
-        message: alert.message,
-        roundId: alert.roundId,
+        ...alert,
         observedAt: args.observedAt,
-        fingerprint: alert.fingerprint,
-        meta: alert.meta,
       });
       inserted += 1;
       console.error(`[keeper-alert] ${alert.kind}: ${alert.message}`);
@@ -74,6 +69,7 @@ export const listRecentAlerts = internalQuery({
   returns: v.array(
     v.object({
       _id: v.id("keeperAlerts"),
+      _creationTime: v.number(),
       kind: v.string(),
       severity: v.string(),
       message: v.string(),
@@ -85,20 +81,10 @@ export const listRecentAlerts = internalQuery({
   ),
   handler: async (ctx, args) => {
     const limit = args.limit ?? 100;
-    const rows = await ctx.db
+    return await ctx.db
       .query("keeperAlerts")
       .withIndex("by_observedAt", (q) => q.gte("observedAt", args.since))
       .order("desc")
       .take(limit);
-    return rows.map((row) => ({
-      _id: row._id,
-      kind: row.kind,
-      severity: row.severity,
-      message: row.message,
-      roundId: row.roundId,
-      observedAt: row.observedAt,
-      fingerprint: row.fingerprint,
-      meta: row.meta,
-    }));
   },
 });

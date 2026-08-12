@@ -8,6 +8,7 @@ import {
   isFinalizeEligible,
   isKeeperSessionActive,
   isRevealEligible,
+  failedAttestationAlert,
   missingCredentialsAlert,
   planKeeperTick,
   type KeeperRoundSnapshot,
@@ -321,7 +322,6 @@ describe("crash-keeper alerts", () => {
         preopenEnabled: true,
         currentRoundId: 10n,
         keeperEthWei: 1n,
-        attestationFailures: [9n],
         sponsorship: {
           failuresInWindow: 2,
           spendWeiInWindow: 100n,
@@ -359,7 +359,6 @@ describe("crash-keeper alerts", () => {
 
     const kinds = new Set(alerts.map((a) => a.kind));
     expect(kinds.has("delayed_reveal")).toBe(true);
-    expect(kinds.has("failed_attestation")).toBe(true);
     expect(kinds.has("expiry_eligibility")).toBe(true);
     expect(kinds.has("freeze_outliving_expiry")).toBe(true);
     expect(kinds.has("low_free_liquidity")).toBe(true);
@@ -414,6 +413,13 @@ describe("crash-keeper alerts", () => {
     const a = missingCredentialsAlert("KEEPER_PRIVATE_KEY");
     expect(a.kind).toBe("missing_credentials");
     expect(a.severity).toBe("critical");
+  });
+
+  it("builds a failed-attestation alert for the executor", () => {
+    const a = failedAttestationAlert(9n);
+    expect(a.kind).toBe("failed_attestation");
+    expect(a.roundId).toBe(9n);
+    expect(a.fingerprint).toBe("failed_attestation:9");
   });
 
   it("never treats alerts as settlement actions", () => {
