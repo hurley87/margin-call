@@ -12,6 +12,7 @@ import { RoundVerificationRecord } from "./round-verification-record";
 const historyStateColors: Record<RoundHistoryState, string> = {
   open: "text-[var(--t-green-hot)] border-[var(--t-green)]/50",
   delayed: "text-[var(--t-amber-hot)] border-[var(--t-amber)]/50",
+  empty: "text-[var(--t-muted)] border-[var(--t-muted)]/40",
   finalized: "text-[var(--t-green)] border-[var(--t-green)]/40",
   expired: "text-[var(--t-muted)] border-[var(--t-muted)]/40",
 };
@@ -79,8 +80,8 @@ export function GlobalHistory() {
         Recent rounds
       </h2>
       <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-        Finalized rounds show the attested Crash Point. Delayed and expired
-        rounds never invent a multiplier.
+        Finalized rounds show the attested Crash Point. Empty, delayed, and
+        expired rounds never invent a multiplier.
       </p>
 
       {history.rounds.length === 0 ? (
@@ -132,9 +133,11 @@ function HistoryRoundRow({
       ? item.displayCrashPoint
       : item.historyState === "delayed"
         ? "Awaiting attestation"
-        : item.historyState === "expired"
-          ? "Expired — no result"
-          : "—";
+        : item.historyState === "empty"
+          ? "No entries"
+          : item.historyState === "expired"
+            ? "Expired — no result"
+            : "—";
 
   return (
     <li className="py-4">

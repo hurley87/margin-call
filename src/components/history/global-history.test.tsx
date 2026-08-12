@@ -42,6 +42,23 @@ const sdk = vi.hoisted(() => {
     historyState: "delayed",
     displayCrashPoint: null,
   };
+  const empty: RoundHistoryItem = {
+    round: {
+      id: 5n,
+      openAt: 2_100n,
+      lockAt: 2_145n,
+      expiresAt: 3_045n,
+      crashRandom:
+        "0x000000000000000000000000000000000000000000000000000000000000abcd",
+      crashPointBps: 0n,
+      totalMargin: 0n,
+      reservedPayout: 0n,
+      status: 1,
+    },
+    phase: "locked",
+    historyState: "empty",
+    displayCrashPoint: null,
+  };
   const expired: RoundHistoryItem = {
     round: {
       id: 2n,
@@ -81,7 +98,7 @@ const sdk = vi.hoisted(() => {
   return {
     view: {
       status: "ready" as const,
-      rounds: [delayed, finalized, expired],
+      rounds: [empty, delayed, finalized, expired],
       selectedRoundId: null as bigint | null,
       detail: null as RoundHistoryDetail | null,
       detailStatus: "idle" as "idle" | "loading" | "ready" | "error",
@@ -110,9 +127,12 @@ describe("GlobalHistory", () => {
 
   afterEach(cleanup);
 
-  it("shows honest delayed and expired states without inventing multipliers", () => {
+  it("shows honest delayed, empty, and expired states without inventing multipliers", () => {
     render(<GlobalHistory />);
 
+    expect(screen.getByText("Round 5")).toBeTruthy();
+    expect(screen.getByText("Empty")).toBeTruthy();
+    expect(screen.getByText("No entries")).toBeTruthy();
     expect(screen.getByText("Round 4")).toBeTruthy();
     expect(screen.getByText("Delayed")).toBeTruthy();
     expect(screen.getByText("Awaiting attestation")).toBeTruthy();
