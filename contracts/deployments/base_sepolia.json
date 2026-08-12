@@ -1,13 +1,13 @@
 {
-  "sourceCommit": "7e8e872d6b14e785ff5909aea72074358cddce9a",
+  "sourceCommit": "a1915fb915d09fe65cd0dfa0c988443b6331ee13",
   "chainId": 84532,
   "frontend": {
     "url": "https://margincall.fun",
     "status": "production-ready",
-    "productionDeploymentId": "dpl_FpJaVGBtRJYSYtJjfYHapdp6fNur",
-    "productionCommit": "7e8e872d6b14e785ff5909aea72074358cddce9a",
-    "previewUrl": "https://margin-call-7bi23vvrb-dhurls99-s-team.vercel.app",
-    "previewDeploymentId": "dpl_FpJaVGBtRJYSYtJjfYHapdp6fNur",
+    "productionDeploymentId": "dpl_3wEL15zrTaSRftg8NvMqJ6QMUY1P",
+    "productionCommit": "a1915fb915d09fe65cd0dfa0c988443b6331ee13",
+    "previewUrl": "https://margin-call-ickt89oy8-dhurls99-s-team.vercel.app",
+    "previewDeploymentId": "dpl_3wEL15zrTaSRftg8NvMqJ6QMUY1P",
     "previewStatus": "ready"
   },
   "tokenDeploymentBlock": 45385960,
