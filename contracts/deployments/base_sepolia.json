@@ -1,11 +1,11 @@
 {
-  "sourceCommit": "a791b5a962eecdec2b7e9df91cfb3bd1d55344d9",
+  "sourceCommit": "7e8e872d6b14e785ff5909aea72074358cddce9a",
   "chainId": 84532,
   "frontend": {
     "url": "https://margincall.fun",
     "status": "production-ready",
     "productionDeploymentId": "dpl_FpJaVGBtRJYSYtJjfYHapdp6fNur",
-    "productionCommit": "a791b5a962eecdec2b7e9df91cfb3bd1d55344d9",
+    "productionCommit": "7e8e872d6b14e785ff5909aea72074358cddce9a",
     "previewUrl": "https://margin-call-7bi23vvrb-dhurls99-s-team.vercel.app",
     "previewDeploymentId": "dpl_FpJaVGBtRJYSYtJjfYHapdp6fNur",
     "previewStatus": "ready"
