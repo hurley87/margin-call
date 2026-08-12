@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   useCurrentCrashRound,
   type CurrentCrashRoundView,
@@ -118,15 +118,6 @@ export function useRoundTheater(): TheaterView {
 
   const tapePoll = usePolledCrashRead(tapeRead);
 
-  // Always polled (not just pre-lock) so ambiance is warm the instant the
-  // phase flips back to open, instead of flashing to the empty panel.
-  const ambianceRead = useCallback(
-    (config: Parameters<typeof readLatestFinalizedReplayRound>[0]) =>
-      readLatestFinalizedReplayRound(config),
-    []
-  );
-  const ambiancePoll = usePolledCrashRead(ambianceRead);
-
   // Retain the newest fully-finalized round we've seen so its replay can hold
   // the hero across the epoch flip. Overwritten by supersession, never
   // cleared. Adjusted during render (guarded) per the React "state from
@@ -141,6 +132,20 @@ export function useRoundTheater(): TheaterView {
   ) {
     setRetained(candidate);
   }
+
+  // Mid-arrival only: retained already is the previous result, and the hold
+  // covers the epoch flip. Poll lookback solely when open has nothing to show.
+  const needsAmbiance =
+    round.status === "ready" &&
+    isPreLockPhase(round.phase) &&
+    retained === null;
+
+  const ambianceRead = useMemo(() => {
+    if (!needsAmbiance) return null;
+    return (config: MarginCallCrashConfig) =>
+      readLatestFinalizedReplayRound(config);
+  }, [needsAmbiance]);
+  const ambiancePoll = usePolledCrashRead(ambianceRead);
 
   return useMemo(
     () =>
@@ -163,6 +168,15 @@ export function useRoundTheater(): TheaterView {
       tapePoll.refresh,
     ]
   );
+}
+
+function ambianceFromRetained(retained: RetainedFinalized): TheaterHero {
+  return {
+    type: "ambiance",
+    roundId: retained.roundId,
+    crashPointBps: retained.crashPointBps,
+    displayCrashPoint: retained.displayCrashPoint,
+  };
 }
 
 function deriveRetainedCandidate(
@@ -253,7 +267,10 @@ function toTheaterView(options: {
 
     return {
       live,
-      hero: ambianceHero(ambiance),
+      hero:
+        retained !== null
+          ? ambianceFromRetained(retained)
+          : ambianceHero(ambiance),
       reducedMotion,
       retry,
     };

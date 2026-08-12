@@ -913,6 +913,36 @@ describe("MarginCallCrash public reads and phase math", () => {
       displayCrashPoint: "3.42x",
       round: { id: 3n, crashPointBps: 34_200n, status: 3 },
     });
+    const getRoundIds = sdk.readContract.mock.calls
+      .filter(([request]) => request.functionName === "getRound")
+      .map(([request]) => request.args[0]);
+    expect(getRoundIds).toEqual([4n, 3n]);
+  });
+
+  it("walks at most AMBIANCE_LOOKBACK_ROUNDS prior rounds, newest first", async () => {
+    sdk.getBlockNumber.mockResolvedValue(100n);
+    sdk.readContract.mockImplementation(({ functionName, args }) => {
+      if (functionName === "currentRoundId") return Promise.resolve(30n);
+      if (functionName === "getRound") {
+        const roundId = args?.[0] as bigint;
+        return Promise.resolve(makeRound({ id: roundId, status: 0 }));
+      }
+      return Promise.reject(new Error(`unexpected ${functionName}`));
+    });
+    const { AMBIANCE_LOOKBACK_ROUNDS, readLatestFinalizedReplayRound } =
+      await import("./margin-call-crash");
+
+    expect(AMBIANCE_LOOKBACK_ROUNDS).toBe(5);
+    const ambiance = await readLatestFinalizedReplayRound({
+      address: CONTRACT_ADDRESS,
+      deploymentBlock: 50n,
+    });
+
+    expect(ambiance).toBeNull();
+    const getRoundIds = sdk.readContract.mock.calls
+      .filter(([request]) => request.functionName === "getRound")
+      .map(([request]) => request.args[0]);
+    expect(getRoundIds).toEqual([29n, 28n, 27n, 26n, 25n]);
   });
 
   it("caches the finalize timestamp and returns it from current-round reads", async () => {
