@@ -26,7 +26,6 @@ The repository retains neutral Next.js, Convex, Privy, shared TypeScript, Foundr
 - Foundry must be installed locally (`foundryup -i v1.4.3`) for contract checks.
 - `contracts/lib/` is gitignored; run `pnpm install:forge-deps` after cloning.
 - pnpm v10 may warn about ignored dependency build scripts; they are not required for the current checks.
-- Upstash Redis is optional; rate limiting falls back to memory when its environment variables are absent.
 - Sentry source-map uploads are disabled without `SENTRY_AUTH_TOKEN`.
 - Convex schema shrink requires resetting any development deployment that still contains retired tables.
 - Husky pre-commit runs Prettier on explicitly staged files.
