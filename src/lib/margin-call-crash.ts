@@ -100,8 +100,10 @@ const ticketRefundedEvent = getAbiItem({
 // window provides ample Base Sepolia reorg/block-time margin without an
 // ever-growing deployment-to-latest scan on every client poll.
 const ROUND_EVENT_LOOKBACK_BLOCKS = 512n;
-const ONE_X_BPS = 10_000n;
-const MAX_CRASH_POINT_BPS = 100_000n;
+/** 1.00x in basis points — the floor of the displayable Crash Point range. */
+export const ONE_X_BPS = 10_000n;
+/** 10.00x in basis points — the cap of the displayable Crash Point range. */
+export const MAX_CRASH_POINT_BPS = 100_000n;
 
 /** Base Sepolia Inco Lightning singleton from @inco/lightning@1.0.2. */
 export const BASE_SEPOLIA_INCO_LIGHTNING_ADDRESS =
@@ -191,7 +193,7 @@ export const ROUND_STATUS = {
 export const GLOBAL_HISTORY_LOOKBACK_ROUNDS = 20;
 
 /** How many prior epochs to scan for Open-phase ambiance replay. */
-export const AMBIANCE_LOOKBACK_ROUNDS = 5;
+const AMBIANCE_LOOKBACK_ROUNDS = 5;
 
 /** One public TicketEntered row for the live ticket tape / tier pops. */
 export type TicketTapeEntry = {
@@ -222,8 +224,6 @@ export type RoundTicketTape = {
 export type FinalizedReplayRound = {
   round: CrashRound;
   displayCrashPoint: string;
-  finalizedAtSeconds: bigint;
-  finalizeTransactionUrl: string | null;
 };
 
 type RoundLifecycleEvent =
@@ -247,6 +247,13 @@ const lifecycleTransactionCache = new Map<
 const finalizeTimestampCache = new Map<string, bigint>();
 /** Block number of RoundFinalized, shared with the lifecycle hash lookup. */
 const finalizeBlockNumberCache = new Map<string, bigint>();
+// TicketEntered rows are append-only, so each poll only scans blocks past the
+// previous watermark instead of the full deployment-to-latest range. A reorged
+// entry can linger on the decorative tape until reload; settlement never reads it.
+const ticketTapeCache = new Map<
+  string,
+  { lastScannedBlock: bigint; entries: TicketTapeEntry[] }
+>();
 
 /** Public configuration only. Static env references allow Next.js client inlining. */
 export function getMarginCallCrashConfig(): MarginCallCrashConfig | null {
@@ -279,6 +286,13 @@ export function getRoundCountdownSeconds(
 ) {
   if (deriveRoundPhase(round, chainTimestamp) !== "open") return 0;
   return Number(round.lockAt - chainTimestamp);
+}
+
+/** Phases before entry locks — the round can still accept (or start accepting) Tickets. */
+export function isPreLockPhase(
+  phase: CrashRoundPhase
+): phase is "open" | "prelaunch" | "uninitialized" {
+  return phase === "open" || phase === "prelaunch" || phase === "uninitialized";
 }
 
 export type CrashTicket = {
@@ -914,24 +928,37 @@ export async function readRoundTicketTape(
   config: MarginCallCrashConfig,
   roundId: bigint
 ): Promise<RoundTicketTape> {
-  const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
-  const logs = await baseSepoliaPublicClient.getLogs({
-    address: config.address,
-    event: ticketEnteredEvent,
-    args: { roundId },
-    fromBlock: config.deploymentBlock,
-    toBlock: block.number,
-    strict: true,
-  });
+  const cacheKey = lifecycleCacheKey(config.address, roundId);
+  const cached = ticketTapeCache.get(cacheKey);
+  const latestBlock = await baseSepoliaPublicClient.getBlockNumber();
 
-  const entries: TicketTapeEntry[] = logs.map((log) => ({
-    ticketId: log.args.ticketId,
-    player: log.args.player,
-    margin: log.args.margin,
-    leverageBps: log.args.leverageBps,
-    reservedPayout: log.args.reservedPayout,
-    transactionHash: log.transactionHash,
-  }));
+  let entries = cached?.entries ?? [];
+  const fromBlock =
+    cached !== undefined
+      ? cached.lastScannedBlock + 1n
+      : config.deploymentBlock;
+  if (fromBlock <= latestBlock) {
+    const logs = await baseSepoliaPublicClient.getLogs({
+      address: config.address,
+      event: ticketEnteredEvent,
+      args: { roundId },
+      fromBlock,
+      toBlock: latestBlock,
+      strict: true,
+    });
+    entries = [
+      ...entries,
+      ...logs.map((log) => ({
+        ticketId: log.args.ticketId,
+        player: log.args.player,
+        margin: log.args.margin,
+        leverageBps: log.args.leverageBps,
+        reservedPayout: log.args.reservedPayout,
+        transactionHash: log.transactionHash,
+      })),
+    ];
+    ticketTapeCache.set(cacheKey, { lastScannedBlock: latestBlock, entries });
+  }
 
   return {
     roundId,
@@ -947,12 +974,12 @@ export async function readRoundTicketTape(
 export async function readLatestFinalizedReplayRound(
   config: MarginCallCrashConfig
 ): Promise<FinalizedReplayRound | null> {
-  const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
+  const blockNumber = await baseSepoliaPublicClient.getBlockNumber();
   const currentRoundId = await baseSepoliaPublicClient.readContract({
     address: config.address,
     abi: marginCallCrashAbi,
     functionName: "currentRoundId",
-    blockNumber: block.number,
+    blockNumber,
   });
   const roundIds = lookbackRoundIds(currentRoundId, AMBIANCE_LOOKBACK_ROUNDS);
 
@@ -962,7 +989,7 @@ export async function readLatestFinalizedReplayRound(
       abi: marginCallCrashAbi,
       functionName: "getRound",
       args: [roundId],
-      blockNumber: block.number,
+      blockNumber,
     });
     const normalized: CrashRound = {
       ...round,
@@ -970,26 +997,9 @@ export async function readLatestFinalizedReplayRound(
     };
     if (normalized.status !== ROUND_STATUS.finalized) continue;
 
-    const finalizedAtSeconds = await readFinalizedAtSeconds(
-      config,
-      roundId,
-      normalized,
-      block.number
-    );
-    if (finalizedAtSeconds === null) continue;
-
-    const lifecycleUrls = await readLifecycleUrls(
-      config,
-      roundId,
-      normalized,
-      block.number
-    );
-
     return {
       round: normalized,
       displayCrashPoint: formatCrashPointBps(normalized.crashPointBps),
-      finalizedAtSeconds,
-      finalizeTransactionUrl: lifecycleUrls.finalizeTransactionUrl,
     };
   }
 
@@ -1015,33 +1025,27 @@ export async function readFinalizedAtSeconds(
 
   let blockNumber = finalizeBlockNumberCache.get(cacheKey);
   if (blockNumber === undefined) {
-    const fromBlock = getEventFromBlock(config.deploymentBlock, toBlock);
-    const result = await readExactRoundEvent({
-      config,
-      roundId,
-      event: roundFinalizedEvent,
-      fromBlock,
-      toBlock,
-      required: false,
-    });
-    if (result.blockNumber === null) {
-      if (fromBlock > config.deploymentBlock) {
-        const wide = await readExactRoundEvent({
-          config,
-          roundId,
-          event: roundFinalizedEvent,
-          fromBlock: config.deploymentBlock,
-          toBlock,
-          required: false,
-        });
-        if (wide.blockNumber === null) return null;
-        blockNumber = wide.blockNumber;
-      } else {
-        return null;
+    // Try the recent lookback window first, then the full deployment range.
+    const lookbackBlock = getEventFromBlock(config.deploymentBlock, toBlock);
+    const fromBlocks =
+      lookbackBlock > config.deploymentBlock
+        ? [lookbackBlock, config.deploymentBlock]
+        : [lookbackBlock];
+    for (const fromBlock of fromBlocks) {
+      const result = await readExactRoundEvent({
+        config,
+        roundId,
+        event: roundFinalizedEvent,
+        fromBlock,
+        toBlock,
+        required: false,
+      });
+      if (result.blockNumber !== null) {
+        blockNumber = result.blockNumber;
+        break;
       }
-    } else {
-      blockNumber = result.blockNumber;
     }
+    if (blockNumber === undefined) return null;
     finalizeBlockNumberCache.set(cacheKey, blockNumber);
   }
 

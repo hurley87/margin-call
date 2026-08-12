@@ -14,6 +14,7 @@ import {
   type CrashRoundPhase,
 } from "@/lib/margin-call-crash";
 import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashEntryStatus, string>> = {
@@ -238,7 +239,7 @@ export function CrashRoundEntry({
         </button>
         {entry.canRetry ? (
           <button
-            className="border border-[var(--t-accent)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
+            className={TERMINAL_ACTION_BUTTON_CLASS}
             onClick={() => void entry.retry()}
             type="button"
           >

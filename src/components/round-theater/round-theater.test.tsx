@@ -34,7 +34,6 @@ const sdk = vi.hoisted(() => {
       tiers: emptyTiers(),
     },
     ambiance: null,
-    chainTimestamp: 1_000n,
     reducedMotion: false,
     retry: vi.fn(),
   });
@@ -53,8 +52,6 @@ vi.mock("@/hooks/use-round-theater", () => ({
 vi.mock("@/hooks/use-replay-clock", () => ({
   useReplayClock: () => ({
     progress: 1,
-    elapsedMs: 8_000,
-    durationMs: 8_000,
     isComplete: true,
   }),
 }));
@@ -64,8 +61,11 @@ vi.mock("@/lib/theater-audio", () => {
   const listeners = new Set<() => void>();
   return {
     readTheaterSoundEnabled: () => enabled,
-    writeTheaterSoundEnabled: (next: boolean) => {
-      enabled = next;
+    subscribeTheaterSound: (listener: () => void) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
     },
     getTheaterAudio: () => ({
       get enabled() {
@@ -73,17 +73,13 @@ vi.mock("@/lib/theater-audio", () => {
       },
       setEnabled: (next: boolean) => {
         enabled = next;
+        for (const listener of listeners) listener();
       },
       playTierClose: vi.fn(),
       playCrashBell: vi.fn(),
       playPhoneRing: vi.fn(),
       dispose: vi.fn(),
     }),
-    // Expose for tests that need to reset between cases.
-    __resetTheaterSoundForTests: () => {
-      enabled = false;
-      listeners.clear();
-    },
   };
 });
 

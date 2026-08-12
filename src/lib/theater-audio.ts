@@ -15,13 +15,26 @@ export function readTheaterSoundEnabled(): boolean {
   }
 }
 
-export function writeTheaterSoundEnabled(enabled: boolean): void {
+function writeTheaterSoundEnabled(enabled: boolean): void {
   if (typeof window === "undefined") return;
   try {
     window.localStorage.setItem(SOUND_STORAGE_KEY, enabled ? "1" : "0");
   } catch {
     // Ignore quota / private-mode failures; in-memory toggle still works.
   }
+}
+
+const soundListeners = new Set<() => void>();
+
+/**
+ * Subscribe to sound-preference changes. Every `setEnabled` call notifies,
+ * so UI stays in sync no matter which surface flips the preference.
+ */
+export function subscribeTheaterSound(listener: () => void): () => void {
+  soundListeners.add(listener);
+  return () => {
+    soundListeners.delete(listener);
+  };
 }
 
 type TheaterAudioEngine = {
@@ -96,6 +109,7 @@ export function getTheaterAudio(): TheaterAudioEngine {
       enabled = next;
       writeTheaterSoundEnabled(next);
       if (next) ensureContext();
+      for (const listener of soundListeners) listener();
     },
     playTierClose() {
       tone(880, 80, { type: "triangle", gain: 0.04 });

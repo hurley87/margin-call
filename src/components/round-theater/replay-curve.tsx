@@ -8,8 +8,11 @@ import {
 } from "@/lib/margin-call-crash";
 import {
   getReplayMultiplierBps,
-  getReplayPath,
+  getReplayPathPoints,
   getTierCloseProgress,
+  isReplayComplete,
+  multiplierToY,
+  replayPathD,
 } from "@/lib/round-replay";
 import { MarginCallPhone } from "./margin-call-phone";
 import { theaterCopy } from "./theater-copy";
@@ -33,27 +36,29 @@ export function ReplayCurve({
   progress,
   ambiance = false,
 }: ReplayCurveProps) {
-  const path = useMemo(
-    () =>
-      getReplayPath(crashPointBps, progress, { width: VIEW_W, height: VIEW_H }),
-    [crashPointBps, progress]
-  );
+  // `progress` moves every animation frame, so memoizing on it buys nothing.
+  const points = getReplayPathPoints(crashPointBps, progress, {
+    width: VIEW_W,
+    height: VIEW_H,
+  });
+  const path = replayPathD(points);
+  const head = points[points.length - 1] ?? { x: 0, y: VIEW_H };
   const multiplierBps = getReplayMultiplierBps(progress, crashPointBps);
   const displayMultiplier = formatCrashPointBps(multiplierBps);
-  const isComplete = progress >= 1;
+  const isComplete = isReplayComplete(progress);
   const crashLabel = formatCrashPointBps(crashPointBps);
 
-  const head = useMemo(() => {
-    // Approximate head from the final path command.
-    const match = /([\d.]+)\s+([\d.]+)$/.exec(path);
-    if (!match) return { x: 0, y: VIEW_H };
-    return { x: Number(match[1]), y: Number(match[2]) };
-  }, [path]);
-
-  const tierLines = ENTRY_LEVERAGE_TIERS_BPS.filter((tier) => {
-    const closeAt = getTierCloseProgress(tier, crashPointBps);
-    return closeAt !== null;
-  });
+  const tierLines = useMemo(
+    () =>
+      ENTRY_LEVERAGE_TIERS_BPS.flatMap((tier) => {
+        const closeAt = getTierCloseProgress(tier, crashPointBps);
+        if (closeAt === null) return [];
+        return [
+          { tier, closeAt, y: multiplierToY(tier, crashPointBps, VIEW_H) },
+        ];
+      }),
+    [crashPointBps]
+  );
 
   return (
     <div
@@ -104,16 +109,7 @@ export function ReplayCurve({
             <stop offset="100%" stopColor="var(--t-green-hot)" />
           </linearGradient>
         </defs>
-        {tierLines.map((tier) => {
-          const closeAt = getTierCloseProgress(tier, crashPointBps) ?? 0;
-          const y =
-            VIEW_H -
-            ((Number(tier) / 10_000 - 1) /
-              ((Number(crashPointBps < 10_000n ? 10_000n : crashPointBps) /
-                10_000) *
-                1.08 -
-                1)) *
-              VIEW_H;
+        {tierLines.map(({ tier, closeAt, y }) => {
           return (
             <g key={tier.toString()}>
               <line

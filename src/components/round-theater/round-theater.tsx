@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useReplayClock } from "@/hooks/use-replay-clock";
 import { useRoundTheater, type TheaterStage } from "@/hooks/use-round-theater";
-import { getClosedTiersAtProgress } from "@/lib/round-replay";
+import { getTierCloseProgress } from "@/lib/round-replay";
 import { ENTRY_LEVERAGE_TIERS_BPS } from "@/lib/margin-call-crash";
 import { getTheaterAudio } from "@/lib/theater-audio";
+import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { delayedPhaseCopy, theaterCopy } from "./theater-copy";
+import { FinalizeLink } from "./finalize-link";
 import { ReplayCurve } from "./replay-curve";
 import { RoundResultCard } from "./round-result-card";
 import { TheaterSoundToggle } from "./theater-sound-toggle";
@@ -69,7 +71,7 @@ function TheaterBody({ stage }: { stage: TheaterStage }) {
             {stage.error}
           </p>
           <button
-            className="mt-4 border border-[var(--t-accent)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
+            className={`mt-4 ${TERMINAL_ACTION_BUTTON_CLASS}`}
             onClick={() => void stage.retry()}
             type="button"
           >
@@ -98,13 +100,6 @@ function OpenStage({
   stage: Extract<TheaterStage, { kind: "open" }>;
 }) {
   const ambiance = stage.ambiance;
-  const clock = useReplayClock({
-    crashPointBps: ambiance?.round.crashPointBps ?? null,
-    finalizedAtSeconds: null,
-    chainTimestamp: null,
-    reducedMotion: stage.reducedMotion,
-    loop: true,
-  });
 
   return (
     <div className="grid gap-6 lg:grid-cols-[1.4fr_1fr]">
@@ -123,11 +118,7 @@ function OpenStage({
       </div>
       <div>
         {ambiance && !stage.reducedMotion ? (
-          <ReplayCurve
-            ambiance
-            crashPointBps={ambiance.round.crashPointBps}
-            progress={clock.progress}
-          />
+          <AmbianceReplay crashPointBps={ambiance.round.crashPointBps} />
         ) : ambiance && stage.reducedMotion ? (
           <div className="terminal-panel p-4">
             <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
@@ -147,12 +138,33 @@ function OpenStage({
   );
 }
 
+/**
+ * Leaf that owns the looping ambiance clock, so its ~60fps state updates
+ * re-render only the curve — not the countdown and ticket tape beside it.
+ */
+function AmbianceReplay({ crashPointBps }: { crashPointBps: bigint }) {
+  const clock = useReplayClock({
+    crashPointBps,
+    finalizedAtSeconds: null,
+    chainTimestamp: null,
+    loop: true,
+  });
+
+  return (
+    <ReplayCurve
+      ambiance
+      crashPointBps={crashPointBps}
+      progress={clock.progress}
+    />
+  );
+}
+
 function DelayedStage({
   stage,
 }: {
   stage: Extract<TheaterStage, { kind: "delayed" }>;
 }) {
-  const copy = delayedPhaseCopy(stage.phaseLabel);
+  const copy = delayedPhaseCopy[stage.phaseLabel];
   return (
     <div data-testid="theater-delayed">
       <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
@@ -218,22 +230,13 @@ function FinalizedStage({
       />
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button
-          className="border border-[var(--t-accent)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]"
+          className={TERMINAL_ACTION_BUTTON_CLASS}
           onClick={() => setRestartNonce((n) => n + 1)}
           type="button"
         >
           {theaterCopy.replayAgain}
         </button>
-        {stage.finalizeTransactionUrl ? (
-          <a
-            className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--t-accent)] underline decoration-[var(--t-border)] underline-offset-4 hover:text-[var(--t-text)]"
-            href={stage.finalizeTransactionUrl}
-            rel="noreferrer"
-            target="_blank"
-          >
-            {theaterCopy.viewFinalization}
-          </a>
-        ) : null}
+        <FinalizeLink url={stage.finalizeTransactionUrl} />
       </div>
     </div>
   );
@@ -267,46 +270,39 @@ function useTierSoundEffects(options: {
   enabled: boolean;
   restartNonce: number;
 }) {
-  const closedRef = useRef<Set<string>>(new Set());
+  // The per-frame work is two number comparisons against precomputed,
+  // ascending close thresholds; the log math runs once per Crash Point.
+  const closeThresholds = useMemo(
+    () =>
+      ENTRY_LEVERAGE_TIERS_BPS.map((tier) =>
+        getTierCloseProgress(tier, options.crashPointBps)
+      )
+        .filter((closeAt): closeAt is number => closeAt !== null)
+        .sort((a, b) => a - b),
+    [options.crashPointBps]
+  );
+  const firedCountRef = useRef(0);
   const crashedRef = useRef(false);
 
   useEffect(() => {
-    closedRef.current = new Set();
+    firedCountRef.current = 0;
     crashedRef.current = false;
   }, [options.restartNonce, options.crashPointBps]);
 
   useEffect(() => {
     if (!options.enabled) return;
-    const audio = getTheaterAudio();
-    const closed = getClosedTiersAtProgress(
-      options.progress,
-      options.crashPointBps,
-      ENTRY_LEVERAGE_TIERS_BPS
-    );
-    for (const tier of closed) {
-      const key = tier.toString();
-      if (closedRef.current.has(key)) continue;
-      closedRef.current.add(key);
-      audio.playTierClose();
+    while (
+      firedCountRef.current < closeThresholds.length &&
+      closeThresholds[firedCountRef.current] <= options.progress
+    ) {
+      firedCountRef.current += 1;
+      getTheaterAudio().playTierClose();
     }
     if (options.isComplete && !crashedRef.current) {
       crashedRef.current = true;
+      const audio = getTheaterAudio();
       audio.playCrashBell();
       audio.playPhoneRing();
     }
-  }, [
-    options.crashPointBps,
-    options.enabled,
-    options.isComplete,
-    options.progress,
-  ]);
-}
-
-function formatCountdown(seconds: number) {
-  const safe = Math.max(0, seconds);
-  const minutes = Math.floor(safe / 60);
-  const remainingSeconds = safe % 60;
-  return `${minutes.toString().padStart(2, "0")}:${remainingSeconds
-    .toString()
-    .padStart(2, "0")}`;
+  }, [closeThresholds, options.enabled, options.isComplete, options.progress]);
 }

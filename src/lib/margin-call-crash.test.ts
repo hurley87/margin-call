@@ -4,6 +4,7 @@ import type { CrashRound } from "./margin-call-crash";
 
 const sdk = vi.hoisted(() => ({
   getBlock: vi.fn(),
+  getBlockNumber: vi.fn(),
   getLogs: vi.fn(),
   readContract: vi.fn(),
 }));
@@ -11,6 +12,7 @@ const sdk = vi.hoisted(() => ({
 vi.mock("./base-sepolia", () => ({
   baseSepoliaPublicClient: {
     getBlock: (...args: unknown[]) => sdk.getBlock(...args),
+    getBlockNumber: (...args: unknown[]) => sdk.getBlockNumber(...args),
     getLogs: (...args: unknown[]) => sdk.getLogs(...args),
     readContract: (...args: unknown[]) => sdk.readContract(...args),
   },
@@ -33,6 +35,7 @@ describe("MarginCallCrash public reads and phase math", () => {
     vi.resetModules();
     vi.unstubAllEnvs();
     sdk.getBlock.mockReset();
+    sdk.getBlockNumber.mockReset();
     sdk.getLogs.mockReset();
     sdk.readContract.mockReset();
   });
@@ -807,7 +810,7 @@ describe("MarginCallCrash public reads and phase math", () => {
   it("reads the ticket tape and per-tier aggregates for a round", async () => {
     const playerA = "0x00000000000000000000000000000000000000aa";
     const playerB = "0x00000000000000000000000000000000000000bb";
-    sdk.getBlock.mockResolvedValue({ number: 100n, timestamp: 2_000n });
+    sdk.getBlockNumber.mockResolvedValue(100n);
     sdk.getLogs.mockResolvedValue([
       {
         args: {
@@ -853,9 +856,7 @@ describe("MarginCallCrash public reads and phase math", () => {
   });
 
   it("finds the latest finalized round for ambiance replay", async () => {
-    sdk.getBlock
-      .mockResolvedValueOnce({ number: 100n, timestamp: 2_000n })
-      .mockResolvedValueOnce({ number: 90n, timestamp: 1_800n });
+    sdk.getBlockNumber.mockResolvedValue(100n);
     sdk.readContract.mockImplementation(({ functionName, args }) => {
       if (functionName === "currentRoundId") return Promise.resolve(5n);
       if (functionName === "getRound") {
@@ -879,23 +880,6 @@ describe("MarginCallCrash public reads and phase math", () => {
       }
       return Promise.reject(new Error(`unexpected ${functionName}`));
     });
-    sdk.getLogs.mockImplementation(({ event }) => {
-      if (event.name === "RoundFinalized") {
-        return Promise.resolve([
-          {
-            transactionHash: FINALIZE_TRANSACTION_HASH,
-            blockNumber: 90n,
-          },
-        ]);
-      }
-      if (event.name === "RoundOpened") {
-        return Promise.resolve([{ transactionHash: OPENING_TRANSACTION_HASH }]);
-      }
-      if (event.name === "RevealRequested") {
-        return Promise.resolve([{ transactionHash: REVEAL_TRANSACTION_HASH }]);
-      }
-      return Promise.resolve([]);
-    });
     const { readLatestFinalizedReplayRound } =
       await import("./margin-call-crash");
 
@@ -906,7 +890,6 @@ describe("MarginCallCrash public reads and phase math", () => {
 
     expect(ambiance).toMatchObject({
       displayCrashPoint: "3.42x",
-      finalizedAtSeconds: 1_800n,
       round: { id: 3n, crashPointBps: 34_200n, status: 3 },
     });
   });

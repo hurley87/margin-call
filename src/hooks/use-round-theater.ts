@@ -8,10 +8,12 @@ import {
 import { usePolledCrashRead } from "@/hooks/use-polled-crash-read";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import {
-  ENTRY_LEVERAGE_TIERS_BPS,
+  aggregateTierExposure,
+  isPreLockPhase,
   readLatestFinalizedReplayRound,
   readRoundTicketTape,
   type FinalizedReplayRound,
+  type MarginCallCrashConfig,
   type RoundTicketTape,
   type TierExposure,
 } from "@/lib/margin-call-crash";
@@ -40,7 +42,6 @@ export type TheaterStage = TheaterBase &
         countdownSeconds: number;
         tape: RoundTicketTape | null;
         ambiance: FinalizedReplayRound | null;
-        chainTimestamp: bigint;
       }
     | {
         kind: "delayed";
@@ -66,15 +67,6 @@ export type TheaterStage = TheaterBase &
       }
   );
 
-function emptyTiers(): TierExposure[] {
-  return ENTRY_LEVERAGE_TIERS_BPS.map((leverageBps) => ({
-    leverageBps,
-    ticketCount: 0,
-    totalMargin: 0n,
-    reservedPayout: 0n,
-  }));
-}
-
 /**
  * Presentation-only theater state. Composes public round reads and ticket tape
  * — never imports settlement or entry transaction hooks.
@@ -85,25 +77,15 @@ export function useRoundTheater(): TheaterStage {
 
   const roundIdForTape = round.status === "ready" ? round.roundId : null;
 
-  const tapeRead = useCallback(
-    (config: Parameters<typeof readRoundTicketTape>[0]) => {
-      if (roundIdForTape === null) {
-        return Promise.resolve<RoundTicketTape | null>(null);
-      }
-      return readRoundTicketTape(config, roundIdForTape);
-    },
-    [roundIdForTape]
-  );
+  const tapeRead = useMemo(() => {
+    if (roundIdForTape === null) return null;
+    return (config: MarginCallCrashConfig) =>
+      readRoundTicketTape(config, roundIdForTape);
+  }, [roundIdForTape]);
 
-  const tapePoll = usePolledCrashRead(
-    roundIdForTape !== null ? tapeRead : null
-  );
+  const tapePoll = usePolledCrashRead(tapeRead);
 
-  const needsAmbiance =
-    round.status === "ready" &&
-    (round.phase === "open" ||
-      round.phase === "prelaunch" ||
-      round.phase === "uninitialized");
+  const needsAmbiance = round.status === "ready" && isPreLockPhase(round.phase);
 
   const ambianceRead = useCallback(
     (config: Parameters<typeof readLatestFinalizedReplayRound>[0]) =>
@@ -164,14 +146,13 @@ function toTheaterStage(options: {
 
   const phase = round.phase;
 
-  if (phase === "open" || phase === "prelaunch" || phase === "uninitialized") {
+  if (isPreLockPhase(phase)) {
     return {
       kind: "open",
       roundId: round.roundId,
       countdownSeconds: round.countdownSeconds,
       tape,
       ambiance,
-      chainTimestamp: round.chainTimestamp,
       reducedMotion,
       retry,
     };
@@ -212,7 +193,7 @@ function toTheaterStage(options: {
       chainTimestamp: round.chainTimestamp,
       finalizeTransactionUrl: round.finalizeTransactionUrl,
       tape,
-      tiers: tape?.tiers ?? emptyTiers(),
+      tiers: tape?.tiers ?? aggregateTierExposure([]),
       reducedMotion,
       retry,
     };

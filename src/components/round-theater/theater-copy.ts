@@ -41,28 +41,20 @@ export const theaterCopy = {
   staticResult: "Static result card",
 } as const;
 
-export function delayedPhaseCopy(
-  phaseLabel: "locked" | "reveal-requested" | "expired-eligible"
-): { title: string; body: string } {
-  switch (phaseLabel) {
-    case "locked":
-      return {
-        title: theaterCopy.awaitingReveal,
-        body: theaterCopy.awaitingRevealDetail,
-      };
-    case "reveal-requested":
-      return {
-        title: theaterCopy.awaitingAttestation,
-        body: theaterCopy.awaitingAttestationDetail,
-      };
-    case "expired-eligible":
-      return {
-        title: theaterCopy.pastExpiry,
-        body: theaterCopy.pastExpiryDetail,
-      };
-    default: {
-      const _exhaustive: never = phaseLabel;
-      return _exhaustive;
-    }
-  }
-}
+export const delayedPhaseCopy = {
+  locked: {
+    title: theaterCopy.awaitingReveal,
+    body: theaterCopy.awaitingRevealDetail,
+  },
+  "reveal-requested": {
+    title: theaterCopy.awaitingAttestation,
+    body: theaterCopy.awaitingAttestationDetail,
+  },
+  "expired-eligible": {
+    title: theaterCopy.pastExpiry,
+    body: theaterCopy.pastExpiryDetail,
+  },
+} as const satisfies Record<
+  "locked" | "reveal-requested" | "expired-eligible",
+  { title: string; body: string }
+>;

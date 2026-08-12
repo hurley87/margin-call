@@ -1,29 +1,12 @@
 "use client";
 
-import { useCallback, useSyncExternalStore } from "react";
-import { getTheaterAudio, readTheaterSoundEnabled } from "@/lib/theater-audio";
+import { useSyncExternalStore } from "react";
+import {
+  getTheaterAudio,
+  readTheaterSoundEnabled,
+  subscribeTheaterSound,
+} from "@/lib/theater-audio";
 import { theaterCopy } from "./theater-copy";
-
-const listeners = new Set<() => void>();
-
-function subscribe(onStoreChange: () => void) {
-  listeners.add(onStoreChange);
-  return () => {
-    listeners.delete(onStoreChange);
-  };
-}
-
-function getSnapshot() {
-  return readTheaterSoundEnabled();
-}
-
-function getServerSnapshot() {
-  return false;
-}
-
-function notifySoundListeners() {
-  for (const listener of listeners) listener();
-}
 
 /**
  * Default-off sound toggle. Persists preference; creates AudioContext only on
@@ -31,16 +14,14 @@ function notifySoundListeners() {
  */
 export function TheaterSoundToggle() {
   const enabled = useSyncExternalStore(
-    subscribe,
-    getSnapshot,
-    getServerSnapshot
+    subscribeTheaterSound,
+    readTheaterSoundEnabled,
+    () => false
   );
 
-  const toggle = useCallback(() => {
-    const next = !readTheaterSoundEnabled();
-    getTheaterAudio().setEnabled(next);
-    notifySoundListeners();
-  }, []);
+  const toggle = () => {
+    getTheaterAudio().setEnabled(!enabled);
+  };
 
   return (
     <button

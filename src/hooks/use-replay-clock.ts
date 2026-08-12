@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { getReplayDurationMs, getReplayProgress } from "@/lib/round-replay";
+import { useEffect, useRef, useState } from "react";
+import {
+  getReplayDurationMs,
+  getReplayProgress,
+  isReplayComplete,
+} from "@/lib/round-replay";
 
 export type ReplayClockOptions = {
   /** Attested Crash Point in basis points. Null disables the clock. */
@@ -26,8 +30,6 @@ export type ReplayClockOptions = {
 
 export type ReplayClock = {
   progress: number;
-  elapsedMs: number;
-  durationMs: number;
   isComplete: boolean;
 };
 
@@ -67,6 +69,13 @@ export function useReplayClock(options: ReplayClockOptions): ReplayClock {
     elapsedMs: number;
   } | null>(null);
 
+  // Read the seed through a ref so a fresh chainTimestamp on each poll doesn't
+  // tear down and restart the running rAF loop; only `generation` restarts it.
+  const seedRef = useRef(seedElapsedMs);
+  useEffect(() => {
+    seedRef.current = seedElapsedMs;
+  }, [seedElapsedMs]);
+
   useEffect(() => {
     if (
       reducedMotion ||
@@ -79,7 +88,7 @@ export function useReplayClock(options: ReplayClockOptions): ReplayClock {
     let frame = 0;
     let cancelled = false;
     const start = performance.now();
-    const seed = seedElapsedMs;
+    const seed = seedRef.current;
     const activeGeneration = generation;
 
     const tick = (now: number) => {
@@ -99,14 +108,7 @@ export function useReplayClock(options: ReplayClockOptions): ReplayClock {
       cancelled = true;
       window.cancelAnimationFrame(frame);
     };
-  }, [
-    crashPointBps,
-    durationMs,
-    generation,
-    loop,
-    reducedMotion,
-    seedElapsedMs,
-  ]);
+  }, [crashPointBps, durationMs, generation, loop, reducedMotion]);
 
   const elapsedMs =
     anim !== null && anim.generation === generation
@@ -117,8 +119,6 @@ export function useReplayClock(options: ReplayClockOptions): ReplayClock {
 
   return {
     progress,
-    elapsedMs,
-    durationMs,
-    isComplete: progress >= 1,
+    isComplete: isReplayComplete(progress),
   };
 }

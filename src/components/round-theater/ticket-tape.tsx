@@ -5,6 +5,7 @@ import {
   type TicketTapeEntry,
 } from "@/lib/margin-call-crash";
 import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { formatShortAddress } from "@/lib/utils";
 import { theaterCopy } from "./theater-copy";
 
 /**
@@ -38,7 +39,7 @@ export function TicketTape({
         {formatLeverageBps(entry.leverageBps)}
       </span>
       <span className="font-mono text-[10px] text-[var(--t-muted)]">
-        {shortAddress(entry.player)}
+        {formatShortAddress(entry.player)}
       </span>
     </span>
   ));
@@ -60,8 +61,4 @@ export function TicketTape({
       </div>
     </div>
   );
-}
-
-function shortAddress(address: string) {
-  return `${address.slice(0, 6)}…${address.slice(-4)}`;
 }

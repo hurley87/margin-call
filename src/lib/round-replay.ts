@@ -6,8 +6,7 @@
  * replaying never gates or changes settlement.
  */
 
-const ONE_X_BPS = 10_000n;
-const MAX_CRASH_POINT_BPS = 100_000n;
+import { MAX_CRASH_POINT_BPS, ONE_X_BPS } from "./margin-call-crash";
 
 /** Minimum dramatized climb duration (at a 1.00x Crash Point). */
 export const REPLAY_DURATION_MIN_MS = 4_000;
@@ -95,6 +94,37 @@ export function getTierCloseProgress(
 
 export type ReplayPathPoint = { x: number; y: number };
 
+// Vertical headroom above the Crash Point so the head never kisses the
+// viewBox edge. Shared by the curve and anything annotating it (tier lines).
+const Y_HEADROOM = 1.08;
+
+// Invert y so 1.00x sits at the bottom and crash sits near the top.
+function yForMultiplier(
+  multiplierX: number,
+  crashX: number,
+  height: number
+): number {
+  const yMax = crashX * Y_HEADROOM;
+  return height - ((multiplierX - 1) / (yMax - 1)) * height;
+}
+
+/**
+ * y coordinate of a multiplier on the replay viewBox — the same vertical
+ * scale the curve is plotted on, for tier gridlines and close markers.
+ */
+export function multiplierToY(
+  multiplierBps: bigint,
+  crashPointBps: bigint,
+  height: number
+): number {
+  const crashX = Number(clampCrashPointBps(crashPointBps)) / Number(ONE_X_BPS);
+  return yForMultiplier(
+    Number(multiplierBps) / Number(ONE_X_BPS),
+    crashX,
+    height
+  );
+}
+
 /**
  * Builds an SVG path string for the climb up to `progress`.
  * Coordinates are normalized to a 0–100 viewBox (x = time, y = multiplier
@@ -105,14 +135,11 @@ export function getReplayPath(
   progress: number,
   options: { width?: number; height?: number; samples?: number } = {}
 ): string {
-  const width = options.width ?? 100;
-  const height = options.height ?? 100;
-  const samples = options.samples ?? PATH_SAMPLES;
-  const points = getReplayPathPoints(crashPointBps, progress, {
-    width,
-    height,
-    samples,
-  });
+  return replayPathD(getReplayPathPoints(crashPointBps, progress, options));
+}
+
+/** Serializes sampled points to an SVG path `d` string. */
+export function replayPathD(points: readonly ReplayPathPoint[]): string {
   if (points.length === 0) return "";
 
   const [first, ...rest] = points;
@@ -144,12 +171,10 @@ export function getReplayPathPoints(
   for (let i = 0; i < count; i++) {
     const p = (i / (count - 1)) * clampedProgress;
     const multiplier = p <= 0 ? 1 : p >= 1 ? crashX : Math.pow(crashX, p);
-    const x = p * width;
-    // Invert y so 1.00x sits at the bottom and crash sits near the top,
-    // with headroom so the head never kisses the viewBox edge.
-    const yMax = crashX * 1.08;
-    const y = height - ((multiplier - 1) / (yMax - 1)) * height;
-    points.push({ x, y });
+    points.push({
+      x: p * width,
+      y: yForMultiplier(multiplier, crashX, height),
+    });
   }
   return points;
 }

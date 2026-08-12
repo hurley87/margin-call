@@ -1,6 +1,7 @@
 "use client";
 
 import type { TierExposure } from "@/lib/margin-call-crash";
+import { FinalizeLink } from "./finalize-link";
 import { TierCloseBoard } from "./tier-close-board";
 import { theaterCopy } from "./theater-copy";
 
@@ -53,16 +54,7 @@ export function RoundResultCard({
         {theaterCopy.marginCallDetail}
       </p>
 
-      {finalizeTransactionUrl ? (
-        <a
-          className="mt-4 inline-flex text-xs font-bold uppercase tracking-[0.12em] text-[var(--t-accent)] underline decoration-[var(--t-border)] underline-offset-4 hover:text-[var(--t-text)]"
-          href={finalizeTransactionUrl}
-          rel="noreferrer"
-          target="_blank"
-        >
-          {theaterCopy.viewFinalization}
-        </a>
-      ) : null}
+      <FinalizeLink className="mt-4 inline-flex" url={finalizeTransactionUrl} />
     </div>
   );
 }
