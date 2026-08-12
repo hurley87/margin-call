@@ -15,6 +15,7 @@ import {
   replayPathD,
 } from "@/lib/round-replay";
 import { MarginCallPhone } from "./margin-call-phone";
+import { presentLanding, type TicketLanding } from "./landing-frame";
 import { theaterCopy } from "./theater-copy";
 
 const VIEW_W = 100;
@@ -27,6 +28,8 @@ export type ReplayCurveProps = {
   ambiance?: { roundId: bigint } | null;
   /** Signed-in player's Arcade Leverage tier, highlighted on the chart. */
   playerTierBps?: bigint | null;
+  /** Personal vs spectator freeze once the climb completes. */
+  landing?: TicketLanding;
 };
 
 /**
@@ -37,13 +40,15 @@ export const REPLAY_HERO_MIN_H = "min-h-[22rem] lg:min-h-[28rem]";
 
 /**
  * SVG multiplier climb. Axes rescale with the live multiplier; hard stop at
- * the Crash Point with a margin-call phone stamp.
+ * the Crash Point. Signed-in players freeze on Won / Margin called; spectators
+ * keep the Crash Point number and margin-call phone.
  */
 export function ReplayCurve({
   crashPointBps,
   progress,
   ambiance = null,
   playerTierBps = null,
+  landing = { kind: "spectator" },
 }: ReplayCurveProps) {
   // `progress` moves every animation frame, so memoizing on it buys nothing.
   const points = getReplayPathPoints(crashPointBps, progress, {
@@ -69,15 +74,17 @@ export function ReplayCurve({
     [crashPointBps]
   );
 
-  // Crash-moment juice: shake the panel and flash its edge once, colored by
-  // the player's outcome (green closed-in-time, red margin-called, amber none).
+  // Crash-moment: climb finished and this is the result hero (not ambiance).
+  // *When* freeze applies lives here; *what* it shows comes from presentLanding.
   const crashMoment = isComplete && !ambiance;
-  const momentColor =
-    playerTierBps === null
-      ? "var(--t-amber-hot)"
-      : playerTierBps <= crashPointBps
-        ? "var(--t-safe)"
-        : "var(--t-threat)";
+  const freeze = crashMoment ? presentLanding(landing, crashLabel) : null;
+
+  const heroLabel = ambiance
+    ? theaterCopy.openAmbiance(ambiance.roundId.toString())
+    : (freeze?.heroLabel ?? theaterCopy.verifiedCrashPoint);
+  const heroValue = freeze?.heroValue ?? displayMultiplier;
+  const heroColor = freeze?.heroColorClass ?? "text-[var(--t-green-hot)]";
+  const heroIsMultiplier = freeze?.heroIsMultiplier ?? true;
 
   return (
     <div
@@ -86,41 +93,61 @@ export function ReplayCurve({
       }`}
       data-testid={ambiance ? "replay-curve-ambiance" : "replay-curve"}
     >
-      {crashMoment ? (
+      {freeze ? (
         <div
           aria-hidden="true"
           className="mc-moment-edge pointer-events-none absolute inset-0"
-          style={{ "--mc-moment-color": momentColor } as React.CSSProperties}
+          style={
+            { "--mc-moment-color": freeze.momentColor } as React.CSSProperties
+          }
         />
       ) : null}
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-            {ambiance
-              ? theaterCopy.openAmbiance(ambiance.roundId.toString())
-              : theaterCopy.verifiedCrashPoint}
+            {heroLabel}
           </p>
           <p
             aria-live="polite"
-            className={`mc-live-value mt-1 font-[family-name:var(--font-plex-sans)] text-5xl font-bold tabular-nums sm:text-6xl lg:text-7xl ${
-              isComplete
-                ? "text-[var(--t-red-hot)]"
-                : "text-[var(--t-green-hot)]"
-            }`}
+            className={`mc-live-value mt-1 font-[family-name:var(--font-plex-sans)] text-5xl font-bold sm:text-6xl lg:text-7xl ${
+              heroIsMultiplier ? "tabular-nums" : ""
+            } ${heroColor}`}
+            data-testid={
+              freeze
+                ? landing.kind === "spectator"
+                  ? "replay-curve-crash-point"
+                  : "replay-curve-outcome"
+                : undefined
+            }
           >
-            {isComplete ? crashLabel : displayMultiplier}
+            {heroValue}
           </p>
+          {freeze?.supportingCrashPoint ? (
+            <p
+              className="mt-1 text-sm font-bold tabular-nums text-[var(--t-muted)]"
+              data-testid="replay-curve-crash-point-supporting"
+            >
+              {freeze.supportingCrashPoint}
+            </p>
+          ) : null}
+          {freeze?.outcomeDetail ? (
+            <p className="mt-1 max-w-[20rem] text-[10px] leading-4 text-[var(--t-muted)]">
+              {freeze.outcomeDetail}
+            </p>
+          ) : null}
         </div>
-        {isComplete && !ambiance ? (
+        {freeze?.showMarginCallStamp ? (
           <div className="flex items-center gap-3">
             <MarginCallPhone ringing />
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-red-hot)]">
                 {theaterCopy.marginCall}
               </p>
-              <p className="mt-1 max-w-[14rem] text-[10px] leading-4 text-[var(--t-muted)]">
-                {theaterCopy.marginCallDetail}
-              </p>
+              {freeze.stampDetail ? (
+                <p className="mt-1 max-w-[14rem] text-[10px] leading-4 text-[var(--t-muted)]">
+                  {freeze.stampDetail}
+                </p>
+              ) : null}
             </div>
           </div>
         ) : null}
