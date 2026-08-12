@@ -190,6 +190,42 @@ export const ROUND_STATUS = {
 /** How many prior epochs to surface in global history. */
 export const GLOBAL_HISTORY_LOOKBACK_ROUNDS = 20;
 
+/** How many prior epochs to scan for Open-phase ambiance replay. */
+export const AMBIANCE_LOOKBACK_ROUNDS = 5;
+
+/** One public TicketEntered row for the live ticket tape / tier pops. */
+export type TicketTapeEntry = {
+  ticketId: bigint;
+  player: Address;
+  margin: bigint;
+  leverageBps: bigint;
+  reservedPayout: bigint;
+  transactionHash: Hash | null;
+};
+
+/** Per-tier aggregate of committed tickets in a round. */
+export type TierExposure = {
+  leverageBps: bigint;
+  ticketCount: number;
+  totalMargin: bigint;
+  reservedPayout: bigint;
+};
+
+/** Ticket tape + tier aggregates for one round. */
+export type RoundTicketTape = {
+  roundId: bigint;
+  entries: TicketTapeEntry[];
+  tiers: TierExposure[];
+};
+
+/** A finalized round eligible for dramatized replay / ambiance. */
+export type FinalizedReplayRound = {
+  round: CrashRound;
+  displayCrashPoint: string;
+  finalizedAtSeconds: bigint;
+  finalizeTransactionUrl: string | null;
+};
+
 type RoundLifecycleEvent =
   | typeof roundOpenedEvent
   | typeof revealRequestedEvent
@@ -207,6 +243,10 @@ const lifecycleTransactionCache = new Map<
   string,
   Partial<Record<LifecycleEventKey, Hash | null>>
 >();
+/** Finalized-at timestamps are immutable once observed. */
+const finalizeTimestampCache = new Map<string, bigint>();
+/** Block number of RoundFinalized, shared with the lifecycle hash lookup. */
+const finalizeBlockNumberCache = new Map<string, bigint>();
 
 /** Public configuration only. Static env references allow Next.js client inlining. */
 export function getMarginCallCrashConfig(): MarginCallCrashConfig | null {
@@ -350,6 +390,37 @@ export function canOfferEntry(
   countdownSeconds: number
 ) {
   return phase === "open" && countdownSeconds > ENTRY_CUTOFF_SECONDS;
+}
+
+/**
+ * Groups TicketEntered rows into one TierExposure per Arcade Leverage tier.
+ * Sums the onchain reservedPayout to avoid integer-division drift vs the vault.
+ * Unknown leverage values are skipped (contracts reject them at entry).
+ */
+export function aggregateTierExposure(
+  entries: ReadonlyArray<
+    Pick<TicketTapeEntry, "leverageBps" | "margin" | "reservedPayout">
+  >
+): TierExposure[] {
+  const byTier = new Map<bigint, TierExposure>();
+  for (const tier of ENTRY_LEVERAGE_TIERS_BPS) {
+    byTier.set(tier, {
+      leverageBps: tier,
+      ticketCount: 0,
+      totalMargin: 0n,
+      reservedPayout: 0n,
+    });
+  }
+
+  for (const entry of entries) {
+    const bucket = byTier.get(entry.leverageBps);
+    if (!bucket) continue;
+    bucket.ticketCount += 1;
+    bucket.totalMargin += entry.margin;
+    bucket.reservedPayout += entry.reservedPayout;
+  }
+
+  return ENTRY_LEVERAGE_TIERS_BPS.map((tier) => byTier.get(tier)!);
 }
 
 export type CrashCallRequest = { to: Address; data: Hex };
@@ -787,6 +858,7 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
       chainTimestamp: block.timestamp,
       currentRoundId: 0n,
       round: pendingRound,
+      finalizedAtSeconds: null,
       ...emptyLifecycleUrls(config.address),
     };
   }
@@ -814,14 +886,168 @@ export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
     normalizedRound,
     block.number
   );
+  const finalizedAtSeconds =
+    normalizedRound.status === ROUND_STATUS.finalized
+      ? await readFinalizedAtSeconds(
+          config,
+          currentRoundId,
+          normalizedRound,
+          block.number
+        )
+      : null;
 
   return {
     blockNumber: block.number,
     chainTimestamp: block.timestamp,
     currentRoundId,
     round: normalizedRound,
+    finalizedAtSeconds,
     ...lifecycleUrls,
   };
+}
+
+/**
+ * Public TicketEntered rows for one round, plus per-tier aggregates for the
+ * theater tape and tier-close payout pops.
+ */
+export async function readRoundTicketTape(
+  config: MarginCallCrashConfig,
+  roundId: bigint
+): Promise<RoundTicketTape> {
+  const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
+  const logs = await baseSepoliaPublicClient.getLogs({
+    address: config.address,
+    event: ticketEnteredEvent,
+    args: { roundId },
+    fromBlock: config.deploymentBlock,
+    toBlock: block.number,
+    strict: true,
+  });
+
+  const entries: TicketTapeEntry[] = logs.map((log) => ({
+    ticketId: log.args.ticketId,
+    player: log.args.player,
+    margin: log.args.margin,
+    leverageBps: log.args.leverageBps,
+    reservedPayout: log.args.reservedPayout,
+    transactionHash: log.transactionHash,
+  }));
+
+  return {
+    roundId,
+    entries,
+    tiers: aggregateTierExposure(entries),
+  };
+}
+
+/**
+ * Newest finalized round within the ambiance lookback, for Open-phase
+ * previous-round replay. Returns null when none exist.
+ */
+export async function readLatestFinalizedReplayRound(
+  config: MarginCallCrashConfig
+): Promise<FinalizedReplayRound | null> {
+  const block = await baseSepoliaPublicClient.getBlock({ blockTag: "latest" });
+  const currentRoundId = await baseSepoliaPublicClient.readContract({
+    address: config.address,
+    abi: marginCallCrashAbi,
+    functionName: "currentRoundId",
+    blockNumber: block.number,
+  });
+  const roundIds = lookbackRoundIds(currentRoundId, AMBIANCE_LOOKBACK_ROUNDS);
+
+  for (const roundId of roundIds) {
+    const round = await baseSepoliaPublicClient.readContract({
+      address: config.address,
+      abi: marginCallCrashAbi,
+      functionName: "getRound",
+      args: [roundId],
+      blockNumber: block.number,
+    });
+    const normalized: CrashRound = {
+      ...round,
+      status: normalizeRoundStatus(round.status),
+    };
+    if (normalized.status !== ROUND_STATUS.finalized) continue;
+
+    const finalizedAtSeconds = await readFinalizedAtSeconds(
+      config,
+      roundId,
+      normalized,
+      block.number
+    );
+    if (finalizedAtSeconds === null) continue;
+
+    const lifecycleUrls = await readLifecycleUrls(
+      config,
+      roundId,
+      normalized,
+      block.number
+    );
+
+    return {
+      round: normalized,
+      displayCrashPoint: formatCrashPointBps(normalized.crashPointBps),
+      finalizedAtSeconds,
+      finalizeTransactionUrl: lifecycleUrls.finalizeTransactionUrl,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Resolves the Unix timestamp of RoundFinalized for a finalized round.
+ * Cached forever — finalized rounds are immutable. Prefers the block number
+ * already captured by the lifecycle URL lookup to avoid a second getLogs.
+ */
+export async function readFinalizedAtSeconds(
+  config: MarginCallCrashConfig,
+  roundId: bigint,
+  round: CrashRound,
+  toBlock: bigint
+): Promise<bigint | null> {
+  if (round.status !== ROUND_STATUS.finalized) return null;
+
+  const cacheKey = lifecycleCacheKey(config.address, roundId);
+  const cached = finalizeTimestampCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  let blockNumber = finalizeBlockNumberCache.get(cacheKey);
+  if (blockNumber === undefined) {
+    const fromBlock = getEventFromBlock(config.deploymentBlock, toBlock);
+    const result = await readExactRoundEvent({
+      config,
+      roundId,
+      event: roundFinalizedEvent,
+      fromBlock,
+      toBlock,
+      required: false,
+    });
+    if (result.blockNumber === null) {
+      if (fromBlock > config.deploymentBlock) {
+        const wide = await readExactRoundEvent({
+          config,
+          roundId,
+          event: roundFinalizedEvent,
+          fromBlock: config.deploymentBlock,
+          toBlock,
+          required: false,
+        });
+        if (wide.blockNumber === null) return null;
+        blockNumber = wide.blockNumber;
+      } else {
+        return null;
+      }
+    } else {
+      blockNumber = result.blockNumber;
+    }
+    finalizeBlockNumberCache.set(cacheKey, blockNumber);
+  }
+
+  const block = await baseSepoliaPublicClient.getBlock({ blockNumber });
+  finalizeTimestampCache.set(cacheKey, block.timestamp);
+  return block.timestamp;
 }
 
 async function readEpochOrigin(
@@ -896,7 +1122,7 @@ async function readLifecycleUrls(
         hashes[key] = cached[key];
         return;
       }
-      hashes[key] = await readExactRoundEventHash({
+      const result = await readExactRoundEvent({
         config,
         roundId,
         event,
@@ -904,6 +1130,10 @@ async function readLifecycleUrls(
         toBlock,
         required,
       });
+      hashes[key] = result.hash;
+      if (key === "finalize" && result.blockNumber !== null) {
+        finalizeBlockNumberCache.set(cacheKey, result.blockNumber);
+      }
     })
   );
   lifecycleTransactionCache.set(cacheKey, hashes);
@@ -978,7 +1208,7 @@ function toTransactionUrl(hash: Hash | null | undefined): string | null {
   return hash ? getBaseSepoliaTransactionUrl(hash) : null;
 }
 
-async function readExactRoundEventHash({
+async function readExactRoundEvent({
   config,
   roundId,
   event,
@@ -992,7 +1222,7 @@ async function readExactRoundEventHash({
   fromBlock: bigint;
   toBlock: bigint;
   required: boolean;
-}): Promise<Hash | null> {
+}): Promise<{ hash: Hash | null; blockNumber: bigint | null }> {
   const logs = await baseSepoliaPublicClient.getLogs({
     address: config.address,
     event,
@@ -1002,18 +1232,21 @@ async function readExactRoundEventHash({
     strict: true,
   });
 
-  if (logs.length === 0) {
+  if (!logs || logs.length === 0) {
     if (required) {
       throw new Error(`Expected one ${event.name} event for round ${roundId}`);
     }
-    return null;
+    return { hash: null, blockNumber: null };
   }
   if (logs.length !== 1 || !logs[0].transactionHash) {
     throw new Error(
       `Expected one ${event.name} event for round ${roundId}, found ${logs.length}`
     );
   }
-  return logs[0].transactionHash;
+  return {
+    hash: logs[0].transactionHash,
+    blockNumber: logs[0].blockNumber ?? null,
+  };
 }
 
 function lifecycleCacheKey(address: Address, roundId: bigint) {

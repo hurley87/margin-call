@@ -29,7 +29,13 @@ export type CurrentCrashRoundView = { retry: () => Promise<void> } & (
       phase: CrashRoundPhase;
       countdownSeconds: number;
       crashRandom: Hex | null;
+      /** Raw verified Crash Point in basis points; null until finalized. */
+      crashPointBps: bigint | null;
       displayCrashPoint: string | null;
+      /** Unix seconds of RoundFinalized; null until finalized. */
+      finalizedAtSeconds: bigint | null;
+      /** Client-corrected chain time used for phase and countdown. */
+      chainTimestamp: bigint;
       openingTransactionUrl: string | null;
       revealTransactionUrl: string | null;
       finalizeTransactionUrl: string | null;
@@ -100,9 +106,12 @@ export function useCurrentCrashRound(): CurrentCrashRoundView {
       crashRandom: isRoundInitialized(snapshot.round)
         ? snapshot.round.crashRandom
         : null,
+      crashPointBps: published ? snapshot.round.crashPointBps : null,
       displayCrashPoint: published
         ? formatCrashPointBps(snapshot.round.crashPointBps)
         : null,
+      finalizedAtSeconds: published ? snapshot.finalizedAtSeconds : null,
+      chainTimestamp,
       openingTransactionUrl: snapshot.openingTransactionUrl,
       revealTransactionUrl: snapshot.revealTransactionUrl,
       finalizeTransactionUrl: snapshot.finalizeTransactionUrl,

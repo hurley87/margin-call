@@ -589,6 +589,65 @@
   animation: mc-flavor-fade var(--mc-dur-slow) var(--mc-ease-out) both;
 }
 
+/* ── Round theater: tier pop, margin-call flash, desk phone ── */
+
+@keyframes mc-tier-pop {
+  0% {
+    transform: scale(0.98);
+    filter: brightness(1.35);
+  }
+  55% {
+    transform: scale(1.01);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+.mc-tier-pop {
+  animation: mc-tier-pop var(--mc-dur-flash) var(--mc-ease-snap) both;
+}
+
+@keyframes mc-margin-call-flash {
+  0%,
+  100% {
+    filter: brightness(1);
+  }
+  40% {
+    filter: brightness(1.8);
+  }
+}
+
+.mc-margin-call-flash {
+  animation: mc-margin-call-flash calc(var(--mc-dur-flash) * 2)
+    var(--mc-ease-out) both;
+}
+
+@keyframes mc-phone-ring {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  20% {
+    transform: rotate(-8deg);
+  }
+  40% {
+    transform: rotate(8deg);
+  }
+  60% {
+    transform: rotate(-5deg);
+  }
+  80% {
+    transform: rotate(5deg);
+  }
+}
+
+.mc-phone-ring {
+  animation: mc-phone-ring 420ms var(--mc-ease-out) both;
+  transform-origin: 50% 20%;
+}
+
 /* ── Reduced motion ── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -624,7 +683,10 @@
   .mc-moment-backdrop,
   .mc-moment-card,
   .mc-moment-edge,
-  .mc-shake {
+  .mc-shake,
+  .mc-tier-pop,
+  .mc-margin-call-flash,
+  .mc-phone-ring {
     animation: none;
     opacity: 1;
   }
