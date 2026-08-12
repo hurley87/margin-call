@@ -4,8 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useReplayClock } from "@/hooks/use-replay-clock";
 import {
   useRoundTheater,
-  type TheaterNextRound,
-  type TheaterStage,
+  type TheaterHero,
+  type TheaterLive,
+  type TheaterReplayHero,
+  type TheaterView,
 } from "@/hooks/use-round-theater";
 import { useTheaterPlayerTicket } from "@/hooks/use-theater-player-ticket";
 import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
@@ -15,7 +17,10 @@ import {
   formatLeverageBps,
   type CrashTicket,
 } from "@/lib/margin-call-crash";
-import { roundPhaseCopy } from "@/lib/round-phase-copy";
+import type {
+  RoundTimeline,
+  RoundTimelineCountdown,
+} from "@/lib/round-timeline";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { theaterCopy } from "./theater-copy";
@@ -37,28 +42,27 @@ import { TierCloseBoard } from "./tier-close-board";
  * on CurrentRound and the settlement/refund surfaces.
  */
 export function RoundTheater() {
-  const stage = useRoundTheater();
+  const view = useRoundTheater();
   // The displayed round's ticket for the signed-in player (null when signed
   // out or ticketless) — drives the "YOU" highlights. During the display-round
-  // hold this reads the held round, so the player's own replay is marked.
-  const { ticket: playerTicket } = useTheaterPlayerTicket(
-    "roundId" in stage ? stage.roundId : null
-  );
+  // hold this reads the held replay round, so the player's own replay is marked.
+  const { ticket: playerTicket } = useTheaterPlayerTicket(ticketRoundId(view));
 
   // Lock moment: one low thunk when the entry window slams shut.
-  const previousKind = useRef(stage.kind);
+  const previousKind = useRef(view.live.kind);
   useEffect(() => {
     if (
-      !stage.reducedMotion &&
-      stage.kind === "delayed" &&
+      !view.reducedMotion &&
+      view.live.kind === "delayed" &&
       previousKind.current === "open"
     ) {
       getTheaterAudio().playLockThunk();
     }
-    previousKind.current = stage.kind;
-  }, [stage.kind, stage.reducedMotion]);
+    previousKind.current = view.live.kind;
+  }, [view.live.kind, view.reducedMotion]);
 
-  const live = stage.kind === "open" || stage.kind === "finalized";
+  const isLive = view.live.kind === "open" || view.live.kind === "finalized";
+  const timeline = liveTimeline(view.live);
 
   return (
     <section
@@ -71,7 +75,7 @@ export function RoundTheater() {
           <div>
             <p className="flex items-center gap-2 text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]">
               Base Sepolia · Trading floor
-              {live ? (
+              {isLive ? (
                 <span className="inline-flex items-center gap-1.5 text-[var(--t-green-hot)]">
                   <span
                     aria-hidden="true"
@@ -88,32 +92,68 @@ export function RoundTheater() {
               {theaterCopy.heading}
             </h2>
           </div>
-          <TheaterSoundToggle suggest={stage.kind === "finalized"} />
+          <TheaterSoundToggle suggest={view.hero.type === "replay"} />
         </div>
 
         <div className="mt-4 space-y-2">
-          {"timeline" in stage ? (
-            <RoundTimelineStrip timeline={stage.timeline} />
-          ) : null}
+          {timeline ? <RoundTimelineStrip timeline={timeline} /> : null}
           <RoundExplainer />
         </div>
 
         <div className="mt-4">
-          <TheaterBody playerTicket={playerTicket} stage={stage} />
+          <TheaterBody playerTicket={playerTicket} view={view} />
         </div>
       </div>
     </section>
   );
 }
 
+function ticketRoundId(view: TheaterView): bigint | null {
+  if (view.hero.type === "replay") return view.hero.roundId;
+  switch (view.live.kind) {
+    case "open":
+    case "delayed":
+    case "finalized":
+    case "expired":
+      return view.live.roundId;
+    case "loading":
+    case "error":
+    case "unavailable":
+      return null;
+    default: {
+      const _exhaustive: never = view.live;
+      return _exhaustive;
+    }
+  }
+}
+
+function liveTimeline(live: TheaterLive): RoundTimeline | null {
+  switch (live.kind) {
+    case "open":
+    case "delayed":
+    case "finalized":
+    case "expired":
+      return live.timeline;
+    case "loading":
+    case "error":
+    case "unavailable":
+      return null;
+    default: {
+      const _exhaustive: never = live;
+      return _exhaustive;
+    }
+  }
+}
+
 function TheaterBody({
-  stage,
+  view,
   playerTicket,
 }: {
-  stage: TheaterStage;
+  view: TheaterView;
   playerTicket: CrashTicket | null;
 }) {
-  switch (stage.kind) {
+  const { live, hero } = view;
+  switch (live.kind) {
     case "loading":
       return (
         <ReplayCurveEmpty
@@ -127,13 +167,13 @@ function TheaterBody({
       return (
         <div>
           <ReplayCurveEmpty
-            body={stage.error}
+            body={live.error}
             testId="theater-error"
             title="Theater unavailable"
           />
           <button
             className={`mt-4 ${TERMINAL_ACTION_BUTTON_CLASS}`}
-            onClick={() => void stage.retry()}
+            onClick={() => void view.retry()}
             type="button"
           >
             Retry theater read
@@ -141,30 +181,64 @@ function TheaterBody({
         </div>
       );
     case "open":
-      return <OpenStage playerTicket={playerTicket} stage={stage} />;
+      if (hero.type === "replay") {
+        return (
+          <ReplayStage
+            hero={hero}
+            live={live}
+            playerTicket={playerTicket}
+            reducedMotion={view.reducedMotion}
+          />
+        );
+      }
+      return (
+        <OpenStage
+          hero={hero}
+          live={live}
+          playerTicket={playerTicket}
+          reducedMotion={view.reducedMotion}
+        />
+      );
     case "delayed":
-      return <DelayedStage stage={stage} />;
+      return <DelayedStage hero={hero} live={live} />;
     case "finalized":
-      return <FinalizedStage playerTicket={playerTicket} stage={stage} />;
+      if (hero.type === "replay") {
+        return (
+          <ReplayStage
+            hero={hero}
+            live={live}
+            playerTicket={playerTicket}
+            reducedMotion={view.reducedMotion}
+          />
+        );
+      }
+      return (
+        <ReplayCurveEmpty
+          testId="theater-finalized-replay"
+          title={theaterCopy.loading}
+        />
+      );
     case "expired":
-      return <ExpiredStage stage={stage} />;
+      return <ExpiredStage hero={hero} live={live} />;
     default: {
-      const _exhaustive: never = stage;
+      const _exhaustive: never = live;
       return _exhaustive;
     }
   }
 }
 
 function OpenStage({
-  stage,
+  live,
+  hero,
   playerTicket,
+  reducedMotion,
 }: {
-  stage: Extract<TheaterStage, { kind: "open" }>;
+  live: Extract<TheaterLive, { kind: "open" }>;
+  hero: TheaterHero;
   playerTicket: CrashTicket | null;
+  reducedMotion: boolean;
 }) {
-  const ambiance = stage.ambiance;
-
-  const countdown = stage.timeline.countdown;
+  const countdown = live.timeline.countdown;
   const countdownLabel =
     countdown.kind === "entry-closes"
       ? theaterCopy.openCountdown
@@ -186,39 +260,16 @@ function OpenStage({
   const ticking = closingSeconds !== null && closingSeconds <= 10;
 
   useEffect(() => {
-    if (stage.reducedMotion) return;
+    if (reducedMotion) return;
     if (closingSeconds === null || closingSeconds < 1 || closingSeconds > 5) {
       return;
     }
     getTheaterAudio().playCountdownTick();
-  }, [closingSeconds, stage.reducedMotion]);
+  }, [closingSeconds, reducedMotion]);
 
   return (
     <div className="space-y-4">
-      {ambiance && !stage.reducedMotion ? (
-        <AmbianceReplay
-          crashPointBps={ambiance.round.crashPointBps}
-          roundId={ambiance.round.id}
-        />
-      ) : ambiance && stage.reducedMotion ? (
-        <div className={`terminal-panel p-5 ${REPLAY_HERO_MIN_H}`}>
-          <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-            {theaterCopy.openAmbiance(ambiance.round.id.toString())}
-          </p>
-          <p className="mc-live-value mt-2 font-[family-name:var(--font-plex-sans)] text-5xl font-bold text-[var(--t-green-hot)] sm:text-6xl">
-            {ambiance.displayCrashPoint}
-          </p>
-          <p className="mt-2 text-[10px] leading-4 text-[var(--t-muted)]">
-            {theaterCopy.openAmbianceNote}
-          </p>
-        </div>
-      ) : (
-        <ReplayCurveEmpty
-          body={theaterCopy.openAmbianceEmpty}
-          testId="theater-ambiance-empty"
-          title={theaterCopy.openAmbianceLabel}
-        />
-      )}
+      <OpenHero hero={hero} reducedMotion={reducedMotion} />
 
       <div className="flex flex-wrap items-end justify-between gap-4 border-t border-[var(--t-divider)] pt-4">
         <div>
@@ -255,10 +306,48 @@ function OpenStage({
               {formatLeverageBps(playerTicket.leverageBps)}
             </p>
           ) : null}
-          <TicketTape entries={stage.tape?.entries ?? []} />
+          <TicketTape entries={live.tape?.entries ?? []} />
         </div>
       </div>
     </div>
+  );
+}
+
+function OpenHero({
+  hero,
+  reducedMotion,
+}: {
+  hero: TheaterHero;
+  reducedMotion: boolean;
+}) {
+  if (hero.type !== "ambiance") {
+    return (
+      <ReplayCurveEmpty
+        body={theaterCopy.openAmbianceEmpty}
+        testId="theater-ambiance-empty"
+        title={theaterCopy.openAmbianceLabel}
+      />
+    );
+  }
+
+  if (reducedMotion) {
+    return (
+      <div className={`terminal-panel p-5 ${REPLAY_HERO_MIN_H}`}>
+        <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
+          {theaterCopy.openAmbiance(hero.roundId.toString())}
+        </p>
+        <p className="mc-live-value mt-2 font-[family-name:var(--font-plex-sans)] text-5xl font-bold text-[var(--t-green-hot)] sm:text-6xl">
+          {hero.displayCrashPoint}
+        </p>
+        <p className="mt-2 text-[10px] leading-4 text-[var(--t-muted)]">
+          {theaterCopy.openAmbianceNote}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <AmbianceReplay crashPointBps={hero.crashPointBps} roundId={hero.roundId} />
   );
 }
 
@@ -290,57 +379,64 @@ function AmbianceReplay({
 }
 
 function DelayedStage({
-  stage,
+  live,
+  hero,
 }: {
-  stage: Extract<TheaterStage, { kind: "delayed" }>;
+  live: Extract<TheaterLive, { kind: "delayed" }>;
+  hero: TheaterHero;
 }) {
-  const copy = roundPhaseCopy[stage.phaseLabel];
+  const title = hero.type === "pending" ? hero.title : "Awaiting attestation";
+  const body = hero.type === "pending" ? hero.body : undefined;
   return (
     // CRT wipe-in as the stage flips from open to locked/awaiting.
     <div className="mc-crt-reveal space-y-4" data-testid="theater-delayed">
       {/* Never invent a multiplier or start a climb while delayed. */}
-      <ReplayCurveEmpty body={copy.body} title={copy.title} />
-      <TicketTape entries={stage.tape?.entries ?? []} />
+      <ReplayCurveEmpty body={body} title={title} />
+      <TicketTape entries={live.tape?.entries ?? []} />
     </div>
   );
 }
 
-function FinalizedStage({
-  stage,
+function ReplayStage({
+  hero,
+  live,
   playerTicket,
+  reducedMotion,
 }: {
-  stage: Extract<TheaterStage, { kind: "finalized" }>;
+  hero: TheaterReplayHero;
+  live: TheaterLive;
   playerTicket: CrashTicket | null;
+  reducedMotion: boolean;
 }) {
   const [restartNonce, setRestartNonce] = useState(0);
   const playerTierBps = playerTicket?.leverageBps ?? null;
   const clock = useReplayClock({
-    crashPointBps: stage.crashPointBps,
-    finalizedAtSeconds: stage.finalizedAtSeconds,
-    chainTimestamp: stage.chainTimestamp,
-    reducedMotion: stage.reducedMotion,
+    crashPointBps: hero.crashPointBps,
+    finalizedAtSeconds: hero.finalizedAtSeconds,
+    chainTimestamp: hero.chainTimestamp,
+    reducedMotion,
     restartNonce,
   });
 
   useTierSoundEffects({
-    crashPointBps: stage.crashPointBps,
+    crashPointBps: hero.crashPointBps,
     progress: clock.progress,
     isComplete: clock.isComplete,
-    enabled: !stage.reducedMotion,
+    enabled: !reducedMotion,
     restartNonce,
     playerTierBps,
   });
 
-  if (stage.reducedMotion) {
+  if (reducedMotion) {
     return (
       <div className="space-y-4" data-testid="theater-finalized-static">
         <RoundResultCard
-          crashPointBps={stage.crashPointBps}
-          displayCrashPoint={stage.displayCrashPoint}
-          finalizeTransactionUrl={stage.finalizeTransactionUrl}
-          tiers={stage.tiers}
+          crashPointBps={hero.crashPointBps}
+          displayCrashPoint={hero.displayCrashPoint}
+          finalizeTransactionUrl={hero.finalizeTransactionUrl}
+          tiers={hero.tiers}
         />
-        <ResultHandoffRow next={stage.next} roundId={stage.roundId} />
+        <ResultHandoffRow hero={hero} live={live} />
       </div>
     );
   }
@@ -350,17 +446,17 @@ function FinalizedStage({
       {/* Re-keyed on restart so the Replay button replays the CRT wipe too. */}
       <div className="mc-crt-reveal" key={restartNonce}>
         <ReplayCurve
-          crashPointBps={stage.crashPointBps}
+          crashPointBps={hero.crashPointBps}
           playerTierBps={playerTierBps}
           progress={clock.progress}
         />
       </div>
-      <ResultHandoffRow next={stage.next} roundId={stage.roundId} />
+      <ResultHandoffRow hero={hero} live={live} />
       <TierCloseBoard
-        crashPointBps={stage.crashPointBps}
+        crashPointBps={hero.crashPointBps}
         playerTierBps={playerTierBps}
         progress={clock.progress}
-        tiers={stage.tiers}
+        tiers={hero.tiers}
       />
       <div className="flex flex-wrap items-center gap-3">
         <button
@@ -370,7 +466,7 @@ function FinalizedStage({
         >
           {theaterCopy.replayAgain}
         </button>
-        <FinalizeLink url={stage.finalizeTransactionUrl} />
+        <FinalizeLink url={hero.finalizeTransactionUrl} />
       </div>
     </div>
   );
@@ -381,58 +477,84 @@ function FinalizedStage({
  * Keeps a held previous-round replay from reading as the live round.
  */
 function ResultHandoffRow({
-  roundId,
-  next,
+  hero,
+  live,
 }: {
-  roundId: bigint;
-  next: TheaterNextRound | null;
+  hero: TheaterReplayHero;
+  live: TheaterLive;
 }) {
+  const handoff = replayHandoffLabel(hero, live);
   return (
     <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
       <p className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        {theaterCopy.resultCaption(roundId.toString())}
+        {theaterCopy.resultCaption(hero.roundId.toString())}
       </p>
-      {next ? (
+      {handoff ? (
         <p
           aria-live="polite"
           className="text-xs font-bold tabular-nums text-[var(--t-green-hot)]"
           data-testid="theater-next-round"
         >
-          {nextRoundLabel(next)}
+          {handoff}
         </p>
       ) : null}
     </div>
   );
 }
 
-function nextRoundLabel(next: TheaterNextRound): string {
-  const roundId = next.roundId.toString();
-  if (next.countdown.kind === "entry-closes") {
+function replayHandoffLabel(
+  hero: TheaterReplayHero,
+  live: TheaterLive
+): string | null {
+  switch (live.kind) {
+    case "open":
+      return hero.roundId !== live.roundId
+        ? nextRoundLabel(live.roundId, live.timeline.countdown)
+        : null;
+    case "finalized":
+      return nextRoundLabel(live.roundId + 1n, live.timeline.countdown);
+    case "delayed":
+    case "expired":
+    case "loading":
+    case "error":
+    case "unavailable":
+      return null;
+    default: {
+      const _exhaustive: never = live;
+      return _exhaustive;
+    }
+  }
+}
+
+function nextRoundLabel(
+  roundId: bigint,
+  countdown: RoundTimelineCountdown
+): string {
+  const id = roundId.toString();
+  if (countdown.kind === "entry-closes") {
     return theaterCopy.nextRoundEntryOpen(
-      roundId,
-      formatCountdown(next.countdown.seconds)
+      id,
+      formatCountdown(countdown.seconds)
     );
   }
-  return next.countdown.seconds > 0
-    ? theaterCopy.nextRoundOpens(
-        roundId,
-        formatCountdown(next.countdown.seconds)
-      )
-    : theaterCopy.nextRoundOpening(roundId);
+  return countdown.seconds > 0
+    ? theaterCopy.nextRoundOpens(id, formatCountdown(countdown.seconds))
+    : theaterCopy.nextRoundOpening(id);
 }
 
 function ExpiredStage({
-  stage,
+  live,
+  hero,
 }: {
-  stage: Extract<TheaterStage, { kind: "expired" }>;
+  live: Extract<TheaterLive, { kind: "expired" }>;
+  hero: TheaterHero;
 }) {
+  const title = hero.type === "pending" ? hero.title : theaterCopy.expired;
+  const body = hero.type === "pending" ? hero.body : theaterCopy.expiredDetail;
   return (
     <div className="space-y-4" data-testid="theater-expired">
-      <ReplayCurveEmpty
-        body={theaterCopy.expiredDetail}
-        title={theaterCopy.expired}
-      />
-      <TicketTape entries={stage.tape?.entries ?? []} />
+      <ReplayCurveEmpty body={body} title={title} />
+      <TicketTape entries={live.tape?.entries ?? []} />
     </div>
   );
 }

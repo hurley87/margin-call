@@ -2,7 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { TheaterStage } from "@/hooks/use-round-theater";
+import type { TheaterView } from "@/hooks/use-round-theater";
 
 const sdk = vi.hoisted(() => {
   const emptyTiers = () =>
@@ -21,9 +21,10 @@ const sdk = vi.hoisted(() => {
     countdown: {
       kind: "entry-closes" | "next-opens";
       seconds: number;
-    } = { kind: "entry-closes", seconds: 22 }
+    } = { kind: "entry-closes", seconds: 22 },
+    roundId = 12n
   ) => ({
-    roundId: 12n,
+    roundId,
     phase,
     segments: [
       { id: "entry" as const, state: "active" as const, progress: 0.5 },
@@ -37,38 +38,30 @@ const sdk = vi.hoisted(() => {
     expiresInSeconds: null,
   });
 
-  const makeOpen = (): TheaterStage => ({
-    kind: "open",
-    roundId: 12n,
-    countdownSeconds: 22,
-    timeline: makeTimeline(),
-    tape: {
+  const makeOpen = (): TheaterView => ({
+    live: {
+      kind: "open",
       roundId: 12n,
-      entries: [
-        {
-          ticketId: 1n,
-          player: "0x00000000000000000000000000000000000000aa",
-          margin: 1_000_000n,
-          leverageBps: 12_500n,
-          reservedPayout: 1_250_000n,
-          transactionHash: null,
-        },
-      ],
-      tiers: emptyTiers(),
-    },
-    ambiance: {
-      round: {
-        id: 11n,
-        openAt: 900n,
-        lockAt: 945n,
-        expiresAt: 1_845n,
-        crashRandom:
-          "0x000000000000000000000000000000000000000000000000000000000000bbbb",
-        crashPointBps: 25_000n,
-        totalMargin: 1_000_000n,
-        reservedPayout: 1_250_000n,
-        status: 3,
+      timeline: makeTimeline(),
+      tape: {
+        roundId: 12n,
+        entries: [
+          {
+            ticketId: 1n,
+            player: "0x00000000000000000000000000000000000000aa",
+            margin: 1_000_000n,
+            leverageBps: 12_500n,
+            reservedPayout: 1_250_000n,
+            transactionHash: null,
+          },
+        ],
+        tiers: emptyTiers(),
       },
+    },
+    hero: {
+      type: "ambiance",
+      roundId: 11n,
+      crashPointBps: 25_000n,
       displayCrashPoint: "2.50x",
     },
     reducedMotion: false,
@@ -79,7 +72,8 @@ const sdk = vi.hoisted(() => {
     emptyTiers,
     makeTimeline,
     makeOpen,
-    stage: makeOpen() as TheaterStage,
+    view: makeOpen() as TheaterView,
+    ticketRoundId: null as bigint | null,
     playerTicket: null as {
       id: bigint;
       player: string;
@@ -94,11 +88,14 @@ const sdk = vi.hoisted(() => {
 });
 
 vi.mock("@/hooks/use-round-theater", () => ({
-  useRoundTheater: () => sdk.stage,
+  useRoundTheater: () => sdk.view,
 }));
 
 vi.mock("@/hooks/use-theater-player-ticket", () => ({
-  useTheaterPlayerTicket: () => ({ ticket: sdk.playerTicket }),
+  useTheaterPlayerTicket: (roundId: bigint | null) => {
+    sdk.ticketRoundId = roundId;
+    return { ticket: sdk.playerTicket };
+  },
 }));
 
 vi.mock("@/hooks/use-replay-clock", () => ({
@@ -143,8 +140,9 @@ import { RoundTheater } from "./round-theater";
 
 describe("RoundTheater", () => {
   beforeEach(() => {
-    sdk.stage = sdk.makeOpen();
+    sdk.view = sdk.makeOpen();
     sdk.playerTicket = null;
+    sdk.ticketRoundId = null;
     window.localStorage.clear();
   });
 
@@ -163,6 +161,7 @@ describe("RoundTheater", () => {
     };
     render(<RoundTheater />);
 
+    expect(sdk.ticketRoundId).toBe(12n);
     expect(screen.getByTestId("theater-player-ticket").textContent).toContain(
       "Your Ticket · 5 tUSD · 2.00x"
     );
@@ -193,15 +192,22 @@ describe("RoundTheater", () => {
   });
 
   it("shows awaiting-attestation with no climb and no invented multiplier", () => {
-    sdk.stage = {
-      kind: "delayed",
-      roundId: 12n,
-      phaseLabel: "reveal-requested",
-      tape: null,
-      timeline: sdk.makeTimeline("reveal-requested", {
-        kind: "next-opens",
-        seconds: 9,
-      }),
+    sdk.view = {
+      live: {
+        kind: "delayed",
+        roundId: 12n,
+        phaseLabel: "reveal-requested",
+        tape: null,
+        timeline: sdk.makeTimeline("reveal-requested", {
+          kind: "next-opens",
+          seconds: 9,
+        }),
+      },
+      hero: {
+        type: "pending",
+        title: "Awaiting attestation",
+        body: "Reveal has been requested. No Crash Point is shown until covalidator signatures finalize the exact stored handle.",
+      },
       reducedMotion: false,
       retry: vi.fn(),
     };
@@ -217,11 +223,21 @@ describe("RoundTheater", () => {
   });
 
   it("shows expired without inventing a Crash Point", () => {
-    sdk.stage = {
-      kind: "expired",
-      roundId: 12n,
-      tape: null,
-      timeline: sdk.makeTimeline("expired", { kind: "next-opens", seconds: 0 }),
+    sdk.view = {
+      live: {
+        kind: "expired",
+        roundId: 12n,
+        tape: null,
+        timeline: sdk.makeTimeline("expired", {
+          kind: "next-opens",
+          seconds: 0,
+        }),
+      },
+      hero: {
+        type: "pending",
+        title: "Outcome unavailable",
+        body: "This round expired without a verified Crash Point. Ticket owners can pull back exactly their original margin.",
+      },
       reducedMotion: false,
       retry: vi.fn(),
     };
@@ -233,22 +249,35 @@ describe("RoundTheater", () => {
   });
 
   it("renders the animated replay for finalized rounds with tier closes", () => {
-    sdk.stage = {
-      kind: "finalized",
-      roundId: 12n,
-      crashPointBps: 25_000n,
-      displayCrashPoint: "2.50x",
-      finalizedAtSeconds: 900n,
-      chainTimestamp: 910n,
-      finalizeTransactionUrl:
-        "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      tape: null,
-      tiers: sdk.emptyTiers(),
-      timeline: sdk.makeTimeline("finalized", {
-        kind: "next-opens",
-        seconds: 5,
-      }),
-      next: { roundId: 13n, countdown: { kind: "next-opens", seconds: 5 } },
+    sdk.view = {
+      live: {
+        kind: "finalized",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl:
+          "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        tape: null,
+        tiers: sdk.emptyTiers(),
+        timeline: sdk.makeTimeline("finalized", {
+          kind: "next-opens",
+          seconds: 5,
+        }),
+      },
+      hero: {
+        type: "replay",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl:
+          "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        tape: null,
+        tiers: sdk.emptyTiers(),
+      },
       reducedMotion: false,
       retry: vi.fn(),
     };
@@ -271,23 +300,76 @@ describe("RoundTheater", () => {
     expect(screen.queryByRole("button", { name: /claim/i })).toBeNull();
   });
 
+  it("renders a held previous replay while live stays the open round", () => {
+    sdk.view = {
+      live: {
+        kind: "open",
+        roundId: 13n,
+        tape: null,
+        timeline: sdk.makeTimeline(
+          "open",
+          { kind: "entry-closes", seconds: 30 },
+          13n
+        ),
+      },
+      hero: {
+        type: "replay",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 1_000n,
+        chainTimestamp: 1_006n,
+        finalizeTransactionUrl: null,
+        tape: null,
+        tiers: sdk.emptyTiers(),
+      },
+      reducedMotion: false,
+      retry: vi.fn(),
+    };
+    render(<RoundTheater />);
+
+    expect(sdk.ticketRoundId).toBe(12n);
+    expect(screen.getByText("Live")).toBeTruthy();
+    expect(screen.getByTestId("theater-finalized-replay")).toBeTruthy();
+    expect(screen.getByText("Round 12 result")).toBeTruthy();
+    expect(screen.getByTestId("theater-next-round").textContent).toBe(
+      "Round 13 entry is open — closes in 00:30"
+    );
+    expect(screen.getByTestId("round-timeline-countdown").textContent).toBe(
+      "Entry closes in 00:30"
+    );
+  });
+
   it("renders the static result card under reduced motion with identical facts", () => {
-    sdk.stage = {
-      kind: "finalized",
-      roundId: 12n,
-      crashPointBps: 25_000n,
-      displayCrashPoint: "2.50x",
-      finalizedAtSeconds: 900n,
-      chainTimestamp: 910n,
-      finalizeTransactionUrl:
-        "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
-      tape: null,
-      tiers: sdk.emptyTiers(),
-      timeline: sdk.makeTimeline("finalized", {
-        kind: "next-opens",
-        seconds: 5,
-      }),
-      next: { roundId: 13n, countdown: { kind: "next-opens", seconds: 5 } },
+    sdk.view = {
+      live: {
+        kind: "finalized",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl:
+          "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        tape: null,
+        tiers: sdk.emptyTiers(),
+        timeline: sdk.makeTimeline("finalized", {
+          kind: "next-opens",
+          seconds: 5,
+        }),
+      },
+      hero: {
+        type: "replay",
+        roundId: 12n,
+        crashPointBps: 25_000n,
+        displayCrashPoint: "2.50x",
+        finalizedAtSeconds: 900n,
+        chainTimestamp: 910n,
+        finalizeTransactionUrl:
+          "https://sepolia.basescan.org/tx/0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        tape: null,
+        tiers: sdk.emptyTiers(),
+      },
       reducedMotion: true,
       retry: vi.fn(),
     };

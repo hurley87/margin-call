@@ -80,9 +80,10 @@ describe("useRoundTheater display-round hold", () => {
     sdk.round = sdk.makeReady({});
   });
 
-  it("keeps the finished round on stage into the next entry window", () => {
+  it("keeps the finished round on the hero into the next entry window", () => {
     const { result, rerender } = renderHook(() => useRoundTheater());
-    expect(result.current.kind).toBe("finalized");
+    expect(result.current.live.kind).toBe("finalized");
+    expect(result.current.hero.type).toBe("replay");
 
     // Epoch flips: round 13 is now open, 6s after round 12 finalized.
     sdk.round = sdk.makeReady({
@@ -98,14 +99,14 @@ describe("useRoundTheater display-round hold", () => {
     rerender();
 
     const held = result.current;
-    expect(held.kind).toBe("finalized");
-    if (held.kind !== "finalized") throw new Error("unreachable");
-    expect(held.roundId).toBe(12n);
-    expect(held.displayCrashPoint).toBe("2.50x");
-    expect(held.next).toEqual({
-      roundId: 13n,
-      countdown: { kind: "entry-closes", seconds: 30 },
-    });
+    expect(held.live.kind).toBe("open");
+    if (held.live.kind !== "open") throw new Error("unreachable");
+    expect(held.live.roundId).toBe(13n);
+    expect(held.live.timeline.roundId).toBe(13n);
+    expect(held.hero.type).toBe("replay");
+    if (held.hero.type !== "replay") throw new Error("unreachable");
+    expect(held.hero.roundId).toBe(12n);
+    expect(held.hero.displayCrashPoint).toBe("2.50x");
 
     // Past the replay + beat, the hold releases to the live open round.
     sdk.round = sdk.makeReady({
@@ -119,12 +120,13 @@ describe("useRoundTheater display-round hold", () => {
       timeline: sdk.makeTimeline("open", 13n),
     });
     rerender();
-    expect(result.current.kind).toBe("open");
+    expect(result.current.live.kind).toBe("open");
+    expect(result.current.hero.type).not.toBe("replay");
   });
 
   it("never holds across more than one epoch", () => {
     const { result, rerender } = renderHook(() => useRoundTheater());
-    expect(result.current.kind).toBe("finalized");
+    expect(result.current.live.kind).toBe("finalized");
 
     sdk.round = sdk.makeReady({
       roundId: 14n,
@@ -136,12 +138,13 @@ describe("useRoundTheater display-round hold", () => {
       timeline: sdk.makeTimeline("open", 14n),
     });
     rerender();
-    expect(result.current.kind).toBe("open");
+    expect(result.current.live.kind).toBe("open");
+    expect(result.current.hero.type).not.toBe("replay");
   });
 
   it("skips the hold when the next round is already locked", () => {
     const { result, rerender } = renderHook(() => useRoundTheater());
-    expect(result.current.kind).toBe("finalized");
+    expect(result.current.live.kind).toBe("finalized");
 
     sdk.round = sdk.makeReady({
       roundId: 13n,
@@ -153,17 +156,22 @@ describe("useRoundTheater display-round hold", () => {
       timeline: sdk.makeTimeline("locked", 13n),
     });
     rerender();
-    expect(result.current.kind).toBe("delayed");
+    expect(result.current.live.kind).toBe("delayed");
+    expect(result.current.hero.type).toBe("pending");
   });
 
-  it("annotates the live finalized stage with the upcoming round", () => {
+  it("keeps live finalized as this round's replay, not a held previous", () => {
     const { result } = renderHook(() => useRoundTheater());
-    const stage = result.current;
-    expect(stage.kind).toBe("finalized");
-    if (stage.kind !== "finalized") throw new Error("unreachable");
-    expect(stage.next).toEqual({
-      roundId: 13n,
-      countdown: { kind: "entry-closes", seconds: 30 },
+    const view = result.current;
+    expect(view.live.kind).toBe("finalized");
+    if (view.live.kind !== "finalized") throw new Error("unreachable");
+    expect(view.live.roundId).toBe(12n);
+    expect(view.live.timeline.countdown).toEqual({
+      kind: "entry-closes",
+      seconds: 30,
     });
+    expect(view.hero.type).toBe("replay");
+    if (view.hero.type !== "replay") throw new Error("unreachable");
+    expect(view.hero.roundId).toBe(12n);
   });
 });
