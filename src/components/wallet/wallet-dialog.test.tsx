@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const sdk = vi.hoisted(() => ({
   transfer: vi.fn(),
+  transferValidated: vi.fn(),
   retry: vi.fn(),
   status: "idle" as string,
   error: null as string | null,
@@ -32,6 +33,7 @@ vi.mock("@/hooks/use-desk-dollars-transfer", async () => {
       canTransfer: sdk.canTransfer,
       canRetry: sdk.canRetry,
       transfer: sdk.transfer,
+      transferValidated: sdk.transferValidated,
       retry: sdk.retry,
     }),
   };
@@ -49,6 +51,7 @@ const TO = "0x0000000000000000000000000000000000000004" as const;
 describe("WalletDialog", () => {
   beforeEach(() => {
     sdk.transfer.mockReset().mockResolvedValue(true);
+    sdk.transferValidated.mockReset().mockResolvedValue(true);
     sdk.retry.mockReset().mockResolvedValue(true);
     sdk.status = "idle";
     sdk.error = null;
@@ -81,7 +84,7 @@ describe("WalletDialog", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Send USDC" }));
 
-    expect(sdk.transfer).not.toHaveBeenCalled();
+    expect(sdk.transferValidated).not.toHaveBeenCalled();
     expect(screen.getByTestId("transaction-confirm")).not.toBeNull();
     expect(screen.getByText(TO)).not.toBeNull();
     expect(screen.getByText("10 USDC")).not.toBeNull();
@@ -98,12 +101,12 @@ describe("WalletDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Confirm send USDC" }));
 
     await waitFor(() =>
-      expect(sdk.transfer).toHaveBeenCalledWith({
-        recipient: TO,
-        amount: "10",
-        balance: 100_000_000n,
+      expect(sdk.transferValidated).toHaveBeenCalledWith({
+        to: TO,
+        amount: 10_000_000n,
       })
     );
+    expect(sdk.transfer).not.toHaveBeenCalled();
   });
 
   it("fills the amount field from Max", () => {
@@ -142,6 +145,6 @@ describe("WalletDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(sdk.retry).toHaveBeenCalledTimes(1));
-    expect(sdk.transfer).not.toHaveBeenCalled();
+    expect(sdk.transferValidated).not.toHaveBeenCalled();
   });
 });

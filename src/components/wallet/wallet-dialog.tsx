@@ -46,9 +46,6 @@ type TransferStatusMessage = {
 };
 
 type PendingTransfer = {
-  recipient: string;
-  amount: string;
-  balance: bigint | null;
   to: Address;
   amountWei: bigint;
 };
@@ -178,9 +175,6 @@ export function WalletDialog({
       }
       setValidationError(null);
       pendingTransfer.arm({
-        recipient,
-        amount,
-        balance,
         to: validation.to,
         amountWei: validation.amount,
       });
@@ -198,10 +192,9 @@ export function WalletDialog({
 
   const handleConfirmTransfer = useCallback(() => {
     pendingTransfer.confirm((armed) =>
-      transfer.transfer({
-        recipient: armed.recipient,
-        amount: armed.amount,
-        balance: armed.balance,
+      transfer.transferValidated({
+        to: armed.to,
+        amount: armed.amountWei,
       })
     );
   }, [pendingTransfer, transfer]);
