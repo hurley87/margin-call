@@ -57,6 +57,10 @@ vi.mock("@/hooks/use-desk-dollars-transfer", () => ({
   }),
 }));
 
+vi.mock("@/components/desk-dollars/desk-dollars-faucet", () => ({
+  DeskDollarsFaucet: () => null,
+}));
+
 vi.mock("convex/react", () => ({
   useQuery: () => ({ optedIn: false }),
   useMutation: () => vi.fn(),
