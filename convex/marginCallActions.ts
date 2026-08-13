@@ -1,9 +1,10 @@
 "use node";
 
 import { PrivyClient } from "@privy-io/server-auth";
+import { KEEPER_ROUND_STATUS } from "@margin-call/shared/crash-keeper";
+import { isWinningTicket } from "@margin-call/shared/crash-outcome";
 import {
   extractPrivyPhoneNumber,
-  isLosingTicket,
   MARGIN_CALL_LIQUIDATION_TWIML,
 } from "@margin-call/shared/margin-call-voice";
 import {
@@ -18,9 +19,6 @@ import { v } from "convex/values";
 import deployments from "../contracts/deployments/base_sepolia.json";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-
-/** Mirrors MarginCallCrash ROUND_STATUS.finalized. */
-const ROUND_STATUS_FINALIZED = 3;
 
 const gameAbi = parseAbi([
   "function getRound(uint256 roundId) view returns ((uint256 id, uint64 openAt, uint64 lockAt, uint64 expiresAt, bytes32 crashRandom, uint256 crashPointBps, uint256 totalMargin, uint256 reservedPayout, uint8 status))",
@@ -209,8 +207,8 @@ export const placeCall = internalAction({
     }
 
     if (
-      round.status !== ROUND_STATUS_FINALIZED ||
-      !isLosingTicket(ticket.leverageBps, round.crashPointBps)
+      round.status !== KEEPER_ROUND_STATUS.finalized ||
+      isWinningTicket(ticket.leverageBps, round.crashPointBps)
     ) {
       return await skip("not_a_loss");
     }

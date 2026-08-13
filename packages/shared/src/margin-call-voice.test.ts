@@ -1,17 +1,19 @@
 import { describe, expect, it } from "vitest";
+import { isWinningTicket } from "./crash-outcome";
 import {
   extractPrivyPhoneNumber,
-  isLosingTicket,
   MARGIN_CALL_LIQUIDATION_TWIML,
 } from "./margin-call-voice";
 
-describe("margin-call-voice helpers", () => {
-  it("treats leverage above the crash point as a liquidation", () => {
-    expect(isLosingTicket(50_000n, 25_000n)).toBe(true);
-    expect(isLosingTicket(25_000n, 25_000n)).toBe(false);
-    expect(isLosingTicket(12_500n, 25_000n)).toBe(false);
+describe("crash-outcome", () => {
+  it("treats equality as a win and leverage above crash as a loss", () => {
+    expect(isWinningTicket(25_000n, 25_000n)).toBe(true);
+    expect(isWinningTicket(12_500n, 25_000n)).toBe(true);
+    expect(isWinningTicket(50_000n, 25_000n)).toBe(false);
   });
+});
 
+describe("margin-call-voice helpers", () => {
   it("extracts phone from top-level or linked Privy accounts", () => {
     expect(
       extractPrivyPhoneNumber({ phone: { number: " +15555550123 " } })

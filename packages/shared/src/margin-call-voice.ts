@@ -1,15 +1,11 @@
 /**
  * Pure helpers for the promotional desk-phone liquidation call.
  * Phone numbers must never be logged or persisted — callers discard them.
+ * Ticket win/loss policy lives in crash-outcome — not here.
  */
 
 export const MARGIN_CALL_LIQUIDATION_TWIML =
   `<Response><Say voice="Polly.Matthew">This is the desk. Your ticket has been liquidated. The crash hit first. Posted margin is gone. Don't take it personally.</Say></Response>` as const;
-
-/** Equality wins — mirrors onchain / client ticket marking. */
-export function isLosingTicket(leverageBps: bigint, crashPointBps: bigint) {
-  return leverageBps > crashPointBps;
-}
 
 type PrivyPhoneUser = {
   phone?: { number?: string | null } | null;

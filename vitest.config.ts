@@ -1,6 +1,8 @@
 import { defineConfig } from "vitest/config";
 import path from "path";
 
+// Longer @margin-call/shared/* aliases must precede the package root alias so
+// Vite does not resolve subpaths against index.ts.
 export default defineConfig({
   test: {
     environment: "node",
@@ -14,28 +16,50 @@ export default defineConfig({
     exclude: ["**/node_modules/**"],
   },
   resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
-      "@margin-call/shared": path.resolve(
-        __dirname,
-        "./packages/shared/src/index.ts"
-      ),
-      "@margin-call/shared/margin-call-voice": path.resolve(
-        __dirname,
-        "./packages/shared/src/margin-call-voice.ts"
-      ),
-      "@margin-call/shared/crash-keeper": path.resolve(
-        __dirname,
-        "./packages/shared/src/crash-keeper.ts"
-      ),
-      "@margin-call/shared/address": path.resolve(
-        __dirname,
-        "./packages/shared/src/address.ts"
-      ),
-      "@margin-call/shared/parse-private-key": path.resolve(
-        __dirname,
-        "./packages/shared/src/parse-private-key.ts"
-      ),
-    },
+    alias: [
+      {
+        find: "@margin-call/shared/margin-call-voice",
+        replacement: path.resolve(
+          __dirname,
+          "./packages/shared/src/margin-call-voice.ts"
+        ),
+      },
+      {
+        find: "@margin-call/shared/crash-outcome",
+        replacement: path.resolve(
+          __dirname,
+          "./packages/shared/src/crash-outcome.ts"
+        ),
+      },
+      {
+        find: "@margin-call/shared/crash-keeper",
+        replacement: path.resolve(
+          __dirname,
+          "./packages/shared/src/crash-keeper.ts"
+        ),
+      },
+      {
+        find: "@margin-call/shared/address",
+        replacement: path.resolve(
+          __dirname,
+          "./packages/shared/src/address.ts"
+        ),
+      },
+      {
+        find: "@margin-call/shared/parse-private-key",
+        replacement: path.resolve(
+          __dirname,
+          "./packages/shared/src/parse-private-key.ts"
+        ),
+      },
+      {
+        find: "@margin-call/shared",
+        replacement: path.resolve(__dirname, "./packages/shared/src/index.ts"),
+      },
+      {
+        find: "@",
+        replacement: path.resolve(__dirname, "./src"),
+      },
+    ],
   },
 });
