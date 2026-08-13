@@ -18,6 +18,11 @@ const API_FILE = join(CONVEX_DIR, "_generated", "api.d.ts");
 // Convex omits these config modules from api.d.ts by design.
 const ALLOWED_UNWIRED = new Set(["schema", "auth.config"]);
 
+/** Pure helpers under convex/lib/ are not Convex function modules. */
+function isAllowedUnwired(mod) {
+  return ALLOWED_UNWIRED.has(mod) || mod.startsWith("lib/");
+}
+
 function listModules(dir) {
   const out = [];
   for (const entry of readdirSync(dir)) {
@@ -42,7 +47,7 @@ const modules = new Set(
     relative(CONVEX_DIR, file).replace(/\.ts$/, "").split(sep).join("/")
   )
 );
-const expected = [...modules].filter((mod) => !ALLOWED_UNWIRED.has(mod)).sort();
+const expected = [...modules].filter((mod) => !isAllowedUnwired(mod)).sort();
 const missing = expected.filter((mod) => !wired.has(mod));
 const stale = [...wired].filter((mod) => !modules.has(mod)).sort();
 

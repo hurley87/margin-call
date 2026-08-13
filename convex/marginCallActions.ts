@@ -7,23 +7,15 @@ import {
   extractPrivyPhoneNumber,
   MARGIN_CALL_LIQUIDATION_TWIML,
 } from "@margin-call/shared/margin-call-voice";
-import {
-  createPublicClient,
-  getAddress,
-  http,
-  parseAbi,
-  type Address,
-} from "viem";
-import { baseSepolia } from "viem/chains";
 import { v } from "convex/values";
-import deployments from "../contracts/deployments/base_sepolia.json";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
-
-const gameAbi = parseAbi([
-  "function getRound(uint256 roundId) view returns ((uint256 id, uint64 openAt, uint64 lockAt, uint64 expiresAt, bytes32 crashRandom, uint256 crashPointBps, uint256 totalMargin, uint256 reservedPayout, uint8 status))",
-  "function getTicket(uint256 ticketId) view returns ((uint256 id, address player, uint256 roundId, uint256 margin, uint256 leverageBps, uint256 reservedPayout, bool settled, bool claimed))",
-]);
+import {
+  createBaseSepoliaPublicClient,
+  readCrashTicketAndRound,
+  resolveBaseSepoliaRpcUrl,
+  resolveCrashGameAddress,
+} from "./lib/crashGameRead";
 
 type SkipReason =
   | "not_opted_in"
@@ -59,22 +51,6 @@ function readPrivyConfig():
     return { ok: false };
   }
   return { ok: true, appId, appSecret };
-}
-
-function gameAddress(): Address {
-  const override = process.env.MARGIN_CALL_CRASH_ADDRESS?.trim();
-  if (override) {
-    return getAddress(override);
-  }
-  return getAddress(deployments.marginCallCrash);
-}
-
-function rpcUrl(): string | null {
-  return (
-    process.env.BASE_SEPOLIA_RPC_URL?.trim() ||
-    process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL?.trim() ||
-    null
-  );
 }
 
 async function placeTwilioCall(args: {
@@ -170,33 +146,20 @@ export const placeCall = internalAction({
 
     const twilio = readTwilioConfig();
     const privy = readPrivyConfig();
-    const rpc = rpcUrl();
+    const rpc = resolveBaseSepoliaRpcUrl();
     if (!twilio.ok || !privy.ok || !rpc) {
       return await skip("missing_credentials");
     }
 
-    const client = createPublicClient({
-      chain: baseSepolia,
-      transport: http(rpc),
-    });
-
+    const client = createBaseSepoliaPublicClient(rpc);
     const ticketId = BigInt(attempt.ticketId);
     const roundId = BigInt(attempt.roundId);
-
-    const [ticket, round] = await Promise.all([
-      client.readContract({
-        address: gameAddress(),
-        abi: gameAbi,
-        functionName: "getTicket",
-        args: [ticketId],
-      }),
-      client.readContract({
-        address: gameAddress(),
-        abi: gameAbi,
-        functionName: "getRound",
-        args: [roundId],
-      }),
-    ]);
+    const { ticket, round } = await readCrashTicketAndRound(
+      client,
+      resolveCrashGameAddress(),
+      ticketId,
+      roundId
+    );
 
     if (ticket.roundId !== roundId) {
       return await skip("round_mismatch");

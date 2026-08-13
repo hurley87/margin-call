@@ -29,9 +29,13 @@ import { v } from "convex/values";
 import deployments from "../contracts/deployments/base_sepolia.json";
 import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import {
+  DEFAULT_CRASH_GAME_ADDRESS,
+  resolveBaseSepoliaRpcUrl,
+} from "./lib/crashGameRead";
 
 /** Defaults from the curated Base Sepolia record — override via Convex env. */
-const DEFAULT_GAME = deployments.marginCallCrash as Address;
+const DEFAULT_GAME = DEFAULT_CRASH_GAME_ADDRESS;
 const DEFAULT_VAULT = deployments.bankrollVault as Address;
 const DEFAULT_INCO = deployments.incoLightning as Address;
 
@@ -80,9 +84,7 @@ function readCredentials():
     }
   | { ok: false; detail: string } {
   const privateKey = process.env.KEEPER_PRIVATE_KEY;
-  const rpcUrl =
-    process.env.BASE_SEPOLIA_RPC_URL ??
-    process.env.NEXT_PUBLIC_BASE_SEPOLIA_RPC_URL;
+  const rpcUrl = resolveBaseSepoliaRpcUrl();
   if (!privateKey) {
     return { ok: false, detail: "KEEPER_PRIVATE_KEY" };
   }
