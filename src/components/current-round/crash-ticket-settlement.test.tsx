@@ -59,7 +59,7 @@ vi.mock("@/hooks/use-crash-ticket-settlement", () => ({
 }));
 
 const voice = vi.hoisted(() => ({
-  trigger: vi.fn((_props: { ticketId: bigint; roundId: bigint }) => null),
+  trigger: vi.fn().mockReturnValue(null),
 }));
 
 vi.mock("@/components/desk-phone/margin-call-voice-trigger", () => ({
