@@ -43,6 +43,22 @@ export function CrashCanvas(props: CrashCanvasProps) {
       dpr={[1, 1.75]}
       frameloop={pageVisible ? "always" : "never"}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+      onCreated={({ gl }) => {
+        // React StrictMode's simulated remount makes R3F's delayed unmount
+        // cleanup force a context loss on the still-live canvas (the root is
+        // reused across the remount), leaving the Floor permanently white in
+        // dev. The loss comes from WEBGL_lose_context, so it is restorable;
+        // a genuine GPU loss makes forceContextRestore a harmless no-op.
+        gl.domElement.addEventListener("webglcontextlost", () => {
+          window.setTimeout(() => {
+            try {
+              gl.forceContextRestore();
+            } catch {
+              // WEBGL_lose_context unsupported — nothing to restore with.
+            }
+          }, 1);
+        });
+      }}
       style={{
         position: "absolute",
         inset: 0,
