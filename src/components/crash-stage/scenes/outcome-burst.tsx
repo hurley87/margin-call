@@ -4,11 +4,14 @@ import { useFrame } from "@react-three/fiber";
 import { Text } from "@react-three/drei";
 import { useEffect, useRef } from "react";
 import type { Group } from "three";
-import type { LandingPresentation } from "@/components/round-theater/landing-frame";
-import { theaterCopy } from "@/components/round-theater/theater-copy";
+import type {
+  LandingPresentation,
+  TicketLanding,
+} from "@/components/round-theater/landing-frame";
 
 export type OutcomeBurstProps = {
   landing: LandingPresentation;
+  kind: TicketLanding["kind"];
 };
 
 type Particle = {
@@ -38,13 +41,10 @@ function seedParticles(isWin: boolean): Particle[] {
 /**
  * Win fountain (green particles rising) or margin-call shatter (red scatter).
  */
-export function OutcomeBurst({ landing }: OutcomeBurstProps) {
+export function OutcomeBurst({ landing, kind }: OutcomeBurstProps) {
   const groupRef = useRef<Group>(null);
   const particlesRef = useRef<Particle[]>(seedParticles(false));
-  const isWin =
-    landing.heroValue === theaterCopy.playerWon ||
-    (!landing.showMarginCallStamp &&
-      landing.heroLabel === theaterCopy.yourTicket);
+  const isWin = kind === "won";
   const color = isWin ? "#92f5b8" : "#ff6b5c";
   const heroColor = isWin ? "#92f5b8" : "#ff6b5c";
 

@@ -235,6 +235,23 @@ describe("deriveStageCtaKind", () => {
     ).toBe("refund");
   });
 
+  it("offers retry when settlement actions fail while awaiting settle", () => {
+    expect(
+      deriveStageCtaKind({
+        mode: "awaiting-settle",
+        offerEntry: false,
+        hasTicket: true,
+        canEnter: false,
+        canVerify: false,
+        canClaim: false,
+        canSettle: false,
+        canRefund: false,
+        canExpire: false,
+        canRetry: true,
+      })
+    ).toBe("retry");
+  });
+
   it("returns none when there is no actionable CTA", () => {
     expect(
       deriveStageCtaKind({

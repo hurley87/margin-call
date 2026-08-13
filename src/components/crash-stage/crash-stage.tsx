@@ -131,13 +131,15 @@ export function CrashStage() {
 
   const activeTicket = unsettledTicket ?? playerTicket ?? settlement.ticket;
 
-  const landing = useMemo(() => {
+  const landingKind = useMemo(() => {
     if (!replayHero || mode !== "outcome") return null;
-    return presentLanding(
-      ticketLanding(activeTicket, replayHero.crashPointBps),
-      replayHero.displayCrashPoint
-    );
+    return ticketLanding(activeTicket, replayHero.crashPointBps).kind;
   }, [activeTicket, mode, replayHero]);
+
+  const landing = useMemo(() => {
+    if (!replayHero || mode !== "outcome" || landingKind === null) return null;
+    return presentLanding({ kind: landingKind }, replayHero.displayCrashPoint);
+  }, [landingKind, mode, replayHero]);
 
   const countdownSeconds = theaterCountdownSeconds(theater.live);
   const urgency = countdownUrgency(mode, countdownSeconds);
@@ -167,6 +169,7 @@ export function CrashStage() {
     playerTierBps: activeTicket?.leverageBps ?? null,
     chipStates,
     landing: mode === "outcome" ? landing : null,
+    landingKind: mode === "outcome" ? landingKind : null,
   };
 
   if (theater.live.kind === "error" || theater.live.kind === "unavailable") {
@@ -216,7 +219,6 @@ export function CrashStage() {
         countdownSeconds={countdownSeconds}
         isAlert={settlement.status === "error"}
         playerTicket={activeTicket}
-        showFaucet={false}
         statusMessage={stageStatusMessage(mode, settlement)}
         suggestSound={mode === "replay" || mode === "outcome"}
       />

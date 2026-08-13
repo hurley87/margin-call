@@ -1,6 +1,5 @@
 "use client";
 
-import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
 import { TheaterSoundToggle } from "@/components/round-theater/theater-sound-toggle";
 import {
   formatDeskDollarsAmount,
@@ -16,11 +15,11 @@ export type StageHudProps = {
   isAlert?: boolean;
   playerTicket: CrashTicket | null;
   suggestSound?: boolean;
-  showFaucet?: boolean;
 };
 
 /**
- * Compact floor HUD: live region, YOU ticket chip, faucet, sound.
+ * Compact floor HUD: live region, YOU ticket chip, sound.
+ * Faucet lives on CrashRoundEntry in the action overlay.
  */
 export function StageHud({
   countdownLabel,
@@ -29,7 +28,6 @@ export function StageHud({
   isAlert = false,
   playerTicket,
   suggestSound = false,
-  showFaucet = false,
 }: StageHudProps) {
   return (
     <div
@@ -84,12 +82,6 @@ export function StageHud({
         >
           {statusMessage}
         </p>
-      ) : null}
-
-      {showFaucet ? (
-        <div className="pointer-events-auto max-w-sm">
-          <DeskDollarsFaucet />
-        </div>
       ) : null}
     </div>
   );

@@ -104,20 +104,20 @@ export type StageCtaInput = {
 };
 
 export function deriveStageCtaKind(input: StageCtaInput): StageCtaKind {
-  if (input.canRetry && input.mode === "error") return "retry";
-
   if (input.mode === "awaiting-settle") {
     if (input.canVerify) return "verify";
     if (input.canClaim) return "claim";
     if (input.canSettle) return "settle-loss";
     if (input.canExpire) return "expire";
     if (input.canRefund) return "refund";
+    if (input.canRetry) return "retry";
     return "none";
   }
 
   if (input.mode === "expired") {
     if (input.canExpire) return "expire";
     if (input.canRefund) return "refund";
+    if (input.canRetry) return "retry";
     return "none";
   }
 
@@ -125,11 +125,14 @@ export function deriveStageCtaKind(input: StageCtaInput): StageCtaKind {
     return "enter";
   }
 
+  if (input.mode === "error" && input.canRetry) return "retry";
+
   // After finalize, claim/settle may still be available if flow split.
   if (input.canClaim) return "claim";
   if (input.canSettle) return "settle-loss";
   if (input.canRefund) return "refund";
   if (input.canExpire) return "expire";
+  if (input.canRetry) return "retry";
 
   return "none";
 }
