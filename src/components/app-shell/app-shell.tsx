@@ -15,7 +15,8 @@ const NAV = [
 
 /**
  * Shared chrome: brand, Floor / Record / Rounds / LP nav, compact auth,
- * disclosure. Leaves page content as the primary workspace.
+ * disclosure. Floor (`/`) is full-bleed with an overlaid header so the
+ * immersive stage owns the viewport; other routes keep the document layout.
  */
 export function AppShell({
   children,
@@ -23,12 +24,28 @@ export function AppShell({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
+  const isFloor = pathname === "/";
 
   return (
     <DeskDollarsFaucetProvider>
-      <div className="min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
-        <header className="border-b border-[var(--t-border)] bg-[var(--t-panel-strong)]">
-          <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+      <div
+        className={`bg-[var(--t-bg)] font-mono text-[var(--t-text)] ${
+          isFloor ? "h-svh overflow-hidden" : "min-h-screen"
+        }`}
+        data-floor={isFloor ? "true" : undefined}
+      >
+        <header
+          className={
+            isFloor
+              ? "absolute inset-x-0 top-0 z-40 border-b border-[var(--t-border)]/60 bg-[var(--t-bg)]/70 backdrop-blur-md"
+              : "border-b border-[var(--t-border)] bg-[var(--t-panel-strong)]"
+          }
+        >
+          <div
+            className={`mx-auto flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6 ${
+              isFloor ? "" : "max-w-7xl"
+            }`}
+          >
             <div className="flex min-w-0 flex-wrap items-center gap-4 sm:gap-6">
               <Link
                 className="font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-tight text-[var(--t-accent)] sm:text-2xl"
@@ -65,11 +82,22 @@ export function AppShell({
             </div>
             <AuthControls />
           </div>
-          <div className="mx-auto w-full max-w-7xl px-4 pb-2 sm:px-6">
+          <div
+            className={`mx-auto w-full px-4 pb-2 sm:px-6 ${
+              isFloor ? "" : "max-w-7xl"
+            }`}
+          >
             <NoRealValueDisclosure />
           </div>
         </header>
-        <main className="mx-auto w-full max-w-7xl px-4 py-6 text-left sm:px-6 sm:py-8">
+        <main
+          className={
+            isFloor
+              ? "relative h-full w-full text-left"
+              : "mx-auto w-full max-w-7xl px-4 py-6 text-left sm:px-6 sm:py-8"
+          }
+          data-testid={isFloor ? "app-shell-floor-main" : undefined}
+        >
           {children}
         </main>
       </div>

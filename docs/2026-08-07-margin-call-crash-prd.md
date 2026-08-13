@@ -114,13 +114,14 @@ The interface derives timing from contract timestamps, not only the browser cloc
 
 ### Round theater
 
-The main screen renders the round as a climbing multiplier curve in the style of established crash games, with one honest difference: the climb is a **replay**. The crash point is committed before entry and revealed only after lock, so nothing can climb live while entries are open.
+The Floor is a full-bleed immersive trading pit (Three.js). The climb is still a **Replay** — the Crash Point is committed before entry and revealed only after lock, so nothing climbs live while entries are open.
 
-- During Open, the curve area shows the contract-derived countdown, a live ticket tape of public entries, and the previous round's replay as ambiance. The interface stops offering new entries roughly five seconds before lock so a submitted transaction cannot straddle the lock; a late entry that reverts is a normal, clearly messaged outcome.
-- All player transactions happen in the Open phase. Posting margin is the anticipation phase, exactly like placing a bet between rounds in a live crash game. There is no mid-climb action.
-- After finalization, the round plays a short dramatized climb — roughly four to twelve seconds, scaling with the crash point — from `1.00x` to the verified result. As the curve passes each Arcade Leverage tier, tickets at that tier visibly close with their payouts; when the curve dies at the crash point, every ticket still open takes the margin call.
-- The replay is explicitly labelled as a rendering of an attested onchain result and links to the verification record. A delayed round shows an honest awaiting-attestation state, never a stalled climb.
-- Reduced-motion clients receive the identical information as a static result card, and watching, skipping, or replaying the theater never changes settlement.
+- During Open, one large floating countdown owns the stage and public Tickets drift in as chips as they enter. Huge Enter CTAs sit in the DOM overlay. The interface stops offering new entries roughly five seconds before lock so a submitted transaction cannot straddle the lock; a late entry that reverts is a normal, clearly messaged outcome.
+- All player transactions happen in the Open phase. Posting margin is the anticipation phase. There is no mid-climb action.
+- After lock, a player with an unsettled Ticket sees a frozen field and a huge **Verify and settle** CTA. The 3D Replay does not start for that player until their settlement transaction confirms. Spectators (no Ticket) see the 3D climb as soon as the round is finalized.
+- The dramatized climb lasts roughly four to twelve seconds, scaling with the Crash Point — from `1.00x` to the verified result. As the curve passes each Arcade Leverage Tier, Ticket chips at that Tier visibly close; when the curve dies at the Crash Point, every Ticket still open takes the margin call, then a win or margin-call outcome animation.
+- The Replay is a rendering of an attested onchain result and links to the verification record. A delayed round shows an honest awaiting-attestation state, never a stalled climb.
+- Reduced-motion clients receive the identical information as a static result card (or giant static countdown), and watching, skipping, or replaying the theater never changes settlement.
 
 ### Game rules
 
@@ -139,7 +140,7 @@ Exact integer math and boundary rules are specified in the [technical design](./
 
 ### Main screen and history
 
-The main screen shows the current and next available round, contract-derived countdown, margin and leverage selectors, expected payout, entry status, the replayed multiplier curve, recent crash points, latest tickets, and claim or refund actions. It always labels Base Sepolia, tUSD, and the assets' lack of real value.
+The Floor is a full-bleed immersive stage with contract-derived countdown, live Ticket chips, margin and Arcade Leverage selectors, expected payout, entry status, the 3D Replay climb after settle (or after finalize for spectators), and claim or refund actions. It always labels Base Sepolia, tUSD, and the assets' lack of real value.
 
 Global history shows at least 20 recent finalized rounds and distinguishes delayed or expired rounds without inventing a multiplier. Round detail includes timestamps, aggregate margin and payouts, the encrypted handle, attested reveal, lifecycle transactions, and BaseScan links.
 
