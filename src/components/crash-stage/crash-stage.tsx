@@ -9,10 +9,7 @@ import { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import { useReplayClock } from "@/hooks/use-replay-clock";
 import {
   useRoundTheater,
-  type TheaterHero,
-  type TheaterLive,
   type TheaterReplayHero,
-  type TheaterView,
 } from "@/hooks/use-round-theater";
 import { useTheaterPlayerTicket } from "@/hooks/use-theater-player-ticket";
 import {
@@ -33,6 +30,13 @@ import {
   getTierCloseProgress,
   isReplayComplete,
 } from "@/lib/round-replay";
+import {
+  theaterCountdownSeconds,
+  theaterDisplayRoundId,
+  theaterLiveRoundId,
+  theaterLiveTimeline,
+  theaterTapeEntries,
+} from "@/lib/theater-live";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import type { CrashCanvasProps } from "./crash-canvas";
@@ -77,10 +81,10 @@ export function CrashStage() {
   const playerAddress =
     authenticated && user ? getEvmWalletAddress(user) : null;
 
-  const displayRoundId = resolveDisplayRoundId(theater.live, theater.hero);
+  const displayRoundId = theaterDisplayRoundId(theater.live, theater.hero);
   const { ticket: playerTicket } = useTheaterPlayerTicket(displayRoundId);
 
-  const entryRoundId = liveRoundId(theater.live) ?? 0n;
+  const entryRoundId = theaterLiveRoundId(theater.live) ?? 0n;
   const entry = useCrashRoundEntry({ roundId: entryRoundId });
   const settlement = useCrashTicketSettlement();
   const refund = useCrashTicketRefund();
@@ -88,7 +92,7 @@ export function CrashStage() {
   const [settledThisSession, setSettledThisSession] = useState(false);
   const previousSettlementStatus = useRef(settlement.status);
   const previousLiveId = useRef<string | null>(null);
-  const liveIdKey = liveRoundId(theater.live)?.toString() ?? null;
+  const liveIdKey = theaterLiveRoundId(theater.live)?.toString() ?? null;
 
   useEffect(() => {
     if (
@@ -148,7 +152,7 @@ export function CrashStage() {
   useStageAudio({
     mode,
     liveKind: theater.live.kind,
-    countdownSeconds: openCountdownSeconds(theater.live),
+    countdownSeconds: theaterCountdownSeconds(theater.live),
     reducedMotion: theater.reducedMotion,
     crashPointBps:
       shouldRunReplayClock && replayHero ? replayHero.crashPointBps : null,
@@ -158,7 +162,7 @@ export function CrashStage() {
       unsettledTicket?.leverageBps ?? playerTicket?.leverageBps ?? null,
   });
 
-  const entries = liveTapeEntries(theater);
+  const entries = theaterTapeEntries(theater);
   const chipStates = useMemo(
     () =>
       buildChipStates(
@@ -182,7 +186,7 @@ export function CrashStage() {
   }, [activeTicket, mode, replayHero]);
 
   const isOpen = theater.live.kind === "open";
-  const countdownSeconds = openCountdownSeconds(theater.live);
+  const countdownSeconds = theaterCountdownSeconds(theater.live);
   const offerEntry =
     isOpen &&
     canOfferEntry("open", countdownSeconds ?? 0) &&
@@ -217,13 +221,10 @@ export function CrashStage() {
     offerEntry,
   });
 
-  const countdownLabel =
-    theater.live.kind === "open" ||
-    theater.live.kind === "delayed" ||
-    theater.live.kind === "finalized" ||
-    theater.live.kind === "expired"
-      ? formatTimelineCountdownLabel(theater.live.timeline)
-      : null;
+  const liveTimeline = theaterLiveTimeline(theater.live);
+  const countdownLabel = liveTimeline
+    ? formatTimelineCountdownLabel(liveTimeline)
+    : null;
 
   const txBusy =
     settlement.status.includes("submitting") ||
@@ -406,66 +407,6 @@ function ReducedMotionFloor({
   );
 }
 
-function liveRoundId(live: TheaterLive): bigint | null {
-  switch (live.kind) {
-    case "open":
-    case "delayed":
-    case "finalized":
-    case "expired":
-      return live.roundId;
-    case "loading":
-    case "error":
-    case "unavailable":
-      return null;
-    default: {
-      const _exhaustive: never = live;
-      return _exhaustive;
-    }
-  }
-}
-
-function resolveDisplayRoundId(
-  live: TheaterLive,
-  hero: TheaterHero
-): bigint | null {
-  if (hero.type === "replay") return hero.roundId;
-  return liveRoundId(live);
-}
-
-function openCountdownSeconds(live: TheaterLive): number | null {
-  switch (live.kind) {
-    case "open":
-    case "delayed":
-    case "finalized":
-    case "expired":
-      return live.timeline.countdown.seconds;
-    case "loading":
-    case "error":
-    case "unavailable":
-      return null;
-    default: {
-      const _exhaustive: never = live;
-      return _exhaustive;
-    }
-  }
-}
-
-function liveTapeEntries(theater: TheaterView): readonly TicketTapeEntry[] {
-  const live = theater.live;
-  if (
-    live.kind === "open" ||
-    live.kind === "delayed" ||
-    live.kind === "finalized" ||
-    live.kind === "expired"
-  ) {
-    return live.tape?.entries ?? [];
-  }
-  if (theater.hero.type === "replay") {
-    return theater.hero.tape?.entries ?? [];
-  }
-  return [];
-}
-
 function countdownUrgency(
   mode: CrashStageMode,
   seconds: number | null
@@ -507,7 +448,7 @@ function buildChipStates(
 
 function stageStatusMessage(options: {
   mode: CrashStageMode;
-  theater: TheaterView;
+  theater: ReturnType<typeof useRoundTheater>;
   settlement: ReturnType<typeof useCrashTicketSettlement>;
   entry: ReturnType<typeof useCrashRoundEntry>;
   refund: ReturnType<typeof useCrashTicketRefund>;

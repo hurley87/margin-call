@@ -21,7 +21,7 @@ import {
   formatNextRoundHandoff,
   formatTimelineCountdownLabel,
 } from "@/lib/round-phase-copy";
-import type { RoundTimeline } from "@/lib/round-timeline";
+import { theaterDisplayRoundId, theaterLiveTimeline } from "@/lib/theater-live";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { ticketLanding } from "./landing-frame";
@@ -48,7 +48,9 @@ export function RoundTheater() {
   // The displayed round's ticket for the signed-in player (null when signed
   // out or ticketless) — drives the "YOU" highlights. During the display-round
   // hold this reads the held replay round, so the player's own replay is marked.
-  const { ticket: playerTicket } = useTheaterPlayerTicket(ticketRoundId(view));
+  const { ticket: playerTicket } = useTheaterPlayerTicket(
+    theaterDisplayRoundId(view.live, view.hero)
+  );
 
   // Lock moment: one low thunk when the entry window slams shut.
   const previousKind = useRef(view.live.kind);
@@ -64,7 +66,7 @@ export function RoundTheater() {
   }, [view.live.kind, view.reducedMotion]);
 
   const isLive = view.live.kind === "open" || view.live.kind === "finalized";
-  const timeline = liveTimeline(view.live);
+  const timeline = theaterLiveTimeline(view.live);
 
   return (
     <section
@@ -108,43 +110,6 @@ export function RoundTheater() {
       </div>
     </section>
   );
-}
-
-function ticketRoundId(view: TheaterView): bigint | null {
-  if (view.hero.type === "replay") return view.hero.roundId;
-  switch (view.live.kind) {
-    case "open":
-    case "delayed":
-    case "finalized":
-    case "expired":
-      return view.live.roundId;
-    case "loading":
-    case "error":
-    case "unavailable":
-      return null;
-    default: {
-      const _exhaustive: never = view.live;
-      return _exhaustive;
-    }
-  }
-}
-
-function liveTimeline(live: TheaterLive): RoundTimeline | null {
-  switch (live.kind) {
-    case "open":
-    case "delayed":
-    case "finalized":
-    case "expired":
-      return live.timeline;
-    case "loading":
-    case "error":
-    case "unavailable":
-      return null;
-    default: {
-      const _exhaustive: never = live;
-      return _exhaustive;
-    }
-  }
 }
 
 function TheaterBody({
