@@ -472,6 +472,7 @@ export function CrashStage() {
             hasTicket={liveRoundTicket !== null || hasStaleUnsettledTicket}
             mode={mode}
             phase={actionPhase}
+            refund={refund}
             roundId={actionRoundId}
             settlement={stageSettlement}
           />

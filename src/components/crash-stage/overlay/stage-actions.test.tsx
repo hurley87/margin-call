@@ -64,6 +64,26 @@ vi.mock("@/components/desk-phone/margin-call-voice-trigger", () => ({
 
 import { StageActions } from "./stage-actions";
 
+const emptyRefund = {
+  status: "ready" as const,
+  error: null,
+  walletAddress: null,
+  ticket: null,
+  round: null,
+  outcome: null,
+  payout: null,
+  phase: null,
+  canExpire: false,
+  canRefund: false,
+  canRetry: false,
+  retryAction: null,
+  busy: false,
+  expireRound: vi.fn(),
+  refund: vi.fn(),
+  retry: vi.fn(),
+  refresh: vi.fn(),
+};
+
 describe("StageActions", () => {
   beforeEach(() => {
     sdk.settlement = sdk.makeSettlement();
@@ -78,6 +98,7 @@ describe("StageActions", () => {
         hasTicket
         mode="awaiting-settle"
         phase="locked"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -103,6 +124,7 @@ describe("StageActions", () => {
         hasTicket
         mode="awaiting-settle"
         phase="locked"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -123,6 +145,7 @@ describe("StageActions", () => {
         hasTicket={false}
         mode="countdown"
         phase="open"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -147,6 +170,7 @@ describe("StageActions", () => {
         hasTicket={false}
         mode="outcome"
         phase="open"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -177,6 +201,7 @@ describe("StageActions", () => {
         hasTicket
         mode="outcome"
         phase="finalized"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -199,6 +224,7 @@ describe("StageActions", () => {
         hasTicket
         mode="countdown"
         phase="open"
+        refund={emptyRefund}
         roundId={13n}
         settlement={sdk.settlement}
       />

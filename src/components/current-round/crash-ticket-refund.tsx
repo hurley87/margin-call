@@ -26,13 +26,21 @@ const retryLabels: Record<CrashRefundRetryAction, string> = {
   "refund-receipt-check": "Retry refund receipt check",
 };
 
+export type CrashTicketRefundState = ReturnType<typeof useCrashTicketRefund>;
+
+export type CrashTicketRefundProps = {
+  /**
+   * Floor-owned refund brain. When set, this surface does not mount its own
+   * hook — keeps HUD clear and the dock on one inFlight/status machine.
+   */
+  refund: CrashTicketRefundState;
+};
+
 /**
  * Return-safe expiry refund surface: recovers a prior-round ticket so a player
  * can expire an unresolved round and pull original margin back.
  */
-export function CrashTicketRefund() {
-  const refund = useCrashTicketRefund();
-
+export function CrashTicketRefund({ refund }: CrashTicketRefundProps) {
   if (!refund.walletAddress) return null;
   if (refund.status === "unavailable") return null;
   if (refund.status === "loading" && !refund.ticket) {
