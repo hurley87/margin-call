@@ -153,6 +153,18 @@ describe("CrashTicketSettlement", () => {
     expect(voice.trigger).not.toHaveBeenCalled();
   });
 
+  it("disables and relabels claim while a claim stage is in flight", () => {
+    sdk.settlement = sdk.makeSettlement({
+      status: "claim-submitting",
+      canClaim: true,
+    });
+    render(<CrashTicketSettlement />);
+    const button = screen.getByRole("button", { name: "Claiming…" });
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.click(button);
+    expect(sdk.settlement.claim).not.toHaveBeenCalled();
+  });
+
   it("hides when the wallet has no recoverable ticket", () => {
     sdk.settlement = sdk.makeSettlement({
       ticket: null,

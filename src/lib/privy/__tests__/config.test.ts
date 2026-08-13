@@ -12,6 +12,7 @@ describe("Privy provider configuration", () => {
         ethereum: {
           createOnLogin: "all-users",
         },
+        showWalletUIs: false,
       },
     });
   });

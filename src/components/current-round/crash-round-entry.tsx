@@ -202,7 +202,15 @@ export function CrashRoundEntry({
           onClick={() => void entry.enter()}
           size="hero"
         >
-          {entry.needsApproval ? "Approve & enter" : "Enter round"}
+          {entry.status === "approval-submitting" ||
+          entry.status === "approval-pending"
+            ? "Approval pending…"
+            : entry.status === "entry-submitting" ||
+                entry.status === "entry-pending"
+              ? "Entering…"
+              : entry.needsApproval
+                ? "Approve & enter"
+                : "Enter round"}
         </GameButton>
         {entry.canRetry ? (
           <button

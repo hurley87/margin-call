@@ -208,5 +208,7 @@ describe("PersonalHistory", () => {
       screen.getByText(/Claim pending until its Base Sepolia receipt succeeds/)
     ).toBeTruthy();
     expect(screen.getByText("Won — claim your payout")).toBeTruthy();
+    const claim = screen.getByRole("button", { name: "Claiming…" });
+    expect(claim).toHaveProperty("disabled", true);
   });
 });

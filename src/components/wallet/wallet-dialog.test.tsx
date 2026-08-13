@@ -19,17 +19,23 @@ const sdk = vi.hoisted(() => ({
   canRetry: false,
 }));
 
-vi.mock("@/hooks/use-desk-dollars-transfer", () => ({
-  useDeskDollarsTransfer: () => ({
-    status: sdk.status,
-    error: sdk.error,
-    lastHash: sdk.lastHash,
-    canTransfer: sdk.canTransfer,
-    canRetry: sdk.canRetry,
-    transfer: sdk.transfer,
-    retry: sdk.retry,
-  }),
-}));
+vi.mock("@/hooks/use-desk-dollars-transfer", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/hooks/use-desk-dollars-transfer")
+  >("@/hooks/use-desk-dollars-transfer");
+  return {
+    ...actual,
+    useDeskDollarsTransfer: () => ({
+      status: sdk.status,
+      error: sdk.error,
+      lastHash: sdk.lastHash,
+      canTransfer: sdk.canTransfer,
+      canRetry: sdk.canRetry,
+      transfer: sdk.transfer,
+      retry: sdk.retry,
+    }),
+  };
+});
 
 vi.mock("@/components/desk-dollars/desk-dollars-faucet", () => ({
   DeskDollarsFaucet: () => null,
@@ -53,7 +59,7 @@ describe("WalletDialog", () => {
 
   afterEach(cleanup);
 
-  it("renders address, balance, and submits a transfer", async () => {
+  it("requires confirm before submitting a transfer and preserves input on cancel", async () => {
     render(
       <WalletDialog
         balance={100_000_000n}
@@ -74,6 +80,22 @@ describe("WalletDialog", () => {
       target: { value: "10" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Send USDC" }));
+
+    expect(sdk.transfer).not.toHaveBeenCalled();
+    expect(screen.getByTestId("transaction-confirm")).not.toBeNull();
+    expect(screen.getByText(TO)).not.toBeNull();
+    expect(screen.getByText("10 USDC")).not.toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect((screen.getByLabelText("Recipient") as HTMLInputElement).value).toBe(
+      TO
+    );
+    expect(
+      (screen.getByLabelText("Amount (USDC)") as HTMLInputElement).value
+    ).toBe("10");
+
+    fireEvent.click(screen.getByRole("button", { name: "Send USDC" }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm send USDC" }));
 
     await waitFor(() =>
       expect(sdk.transfer).toHaveBeenCalledWith({

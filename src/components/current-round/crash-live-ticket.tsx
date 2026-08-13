@@ -21,6 +21,8 @@ type CrashLiveTicketProps = {
   isAlert?: boolean;
   canRetry?: boolean;
   retryLabel?: string;
+  /** True while a sponsored settlement/refund stage is in flight. */
+  busy?: boolean;
   onVerify?: () => void;
   onClaim?: () => void;
   onSettle?: () => void;
@@ -90,6 +92,7 @@ export function CrashLiveTicket({
   isAlert = false,
   canRetry = false,
   retryLabel = "Retry",
+  busy = false,
   onVerify,
   onClaim,
   onSettle,
@@ -175,52 +178,58 @@ export function CrashLiveTicket({
       <div className="mt-4 flex flex-wrap gap-3">
         {canVerify ? (
           <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
+            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
             onClick={onVerify}
             type="button"
           >
-            Verify and settle
+            {busy ? "Verifying…" : "Verify and settle"}
           </button>
         ) : null}
         {canClaim ? (
           <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
+            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
             onClick={onClaim}
             type="button"
           >
-            Claim payout
+            {busy ? "Claiming…" : "Claim payout"}
           </button>
         ) : null}
         {canSettle ? (
           <button
-            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
+            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
             onClick={onSettle}
             type="button"
           >
-            Settle loss
+            {busy ? "Settling…" : "Settle loss"}
           </button>
         ) : null}
         {canExpire ? (
           <button
-            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
+            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
             onClick={onExpire}
             type="button"
           >
-            Mark round expired
+            {busy ? "Expiring…" : "Mark round expired"}
           </button>
         ) : null}
         {canRefund ? (
           <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
+            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
             onClick={onRefund}
             type="button"
           >
-            Refund margin
+            {busy ? "Refunding…" : "Refund margin"}
           </button>
         ) : null}
         {canRetry ? (
           <button
-            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
+            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+            disabled={busy}
             onClick={onRetry}
             type="button"
           >

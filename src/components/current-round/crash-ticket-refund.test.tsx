@@ -88,6 +88,18 @@ describe("CrashTicketRefund", () => {
     expect(sdk.refund.expireRound).toHaveBeenCalledOnce();
   });
 
+  it("disables and relabels refund while a refund stage is in flight", () => {
+    sdk.refund = sdk.makeRefund({
+      status: "refund-pending",
+      canRefund: true,
+    });
+    render(<CrashTicketRefund />);
+    const button = screen.getByRole("button", { name: "Refunding…" });
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.click(button);
+    expect(sdk.refund.refund).not.toHaveBeenCalled();
+  });
+
   it("hides for non-expiry tickets owned by settlement", () => {
     sdk.refund = sdk.makeRefund({
       outcome: "won",

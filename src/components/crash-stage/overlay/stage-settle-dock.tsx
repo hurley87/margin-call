@@ -35,6 +35,10 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
   const retryLabel = settlement.retryAction
     ? settlementRetryLabels[settlement.retryAction]
     : "Retry";
+  const busy =
+    settlement.status === "attesting" ||
+    settlement.status.endsWith("-submitting") ||
+    settlement.status.endsWith("-pending");
 
   return (
     <div className="text-left" data-testid="stage-settle-dock">
@@ -75,33 +79,37 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
         {settlement.canVerify ? (
           <GameButton
             className="bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+            disabled={busy}
             onClick={() => void settlement.verifyAndSettle()}
             size="hero"
           >
-            Verify and settle
+            {busy ? "Verifying…" : "Verify and settle"}
           </GameButton>
         ) : null}
         {settlement.canClaim ? (
           <GameButton
             className="bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+            disabled={busy}
             onClick={() => void settlement.claim()}
             size="hero"
           >
-            Claim payout
+            {busy ? "Claiming…" : "Claim payout"}
           </GameButton>
         ) : null}
         {settlement.canSettle ? (
           <GameButton
+            disabled={busy}
             onClick={() => void settlement.settleLoss()}
             size="hero"
             variant="danger"
           >
-            Settle loss
+            {busy ? "Settling…" : "Settle loss"}
           </GameButton>
         ) : null}
         {settlement.canRetry ? (
           <button
             className={TERMINAL_ACTION_BUTTON_CLASS}
+            disabled={busy}
             onClick={() => void settlement.retry()}
             type="button"
           >
