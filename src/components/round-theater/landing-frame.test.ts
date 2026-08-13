@@ -1,12 +1,41 @@
 import { describe, expect, it } from "vitest";
 import {
   presentLanding,
+  ticketForRound,
   ticketLanding,
   type TicketLanding,
 } from "./landing-frame";
 import { theaterCopy } from "./theater-copy";
 
 const CRASH = "2.50x";
+
+describe("ticketForRound", () => {
+  const ticket = {
+    id: 1n,
+    player: "0x00000000000000000000000000000000000000aa" as const,
+    roundId: 12n,
+    margin: 5_000_000n,
+    leverageBps: 20_000n,
+    reservedPayout: 10_000_000n,
+    settled: false,
+    claimed: false,
+  };
+
+  it("passes a ticket from the same round through", () => {
+    expect(ticketForRound(ticket, 12n)).toBe(ticket);
+  });
+
+  it("nulls a ticket from another round so it lands as spectator", () => {
+    expect(ticketForRound(ticket, 13n)).toBeNull();
+    expect(ticketLanding(ticketForRound(ticket, 13n), 25_000n)).toEqual({
+      kind: "spectator",
+    });
+  });
+
+  it("passes null through", () => {
+    expect(ticketForRound(null, 12n)).toBeNull();
+  });
+});
 
 describe("ticketLanding", () => {
   it("returns spectator when there is no ticket", () => {
@@ -59,6 +88,8 @@ describe("presentLanding", () => {
     expect(frame.showMarginCallStamp).toBe(false);
     expect(frame.stampDetail).toBeNull();
     expect(frame.heroColorClass).toContain("green");
+    expect(frame.plotAccent).toBe("var(--t-green-hot)");
+    expect(frame.panelInsetClass).toContain("146,245,184");
   });
 
   it("freezes margin-called with personal detail once and market stamp copy", () => {
@@ -69,6 +100,8 @@ describe("presentLanding", () => {
     // Stamp must not re-print the personal detail.
     expect(frame.stampDetail).toBe(theaterCopy.marginCallDetail);
     expect(frame.stampDetail).not.toBe(frame.outcomeDetail);
+    expect(frame.plotAccent).toBe("var(--t-red-hot)");
+    expect(frame.panelInsetClass).toContain("255,107,92");
   });
 
   it("freezes spectator on Crash Point in red with the market stamp", () => {
@@ -80,6 +113,8 @@ describe("presentLanding", () => {
     expect(frame.supportingCrashPoint).toBeNull();
     expect(frame.showMarginCallStamp).toBe(true);
     expect(frame.stampDetail).toBe(theaterCopy.marginCallDetail);
+    expect(frame.plotAccent).toBe("var(--t-red-hot)");
+    expect(frame.panelInsetClass).toBeNull();
   });
 
   it("covers every TicketLanding kind", () => {

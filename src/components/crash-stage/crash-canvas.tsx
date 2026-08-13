@@ -20,7 +20,7 @@ export type CrashCanvasProps = {
   entries: readonly TicketTapeEntry[];
   playerAddress: string | null;
   chipStates: ReadonlyMap<string, TicketChipState>;
-  outcomeKind: TicketLanding["kind"] | null;
+  outcomeKind: Exclude<TicketLanding["kind"], "won"> | null;
 };
 
 /**
@@ -43,6 +43,22 @@ export function CrashCanvas(props: CrashCanvasProps) {
       dpr={[1, 1.75]}
       frameloop={pageVisible ? "always" : "never"}
       gl={{ antialias: true, alpha: true, powerPreference: "high-performance" }}
+      onCreated={({ gl }) => {
+        // React StrictMode's simulated remount makes R3F's delayed unmount
+        // cleanup force a context loss on the still-live canvas (the root is
+        // reused across the remount), leaving the Floor permanently white in
+        // dev. The loss comes from WEBGL_lose_context, so it is restorable;
+        // a genuine GPU loss makes forceContextRestore a harmless no-op.
+        gl.domElement.addEventListener("webglcontextlost", () => {
+          window.setTimeout(() => {
+            try {
+              gl.forceContextRestore();
+            } catch {
+              // WEBGL_lose_context unsupported — nothing to restore with.
+            }
+          }, 1);
+        });
+      }}
       style={{
         position: "absolute",
         inset: 0,
@@ -82,6 +98,7 @@ function StageContent(props: CrashCanvasProps) {
   const showCountdown =
     props.mode === "countdown" ||
     props.mode === "awaiting-settle" ||
+    props.mode === "settling" ||
     props.mode === "expired" ||
     props.mode === "loading";
 
@@ -90,7 +107,10 @@ function StageContent(props: CrashCanvasProps) {
     props.mode !== "loading" &&
     (showCountdown || props.mode === "replay" || props.mode === "outcome");
 
-  const frozen = props.mode === "awaiting-settle" || props.mode === "expired";
+  const frozen =
+    props.mode === "awaiting-settle" ||
+    props.mode === "settling" ||
+    props.mode === "expired";
 
   return (
     <>

@@ -5,10 +5,12 @@ import {
   getReplayDurationMs,
   getReplayMultiplierBps,
   getReplayPath,
+  getReplayPathPoints,
   getReplayProgress,
   getTierCloseProgress,
   isReplayComplete,
   isReplayHoldActive,
+  replayAreaPathD,
   REPLAY_DURATION_MAX_MS,
   REPLAY_DURATION_MIN_MS,
   REPLAY_HOLD_BEAT_SECONDS,
@@ -96,6 +98,20 @@ describe("round-replay math", () => {
     expect(path.startsWith("M ")).toBe(true);
     expect(path.includes(" L ")).toBe(true);
     expect(getReplayPath(30_000n, 0).startsWith("M ")).toBe(true);
+  });
+
+  it("closes an area path under the climb to the baseline", () => {
+    expect(replayAreaPathD([], 56)).toBe("");
+
+    const points = getReplayPathPoints(30_000n, 1, {
+      width: 100,
+      height: 56,
+    });
+    const area = replayAreaPathD(points, 56);
+    expect(area.startsWith("M ")).toBe(true);
+    expect(area.endsWith(" Z")).toBe(true);
+    expect(area).toContain(" L 100.00 56.00");
+    expect(area).toContain(` L ${points[0]!.x.toFixed(2)} 56.00 Z`);
   });
 
   it("holds the display round through the replay plus the result beat", () => {

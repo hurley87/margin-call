@@ -91,11 +91,15 @@ export async function runSponsoredStage<Stage extends string>(options: {
   copy: StageErrorCopy;
   request: { to: Address; data: Hex };
   onStatus: (status: `${Stage}-submitting` | `${Stage}-pending`) => void;
+  /** Reports the submitted transaction hash before its receipt resolves. */
+  onHash?: (hash: Hex) => void;
 }): Promise<void> {
-  const { transaction, pendingStage, stage, copy, request, onStatus } = options;
+  const { transaction, pendingStage, stage, copy, request, onStatus, onHash } =
+    options;
   onStatus(`${stage}-submitting`);
   const result = await submitSponsoredCall(transaction, request, (hash) => {
     pendingStage.current = { stage, hash };
+    onHash?.(hash);
     onStatus(`${stage}-pending`);
   });
   applyStageResult(pendingStage, copy, result);

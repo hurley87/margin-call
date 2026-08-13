@@ -20,6 +20,13 @@ export type SettlementStage = "reveal" | "finalize" | "claim" | "settle";
  * settlement hook and the personal-history actions. `runStage` submits one
  * receipt-confirmed transaction and throws on failure; `onRoundChange` reports
  * each round-status advance so callers can mirror it into their state.
+ *
+ * `onCrashPointKnown` fires at the earliest moment the Crash Point is
+ * determined client-side: immediately for an already-finalized round, or as
+ * soon as the covalidator attestation returns — before the finalize receipt.
+ * The crash point is a pure function of the attested plaintext, so a
+ * presentation layer may reveal the outcome while finalize/claim confirm in
+ * the background.
  */
 export async function runVerifyAndSettleFlow(options: {
   contractAddress: Address;
@@ -31,11 +38,22 @@ export async function runVerifyAndSettleFlow(options: {
   ) => Promise<void>;
   onAttesting: () => void;
   onRoundChange?: (round: CrashRound) => void;
+  onCrashPointKnown?: (crashPointBps: bigint) => void;
 }): Promise<void> {
-  const { contractAddress, ticket, runStage, onAttesting, onRoundChange } =
-    options;
+  const {
+    contractAddress,
+    ticket,
+    runStage,
+    onAttesting,
+    onRoundChange,
+    onCrashPointKnown,
+  } = options;
 
   let round = options.round;
+  if (round.status === ROUND_STATUS.finalized) {
+    onCrashPointKnown?.(round.crashPointBps);
+  }
+
   // Locked rounds still store Open until reveal is requested.
   if (round.status === ROUND_STATUS.open) {
     await runStage("reveal", revealRequest(contractAddress, round.id));
@@ -46,6 +64,8 @@ export async function runVerifyAndSettleFlow(options: {
   if (round.status === ROUND_STATUS.revealRequested) {
     onAttesting();
     const attestation = await requestCrashAttestation(round.crashRandom);
+    const crashPointBps = computeCrashPointBps(attestation.plaintext);
+    onCrashPointKnown?.(crashPointBps);
     await runStage(
       "finalize",
       finalizeRequest(
@@ -58,7 +78,7 @@ export async function runVerifyAndSettleFlow(options: {
     round = {
       ...round,
       status: ROUND_STATUS.finalized,
-      crashPointBps: computeCrashPointBps(attestation.plaintext),
+      crashPointBps,
     };
     onRoundChange?.(round);
   }

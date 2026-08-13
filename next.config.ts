@@ -2,6 +2,12 @@ import type { NextConfig } from "next";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
+  // StrictMode's dev-only simulated remount makes @react-three/fiber 9.x
+  // schedule its unmount cleanup (renderer dispose + forceContextLoss) against
+  // the root it then reuses, killing the Floor's WebGL context ~500ms after
+  // mount and leaving the pit permanently white in `next dev`. Production
+  // never double-invokes effects, so this only changes dev behaviour.
+  reactStrictMode: false,
   transpilePackages: [
     "@margin-call/shared",
     "three",

@@ -1,6 +1,8 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
+import type { Hex } from "viem";
+import { getBaseSepoliaTransactionUrl } from "@/lib/base-sepolia-explorer";
 import { runVerifyAndSettleFlow } from "@/lib/crash-settlement-flow";
 import {
   claimRequest,
@@ -17,7 +19,17 @@ import {
 
 type Stage = "reveal" | "finalize" | "claim" | "settle";
 
+const STAGE_ORDER: readonly Stage[] = ["reveal", "finalize", "claim", "settle"];
+
 export type CrashSettlementStatus = CrashTicketStageStatus<Stage, "attesting">;
+
+/** Submitted settlement transaction with its BaseScan link. */
+export type SettlementTransaction = {
+  stage: Stage;
+  hash: Hex;
+  url: string;
+  confirmed: boolean;
+};
 
 export type CrashSettlementRetryAction =
   | "refresh"
@@ -59,8 +71,16 @@ const stageCopy: Record<Stage, StageErrorCopy> = {
 /**
  * Recovers a returning player's recent ticket and drives verify/claim/settle
  * through receipt-confirmed sponsored transactions.
+ *
+ * `onCrashPointKnown` (optional) fires as soon as the Crash Point is
+ * determined client-side during `verifyAndSettle` — before the finalize and
+ * claim/settle receipts — so presentation can start revealing the outcome
+ * while the remaining transactions confirm.
  */
-export function useCrashTicketSettlement() {
+export function useCrashTicketSettlement(options?: {
+  onCrashPointKnown?: (crashPointBps: bigint) => void;
+}) {
+  const onCrashPointKnown = options?.onCrashPointKnown;
   const {
     walletAddress,
     gameConfig,
@@ -71,7 +91,9 @@ export function useCrashTicketSettlement() {
     pendingStageRef,
     retryKind,
     pendingReceiptStage,
+    stageHashes,
     refresh,
+    refreshIfIdle,
     runStage,
     resumePending,
     runFlow,
@@ -86,6 +108,23 @@ export function useCrashTicketSettlement() {
     unavailable,
     loadFailed,
   });
+
+  const transactions = useMemo<SettlementTransaction[]>(
+    () =>
+      STAGE_ORDER.flatMap((stage) => {
+        const recorded = stageHashes[stage];
+        if (!recorded) return [];
+        return [
+          {
+            stage,
+            hash: recorded.hash,
+            url: getBaseSepoliaTransactionUrl(recorded.hash),
+            confirmed: recorded.confirmed,
+          },
+        ];
+      }),
+    [stageHashes]
+  );
 
   const settleTicket = useCallback(
     async (mode: "claim" | "settle" | "resume" = "claim"): Promise<boolean> => {
@@ -149,11 +188,13 @@ export function useCrashTicketSettlement() {
           })),
         onRoundChange: (round) =>
           setState((current) => ({ ...current, round })),
+        onCrashPointKnown,
       })
     );
   }, [
     gameConfig,
     inFlightRef,
+    onCrashPointKnown,
     pendingStageRef,
     retryKindRef,
     runFlow,
@@ -218,10 +259,12 @@ export function useCrashTicketSettlement() {
     canSettle: outcome === "lost" && canAct,
     canRetry,
     retryAction,
+    transactions,
     verifyAndSettle,
     claim,
     settleLoss,
     retry,
     refresh,
+    refreshIfIdle,
   };
 }

@@ -98,6 +98,10 @@ const ticketRefundedEvent = getAbiItem({
   abi: marginCallCrashAbi,
   name: "TicketRefunded",
 });
+const ticketLossSettledEvent = getAbiItem({
+  abi: marginCallCrashAbi,
+  name: "TicketLossSettled",
+});
 
 // A round can be initialized at most one 60-second epoch early. A 512-block
 // window provides ample Base Sepolia reorg/block-time margin without an
@@ -183,6 +187,14 @@ export type PlayerTicketHistoryItem = {
   canVerify: boolean;
   canExpire: boolean;
   canRefund: boolean;
+  /** BaseScan link for this ticket's settlement, when one exists onchain. */
+  settlementTransaction: PlayerSettlementTransaction | null;
+};
+
+/** Player-scoped settlement transaction link for one round. */
+export type PlayerSettlementTransaction = {
+  kind: "claim" | "loss" | "refund";
+  url: string;
 };
 
 export const ROUND_STATUS = {
@@ -634,15 +646,91 @@ export async function readPlayerTicketHistory(
     functionName: "currentRoundId",
     blockNumber: block.number,
   });
-  const found = await scanPlayerTickets(
-    config.address,
-    currentRoundId,
-    player,
-    block.number
-  );
+  const [found, settlementUrls] = await Promise.all([
+    scanPlayerTickets(config.address, currentRoundId, player, block.number),
+    // Rows degrade to no link when the log scan fails — never the whole list.
+    readPlayerSettlementTransactionUrls(config, player, block.number).catch(
+      () => new Map<string, PlayerSettlementTransaction>()
+    ),
+  ]);
   return found.map(({ ticket, round }) =>
-    toPlayerTicketHistoryItem(ticket, round, block.timestamp)
+    toPlayerTicketHistoryItem(
+      ticket,
+      round,
+      block.timestamp,
+      settlementUrls.get(ticket.roundId.toString()) ?? null
+    )
   );
+}
+
+/**
+ * BaseScan links for every settlement the player holds onchain — claims,
+ * loss settlements, and refunds — keyed by roundId string. All three events
+ * index the player, so the scan stays player-filtered from deployment.
+ */
+export async function readPlayerSettlementTransactionUrls(
+  config: MarginCallCrashConfig,
+  player: Address,
+  toBlock?: bigint
+): Promise<Map<string, PlayerSettlementTransaction>> {
+  const fromBlock = config.deploymentBlock;
+  const [claimed, lossSettled, refunded] = await Promise.all([
+    baseSepoliaPublicClient.getLogs({
+      address: config.address,
+      event: ticketClaimedEvent,
+      args: { player },
+      fromBlock,
+      toBlock,
+      strict: true,
+    }),
+    baseSepoliaPublicClient.getLogs({
+      address: config.address,
+      event: ticketLossSettledEvent,
+      args: { player },
+      fromBlock,
+      toBlock,
+      strict: true,
+    }),
+    baseSepoliaPublicClient.getLogs({
+      address: config.address,
+      event: ticketRefundedEvent,
+      args: { player },
+      fromBlock,
+      toBlock,
+      strict: true,
+    }),
+  ]);
+  return buildPlayerSettlementUrlMap({ claimed, lossSettled, refunded });
+}
+
+type PlayerSettlementLog = {
+  args: { roundId?: bigint };
+  transactionHash: Hash | null;
+};
+
+/** Pure log → per-round settlement link mapping (one settlement per round). */
+export function buildPlayerSettlementUrlMap(logs: {
+  claimed: ReadonlyArray<PlayerSettlementLog>;
+  lossSettled: ReadonlyArray<PlayerSettlementLog>;
+  refunded: ReadonlyArray<PlayerSettlementLog>;
+}): Map<string, PlayerSettlementTransaction> {
+  const map = new Map<string, PlayerSettlementTransaction>();
+  const add = (
+    kind: PlayerSettlementTransaction["kind"],
+    rows: ReadonlyArray<PlayerSettlementLog>
+  ) => {
+    for (const row of rows) {
+      if (row.args.roundId === undefined || !row.transactionHash) continue;
+      map.set(row.args.roundId.toString(), {
+        kind,
+        url: getBaseSepoliaTransactionUrl(row.transactionHash),
+      });
+    }
+  };
+  add("claim", logs.claimed);
+  add("loss", logs.lossSettled);
+  add("refund", logs.refunded);
+  return map;
 }
 
 /** Loads initialized rounds in the global lookback, newest first. */
@@ -767,7 +855,8 @@ function deriveHistoryState(
 function toPlayerTicketHistoryItem(
   ticket: CrashTicket,
   round: CrashRound,
-  chainTimestamp: bigint
+  chainTimestamp: bigint,
+  settlementTransaction: PlayerSettlementTransaction | null = null
 ): PlayerTicketHistoryItem {
   const phase = deriveRoundPhase(round, chainTimestamp);
   const outcome = deriveTicketOutcome(ticket, round);
@@ -805,6 +894,7 @@ function toPlayerTicketHistoryItem(
       !ticket.settled && (phase === "locked" || phase === "reveal-requested"),
     canExpire: !ticket.settled && phase === "expired-eligible",
     canRefund: outcome === "refundable",
+    settlementTransaction,
   };
 }
 

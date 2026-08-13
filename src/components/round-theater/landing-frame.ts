@@ -26,6 +26,10 @@ export type LandingPresentation = {
   stampDetail: string | null;
   /** Crash-moment edge flash color (curve juice only). */
   momentColor: string;
+  /** Stroke / area / head accent once the climb freezes. */
+  plotAccent: string;
+  /** Optional inset glow on the hero panel. */
+  panelInsetClass: string | null;
 };
 
 /** Domain boundary: ticket + Crash Point → personal or spectator landing. */
@@ -37,6 +41,18 @@ export function ticketLanding(
   return isWinningTicket(ticket.leverageBps, crashPointBps)
     ? { kind: "won" }
     : { kind: "margin-called" };
+}
+
+/**
+ * Null unless the ticket belongs to the given round. Guards personal landings
+ * against a recovered ticket from an earlier round being judged against
+ * another round's Crash Point.
+ */
+export function ticketForRound(
+  ticket: CrashTicket | null,
+  roundId: bigint
+): CrashTicket | null {
+  return ticket !== null && ticket.roundId === roundId ? ticket : null;
 }
 
 /**
@@ -59,6 +75,8 @@ export function presentLanding(
         showMarginCallStamp: false,
         stampDetail: null,
         momentColor: "var(--t-safe)",
+        plotAccent: "var(--t-green-hot)",
+        panelInsetClass: "shadow-[inset_0_0_56px_rgba(146,245,184,0.16)]",
       };
     case "margin-called":
       return {
@@ -72,6 +90,8 @@ export function presentLanding(
         showMarginCallStamp: true,
         stampDetail: theaterCopy.marginCallDetail,
         momentColor: "var(--t-threat)",
+        plotAccent: "var(--t-red-hot)",
+        panelInsetClass: "shadow-[inset_0_0_56px_rgba(255,107,92,0.14)]",
       };
     case "spectator":
       return {
@@ -85,6 +105,8 @@ export function presentLanding(
         showMarginCallStamp: true,
         stampDetail: theaterCopy.marginCallDetail,
         momentColor: "var(--t-amber-hot)",
+        plotAccent: "var(--t-red-hot)",
+        panelInsetClass: null,
       };
     default: {
       const _exhaustive: never = landing;

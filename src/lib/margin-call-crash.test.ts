@@ -998,3 +998,50 @@ function makeRound(overrides: Partial<CrashRound> = {}): CrashRound {
     ...overrides,
   };
 }
+
+describe("buildPlayerSettlementUrlMap", () => {
+  it("maps each settlement event kind to a per-round BaseScan link", async () => {
+    const { buildPlayerSettlementUrlMap } = await import("./margin-call-crash");
+    const map = buildPlayerSettlementUrlMap({
+      claimed: [
+        {
+          args: { roundId: 12n },
+          transactionHash: OPENING_TRANSACTION_HASH,
+        },
+      ],
+      lossSettled: [
+        {
+          args: { roundId: 13n },
+          transactionHash: REVEAL_TRANSACTION_HASH,
+        },
+      ],
+      refunded: [
+        {
+          args: { roundId: 14n },
+          transactionHash: FINALIZE_TRANSACTION_HASH,
+        },
+      ],
+    });
+
+    expect(map.get("12")).toEqual({
+      kind: "claim",
+      url: expect.stringContaining(`/tx/${OPENING_TRANSACTION_HASH}`),
+    });
+    expect(map.get("13")?.kind).toBe("loss");
+    expect(map.get("14")?.kind).toBe("refund");
+    expect(map.size).toBe(3);
+  });
+
+  it("skips rows without a round id or transaction hash", async () => {
+    const { buildPlayerSettlementUrlMap } = await import("./margin-call-crash");
+    const map = buildPlayerSettlementUrlMap({
+      claimed: [
+        { args: {}, transactionHash: OPENING_TRANSACTION_HASH },
+        { args: { roundId: 15n }, transactionHash: null },
+      ],
+      lossSettled: [],
+      refunded: [],
+    });
+    expect(map.size).toBe(0);
+  });
+});
