@@ -1,6 +1,7 @@
 import { query } from "./_generated/server";
 
-function canonicalPrivyDid(subject: string): string {
+/** Canonical `did:privy:…` from a verified Convex identity subject. */
+export function canonicalPrivyDid(subject: string): string {
   if (!subject.startsWith("did:privy:") || subject === "did:privy:") {
     throw new Error(
       "Expected a canonical Privy DID from the verified identity"

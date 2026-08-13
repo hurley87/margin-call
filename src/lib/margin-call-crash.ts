@@ -9,11 +9,14 @@ import {
   type Hash,
   type Hex,
 } from "viem";
+import { isWinningTicket } from "@margin-call/shared";
 import { baseSepoliaPublicClient } from "./base-sepolia";
 import {
   getBaseSepoliaContractCodeUrl,
   getBaseSepoliaTransactionUrl,
 } from "./base-sepolia-explorer";
+
+export { isWinningTicket };
 
 export const marginCallCrashAbi = parseAbi([
   "function epochOrigin() view returns (uint64)",
@@ -312,10 +315,6 @@ export function computeMaximumPayout(margin: bigint, leverageBps: bigint) {
 }
 
 /** Equality wins: the ticket pays when leverage is at or below the Crash Point. */
-export function isWinningTicket(leverageBps: bigint, crashPointBps: bigint) {
-  return leverageBps <= crashPointBps;
-}
-
 export function computeTicketPayout(
   margin: bigint,
   leverageBps: bigint,

@@ -8,6 +8,8 @@
     ".": "./src/index.ts",
     "./address": "./src/address.ts",
     "./crash-keeper": "./src/crash-keeper.ts",
+    "./crash-outcome": "./src/crash-outcome.ts",
+    "./margin-call-voice": "./src/margin-call-voice.ts",
     "./parse-private-key": "./src/parse-private-key.ts"
   },
   "dependencies": {

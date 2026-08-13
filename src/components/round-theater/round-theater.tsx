@@ -25,6 +25,7 @@ import type { RoundTimeline } from "@/lib/round-timeline";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { ticketLanding } from "./landing-frame";
+import { MarginCallVoiceBeat } from "./margin-call-voice-beat";
 import { theaterCopy } from "./theater-copy";
 import { FinalizeLink } from "./finalize-link";
 import {
@@ -427,9 +428,21 @@ function ReplayStage({
     playerTierBps,
   });
 
+  // Reduced-motion shows the static result immediately — treat that as the
+  // hard-stop beat for the promotional desk-phone call.
+  const voiceBeat = (
+    <MarginCallVoiceBeat
+      isComplete={reducedMotion || clock.isComplete}
+      isLiquidated={landing.kind === "margin-called"}
+      roundId={hero.roundId}
+      ticketId={playerTicket?.id ?? null}
+    />
+  );
+
   if (reducedMotion) {
     return (
       <div className="space-y-4" data-testid="theater-finalized-static">
+        {voiceBeat}
         <RoundResultCard
           crashPointBps={hero.crashPointBps}
           displayCrashPoint={hero.displayCrashPoint}
@@ -445,6 +458,7 @@ function ReplayStage({
 
   return (
     <div className="space-y-4" data-testid="theater-finalized-replay">
+      {voiceBeat}
       {/* Re-keyed on restart so the Replay button replays the CRT wipe too. */}
       <div className="mc-crt-reveal" key={restartNonce}>
         <ReplayCurve
