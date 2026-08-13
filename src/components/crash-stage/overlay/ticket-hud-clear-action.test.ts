@@ -12,8 +12,6 @@ function settlement(
     canSettle: false,
     canRetry: false,
     retryAction: null,
-    phase: null,
-    outcome: null,
     verifyAndSettle: vi.fn(),
     claim: vi.fn(),
     settleLoss: vi.fn(),
@@ -50,8 +48,8 @@ describe("ticketHudClearAction", () => {
     ).toBeNull();
   });
 
-  it("prefers verify and settle when the settlement dock would", () => {
-    const settle = settlement({ canVerify: true, canClaim: true });
+  it("uses the shared primary resolve action when ready", () => {
+    const settle = settlement({ canVerify: true });
     const action = ticketHudClearAction({
       isLiveOpenEntry: false,
       settlement: settle,
@@ -62,47 +60,11 @@ describe("ticketHudClearAction", () => {
     expect(settle.verifyAndSettle).toHaveBeenCalledOnce();
   });
 
-  it("offers refund margin for an expiry leftover", () => {
-    const refundState = refund({ canRefund: true });
-    const action = ticketHudClearAction({
-      isLiveOpenEntry: false,
-      settlement: settlement(),
-      refund: refundState,
-    });
-    expect(action?.label).toBe("Refund margin");
-    action?.run();
-    expect(refundState.refund).toHaveBeenCalledOnce();
-  });
-
-  it("falls back to verify when phase is locked but canVerify is not ready", () => {
-    const settle = settlement({ phase: "locked", outcome: "pending" });
-    const action = ticketHudClearAction({
-      isLiveOpenEntry: false,
-      settlement: settle,
-      refund: null,
-    });
-    expect(action?.label).toBe("Verify and settle");
-    action?.run();
-    expect(settle.verifyAndSettle).toHaveBeenCalledOnce();
-  });
-
-  it("falls back to refund when settlement already knows the ticket is refundable", () => {
-    const refundState = refund();
-    const action = ticketHudClearAction({
-      isLiveOpenEntry: false,
-      settlement: settlement({ phase: "expired", outcome: "refundable" }),
-      refund: refundState,
-    });
-    expect(action?.label).toBe("Refund margin");
-    action?.run();
-    expect(refundState.refund).toHaveBeenCalledOnce();
-  });
-
-  it("returns null when no resolve path exists", () => {
+  it("returns null when no can* flag is set", () => {
     expect(
       ticketHudClearAction({
         isLiveOpenEntry: false,
-        settlement: settlement({ phase: "open", outcome: "pending" }),
+        settlement: settlement(),
         refund: refund(),
       })
     ).toBeNull();
