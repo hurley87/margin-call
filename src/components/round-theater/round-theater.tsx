@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useReplayClock } from "@/hooks/use-replay-clock";
 import {
   useRoundTheater,
@@ -10,18 +10,14 @@ import {
   type TheaterView,
 } from "@/hooks/use-round-theater";
 import { useTheaterPlayerTicket } from "@/hooks/use-theater-player-ticket";
+import { useTheaterTierSounds } from "@/hooks/use-theater-tier-sounds";
 import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
-import { getTierCloseProgress } from "@/lib/round-replay";
-import {
-  ENTRY_LEVERAGE_TIERS_BPS,
-  formatLeverageBps,
-  type CrashTicket,
-} from "@/lib/margin-call-crash";
+import { formatLeverageBps, type CrashTicket } from "@/lib/margin-call-crash";
 import {
   formatNextRoundHandoff,
   formatTimelineCountdownLabel,
 } from "@/lib/round-phase-copy";
-import type { RoundTimeline } from "@/lib/round-timeline";
+import { theaterDisplayRoundId, theaterLiveTimeline } from "@/lib/theater-live";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { ticketLanding } from "./landing-frame";
@@ -48,7 +44,9 @@ export function RoundTheater() {
   // The displayed round's ticket for the signed-in player (null when signed
   // out or ticketless) — drives the "YOU" highlights. During the display-round
   // hold this reads the held replay round, so the player's own replay is marked.
-  const { ticket: playerTicket } = useTheaterPlayerTicket(ticketRoundId(view));
+  const { ticket: playerTicket } = useTheaterPlayerTicket(
+    theaterDisplayRoundId(view.live, view.hero)
+  );
 
   // Lock moment: one low thunk when the entry window slams shut.
   const previousKind = useRef(view.live.kind);
@@ -64,7 +62,7 @@ export function RoundTheater() {
   }, [view.live.kind, view.reducedMotion]);
 
   const isLive = view.live.kind === "open" || view.live.kind === "finalized";
-  const timeline = liveTimeline(view.live);
+  const timeline = theaterLiveTimeline(view.live);
 
   return (
     <section
@@ -108,43 +106,6 @@ export function RoundTheater() {
       </div>
     </section>
   );
-}
-
-function ticketRoundId(view: TheaterView): bigint | null {
-  if (view.hero.type === "replay") return view.hero.roundId;
-  switch (view.live.kind) {
-    case "open":
-    case "delayed":
-    case "finalized":
-    case "expired":
-      return view.live.roundId;
-    case "loading":
-    case "error":
-    case "unavailable":
-      return null;
-    default: {
-      const _exhaustive: never = view.live;
-      return _exhaustive;
-    }
-  }
-}
-
-function liveTimeline(live: TheaterLive): RoundTimeline | null {
-  switch (live.kind) {
-    case "open":
-    case "delayed":
-    case "finalized":
-    case "expired":
-      return live.timeline;
-    case "loading":
-    case "error":
-    case "unavailable":
-      return null;
-    default: {
-      const _exhaustive: never = live;
-      return _exhaustive;
-    }
-  }
 }
 
 function TheaterBody({
@@ -417,7 +378,7 @@ function ReplayStage({
     restartNonce,
   });
 
-  useTierSoundEffects({
+  useTheaterTierSounds({
     crashPointBps: hero.crashPointBps,
     progress: clock.progress,
     isComplete: clock.isComplete,
@@ -543,58 +504,4 @@ function ExpiredStage({
       <TicketTape entries={live.tape?.entries ?? []} />
     </div>
   );
-}
-
-function useTierSoundEffects(options: {
-  crashPointBps: bigint;
-  progress: number;
-  isComplete: boolean;
-  enabled: boolean;
-  restartNonce: number;
-  playerTierBps: bigint | null;
-}) {
-  // The per-frame work is two number comparisons against precomputed,
-  // ascending close thresholds; the log math runs once per Crash Point.
-  const closeThresholds = useMemo(
-    () =>
-      ENTRY_LEVERAGE_TIERS_BPS.flatMap((tier) => {
-        const closeAt = getTierCloseProgress(tier, options.crashPointBps);
-        if (closeAt === null) return [];
-        return [
-          {
-            closeAt,
-            isPlayerTier:
-              options.playerTierBps !== null && tier === options.playerTierBps,
-          },
-        ];
-      }).sort((a, b) => a.closeAt - b.closeAt),
-    [options.crashPointBps, options.playerTierBps]
-  );
-  const firedCountRef = useRef(0);
-  const crashedRef = useRef(false);
-
-  useEffect(() => {
-    firedCountRef.current = 0;
-    crashedRef.current = false;
-  }, [options.restartNonce, options.crashPointBps]);
-
-  useEffect(() => {
-    if (!options.enabled) return;
-    while (
-      firedCountRef.current < closeThresholds.length &&
-      closeThresholds[firedCountRef.current].closeAt <= options.progress
-    ) {
-      const threshold = closeThresholds[firedCountRef.current];
-      firedCountRef.current += 1;
-      // The player's own close rings the register instead of the desk chime.
-      if (threshold.isPlayerTier) getTheaterAudio().playWinRegister();
-      else getTheaterAudio().playTierClose();
-    }
-    if (options.isComplete && !crashedRef.current) {
-      crashedRef.current = true;
-      const audio = getTheaterAudio();
-      audio.playCrashBell();
-      audio.playPhoneRing();
-    }
-  }, [closeThresholds, options.enabled, options.isComplete, options.progress]);
 }

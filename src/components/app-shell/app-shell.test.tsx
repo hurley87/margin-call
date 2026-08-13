@@ -72,6 +72,17 @@ describe("AppShell", () => {
     expect(lp.getAttribute("aria-current")).toBeNull();
     expect(screen.getByTestId("no-real-value-disclosure")).toBeTruthy();
     expect(screen.getByText("Floor content")).toBeTruthy();
+    expect(screen.getByTestId("app-shell-floor-main")).toBeTruthy();
+  });
+
+  it("uses document layout main (not floor) on Record", () => {
+    sdk.pathname = "/record";
+    render(
+      <AppShell>
+        <p>Record content</p>
+      </AppShell>
+    );
+    expect(screen.queryByTestId("app-shell-floor-main")).toBeNull();
   });
 
   it("marks Record as current on /record", () => {
