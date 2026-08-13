@@ -38,7 +38,7 @@ describe("DeskPhoneSwitch", () => {
 
     const button = screen.getByRole("button", { name: /Desk phone/i });
     expect(button.getAttribute("aria-pressed")).toBe("false");
-    expect(screen.getByText(/Calls your login number/i)).not.toBeNull();
+    expect(screen.queryByText(/Calls your login number/i)).toBeNull();
 
     fireEvent.click(button);
     await waitFor(() =>
@@ -65,5 +65,16 @@ describe("DeskPhoneSwitch", () => {
         walletAddress: WALLET,
       })
     );
+  });
+
+  it("surfaces update failures without the default hint", async () => {
+    sdk.setConsent.mockRejectedValue(new Error("nope"));
+    render(<DeskPhoneSwitch walletAddress={WALLET} />);
+
+    fireEvent.click(screen.getByRole("button", { name: /Desk phone/i }));
+    await waitFor(() =>
+      expect(screen.getByText(/Couldn’t update/)).not.toBeNull()
+    );
+    expect(screen.queryByText(/Calls your login number/i)).toBeNull();
   });
 });

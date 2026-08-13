@@ -47,6 +47,10 @@ vi.mock("@/hooks/use-crash-round-entry", () => ({
   useCrashRoundEntry: () => sdk.entry,
 }));
 
+vi.mock("@/components/desk-dollars/desk-dollars-faucet", () => ({
+  DeskDollarsFaucet: () => null,
+}));
+
 import { CrashRoundEntry } from "./crash-round-entry";
 
 describe("CrashRoundEntry", () => {
@@ -90,6 +94,15 @@ describe("CrashRoundEntry", () => {
     ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Approve & enter" }));
     expect(sdk.entry.enter).toHaveBeenCalledOnce();
+  });
+
+  it("places the enter CTA before the approval disclosure", () => {
+    render(<CrashRoundEntry {...sdk.props} />);
+    const cta = screen.getByRole("button", { name: "Approve & enter" });
+    const spender = screen.getByText(/Spender: Bankroll Vault/);
+    expect(
+      cta.compareDocumentPosition(spender) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it("renders the confirmed live ticket instead of the form", () => {
