@@ -65,7 +65,6 @@ export const countdownCopy = {
   nextRoundOpening: "Next round opening…",
   nextRoundEntryOpen: (clock: string) => `Entry is open — closes in ${clock}`,
   entriesReopen: (clock: string) => `Entries reopen in ${clock}`,
-  entriesOpening: "Next round opening…",
 } as const;
 
 /** Full strip sentence for the active timeline countdown. */
@@ -87,18 +86,14 @@ export function formatTimelineCountdownLabel(timeline: RoundTimeline): string {
 }
 
 /** Result handoff line — stage-first; live chrome does not name round ids. */
-export function formatNextRoundHandoff(next: {
-  roundId: bigint;
-  countdown: RoundTimelineCountdown;
-}): string {
-  void next.roundId;
-  if (next.countdown.kind === "entry-closes") {
-    return countdownCopy.nextRoundEntryOpen(
-      formatCountdown(next.countdown.seconds)
-    );
+export function formatNextRoundHandoff(
+  countdown: RoundTimelineCountdown
+): string {
+  if (countdown.kind === "entry-closes") {
+    return countdownCopy.nextRoundEntryOpen(formatCountdown(countdown.seconds));
   }
-  return next.countdown.seconds > 0
-    ? `${countdownCopy.nextRoundOpensIn} ${formatCountdown(next.countdown.seconds)}`
+  return countdown.seconds > 0
+    ? `${countdownCopy.nextRoundOpensIn} ${formatCountdown(countdown.seconds)}`
     : countdownCopy.nextRoundOpening;
 }
 
@@ -111,5 +106,5 @@ export function formatEntriesReopenNotice(timeline: RoundTimeline): string {
     timeline.countdown.kind === "next-opens" ? timeline.countdown.seconds : 0;
   return seconds > 0
     ? countdownCopy.entriesReopen(formatCountdown(seconds))
-    : countdownCopy.entriesOpening;
+    : countdownCopy.nextRoundOpening;
 }

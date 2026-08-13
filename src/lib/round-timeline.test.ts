@@ -239,11 +239,8 @@ describe("countdown formatters", () => {
   });
 
   it("formats the result handoff without naming the round id", () => {
-    expect(
-      formatNextRoundHandoff({
-        roundId: 13n,
-        countdown: { kind: "next-opens", seconds: 5 },
-      })
-    ).toBe("Next round opens in 00:05");
+    expect(formatNextRoundHandoff({ kind: "next-opens", seconds: 5 })).toBe(
+      "Next round opens in 00:05"
+    );
   });
 });

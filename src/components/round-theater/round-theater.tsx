@@ -511,16 +511,10 @@ function replayHandoffLabel(
   switch (live.kind) {
     case "open":
       return hero.roundId !== live.roundId
-        ? formatNextRoundHandoff({
-            roundId: live.roundId,
-            countdown: live.timeline.countdown,
-          })
+        ? formatNextRoundHandoff(live.timeline.countdown)
         : null;
     case "finalized":
-      return formatNextRoundHandoff({
-        roundId: live.roundId + 1n,
-        countdown: live.timeline.countdown,
-      });
+      return formatNextRoundHandoff(live.timeline.countdown);
     case "delayed":
     case "expired":
     case "loading":
