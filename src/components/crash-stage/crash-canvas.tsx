@@ -3,17 +3,13 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useState } from "react";
 import type { TicketTapeEntry } from "@/lib/margin-call-crash";
-import type {
-  LandingPresentation,
-  TicketLanding,
-} from "@/components/round-theater/landing-frame";
+import type { TicketLanding } from "@/components/round-theater/landing-frame";
 import type { CrashStageMode } from "./use-crash-stage-mode";
 import {
   CountdownScene,
   type CountdownUrgency,
 } from "./scenes/countdown-scene";
 import { TicketField, type TicketChipState } from "./scenes/ticket-field";
-import { ReplayScene } from "./scenes/replay-scene";
 import { OutcomeBurst } from "./scenes/outcome-burst";
 
 export type CrashCanvasProps = {
@@ -23,12 +19,8 @@ export type CrashCanvasProps = {
   locked: boolean;
   entries: readonly TicketTapeEntry[];
   playerAddress: string | null;
-  crashPointBps: bigint | null;
-  replayProgress: number;
-  playerTierBps: bigint | null;
   chipStates: ReadonlyMap<string, TicketChipState>;
-  landing: LandingPresentation | null;
-  landingKind: TicketLanding["kind"] | null;
+  outcomeKind: TicketLanding["kind"] | null;
 };
 
 /**
@@ -93,11 +85,10 @@ function StageContent(props: CrashCanvasProps) {
     props.mode === "expired" ||
     props.mode === "loading";
 
-  const showReplay = props.mode === "replay" && props.crashPointBps !== null;
-  const showOutcome =
-    props.mode === "outcome" &&
-    props.landing !== null &&
-    props.landingKind !== null;
+  const showOutcome = props.mode === "outcome" && props.outcomeKind !== null;
+  const showField =
+    props.mode !== "loading" &&
+    (showCountdown || props.mode === "replay" || props.mode === "outcome");
 
   const frozen = props.mode === "awaiting-settle" || props.mode === "expired";
 
@@ -111,23 +102,16 @@ function StageContent(props: CrashCanvasProps) {
           urgency={props.urgency}
         />
       ) : null}
-      {(showCountdown || showReplay) && props.mode !== "loading" ? (
+      {showField ? (
         <TicketField
           chipStates={props.chipStates}
           entries={props.entries}
-          frozen={frozen || showReplay}
+          frozen={frozen || props.mode === "replay" || props.mode === "outcome"}
           playerAddress={props.playerAddress}
         />
       ) : null}
-      {showReplay && props.crashPointBps !== null ? (
-        <ReplayScene
-          crashPointBps={props.crashPointBps}
-          playerTierBps={props.playerTierBps}
-          progress={props.replayProgress}
-        />
-      ) : null}
-      {showOutcome && props.landing && props.landingKind ? (
-        <OutcomeBurst kind={props.landingKind} landing={props.landing} />
+      {showOutcome && props.outcomeKind ? (
+        <OutcomeBurst kind={props.outcomeKind} />
       ) : null}
     </>
   );

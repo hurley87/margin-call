@@ -2,26 +2,15 @@
 
 import { useEffect, useRef } from "react";
 import { MarginCallVoiceTrigger } from "@/components/desk-phone/margin-call-voice-trigger";
-import {
-  useCrashTicketSettlement,
-  type CrashSettlementRetryAction,
-} from "@/hooks/use-crash-ticket-settlement";
+import { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
 import { getTheaterAudio } from "@/lib/theater-audio";
+import {
+  settlementRetryLabels,
+  settlementStatusCopy,
+} from "@/lib/settlement-status-copy";
 import { CrashLiveTicket } from "./crash-live-ticket";
-import { settlementStatusCopy } from "@/lib/settlement-status-copy";
-
-const retryLabels: Record<CrashSettlementRetryAction, string> = {
-  refresh: "Retry",
-  verify: "Retry verify and settle",
-  claim: "Retry claim",
-  settle: "Retry settle loss",
-  "reveal-receipt-check": "Retry reveal receipt check",
-  "finalize-receipt-check": "Retry finalization receipt check",
-  "claim-receipt-check": "Retry claim receipt check",
-  "settle-receipt-check": "Retry settle receipt check",
-};
 
 /**
  * Return-safe settlement surface: recovers a prior-round ticket so a judge can
@@ -104,7 +93,7 @@ export function CrashTicketSettlement() {
           payout={settlement.payout}
           retryLabel={
             settlement.retryAction
-              ? retryLabels[settlement.retryAction]
+              ? settlementRetryLabels[settlement.retryAction]
               : "Retry"
           }
           statusMessage={statusMessage}

@@ -40,6 +40,8 @@ export const theaterCopy = {
   tierIdle: (tier: string) => `${tier} — waiting`,
   noTicketsAtTier: "No Tickets",
   replayAgain: "Replay",
+  outcomeGraphNote:
+    "Dramatized from the verified Crash Point — your Arcade Leverage either closed or took the margin call.",
   soundOn: "Sound on",
   soundOff: "Sound off",
   soundHint: "Audio is optional and muted by default.",

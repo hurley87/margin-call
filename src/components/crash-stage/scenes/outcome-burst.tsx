@@ -1,16 +1,11 @@
 "use client";
 
 import { useFrame } from "@react-three/fiber";
-import { Text } from "@react-three/drei";
 import { useEffect, useRef } from "react";
 import type { Group } from "three";
-import type {
-  LandingPresentation,
-  TicketLanding,
-} from "@/components/round-theater/landing-frame";
+import type { TicketLanding } from "@/components/round-theater/landing-frame";
 
 export type OutcomeBurstProps = {
-  landing: LandingPresentation;
   kind: TicketLanding["kind"];
 };
 
@@ -39,14 +34,14 @@ function seedParticles(isWin: boolean): Particle[] {
 }
 
 /**
- * Win fountain (green particles rising) or margin-call shatter (red scatter).
+ * Win fountain (green particles rising) or shatter (red scatter).
+ * Outcome labels live on the DOM graph, not in the pit.
  */
-export function OutcomeBurst({ landing, kind }: OutcomeBurstProps) {
+export function OutcomeBurst({ kind }: OutcomeBurstProps) {
   const groupRef = useRef<Group>(null);
   const particlesRef = useRef<Particle[]>(seedParticles(false));
   const isWin = kind === "won";
   const color = isWin ? "#92f5b8" : "#ff6b5c";
-  const heroColor = isWin ? "#92f5b8" : "#ff6b5c";
 
   useEffect(() => {
     particlesRef.current = seedParticles(isWin);
@@ -79,41 +74,17 @@ export function OutcomeBurst({ landing, kind }: OutcomeBurstProps) {
   });
 
   return (
-    <group>
-      <Text
-        anchorX="center"
-        anchorY="middle"
-        color={heroColor}
-        fontSize={1.1}
-        outlineColor="#090b10"
-        outlineWidth={0.04}
-        position={[0, 0.6, 0.5]}
-      >
-        {landing.heroValue}
-      </Text>
-      {landing.supportingCrashPoint ? (
-        <Text
-          anchorX="center"
-          anchorY="middle"
-          color="#9aa3b5"
-          fontSize={0.28}
-          position={[0, -0.3, 0.5]}
-        >
-          {landing.supportingCrashPoint}
-        </Text>
-      ) : null}
-      <group ref={groupRef}>
-        {Array.from({ length: PARTICLE_COUNT }, (_, i) => (
-          <mesh key={i} position={[0, 0.2, 0]}>
-            <boxGeometry args={[0.12, 0.12, 0.12]} />
-            <meshStandardMaterial
-              color={color}
-              emissive={color}
-              emissiveIntensity={0.7}
-            />
-          </mesh>
-        ))}
-      </group>
+    <group ref={groupRef}>
+      {Array.from({ length: PARTICLE_COUNT }, (_, i) => (
+        <mesh key={i} position={[0, 0.2, 0]}>
+          <boxGeometry args={[0.12, 0.12, 0.12]} />
+          <meshStandardMaterial
+            color={color}
+            emissive={color}
+            emissiveIntensity={0.7}
+          />
+        </mesh>
+      ))}
     </group>
   );
 }

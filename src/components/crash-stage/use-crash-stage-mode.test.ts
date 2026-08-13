@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { TheaterLive } from "@/hooks/use-round-theater";
 import {
   deriveCrashStageMode,
-  deriveStageCtaKind,
   type CrashStageModeInput,
 } from "./use-crash-stage-mode";
 
@@ -163,109 +162,5 @@ describe("deriveCrashStageMode", () => {
         })
       )
     ).toBe("expired");
-  });
-});
-
-describe("deriveStageCtaKind", () => {
-  it("offers enter during open countdown without a ticket", () => {
-    expect(
-      deriveStageCtaKind({
-        mode: "countdown",
-        offerEntry: true,
-        hasTicket: false,
-        canEnter: true,
-        canVerify: false,
-        canClaim: false,
-        canSettle: false,
-        canRefund: false,
-        canExpire: false,
-        canRetry: false,
-      })
-    ).toBe("enter");
-  });
-
-  it("offers verify while awaiting settle", () => {
-    expect(
-      deriveStageCtaKind({
-        mode: "awaiting-settle",
-        offerEntry: false,
-        hasTicket: true,
-        canEnter: false,
-        canVerify: true,
-        canClaim: false,
-        canSettle: false,
-        canRefund: false,
-        canExpire: false,
-        canRetry: false,
-      })
-    ).toBe("verify");
-  });
-
-  it("prefers claim over settle when both could apply", () => {
-    expect(
-      deriveStageCtaKind({
-        mode: "awaiting-settle",
-        offerEntry: false,
-        hasTicket: true,
-        canEnter: false,
-        canVerify: false,
-        canClaim: true,
-        canSettle: true,
-        canRefund: false,
-        canExpire: false,
-        canRetry: false,
-      })
-    ).toBe("claim");
-  });
-
-  it("offers refund when expired and refundable", () => {
-    expect(
-      deriveStageCtaKind({
-        mode: "expired",
-        offerEntry: false,
-        hasTicket: true,
-        canEnter: false,
-        canVerify: false,
-        canClaim: false,
-        canSettle: false,
-        canRefund: true,
-        canExpire: false,
-        canRetry: false,
-      })
-    ).toBe("refund");
-  });
-
-  it("offers retry when settlement actions fail while awaiting settle", () => {
-    expect(
-      deriveStageCtaKind({
-        mode: "awaiting-settle",
-        offerEntry: false,
-        hasTicket: true,
-        canEnter: false,
-        canVerify: false,
-        canClaim: false,
-        canSettle: false,
-        canRefund: false,
-        canExpire: false,
-        canRetry: true,
-      })
-    ).toBe("retry");
-  });
-
-  it("returns none when there is no actionable CTA", () => {
-    expect(
-      deriveStageCtaKind({
-        mode: "replay",
-        offerEntry: false,
-        hasTicket: false,
-        canEnter: false,
-        canVerify: false,
-        canClaim: false,
-        canSettle: false,
-        canRefund: false,
-        canExpire: false,
-        canRetry: false,
-      })
-    ).toBe("none");
   });
 });

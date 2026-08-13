@@ -91,7 +91,6 @@ export function CrashRoundEntry({
   }
 
   if (entry.ticket) {
-    // Confirmed this session → green inset flash on the fresh ticket.
     const justEntered = entry.status === "confirmed";
     return (
       <EntryShell>
@@ -201,7 +200,7 @@ export function CrashRoundEntry({
           className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
           disabled={!entry.canEnter}
           onClick={() => void entry.enter()}
-          size="lg"
+          size="hero"
         >
           {entry.needsApproval ? "Approve & enter" : "Enter round"}
         </GameButton>
@@ -216,63 +215,65 @@ export function CrashRoundEntry({
         ) : null}
       </div>
 
-      <div className="mt-5 border border-[var(--t-border)] p-3 text-xs leading-5 text-[var(--t-muted)]">
-        <p>
-          Spender: Bankroll Vault
-          {entry.vaultAddress ? (
-            <>
-              {" "}
-              <code className="break-all text-[var(--t-accent)]">
-                {entry.vaultAddress}
-              </code>
-            </>
-          ) : null}
-        </p>
-        <p className="mt-2">
-          One-time bounded approval:{" "}
-          {formatDeskDollarsAmount(BOUNDED_ENTRY_ALLOWANCE_TUSD)}. Later entries
-          reuse this allowance with sponsored enter-only transactions. This
-          interface never requests an unlimited allowance.
-        </p>
-        <p className="mt-2">
-          Game contract
-          {entry.gameAddress ? (
-            <>
-              :{" "}
-              <code className="break-all text-[var(--t-accent)]">
-                {entry.gameAddress}
-              </code>
-            </>
-          ) : null}
-          . Margin moves directly from your wallet to the vault.
-        </p>
-        <p className="mt-2">
-          Current vault allowance:{" "}
-          {formatDeskDollarsAmountLabel(entry.allowance)}. Selected margin:{" "}
-          {formatDeskDollarsAmount(entry.selectedMargin)}.
-        </p>
-        {entry.needsApproval ? (
-          <p className="mt-2 text-[var(--t-amber-hot)]">
-            Your first entry will submit the bounded approval, wait for its
-            receipt, then submit enter.
+      <details className="mt-4 text-xs leading-5 text-[var(--t-muted)]">
+        <summary className="cursor-pointer font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
+          Approval details
+        </summary>
+        <div className="mt-2 border border-[var(--t-border)] p-3">
+          <p>
+            Spender: Bankroll Vault
+            {entry.vaultAddress ? (
+              <>
+                {" "}
+                <code className="break-all text-[var(--t-accent)]">
+                  {entry.vaultAddress}
+                </code>
+              </>
+            ) : null}
           </p>
-        ) : (
-          <p className="mt-2 text-[var(--t-green)]">
-            Allowance already covers this margin. Only a sponsored enter will be
-            submitted.
+          <p className="mt-2">
+            One-time bounded approval:{" "}
+            {formatDeskDollarsAmount(BOUNDED_ENTRY_ALLOWANCE_TUSD)}. Later
+            entries reuse this allowance with sponsored enter-only transactions.
+            This interface never requests an unlimited allowance.
           </p>
-        )}
-      </div>
+          <p className="mt-2">
+            Game contract
+            {entry.gameAddress ? (
+              <>
+                :{" "}
+                <code className="break-all text-[var(--t-accent)]">
+                  {entry.gameAddress}
+                </code>
+              </>
+            ) : null}
+            . Margin moves directly from your wallet to the vault.
+          </p>
+          <p className="mt-2">
+            Current vault allowance:{" "}
+            {formatDeskDollarsAmountLabel(entry.allowance)}. Selected margin:{" "}
+            {formatDeskDollarsAmount(entry.selectedMargin)}.
+          </p>
+          {entry.needsApproval ? (
+            <p className="mt-2 text-[var(--t-amber-hot)]">
+              Your first entry will submit the bounded approval, wait for its
+              receipt, then submit enter.
+            </p>
+          ) : (
+            <p className="mt-2 text-[var(--t-green)]">
+              Allowance already covers this margin. Only a sponsored enter will
+              be submitted.
+            </p>
+          )}
+        </div>
+      </details>
     </EntryShell>
   );
 }
 
 function EntryShell({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      aria-labelledby="crash-entry-heading"
-      className="mt-4 border-t border-[var(--t-divider)] pt-4 text-left"
-    >
+    <div aria-labelledby="crash-entry-heading" className="text-left">
       <h3
         id="crash-entry-heading"
         className="font-[family-name:var(--font-plex-sans)] text-lg font-bold uppercase tracking-tight text-[var(--t-accent)]"

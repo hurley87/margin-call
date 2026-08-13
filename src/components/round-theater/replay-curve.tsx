@@ -30,6 +30,8 @@ export type ReplayCurveProps = {
   playerTierBps?: bigint | null;
   /** Personal vs spectator freeze once the climb completes. */
   landing?: TicketLanding;
+  /** Floor outcome: fill the remaining viewport instead of a fixed hero height. */
+  fill?: boolean;
 };
 
 /**
@@ -49,6 +51,7 @@ export function ReplayCurve({
   ambiance = null,
   playerTierBps = null,
   landing = { kind: "spectator" },
+  fill = false,
 }: ReplayCurveProps) {
   // `progress` moves every animation frame, so memoizing on it buys nothing.
   const points = getReplayPathPoints(crashPointBps, progress, {
@@ -88,9 +91,9 @@ export function ReplayCurve({
 
   return (
     <div
-      className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${REPLAY_HERO_MIN_H} ${
-        crashMoment ? "mc-shake" : ""
-      }`}
+      className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${
+        fill ? "flex h-full min-h-0 w-full flex-col" : REPLAY_HERO_MIN_H
+      } ${crashMoment ? "mc-shake" : ""}`}
       data-testid={ambiance ? "replay-curve-ambiance" : "replay-curve"}
     >
       {freeze ? (
@@ -155,7 +158,11 @@ export function ReplayCurve({
 
       <svg
         aria-hidden="true"
-        className="mt-4 h-[14rem] w-full sm:h-[18rem] lg:h-[22rem]"
+        className={
+          fill
+            ? "mt-2 min-h-[8rem] w-full flex-1"
+            : "mt-4 h-[14rem] w-full sm:h-[18rem] lg:h-[22rem]"
+        }
         preserveAspectRatio="none"
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
       >
@@ -220,7 +227,9 @@ export function ReplayCurve({
       <p className="mt-2 text-[10px] leading-4 text-[var(--t-muted)]">
         {ambiance
           ? theaterCopy.openAmbianceNote
-          : `${theaterCopy.replayLabel}. ${theaterCopy.replayDetail}`}
+          : freeze && landing.kind !== "spectator"
+            ? theaterCopy.outcomeGraphNote
+            : `${theaterCopy.replayLabel}. ${theaterCopy.replayDetail}`}
       </p>
     </div>
   );
