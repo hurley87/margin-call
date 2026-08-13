@@ -12,6 +12,7 @@ const DIALOG_POPUP_BASE_CLASS =
   "fixed left-1/2 top-1/2 z-50 max-h-[calc(100dvh-1rem)] w-[calc(100vw-1rem)] -translate-x-1/2 -translate-y-1/2 overflow-hidden border border-[var(--t-border)] bg-[var(--t-bg)] font-mono shadow-2xl shadow-black/60 sm:max-h-[88vh]";
 
 const DIALOG_POPUP_SIZE_CLASS = {
+  sm: "max-w-md sm:w-[min(28rem,92vw)]",
   lg: "max-w-2xl sm:w-[92vw]",
   xl: "max-w-4xl sm:w-[94vw]",
 } as const;
