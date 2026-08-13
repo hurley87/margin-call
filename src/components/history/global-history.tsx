@@ -20,7 +20,8 @@ const historyStateColors: Record<RoundHistoryState, string> = {
 
 /**
  * Public global history: ≥20 lookback rounds with honest delayed/expired
- * states and expandable verification records.
+ * states and expandable verification records. Page chrome (heading, eyebrow)
+ * lives on /history.
  */
 export function GlobalHistory() {
   const history = useGlobalHistory();
@@ -30,7 +31,7 @@ export function GlobalHistory() {
       <section
         aria-busy="true"
         aria-labelledby="global-history-loading"
-        className="border-y border-[var(--t-border)] px-5 py-8 text-left sm:px-8"
+        className="text-left"
       >
         <p
           id="global-history-loading"
@@ -44,10 +45,7 @@ export function GlobalHistory() {
 
   if (history.status !== "ready") {
     return (
-      <section
-        aria-labelledby="global-history-error"
-        className="border-y border-[var(--t-border)] px-5 py-8 text-left sm:px-8"
-      >
+      <section aria-labelledby="global-history-error" className="text-left">
         <p
           id="global-history-error"
           className="text-sm text-[var(--t-red-hot)]"
@@ -66,52 +64,39 @@ export function GlobalHistory() {
     );
   }
 
-  return (
-    <section
-      aria-labelledby="global-history-heading"
-      className="border-y border-[var(--t-border)] bg-[var(--t-panel)] px-5 py-6 text-left sm:px-8 sm:py-8"
-    >
-      <p className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]">
-        Base Sepolia · Global history
-      </p>
-      <h2
-        id="global-history-heading"
-        className="mt-3 font-[family-name:var(--font-plex-sans)] text-3xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-4xl"
-      >
-        Recent rounds
-      </h2>
-      <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-        Finalized rounds show the attested Crash Point. Empty, delayed, and
-        expired rounds never invent a multiplier.
-      </p>
-
-      {history.rounds.length === 0 ? (
-        <p className="mt-6 text-sm text-[var(--t-muted)]">
+  if (history.rounds.length === 0) {
+    return (
+      <section aria-label="Recent rounds" className="text-left">
+        <p className="text-sm text-[var(--t-muted)]">
           No initialized rounds in the lookback window yet.
         </p>
-      ) : (
-        <ul className="mt-6 divide-y divide-[var(--t-divider)] border-y border-[var(--t-divider)]">
-          {history.rounds.map((item) => {
-            const isSelected = history.selectedRoundId === item.round.id;
-            return (
-              <HistoryRoundRow
-                detail={isSelected ? history.detail : null}
-                detailStatus={isSelected ? history.detailStatus : "idle"}
-                item={item}
-                key={item.round.id.toString()}
-                onSelect={() => {
-                  if (isSelected) {
-                    history.clearSelection();
-                    return;
-                  }
-                  history.selectRound(item.round.id);
-                }}
-                selected={isSelected}
-              />
-            );
-          })}
-        </ul>
-      )}
+      </section>
+    );
+  }
+
+  return (
+    <section aria-label="Recent rounds" className="text-left">
+      <ul className="divide-y divide-[var(--t-divider)] border-y border-[var(--t-divider)]">
+        {history.rounds.map((item) => {
+          const isSelected = history.selectedRoundId === item.round.id;
+          return (
+            <HistoryRoundRow
+              detail={isSelected ? history.detail : null}
+              detailStatus={isSelected ? history.detailStatus : "idle"}
+              item={item}
+              key={item.round.id.toString()}
+              onSelect={() => {
+                if (isSelected) {
+                  history.clearSelection();
+                  return;
+                }
+                history.selectRound(item.round.id);
+              }}
+              selected={isSelected}
+            />
+          );
+        })}
+      </ul>
     </section>
   );
 }

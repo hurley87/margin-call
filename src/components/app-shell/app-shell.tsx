@@ -7,12 +7,13 @@ import { NoRealValueDisclosure } from "@/components/no-real-value-disclosure";
 
 const NAV = [
   { href: "/", label: "Floor" },
+  { href: "/history", label: "Recent rounds" },
   { href: "/lp", label: "LP Desk" },
 ] as const;
 
 /**
- * Shared chrome: brand, Floor / LP Desk nav, compact auth, disclosure.
- * Leaves page content as the primary workspace.
+ * Shared chrome: brand, Floor / Recent rounds / LP Desk nav, compact auth,
+ * disclosure. Leaves page content as the primary workspace.
  */
 export function AppShell({
   children,
