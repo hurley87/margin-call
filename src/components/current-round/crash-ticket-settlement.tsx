@@ -103,6 +103,7 @@ export function CrashTicketSettlement() {
           <MarginCallVoiceTrigger
             roundId={settlement.ticket.roundId}
             ticketId={settlement.ticket.id}
+            walletAddress={settlement.walletAddress}
           />
         ) : null}
         <CrashLiveTicket

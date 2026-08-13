@@ -1,26 +1,23 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
 import { useMarginCallVoice } from "@/hooks/use-margin-call-voice";
-import { getEvmWalletAddress } from "@/lib/privy/wallet";
 
 type MarginCallVoiceTriggerProps = {
   ticketId: bigint;
   roundId: bigint;
+  /** Embedded wallet already proven by AuthGate / settlement. */
+  walletAddress: `0x${string}`;
 };
 
 /**
- * Owns Privy wallet resolution and the promotional desk-phone mutation.
- * Mount only when a personal liquidation is already known (ticket settlement).
- * Renders nothing.
+ * Promotional desk-phone mutation for a known personal liquidation.
+ * Mount only from ticket settlement. Renders nothing.
  */
 export function MarginCallVoiceTrigger({
   ticketId,
   roundId,
+  walletAddress,
 }: MarginCallVoiceTriggerProps) {
-  const { user } = usePrivy();
-  const walletAddress = getEvmWalletAddress(user);
-
   useMarginCallVoice({
     ticketId: ticketId.toString(),
     roundId: roundId.toString(),
