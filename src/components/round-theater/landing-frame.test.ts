@@ -88,6 +88,8 @@ describe("presentLanding", () => {
     expect(frame.showMarginCallStamp).toBe(false);
     expect(frame.stampDetail).toBeNull();
     expect(frame.heroColorClass).toContain("green");
+    expect(frame.plotAccent).toBe("var(--t-green-hot)");
+    expect(frame.panelInsetClass).toContain("146,245,184");
   });
 
   it("freezes margin-called with personal detail once and market stamp copy", () => {
@@ -98,6 +100,8 @@ describe("presentLanding", () => {
     // Stamp must not re-print the personal detail.
     expect(frame.stampDetail).toBe(theaterCopy.marginCallDetail);
     expect(frame.stampDetail).not.toBe(frame.outcomeDetail);
+    expect(frame.plotAccent).toBe("var(--t-red-hot)");
+    expect(frame.panelInsetClass).toContain("255,107,92");
   });
 
   it("freezes spectator on Crash Point in red with the market stamp", () => {
@@ -109,6 +113,8 @@ describe("presentLanding", () => {
     expect(frame.supportingCrashPoint).toBeNull();
     expect(frame.showMarginCallStamp).toBe(true);
     expect(frame.stampDetail).toBe(theaterCopy.marginCallDetail);
+    expect(frame.plotAccent).toBe("var(--t-red-hot)");
+    expect(frame.panelInsetClass).toBeNull();
   });
 
   it("covers every TicketLanding kind", () => {

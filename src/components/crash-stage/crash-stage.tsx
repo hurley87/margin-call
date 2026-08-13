@@ -261,9 +261,10 @@ export function CrashStage() {
   );
 
   const graphLanding: TicketLanding | null = ceremonyClimb
-    ? ceremonyClimb.reveal.outcome === "won"
-      ? { kind: "won" }
-      : { kind: "margin-called" }
+    ? ticketLanding(
+        ceremonyClimb.snapshot.ticket,
+        ceremonyClimb.reveal.crashPointBps
+      )
     : replayHero
       ? ticketLanding(heroTicket, replayHero.crashPointBps)
       : null;

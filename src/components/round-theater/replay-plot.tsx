@@ -13,7 +13,7 @@ import {
   replayAreaPathD,
   replayPathD,
 } from "@/lib/round-replay";
-import type { LandingPresentation, TicketLanding } from "./landing-frame";
+import type { LandingPresentation } from "./landing-frame";
 
 const VIEW_W = 100;
 const VIEW_H = 56;
@@ -28,7 +28,6 @@ export type ReplayPlotProps = {
   crashPointBps: bigint;
   progress: number;
   playerTierBps?: bigint | null;
-  landing: TicketLanding;
   /** Null while the climb is still running. */
   freeze: LandingPresentation | null;
   isComplete: boolean;
@@ -96,7 +95,6 @@ export function ReplayPlot({
   crashPointBps,
   progress,
   playerTierBps = null,
-  landing,
   freeze,
   isComplete,
   fill = false,
@@ -140,14 +138,9 @@ export function ReplayPlot({
         }
       : null;
 
-  const isWinFreeze = freeze !== null && landing.kind === "won";
-  const headColor =
-    isComplete &&
-    (landing.kind === "margin-called" || landing.kind === "spectator")
-      ? "var(--t-red-hot)"
-      : "var(--t-green-hot)";
-  const accentHot =
-    isComplete && !isWinFreeze ? "var(--t-red-hot)" : "var(--t-green-hot)";
+  const climbAccent = "var(--t-green-hot)";
+  const plotAccent = freeze?.plotAccent ?? climbAccent;
+  const headColor = isComplete ? plotAccent : climbAccent;
 
   const headLeft = plotPct(head.x, VIEW_W, PAD_X);
   const headTop = plotPct(head.y, VIEW_H, PAD_Y);
@@ -171,12 +164,12 @@ export function ReplayPlot({
         <defs>
           <linearGradient id={strokeId} x1="0" x2="1" y1="0" y2="0">
             <stop offset="0%" stopColor="var(--t-green)" />
-            <stop offset="100%" stopColor={accentHot} />
+            <stop offset="100%" stopColor={plotAccent} />
           </linearGradient>
           <linearGradient id={areaId} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor={accentHot} stopOpacity="0.42" />
-            <stop offset="55%" stopColor={accentHot} stopOpacity="0.12" />
-            <stop offset="100%" stopColor={accentHot} stopOpacity="0" />
+            <stop offset="0%" stopColor={plotAccent} stopOpacity="0.42" />
+            <stop offset="55%" stopColor={plotAccent} stopOpacity="0.12" />
+            <stop offset="100%" stopColor={plotAccent} stopOpacity="0" />
           </linearGradient>
           <filter
             filterUnits="userSpaceOnUse"
@@ -375,12 +368,11 @@ export function ReplayPlot({
           />
           {isComplete ? (
             <span
-              className={`absolute left-1/2 top-0 whitespace-nowrap rounded-sm bg-[var(--t-bg)]/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] ${
-                isWinFreeze || landing.kind === "won"
-                  ? "text-[var(--t-green-hot)]"
-                  : "text-[var(--t-red-hot)]"
-              }`}
-              style={{ transform: "translate(-50%, calc(-100% - 8px))" }}
+              className="absolute left-1/2 top-0 whitespace-nowrap rounded-sm bg-[var(--t-bg)]/90 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em]"
+              style={{
+                color: plotAccent,
+                transform: "translate(-50%, calc(-100% - 8px))",
+              }}
             >
               {crashLabel}
             </span>

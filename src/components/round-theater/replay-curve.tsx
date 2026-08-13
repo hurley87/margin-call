@@ -63,20 +63,12 @@ export function ReplayCurve({
   const heroValue = freeze?.heroValue ?? displayMultiplier;
   const heroColor = freeze?.heroColorClass ?? "text-[var(--t-green-hot)]";
   const heroIsMultiplier = freeze?.heroIsMultiplier ?? true;
-  const isWinFreeze = freeze !== null && landing.kind === "won";
-  const isLossFreeze = freeze !== null && landing.kind === "margin-called";
 
   return (
     <div
       className={`terminal-panel relative overflow-hidden p-3 sm:p-5 ${
         fill ? "flex h-full min-h-0 w-full flex-col" : REPLAY_HERO_MIN_H
-      } ${crashMoment ? "mc-shake" : ""} ${
-        isWinFreeze
-          ? "shadow-[inset_0_0_56px_rgba(146,245,184,0.16)]"
-          : isLossFreeze
-            ? "shadow-[inset_0_0_56px_rgba(255,107,92,0.14)]"
-            : ""
-      }`}
+      } ${crashMoment ? "mc-shake" : ""} ${freeze?.panelInsetClass ?? ""}`}
       data-testid={ambiance ? "replay-curve-ambiance" : "replay-curve"}
     >
       {freeze ? (
@@ -144,7 +136,6 @@ export function ReplayCurve({
         fill={fill}
         freeze={freeze}
         isComplete={isComplete}
-        landing={landing}
         playerTierBps={playerTierBps}
         progress={progress}
       />
