@@ -12,6 +12,7 @@ import {
   validateDeskDollarsTransfer,
 } from "@/hooks/use-desk-dollars-transfer";
 import type { DeskDollarsTransferStatus } from "@/hooks/use-desk-dollars-transfer";
+import { usePendingConfirm } from "@/hooks/use-pending-confirm";
 import {
   DISPLAY_ASSET_SYMBOL,
   formatDeskDollars,
@@ -119,8 +120,7 @@ export function WalletDialog({
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
-  const [pendingTransfer, setPendingTransfer] =
-    useState<PendingTransfer | null>(null);
+  const pendingTransfer = usePendingConfirm<PendingTransfer>();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle"
   );
@@ -173,11 +173,11 @@ export function WalletDialog({
       });
       if (!validation.ok) {
         setValidationError(validation.error);
-        setPendingTransfer(null);
+        pendingTransfer.cancel();
         return;
       }
       setValidationError(null);
-      setPendingTransfer({
+      pendingTransfer.arm({
         recipient,
         amount,
         balance,
@@ -185,25 +185,26 @@ export function WalletDialog({
         amountWei: validation.amount,
       });
     },
-    [amount, balance, isRetry, recipient, transfer, walletAddress]
+    [
+      amount,
+      balance,
+      isRetry,
+      pendingTransfer,
+      recipient,
+      transfer,
+      walletAddress,
+    ]
   );
 
   const handleConfirmTransfer = useCallback(() => {
-    if (!pendingTransfer) return;
-    void Promise.resolve(
+    pendingTransfer.confirm((armed) =>
       transfer.transfer({
-        recipient: pendingTransfer.recipient,
-        amount: pendingTransfer.amount,
-        balance: pendingTransfer.balance,
+        recipient: armed.recipient,
+        amount: armed.amount,
+        balance: armed.balance,
       })
-    ).finally(() => {
-      setPendingTransfer(null);
-    });
+    );
   }, [pendingTransfer, transfer]);
-
-  const handleCancelConfirm = useCallback(() => {
-    setPendingTransfer(null);
-  }, []);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -276,19 +277,21 @@ export function WalletDialog({
 
           <DeskDollarsFaucet />
 
-          {pendingTransfer ? (
+          {pendingTransfer.pending ? (
             <div className="mt-6 border-t border-[var(--t-border)] pt-5">
               <TransactionConfirm
                 busy={isBusy}
                 confirmLabel={`Confirm send ${DISPLAY_ASSET_SYMBOL}`}
                 note="Desk Dollars have no real value. Double-check the recipient before sending."
-                onCancel={handleCancelConfirm}
+                onCancel={pendingTransfer.cancel}
                 onConfirm={handleConfirmTransfer}
                 rows={[
-                  { label: "Recipient", value: pendingTransfer.to },
+                  { label: "Recipient", value: pendingTransfer.pending.to },
                   {
                     label: "Amount",
-                    value: formatDeskDollarsAmount(pendingTransfer.amountWei),
+                    value: formatDeskDollarsAmount(
+                      pendingTransfer.pending.amountWei
+                    ),
                   },
                 ]}
                 title="Confirm transfer"

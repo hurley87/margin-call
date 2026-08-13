@@ -14,6 +14,7 @@ import {
   type LpFreezeActionStatus,
   type LpFreezeRetryAction,
 } from "@/hooks/use-lp-freeze-actions";
+import { usePendingConfirm } from "@/hooks/use-pending-confirm";
 import {
   getBankrollVaultConfig,
   type BlockingRoundDetail,
@@ -270,6 +271,11 @@ function TierCapacityList({ tiers }: { tiers: TierCapacity[] | undefined }) {
   );
 }
 
+type LpPendingAction = {
+  kind: "deposit" | "withdrawal";
+  amount: bigint;
+};
+
 export function LpDesk() {
   const { user } = usePrivy();
   const walletAddress = getEvmWalletAddress(user);
@@ -280,10 +286,7 @@ export function LpDesk() {
   const vaultConfig = getBankrollVaultConfig();
   const [amount, setAmount] = useState("");
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
-  const [pendingDeposit, setPendingDeposit] = useState<bigint | null>(null);
-  const [pendingWithdrawal, setPendingWithdrawal] = useState<bigint | null>(
-    null
-  );
+  const pendingAction = usePendingConfirm<LpPendingAction>();
   const parsedAmount = parseTUsdInput(amount);
   const validationError = validateAmount(
     amount,
@@ -310,14 +313,12 @@ export function LpDesk() {
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSubmit || parsedAmount === null) return;
-    setPendingWithdrawal(null);
-    setPendingDeposit(parsedAmount);
+    pendingAction.arm({ kind: "deposit", amount: parsedAmount });
   };
   const submitWithdrawal = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canWithdraw || parsedWithdrawalAmount === null) return;
-    setPendingDeposit(null);
-    setPendingWithdrawal(parsedWithdrawalAmount);
+    pendingAction.arm({ kind: "withdrawal", amount: parsedWithdrawalAmount });
   };
 
   const depositBusy =
@@ -325,21 +326,21 @@ export function LpDesk() {
   const withdrawalBusy =
     vault.status === "withdrawal-submitting" ||
     vault.status === "withdrawal-pending";
+  const pendingDeposit =
+    pendingAction.pending?.kind === "deposit"
+      ? pendingAction.pending.amount
+      : null;
+  const pendingWithdrawal =
+    pendingAction.pending?.kind === "withdrawal"
+      ? pendingAction.pending.amount
+      : null;
 
-  const confirmDeposit = () => {
-    if (pendingDeposit === null) return;
-    const assets = pendingDeposit;
-    void Promise.resolve(vault.deposit(assets)).finally(() => {
-      setPendingDeposit(null);
-    });
-  };
-
-  const confirmWithdrawal = () => {
-    if (pendingWithdrawal === null) return;
-    const assets = pendingWithdrawal;
-    void Promise.resolve(vault.withdraw(assets)).finally(() => {
-      setPendingWithdrawal(null);
-    });
+  const confirmPending = () => {
+    pendingAction.confirm((armed) =>
+      armed.kind === "deposit"
+        ? vault.deposit(armed.amount)
+        : vault.withdraw(armed.amount)
+    );
   };
 
   const withdrawalRecovery =
@@ -474,8 +475,8 @@ export function LpDesk() {
             busy={depositBusy}
             confirmLabel={`Confirm deposit ${DISPLAY_ASSET_SYMBOL}`}
             note={`An exact ${DISPLAY_ASSET_SYMBOL} approval for this deposit may be submitted first. The LP Desk never requests unlimited approval.`}
-            onCancel={() => setPendingDeposit(null)}
-            onConfirm={confirmDeposit}
+            onCancel={pendingAction.cancel}
+            onConfirm={confirmPending}
             rows={[
               {
                 label: "Amount",
@@ -538,8 +539,8 @@ export function LpDesk() {
             busy={withdrawalBusy}
             confirmLabel={`Confirm withdraw ${DISPLAY_ASSET_SYMBOL}`}
             note={`Withdraw ${DISPLAY_ASSET_SYMBOL}, not shares, up to your authoritative immediately withdrawable limit.`}
-            onCancel={() => setPendingWithdrawal(null)}
-            onConfirm={confirmWithdrawal}
+            onCancel={pendingAction.cancel}
+            onConfirm={confirmPending}
             rows={[
               {
                 label: "Amount",
