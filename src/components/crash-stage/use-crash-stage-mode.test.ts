@@ -62,10 +62,9 @@ function baseInput(
   return {
     live: openLive(),
     hasUnsettledTicket: false,
-    settledThisSession: false,
+    mayClimb: true,
     hasReplayHero: false,
     isReplayComplete: false,
-    outcome: null,
     ...overrides,
   };
 }
@@ -86,13 +85,13 @@ describe("deriveCrashStageMode", () => {
     expect(deriveCrashStageMode(baseInput())).toBe("countdown");
   });
 
-  it("gates personal replay until settledThisSession", () => {
+  it("gates personal replay until mayClimb", () => {
     expect(
       deriveCrashStageMode(
         baseInput({
           live: finalizedLive(),
           hasUnsettledTicket: true,
-          settledThisSession: false,
+          mayClimb: false,
           hasReplayHero: true,
         })
       )
@@ -103,7 +102,7 @@ describe("deriveCrashStageMode", () => {
         baseInput({
           live: finalizedLive(),
           hasUnsettledTicket: true,
-          settledThisSession: true,
+          mayClimb: true,
           hasReplayHero: true,
           isReplayComplete: false,
         })
@@ -117,7 +116,7 @@ describe("deriveCrashStageMode", () => {
         baseInput({
           live: finalizedLive(),
           hasUnsettledTicket: false,
-          settledThisSession: false,
+          mayClimb: true,
           hasReplayHero: true,
           isReplayComplete: false,
         })
@@ -131,6 +130,7 @@ describe("deriveCrashStageMode", () => {
         baseInput({
           live: finalizedLive(),
           hasUnsettledTicket: false,
+          mayClimb: true,
           hasReplayHero: true,
           isReplayComplete: true,
         })
@@ -144,7 +144,7 @@ describe("deriveCrashStageMode", () => {
         baseInput({
           live: delayedLive(),
           hasUnsettledTicket: true,
-          settledThisSession: false,
+          mayClimb: false,
         })
       )
     ).toBe("awaiting-settle");
@@ -171,7 +171,7 @@ describe("deriveStageCtaKind", () => {
     expect(
       deriveStageCtaKind({
         mode: "countdown",
-        isOpen: true,
+        offerEntry: true,
         hasTicket: false,
         canEnter: true,
         canVerify: false,
@@ -188,7 +188,7 @@ describe("deriveStageCtaKind", () => {
     expect(
       deriveStageCtaKind({
         mode: "awaiting-settle",
-        isOpen: false,
+        offerEntry: false,
         hasTicket: true,
         canEnter: false,
         canVerify: true,
@@ -205,7 +205,7 @@ describe("deriveStageCtaKind", () => {
     expect(
       deriveStageCtaKind({
         mode: "awaiting-settle",
-        isOpen: false,
+        offerEntry: false,
         hasTicket: true,
         canEnter: false,
         canVerify: false,
@@ -222,7 +222,7 @@ describe("deriveStageCtaKind", () => {
     expect(
       deriveStageCtaKind({
         mode: "expired",
-        isOpen: false,
+        offerEntry: false,
         hasTicket: true,
         canEnter: false,
         canVerify: false,
@@ -239,7 +239,7 @@ describe("deriveStageCtaKind", () => {
     expect(
       deriveStageCtaKind({
         mode: "replay",
-        isOpen: false,
+        offerEntry: false,
         hasTicket: false,
         canEnter: false,
         canVerify: false,

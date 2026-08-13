@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCrashRoundEntry } from "@/hooks/use-crash-round-entry";
 import { useCrashTicketRefund } from "@/hooks/use-crash-ticket-refund";
@@ -89,31 +89,6 @@ export function CrashStage() {
   const settlement = useCrashTicketSettlement();
   const refund = useCrashTicketRefund();
 
-  const [settledThisSession, setSettledThisSession] = useState(false);
-  const previousSettlementStatus = useRef(settlement.status);
-  const previousLiveId = useRef<string | null>(null);
-  const liveIdKey = theaterLiveRoundId(theater.live)?.toString() ?? null;
-
-  useEffect(() => {
-    if (
-      settlement.status === "confirmed" &&
-      previousSettlementStatus.current !== "confirmed"
-    ) {
-      setSettledThisSession(true);
-    }
-    previousSettlementStatus.current = settlement.status;
-  }, [settlement.status]);
-
-  useEffect(() => {
-    if (
-      previousLiveId.current !== null &&
-      previousLiveId.current !== liveIdKey
-    ) {
-      setSettledThisSession(false);
-    }
-    previousLiveId.current = liveIdKey;
-  }, [liveIdKey]);
-
   const replayHero: TheaterReplayHero | null =
     theater.hero.type === "replay" ? theater.hero : null;
 
@@ -124,8 +99,15 @@ export function CrashStage() {
       : null);
   const hasUnsettledTicket = unsettledTicket !== null;
 
-  const shouldRunReplayClock =
-    replayHero !== null && (settledThisSession || !hasUnsettledTicket);
+  // Climb gate: spectators / onchain-settled tickets climb freely; unsettled
+  // tickets wait until this session's settlement receipt confirms.
+  const settleReceiptOk =
+    settlement.status === "confirmed" ||
+    Boolean(playerTicket?.settled) ||
+    Boolean(settlement.ticket?.settled);
+  const mayClimb = !hasUnsettledTicket || settleReceiptOk;
+
+  const shouldRunReplayClock = replayHero !== null && mayClimb;
 
   const clock = useReplayClock({
     crashPointBps:
@@ -143,10 +125,9 @@ export function CrashStage() {
   const mode = deriveCrashStageMode({
     live: theater.live,
     hasUnsettledTicket,
-    settledThisSession,
+    mayClimb,
     hasReplayHero: replayHero !== null,
     isReplayComplete: climbComplete,
-    outcome: settlement.outcome,
   });
 
   useStageAudio({
@@ -195,7 +176,7 @@ export function CrashStage() {
 
   const ctaKind = deriveStageCtaKind({
     mode,
-    isOpen: offerEntry,
+    offerEntry,
     hasTicket: Boolean(entry.ticket ?? playerTicket),
     canEnter: entry.canEnter && offerEntry,
     canVerify: settlement.canVerify,

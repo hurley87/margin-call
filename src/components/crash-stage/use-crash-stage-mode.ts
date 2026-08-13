@@ -1,9 +1,8 @@
 /**
- * Derives CrashStage presentation mode from theater live phase, player ticket,
- * and whether the player settled this session. Pure — no hooks, no WebGL.
+ * Derives CrashStage presentation mode from theater live phase and whether
+ * the player may climb (settle receipt or no unsettled ticket). Pure — no hooks.
  */
 
-import type { TicketOutcome } from "@/lib/margin-call-crash";
 import type { TheaterLive } from "@/hooks/use-round-theater";
 
 export type CrashStageMode =
@@ -19,14 +18,15 @@ export type CrashStageModeInput = {
   live: TheaterLive;
   /** Player has a ticket for the displayed round that is not yet settled. */
   hasUnsettledTicket: boolean;
-  /** Player confirmed settle/claim/refund this session (gates personal replay). */
-  settledThisSession: boolean;
+  /**
+   * True when the player may see the Replay climb: no unsettled ticket
+   * (spectator / already settled onchain), or settlement receipt confirmed.
+   */
+  mayClimb: boolean;
   /** Spectator or post-settle: finalized replay hero is available. */
   hasReplayHero: boolean;
   /** Climb finished (progress >= 1). */
   isReplayComplete: boolean;
-  /** Player ticket outcome after settle, for outcome burst. */
-  outcome: TicketOutcome | null;
 };
 
 /**
@@ -34,7 +34,7 @@ export type CrashStageModeInput = {
  *
  * - countdown: open entry window (or delayed without a personal settle gate)
  * - awaiting-settle: locked/reveal with unsettled ticket — huge Verify CTA, no climb
- * - replay: 3D climb — after player settle receipt, or for spectators after finalize
+ * - replay: 3D climb — after settle receipt, or for spectators after finalize
  * - outcome: win/loss burst after climb completes
  */
 export function deriveCrashStageMode(
@@ -52,21 +52,21 @@ export function deriveCrashStageMode(
       return "expired";
     case "open":
       // Held previous-round replay for spectators, or after personal settle.
-      if (input.hasReplayHero && shouldShowReplay(input)) {
+      if (input.hasReplayHero && input.mayClimb) {
         if (input.isReplayComplete) return "outcome";
         return "replay";
       }
       return "countdown";
     case "delayed":
-      if (input.hasUnsettledTicket && !input.settledThisSession) {
+      if (input.hasUnsettledTicket && !input.mayClimb) {
         return "awaiting-settle";
       }
       return "countdown";
     case "finalized":
-      if (input.hasUnsettledTicket && !input.settledThisSession) {
+      if (input.hasUnsettledTicket && !input.mayClimb) {
         return "awaiting-settle";
       }
-      if (input.hasReplayHero && shouldShowReplay(input)) {
+      if (input.hasReplayHero && input.mayClimb) {
         if (input.isReplayComplete) return "outcome";
         return "replay";
       }
@@ -76,18 +76,6 @@ export function deriveCrashStageMode(
       return _exhaustive;
     }
   }
-}
-
-/**
- * Player: climb only after settlement receipt this session.
- * Spectator (no unsettled ticket): climb as soon as a finalized replay hero exists.
- */
-function shouldShowReplay(input: CrashStageModeInput): boolean {
-  if (input.hasUnsettledTicket) {
-    return input.settledThisSession;
-  }
-  // Already settled this session (personal) or never had a ticket (spectator).
-  return true;
 }
 
 /** Hero CTA kind for the DOM overlay. */
@@ -103,7 +91,8 @@ export type StageCtaKind =
 
 export type StageCtaInput = {
   mode: CrashStageMode;
-  isOpen: boolean;
+  /** Entry is offered (open + cutoff + no ticket). */
+  offerEntry: boolean;
   hasTicket: boolean;
   canEnter: boolean;
   canVerify: boolean;
@@ -132,7 +121,7 @@ export function deriveStageCtaKind(input: StageCtaInput): StageCtaKind {
     return "none";
   }
 
-  if (input.mode === "countdown" && input.isOpen && !input.hasTicket) {
+  if (input.mode === "countdown" && input.offerEntry && !input.hasTicket) {
     return "enter";
   }
 
