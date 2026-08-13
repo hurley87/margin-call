@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { CrashTicket } from "@/lib/margin-call-crash";
-import { stageHeroTicket, stageHudTicket } from "./stage-hud-ticket";
+import { stageHeroTicket } from "./stage-hero-ticket";
 
 function ticket(
   overrides: Partial<CrashTicket> &
@@ -15,17 +15,6 @@ function ticket(
     ...overrides,
   };
 }
-
-describe("stageHudTicket", () => {
-  it("passes through an unsettled ticket", () => {
-    const live = ticket({ id: 25n, roundId: 2047n, settled: false });
-    expect(stageHudTicket(live)).toBe(live);
-  });
-
-  it("hides settled historical leftovers from the Open HUD", () => {
-    expect(stageHudTicket(null)).toBeNull();
-  });
-});
 
 describe("stageHeroTicket", () => {
   it("prefers an unsettled ticket over a settled hero-round ticket", () => {

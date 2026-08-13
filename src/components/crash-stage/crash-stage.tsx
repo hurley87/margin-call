@@ -46,7 +46,7 @@ import type { CountdownUrgency } from "./scenes/countdown-scene";
 import type { TicketChipState } from "./scenes/ticket-field";
 import { StageActions } from "./overlay/stage-actions";
 import { StageHud } from "./overlay/stage-hud";
-import { stageHeroTicket, stageHudTicket } from "./overlay/stage-hud-ticket";
+import { stageHeroTicket } from "./overlay/stage-hero-ticket";
 import { StageOutcomeGraph } from "./overlay/stage-outcome-graph";
 import { StageOutcomePanel } from "./overlay/stage-outcome-panel";
 import { StageVerifyProgress } from "./overlay/stage-verify-progress";
@@ -236,7 +236,7 @@ export function CrashStage() {
 
   // HUD never shows settled historical leftovers; hero landing may still use a
   // settled ticket that belongs to the replay round.
-  const hudTicket = stageHudTicket(unsettledTicket);
+  const hudTicket = unsettledTicket;
   const activeTicket = stageHeroTicket({
     unsettledTicket,
     playerTicket,
