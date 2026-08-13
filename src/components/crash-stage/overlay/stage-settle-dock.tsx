@@ -17,6 +17,14 @@ export type StageSettleDockProps = {
   settlement: Settlement;
 };
 
+type SettleAction = {
+  show: boolean;
+  label: string;
+  busyLabel: string;
+  variant: "primary" | "danger" | "terminal";
+  onClick: () => void;
+};
+
 /**
  * Compact Floor settlement dock. Buttons follow the settlement flags;
  * copy follows the same priority as the awaiting-settle CTA.
@@ -36,6 +44,36 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
     ? settlementRetryLabels[settlement.retryAction]
     : "Retry";
   const busy = settlement.busy;
+  const actions: SettleAction[] = [
+    {
+      show: settlement.canVerify,
+      label: "Verify and settle",
+      busyLabel: "Verifying…",
+      variant: "primary",
+      onClick: () => void settlement.verifyAndSettle(),
+    },
+    {
+      show: settlement.canClaim,
+      label: "Claim payout",
+      busyLabel: "Claiming…",
+      variant: "primary",
+      onClick: () => void settlement.claim(),
+    },
+    {
+      show: settlement.canSettle,
+      label: "Settle loss",
+      busyLabel: "Settling…",
+      variant: "danger",
+      onClick: () => void settlement.settleLoss(),
+    },
+    {
+      show: settlement.canRetry,
+      label: retryLabel,
+      busyLabel: retryLabel,
+      variant: "terminal",
+      onClick: () => void settlement.retry(),
+    },
+  ];
 
   return (
     <div className="text-left" data-testid="stage-settle-dock">
@@ -73,46 +111,36 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
       ) : null}
 
       <div className="mt-4 flex flex-col gap-3">
-        {settlement.canVerify ? (
-          <GameButton
-            className="bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-            disabled={busy}
-            onClick={() => void settlement.verifyAndSettle()}
-            size="hero"
-          >
-            {busy ? "Verifying…" : "Verify and settle"}
-          </GameButton>
-        ) : null}
-        {settlement.canClaim ? (
-          <GameButton
-            className="bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-            disabled={busy}
-            onClick={() => void settlement.claim()}
-            size="hero"
-          >
-            {busy ? "Claiming…" : "Claim payout"}
-          </GameButton>
-        ) : null}
-        {settlement.canSettle ? (
-          <GameButton
-            disabled={busy}
-            onClick={() => void settlement.settleLoss()}
-            size="hero"
-            variant="danger"
-          >
-            {busy ? "Settling…" : "Settle loss"}
-          </GameButton>
-        ) : null}
-        {settlement.canRetry ? (
-          <button
-            className={TERMINAL_ACTION_BUTTON_CLASS}
-            disabled={busy}
-            onClick={() => void settlement.retry()}
-            type="button"
-          >
-            {retryLabel}
-          </button>
-        ) : null}
+        {actions
+          .filter((action) => action.show)
+          .map((action) =>
+            action.variant === "terminal" ? (
+              <button
+                className={TERMINAL_ACTION_BUTTON_CLASS}
+                disabled={busy}
+                key={action.label}
+                onClick={action.onClick}
+                type="button"
+              >
+                {busy ? action.busyLabel : action.label}
+              </button>
+            ) : (
+              <GameButton
+                className={
+                  action.variant === "primary"
+                    ? "bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+                    : undefined
+                }
+                disabled={busy}
+                key={action.label}
+                onClick={action.onClick}
+                size="hero"
+                variant={action.variant === "danger" ? "danger" : "primary"}
+              >
+                {busy ? action.busyLabel : action.label}
+              </GameButton>
+            )
+          )}
       </div>
     </div>
   );

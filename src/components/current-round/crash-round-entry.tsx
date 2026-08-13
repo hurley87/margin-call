@@ -22,6 +22,7 @@ import {
   formatDeskDollarsAmountLabel,
 } from "@/lib/desk-dollars";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
+import { entrySubmitLabel } from "@/lib/entry-submit-label";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
 import { GameButton } from "@/components/ui/game-button";
 import { EntryOptionGroup } from "./entry-option-group";
@@ -202,15 +203,7 @@ export function CrashRoundEntry({
           onClick={() => void entry.enter()}
           size="hero"
         >
-          {entry.status === "approval-submitting" ||
-          entry.status === "approval-pending"
-            ? "Approval pending…"
-            : entry.status === "entry-submitting" ||
-                entry.status === "entry-pending"
-              ? "Entering…"
-              : entry.needsApproval
-                ? "Approve & enter"
-                : "Enter round"}
+          {entrySubmitLabel(entry.status, entry.needsApproval)}
         </GameButton>
         {entry.canRetry ? (
           <button
