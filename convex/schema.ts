@@ -1,5 +1,9 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import {
+  marginCallAttemptReason,
+  marginCallAttemptStatus,
+} from "./lib/marginCallValidators";
 
 /**
  * Keeper ops + promotional desk-phone consent/attempts.
@@ -54,14 +58,9 @@ export default defineSchema({
     roundId: v.string(),
     walletAddress: v.string(),
     privyDid: v.string(),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("placed"),
-      v.literal("skipped"),
-      v.literal("failed")
-    ),
+    status: marginCallAttemptStatus,
     twilioCallSid: v.optional(v.string()),
-    reason: v.optional(v.string()),
+    reason: v.optional(marginCallAttemptReason),
     createdAt: v.number(),
   }).index("by_ticketId", ["ticketId"]),
 });

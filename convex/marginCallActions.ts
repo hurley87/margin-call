@@ -16,16 +16,7 @@ import {
   resolveBaseSepoliaRpcUrl,
   resolveCrashGameAddress,
 } from "./lib/crashGameRead";
-
-type SkipReason =
-  | "not_opted_in"
-  | "voice_disabled"
-  | "missing_credentials"
-  | "not_a_loss"
-  | "player_mismatch"
-  | "round_mismatch"
-  | "no_phone"
-  | "twilio_error";
+import type { MarginCallActionSkipReason } from "./lib/marginCallValidators";
 
 function voiceEnabled() {
   return process.env.MARGIN_CALL_VOICE_ENABLED === "true";
@@ -108,7 +99,7 @@ export const placeCall = internalAction({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const attempt = await ctx.runQuery(internal.marginCallStore.getAttempt, {
+    const attempt = await ctx.runQuery(internal.marginCall.getAttempt, {
       attemptId: args.attemptId,
     });
 
@@ -120,8 +111,8 @@ export const placeCall = internalAction({
       return null;
     }
 
-    const skip = async (reason: SkipReason) => {
-      await ctx.runMutation(internal.marginCallStore.markAttempt, {
+    const skip = async (reason: MarginCallActionSkipReason) => {
+      await ctx.runMutation(internal.marginCall.markAttempt, {
         attemptId: args.attemptId,
         status: "skipped",
         reason,
@@ -133,12 +124,9 @@ export const placeCall = internalAction({
       return await skip("voice_disabled");
     }
 
-    const consent = await ctx.runQuery(
-      internal.marginCallStore.getConsentByDid,
-      {
-        privyDid: attempt.privyDid,
-      }
-    );
+    const consent = await ctx.runQuery(internal.marginCall.getConsentByDid, {
+      privyDid: attempt.privyDid,
+    });
 
     if (!consent || !consent.optedIn) {
       return await skip("not_opted_in");
@@ -186,7 +174,7 @@ export const placeCall = internalAction({
         "[margin-call] privy_lookup_failed",
         error instanceof Error ? error.message : "unknown"
       );
-      await ctx.runMutation(internal.marginCallStore.markAttempt, {
+      await ctx.runMutation(internal.marginCall.markAttempt, {
         attemptId: args.attemptId,
         status: "failed",
         reason: "no_phone",
@@ -201,7 +189,7 @@ export const placeCall = internalAction({
     // Re-check consent immediately before the Twilio POST so flipping the
     // switch off after scheduling still stops the call.
     const consentAgain = await ctx.runQuery(
-      internal.marginCallStore.getConsentByDid,
+      internal.marginCall.getConsentByDid,
       { privyDid: attempt.privyDid }
     );
     if (!consentAgain || !consentAgain.optedIn) {
@@ -219,7 +207,7 @@ export const placeCall = internalAction({
     phone = null;
 
     if (!placed.ok) {
-      await ctx.runMutation(internal.marginCallStore.markAttempt, {
+      await ctx.runMutation(internal.marginCall.markAttempt, {
         attemptId: args.attemptId,
         status: "failed",
         reason: "twilio_error",
@@ -227,7 +215,7 @@ export const placeCall = internalAction({
       return null;
     }
 
-    await ctx.runMutation(internal.marginCallStore.markAttempt, {
+    await ctx.runMutation(internal.marginCall.markAttempt, {
       attemptId: args.attemptId,
       status: "placed",
       twilioCallSid: placed.sid,

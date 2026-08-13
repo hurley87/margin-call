@@ -139,18 +139,18 @@ describe("marginCall consent + request", () => {
     });
 
     // Exercise the store helpers the action uses before Twilio.
-    const consent = await t.query(internal.marginCallStore.getConsentByDid, {
+    const consent = await t.query(internal.marginCall.getConsentByDid, {
       privyDid: DID,
     });
     expect(consent?.optedIn).toBe(false);
 
-    await t.mutation(internal.marginCallStore.markAttempt, {
+    await t.mutation(internal.marginCall.markAttempt, {
       attemptId: scheduled.attemptId,
       status: "skipped",
       reason: "not_opted_in",
     });
 
-    const attempt = await t.query(internal.marginCallStore.getAttempt, {
+    const attempt = await t.query(internal.marginCall.getAttempt, {
       attemptId: scheduled.attemptId,
     });
     expect(attempt).toMatchObject({
@@ -173,18 +173,18 @@ describe("marginCall consent + request", () => {
     expect(scheduled.scheduled).toBe(true);
     if (!scheduled.scheduled) throw new Error("expected schedule");
 
-    await t.mutation(internal.marginCallStore.markAttempt, {
+    await t.mutation(internal.marginCall.markAttempt, {
       attemptId: scheduled.attemptId,
       status: "placed",
       twilioCallSid: "CA_test",
     });
-    await t.mutation(internal.marginCallStore.markAttempt, {
+    await t.mutation(internal.marginCall.markAttempt, {
       attemptId: scheduled.attemptId,
       status: "skipped",
       reason: "not_opted_in",
     });
 
-    const attempt = await t.query(internal.marginCallStore.getAttempt, {
+    const attempt = await t.query(internal.marginCall.getAttempt, {
       attemptId: scheduled.attemptId,
     });
     expect(attempt).toMatchObject({

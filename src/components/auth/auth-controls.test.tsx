@@ -57,12 +57,9 @@ vi.mock("@/hooks/use-desk-dollars-transfer", () => ({
   }),
 }));
 
-vi.mock("@/hooks/use-margin-call-consent", () => ({
-  useMarginCallConsent: () => ({
-    optedIn: false,
-    isReady: true,
-    setOptedIn: vi.fn(),
-  }),
+vi.mock("convex/react", () => ({
+  useQuery: () => ({ optedIn: false }),
+  useMutation: () => vi.fn(),
 }));
 
 import { AuthControls } from "@/components/auth/auth-controls";

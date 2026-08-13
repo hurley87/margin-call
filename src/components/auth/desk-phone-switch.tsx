@@ -1,7 +1,8 @@
 "use client";
 
+import { useMutation, useQuery } from "convex/react";
 import { useCallback, useState } from "react";
-import { useMarginCallConsent } from "@/hooks/use-margin-call-consent";
+import { api } from "../../../convex/_generated/api";
 
 type DeskPhoneSwitchProps = {
   walletAddress: `0x${string}`;
@@ -12,7 +13,10 @@ type DeskPhoneSwitchProps = {
  * Default off; flipping off stops further liquidation calls.
  */
 export function DeskPhoneSwitch({ walletAddress }: DeskPhoneSwitchProps) {
-  const { optedIn, isReady, setOptedIn } = useMarginCallConsent(walletAddress);
+  const consent = useQuery(api.marginCall.myMarginCallConsent);
+  const setConsent = useMutation(api.marginCall.setMarginCallConsent);
+  const optedIn = consent?.optedIn === true;
+  const isReady = consent !== undefined;
   const [pending, setPending] = useState(false);
   const [error, setError] = useState(false);
 
@@ -21,13 +25,13 @@ export function DeskPhoneSwitch({ walletAddress }: DeskPhoneSwitchProps) {
     setPending(true);
     setError(false);
     try {
-      await setOptedIn(!optedIn);
+      await setConsent({ optedIn: !optedIn, walletAddress });
     } catch {
       setError(true);
     } finally {
       setPending(false);
     }
-  }, [isReady, optedIn, pending, setOptedIn]);
+  }, [isReady, optedIn, pending, setConsent, walletAddress]);
 
   return (
     <div
