@@ -66,9 +66,11 @@ export function StageOutcomePanel({
     ? settlementRetryLabels[settlement.retryAction]
     : "Retry";
 
+  const showTierBoard = !reducedMotion && hasTickets(snapshot.tiers);
+
   return (
     <div
-      className="pointer-events-auto mx-auto w-full max-w-xl rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-4 backdrop-blur-md sm:p-5"
+      className="pointer-events-auto mx-auto w-full max-w-3xl rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-4 backdrop-blur-md sm:p-5"
       data-testid="stage-outcome-panel"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -89,10 +91,14 @@ export function StageOutcomePanel({
         </p>
       </div>
 
-      <div className="mt-2 max-h-[26svh] overflow-y-auto pr-1">
+      <div
+        className={
+          showTierBoard ? "mt-2 max-h-[26svh] overflow-y-auto pr-1" : "mt-2"
+        }
+      >
         {/* Reduced motion renders RoundResultCard above — its tier board
             already covers this. */}
-        {!reducedMotion && hasTickets(snapshot.tiers) ? (
+        {showTierBoard ? (
           <TierCloseBoard
             crashPointBps={reveal.crashPointBps}
             playerTierBps={snapshot.ticket.leverageBps}
@@ -139,18 +145,18 @@ export function StageOutcomePanel({
         </p>
       ) : null}
 
-      <div className="mt-4 flex flex-wrap items-center gap-3">
+      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch">
         <GameButton
-          className="flex-1 bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50"
+          className="h-14 min-h-14 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50 sm:text-base"
           disabled={!settleConfirmed}
           onClick={onContinue}
-          size="hero"
+          size="default"
         >
           {settleConfirmed ? "Continue to the Floor" : "Settling onchain…"}
         </GameButton>
         {!reducedMotion ? (
           <button
-            className={TERMINAL_ACTION_BUTTON_CLASS}
+            className={`${TERMINAL_ACTION_BUTTON_CLASS} inline-flex h-14 min-h-14 shrink-0 items-center justify-center whitespace-nowrap px-6 py-0 leading-none`}
             onClick={onRewatch}
             type="button"
           >
@@ -159,7 +165,7 @@ export function StageOutcomePanel({
         ) : null}
         {isError && settlement.canRetry ? (
           <button
-            className={TERMINAL_ACTION_BUTTON_CLASS}
+            className={`${TERMINAL_ACTION_BUTTON_CLASS} inline-flex h-14 min-h-14 shrink-0 items-center justify-center whitespace-nowrap px-6 py-0 leading-none`}
             onClick={() => void settlement.retry()}
             type="button"
           >

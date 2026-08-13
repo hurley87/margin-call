@@ -648,6 +648,71 @@
   transform-origin: 50% 20%;
 }
 
+/* ── Win celebration: curve head pulse + CSS confetti ── */
+
+@keyframes mc-head-pulse {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.45);
+    opacity: 0.85;
+  }
+}
+
+.mc-head-pulse {
+  animation: mc-head-pulse calc(var(--mc-dur-flash) * 1.5) var(--mc-ease-out)
+    infinite;
+}
+
+@keyframes mc-confetti-cannon {
+  0% {
+    transform: translate3d(0, 0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  18% {
+    transform: translate3d(calc(var(--mc-confetti-drift) * 0.35), -42vh, 0)
+      rotate(calc(var(--mc-confetti-rotate) * 0.3));
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--mc-confetti-drift), 12vh, 0)
+      rotate(var(--mc-confetti-rotate));
+    opacity: 0;
+  }
+}
+
+@keyframes mc-confetti-rain {
+  0% {
+    transform: translate3d(0, -8vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  8% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--mc-confetti-drift), 110vh, 0)
+      rotate(var(--mc-confetti-rotate));
+    opacity: 0.15;
+  }
+}
+
+.mc-confetti-cannon {
+  animation: mc-confetti-cannon var(--mc-confetti-duration) var(--mc-ease-out)
+    var(--mc-confetti-delay) both;
+  border-radius: 1px;
+  will-change: transform, opacity;
+}
+
+.mc-confetti-rain {
+  animation: mc-confetti-rain var(--mc-confetti-duration) linear
+    var(--mc-confetti-delay) both;
+  border-radius: 1px;
+  will-change: transform, opacity;
+}
+
 /* ── Reduced motion ── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -686,9 +751,17 @@
   .mc-shake,
   .mc-tier-pop,
   .mc-margin-call-flash,
-  .mc-phone-ring {
+  .mc-phone-ring,
+  .mc-head-pulse,
+  .mc-confetti-cannon,
+  .mc-confetti-rain {
     animation: none;
     opacity: 1;
+  }
+
+  .mc-confetti-cannon,
+  .mc-confetti-rain {
+    opacity: 0;
   }
 
   /* Held edge color instead of a flash pulse */

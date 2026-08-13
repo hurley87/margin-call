@@ -48,6 +48,7 @@ import { StageHud } from "./overlay/stage-hud";
 import { StageOutcomeGraph } from "./overlay/stage-outcome-graph";
 import { StageOutcomePanel } from "./overlay/stage-outcome-panel";
 import { StageVerifyProgress } from "./overlay/stage-verify-progress";
+import { WinConfetti } from "./overlay/win-confetti";
 import {
   deriveCrashStageMode,
   type CrashStageMode,
@@ -375,6 +376,15 @@ export function CrashStage() {
       </div>
 
       <div className="pointer-events-none relative z-20 flex min-h-0 flex-1 flex-col pt-[6.75rem]">
+        {ceremony.phase === "landed" &&
+        ceremonyClimb?.reveal.outcome === "won" &&
+        !theater.reducedMotion ? (
+          <WinConfetti
+            key={ceremonyClimb.startNonce}
+            nonce={ceremonyClimb.startNonce}
+            reducedMotion={theater.reducedMotion}
+          />
+        ) : null}
         <StageHud
           countdownLabel={countdownLabel}
           countdownSeconds={countdownSeconds}

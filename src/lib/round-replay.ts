@@ -96,7 +96,7 @@ export type ReplayPathPoint = { x: number; y: number };
 
 // Vertical headroom above the Crash Point so the head never kisses the
 // viewBox edge. Shared by the curve and anything annotating it (tier lines).
-const Y_HEADROOM = 1.08;
+const Y_HEADROOM = 1.16;
 
 // Invert y so 1.00x sits at the bottom and crash sits near the top.
 function yForMultiplier(
@@ -148,6 +148,22 @@ export function replayPathD(points: readonly ReplayPathPoint[]): string {
     d += ` L ${point.x.toFixed(2)} ${point.y.toFixed(2)}`;
   }
   return d;
+}
+
+/**
+ * Closed area path under the climb: curve points, then down to the baseline
+ * and back to the start. Used for the gradient fill beneath the stroke.
+ */
+export function replayAreaPathD(
+  points: readonly ReplayPathPoint[],
+  baselineY: number
+): string {
+  if (points.length === 0) return "";
+
+  const stroke = replayPathD(points);
+  const last = points[points.length - 1]!;
+  const first = points[0]!;
+  return `${stroke} L ${last.x.toFixed(2)} ${baselineY.toFixed(2)} L ${first.x.toFixed(2)} ${baselineY.toFixed(2)} Z`;
 }
 
 /** Sampled polyline points for the climb up to `progress`. */
