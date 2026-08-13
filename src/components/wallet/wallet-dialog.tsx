@@ -6,6 +6,7 @@ import type { Address } from "viem";
 import { FlashValue } from "@/components/ui/flash-value";
 import { GameButton } from "@/components/ui/game-button";
 import { useDeskDollarsTransfer } from "@/hooks/use-desk-dollars-transfer";
+import type { DeskDollarsTransferStatus } from "@/hooks/use-desk-dollars-transfer";
 import {
   formatDeskDollars,
   formatDeskDollarsBalanceLabel,
@@ -29,6 +30,65 @@ type WalletDialogProps = {
   decimals: number | null;
 };
 
+type TransferStatusMessage = {
+  status: DeskDollarsTransferStatus;
+  error: string | null;
+  lastHash: `0x${string}` | null;
+};
+
+function TransferStatusCopy({
+  status,
+  error,
+  lastHash,
+}: TransferStatusMessage) {
+  switch (status) {
+    case "submitting":
+      return (
+        <p aria-live="polite" className="mt-3 text-sm">
+          Submitting your sponsored transfer…
+        </p>
+      );
+    case "pending":
+      return (
+        <p aria-live="polite" className="mt-3 text-sm">
+          Transfer pending until its Base Sepolia receipt succeeds…
+        </p>
+      );
+    case "confirmed":
+      return (
+        <p aria-live="polite" className="mt-3 text-sm">
+          Transfer confirmed on Base Sepolia.
+          {lastHash ? (
+            <>
+              {" "}
+              <a
+                className="underline"
+                href={getBaseSepoliaTransactionUrl(lastHash)}
+                rel="noreferrer"
+                target="_blank"
+              >
+                View on BaseScan
+              </a>
+            </>
+          ) : null}
+        </p>
+      );
+    case "unavailable":
+    case "error":
+      return error ? (
+        <p role="alert" className="mt-3 text-sm">
+          {error}
+        </p>
+      ) : null;
+    case "idle":
+      return null;
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
 /**
  * Signed-in wallet surface: full address utilities and a sponsored tUSD send.
  */
@@ -50,6 +110,19 @@ export function WalletDialog({
     formatDeskDollarsBalanceLabel(balance, decimals) ?? "— tUSD";
   const isBusy =
     transfer.status === "submitting" || transfer.status === "pending";
+  const isRetry = transfer.canRetry;
+  const canSubmit =
+    transfer.status !== "unavailable" &&
+    !isBusy &&
+    (isRetry ||
+      (transfer.canTransfer && !!recipient.trim() && !!amount.trim()));
+  const submitLabel = isBusy
+    ? transfer.status === "submitting"
+      ? "Submitting…"
+      : "Pending…"
+    : isRetry
+      ? "Retry"
+      : "Send tUSD";
 
   const handleCopy = useCallback(async () => {
     try {
@@ -68,13 +141,13 @@ export function WalletDialog({
   const handleSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (transfer.canRetry) {
+      if (isRetry) {
         void transfer.retry();
         return;
       }
       void transfer.transfer({ recipient, amount, balance });
     },
-    [amount, balance, recipient, transfer]
+    [amount, balance, isRetry, recipient, transfer]
   );
 
   return (
@@ -196,63 +269,19 @@ export function WalletDialog({
               value={amount}
             />
 
-            {transfer.status === "submitting" ? (
-              <p aria-live="polite" className="mt-3 text-sm">
-                Submitting your sponsored transfer…
-              </p>
-            ) : null}
-            {transfer.status === "pending" ? (
-              <p aria-live="polite" className="mt-3 text-sm">
-                Transfer pending until its Base Sepolia receipt succeeds…
-              </p>
-            ) : null}
-            {transfer.status === "confirmed" ? (
-              <p aria-live="polite" className="mt-3 text-sm">
-                Transfer confirmed on Base Sepolia.
-                {transfer.lastHash ? (
-                  <>
-                    {" "}
-                    <a
-                      className="underline"
-                      href={getBaseSepoliaTransactionUrl(transfer.lastHash)}
-                      rel="noreferrer"
-                      target="_blank"
-                    >
-                      View on BaseScan
-                    </a>
-                  </>
-                ) : null}
-              </p>
-            ) : null}
-            {transfer.status === "unavailable" ||
-            transfer.status === "error" ? (
-              <p role="alert" className="mt-3 text-sm">
-                {transfer.error}
-              </p>
-            ) : null}
+            <TransferStatusCopy
+              error={transfer.error}
+              lastHash={transfer.lastHash}
+              status={transfer.status}
+            />
 
             <GameButton
               className="mt-4 w-full"
-              disabled={
-                transfer.status === "unavailable" ||
-                (isBusy
-                  ? true
-                  : transfer.canRetry
-                    ? false
-                    : !transfer.canTransfer ||
-                      !recipient.trim() ||
-                      !amount.trim())
-              }
+              disabled={!canSubmit}
               size="sm"
               type="submit"
             >
-              {transfer.canRetry
-                ? "Retry"
-                : transfer.status === "submitting"
-                  ? "Submitting…"
-                  : transfer.status === "pending"
-                    ? "Pending…"
-                    : "Send tUSD"}
+              {submitLabel}
             </GameButton>
           </form>
         </Dialog.Popup>
