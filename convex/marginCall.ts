@@ -1,16 +1,8 @@
 import { v } from "convex/values";
+import { normalizeWalletAddress } from "@margin-call/shared/address";
 import { internal } from "./_generated/api";
 import { mutation, query } from "./_generated/server";
 import { canonicalPrivyDid } from "./me";
-
-const EVM_ADDRESS = /^0x[a-fA-F0-9]{40}$/;
-
-function normalizeWallet(address: string): string {
-  if (!EVM_ADDRESS.test(address)) {
-    throw new Error("Invalid wallet address");
-  }
-  return address.toLowerCase();
-}
 
 async function requireIdentity(ctx: {
   auth: { getUserIdentity: () => Promise<{ subject: string } | null> };
@@ -53,7 +45,7 @@ export const setMarginCallConsent = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const privyDid = await requireIdentity(ctx);
-    const walletAddress = normalizeWallet(args.walletAddress);
+    const walletAddress = normalizeWalletAddress(args.walletAddress);
     const updatedAt = Date.now();
 
     const existing = await ctx.db
@@ -99,7 +91,7 @@ export const requestMarginCall = mutation({
   ),
   handler: async (ctx, args) => {
     const privyDid = await requireIdentity(ctx);
-    const walletAddress = normalizeWallet(args.walletAddress);
+    const walletAddress = normalizeWalletAddress(args.walletAddress);
 
     if (!/^\d+$/.test(args.ticketId) || !/^\d+$/.test(args.roundId)) {
       throw new Error("Invalid ticket or round id");
