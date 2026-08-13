@@ -1,6 +1,9 @@
 import type { useCrashTicketRefund } from "@/hooks/use-crash-ticket-refund";
 import type { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
-import { settlementRetryLabels } from "@/lib/settlement-status-copy";
+import {
+  refundRetryLabels,
+  settlementRetryLabels,
+} from "@/lib/settlement-status-copy";
 
 export type TicketResolveAction = {
   label: string;
@@ -45,18 +48,9 @@ export function ticketResolveCandidates(input: {
   const settlementRetryLabel = settlement.retryAction
     ? settlementRetryLabels[settlement.retryAction]
     : "Retry";
-  const refundRetryLabel =
-    refund?.retryAction === "refresh"
-      ? "Retry"
-      : refund?.retryAction === "expire"
-        ? "Retry mark expired"
-        : refund?.retryAction === "refund"
-          ? "Retry refund"
-          : refund?.retryAction === "expire-receipt-check"
-            ? "Retry expiry receipt check"
-            : refund?.retryAction === "refund-receipt-check"
-              ? "Retry refund receipt check"
-              : "Retry";
+  const refundRetryLabel = refund?.retryAction
+    ? refundRetryLabels[refund.retryAction]
+    : "Retry";
 
   return [
     {

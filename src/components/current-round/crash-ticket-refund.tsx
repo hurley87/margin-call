@@ -2,12 +2,12 @@
 
 import {
   useCrashTicketRefund,
-  type CrashRefundRetryAction,
   type CrashRefundStatus,
 } from "@/hooks/use-crash-ticket-refund";
-import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
-import { CrashLiveTicket } from "./crash-live-ticket";
 import { DISPLAY_ASSET_SYMBOL } from "@/lib/desk-dollars";
+import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
+import { refundRetryLabels } from "@/lib/settlement-status-copy";
+import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashRefundStatus, string>> = {
   loading: "Loading your ticket refund state…",
@@ -16,14 +16,6 @@ const statusCopy: Partial<Record<CrashRefundStatus, string>> = {
   "refund-submitting": "Submitting your margin refund…",
   "refund-pending": `Refund pending until its Base Sepolia receipt succeeds. ${DISPLAY_ASSET_SYMBOL} will not update until confirmation.`,
   confirmed: "Refund confirmed on Base Sepolia.",
-};
-
-const retryLabels: Record<CrashRefundRetryAction, string> = {
-  refresh: "Retry",
-  expire: "Retry mark expired",
-  refund: "Retry refund",
-  "expire-receipt-check": "Retry expiry receipt check",
-  "refund-receipt-check": "Retry refund receipt check",
 };
 
 export type CrashTicketRefundState = ReturnType<typeof useCrashTicketRefund>;
@@ -78,7 +70,7 @@ export function CrashTicketRefund({ refund }: CrashTicketRefundProps) {
           outcome={refund.outcome}
           payout={refund.payout}
           retryLabel={
-            refund.retryAction ? retryLabels[refund.retryAction] : "Retry"
+            refund.retryAction ? refundRetryLabels[refund.retryAction] : "Retry"
           }
           statusMessage={statusMessage}
           ticket={refund.ticket}
