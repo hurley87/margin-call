@@ -149,6 +149,18 @@ vi.mock("@/hooks/use-replay-clock", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-margin-call-voice", () => ({
+  useMarginCallVoice: vi.fn(),
+}));
+
+vi.mock("@privy-io/react-auth", () => ({
+  usePrivy: () => ({
+    ready: true,
+    authenticated: false,
+    user: null,
+  }),
+}));
+
 vi.mock("@/lib/theater-audio", () => {
   let enabled = false;
   const listeners = new Set<() => void>();

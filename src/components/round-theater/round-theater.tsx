@@ -1,6 +1,8 @@
 "use client";
 
+import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useMarginCallVoice } from "@/hooks/use-margin-call-voice";
 import { useReplayClock } from "@/hooks/use-replay-clock";
 import {
   useRoundTheater,
@@ -17,6 +19,7 @@ import {
   formatLeverageBps,
   type CrashTicket,
 } from "@/lib/margin-call-crash";
+import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import {
   formatNextRoundHandoff,
   formatTimelineCountdownLabel,
@@ -408,6 +411,8 @@ function ReplayStage({
   reducedMotion: boolean;
 }) {
   const [restartNonce, setRestartNonce] = useState(0);
+  const { user } = usePrivy();
+  const walletAddress = getEvmWalletAddress(user);
   const playerTierBps = playerTicket?.leverageBps ?? null;
   const landing = ticketLanding(playerTicket, hero.crashPointBps);
   const clock = useReplayClock({
@@ -416,6 +421,16 @@ function ReplayStage({
     chainTimestamp: hero.chainTimestamp,
     reducedMotion,
     restartNonce,
+  });
+
+  // Reduced-motion shows the static result immediately — treat that as the
+  // hard-stop beat for the promotional desk-phone call.
+  useMarginCallVoice({
+    ticketId: playerTicket ? playerTicket.id.toString() : null,
+    roundId: hero.roundId.toString(),
+    walletAddress,
+    isLiquidated: landing.kind === "margin-called",
+    isComplete: reducedMotion || clock.isComplete,
   });
 
   useTierSoundEffects({

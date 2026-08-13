@@ -13,6 +13,9 @@ import type * as http from "../http.js";
 import type * as keeperAlerts from "../keeperAlerts.js";
 import type * as keeperSponsorship from "../keeperSponsorship.js";
 import type * as keeperTick from "../keeperTick.js";
+import type * as marginCall from "../marginCall.js";
+import type * as marginCallActions from "../marginCallActions.js";
+import type * as marginCallStore from "../marginCallStore.js";
 import type * as me from "../me.js";
 
 import type {
@@ -27,11 +30,14 @@ declare const fullApi: ApiFromModules<{
   keeperAlerts: typeof keeperAlerts;
   keeperSponsorship: typeof keeperSponsorship;
   keeperTick: typeof keeperTick;
+  marginCall: typeof marginCall;
+  marginCallActions: typeof marginCallActions;
+  marginCallStore: typeof marginCallStore;
   me: typeof me;
 }>;
 
 /**
- * A utility for referencing Convex functions in your app's API.
+ * A utility for referencing Convex functions in your app's public API.
  *
  * Usage:
  * ```js

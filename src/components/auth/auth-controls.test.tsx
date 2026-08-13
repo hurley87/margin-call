@@ -57,6 +57,14 @@ vi.mock("@/hooks/use-desk-dollars-transfer", () => ({
   }),
 }));
 
+vi.mock("@/hooks/use-margin-call-consent", () => ({
+  useMarginCallConsent: () => ({
+    optedIn: false,
+    isReady: true,
+    setOptedIn: vi.fn(),
+  }),
+}));
+
 import { AuthControls } from "@/components/auth/auth-controls";
 
 function embeddedUser() {
@@ -147,11 +155,12 @@ describe("AuthControls", () => {
     expect(sdk.login).toHaveBeenCalledTimes(2);
   });
 
-  it("shows truncated wallet and tUSD balance when signed in", () => {
+  it("shows truncated wallet, tUSD balance, and Desk phone switch when signed in", () => {
     renderSignedInControls();
     expect(screen.getByText("0x1234")).not.toBeNull();
     expect(screen.getByText("100 tUSD")).not.toBeNull();
     expect(screen.queryByText("+15555550123")).toBeNull();
+    expect(screen.getByRole("button", { name: /Desk phone/i })).not.toBeNull();
   });
 
   it("opens the wallet dialog from the header chip", () => {

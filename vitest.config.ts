@@ -20,6 +20,22 @@ export default defineConfig({
         __dirname,
         "./packages/shared/src/index.ts"
       ),
+      "@margin-call/shared/margin-call-voice": path.resolve(
+        __dirname,
+        "./packages/shared/src/margin-call-voice.ts"
+      ),
+      "@margin-call/shared/crash-keeper": path.resolve(
+        __dirname,
+        "./packages/shared/src/crash-keeper.ts"
+      ),
+      "@margin-call/shared/address": path.resolve(
+        __dirname,
+        "./packages/shared/src/address.ts"
+      ),
+      "@margin-call/shared/parse-private-key": path.resolve(
+        __dirname,
+        "./packages/shared/src/parse-private-key.ts"
+      ),
     },
   },
 });

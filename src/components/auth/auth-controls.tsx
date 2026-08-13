@@ -2,6 +2,7 @@
 
 import { useLogin, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCallback, useRef, useState } from "react";
+import { DeskPhoneSwitch } from "@/components/auth/desk-phone-switch";
 import { FlashValue } from "@/components/ui/flash-value";
 import { WalletDialog } from "@/components/wallet/wallet-dialog";
 import { formatDeskDollarsBalanceLabel } from "@/lib/desk-dollars";
@@ -11,7 +12,8 @@ import { useDeskDollarsBalance } from "@/hooks/use-desk-dollars-balance";
 import { getAuthBoundaryState } from "./auth-boundary";
 
 /**
- * Compact shell auth: login/logout, truncated wallet, and live tUSD balance.
+ * Compact shell auth: login/logout, wallet chip, live tUSD balance,
+ * and the Desk phone switch for liquidation calls.
  * Does not gate children — use AuthGate for signed-in-only surfaces.
  */
 export function AuthControls() {
@@ -101,6 +103,7 @@ export function AuthControls() {
             open={walletOpen}
             walletAddress={signedInWallet}
           />
+          <DeskPhoneSwitch walletAddress={signedInWallet} />
         </>
       ) : null}
       {state.action === "login" ? (
