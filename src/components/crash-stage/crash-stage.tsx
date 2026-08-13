@@ -3,48 +3,47 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
-import { useCrashRoundEntry } from "@/hooks/use-crash-round-entry";
-import { useCrashTicketRefund } from "@/hooks/use-crash-ticket-refund";
 import { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import { useReplayClock } from "@/hooks/use-replay-clock";
 import {
   useRoundTheater,
+  type TheaterLive,
   type TheaterReplayHero,
 } from "@/hooks/use-round-theater";
 import { useTheaterPlayerTicket } from "@/hooks/use-theater-player-ticket";
+import { useTheaterTierSounds } from "@/hooks/use-theater-tier-sounds";
 import {
   presentLanding,
   ticketLanding,
 } from "@/components/round-theater/landing-frame";
 import { RoundResultCard } from "@/components/round-theater/round-result-card";
 import {
-  canOfferEntry,
   ENTRY_LEVERAGE_TIERS_BPS,
+  type CrashRoundPhase,
   type CrashTicket,
   type TicketTapeEntry,
 } from "@/lib/margin-call-crash";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { formatTimelineCountdownLabel } from "@/lib/round-phase-copy";
 import { getClosedTiersAtProgress, isReplayComplete } from "@/lib/round-replay";
+import { settlementStatusCopy } from "@/lib/settlement-status-copy";
 import {
+  isTheaterLiveReady,
   theaterCountdownSeconds,
   theaterDisplayRoundId,
   theaterLiveRoundId,
   theaterLiveTimeline,
   theaterTapeEntries,
 } from "@/lib/theater-live";
-import { settlementStatusCopy } from "@/lib/settlement-status-copy";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
-import { useTheaterTierSounds } from "@/hooks/use-theater-tier-sounds";
 import type { CrashCanvasProps } from "./crash-canvas";
-import type { TicketChipState } from "./scenes/ticket-field";
 import type { CountdownUrgency } from "./scenes/countdown-scene";
-import { StageCta } from "./overlay/stage-cta";
+import type { TicketChipState } from "./scenes/ticket-field";
+import { StageActions } from "./overlay/stage-actions";
 import { StageHud } from "./overlay/stage-hud";
 import {
   deriveCrashStageMode,
-  deriveStageCtaKind,
   type CrashStageMode,
 } from "./use-crash-stage-mode";
 
@@ -54,8 +53,7 @@ const CrashCanvas = dynamic(
 );
 
 /**
- * Immersive Floor orchestrator: composes theater, entry, and settlement into
- * a full-bleed Three.js pit with huge DOM CTAs.
+ * Immersive Floor: Three.js pit plus existing entry/settlement/refund surfaces.
  */
 export function CrashStage() {
   const theater = useRoundTheater();
@@ -65,11 +63,7 @@ export function CrashStage() {
 
   const displayRoundId = theaterDisplayRoundId(theater.live, theater.hero);
   const { ticket: playerTicket } = useTheaterPlayerTicket(displayRoundId);
-
-  const entryRoundId = theaterLiveRoundId(theater.live) ?? 0n;
-  const entry = useCrashRoundEntry({ roundId: entryRoundId });
   const settlement = useCrashTicketSettlement();
-  const refund = useCrashTicketRefund();
 
   const replayHero: TheaterReplayHero | null =
     theater.hero.type === "replay" ? theater.hero : null;
@@ -81,8 +75,6 @@ export function CrashStage() {
       : null);
   const hasUnsettledTicket = unsettledTicket !== null;
 
-  // Climb gate: spectators / onchain-settled tickets climb freely; unsettled
-  // tickets wait until this session's settlement receipt confirms.
   const settleReceiptOk =
     settlement.status === "confirmed" ||
     Boolean(playerTicket?.settled) ||
@@ -137,8 +129,7 @@ export function CrashStage() {
     [entries, replayHero?.crashPointBps, replayProgress, mode, climbComplete]
   );
 
-  const activeTicket =
-    unsettledTicket ?? playerTicket ?? entry.ticket ?? settlement.ticket;
+  const activeTicket = unsettledTicket ?? playerTicket ?? settlement.ticket;
 
   const landing = useMemo(() => {
     if (!replayHero || mode !== "outcome") return null;
@@ -148,55 +139,20 @@ export function CrashStage() {
     );
   }, [activeTicket, mode, replayHero]);
 
-  const isOpen = theater.live.kind === "open";
   const countdownSeconds = theaterCountdownSeconds(theater.live);
-  const offerEntry =
-    isOpen &&
-    canOfferEntry("open", countdownSeconds ?? 0) &&
-    !entry.ticket &&
-    !playerTicket;
-
-  const ctaKind = deriveStageCtaKind({
-    mode,
-    offerEntry,
-    hasTicket: Boolean(entry.ticket ?? playerTicket),
-    canEnter: entry.canEnter && offerEntry,
-    canVerify: settlement.canVerify,
-    canClaim: settlement.canClaim,
-    canSettle: settlement.canSettle,
-    canRefund: refund.canRefund,
-    canExpire: refund.canExpire,
-    canRetry: settlement.canRetry || entry.canRetry || refund.canRetry,
-  });
-
   const urgency = countdownUrgency(mode, countdownSeconds);
   const showLockedLabel =
     mode === "awaiting-settle" ||
     theater.live.kind === "delayed" ||
     theater.live.kind === "expired";
 
-  const statusMessage = stageStatusMessage({
-    mode,
-    theater,
-    settlement,
-    entry,
-    refund,
-    offerEntry,
-  });
-
   const liveTimeline = theaterLiveTimeline(theater.live);
   const countdownLabel = liveTimeline
     ? formatTimelineCountdownLabel(liveTimeline)
     : null;
 
-  const txBusy =
-    settlement.status.includes("submitting") ||
-    settlement.status.includes("pending") ||
-    settlement.status === "attesting" ||
-    entry.status.includes("submitting") ||
-    entry.status.includes("pending") ||
-    refund.status.includes("submitting") ||
-    refund.status.includes("pending");
+  const actionPhase = theaterLivePhase(theater.live);
+  const actionRoundId = theaterLiveRoundId(theater.live);
 
   const canvasProps: CrashCanvasProps = {
     mode,
@@ -258,41 +214,20 @@ export function CrashStage() {
       <StageHud
         countdownLabel={countdownLabel}
         countdownSeconds={countdownSeconds}
-        isAlert={
-          settlement.status === "error" ||
-          entry.status === "error" ||
-          refund.status === "error"
-        }
+        isAlert={settlement.status === "error"}
         playerTicket={activeTicket}
-        showFaucet={offerEntry && Boolean(entry.walletAddress)}
-        statusMessage={statusMessage}
+        showFaucet={false}
+        statusMessage={stageStatusMessage(mode, settlement)}
         suggestSound={mode === "replay" || mode === "outcome"}
       />
 
-      <StageCta
-        canEnter={entry.canEnter && offerEntry}
-        disabled={txBusy}
-        expectedPayout={entry.expectedPayout}
-        kind={ctaKind}
-        needsApproval={entry.needsApproval}
-        onClaim={() => void settlement.claim()}
-        onEnter={() => void entry.enter()}
-        onExpire={() => void refund.expireRound()}
-        onRefund={() => void refund.refund()}
-        onRetry={() => {
-          if (settlement.canRetry) void settlement.retry();
-          else if (entry.canRetry) void entry.retry();
-          else if (refund.canRetry) void refund.retry();
-        }}
-        onSelectLeverage={entry.selectLeverage}
-        onSelectMargin={entry.selectMargin}
-        onSettle={() => void settlement.settleLoss()}
-        onVerify={() => void settlement.verifyAndSettle()}
-        retryLabel="Retry"
-        selectedLeverageBps={entry.selectedLeverageBps}
-        selectedMargin={entry.selectedMargin}
-        walletRequired={!entry.walletAddress && ctaKind === "enter"}
-      />
+      {actionRoundId !== null && actionPhase !== null ? (
+        <StageActions
+          countdownSeconds={countdownSeconds ?? 0}
+          phase={actionPhase}
+          roundId={actionRoundId}
+        />
+      ) : null}
     </section>
   );
 }
@@ -370,6 +305,24 @@ function ReducedMotionFloor({
   );
 }
 
+function theaterLivePhase(live: TheaterLive): CrashRoundPhase | null {
+  if (!isTheaterLiveReady(live)) return null;
+  switch (live.kind) {
+    case "open":
+      return "open";
+    case "delayed":
+      return live.phaseLabel;
+    case "finalized":
+      return "finalized";
+    case "expired":
+      return "expired";
+    default: {
+      const _exhaustive: never = live;
+      return _exhaustive;
+    }
+  }
+}
+
 function countdownUrgency(
   mode: CrashStageMode,
   seconds: number | null
@@ -409,38 +362,16 @@ function buildChipStates(
   return map;
 }
 
-function stageStatusMessage(options: {
-  mode: CrashStageMode;
-  theater: ReturnType<typeof useRoundTheater>;
-  settlement: ReturnType<typeof useCrashTicketSettlement>;
-  entry: ReturnType<typeof useCrashRoundEntry>;
-  refund: ReturnType<typeof useCrashTicketRefund>;
-  offerEntry: boolean;
-}): string | null {
-  const { settlement, entry, refund, theater, mode, offerEntry } = options;
+function stageStatusMessage(
+  mode: CrashStageMode,
+  settlement: ReturnType<typeof useCrashTicketSettlement>
+): string | null {
   if (settlement.status === "error") return settlement.error;
-  if (entry.status === "error") return entry.error;
-  if (refund.status === "error") return refund.error;
-
   const settleCopy = settlementStatusCopy[settlement.status];
   if (settleCopy && settlement.ticket) return settleCopy;
-
-  if (
-    entry.status === "approval-submitting" ||
-    entry.status === "approval-pending"
-  ) {
-    return "Bounded approval pending…";
-  }
-  if (entry.status === "entry-submitting" || entry.status === "entry-pending") {
-    return "Entry pending until its Base Sepolia receipt succeeds…";
-  }
   if (mode === "awaiting-settle") {
     return "Round locked. Verify and settle to reveal the Crash Point and see the Replay.";
   }
-  if (offerEntry && !entry.walletAddress) {
-    return "Sign in with phone to enter this round with a sponsored transaction.";
-  }
-  if (theater.live.kind === "loading") return "Loading round…";
   return null;
 }
 
