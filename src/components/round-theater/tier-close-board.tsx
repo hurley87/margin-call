@@ -5,7 +5,7 @@ import {
   isWinningTicket,
   type TierExposure,
 } from "@/lib/margin-call-crash";
-import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
 import { getTierCloseProgress } from "@/lib/round-replay";
 import { theaterCopy } from "./theater-copy";
 
@@ -70,8 +70,8 @@ export function TierCloseBoard({
               {tier.ticketCount === 0
                 ? theaterCopy.noTicketsAtTier
                 : wins && closed
-                  ? `${formatDeskDollars(tier.reservedPayout, TUSD_DECIMALS)} tUSD · ${tier.ticketCount} Ticket${tier.ticketCount === 1 ? "" : "s"}`
-                  : `${tier.ticketCount} Ticket${tier.ticketCount === 1 ? "" : "s"} · ${formatDeskDollars(tier.totalMargin, TUSD_DECIMALS)} tUSD margin`}
+                  ? `${formatDeskDollarsAmount(tier.reservedPayout)} · ${tier.ticketCount} Ticket${tier.ticketCount === 1 ? "" : "s"}`
+                  : `${tier.ticketCount} Ticket${tier.ticketCount === 1 ? "" : "s"} · ${formatDeskDollarsAmount(tier.totalMargin)} margin`}
             </span>
           </li>
         );

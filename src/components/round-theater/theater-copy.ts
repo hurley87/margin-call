@@ -20,9 +20,6 @@ export const theaterCopy = {
   openAmbianceNote: "Previous result — not the live round.",
   openAmbianceEmpty: "No prior finalized round to replay yet.",
   resultCaption: (roundId: string) => `Round ${roundId} result`,
-  nextRoundOpens: countdownCopy.nextRoundOpensNamed,
-  nextRoundOpening: countdownCopy.nextRoundOpeningNamed,
-  nextRoundEntryOpen: countdownCopy.nextRoundEntryOpen,
   verifiedCrashPoint: "Verified Crash Point",
   /** Eyebrow above a personal Won / Margin called freeze. */
   yourTicket: "Your Ticket",

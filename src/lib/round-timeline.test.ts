@@ -235,17 +235,12 @@ describe("countdown formatters", () => {
 
   it("formats the rail notice from next-opens seconds", () => {
     const locked = getRoundTimeline(makeRound(), LOCK_AT + 3n);
-    expect(formatEntriesReopenNotice(locked)).toBe(
-      "Entries reopen in 00:12 · Round 13"
-    );
+    expect(formatEntriesReopenNotice(locked)).toBe("Entries reopen in 00:12");
   });
 
-  it("names the upcoming round on the result handoff", () => {
-    expect(
-      formatNextRoundHandoff({
-        roundId: 13n,
-        countdown: { kind: "next-opens", seconds: 5 },
-      })
-    ).toBe("Next round 13 opens in 00:05");
+  it("formats the result handoff without naming the round id", () => {
+    expect(formatNextRoundHandoff({ kind: "next-opens", seconds: 5 })).toBe(
+      "Next round opens in 00:05"
+    );
   });
 });

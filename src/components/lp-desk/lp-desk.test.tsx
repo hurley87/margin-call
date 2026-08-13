@@ -144,44 +144,44 @@ describe("LpDesk", () => {
     render(<LpDesk />);
     expect(
       screen.getByText("Wallet Desk Dollars").nextElementSibling?.textContent
-    ).toBe("123.45 tUSD");
+    ).toBe("123.45 USDC");
     expect(
       screen.getByText("Wallet vault shares").nextElementSibling?.textContent
     ).toBe("50 vault shares");
     expect(
       screen.getByText("Share price (assets per share)").nextElementSibling
         ?.textContent
-    ).toBe("1 tUSD");
+    ).toBe("1 USDC");
     expect(
       screen.getByText("Realized vault gain/loss").nextElementSibling
         ?.textContent
-    ).toBe("−0.25 tUSD");
+    ).toBe("−0.25 USDC");
     expect(
       screen.getByText("Gross assets").nextElementSibling?.textContent
-    ).toBe("25000 tUSD");
+    ).toBe("25000 USDC");
     expect(
       screen.getByText("Reserved liabilities").nextElementSibling?.textContent
-    ).toBe("1250 tUSD");
+    ).toBe("1250 USDC");
     expect(
       screen.getByText("Safety buffer").nextElementSibling?.textContent
-    ).toBe("5000 tUSD");
+    ).toBe("5000 USDC");
     expect(
       screen.getByText("Global free liquidity").nextElementSibling?.textContent
-    ).toBe("18750 tUSD");
+    ).toBe("18750 USDC");
     expect(
       screen.getByText("Utilization").nextElementSibling?.textContent
     ).toBe("5.00%");
     expect(
-      screen.getByText("Your immediately withdrawable tUSD").nextElementSibling
+      screen.getByText("Your immediately withdrawable USDC").nextElementSibling
         ?.textContent
-    ).toBe("37.5 tUSD");
+    ).toBe("37.5 USDC");
     expect(screen.getByText("1.25x")).not.toBeNull();
-    expect(screen.getByText(/80 tUSD max margin/)).not.toBeNull();
+    expect(screen.getByText(/80 USDC max margin/)).not.toBeNull();
     expect(
       screen.getByText(/Global free liquidity is the vault-wide capacity/)
     ).not.toBeNull();
     expect(
-      screen.getByText(/Liquidity providers can lose tUSD when players win/i)
+      screen.getByText(/Liquidity providers can lose USDC when players win/i)
     ).not.toBeNull();
     expect(screen.getByText(/Base Sepolia/)).not.toBeNull();
   });
@@ -249,7 +249,7 @@ describe("LpDesk", () => {
 
   it("validates an exact six-decimal asset amount against the wallet balance", () => {
     render(<LpDesk />);
-    const input = screen.getByLabelText("LP deposit amount (tUSD)");
+    const input = screen.getByLabelText("LP deposit amount (USDC)");
     fireEvent.change(input, { target: { value: "1.0000001" } });
     expect(screen.getByText(/no more than 6 decimal places/)).not.toBeNull();
     fireEvent.change(input, { target: { value: "124" } });
@@ -271,7 +271,7 @@ describe("LpDesk", () => {
       tUsdBalance: undefined,
     };
     const { rerender } = render(<LpDesk />);
-    const input = screen.getByLabelText("LP deposit amount (tUSD)");
+    const input = screen.getByLabelText("LP deposit amount (USDC)");
     fireEvent.change(input, { target: { value: "5" } });
     expect(screen.queryByText(/still loading/)).toBeNull();
     sdk.vault = {
@@ -301,9 +301,9 @@ describe("LpDesk", () => {
     ).toBe("50 vault shares");
   });
 
-  it("parses and submits an exact six-decimal tUSD withdrawal within maxWithdraw", () => {
+  it("parses and submits an exact six-decimal USDC withdrawal within maxWithdraw", () => {
     render(<LpDesk />);
-    const input = screen.getByLabelText("LP withdrawal amount (tUSD)");
+    const input = screen.getByLabelText("LP withdrawal amount (USDC)");
     fireEvent.change(input, { target: { value: "12.345678" } });
     fireEvent.submit(input.closest("form")!);
     expect(sdk.vault.withdraw).toHaveBeenCalledWith(12345678n);
@@ -311,12 +311,12 @@ describe("LpDesk", () => {
 
   it("validates positive withdrawals and the authoritative maxWithdraw limit", () => {
     render(<LpDesk />);
-    const input = screen.getByLabelText("LP withdrawal amount (tUSD)");
+    const input = screen.getByLabelText("LP withdrawal amount (USDC)");
     fireEvent.change(input, { target: { value: "0" } });
-    expect(screen.getByText("Enter a positive tUSD amount.")).not.toBeNull();
+    expect(screen.getByText("Enter a positive USDC amount.")).not.toBeNull();
     fireEvent.change(input, { target: { value: "37.500001" } });
     expect(
-      screen.getByText(/cannot exceed your immediately withdrawable tUSD limit/)
+      screen.getByText(/cannot exceed your immediately withdrawable USDC limit/)
     ).not.toBeNull();
     fireEvent.change(input, { target: { value: "1.0000001" } });
     expect(screen.getAllByText(/no more than 6 decimal places/)).toHaveLength(
@@ -340,14 +340,14 @@ describe("LpDesk", () => {
     ).not.toBeNull();
     expect(
       screen.getByText("Wallet Desk Dollars").nextElementSibling?.textContent
-    ).toBe("123.45 tUSD");
+    ).toBe("123.45 USDC");
     expect(
       screen.getByText("Wallet vault shares").nextElementSibling?.textContent
     ).toBe("50 vault shares");
     expect(
-      screen.getByText("Your immediately withdrawable tUSD").nextElementSibling
+      screen.getByText("Your immediately withdrawable USDC").nextElementSibling
         ?.textContent
-    ).toBe("37.5 tUSD");
+    ).toBe("37.5 USDC");
   });
 
   it("renders withdrawal lifecycle, corrected-limit recovery, and unambiguous retry actions", () => {
@@ -400,10 +400,10 @@ describe("LpDesk", () => {
     expect(
       screen.queryByRole("button", { name: "Retry withdrawal" })
     ).toBeNull();
-    const input = screen.getByLabelText("LP withdrawal amount (tUSD)");
+    const input = screen.getByLabelText("LP withdrawal amount (USDC)");
     fireEvent.change(input, { target: { value: "12" } });
     expect(
-      screen.getByText(/cannot exceed your immediately withdrawable tUSD limit/)
+      screen.getByText(/cannot exceed your immediately withdrawable USDC limit/)
     ).not.toBeNull();
     fireEvent.change(input, { target: { value: "10" } });
     fireEvent.submit(input.closest("form")!);
@@ -429,7 +429,7 @@ describe("LpDesk", () => {
     const { rerender } = render(<LpDesk />);
     sdk.vault = { ...sdk.vault, status: "approval-pending", canDeposit: false };
     rerender(<LpDesk />);
-    expect(screen.getByText(/Exact tUSD approval pending/)).not.toBeNull();
+    expect(screen.getByText(/Exact USDC approval pending/)).not.toBeNull();
     sdk.vault = { ...sdk.vault, status: "confirmed", canDeposit: false };
     rerender(<LpDesk />);
     expect(screen.getByText(/LP deposit confirmed/)).not.toBeNull();

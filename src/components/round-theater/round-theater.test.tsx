@@ -207,7 +207,7 @@ describe("RoundTheater", () => {
 
     expect(sdk.ticketRoundId).toBe(12n);
     expect(screen.getByTestId("theater-player-ticket").textContent).toContain(
-      "Your Ticket · 5 tUSD · 2.00x"
+      "Your Ticket · 5 USDC · 2.00x"
     );
   });
 
@@ -225,7 +225,7 @@ describe("RoundTheater", () => {
     );
     expect(screen.getByTestId("round-explainer")).toBeTruthy();
     expect(
-      screen.getAllByText((_, el) => el?.textContent === "1 tUSD").length
+      screen.getAllByText((_, el) => el?.textContent === "1 USDC").length
     ).toBeGreaterThan(0);
     expect(screen.getAllByText("1.25x").length).toBeGreaterThan(0);
     // Theater never offers entry or settlement actions.
@@ -298,7 +298,7 @@ describe("RoundTheater", () => {
 
     expect(screen.getByTestId("theater-finalized-replay")).toBeTruthy();
     expect(screen.getByTestId("theater-next-round").textContent).toBe(
-      "Next round 13 opens in 00:05"
+      "Next round opens in 00:05"
     );
     // Spectator freeze: Crash Point stays the hero; no personal outcome stamp.
     expect(screen.getByTestId("replay-curve-crash-point").textContent).toBe(
@@ -391,7 +391,7 @@ describe("RoundTheater", () => {
     expect(screen.getByTestId("theater-finalized-replay")).toBeTruthy();
     expect(screen.getByText("Round 12 result")).toBeTruthy();
     expect(screen.getByTestId("theater-next-round").textContent).toBe(
-      "Round 13 entry is open — closes in 00:30"
+      "Entry is open — closes in 00:30"
     );
     expect(screen.getByTestId("round-timeline-countdown").textContent).toBe(
       "Entry closes in 00:30"

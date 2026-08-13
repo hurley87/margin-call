@@ -152,10 +152,10 @@ describe("AuthControls", () => {
     expect(sdk.login).toHaveBeenCalledTimes(2);
   });
 
-  it("shows truncated wallet, tUSD balance, and Desk phone switch when signed in", () => {
+  it("shows truncated wallet, USDC balance, and Desk phone switch when signed in", () => {
     renderSignedInControls();
     expect(screen.getByText("0x1234")).not.toBeNull();
-    expect(screen.getByText("100 tUSD")).not.toBeNull();
+    expect(screen.getByText("100 USDC")).not.toBeNull();
     expect(screen.queryByText("+15555550123")).toBeNull();
     expect(screen.getByRole("button", { name: /Desk phone/i })).not.toBeNull();
   });

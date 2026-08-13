@@ -10,7 +10,7 @@ export default function HistoryPage() {
     <section aria-labelledby="history-heading">
       <RoutePageIntro
         eyebrow="Base Sepolia · Global history"
-        title="Recent rounds"
+        title="Rounds"
         titleId="history-heading"
       >
         Finalized rounds show the attested Crash Point. Empty, delayed, and

@@ -37,6 +37,7 @@ export function CurrentRound() {
   if (round.status !== "ready") return <CurrentRoundFailure round={round} />;
 
   const phase = round.phase;
+  const copy = roundPhaseCopy[phase];
   return (
     <section
       aria-labelledby="current-round-heading"
@@ -57,17 +58,19 @@ export function CurrentRound() {
                 className="live-pulse h-1.5 w-1.5 bg-[var(--t-green-hot)]"
               />
             ) : null}
-            {roundPhaseCopy[phase].badge}
+            {copy.badge}
           </span>
         </div>
         <h2
           id="current-round-heading"
           className="mt-3 font-[family-name:var(--font-plex-sans)] text-3xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-4xl"
         >
-          Round {round.roundId.toString()}
+          {copy.title}
         </h2>
+        <p className="mt-2 text-xs leading-5 text-[var(--t-muted)]">
+          {copy.body}
+        </p>
 
-        <PhaseStatusCopy phase={phase} />
         <NextRoundNotice phase={phase} timeline={round.timeline} />
         <CrashRoundEntry
           countdownSeconds={round.countdownSeconds}
@@ -82,11 +85,6 @@ export function CurrentRound() {
       </div>
     </section>
   );
-}
-
-function PhaseStatusCopy({ phase }: { phase: CrashRoundPhase }) {
-  const copy = roundPhaseCopy[phase];
-  return <StatusCopy title={copy.title} body={copy.body} />;
 }
 
 /** Post-lock affordance: when and where entry comes back. */
@@ -164,15 +162,6 @@ function VerificationLinks({ round }: { round: ReadyRound }) {
         </li>
       ))}
     </ul>
-  );
-}
-
-function StatusCopy({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="mt-4">
-      <p className="text-sm font-bold text-[var(--t-text)]">{title}</p>
-      <p className="mt-2 text-xs leading-5 text-[var(--t-muted)]">{body}</p>
-    </div>
   );
 }
 

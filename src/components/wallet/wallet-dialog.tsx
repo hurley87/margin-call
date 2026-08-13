@@ -8,7 +8,9 @@ import { GameButton } from "@/components/ui/game-button";
 import { useDeskDollarsTransfer } from "@/hooks/use-desk-dollars-transfer";
 import type { DeskDollarsTransferStatus } from "@/hooks/use-desk-dollars-transfer";
 import {
+  DISPLAY_ASSET_SYMBOL,
   formatDeskDollars,
+  formatDeskDollarsAmountLabel,
   formatDeskDollarsBalanceLabel,
   TUSD_DECIMALS,
 } from "@/lib/desk-dollars";
@@ -90,7 +92,7 @@ function TransferStatusCopy({
 }
 
 /**
- * Signed-in wallet surface: full address utilities and a sponsored tUSD send.
+ * Signed-in wallet surface: full address utilities and a sponsored USDC send.
  */
 export function WalletDialog({
   open,
@@ -107,7 +109,8 @@ export function WalletDialog({
   );
 
   const balanceLabel =
-    formatDeskDollarsBalanceLabel(balance, decimals) ?? "— tUSD";
+    formatDeskDollarsBalanceLabel(balance, decimals) ??
+    formatDeskDollarsAmountLabel(null);
   const isBusy =
     transfer.status === "submitting" || transfer.status === "pending";
   const isRetry = transfer.canRetry;
@@ -122,7 +125,7 @@ export function WalletDialog({
       : "Pending…"
     : isRetry
       ? "Retry"
-      : "Send tUSD";
+      : `Send ${DISPLAY_ASSET_SYMBOL}`;
 
   const handleCopy = useCallback(async () => {
     try {
@@ -171,7 +174,8 @@ export function WalletDialog({
           </div>
 
           <Dialog.Description className="mt-2 text-xs text-[var(--t-muted)]">
-            Base Sepolia only. Desk Dollars (tUSD) have no real value.
+            Base Sepolia only. Desk Dollars ({DISPLAY_ASSET_SYMBOL}) have no
+            real value.
           </Dialog.Description>
 
           <div className="mt-5 space-y-2">
@@ -248,7 +252,7 @@ export function WalletDialog({
                 className="block text-sm font-bold"
                 htmlFor="wallet-transfer-amount"
               >
-                Amount (tUSD)
+                Amount ({DISPLAY_ASSET_SYMBOL})
               </label>
               <button
                 className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] disabled:opacity-50"

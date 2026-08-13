@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { encodeFunctionData, type Address, type Hex } from "viem";
 import { getBankrollVaultConfig } from "@/lib/bankroll-vault";
 import { baseSepoliaPublicClient } from "@/lib/base-sepolia";
-import { deskDollarsAbi } from "@/lib/desk-dollars";
+import { DISPLAY_ASSET_SYMBOL, deskDollarsAbi } from "@/lib/desk-dollars";
 import {
   BOUNDED_ENTRY_ALLOWANCE_TUSD,
   computeMaximumPayout,
@@ -73,10 +73,8 @@ const unavailable =
 const loadFailed = "We couldn't load your entry state. Please try again.";
 const stageCopy: Record<Stage, StageErrorCopy> = {
   approval: {
-    failed:
-      "We couldn't approve the bounded 1,000 tUSD allowance. Please try again.",
-    unconfirmed:
-      "Your tUSD approval was submitted, but we couldn't confirm it yet. Retry to check its status.",
+    failed: `We couldn't approve the bounded 1,000 ${DISPLAY_ASSET_SYMBOL} allowance. Please try again.`,
+    unconfirmed: `Your ${DISPLAY_ASSET_SYMBOL} approval was submitted, but we couldn't confirm it yet. Retry to check its status.`,
   },
   entry: {
     failed: "We couldn't complete your entry. Please try again.",
@@ -115,7 +113,7 @@ async function readEntryState(
 }
 
 /**
- * Orchestrates the bounded 1,000 tUSD approval and subsequent sponsored enter calls.
+ * Orchestrates the bounded 1,000 USDC approval and subsequent sponsored enter calls.
  * Approval is requested once when allowance is below the selected margin; entry never
  * requests an unlimited allowance.
  */

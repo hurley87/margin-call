@@ -10,7 +10,7 @@ import {
   type TheaterView,
 } from "@/hooks/use-round-theater";
 import { useTheaterPlayerTicket } from "@/hooks/use-theater-player-ticket";
-import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
 import { getTierCloseProgress } from "@/lib/round-replay";
 import {
   ENTRY_LEVERAGE_TIERS_BPS,
@@ -300,8 +300,7 @@ function OpenStage({
                 aria-hidden="true"
                 className="live-pulse h-1.5 w-1.5 bg-[var(--t-accent)]"
               />
-              Your Ticket ·{" "}
-              {formatDeskDollars(playerTicket.margin, TUSD_DECIMALS)} tUSD ·{" "}
+              Your Ticket · {formatDeskDollarsAmount(playerTicket.margin)} ·{" "}
               {formatLeverageBps(playerTicket.leverageBps)}
             </p>
           ) : null}
@@ -512,16 +511,10 @@ function replayHandoffLabel(
   switch (live.kind) {
     case "open":
       return hero.roundId !== live.roundId
-        ? formatNextRoundHandoff({
-            roundId: live.roundId,
-            countdown: live.timeline.countdown,
-          })
+        ? formatNextRoundHandoff(live.timeline.countdown)
         : null;
     case "finalized":
-      return formatNextRoundHandoff({
-        roundId: live.roundId + 1n,
-        countdown: live.timeline.countdown,
-      });
+      return formatNextRoundHandoff(live.timeline.countdown);
     case "delayed":
     case "expired":
     case "loading":

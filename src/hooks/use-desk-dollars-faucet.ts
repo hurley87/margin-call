@@ -26,6 +26,30 @@ type FaucetState = {
   error: string | null;
 };
 
+export type DeskDollarsFaucetChrome = {
+  /** Eligible / cooldown copy for an empty wallet. */
+  showOffer: boolean;
+  /** Claim / pending / retry control. */
+  showClaimButton: boolean;
+};
+
+/**
+ * Faucet visibility policy: hide claim chrome when funded, never flash claim
+ * while balance is unknown, and keep pending/retry visible during an in-flight claim.
+ */
+export function getDeskDollarsFaucetChrome(input: {
+  balance: bigint | null;
+  status: FaucetState["status"];
+  canRetry: boolean;
+}): DeskDollarsFaucetChrome {
+  const claimInFlight = input.status === "pending" || input.canRetry;
+  const offerEmptyFaucet = input.status === "ready" && input.balance === 0n;
+  return {
+    showOffer: offerEmptyFaucet,
+    showClaimButton: claimInFlight || offerEmptyFaucet,
+  };
+}
+
 const initialState: FaucetState = {
   balance: null,
   decimals: null,

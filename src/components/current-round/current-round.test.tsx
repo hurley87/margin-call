@@ -77,8 +77,9 @@ describe("CurrentRound", () => {
     const ready = sdk.makeReadyRound();
     render(<CurrentRound />);
 
-    expect(screen.getByText("Round 12")).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Entry open" })).toBeTruthy();
     expect(screen.getAllByText("Entry open").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Round 12")).toBeNull();
     // Open phase now explains itself instead of rendering nothing.
     expect(
       screen.getByText(/Commit Margin at an Arcade Leverage/)
@@ -165,7 +166,7 @@ describe("CurrentRound", () => {
     rerender(<CurrentRound />);
     expect(screen.getByText("Awaiting reveal request")).toBeTruthy();
     expect(screen.getByTestId("next-round-notice").textContent).toBe(
-      "Entries reopen in 00:33 · Round 13"
+      "Entries reopen in 00:33"
     );
 
     sdk.round = {

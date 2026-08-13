@@ -1,6 +1,6 @@
 "use client";
 
-import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
 import {
   formatLeverageBps,
   type CrashTicket,
@@ -137,7 +137,7 @@ export function CrashLiveTicket({
         <div>
           <dt className="text-[var(--t-muted)]">Margin</dt>
           <dd className="tabular-nums text-[var(--t-text)]">
-            {formatDeskDollars(ticket.margin, TUSD_DECIMALS)} tUSD
+            {formatDeskDollarsAmount(ticket.margin)}
           </dd>
         </div>
         <div>
@@ -159,8 +159,7 @@ export function CrashLiveTicket({
             {outcome ? amountLabelCopy[outcome] : "Reserved maximum payout"}
           </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {formatDeskDollars(payout ?? ticket.reservedPayout, TUSD_DECIMALS)}{" "}
-            tUSD
+            {formatDeskDollarsAmount(payout ?? ticket.reservedPayout)}
           </dd>
         </div>
         {outcome ? (

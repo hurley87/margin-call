@@ -63,8 +63,11 @@ const voice = vi.hoisted(() => ({
 }));
 
 vi.mock("@/components/desk-phone/margin-call-voice-trigger", () => ({
-  MarginCallVoiceTrigger: (props: { ticketId: bigint; roundId: bigint }) =>
-    voice.trigger(props),
+  MarginCallVoiceTrigger: (props: {
+    ticketId: bigint;
+    roundId: bigint;
+    walletAddress: `0x${string}`;
+  }) => voice.trigger(props),
 }));
 
 import { CrashTicketSettlement } from "./crash-ticket-settlement";
@@ -126,6 +129,7 @@ describe("CrashTicketSettlement", () => {
     expect(voice.trigger).toHaveBeenCalledWith({
       roundId: 12n,
       ticketId: 7n,
+      walletAddress: "0x0000000000000000000000000000000000000003",
     });
   });
 
@@ -140,6 +144,7 @@ describe("CrashTicketSettlement", () => {
     expect(voice.trigger).toHaveBeenCalledWith({
       roundId: 12n,
       ticketId: 7n,
+      walletAddress: "0x0000000000000000000000000000000000000003",
     });
   });
 

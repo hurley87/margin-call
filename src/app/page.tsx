@@ -3,12 +3,11 @@ import { CurrentRound } from "@/components/current-round/current-round";
 import { CrashTicketRefund } from "@/components/current-round/crash-ticket-refund";
 import { CrashTicketSettlement } from "@/components/current-round/crash-ticket-settlement";
 import { DeskDollarsPanel } from "@/components/desk-dollars/desk-dollars-panel";
-import { PersonalHistory } from "@/components/history/personal-history";
 import { RoundTheater } from "@/components/round-theater/round-theater";
 
 /**
  * Chart-first play floor: hero replay + entry rail and player actions.
- * Recent rounds live on /history; LP Desk on /lp.
+ * Record lives on /record; recent rounds on /history; LP Desk on /lp.
  */
 export default function Home() {
   return (
@@ -20,7 +19,6 @@ export default function Home() {
           <CrashTicketSettlement />
           <CrashTicketRefund />
           <DeskDollarsPanel />
-          <PersonalHistory />
         </AuthGate>
       </div>
     </div>
