@@ -31,6 +31,10 @@ vi.mock("@/hooks/use-desk-dollars-transfer", () => ({
   }),
 }));
 
+vi.mock("@/components/desk-dollars/desk-dollars-faucet", () => ({
+  DeskDollarsFaucet: () => null,
+}));
+
 import { WalletDialog } from "./wallet-dialog";
 
 const FROM = "0x0000000000000000000000000000000000000003" as const;

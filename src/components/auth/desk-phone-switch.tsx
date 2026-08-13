@@ -39,7 +39,7 @@ export function DeskPhoneSwitch({ walletAddress }: DeskPhoneSwitchProps) {
       data-testid="desk-phone-switch"
     >
       <button
-        aria-describedby="desk-phone-hint"
+        aria-describedby={error ? "desk-phone-error" : undefined}
         aria-pressed={optedIn}
         className={`border px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors duration-[var(--mc-dur-fast)] ${
           optedIn
@@ -53,14 +53,14 @@ export function DeskPhoneSwitch({ walletAddress }: DeskPhoneSwitchProps) {
       >
         Desk phone · {optedIn ? "On" : "Off"}
       </button>
-      <p
-        className="max-w-[14rem] text-right text-[9px] leading-3 text-[var(--t-muted)]"
-        id="desk-phone-hint"
-      >
-        {error
-          ? "Couldn’t update. Try again."
-          : "Calls your login number after a margin call."}
-      </p>
+      {error ? (
+        <p
+          className="max-w-[14rem] text-right text-[9px] leading-3 text-[var(--t-red)]"
+          id="desk-phone-error"
+        >
+          Couldn’t update. Try again.
+        </p>
+      ) : null}
     </div>
   );
 }

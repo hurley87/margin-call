@@ -32,6 +32,12 @@ vi.mock("@/hooks/use-desk-dollars-balance", () => ({
   }),
 }));
 
+vi.mock("@/components/desk-dollars/desk-dollars-faucet", () => ({
+  DeskDollarsFaucetProvider: ({ children }: { children: React.ReactNode }) =>
+    children,
+  DeskDollarsFaucet: () => null,
+}));
+
 import { AppShell } from "./app-shell";
 
 describe("AppShell", () => {

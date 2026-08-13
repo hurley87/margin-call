@@ -220,3 +220,5 @@ export function useDeskDollarsFaucet(walletAddress: Address | null) {
     retry,
   };
 }
+
+export type DeskDollarsFaucetSession = ReturnType<typeof useDeskDollarsFaucet>;

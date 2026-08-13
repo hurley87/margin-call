@@ -3,6 +3,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useCallback, useState, type FormEvent } from "react";
 import type { Address } from "viem";
+import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
 import { FlashValue } from "@/components/ui/flash-value";
 import { GameButton } from "@/components/ui/game-button";
 import { useDeskDollarsTransfer } from "@/hooks/use-desk-dollars-transfer";
@@ -221,6 +222,8 @@ export function WalletDialog({
               balanceLabel
             )}
           </p>
+
+          <DeskDollarsFaucet />
 
           <form
             className="mt-6 border-t border-[var(--t-border)] pt-5"

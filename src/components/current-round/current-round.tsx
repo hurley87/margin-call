@@ -63,7 +63,7 @@ export function CurrentRound() {
         </div>
         <h2
           id="current-round-heading"
-          className="mt-3 font-[family-name:var(--font-plex-sans)] text-3xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-4xl"
+          className="mt-2 font-[family-name:var(--font-plex-sans)] text-2xl font-bold uppercase tracking-tight text-[var(--t-text)] sm:text-3xl"
         >
           {copy.title}
         </h2>

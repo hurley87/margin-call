@@ -22,6 +22,8 @@ import {
   formatDeskDollarsAmountLabel,
 } from "@/lib/desk-dollars";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
+import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
+import { GameButton } from "@/components/ui/game-button";
 import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashEntryStatus, string>> = {
@@ -165,7 +167,7 @@ export function CrashRoundEntry({
         onSelect={entry.selectLeverage}
       />
 
-      <dl className="mt-5 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
         <div>
           <dt className="text-[var(--t-muted)]">Wallet Desk Dollars</dt>
           <dd className="tabular-nums">
@@ -178,19 +180,40 @@ export function CrashRoundEntry({
             {formatDeskDollarsAmount(entry.expectedPayout)}
           </dd>
         </div>
-        <div>
-          <dt className="text-[var(--t-muted)]">Current vault allowance</dt>
-          <dd className="tabular-nums">
-            {formatDeskDollarsAmountLabel(entry.allowance)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-[var(--t-muted)]">Selected margin</dt>
-          <dd className="tabular-nums">
-            {formatDeskDollarsAmount(entry.selectedMargin)}
-          </dd>
-        </div>
       </dl>
+
+      <DeskDollarsFaucet />
+
+      {statusMessage ? (
+        <p
+          className={`mt-4 text-sm ${
+            isAlert ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
+          }`}
+          role={isAlert ? "alert" : "status"}
+        >
+          {statusMessage}
+        </p>
+      ) : null}
+
+      <div className="mt-4 flex flex-col gap-3">
+        <GameButton
+          className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+          disabled={!entry.canEnter}
+          onClick={() => void entry.enter()}
+          size="lg"
+        >
+          {entry.needsApproval ? "Approve & enter" : "Enter round"}
+        </GameButton>
+        {entry.canRetry ? (
+          <button
+            className={TERMINAL_ACTION_BUTTON_CLASS}
+            onClick={() => void entry.retry()}
+            type="button"
+          >
+            {retryLabel}
+          </button>
+        ) : null}
+      </div>
 
       <div className="mt-5 border border-[var(--t-border)] p-3 text-xs leading-5 text-[var(--t-muted)]">
         <p>
@@ -222,6 +245,11 @@ export function CrashRoundEntry({
           ) : null}
           . Margin moves directly from your wallet to the vault.
         </p>
+        <p className="mt-2">
+          Current vault allowance:{" "}
+          {formatDeskDollarsAmountLabel(entry.allowance)}. Selected margin:{" "}
+          {formatDeskDollarsAmount(entry.selectedMargin)}.
+        </p>
         {entry.needsApproval ? (
           <p className="mt-2 text-[var(--t-amber-hot)]">
             Your first entry will submit the bounded approval, wait for its
@@ -233,37 +261,6 @@ export function CrashRoundEntry({
             submitted.
           </p>
         )}
-      </div>
-
-      {statusMessage ? (
-        <p
-          className={`mt-4 text-sm ${
-            isAlert ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
-          }`}
-          role={isAlert ? "alert" : "status"}
-        >
-          {statusMessage}
-        </p>
-      ) : null}
-
-      <div className="mt-5 flex flex-wrap gap-3">
-        <button
-          className="border border-[var(--t-accent)] bg-[var(--t-accent)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-40"
-          disabled={!entry.canEnter}
-          onClick={() => void entry.enter()}
-          type="button"
-        >
-          {entry.needsApproval ? "Approve & enter" : "Enter round"}
-        </button>
-        {entry.canRetry ? (
-          <button
-            className={TERMINAL_ACTION_BUTTON_CLASS}
-            onClick={() => void entry.retry()}
-            type="button"
-          >
-            {retryLabel}
-          </button>
-        ) : null}
       </div>
     </EntryShell>
   );
@@ -283,11 +280,11 @@ function OptionGroup({
   onSelect: (option: bigint) => void;
 }) {
   return (
-    <fieldset className="mt-5">
+    <fieldset className="mt-3">
       <legend className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
         {legend}
       </legend>
-      <div className="mt-3 flex flex-wrap gap-2">
+      <div className="mt-2 flex flex-wrap gap-2">
         {options.map((option) => {
           const isSelected = selected === option;
           return (
@@ -315,15 +312,15 @@ function EntryShell({ children }: { children: React.ReactNode }) {
   return (
     <div
       aria-labelledby="crash-entry-heading"
-      className="mt-8 border-t border-[var(--t-divider)] pt-6 text-left"
+      className="mt-4 border-t border-[var(--t-divider)] pt-4 text-left"
     >
       <h3
         id="crash-entry-heading"
-        className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]"
+        className="font-[family-name:var(--font-plex-sans)] text-lg font-bold uppercase tracking-tight text-[var(--t-accent)]"
       >
         Enter this round
       </h3>
-      <div className="mt-4">{children}</div>
+      <div className="mt-3">{children}</div>
     </div>
   );
 }
