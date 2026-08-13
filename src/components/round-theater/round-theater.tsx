@@ -1,8 +1,6 @@
 "use client";
 
-import { usePrivy } from "@privy-io/react-auth";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useMarginCallVoice } from "@/hooks/use-margin-call-voice";
 import { useReplayClock } from "@/hooks/use-replay-clock";
 import {
   useRoundTheater,
@@ -19,7 +17,6 @@ import {
   formatLeverageBps,
   type CrashTicket,
 } from "@/lib/margin-call-crash";
-import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import {
   formatNextRoundHandoff,
   formatTimelineCountdownLabel,
@@ -28,6 +25,7 @@ import type { RoundTimeline } from "@/lib/round-timeline";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { formatCountdown, TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { ticketLanding } from "./landing-frame";
+import { MarginCallVoiceBeat } from "./margin-call-voice-beat";
 import { theaterCopy } from "./theater-copy";
 import { FinalizeLink } from "./finalize-link";
 import {
@@ -411,8 +409,6 @@ function ReplayStage({
   reducedMotion: boolean;
 }) {
   const [restartNonce, setRestartNonce] = useState(0);
-  const { user } = usePrivy();
-  const walletAddress = getEvmWalletAddress(user);
   const playerTierBps = playerTicket?.leverageBps ?? null;
   const landing = ticketLanding(playerTicket, hero.crashPointBps);
   const clock = useReplayClock({
@@ -421,16 +417,6 @@ function ReplayStage({
     chainTimestamp: hero.chainTimestamp,
     reducedMotion,
     restartNonce,
-  });
-
-  // Reduced-motion shows the static result immediately — treat that as the
-  // hard-stop beat for the promotional desk-phone call.
-  useMarginCallVoice({
-    ticketId: playerTicket ? playerTicket.id.toString() : null,
-    roundId: hero.roundId.toString(),
-    walletAddress,
-    isLiquidated: landing.kind === "margin-called",
-    isComplete: reducedMotion || clock.isComplete,
   });
 
   useTierSoundEffects({
@@ -442,9 +428,21 @@ function ReplayStage({
     playerTierBps,
   });
 
+  // Reduced-motion shows the static result immediately — treat that as the
+  // hard-stop beat for the promotional desk-phone call.
+  const voiceBeat = (
+    <MarginCallVoiceBeat
+      isComplete={reducedMotion || clock.isComplete}
+      isLiquidated={landing.kind === "margin-called"}
+      roundId={hero.roundId}
+      ticketId={playerTicket?.id ?? null}
+    />
+  );
+
   if (reducedMotion) {
     return (
       <div className="space-y-4" data-testid="theater-finalized-static">
+        {voiceBeat}
         <RoundResultCard
           crashPointBps={hero.crashPointBps}
           displayCrashPoint={hero.displayCrashPoint}
@@ -460,6 +458,7 @@ function ReplayStage({
 
   return (
     <div className="space-y-4" data-testid="theater-finalized-replay">
+      {voiceBeat}
       {/* Re-keyed on restart so the Replay button replays the CRT wipe too. */}
       <div className="mc-crt-reveal" key={restartNonce}>
         <ReplayCurve
