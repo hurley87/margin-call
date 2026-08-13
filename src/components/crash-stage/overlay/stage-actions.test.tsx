@@ -53,7 +53,9 @@ vi.mock("@/components/current-round/crash-round-entry", () => ({
 }));
 
 vi.mock("@/components/current-round/crash-ticket-refund", () => ({
-  CrashTicketRefund: () => null,
+  CrashTicketRefund: () => (
+    <div data-testid="refund-surface">Refund surface</div>
+  ),
 }));
 
 vi.mock("@/components/desk-phone/margin-call-voice-trigger", () => ({
@@ -180,5 +182,32 @@ describe("StageActions", () => {
       />
     );
     expect(container.textContent).toBe("");
+  });
+
+  it("shows refund during Open when a leftover expiry ticket blocks entry", () => {
+    sdk.settlement = sdk.makeSettlement({
+      canVerify: false,
+      canClaim: false,
+      canSettle: false,
+      canRetry: false,
+      phase: "expired",
+      outcome: "refundable",
+    });
+    render(
+      <StageActions
+        countdownSeconds={22}
+        hasTicket
+        mode="countdown"
+        phase="open"
+        roundId={13n}
+        settlement={sdk.settlement}
+      />
+    );
+
+    expect(screen.getByTestId("refund-surface")).toBeTruthy();
+    expect(screen.queryByTestId("entry-form")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Verify and settle" })
+    ).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
+import { useCrashTicketRefund } from "@/hooks/use-crash-ticket-refund";
 import { useReplayClock } from "@/hooks/use-replay-clock";
 import {
   useRoundTheater,
@@ -45,9 +46,11 @@ import type { CountdownUrgency } from "./scenes/countdown-scene";
 import type { TicketChipState } from "./scenes/ticket-field";
 import { StageActions } from "./overlay/stage-actions";
 import { StageHud } from "./overlay/stage-hud";
+import { stageHeroTicket, stageHudTicket } from "./overlay/stage-hud-ticket";
 import { StageOutcomeGraph } from "./overlay/stage-outcome-graph";
 import { StageOutcomePanel } from "./overlay/stage-outcome-panel";
 import { StageVerifyProgress } from "./overlay/stage-verify-progress";
+import { ticketHudClearAction } from "./overlay/ticket-hud-clear-action";
 import { WinConfetti } from "./overlay/win-confetti";
 import {
   deriveCrashStageMode,
@@ -85,6 +88,7 @@ export function CrashStage() {
     [ceremonyDispatch, reducedMotion]
   );
   const settlement = useCrashTicketSettlement({ onCrashPointKnown });
+  const refund = useCrashTicketRefund();
 
   // The settlement recovery read is the stalest round source: re-check it when
   // the live round flips so a cross-round ticket doesn't linger for a poll.
@@ -230,7 +234,15 @@ export function CrashStage() {
     : null;
   const graphHero = ceremonyHero ?? replayHero;
 
-  const activeTicket = unsettledTicket ?? playerTicket ?? settlement.ticket;
+  // HUD never shows settled historical leftovers; hero landing may still use a
+  // settled ticket that belongs to the replay round.
+  const hudTicket = stageHudTicket(unsettledTicket);
+  const activeTicket = stageHeroTicket({
+    unsettledTicket,
+    playerTicket,
+    settlementTicket: settlement.ticket,
+    replayRoundId: replayHero?.roundId ?? null,
+  });
   // Personal landing/tier readouts only apply to a ticket from the hero round.
   const heroTicket = ceremonyClimb
     ? ceremonyClimb.snapshot.ticket
@@ -301,6 +313,21 @@ export function CrashStage() {
     settleLoss: ceremonialSettleLoss,
     retry: ceremonialRetry,
   };
+
+  // Current Open entries cannot be cancelled on-chain — HUD stays informational.
+  // Gate on the chip's ticket round, not merely "any live-round ticket", so a
+  // stale leftover is never mistaken for the live entry.
+  const isLiveOpenEntry =
+    theater.live.kind === "open" &&
+    liveRoundId !== null &&
+    hudTicket !== null &&
+    hudTicket.roundId === liveRoundId;
+  const hudClear = ticketHudClearAction({
+    isLiveOpenEntry,
+    settlement: stageSettlement,
+    refund,
+  });
+  const hudClearBusy = settlement.busy || refund.busy;
 
   const countdownSeconds = theaterCountdownSeconds(theater.live);
   const urgency = countdownUrgency(mode, countdownSeconds);
@@ -390,10 +417,14 @@ export function CrashStage() {
           />
         ) : null}
         <StageHud
+          clearBusy={hudClearBusy}
+          clearLabel={hudClear?.label}
           countdownLabel={countdownLabel}
           countdownSeconds={countdownSeconds}
           isAlert={settlement.status === "error" && ceremony.phase === "idle"}
-          playerTicket={activeTicket}
+          lockedInOpen={isLiveOpenEntry}
+          onClear={hudClear?.run}
+          playerTicket={hudTicket}
           statusMessage={
             // The stepper and outcome panel own settlement messaging while a
             // ceremony is active.
