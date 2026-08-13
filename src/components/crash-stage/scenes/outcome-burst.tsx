@@ -12,6 +12,8 @@ import type {
 export type OutcomeBurstProps = {
   landing: LandingPresentation;
   kind: TicketLanding["kind"];
+  /** When false, only the particle burst runs — labels live on the DOM graph. */
+  showLabels?: boolean;
 };
 
 type Particle = {
@@ -41,7 +43,11 @@ function seedParticles(isWin: boolean): Particle[] {
 /**
  * Win fountain (green particles rising) or margin-call shatter (red scatter).
  */
-export function OutcomeBurst({ landing, kind }: OutcomeBurstProps) {
+export function OutcomeBurst({
+  landing,
+  kind,
+  showLabels = true,
+}: OutcomeBurstProps) {
   const groupRef = useRef<Group>(null);
   const particlesRef = useRef<Particle[]>(seedParticles(false));
   const isWin = kind === "won";
@@ -80,27 +86,31 @@ export function OutcomeBurst({ landing, kind }: OutcomeBurstProps) {
 
   return (
     <group>
-      <Text
-        anchorX="center"
-        anchorY="middle"
-        color={heroColor}
-        fontSize={1.1}
-        outlineColor="#090b10"
-        outlineWidth={0.04}
-        position={[0, 0.6, 0.5]}
-      >
-        {landing.heroValue}
-      </Text>
-      {landing.supportingCrashPoint ? (
-        <Text
-          anchorX="center"
-          anchorY="middle"
-          color="#9aa3b5"
-          fontSize={0.28}
-          position={[0, -0.3, 0.5]}
-        >
-          {landing.supportingCrashPoint}
-        </Text>
+      {showLabels ? (
+        <>
+          <Text
+            anchorX="center"
+            anchorY="middle"
+            color={heroColor}
+            fontSize={1.1}
+            outlineColor="#090b10"
+            outlineWidth={0.04}
+            position={[0, 0.6, 0.5]}
+          >
+            {landing.heroValue}
+          </Text>
+          {landing.supportingCrashPoint ? (
+            <Text
+              anchorX="center"
+              anchorY="middle"
+              color="#9aa3b5"
+              fontSize={0.28}
+              position={[0, -0.3, 0.5]}
+            >
+              {landing.supportingCrashPoint}
+            </Text>
+          ) : null}
+        </>
       ) : null}
       <group ref={groupRef}>
         {Array.from({ length: PARTICLE_COUNT }, (_, i) => (

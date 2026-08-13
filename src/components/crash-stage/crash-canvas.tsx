@@ -13,7 +13,6 @@ import {
   type CountdownUrgency,
 } from "./scenes/countdown-scene";
 import { TicketField, type TicketChipState } from "./scenes/ticket-field";
-import { ReplayScene } from "./scenes/replay-scene";
 import { OutcomeBurst } from "./scenes/outcome-burst";
 
 export type CrashCanvasProps = {
@@ -93,11 +92,13 @@ function StageContent(props: CrashCanvasProps) {
     props.mode === "expired" ||
     props.mode === "loading";
 
-  const showReplay = props.mode === "replay" && props.crashPointBps !== null;
   const showOutcome =
     props.mode === "outcome" &&
     props.landing !== null &&
     props.landingKind !== null;
+  const showField =
+    props.mode !== "loading" &&
+    (showCountdown || props.mode === "replay" || props.mode === "outcome");
 
   const frozen = props.mode === "awaiting-settle" || props.mode === "expired";
 
@@ -111,23 +112,20 @@ function StageContent(props: CrashCanvasProps) {
           urgency={props.urgency}
         />
       ) : null}
-      {(showCountdown || showReplay) && props.mode !== "loading" ? (
+      {showField ? (
         <TicketField
           chipStates={props.chipStates}
           entries={props.entries}
-          frozen={frozen || showReplay}
+          frozen={frozen || props.mode === "replay" || props.mode === "outcome"}
           playerAddress={props.playerAddress}
         />
       ) : null}
-      {showReplay && props.crashPointBps !== null ? (
-        <ReplayScene
-          crashPointBps={props.crashPointBps}
-          playerTierBps={props.playerTierBps}
-          progress={props.replayProgress}
-        />
-      ) : null}
       {showOutcome && props.landing && props.landingKind ? (
-        <OutcomeBurst kind={props.landingKind} landing={props.landing} />
+        <OutcomeBurst
+          kind={props.landingKind}
+          landing={props.landing}
+          showLabels={false}
+        />
       ) : null}
     </>
   );

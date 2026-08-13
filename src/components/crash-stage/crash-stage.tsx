@@ -20,7 +20,6 @@ import { RoundResultCard } from "@/components/round-theater/round-result-card";
 import {
   ENTRY_LEVERAGE_TIERS_BPS,
   type CrashRoundPhase,
-  type CrashTicket,
   type TicketTapeEntry,
 } from "@/lib/margin-call-crash";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
@@ -42,6 +41,7 @@ import type { CountdownUrgency } from "./scenes/countdown-scene";
 import type { TicketChipState } from "./scenes/ticket-field";
 import { StageActions } from "./overlay/stage-actions";
 import { StageHud } from "./overlay/stage-hud";
+import { StageOutcomeGraph } from "./overlay/stage-outcome-graph";
 import {
   deriveCrashStageMode,
   type CrashStageMode,
@@ -62,7 +62,9 @@ export function CrashStage() {
     authenticated && user ? getEvmWalletAddress(user) : null;
 
   const displayRoundId = theaterDisplayRoundId(theater.live, theater.hero);
+  const liveRoundId = theaterLiveRoundId(theater.live);
   const { ticket: playerTicket } = useTheaterPlayerTicket(displayRoundId);
+  const { ticket: liveRoundTicket } = useTheaterPlayerTicket(liveRoundId);
   const settlement = useCrashTicketSettlement();
 
   const replayHero: TheaterReplayHero | null =
@@ -154,7 +156,12 @@ export function CrashStage() {
     : null;
 
   const actionPhase = theaterLivePhase(theater.live);
-  const actionRoundId = theaterLiveRoundId(theater.live);
+  const actionRoundId = liveRoundId;
+  const showOutcomeGraph =
+    (mode === "replay" || mode === "outcome") && replayHero !== null;
+  const graphLanding = replayHero
+    ? ticketLanding(activeTicket, replayHero.crashPointBps)
+    : { kind: "spectator" as const };
 
   const canvasProps: CrashCanvasProps = {
     mode,
@@ -197,39 +204,70 @@ export function CrashStage() {
   return (
     <section
       aria-label="Crash floor"
-      className="relative h-full min-h-[100svh] w-full overflow-hidden"
+      className="relative flex h-full min-h-0 w-full flex-col overflow-hidden"
       data-mode={mode}
       data-testid="crash-stage"
     >
-      {theater.reducedMotion ? (
-        <ReducedMotionFloor
+      <div className="absolute inset-0">
+        {theater.reducedMotion ? (
+          showOutcomeGraph ? null : (
+            <ReducedMotionFloor
+              countdownSeconds={countdownSeconds}
+              locked={showLockedLabel && mode !== "countdown"}
+              mode={mode}
+              urgency={urgency}
+            />
+          )
+        ) : (
+          <CrashCanvas {...canvasProps} />
+        )}
+      </div>
+
+      <div className="pointer-events-none relative z-20 flex min-h-0 flex-1 flex-col pt-[6.75rem]">
+        <StageHud
+          countdownLabel={countdownLabel}
           countdownSeconds={countdownSeconds}
-          locked={showLockedLabel && mode !== "countdown"}
-          mode={mode}
+          isAlert={settlement.status === "error"}
           playerTicket={activeTicket}
-          replayHero={replayHero}
-          urgency={urgency}
+          statusMessage={stageStatusMessage(mode, settlement)}
+          suggestSound={mode === "replay" || mode === "outcome"}
         />
-      ) : (
-        <CrashCanvas {...canvasProps} />
-      )}
 
-      <StageHud
-        countdownLabel={countdownLabel}
-        countdownSeconds={countdownSeconds}
-        isAlert={settlement.status === "error"}
-        playerTicket={activeTicket}
-        statusMessage={stageStatusMessage(mode, settlement)}
-        suggestSound={mode === "replay" || mode === "outcome"}
-      />
+        <div className="flex min-h-0 flex-1 flex-col justify-center px-4 py-2 sm:px-6">
+          {showOutcomeGraph && replayHero ? (
+            theater.reducedMotion ? (
+              <div className="mx-auto w-full max-w-xl">
+                <RoundResultCard
+                  crashPointBps={replayHero.crashPointBps}
+                  displayCrashPoint={replayHero.displayCrashPoint}
+                  finalizeTransactionUrl={replayHero.finalizeTransactionUrl}
+                  landing={graphLanding}
+                  playerTierBps={activeTicket?.leverageBps ?? null}
+                  tiers={replayHero.tiers}
+                />
+              </div>
+            ) : (
+              <StageOutcomeGraph
+                crashPointBps={replayHero.crashPointBps}
+                landing={graphLanding}
+                playerTierBps={activeTicket?.leverageBps ?? null}
+                progress={replayProgress}
+              />
+            )
+          ) : null}
+        </div>
 
-      {actionRoundId !== null && actionPhase !== null ? (
-        <StageActions
-          countdownSeconds={countdownSeconds ?? 0}
-          phase={actionPhase}
-          roundId={actionRoundId}
-        />
-      ) : null}
+        {actionRoundId !== null && actionPhase !== null ? (
+          <StageActions
+            countdownSeconds={countdownSeconds ?? 0}
+            hasTicket={liveRoundTicket !== null}
+            mode={mode}
+            phase={actionPhase}
+            roundId={actionRoundId}
+            settlement={settlement}
+          />
+        ) : null}
+      </div>
     </section>
   );
 }
@@ -255,15 +293,11 @@ function ReducedMotionFloor({
   countdownSeconds,
   urgency,
   locked,
-  replayHero,
-  playerTicket,
 }: {
   mode: CrashStageMode;
   countdownSeconds: number | null;
   urgency: CountdownUrgency;
   locked: boolean;
-  replayHero: TheaterReplayHero | null;
-  playerTicket: CrashTicket | null;
 }) {
   const urgencyClass =
     urgency === "threat"
@@ -274,21 +308,8 @@ function ReducedMotionFloor({
           ? "text-[var(--t-accent)]"
           : "text-[var(--t-green-hot)]";
 
-  if ((mode === "replay" || mode === "outcome") && replayHero) {
-    return (
-      <div className="flex h-full items-center justify-center px-4 pb-40 pt-28">
-        <div className="w-full max-w-xl">
-          <RoundResultCard
-            crashPointBps={replayHero.crashPointBps}
-            displayCrashPoint={replayHero.displayCrashPoint}
-            finalizeTransactionUrl={replayHero.finalizeTransactionUrl}
-            landing={ticketLanding(playerTicket, replayHero.crashPointBps)}
-            playerTierBps={playerTicket?.leverageBps ?? null}
-            tiers={replayHero.tiers}
-          />
-        </div>
-      </div>
-    );
+  if (mode === "replay" || mode === "outcome") {
+    return null;
   }
 
   return (
@@ -372,7 +393,7 @@ function stageStatusMessage(
   const settleCopy = settlementStatusCopy[settlement.status];
   if (settleCopy && settlement.ticket) return settleCopy;
   if (mode === "awaiting-settle") {
-    return "Round locked. Verify and settle to reveal the Crash Point and see the Replay.";
+    return "Round locked. Verify and settle to see whether your Ticket won or took the margin call.";
   }
   return null;
 }

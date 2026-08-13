@@ -121,11 +121,18 @@ export function deriveStageCtaKind(input: StageCtaInput): StageCtaKind {
     return "none";
   }
 
-  if (input.mode === "countdown" && input.offerEntry && !input.hasTicket) {
+  if (input.mode === "error" && input.canRetry) return "retry";
+
+  // Next-round entry stays available while a previous result graph is up.
+  if (
+    (input.mode === "countdown" ||
+      input.mode === "replay" ||
+      input.mode === "outcome") &&
+    input.offerEntry &&
+    !input.hasTicket
+  ) {
     return "enter";
   }
-
-  if (input.mode === "error" && input.canRetry) return "retry";
 
   // After finalize, claim/settle may still be available if flow split.
   if (input.canClaim) return "claim";

@@ -252,6 +252,23 @@ describe("deriveStageCtaKind", () => {
     ).toBe("retry");
   });
 
+  it("offers enter during a previous-round outcome while the next round is open", () => {
+    expect(
+      deriveStageCtaKind({
+        mode: "outcome",
+        offerEntry: true,
+        hasTicket: false,
+        canEnter: true,
+        canVerify: false,
+        canClaim: false,
+        canSettle: false,
+        canRefund: false,
+        canExpire: false,
+        canRetry: false,
+      })
+    ).toBe("enter");
+  });
+
   it("returns none when there is no actionable CTA", () => {
     expect(
       deriveStageCtaKind({

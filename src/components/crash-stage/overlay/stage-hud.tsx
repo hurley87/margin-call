@@ -31,7 +31,7 @@ export function StageHud({
 }: StageHudProps) {
   return (
     <div
-      className="pointer-events-none absolute inset-x-0 top-[4.75rem] z-30 flex flex-col gap-3 px-4 sm:px-6"
+      className="flex shrink-0 flex-col gap-2 px-4 sm:px-6"
       data-testid="stage-hud"
     >
       <div className="flex flex-wrap items-start justify-between gap-3">

@@ -128,6 +128,25 @@ describe("CrashRoundEntry", () => {
     expect(screen.queryByRole("button", { name: /enter/i })).toBeNull();
   });
 
+  it("hides the confirmed ticket card in the compact Floor dock", () => {
+    sdk.entry = sdk.makeEntry({
+      ticket: {
+        id: 7n,
+        player: "0x0000000000000000000000000000000000000003",
+        roundId: 12n,
+        margin: 5_000_000n,
+        leverageBps: 20_000n,
+        reservedPayout: 10_000_000n,
+        settled: false,
+        claimed: false,
+      },
+      canEnter: false,
+    });
+    const { container } = render(<CrashRoundEntry {...sdk.props} compact />);
+    expect(container.textContent).toBe("");
+    expect(screen.queryByText("Your live ticket")).toBeNull();
+  });
+
   it("labels receipt-recovery retries honestly", () => {
     sdk.entry = sdk.makeEntry({
       status: "error",
