@@ -3,6 +3,7 @@
 import { useCallback } from "react";
 import { expireRequest, refundRequest } from "@/lib/margin-call-crash";
 import { type StageErrorCopy } from "@/lib/sponsored-call";
+import { isSponsoredActionBusy } from "@/lib/sponsored-action-busy";
 import {
   useCrashTicketStages,
   type CrashTicketStageStatus,
@@ -123,6 +124,7 @@ export function useCrashTicketRefund() {
       phase === "expired-eligible" && !!ticket && !ticket.settled && canAct,
     canRefund: outcome === "refundable" && canAct,
     canRetry,
+    busy: isSponsoredActionBusy(state.status),
     retryAction,
     expireRound: () => submitStage("expire"),
     refund: () => submitStage("refund"),

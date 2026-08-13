@@ -55,10 +55,7 @@ export function CrashTicketSettlement() {
       ? settlement.error
       : (settlementStatusCopy[settlement.status] ?? null);
   const isAlert = settlement.status === "error";
-  const busy =
-    settlement.status === "attesting" ||
-    settlement.status.endsWith("-submitting") ||
-    settlement.status.endsWith("-pending");
+  const busy = settlement.busy;
   // Desk-phone voice owns this surface only — not theater replay.
   const isLiquidatedLoss =
     settlement.outcome === "lost" || settlement.outcome === "settled-loss";

@@ -35,10 +35,7 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
   const retryLabel = settlement.retryAction
     ? settlementRetryLabels[settlement.retryAction]
     : "Retry";
-  const busy =
-    settlement.status === "attesting" ||
-    settlement.status.endsWith("-submitting") ||
-    settlement.status.endsWith("-pending");
+  const busy = settlement.busy;
 
   return (
     <div className="text-left" data-testid="stage-settle-dock">

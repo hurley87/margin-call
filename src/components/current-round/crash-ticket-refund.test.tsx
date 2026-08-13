@@ -41,6 +41,7 @@ const sdk = vi.hoisted(() => {
       canRefund: true,
       canRetry: false,
       retryAction: null,
+      busy: false,
       expireRound: vi.fn(),
       refund: vi.fn(),
       retry: vi.fn(),
@@ -91,6 +92,7 @@ describe("CrashTicketRefund", () => {
   it("disables and relabels refund while a refund stage is in flight", () => {
     sdk.refund = sdk.makeRefund({
       status: "refund-pending",
+      busy: true,
       canRefund: true,
     });
     render(<CrashTicketRefund />);

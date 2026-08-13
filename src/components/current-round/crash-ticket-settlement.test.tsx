@@ -43,6 +43,7 @@ const sdk = vi.hoisted(() => {
       canSettle: false,
       canRetry: false,
       retryAction: null,
+      busy: false,
       verifyAndSettle: vi.fn(),
       claim: vi.fn(),
       settleLoss: vi.fn(),
@@ -156,6 +157,7 @@ describe("CrashTicketSettlement", () => {
   it("disables and relabels claim while a claim stage is in flight", () => {
     sdk.settlement = sdk.makeSettlement({
       status: "claim-submitting",
+      busy: true,
       canClaim: true,
     });
     render(<CrashTicketSettlement />);

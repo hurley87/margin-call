@@ -32,6 +32,7 @@ const sdk = vi.hoisted(() => {
       canSettle: false,
       canRetry: false,
       retryAction: null,
+      busy: false,
       verifyAndSettle: vi.fn(),
       claim: vi.fn(),
       settleLoss: vi.fn(),
@@ -90,6 +91,7 @@ describe("StageActions", () => {
   it("disables and relabels verify while settlement is in flight", () => {
     sdk.settlement = sdk.makeSettlement({
       status: "reveal-submitting",
+      busy: true,
       canVerify: true,
       canClaim: false,
     });

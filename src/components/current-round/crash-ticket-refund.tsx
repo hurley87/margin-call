@@ -47,8 +47,7 @@ export function CrashTicketRefund() {
       ? refund.error
       : (statusCopy[refund.status] ?? null);
   const isAlert = refund.status === "error";
-  const busy =
-    refund.status.endsWith("-submitting") || refund.status.endsWith("-pending");
+  const busy = refund.busy;
 
   return (
     <section aria-labelledby="ticket-refund-heading" className="mt-8 text-left">
