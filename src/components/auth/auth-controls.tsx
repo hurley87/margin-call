@@ -3,6 +3,7 @@
 import { useLogin, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCallback, useRef, useState } from "react";
 import { FlashValue } from "@/components/ui/flash-value";
+import { WalletDialog } from "@/components/wallet/wallet-dialog";
 import { formatDeskDollarsBalanceLabel } from "@/lib/desk-dollars";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { formatShortAddress } from "@/lib/utils";
@@ -19,6 +20,7 @@ export function AuthControls() {
   const [loginError, setLoginError] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
   const [logoutError, setLogoutError] = useState(false);
+  const [walletOpen, setWalletOpen] = useState(false);
   const logoutInFlight = useRef(false);
   const { login } = useLogin({
     onError: () => setLoginError(true),
@@ -48,6 +50,7 @@ export function AuthControls() {
     logoutInFlight.current = true;
     setLogoutError(false);
     setLogoutPending(true);
+    setWalletOpen(false);
 
     try {
       await logout();
@@ -60,6 +63,9 @@ export function AuthControls() {
   }, [logout]);
 
   const balanceLabel = formatDeskDollarsBalanceLabel(balance, decimals);
+  const showWallet =
+    !!walletAddress &&
+    (state.status === "signed-in" || state.status === "logout-error");
 
   return (
     <div
@@ -69,18 +75,31 @@ export function AuthControls() {
       <p aria-live="polite" className="text-xs text-[var(--t-muted)]">
         {state.message}
       </p>
-      {walletAddress &&
-      (state.status === "signed-in" || state.status === "logout-error") ? (
-        <div className="flex flex-wrap items-center gap-2 text-xs tabular-nums">
-          <span className="text-[var(--t-text)]">
-            {formatShortAddress(walletAddress)}
-          </span>
-          {balanceLabel && balance !== null ? (
-            <FlashValue className="text-[var(--t-green-hot)]" value={balance}>
-              {balanceLabel}
-            </FlashValue>
-          ) : null}
-        </div>
+      {walletAddress && showWallet ? (
+        <>
+          <button
+            aria-expanded={walletOpen}
+            aria-haspopup="dialog"
+            className="flex flex-wrap items-center gap-2 rounded-sm border border-transparent px-2 py-1 text-xs tabular-nums text-[var(--t-text)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--t-accent)]"
+            data-testid="wallet-chip"
+            onClick={() => setWalletOpen(true)}
+            type="button"
+          >
+            <span>{formatShortAddress(walletAddress)}</span>
+            {balanceLabel && balance !== null ? (
+              <FlashValue className="text-[var(--t-green-hot)]" value={balance}>
+                {balanceLabel}
+              </FlashValue>
+            ) : null}
+          </button>
+          <WalletDialog
+            balance={balance}
+            decimals={decimals}
+            onOpenChange={setWalletOpen}
+            open={walletOpen}
+            walletAddress={walletAddress}
+          />
+        </>
       ) : null}
       {state.action === "login" ? (
         <button

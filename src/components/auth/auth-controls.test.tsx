@@ -45,6 +45,18 @@ vi.mock("@/hooks/use-desk-dollars-balance", () => ({
   useDeskDollarsBalance: () => sdk.balance,
 }));
 
+vi.mock("@/hooks/use-desk-dollars-transfer", () => ({
+  useDeskDollarsTransfer: () => ({
+    status: "idle",
+    error: null,
+    lastHash: null,
+    canTransfer: true,
+    canRetry: false,
+    transfer: vi.fn(),
+    retry: vi.fn(),
+  }),
+}));
+
 import { AuthControls } from "@/components/auth/auth-controls";
 
 function embeddedUser() {
@@ -140,6 +152,19 @@ describe("AuthControls", () => {
     expect(screen.getByText("0x1234")).not.toBeNull();
     expect(screen.getByText("100 tUSD")).not.toBeNull();
     expect(screen.queryByText("+15555550123")).toBeNull();
+  });
+
+  it("opens the wallet dialog from the header chip", () => {
+    renderSignedInControls();
+    expect(screen.queryByTestId("wallet-dialog")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("wallet-chip"));
+
+    expect(screen.getByTestId("wallet-dialog")).not.toBeNull();
+    expect(screen.getByTestId("wallet-dialog-address").textContent).toBe(
+      "0x1234"
+    );
+    expect(screen.getByRole("heading", { name: "Wallet" })).not.toBeNull();
   });
 
   it("shows logout pending and ignores rapid duplicate submissions", () => {
