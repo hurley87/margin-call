@@ -18,12 +18,7 @@ describe("WinConfetti", () => {
     );
   });
 
-  it("renders nothing under reduced motion", () => {
-    render(<WinConfetti nonce={1} reducedMotion />);
-    expect(screen.queryByTestId("win-confetti")).toBeNull();
-  });
-
-  it("regenerates pieces when the nonce changes", () => {
+  it("regenerates pieces when remounted with a new nonce", () => {
     const { rerender } = render(<WinConfetti key={1} nonce={1} />);
     const firstLeft =
       screen.getAllByTestId("win-confetti-piece")[0]?.style.left;

@@ -328,7 +328,11 @@ export function CrashStage() {
     entries,
     playerAddress,
     chipStates,
-    outcomeKind: mode === "outcome" ? (graphLanding?.kind ?? null) : null,
+    // Wins use WinConfetti on the DOM overlay; the pit only shatters losses.
+    outcomeKind:
+      mode === "outcome" && graphLanding !== null && graphLanding.kind !== "won"
+        ? graphLanding.kind
+        : null,
   };
 
   if (theater.live.kind === "error" || theater.live.kind === "unavailable") {
@@ -382,7 +386,6 @@ export function CrashStage() {
           <WinConfetti
             key={ceremonyClimb.startNonce}
             nonce={ceremonyClimb.startNonce}
-            reducedMotion={theater.reducedMotion}
           />
         ) : null}
         <StageHud

@@ -20,7 +20,7 @@ export type CrashCanvasProps = {
   entries: readonly TicketTapeEntry[];
   playerAddress: string | null;
   chipStates: ReadonlyMap<string, TicketChipState>;
-  outcomeKind: TicketLanding["kind"] | null;
+  outcomeKind: Exclude<TicketLanding["kind"], "won"> | null;
 };
 
 /**

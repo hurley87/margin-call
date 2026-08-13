@@ -3,9 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 
 export type WinConfettiProps = {
-  /** Bumps regenerate a fresh piece set (e.g. ceremony startNonce on Replay). */
+  /** Remount via key={nonce} to fire again on Replay. */
   nonce: number;
-  reducedMotion?: boolean;
 };
 
 type ConfettiPiece = {
@@ -66,14 +65,10 @@ function buildPieces(nonce: number): ConfettiPiece[] {
 }
 
 /**
- * Full-viewport CSS confetti storm for a personal win. Two waves: a bottom
- * cannon and a full-width rain. Finite; unmounts itself after the last piece.
- * Remount (via `key={nonce}`) to fire again on Replay.
+ * Full-viewport CSS confetti for a personal win. Parent gates reduced motion
+ * and remounts via key={nonce} on Replay; this layer only self-unmounts.
  */
-export function WinConfetti({
-  nonce,
-  reducedMotion = false,
-}: WinConfettiProps) {
+export function WinConfetti({ nonce }: WinConfettiProps) {
   const [alive, setAlive] = useState(true);
   const pieces = useMemo(() => buildPieces(nonce), [nonce]);
 
@@ -82,7 +77,7 @@ export function WinConfetti({
     return () => window.clearTimeout(timer);
   }, [nonce]);
 
-  if (reducedMotion || !alive) return null;
+  if (!alive) return null;
 
   return (
     <div
