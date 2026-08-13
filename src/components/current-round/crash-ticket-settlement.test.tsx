@@ -58,11 +58,21 @@ vi.mock("@/hooks/use-crash-ticket-settlement", () => ({
   useCrashTicketSettlement: () => sdk.settlement,
 }));
 
+const voice = vi.hoisted(() => ({
+  trigger: vi.fn().mockReturnValue(null),
+}));
+
+vi.mock("@/components/desk-phone/margin-call-voice-trigger", () => ({
+  MarginCallVoiceTrigger: (props: { ticketId: bigint; roundId: bigint }) =>
+    voice.trigger(props),
+}));
+
 import { CrashTicketSettlement } from "./crash-ticket-settlement";
 
 describe("CrashTicketSettlement", () => {
   beforeEach(() => {
     sdk.settlement = sdk.makeSettlement();
+    voice.trigger.mockClear();
   });
 
   afterEach(cleanup);
@@ -103,6 +113,39 @@ describe("CrashTicketSettlement", () => {
     render(<CrashTicketSettlement />);
     fireEvent.click(screen.getByRole("button", { name: "Settle loss" }));
     expect(sdk.settlement.settleLoss).toHaveBeenCalledOnce();
+  });
+
+  it("requests desk-phone for a lost ticket before settle", () => {
+    sdk.settlement = sdk.makeSettlement({
+      outcome: "lost",
+      payout: 0n,
+      canClaim: false,
+      canSettle: true,
+    });
+    render(<CrashTicketSettlement />);
+    expect(voice.trigger).toHaveBeenCalledWith({
+      roundId: 12n,
+      ticketId: 7n,
+    });
+  });
+
+  it("requests desk-phone for a settled-loss ticket", () => {
+    sdk.settlement = sdk.makeSettlement({
+      outcome: "settled-loss",
+      payout: 0n,
+      canClaim: false,
+      canSettle: false,
+    });
+    render(<CrashTicketSettlement />);
+    expect(voice.trigger).toHaveBeenCalledWith({
+      roundId: 12n,
+      ticketId: 7n,
+    });
+  });
+
+  it("does not request desk-phone for a winning ticket", () => {
+    render(<CrashTicketSettlement />);
+    expect(voice.trigger).not.toHaveBeenCalled();
   });
 
   it("hides when the wallet has no recoverable ticket", () => {
