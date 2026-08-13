@@ -63,9 +63,11 @@ export function AuthControls() {
   }, [logout]);
 
   const balanceLabel = formatDeskDollarsBalanceLabel(balance, decimals);
-  const showWallet =
-    !!walletAddress &&
-    (state.status === "signed-in" || state.status === "logout-error");
+  const signedInWallet =
+    walletAddress &&
+    (state.status === "signed-in" || state.status === "logout-error")
+      ? walletAddress
+      : null;
 
   return (
     <div
@@ -75,7 +77,7 @@ export function AuthControls() {
       <p aria-live="polite" className="text-xs text-[var(--t-muted)]">
         {state.message}
       </p>
-      {walletAddress && showWallet ? (
+      {signedInWallet ? (
         <>
           <button
             aria-expanded={walletOpen}
@@ -85,7 +87,7 @@ export function AuthControls() {
             onClick={() => setWalletOpen(true)}
             type="button"
           >
-            <span>{formatShortAddress(walletAddress)}</span>
+            <span>{formatShortAddress(signedInWallet)}</span>
             {balanceLabel && balance !== null ? (
               <FlashValue className="text-[var(--t-green-hot)]" value={balance}>
                 {balanceLabel}
@@ -97,7 +99,7 @@ export function AuthControls() {
             decimals={decimals}
             onOpenChange={setWalletOpen}
             open={walletOpen}
-            walletAddress={walletAddress}
+            walletAddress={signedInWallet}
           />
         </>
       ) : null}
