@@ -43,7 +43,8 @@ const amountLabels: Record<PlayerTicketHistoryItem["amountKind"], string> = {
 };
 
 /**
- * Wallet-scoped ticket history with receipt-backed claim/refund actions.
+ * Wallet-scoped ticket list with receipt-backed claim/refund actions.
+ * Page chrome (title / lede) lives on /record.
  */
 export function PersonalHistory() {
   const history = usePersonalHistory();
@@ -53,12 +54,8 @@ export function PersonalHistory() {
 
   if (history.status === "unavailable" || history.status === "error") {
     return (
-      <section aria-labelledby="personal-history-error" className="text-left">
-        <p
-          id="personal-history-error"
-          className="text-sm text-[var(--t-red-hot)]"
-          role="alert"
-        >
+      <div className="text-left">
+        <p className="text-sm text-[var(--t-red-hot)]" role="alert">
           {history.error}
         </p>
         <button
@@ -68,50 +65,36 @@ export function PersonalHistory() {
         >
           Retry
         </button>
-      </section>
+      </div>
     );
   }
 
   if (history.status !== "ready") {
     return (
-      <section className="text-left">
-        <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-          Loading your ticket history…
-        </p>
-      </section>
+      <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
+        Loading your ticket history…
+      </p>
+    );
+  }
+
+  if (history.tickets.length === 0) {
+    return (
+      <p className="text-sm text-[var(--t-muted)]">
+        No tickets found for this wallet in the recent lookback.
+      </p>
     );
   }
 
   return (
-    <section aria-labelledby="personal-history-heading" className="text-left">
-      <h2
-        id="personal-history-heading"
-        className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]"
-      >
-        Record
-      </h2>
-      <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
-        Every ticket in the lookback window. Claim and refund actions wait for
-        Base Sepolia receipts — a transaction hash alone never changes
-        settlement state.
-      </p>
-
-      {history.tickets.length === 0 ? (
-        <p className="mt-4 text-sm text-[var(--t-muted)]">
-          No tickets found for this wallet in the recent lookback.
-        </p>
-      ) : (
-        <ul className="mt-4 space-y-4">
-          {history.tickets.map((item) => (
-            <PersonalHistoryRow
-              actions={actions}
-              item={item}
-              key={item.ticket.id.toString()}
-            />
-          ))}
-        </ul>
-      )}
-    </section>
+    <ul className="space-y-4 text-left">
+      {history.tickets.map((item) => (
+        <PersonalHistoryRow
+          actions={actions}
+          item={item}
+          key={item.ticket.id.toString()}
+        />
+      ))}
+    </ul>
   );
 }
 
