@@ -1,6 +1,7 @@
 "use client";
 
 import { AuthGate } from "@/components/auth/auth-gate";
+import { EntryOptionGroup } from "@/components/current-round/entry-option-group";
 import { GameButton } from "@/components/ui/game-button";
 import {
   BOUNDED_ENTRY_ALLOWANCE_TUSD,
@@ -89,19 +90,21 @@ function EnterCta(props: StageCtaProps) {
 function EnterForm(props: StageCtaProps) {
   return (
     <div className="rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/80 p-4 backdrop-blur-md sm:p-5">
-      <OptionRow
+      <EntryOptionGroup
+        className="mt-2 first:mt-0"
+        format={(m) => formatDeskDollarsAmount(m)}
         legend="Margin"
+        onSelect={props.onSelectMargin}
         options={ENTRY_MARGINS_TUSD}
         selected={props.selectedMargin}
-        format={(m) => formatDeskDollarsAmount(m)}
-        onSelect={props.onSelectMargin}
       />
-      <OptionRow
+      <EntryOptionGroup
+        className="mt-2"
+        format={formatLeverageBps}
         legend="Arcade Leverage"
+        onSelect={props.onSelectLeverage}
         options={ENTRY_LEVERAGE_TIERS_BPS}
         selected={props.selectedLeverageBps}
-        format={formatLeverageBps}
-        onSelect={props.onSelectLeverage}
       />
       <p className="mt-3 text-xs text-[var(--t-muted)]">
         Max payout{" "}
@@ -169,47 +172,5 @@ function ActionCta(props: StageCtaProps) {
         {label}
       </GameButton>
     </AuthGate>
-  );
-}
-
-function OptionRow({
-  legend,
-  options,
-  selected,
-  format,
-  onSelect,
-}: {
-  legend: string;
-  options: readonly bigint[];
-  selected: bigint;
-  format: (option: bigint) => string;
-  onSelect: (option: bigint) => void;
-}) {
-  return (
-    <fieldset className="mt-2 first:mt-0">
-      <legend className="text-[10px] font-bold uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        {legend}
-      </legend>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {options.map((option) => {
-          const isSelected = selected === option;
-          return (
-            <button
-              aria-pressed={isSelected}
-              className={`min-h-11 border px-3 py-2 text-sm font-bold tabular-nums ${
-                isSelected
-                  ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
-                  : "border-[var(--t-border)] text-[var(--t-text)] hover:border-[var(--t-accent)]"
-              }`}
-              key={option.toString()}
-              onClick={() => onSelect(option)}
-              type="button"
-            >
-              {format(option)}
-            </button>
-          );
-        })}
-      </div>
-    </fieldset>
   );
 }

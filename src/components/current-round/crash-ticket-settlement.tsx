@@ -5,29 +5,12 @@ import { MarginCallVoiceTrigger } from "@/components/desk-phone/margin-call-voic
 import {
   useCrashTicketSettlement,
   type CrashSettlementRetryAction,
-  type CrashSettlementStatus,
 } from "@/hooks/use-crash-ticket-settlement";
 import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { CrashLiveTicket } from "./crash-live-ticket";
-import { DISPLAY_ASSET_SYMBOL } from "@/lib/desk-dollars";
-
-const statusCopy: Partial<Record<CrashSettlementStatus, string>> = {
-  loading: "Loading your ticket settlement state…",
-  "reveal-submitting": "Submitting reveal request…",
-  "reveal-pending": "Reveal pending until its Base Sepolia receipt succeeds…",
-  attesting: "Fetching the covalidator attestation for your round…",
-  "finalize-submitting": "Submitting finalization…",
-  "finalize-pending":
-    "Finalization pending until its Base Sepolia receipt succeeds…",
-  "claim-submitting": "Submitting your claim…",
-  "claim-pending": `Claim pending until its Base Sepolia receipt succeeds. ${DISPLAY_ASSET_SYMBOL} will not update until confirmation.`,
-  "settle-submitting": "Submitting loss settlement…",
-  "settle-pending":
-    "Loss settlement pending until its Base Sepolia receipt succeeds…",
-  confirmed: "Settlement confirmed on Base Sepolia.",
-};
+import { settlementStatusCopy } from "@/lib/settlement-status-copy";
 
 const retryLabels: Record<CrashSettlementRetryAction, string> = {
   refresh: "Retry",
@@ -81,7 +64,7 @@ export function CrashTicketSettlement() {
   const statusMessage =
     settlement.status === "error"
       ? settlement.error
-      : (statusCopy[settlement.status] ?? null);
+      : (settlementStatusCopy[settlement.status] ?? null);
   const isAlert = settlement.status === "error";
   // Desk-phone voice owns this surface only — not theater replay.
   const isLiquidatedLoss =

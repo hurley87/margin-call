@@ -25,11 +25,7 @@ import {
 } from "@/lib/margin-call-crash";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { formatTimelineCountdownLabel } from "@/lib/round-phase-copy";
-import {
-  getClosedTiersAtProgress,
-  getTierCloseProgress,
-  isReplayComplete,
-} from "@/lib/round-replay";
+import { getClosedTiersAtProgress, isReplayComplete } from "@/lib/round-replay";
 import {
   theaterCountdownSeconds,
   theaterDisplayRoundId,
@@ -37,8 +33,10 @@ import {
   theaterLiveTimeline,
   theaterTapeEntries,
 } from "@/lib/theater-live";
+import { settlementStatusCopy } from "@/lib/settlement-status-copy";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
+import { useTheaterTierSounds } from "@/hooks/use-theater-tier-sounds";
 import type { CrashCanvasProps } from "./crash-canvas";
 import type { TicketChipState } from "./scenes/ticket-field";
 import type { CountdownUrgency } from "./scenes/countdown-scene";
@@ -54,22 +52,6 @@ const CrashCanvas = dynamic(
   () => import("./crash-canvas").then((m) => m.CrashCanvas),
   { ssr: false, loading: () => <CanvasFallback /> }
 );
-
-const settlementStatusCopy: Partial<Record<string, string>> = {
-  loading: "Loading your ticket settlement state…",
-  "reveal-submitting": "Submitting reveal request…",
-  "reveal-pending": "Reveal pending until its Base Sepolia receipt succeeds…",
-  attesting: "Fetching the covalidator attestation for your round…",
-  "finalize-submitting": "Submitting finalization…",
-  "finalize-pending":
-    "Finalization pending until its Base Sepolia receipt succeeds…",
-  "claim-submitting": "Submitting your claim…",
-  "claim-pending": "Claim pending until its Base Sepolia receipt succeeds…",
-  "settle-submitting": "Submitting loss settlement…",
-  "settle-pending":
-    "Loss settlement pending until its Base Sepolia receipt succeeds…",
-  confirmed: "Settlement confirmed on Base Sepolia.",
-};
 
 /**
  * Immersive Floor orchestrator: composes theater, entry, and settlement into
@@ -473,23 +455,6 @@ function useStageAudio(options: {
   playerTierBps: bigint | null;
 }) {
   const previousKind = useRef(options.liveKind);
-  const firedCountRef = useRef(0);
-  const crashedRef = useRef(false);
-
-  const closeThresholds = useMemo(() => {
-    if (options.crashPointBps === null) return [];
-    return ENTRY_LEVERAGE_TIERS_BPS.flatMap((tier) => {
-      const closeAt = getTierCloseProgress(tier, options.crashPointBps!);
-      if (closeAt === null) return [];
-      return [
-        {
-          closeAt,
-          isPlayerTier:
-            options.playerTierBps !== null && tier === options.playerTierBps,
-        },
-      ];
-    }).sort((a, b) => a.closeAt - b.closeAt);
-  }, [options.crashPointBps, options.playerTierBps]);
 
   useEffect(() => {
     if (
@@ -510,36 +475,13 @@ function useStageAudio(options: {
     getTheaterAudio().playCountdownTick();
   }, [options.countdownSeconds, options.mode, options.reducedMotion]);
 
-  useEffect(() => {
-    firedCountRef.current = 0;
-    crashedRef.current = false;
-  }, [options.crashPointBps]);
-
-  useEffect(() => {
-    if (options.reducedMotion || options.crashPointBps === null) return;
-    if (options.mode !== "replay" && options.mode !== "outcome") return;
-
-    while (
-      firedCountRef.current < closeThresholds.length &&
-      closeThresholds[firedCountRef.current]!.closeAt <= options.progress
-    ) {
-      const threshold = closeThresholds[firedCountRef.current]!;
-      firedCountRef.current += 1;
-      if (threshold.isPlayerTier) getTheaterAudio().playWinRegister();
-      else getTheaterAudio().playTierClose();
-    }
-    if (options.isComplete && !crashedRef.current) {
-      crashedRef.current = true;
-      const audio = getTheaterAudio();
-      audio.playCrashBell();
-      audio.playPhoneRing();
-    }
-  }, [
-    closeThresholds,
-    options.crashPointBps,
-    options.isComplete,
-    options.mode,
-    options.progress,
-    options.reducedMotion,
-  ]);
+  useTheaterTierSounds({
+    crashPointBps: options.crashPointBps,
+    progress: options.progress,
+    isComplete: options.isComplete,
+    enabled:
+      !options.reducedMotion &&
+      (options.mode === "replay" || options.mode === "outcome"),
+    playerTierBps: options.playerTierBps,
+  });
 }

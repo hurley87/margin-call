@@ -24,6 +24,7 @@ import {
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
 import { GameButton } from "@/components/ui/game-button";
+import { EntryOptionGroup } from "./entry-option-group";
 import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashEntryStatus, string>> = {
@@ -151,7 +152,7 @@ export function CrashRoundEntry({
         reservation, not a guaranteed return.
       </p>
 
-      <OptionGroup
+      <EntryOptionGroup
         legend="Margin"
         options={ENTRY_MARGINS_TUSD}
         selected={entry.selectedMargin}
@@ -159,7 +160,7 @@ export function CrashRoundEntry({
         onSelect={entry.selectMargin}
       />
 
-      <OptionGroup
+      <EntryOptionGroup
         legend="Arcade Leverage"
         options={ENTRY_LEVERAGE_TIERS_BPS}
         selected={entry.selectedLeverageBps}
@@ -263,48 +264,6 @@ export function CrashRoundEntry({
         )}
       </div>
     </EntryShell>
-  );
-}
-
-function OptionGroup({
-  legend,
-  options,
-  selected,
-  format,
-  onSelect,
-}: {
-  legend: string;
-  options: readonly bigint[];
-  selected: bigint;
-  format: (option: bigint) => string;
-  onSelect: (option: bigint) => void;
-}) {
-  return (
-    <fieldset className="mt-3">
-      <legend className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
-        {legend}
-      </legend>
-      <div className="mt-2 flex flex-wrap gap-2">
-        {options.map((option) => {
-          const isSelected = selected === option;
-          return (
-            <button
-              aria-pressed={isSelected}
-              className={`border px-3 py-2 text-sm font-bold tabular-nums ${
-                isSelected
-                  ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
-                  : "border-[var(--t-border)] text-[var(--t-text)] hover:border-[var(--t-accent)]"
-              }`}
-              key={option.toString()}
-              onClick={() => onSelect(option)}
-              type="button"
-            >
-              {format(option)}
-            </button>
-          );
-        })}
-      </div>
-    </fieldset>
   );
 }
 
