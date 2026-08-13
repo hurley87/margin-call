@@ -2,13 +2,15 @@
 
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { getDeskDollarsFaucetChrome } from "@/hooks/use-desk-dollars-faucet";
 
 const sdk = vi.hoisted(() => {
   const readyFaucet = () => ({
-    balance: 123450000n,
-    decimals: 6,
-    status: "ready",
-    error: null,
+    balance: 123450000n as bigint | null,
+    decimals: 6 as number | null,
+    status: "ready" as
+      "loading" | "ready" | "pending" | "confirmed" | "error" | "unavailable",
+    error: null as string | null,
     eligible: true,
     cooldownSeconds: 0n,
     canClaim: true,
@@ -33,9 +35,15 @@ const sdk = vi.hoisted(() => {
 vi.mock("@privy-io/react-auth", () => ({
   usePrivy: () => ({ user: sdk.user }),
 }));
-vi.mock("@/hooks/use-desk-dollars-faucet", () => ({
-  useDeskDollarsFaucet: () => sdk.faucet,
-}));
+vi.mock("@/hooks/use-desk-dollars-faucet", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/hooks/use-desk-dollars-faucet")
+  >("@/hooks/use-desk-dollars-faucet");
+  return {
+    ...actual,
+    useDeskDollarsFaucet: () => sdk.faucet,
+  };
+});
 
 import { DeskDollarsPanel } from "./desk-dollars-panel";
 
@@ -43,6 +51,45 @@ beforeEach(() => {
   sdk.faucet = sdk.readyFaucet();
 });
 afterEach(() => cleanup());
+
+describe("getDeskDollarsFaucetChrome", () => {
+  it("hides claim while balance is unknown", () => {
+    expect(
+      getDeskDollarsFaucetChrome({
+        balance: null,
+        status: "loading",
+        canRetry: false,
+      })
+    ).toEqual({ showOffer: false, showClaimButton: false });
+  });
+
+  it("offers claim only for a known empty balance", () => {
+    expect(
+      getDeskDollarsFaucetChrome({
+        balance: 0n,
+        status: "ready",
+        canRetry: false,
+      })
+    ).toEqual({ showOffer: true, showClaimButton: true });
+  });
+
+  it("hides claim when funded unless a claim is in flight", () => {
+    expect(
+      getDeskDollarsFaucetChrome({
+        balance: 83_000_000n,
+        status: "ready",
+        canRetry: false,
+      })
+    ).toEqual({ showOffer: false, showClaimButton: false });
+    expect(
+      getDeskDollarsFaucetChrome({
+        balance: 83_000_000n,
+        status: "pending",
+        canRetry: false,
+      })
+    ).toEqual({ showOffer: false, showClaimButton: true });
+  });
+});
 
 describe("DeskDollarsPanel", () => {
   it("hides claim when the wallet already has a balance and uses USDC copy", () => {
@@ -80,19 +127,37 @@ describe("DeskDollarsPanel", () => {
     ).not.toBeNull();
   });
 
-  it("reports cooldown and pending receipt semantics honestly when unfunded", () => {
+  it("does not flash claim while the balance is still loading", () => {
     sdk.faucet = {
       ...sdk.faucet,
-      balance: 0n,
+      balance: null,
+      status: "loading",
+      canClaim: false,
+      eligible: false,
+    };
+    render(<DeskDollarsPanel />);
+    expect(screen.getByText(/Loading Desk Dollars balance/)).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Claim/ })).toBeNull();
+  });
+
+  it("keeps pending claim chrome visible even when already funded", () => {
+    sdk.faucet = {
+      ...sdk.faucet,
+      balance: 83_000_000n,
       status: "pending",
       eligible: false,
-      cooldownSeconds: 3600n,
       canClaim: false,
     };
-    const { rerender } = render(<DeskDollarsPanel />);
+    render(<DeskDollarsPanel />);
     expect(
       screen.getByText(/pending until its Base Sepolia receipt succeeds/)
     ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Claim pending…" })
+    ).not.toBeNull();
+  });
+
+  it("reports cooldown honestly when unfunded", () => {
     sdk.faucet = {
       ...sdk.faucet,
       balance: 0n,
@@ -101,7 +166,7 @@ describe("DeskDollarsPanel", () => {
       eligible: false,
       canClaim: false,
     };
-    rerender(<DeskDollarsPanel />);
+    render(<DeskDollarsPanel />);
     expect(
       screen.getByText("Next 100 USDC faucet claim in 60 minutes.")
     ).not.toBeNull();

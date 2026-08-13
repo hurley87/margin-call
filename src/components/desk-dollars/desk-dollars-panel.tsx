@@ -7,7 +7,10 @@ import {
   formatDeskDollarsBalanceLabel,
 } from "@/lib/desk-dollars";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
-import { useDeskDollarsFaucet } from "@/hooks/use-desk-dollars-faucet";
+import {
+  getDeskDollarsFaucetChrome,
+  useDeskDollarsFaucet,
+} from "@/hooks/use-desk-dollars-faucet";
 
 function formatCooldown(seconds: bigint) {
   const minutes = Number((seconds + 59n) / 60n);
@@ -21,10 +24,11 @@ export function DeskDollarsPanel() {
   const balance =
     formatDeskDollarsBalanceLabel(faucet.balance, faucet.decimals) ??
     `— ${DISPLAY_ASSET_SYMBOL}`;
-  const isFunded = faucet.balance !== null && faucet.balance > 0n;
-  const showFaucetOffer = !isFunded && faucet.status === "ready";
-  const showClaimButton =
-    !isFunded || faucet.status === "pending" || faucet.canRetry;
+  const chrome = getDeskDollarsFaucetChrome({
+    balance: faucet.balance,
+    status: faucet.status,
+    canRetry: faucet.canRetry,
+  });
 
   return (
     <section
@@ -73,18 +77,18 @@ export function DeskDollarsPanel() {
           {faucet.error}
         </p>
       ) : null}
-      {showFaucetOffer && !faucet.eligible ? (
+      {chrome.showOffer && !faucet.eligible ? (
         <p className="mt-3 text-sm">
           Next 100 {DISPLAY_ASSET_SYMBOL} faucet claim in{" "}
           {formatCooldown(faucet.cooldownSeconds)}.
         </p>
       ) : null}
-      {showFaucetOffer && faucet.eligible ? (
+      {chrome.showOffer && faucet.eligible ? (
         <p className="mt-3 text-sm">
           Eligible to claim 100 {DISPLAY_ASSET_SYMBOL} from the faucet.
         </p>
       ) : null}
-      {showClaimButton ? (
+      {chrome.showClaimButton ? (
         <button
           className="mt-4 rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:opacity-50"
           disabled={!faucet.canClaim && !faucet.canRetry}
