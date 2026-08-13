@@ -7,7 +7,7 @@ import type {
   RoundHistoryState,
 } from "@/lib/margin-call-crash";
 import { ReplayCurveThumb } from "@/components/round-theater/replay-curve";
-import { historyStateCopy } from "./history-state-copy";
+import { historyRowLabel, historyStateCopy } from "./history-state-copy";
 import { RoundVerificationRecord } from "./round-verification-record";
 
 const historyStateColors: Record<RoundHistoryState, string> = {
@@ -19,38 +19,27 @@ const historyStateColors: Record<RoundHistoryState, string> = {
 };
 
 /**
- * Public global history: ≥20 lookback rounds with honest delayed/expired
- * states and expandable verification records. Page chrome (heading, eyebrow)
- * lives on /history.
+ * Global history list content: lookback rounds with honest delayed/expired
+ * states and expandable verification records. Page chrome lives on /history.
  */
 export function GlobalHistory() {
   const history = useGlobalHistory();
 
   if (history.status === "loading") {
     return (
-      <section
+      <p
         aria-busy="true"
-        aria-labelledby="global-history-loading"
-        className="text-left"
+        className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]"
       >
-        <p
-          id="global-history-loading"
-          className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]"
-        >
-          Reading round history from Base Sepolia…
-        </p>
-      </section>
+        Reading round history from Base Sepolia…
+      </p>
     );
   }
 
   if (history.status !== "ready") {
     return (
-      <section aria-labelledby="global-history-error" className="text-left">
-        <p
-          id="global-history-error"
-          className="text-sm text-[var(--t-red-hot)]"
-          role="alert"
-        >
+      <div>
+        <p className="text-sm text-[var(--t-red-hot)]" role="alert">
           {history.error}
         </p>
         <button
@@ -60,44 +49,40 @@ export function GlobalHistory() {
         >
           Retry
         </button>
-      </section>
+      </div>
     );
   }
 
   if (history.rounds.length === 0) {
     return (
-      <section aria-label="Recent rounds" className="text-left">
-        <p className="text-sm text-[var(--t-muted)]">
-          No initialized rounds in the lookback window yet.
-        </p>
-      </section>
+      <p className="text-sm text-[var(--t-muted)]">
+        No initialized rounds in the lookback window yet.
+      </p>
     );
   }
 
   return (
-    <section aria-label="Recent rounds" className="text-left">
-      <ul className="divide-y divide-[var(--t-divider)] border-y border-[var(--t-divider)]">
-        {history.rounds.map((item) => {
-          const isSelected = history.selectedRoundId === item.round.id;
-          return (
-            <HistoryRoundRow
-              detail={isSelected ? history.detail : null}
-              detailStatus={isSelected ? history.detailStatus : "idle"}
-              item={item}
-              key={item.round.id.toString()}
-              onSelect={() => {
-                if (isSelected) {
-                  history.clearSelection();
-                  return;
-                }
-                history.selectRound(item.round.id);
-              }}
-              selected={isSelected}
-            />
-          );
-        })}
-      </ul>
-    </section>
+    <ul className="divide-y divide-[var(--t-divider)] border-y border-[var(--t-divider)]">
+      {history.rounds.map((item) => {
+        const isSelected = history.selectedRoundId === item.round.id;
+        return (
+          <HistoryRoundRow
+            detail={isSelected ? history.detail : null}
+            detailStatus={isSelected ? history.detailStatus : "idle"}
+            item={item}
+            key={item.round.id.toString()}
+            onSelect={() => {
+              if (isSelected) {
+                history.clearSelection();
+                return;
+              }
+              history.selectRound(item.round.id);
+            }}
+            selected={isSelected}
+          />
+        );
+      })}
+    </ul>
   );
 }
 
@@ -114,16 +99,7 @@ function HistoryRoundRow({
   detail: RoundHistoryDetail | null;
   detailStatus: "idle" | "loading" | "ready" | "error";
 }) {
-  const crashLabel =
-    item.historyState === "finalized" && item.displayCrashPoint
-      ? item.displayCrashPoint
-      : item.historyState === "delayed"
-        ? "Awaiting attestation"
-        : item.historyState === "empty"
-          ? "No entries"
-          : item.historyState === "expired"
-            ? "Expired — no result"
-            : "—";
+  const crashLabel = historyRowLabel(item.historyState, item.displayCrashPoint);
   const showThumb =
     item.historyState === "finalized" && item.round.crashPointBps > 0n;
 
