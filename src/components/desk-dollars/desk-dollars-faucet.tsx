@@ -1,10 +1,14 @@
 "use client";
 
+import { createContext, useContext, type ReactNode } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import type { Address } from "viem";
 import { DISPLAY_ASSET_SYMBOL } from "@/lib/desk-dollars";
+import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import {
   getDeskDollarsFaucetChrome,
   useDeskDollarsFaucet,
+  type DeskDollarsFaucetSession,
 } from "@/hooks/use-desk-dollars-faucet";
 
 function formatCooldown(seconds: bigint) {
@@ -12,16 +16,50 @@ function formatCooldown(seconds: bigint) {
   return `${minutes} minute${minutes === 1 ? "" : "s"}`;
 }
 
-type DeskDollarsFaucetProps = {
+type DeskDollarsFaucetContextValue = {
   walletAddress: Address | null;
+  faucet: DeskDollarsFaucetSession;
 };
+
+const DeskDollarsFaucetContext =
+  createContext<DeskDollarsFaucetContextValue | null>(null);
+
+/**
+ * Owns the single faucet session for signed-in chrome. Entry rail and wallet
+ * dialog consume this so they cannot submit overlapping sponsored claims.
+ */
+export function DeskDollarsFaucetProvider({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  const { user } = usePrivy();
+  const walletAddress = getEvmWalletAddress(user);
+  const faucet = useDeskDollarsFaucet(walletAddress);
+
+  return (
+    <DeskDollarsFaucetContext.Provider value={{ walletAddress, faucet }}>
+      {children}
+    </DeskDollarsFaucetContext.Provider>
+  );
+}
+
+function useSharedDeskDollarsFaucet() {
+  const value = useContext(DeskDollarsFaucetContext);
+  if (!value) {
+    throw new Error(
+      "DeskDollarsFaucet must be used within DeskDollarsFaucetProvider"
+    );
+  }
+  return value;
+}
 
 /**
  * Claim chrome for empty or in-flight faucet states. Funded idle wallets
  * render nothing — balance lives on the wallet chip, not a duplicate card.
  */
-export function DeskDollarsFaucet({ walletAddress }: DeskDollarsFaucetProps) {
-  const faucet = useDeskDollarsFaucet(walletAddress);
+export function DeskDollarsFaucet() {
+  const { walletAddress, faucet } = useSharedDeskDollarsFaucet();
   const chrome = getDeskDollarsFaucetChrome({
     balance: faucet.balance,
     status: faucet.status,

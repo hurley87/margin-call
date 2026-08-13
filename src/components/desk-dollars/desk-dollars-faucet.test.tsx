@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getDeskDollarsFaucetChrome } from "@/hooks/use-desk-dollars-faucet";
 
 const sdk = vi.hoisted(() => {
+  const wallet = "0x0000000000000000000000000000000000000003" as const;
   const readyFaucet = () => ({
     balance: 123450000n as bigint | null,
     decimals: 6 as number | null,
@@ -19,10 +20,25 @@ const sdk = vi.hoisted(() => {
     retry: vi.fn(),
   });
   return {
+    wallet,
     readyFaucet,
     faucet: readyFaucet(),
+    useDeskDollarsFaucet: vi.fn(),
   };
 });
+
+vi.mock("@privy-io/react-auth", () => ({
+  usePrivy: () => ({
+    user: {
+      wallet: {
+        address: sdk.wallet,
+        chainType: "ethereum",
+        walletClientType: "privy",
+      },
+      linkedAccounts: [],
+    },
+  }),
+}));
 
 vi.mock("@/hooks/use-desk-dollars-faucet", async () => {
   const actual = await vi.importActual<
@@ -30,16 +46,27 @@ vi.mock("@/hooks/use-desk-dollars-faucet", async () => {
   >("@/hooks/use-desk-dollars-faucet");
   return {
     ...actual,
-    useDeskDollarsFaucet: () => sdk.faucet,
+    useDeskDollarsFaucet: (...args: unknown[]) =>
+      sdk.useDeskDollarsFaucet(...args),
   };
 });
 
-import { DeskDollarsFaucet } from "./desk-dollars-faucet";
+import {
+  DeskDollarsFaucet,
+  DeskDollarsFaucetProvider,
+} from "./desk-dollars-faucet";
 
-const WALLET = "0x0000000000000000000000000000000000000003" as const;
+function renderFaucet() {
+  return render(
+    <DeskDollarsFaucetProvider>
+      <DeskDollarsFaucet />
+    </DeskDollarsFaucetProvider>
+  );
+}
 
 beforeEach(() => {
   sdk.faucet = sdk.readyFaucet();
+  sdk.useDeskDollarsFaucet.mockReset().mockImplementation(() => sdk.faucet);
 });
 afterEach(() => cleanup());
 
@@ -84,7 +111,7 @@ describe("getDeskDollarsFaucetChrome", () => {
 
 describe("DeskDollarsFaucet", () => {
   it("renders nothing when the wallet already has a balance", () => {
-    render(<DeskDollarsFaucet walletAddress={WALLET} />);
+    renderFaucet();
     expect(screen.queryByTestId("desk-dollars-faucet")).toBeNull();
     expect(screen.queryByText("Desk Dollars (USDC)")).toBeNull();
     expect(screen.queryByText(/Balance:/)).toBeNull();
@@ -98,7 +125,7 @@ describe("DeskDollarsFaucet", () => {
       eligible: true,
       canClaim: true,
     };
-    render(<DeskDollarsFaucet walletAddress={WALLET} />);
+    renderFaucet();
     expect(
       screen.getByText("Eligible to claim 100 USDC from the faucet.")
     ).not.toBeNull();
@@ -115,7 +142,7 @@ describe("DeskDollarsFaucet", () => {
       canClaim: false,
       eligible: false,
     };
-    render(<DeskDollarsFaucet walletAddress={WALLET} />);
+    renderFaucet();
     expect(screen.queryByTestId("desk-dollars-faucet")).toBeNull();
     expect(screen.queryByRole("button", { name: /Claim/ })).toBeNull();
   });
@@ -128,7 +155,7 @@ describe("DeskDollarsFaucet", () => {
       eligible: false,
       canClaim: false,
     };
-    render(<DeskDollarsFaucet walletAddress={WALLET} />);
+    renderFaucet();
     expect(
       screen.getByText(/pending until its Base Sepolia receipt succeeds/)
     ).not.toBeNull();
@@ -146,7 +173,7 @@ describe("DeskDollarsFaucet", () => {
       eligible: false,
       canClaim: false,
     };
-    render(<DeskDollarsFaucet walletAddress={WALLET} />);
+    renderFaucet();
     expect(
       screen.getByText("Next 100 USDC faucet claim in 60 minutes.")
     ).not.toBeNull();
@@ -159,8 +186,49 @@ describe("DeskDollarsFaucet", () => {
       eligible: true,
       canClaim: true,
     };
-    render(<DeskDollarsFaucet walletAddress={WALLET} />);
+    renderFaucet();
     fireEvent.click(screen.getByRole("button", { name: "Claim 100 USDC" }));
     expect(sdk.faucet.claim).toHaveBeenCalledOnce();
+  });
+
+  it("shares one claim handler across two chrome mounts", () => {
+    sdk.faucet = {
+      ...sdk.faucet,
+      balance: 0n,
+      eligible: true,
+      canClaim: true,
+    };
+    render(
+      <DeskDollarsFaucetProvider>
+        <DeskDollarsFaucet />
+        <DeskDollarsFaucet />
+      </DeskDollarsFaucetProvider>
+    );
+    const buttons = screen.getAllByRole("button", { name: "Claim 100 USDC" });
+    expect(buttons).toHaveLength(2);
+    fireEvent.click(buttons[0]!);
+    expect(sdk.faucet.claim).toHaveBeenCalledOnce();
+  });
+});
+
+describe("DeskDollarsFaucetProvider", () => {
+  it("calls the faucet hook once for multiple chrome mounts", () => {
+    sdk.faucet = {
+      ...sdk.faucet,
+      balance: 0n,
+      eligible: true,
+      canClaim: true,
+    };
+    render(
+      <DeskDollarsFaucetProvider>
+        <DeskDollarsFaucet />
+        <DeskDollarsFaucet />
+      </DeskDollarsFaucetProvider>
+    );
+    expect(sdk.useDeskDollarsFaucet).toHaveBeenCalledTimes(1);
+    expect(sdk.useDeskDollarsFaucet).toHaveBeenCalledWith(sdk.wallet);
+    expect(
+      screen.getAllByRole("button", { name: "Claim 100 USDC" })
+    ).toHaveLength(2);
   });
 });

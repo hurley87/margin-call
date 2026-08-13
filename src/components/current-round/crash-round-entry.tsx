@@ -182,7 +182,7 @@ export function CrashRoundEntry({
         </div>
       </dl>
 
-      <DeskDollarsFaucet walletAddress={entry.walletAddress} />
+      <DeskDollarsFaucet />
 
       {statusMessage ? (
         <p

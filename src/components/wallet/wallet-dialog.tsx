@@ -223,7 +223,7 @@ export function WalletDialog({
             )}
           </p>
 
-          <DeskDollarsFaucet walletAddress={walletAddress} />
+          <DeskDollarsFaucet />
 
           <form
             className="mt-6 border-t border-[var(--t-border)] pt-5"
