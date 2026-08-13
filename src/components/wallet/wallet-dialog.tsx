@@ -50,6 +50,19 @@ export function WalletDialog({
     formatDeskDollarsBalanceLabel(balance, decimals) ?? "— tUSD";
   const isBusy =
     transfer.status === "submitting" || transfer.status === "pending";
+  const isRetry = transfer.canRetry;
+  const canSubmit =
+    transfer.status !== "unavailable" &&
+    !isBusy &&
+    (isRetry ||
+      (transfer.canTransfer && !!recipient.trim() && !!amount.trim()));
+  const submitLabel = isBusy
+    ? transfer.status === "submitting"
+      ? "Submitting…"
+      : "Pending…"
+    : isRetry
+      ? "Retry"
+      : "Send tUSD";
 
   const handleCopy = useCallback(async () => {
     try {
@@ -68,13 +81,13 @@ export function WalletDialog({
   const handleSubmit = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (transfer.canRetry) {
+      if (isRetry) {
         void transfer.retry();
         return;
       }
       void transfer.transfer({ recipient, amount, balance });
     },
-    [amount, balance, recipient, transfer]
+    [amount, balance, isRetry, recipient, transfer]
   );
 
   return (
@@ -233,26 +246,11 @@ export function WalletDialog({
 
             <GameButton
               className="mt-4 w-full"
-              disabled={
-                transfer.status === "unavailable" ||
-                (isBusy
-                  ? true
-                  : transfer.canRetry
-                    ? false
-                    : !transfer.canTransfer ||
-                      !recipient.trim() ||
-                      !amount.trim())
-              }
+              disabled={!canSubmit}
               size="sm"
               type="submit"
             >
-              {transfer.canRetry
-                ? "Retry"
-                : transfer.status === "submitting"
-                  ? "Submitting…"
-                  : transfer.status === "pending"
-                    ? "Pending…"
-                    : "Send tUSD"}
+              {submitLabel}
             </GameButton>
           </form>
         </Dialog.Popup>
