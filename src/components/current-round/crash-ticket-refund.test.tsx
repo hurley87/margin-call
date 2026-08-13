@@ -41,6 +41,7 @@ const sdk = vi.hoisted(() => {
       canRefund: true,
       canRetry: false,
       retryAction: null,
+      busy: false,
       expireRound: vi.fn(),
       refund: vi.fn(),
       retry: vi.fn(),
@@ -86,6 +87,19 @@ describe("CrashTicketRefund", () => {
     render(<CrashTicketRefund />);
     fireEvent.click(screen.getByRole("button", { name: "Mark round expired" }));
     expect(sdk.refund.expireRound).toHaveBeenCalledOnce();
+  });
+
+  it("disables and relabels refund while a refund stage is in flight", () => {
+    sdk.refund = sdk.makeRefund({
+      status: "refund-pending",
+      busy: true,
+      canRefund: true,
+    });
+    render(<CrashTicketRefund />);
+    const button = screen.getByRole("button", { name: "Refunding…" });
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.click(button);
+    expect(sdk.refund.refund).not.toHaveBeenCalled();
   });
 
   it("hides for non-expiry tickets owned by settlement", () => {

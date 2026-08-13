@@ -128,6 +128,29 @@ describe("CrashRoundEntry", () => {
     expect(screen.queryByRole("button", { name: /enter/i })).toBeNull();
   });
 
+  it("relabels the enter CTA while approval or entry is in flight", () => {
+    sdk.entry = sdk.makeEntry({
+      status: "approval-submitting",
+      canEnter: false,
+      needsApproval: true,
+    });
+    const { rerender } = render(<CrashRoundEntry {...sdk.props} />);
+    expect(
+      screen.getByRole("button", { name: "Approval pending…" })
+    ).toHaveProperty("disabled", true);
+
+    sdk.entry = sdk.makeEntry({
+      status: "entry-pending",
+      canEnter: false,
+      needsApproval: false,
+    });
+    rerender(<CrashRoundEntry {...sdk.props} />);
+    expect(screen.getByRole("button", { name: "Entering…" })).toHaveProperty(
+      "disabled",
+      true
+    );
+  });
+
   it("labels receipt-recovery retries honestly", () => {
     sdk.entry = sdk.makeEntry({
       status: "error",

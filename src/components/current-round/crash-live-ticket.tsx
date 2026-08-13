@@ -7,6 +7,14 @@ import {
   type TicketOutcome,
 } from "@/lib/margin-call-crash";
 
+type TicketAction = {
+  show: boolean;
+  label: string;
+  busyLabel: string;
+  accent: boolean;
+  onClick?: () => void;
+};
+
 type CrashLiveTicketProps = {
   ticket: CrashTicket;
   outcome?: TicketOutcome | null;
@@ -21,6 +29,8 @@ type CrashLiveTicketProps = {
   isAlert?: boolean;
   canRetry?: boolean;
   retryLabel?: string;
+  /** True while a sponsored settlement/refund stage is in flight. */
+  busy?: boolean;
   onVerify?: () => void;
   onClaim?: () => void;
   onSettle?: () => void;
@@ -90,6 +100,7 @@ export function CrashLiveTicket({
   isAlert = false,
   canRetry = false,
   retryLabel = "Retry",
+  busy = false,
   onVerify,
   onClaim,
   onSettle,
@@ -98,6 +109,50 @@ export function CrashLiveTicket({
   onRetry,
 }: CrashLiveTicketProps) {
   const stamp = outcome ? outcomeStamps[outcome] : undefined;
+  const actions: TicketAction[] = [
+    {
+      show: canVerify,
+      label: "Verify and settle",
+      busyLabel: "Verifying…",
+      accent: true,
+      onClick: onVerify,
+    },
+    {
+      show: canClaim,
+      label: "Claim payout",
+      busyLabel: "Claiming…",
+      accent: true,
+      onClick: onClaim,
+    },
+    {
+      show: canSettle,
+      label: "Settle loss",
+      busyLabel: "Settling…",
+      accent: false,
+      onClick: onSettle,
+    },
+    {
+      show: canExpire,
+      label: "Mark round expired",
+      busyLabel: "Expiring…",
+      accent: false,
+      onClick: onExpire,
+    },
+    {
+      show: canRefund,
+      label: "Refund margin",
+      busyLabel: "Refunding…",
+      accent: true,
+      onClick: onRefund,
+    },
+    {
+      show: canRetry,
+      label: retryLabel,
+      busyLabel: retryLabel,
+      accent: false,
+      onClick: onRetry,
+    },
+  ];
 
   return (
     <div
@@ -173,60 +228,23 @@ export function CrashLiveTicket({
       </dl>
 
       <div className="mt-4 flex flex-wrap gap-3">
-        {canVerify ? (
-          <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
-            onClick={onVerify}
-            type="button"
-          >
-            Verify and settle
-          </button>
-        ) : null}
-        {canClaim ? (
-          <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
-            onClick={onClaim}
-            type="button"
-          >
-            Claim payout
-          </button>
-        ) : null}
-        {canSettle ? (
-          <button
-            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
-            onClick={onSettle}
-            type="button"
-          >
-            Settle loss
-          </button>
-        ) : null}
-        {canExpire ? (
-          <button
-            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
-            onClick={onExpire}
-            type="button"
-          >
-            Mark round expired
-          </button>
-        ) : null}
-        {canRefund ? (
-          <button
-            className="rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
-            onClick={onRefund}
-            type="button"
-          >
-            Refund margin
-          </button>
-        ) : null}
-        {canRetry ? (
-          <button
-            className="rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
-            onClick={onRetry}
-            type="button"
-          >
-            {retryLabel}
-          </button>
-        ) : null}
+        {actions
+          .filter((action) => action.show)
+          .map((action) => (
+            <button
+              className={
+                action.accent
+                  ? "rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+                  : "rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
+              }
+              disabled={busy}
+              key={action.label}
+              onClick={action.onClick}
+              type="button"
+            >
+              {busy ? action.busyLabel : action.label}
+            </button>
+          ))}
       </div>
 
       {statusMessage ? (

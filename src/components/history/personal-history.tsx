@@ -124,30 +124,35 @@ function PersonalHistoryRow({
     {
       show: item.canVerify,
       label: "Verify and settle",
+      busyLabel: "Verifying…",
       accent: true,
       run: () => actions.verifyAndSettle(item.ticket, item.round),
     },
     {
       show: item.canClaim,
       label: "Claim payout",
+      busyLabel: "Claiming…",
       accent: true,
       run: () => actions.claim(item.ticket),
     },
     {
       show: item.canSettle,
       label: "Settle loss",
+      busyLabel: "Settling…",
       accent: false,
       run: () => actions.settleLoss(item.ticket),
     },
     {
       show: item.canExpire,
       label: "Mark round expired",
+      busyLabel: "Expiring…",
       accent: false,
       run: () => actions.expireRound(item.ticket, item.round),
     },
     {
       show: item.canRefund,
       label: "Refund margin",
+      busyLabel: "Refunding…",
       accent: true,
       run: () => actions.refund(item.ticket),
     },
@@ -230,15 +235,15 @@ function PersonalHistoryRow({
             <button
               className={
                 action.accent
-                  ? "rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)]"
-                  : "rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold"
+                  ? "rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:cursor-not-allowed disabled:opacity-50"
+                  : "rounded-sm border border-[var(--t-muted)] px-4 py-2 text-sm font-bold disabled:cursor-not-allowed disabled:opacity-50"
               }
               disabled={actions.busy}
               key={action.label}
               onClick={() => void action.run()}
               type="button"
             >
-              {action.label}
+              {isActive && actions.busy ? action.busyLabel : action.label}
             </button>
           ))}
         {isActive && actions.status === "error" ? (

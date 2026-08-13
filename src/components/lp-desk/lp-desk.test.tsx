@@ -256,10 +256,27 @@ describe("LpDesk", () => {
     expect(screen.getByText(/cannot exceed/)).not.toBeNull();
     fireEvent.change(input, { target: { value: "12.345678" } });
     fireEvent.submit(input.closest("form")!);
+    expect(sdk.vault.deposit).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm deposit USDC" })
+    );
     expect(sdk.vault.deposit).toHaveBeenCalledWith(12345678n);
     expect(
       screen.getByText(/never requests unlimited approval/)
     ).not.toBeNull();
+  });
+
+  it("cancels a deposit confirm and preserves the entered amount", () => {
+    render(<LpDesk />);
+    const input = screen.getByLabelText("LP deposit amount (USDC)");
+    fireEvent.change(input, { target: { value: "10" } });
+    fireEvent.submit(input.closest("form")!);
+    expect(sdk.vault.deposit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(
+      (screen.getByLabelText("LP deposit amount (USDC)") as HTMLInputElement)
+        .value
+    ).toBe("10");
   });
 
   it("never claims the balance is still loading in permanent unavailable or error states", () => {
@@ -306,6 +323,10 @@ describe("LpDesk", () => {
     const input = screen.getByLabelText("LP withdrawal amount (USDC)");
     fireEvent.change(input, { target: { value: "12.345678" } });
     fireEvent.submit(input.closest("form")!);
+    expect(sdk.vault.withdraw).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm withdraw USDC" })
+    );
     expect(sdk.vault.withdraw).toHaveBeenCalledWith(12345678n);
   });
 
@@ -407,6 +428,10 @@ describe("LpDesk", () => {
     ).not.toBeNull();
     fireEvent.change(input, { target: { value: "10" } });
     fireEvent.submit(input.closest("form")!);
+    expect(sdk.vault.withdraw).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm withdraw USDC" })
+    );
     expect(sdk.vault.withdraw).toHaveBeenCalledWith(10000000n);
     sdk.vault = {
       ...sdk.vault,

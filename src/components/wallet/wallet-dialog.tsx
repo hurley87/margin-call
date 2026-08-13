@@ -6,11 +6,17 @@ import type { Address } from "viem";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
 import { FlashValue } from "@/components/ui/flash-value";
 import { GameButton } from "@/components/ui/game-button";
-import { useDeskDollarsTransfer } from "@/hooks/use-desk-dollars-transfer";
+import { TransactionConfirm } from "@/components/ui/transaction-confirm";
+import {
+  useDeskDollarsTransfer,
+  validateDeskDollarsTransfer,
+} from "@/hooks/use-desk-dollars-transfer";
 import type { DeskDollarsTransferStatus } from "@/hooks/use-desk-dollars-transfer";
+import { usePendingConfirm } from "@/hooks/use-pending-confirm";
 import {
   DISPLAY_ASSET_SYMBOL,
   formatDeskDollars,
+  formatDeskDollarsAmount,
   formatDeskDollarsAmountLabel,
   formatDeskDollarsBalanceLabel,
   TUSD_DECIMALS,
@@ -37,6 +43,11 @@ type TransferStatusMessage = {
   status: DeskDollarsTransferStatus;
   error: string | null;
   lastHash: `0x${string}` | null;
+};
+
+type PendingTransfer = {
+  to: Address;
+  amountWei: bigint;
 };
 
 function TransferStatusCopy({
@@ -105,6 +116,8 @@ export function WalletDialog({
   const transfer = useDeskDollarsTransfer(walletAddress);
   const [recipient, setRecipient] = useState("");
   const [amount, setAmount] = useState("");
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const pendingTransfer = usePendingConfirm<PendingTransfer>();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">(
     "idle"
   );
@@ -149,10 +162,42 @@ export function WalletDialog({
         void transfer.retry();
         return;
       }
-      void transfer.transfer({ recipient, amount, balance });
+      const validation = validateDeskDollarsTransfer({
+        recipient,
+        amount,
+        balance,
+        from: walletAddress,
+      });
+      if (!validation.ok) {
+        setValidationError(validation.error);
+        pendingTransfer.cancel();
+        return;
+      }
+      setValidationError(null);
+      pendingTransfer.arm({
+        to: validation.to,
+        amountWei: validation.amount,
+      });
     },
-    [amount, balance, isRetry, recipient, transfer]
+    [
+      amount,
+      balance,
+      isRetry,
+      pendingTransfer,
+      recipient,
+      transfer,
+      walletAddress,
+    ]
   );
+
+  const handleConfirmTransfer = useCallback(() => {
+    pendingTransfer.confirm((armed) =>
+      transfer.transferValidated({
+        to: armed.to,
+        amount: armed.amountWei,
+      })
+    );
+  }, [pendingTransfer, transfer]);
 
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
@@ -225,72 +270,111 @@ export function WalletDialog({
 
           <DeskDollarsFaucet />
 
-          <form
-            className="mt-6 border-t border-[var(--t-border)] pt-5"
-            onSubmit={handleSubmit}
-          >
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-muted)]">
-              Transfer Desk Dollars
-            </p>
-
-            <label
-              className="mt-4 block text-sm font-bold"
-              htmlFor="wallet-transfer-recipient"
-            >
-              Recipient
-            </label>
-            <input
-              autoComplete="off"
-              className="mt-2 w-full border border-[var(--t-muted)] bg-transparent px-3 py-2 text-[var(--t-text)]"
-              disabled={isBusy}
-              id="wallet-transfer-recipient"
-              onChange={(event) => setRecipient(event.target.value)}
-              placeholder="0x…"
-              spellCheck={false}
-              value={recipient}
-            />
-
-            <div className="mt-4 flex items-end justify-between gap-3">
-              <label
-                className="block text-sm font-bold"
-                htmlFor="wallet-transfer-amount"
-              >
-                Amount ({DISPLAY_ASSET_SYMBOL})
-              </label>
-              <button
-                className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] disabled:opacity-50"
-                disabled={isBusy || balance === null || balance <= 0n}
-                onClick={handleMax}
-                type="button"
-              >
-                Max
-              </button>
+          {pendingTransfer.pending ? (
+            <div className="mt-6 border-t border-[var(--t-border)] pt-5">
+              <TransactionConfirm
+                busy={isBusy}
+                confirmLabel={`Confirm send ${DISPLAY_ASSET_SYMBOL}`}
+                note="Desk Dollars have no real value. Double-check the recipient before sending."
+                onCancel={pendingTransfer.cancel}
+                onConfirm={handleConfirmTransfer}
+                rows={[
+                  { label: "Recipient", value: pendingTransfer.pending.to },
+                  {
+                    label: "Amount",
+                    value: formatDeskDollarsAmount(
+                      pendingTransfer.pending.amountWei
+                    ),
+                  },
+                ]}
+                title="Confirm transfer"
+              />
+              <TransferStatusCopy
+                error={transfer.error}
+                lastHash={transfer.lastHash}
+                status={transfer.status}
+              />
             </div>
-            <input
-              className="mt-2 w-full border border-[var(--t-muted)] bg-transparent px-3 py-2 text-[var(--t-text)]"
-              disabled={isBusy}
-              id="wallet-transfer-amount"
-              inputMode="decimal"
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="0.000000"
-              value={amount}
-            />
-
-            <TransferStatusCopy
-              error={transfer.error}
-              lastHash={transfer.lastHash}
-              status={transfer.status}
-            />
-
-            <GameButton
-              className="mt-4 w-full"
-              disabled={!canSubmit}
-              size="sm"
-              type="submit"
+          ) : (
+            <form
+              className="mt-6 border-t border-[var(--t-border)] pt-5"
+              onSubmit={handleSubmit}
             >
-              {submitLabel}
-            </GameButton>
-          </form>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-muted)]">
+                Transfer Desk Dollars
+              </p>
+
+              <label
+                className="mt-4 block text-sm font-bold"
+                htmlFor="wallet-transfer-recipient"
+              >
+                Recipient
+              </label>
+              <input
+                autoComplete="off"
+                className="mt-2 w-full border border-[var(--t-muted)] bg-transparent px-3 py-2 text-[var(--t-text)]"
+                disabled={isBusy}
+                id="wallet-transfer-recipient"
+                onChange={(event) => {
+                  setRecipient(event.target.value);
+                  setValidationError(null);
+                }}
+                placeholder="0x…"
+                spellCheck={false}
+                value={recipient}
+              />
+
+              <div className="mt-4 flex items-end justify-between gap-3">
+                <label
+                  className="block text-sm font-bold"
+                  htmlFor="wallet-transfer-amount"
+                >
+                  Amount ({DISPLAY_ASSET_SYMBOL})
+                </label>
+                <button
+                  className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] disabled:opacity-50"
+                  disabled={isBusy || balance === null || balance <= 0n}
+                  onClick={handleMax}
+                  type="button"
+                >
+                  Max
+                </button>
+              </div>
+              <input
+                className="mt-2 w-full border border-[var(--t-muted)] bg-transparent px-3 py-2 text-[var(--t-text)]"
+                disabled={isBusy}
+                id="wallet-transfer-amount"
+                inputMode="decimal"
+                onChange={(event) => {
+                  setAmount(event.target.value);
+                  setValidationError(null);
+                }}
+                placeholder="0.000000"
+                value={amount}
+              />
+
+              {validationError ? (
+                <p role="alert" className="mt-3 text-sm">
+                  {validationError}
+                </p>
+              ) : null}
+
+              <TransferStatusCopy
+                error={transfer.error}
+                lastHash={transfer.lastHash}
+                status={transfer.status}
+              />
+
+              <GameButton
+                className="mt-4 w-full"
+                disabled={!canSubmit}
+                size="sm"
+                type="submit"
+              >
+                {submitLabel}
+              </GameButton>
+            </form>
+          )}
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>

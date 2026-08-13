@@ -47,6 +47,7 @@ export function CrashTicketRefund() {
       ? refund.error
       : (statusCopy[refund.status] ?? null);
   const isAlert = refund.status === "error";
+  const busy = refund.busy;
 
   return (
     <section aria-labelledby="ticket-refund-heading" className="mt-8 text-left">
@@ -58,6 +59,7 @@ export function CrashTicketRefund() {
       </h2>
       <div className="mt-4">
         <CrashLiveTicket
+          busy={busy}
           canExpire={refund.canExpire}
           canRefund={refund.canRefund}
           canRetry={refund.canRetry}

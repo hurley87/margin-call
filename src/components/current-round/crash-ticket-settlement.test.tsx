@@ -43,6 +43,7 @@ const sdk = vi.hoisted(() => {
       canSettle: false,
       canRetry: false,
       retryAction: null,
+      busy: false,
       verifyAndSettle: vi.fn(),
       claim: vi.fn(),
       settleLoss: vi.fn(),
@@ -151,6 +152,19 @@ describe("CrashTicketSettlement", () => {
   it("does not request desk-phone for a winning ticket", () => {
     render(<CrashTicketSettlement />);
     expect(voice.trigger).not.toHaveBeenCalled();
+  });
+
+  it("disables and relabels claim while a claim stage is in flight", () => {
+    sdk.settlement = sdk.makeSettlement({
+      status: "claim-submitting",
+      busy: true,
+      canClaim: true,
+    });
+    render(<CrashTicketSettlement />);
+    const button = screen.getByRole("button", { name: "Claiming…" });
+    expect(button).toHaveProperty("disabled", true);
+    fireEvent.click(button);
+    expect(sdk.settlement.claim).not.toHaveBeenCalled();
   });
 
   it("hides when the wallet has no recoverable ticket", () => {

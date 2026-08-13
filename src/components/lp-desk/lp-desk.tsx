@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
+import { TransactionConfirm } from "@/components/ui/transaction-confirm";
 import {
   useBankrollVaultDeposit,
   type BankrollVaultDepositStatus,
@@ -13,10 +14,16 @@ import {
   type LpFreezeActionStatus,
   type LpFreezeRetryAction,
 } from "@/hooks/use-lp-freeze-actions";
-import type { BlockingRoundDetail, TierCapacity } from "@/lib/bankroll-vault";
+import { usePendingConfirm } from "@/hooks/use-pending-confirm";
+import {
+  getBankrollVaultConfig,
+  type BlockingRoundDetail,
+  type TierCapacity,
+} from "@/lib/bankroll-vault";
 import {
   DISPLAY_ASSET_SYMBOL,
   formatDeskDollars,
+  formatDeskDollarsAmount,
   formatDeskDollarsAmountLabel,
   formatDeskDollarsSignedAmount,
   parseTUsdInput,
@@ -264,6 +271,11 @@ function TierCapacityList({ tiers }: { tiers: TierCapacity[] | undefined }) {
   );
 }
 
+type LpPendingAction = {
+  kind: "deposit" | "withdrawal";
+  amount: bigint;
+};
+
 export function LpDesk() {
   const { user } = usePrivy();
   const walletAddress = getEvmWalletAddress(user);
@@ -271,8 +283,10 @@ export function LpDesk() {
   // Freeze resolutions notify wallet-balance subscribers, which re-read the
   // vault state above — no explicit refresh wiring is needed.
   const freeze = useLpFreezeActions();
+  const vaultConfig = getBankrollVaultConfig();
   const [amount, setAmount] = useState("");
   const [withdrawalAmount, setWithdrawalAmount] = useState("");
+  const pendingAction = usePendingConfirm<LpPendingAction>();
   const parsedAmount = parseTUsdInput(amount);
   const validationError = validateAmount(
     amount,
@@ -299,12 +313,34 @@ export function LpDesk() {
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canSubmit || parsedAmount === null) return;
-    void vault.deposit(parsedAmount);
+    pendingAction.arm({ kind: "deposit", amount: parsedAmount });
   };
   const submitWithdrawal = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!canWithdraw || parsedWithdrawalAmount === null) return;
-    void vault.withdraw(parsedWithdrawalAmount);
+    pendingAction.arm({ kind: "withdrawal", amount: parsedWithdrawalAmount });
+  };
+
+  const depositBusy =
+    vault.status.startsWith("approval-") || vault.status.startsWith("deposit-");
+  const withdrawalBusy =
+    vault.status === "withdrawal-submitting" ||
+    vault.status === "withdrawal-pending";
+  const pendingDeposit =
+    pendingAction.pending?.kind === "deposit"
+      ? pendingAction.pending.amount
+      : null;
+  const pendingWithdrawal =
+    pendingAction.pending?.kind === "withdrawal"
+      ? pendingAction.pending.amount
+      : null;
+
+  const confirmPending = () => {
+    pendingAction.confirm((armed) =>
+      armed.kind === "deposit"
+        ? vault.deposit(armed.amount)
+        : vault.withdraw(armed.amount)
+    );
   };
 
   const withdrawalRecovery =
@@ -433,99 +469,136 @@ export function LpDesk() {
         proportional, authoritative maxWithdraw amount and may be lower.
       </p>
 
-      <form
-        className="mt-6 border-t border-[var(--t-muted)] pt-5"
-        onSubmit={submit}
-      >
-        <label className="block text-sm font-bold" htmlFor="lp-deposit-amount">
-          LP deposit amount ({DISPLAY_ASSET_SYMBOL})
-        </label>
-        <input
-          aria-describedby="lp-deposit-help lp-deposit-validation"
-          className="mt-2 w-full border border-[var(--t-muted)] bg-transparent px-3 py-2 text-[var(--t-text)]"
-          disabled={isFrozen}
-          id="lp-deposit-amount"
-          inputMode="decimal"
-          onChange={(event) => setAmount(event.target.value)}
-          placeholder="0.000000"
-          value={amount}
-        />
-        <p id="lp-deposit-help" className="mt-2 text-xs text-[var(--t-muted)]">
-          {isFrozen
-            ? "Deposits are blocked while share operations are frozen."
-            : `An exact ${DISPLAY_ASSET_SYMBOL} approval for this deposit may occur first. The LP Desk never requests unlimited approval.`}
-        </p>
-        {validationError ? (
-          <p id="lp-deposit-validation" role="alert" className="mt-2 text-sm">
-            {validationError}
-          </p>
-        ) : null}
-        <button
-          className="mt-4 bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:opacity-50"
-          disabled={!canSubmit}
-          type="submit"
+      {pendingDeposit !== null ? (
+        <div className="mt-6 border-t border-[var(--t-muted)] pt-5">
+          <TransactionConfirm
+            busy={depositBusy}
+            confirmLabel={`Confirm deposit ${DISPLAY_ASSET_SYMBOL}`}
+            note={`An exact ${DISPLAY_ASSET_SYMBOL} approval for this deposit may be submitted first. The LP Desk never requests unlimited approval.`}
+            onCancel={pendingAction.cancel}
+            onConfirm={confirmPending}
+            rows={[
+              {
+                label: "Amount",
+                value: formatDeskDollarsAmount(pendingDeposit),
+              },
+              ...(vaultConfig
+                ? [{ label: "Vault", value: vaultConfig.vaultAddress }]
+                : []),
+            ]}
+            title="Confirm LP deposit"
+          />
+        </div>
+      ) : (
+        <form
+          className="mt-6 border-t border-[var(--t-muted)] pt-5"
+          onSubmit={submit}
         >
-          {vault.status.startsWith("approval-")
-            ? "Approval pending…"
-            : vault.status.startsWith("deposit-")
-              ? "LP deposit pending…"
-              : isFrozen
-                ? "Deposits frozen"
-                : `Deposit ${DISPLAY_ASSET_SYMBOL}`}
-        </button>
-      </form>
-
-      <form
-        className="mt-6 border-t border-[var(--t-muted)] pt-5"
-        onSubmit={submitWithdrawal}
-      >
-        <label
-          className="block text-sm font-bold"
-          htmlFor="lp-withdrawal-amount"
-        >
-          LP withdrawal amount ({DISPLAY_ASSET_SYMBOL})
-        </label>
-        <input
-          aria-describedby="lp-withdrawal-help lp-withdrawal-validation"
-          className="mt-2 w-full border border-[var(--t-muted)] bg-transparent px-3 py-2 text-[var(--t-text)]"
-          disabled={isFrozen}
-          id="lp-withdrawal-amount"
-          inputMode="decimal"
-          onChange={(event) => setWithdrawalAmount(event.target.value)}
-          placeholder="0.000000"
-          value={withdrawalAmount}
-        />
-        <p
-          id="lp-withdrawal-help"
-          className="mt-2 text-xs text-[var(--t-muted)]"
-        >
-          {isFrozen
-            ? "Withdrawals are blocked while share operations are frozen."
-            : `Withdraw ${DISPLAY_ASSET_SYMBOL}, not shares, up to your authoritative immediately withdrawable limit. This limit is separate from global free liquidity.`}
-        </p>
-        {withdrawalValidationError ? (
-          <p
-            id="lp-withdrawal-validation"
-            role="alert"
-            className="mt-2 text-sm"
+          <label
+            className="block text-sm font-bold"
+            htmlFor="lp-deposit-amount"
           >
-            {withdrawalValidationError}
+            LP deposit amount ({DISPLAY_ASSET_SYMBOL})
+          </label>
+          <input
+            aria-describedby="lp-deposit-help lp-deposit-validation"
+            className="mt-2 w-full border border-[var(--t-muted)] bg-transparent px-3 py-2 text-[var(--t-text)]"
+            disabled={isFrozen}
+            id="lp-deposit-amount"
+            inputMode="decimal"
+            onChange={(event) => setAmount(event.target.value)}
+            placeholder="0.000000"
+            value={amount}
+          />
+          <p
+            id="lp-deposit-help"
+            className="mt-2 text-xs text-[var(--t-muted)]"
+          >
+            {isFrozen
+              ? "Deposits are blocked while share operations are frozen."
+              : `An exact ${DISPLAY_ASSET_SYMBOL} approval for this deposit may occur first. The LP Desk never requests unlimited approval.`}
           </p>
-        ) : null}
-        <button
-          className="mt-4 bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:opacity-50"
-          disabled={!canWithdraw}
-          type="submit"
+          {validationError ? (
+            <p id="lp-deposit-validation" role="alert" className="mt-2 text-sm">
+              {validationError}
+            </p>
+          ) : null}
+          <button
+            className="mt-4 bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:opacity-50"
+            disabled={!canSubmit}
+            type="submit"
+          >
+            {isFrozen ? "Deposits frozen" : `Deposit ${DISPLAY_ASSET_SYMBOL}`}
+          </button>
+        </form>
+      )}
+
+      {pendingWithdrawal !== null ? (
+        <div className="mt-6 border-t border-[var(--t-muted)] pt-5">
+          <TransactionConfirm
+            busy={withdrawalBusy}
+            confirmLabel={`Confirm withdraw ${DISPLAY_ASSET_SYMBOL}`}
+            note={`Withdraw ${DISPLAY_ASSET_SYMBOL}, not shares, up to your authoritative immediately withdrawable limit.`}
+            onCancel={pendingAction.cancel}
+            onConfirm={confirmPending}
+            rows={[
+              {
+                label: "Amount",
+                value: formatDeskDollarsAmount(pendingWithdrawal),
+              },
+            ]}
+            title="Confirm LP withdrawal"
+          />
+        </div>
+      ) : (
+        <form
+          className="mt-6 border-t border-[var(--t-muted)] pt-5"
+          onSubmit={submitWithdrawal}
         >
-          {vault.status === "withdrawal-submitting"
-            ? "Withdrawal submitting…"
-            : vault.status === "withdrawal-pending"
-              ? "Withdrawal pending…"
-              : isFrozen
-                ? "Withdrawals frozen"
-                : `Withdraw ${DISPLAY_ASSET_SYMBOL}`}
-        </button>
-      </form>
+          <label
+            className="block text-sm font-bold"
+            htmlFor="lp-withdrawal-amount"
+          >
+            LP withdrawal amount ({DISPLAY_ASSET_SYMBOL})
+          </label>
+          <input
+            aria-describedby="lp-withdrawal-help lp-withdrawal-validation"
+            className="mt-2 w-full border border-[var(--t-muted)] bg-transparent px-3 py-2 text-[var(--t-text)]"
+            disabled={isFrozen}
+            id="lp-withdrawal-amount"
+            inputMode="decimal"
+            onChange={(event) => setWithdrawalAmount(event.target.value)}
+            placeholder="0.000000"
+            value={withdrawalAmount}
+          />
+          <p
+            id="lp-withdrawal-help"
+            className="mt-2 text-xs text-[var(--t-muted)]"
+          >
+            {isFrozen
+              ? "Withdrawals are blocked while share operations are frozen."
+              : `Withdraw ${DISPLAY_ASSET_SYMBOL}, not shares, up to your authoritative immediately withdrawable limit. This limit is separate from global free liquidity.`}
+          </p>
+          {withdrawalValidationError ? (
+            <p
+              id="lp-withdrawal-validation"
+              role="alert"
+              className="mt-2 text-sm"
+            >
+              {withdrawalValidationError}
+            </p>
+          ) : null}
+          <button
+            className="mt-4 bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:opacity-50"
+            disabled={!canWithdraw}
+            type="submit"
+          >
+            {isFrozen
+              ? "Withdrawals frozen"
+              : `Withdraw ${DISPLAY_ASSET_SYMBOL}`}
+          </button>
+        </form>
+      )}
 
       {statusMessage ? (
         <p

@@ -195,6 +195,19 @@ export function useDeskDollarsTransfer(walletAddress: Address | null) {
     [submitTransfer, tokenAddress, walletAddress]
   );
 
+  const transferValidated = useCallback(
+    async (input: { to: Address; amount: bigint }): Promise<boolean> => {
+      if (!walletAddress) return false;
+      if (!tokenAddress) {
+        setStatus("unavailable");
+        setError(tokenUnavailable);
+        return false;
+      }
+      return submitTransfer(input.to, input.amount);
+    },
+    [submitTransfer, tokenAddress, walletAddress]
+  );
+
   const retry = useCallback(async (): Promise<boolean> => {
     if (pendingStage.current) {
       if (inFlight.current) return false;
@@ -238,6 +251,7 @@ export function useDeskDollarsTransfer(walletAddress: Address | null) {
       pendingStage.current === null,
     canRetry: status === "error" && retryKind.current !== null,
     transfer,
+    transferValidated,
     retry,
   };
 }

@@ -32,6 +32,7 @@ const sdk = vi.hoisted(() => {
       canSettle: false,
       canRetry: false,
       retryAction: null,
+      busy: false,
       verifyAndSettle: vi.fn(),
       claim: vi.fn(),
       settleLoss: vi.fn(),
@@ -85,6 +86,27 @@ describe("StageActions", () => {
     expect(screen.queryByTestId("entry-form")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Verify and settle" }));
     expect(sdk.settlement.verifyAndSettle).toHaveBeenCalledOnce();
+  });
+
+  it("disables and relabels verify while settlement is in flight", () => {
+    sdk.settlement = sdk.makeSettlement({
+      status: "reveal-submitting",
+      busy: true,
+      canVerify: true,
+      canClaim: false,
+    });
+    render(
+      <StageActions
+        countdownSeconds={8}
+        hasTicket
+        mode="awaiting-settle"
+        phase="locked"
+        roundId={12n}
+        settlement={sdk.settlement}
+      />
+    );
+    const button = screen.getByRole("button", { name: "Verifying…" });
+    expect(button).toHaveProperty("disabled", true);
   });
 
   it("shows the enter form during open countdown without a ticket", () => {

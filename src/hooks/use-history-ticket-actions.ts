@@ -17,6 +17,7 @@ import {
   runSponsoredStage,
   type StageErrorCopy,
 } from "@/lib/sponsored-call";
+import { isSponsoredActionBusy } from "@/lib/sponsored-action-busy";
 import { notifyWalletBalancesChanged } from "@/lib/wallet-balance-sync";
 import { usePrivySponsoredTransaction } from "./use-privy-sponsored-transaction";
 
@@ -220,10 +221,7 @@ export function useHistoryTicketActions(onSettled?: () => void) {
     status,
     error,
     activeTicketId,
-    busy:
-      status.endsWith("-submitting") ||
-      status.endsWith("-pending") ||
-      status === "attesting",
+    busy: isSponsoredActionBusy(status),
     claim,
     settleLoss,
     expireRound,

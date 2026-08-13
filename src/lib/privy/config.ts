@@ -9,5 +9,7 @@ export const privyProviderConfig = {
     ethereum: {
       createOnLogin: "all-users",
     },
+    // App-owned buttons are the confirmation UI; keep Privy's modal off.
+    showWalletUIs: false,
   },
 } satisfies PrivyClientConfig;

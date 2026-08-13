@@ -12,6 +12,7 @@ import {
   settleLossRequest,
 } from "@/lib/margin-call-crash";
 import { type StageErrorCopy } from "@/lib/sponsored-call";
+import { isSponsoredActionBusy } from "@/lib/sponsored-action-busy";
 import {
   useCrashTicketStages,
   type CrashTicketStageStatus,
@@ -258,6 +259,7 @@ export function useCrashTicketSettlement(options?: {
     canClaim: outcome === "won" && canAct,
     canSettle: outcome === "lost" && canAct,
     canRetry,
+    busy: isSponsoredActionBusy(state.status),
     retryAction,
     transactions,
     verifyAndSettle,
