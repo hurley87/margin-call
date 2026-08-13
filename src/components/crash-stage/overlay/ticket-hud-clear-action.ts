@@ -1,60 +1,34 @@
-import type {
-  CrashRefundRetryAction,
-  useCrashTicketRefund,
-} from "@/hooks/use-crash-ticket-refund";
+import type { useCrashTicketRefund } from "@/hooks/use-crash-ticket-refund";
 import type { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import {
   isExpiryRefundTicket,
   type CrashRoundPhase,
   type TicketOutcome,
 } from "@/lib/margin-call-crash";
-import { settlementRetryLabels } from "@/lib/settlement-status-copy";
+import {
+  primaryTicketResolveAction,
+  type TicketResolveAction,
+} from "./primary-ticket-resolve-action";
 
-export type TicketHudClearAction = {
-  label: string;
-  run: () => void;
+export type TicketHudClearAction = TicketResolveAction;
+
+type SettlementSlice = Parameters<
+  typeof primaryTicketResolveAction
+>[0]["settlement"] & {
+  phase: CrashRoundPhase | null;
+  outcome: TicketOutcome | null;
 };
 
-type SettlementSlice = Pick<
-  ReturnType<typeof useCrashTicketSettlement>,
-  | "canVerify"
-  | "canClaim"
-  | "canSettle"
-  | "canRetry"
-  | "retryAction"
-  | "verifyAndSettle"
-  | "claim"
-  | "settleLoss"
-  | "retry"
-  | "phase"
-  | "outcome"
+type RefundSlice = NonNullable<
+  Parameters<typeof primaryTicketResolveAction>[0]["refund"]
 >;
-
-type RefundSlice = Pick<
-  ReturnType<typeof useCrashTicketRefund>,
-  | "canExpire"
-  | "canRefund"
-  | "canRetry"
-  | "retryAction"
-  | "expireRound"
-  | "refund"
-  | "retry"
->;
-
-const refundRetryLabels: Record<CrashRefundRetryAction, string> = {
-  refresh: "Retry",
-  expire: "Retry mark expired",
-  refund: "Retry refund",
-  "expire-receipt-check": "Retry expiry receipt check",
-  "refund-receipt-check": "Retry refund receipt check",
-};
 
 /**
  * Primary HUD clear action for an unsettled leftover ticket. Null when the
  * chip is the current Open entry (cannot cancel) or no resolve path exists.
  *
- * Prefers dock `can*` flags, then falls back to phase/outcome so the chip
- * stays clickable while a sibling refund/settlement hook is still catching up.
+ * Prefers the shared dock `can*` catalog, then falls back to phase/outcome so
+ * the chip stays clickable while a sibling hook is still catching up.
  */
 export function ticketHudClearAction(input: {
   isLiveOpenEntry: boolean;
@@ -63,36 +37,19 @@ export function ticketHudClearAction(input: {
 }): TicketHudClearAction | null {
   if (input.isLiveOpenEntry) return null;
 
-  const { settlement, refund } = input;
+  const primary = primaryTicketResolveAction({
+    settlement: input.settlement,
+    refund: input.refund,
+  });
+  if (primary) return primary;
 
-  if (settlement.canVerify) {
-    return {
-      label: "Verify and settle",
-      run: () => void settlement.verifyAndSettle(),
-    };
-  }
-  if (settlement.canClaim) {
-    return {
-      label: "Claim payout",
-      run: () => void settlement.claim(),
-    };
-  }
-  if (settlement.canSettle) {
-    return {
-      label: "Settle loss",
-      run: () => void settlement.settleLoss(),
-    };
-  }
-  if (settlement.canRetry) {
-    const label = settlement.retryAction
-      ? settlementRetryLabels[settlement.retryAction]
-      : "Retry";
-    return {
-      label,
-      run: () => void settlement.retry(),
-    };
-  }
+  return phaseOutcomeFallback(input.settlement, input.refund);
+}
 
+function phaseOutcomeFallback(
+  settlement: SettlementSlice,
+  refund: RefundSlice | null
+): TicketHudClearAction | null {
   const refundAction = refundClearAction(
     refund,
     settlement.phase,
@@ -100,8 +57,6 @@ export function ticketHudClearAction(input: {
   );
   if (refundAction) return refundAction;
 
-  // Settlement hook knows the ticket is locked/finalized but canAct is false
-  // (loading/error gap) — still expose the same primary CTA as the dock.
   if (
     settlement.phase === "locked" ||
     settlement.phase === "reveal-requested"
@@ -136,34 +91,10 @@ function refundClearAction(
     return null;
   }
 
-  if (refund.canExpire) {
-    return {
-      label: "Mark round expired",
-      run: () => void refund.expireRound(),
-    };
-  }
-  if (refund.canRefund) {
-    return {
-      label: "Refund margin",
-      run: () => void refund.refund(),
-    };
-  }
-  if (refund.canRetry) {
-    const label = refund.retryAction
-      ? refundRetryLabels[refund.retryAction]
-      : "Retry";
-    return {
-      label,
-      run: () => void refund.retry(),
-    };
-  }
-
   if (!isExpiryRefundTicket(phase, outcome)) {
     return null;
   }
 
-  // Settlement already classified the leftover as expiry/refundable; the Floor
-  // refund hook may still be on "loading" so can* is false — still wire the CTA.
   if (phase === "expired-eligible") {
     return {
       label: "Mark round expired",
