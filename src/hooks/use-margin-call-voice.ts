@@ -17,8 +17,9 @@ type MarginCallVoiceOptions = {
 };
 
 /**
- * Fires a one-shot `requestMarginCall` when the replay hard-stop liquidates
- * the signed-in player and their Desk phone switch is on.
+ * Fires a one-shot `requestMarginCall` when a liquidated ticket is known and
+ * the Desk phone switch is on. Callers pass `isComplete` once the trigger beat
+ * is reached (theater hard-stop, or settlement UI after a personal loss).
  */
 export function useMarginCallVoice(options: MarginCallVoiceOptions) {
   const { ticketId, roundId, walletAddress, isLiquidated, isComplete } =

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { MarginCallVoiceBeat } from "@/components/round-theater/margin-call-voice-beat";
 import {
   useCrashTicketSettlement,
   type CrashSettlementRetryAction,
@@ -82,6 +83,10 @@ export function CrashTicketSettlement() {
       ? settlement.error
       : (statusCopy[settlement.status] ?? null);
   const isAlert = settlement.status === "error";
+  // Settlement is return-safe and does not require watching the theater climb.
+  // Fire the promotional desk-phone call once the personal loss is known.
+  const isLiquidatedLoss =
+    settlement.outcome === "lost" || settlement.outcome === "settled-loss";
 
   return (
     <section
@@ -95,6 +100,14 @@ export function CrashTicketSettlement() {
         Ticket settlement
       </h2>
       <div className="mt-4">
+        {isLiquidatedLoss ? (
+          <MarginCallVoiceBeat
+            isComplete
+            isLiquidated
+            roundId={settlement.ticket.roundId}
+            ticketId={settlement.ticket.id}
+          />
+        ) : null}
         <CrashLiveTicket
           canClaim={settlement.canClaim}
           canRetry={settlement.canRetry}

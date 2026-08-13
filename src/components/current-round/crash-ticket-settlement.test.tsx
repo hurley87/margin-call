@@ -58,11 +58,32 @@ vi.mock("@/hooks/use-crash-ticket-settlement", () => ({
   useCrashTicketSettlement: () => sdk.settlement,
 }));
 
+const voice = vi.hoisted(() => ({
+  beat: vi.fn(
+    (_props: {
+      ticketId: bigint | null;
+      roundId: bigint;
+      isLiquidated: boolean;
+      isComplete: boolean;
+    }) => null
+  ),
+}));
+
+vi.mock("@/components/round-theater/margin-call-voice-beat", () => ({
+  MarginCallVoiceBeat: (props: {
+    ticketId: bigint | null;
+    roundId: bigint;
+    isLiquidated: boolean;
+    isComplete: boolean;
+  }) => voice.beat(props),
+}));
+
 import { CrashTicketSettlement } from "./crash-ticket-settlement";
 
 describe("CrashTicketSettlement", () => {
   beforeEach(() => {
     sdk.settlement = sdk.makeSettlement();
+    voice.beat.mockClear();
   });
 
   afterEach(cleanup);
@@ -103,6 +124,27 @@ describe("CrashTicketSettlement", () => {
     render(<CrashTicketSettlement />);
     fireEvent.click(screen.getByRole("button", { name: "Settle loss" }));
     expect(sdk.settlement.settleLoss).toHaveBeenCalledOnce();
+  });
+
+  it("requests a desk-phone beat for a personal loss without waiting on theater", () => {
+    sdk.settlement = sdk.makeSettlement({
+      outcome: "settled-loss",
+      payout: 0n,
+      canClaim: false,
+      canSettle: false,
+    });
+    render(<CrashTicketSettlement />);
+    expect(voice.beat).toHaveBeenCalledWith({
+      isComplete: true,
+      isLiquidated: true,
+      roundId: 12n,
+      ticketId: 7n,
+    });
+  });
+
+  it("does not request a desk-phone beat for a winning ticket", () => {
+    render(<CrashTicketSettlement />);
+    expect(voice.beat).not.toHaveBeenCalled();
   });
 
   it("hides when the wallet has no recoverable ticket", () => {
