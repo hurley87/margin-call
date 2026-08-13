@@ -12,11 +12,7 @@ import {
 } from "@/hooks/use-round-theater";
 import { useTheaterPlayerTicket } from "@/hooks/use-theater-player-ticket";
 import { useTheaterTierSounds } from "@/hooks/use-theater-tier-sounds";
-import {
-  presentLanding,
-  ticketLanding,
-} from "@/components/round-theater/landing-frame";
-import { RoundResultCard } from "@/components/round-theater/round-result-card";
+import { ticketLanding } from "@/components/round-theater/landing-frame";
 import {
   ENTRY_LEVERAGE_TIERS_BPS,
   type CrashRoundPhase,
@@ -66,6 +62,19 @@ export function CrashStage() {
   const { ticket: playerTicket } = useTheaterPlayerTicket(displayRoundId);
   const { ticket: liveRoundTicket } = useTheaterPlayerTicket(liveRoundId);
   const settlement = useCrashTicketSettlement();
+
+  const previousSettlementStatus = useRef(settlement.status);
+  useEffect(() => {
+    if (
+      !theater.reducedMotion &&
+      settlement.status === "confirmed" &&
+      previousSettlementStatus.current !== "confirmed" &&
+      settlement.outcome === "settled-win"
+    ) {
+      getTheaterAudio().playWinRegister();
+    }
+    previousSettlementStatus.current = settlement.status;
+  }, [settlement.outcome, settlement.status, theater.reducedMotion]);
 
   const replayHero: TheaterReplayHero | null =
     theater.hero.type === "replay" ? theater.hero : null;
@@ -132,16 +141,9 @@ export function CrashStage() {
   );
 
   const activeTicket = unsettledTicket ?? playerTicket ?? settlement.ticket;
-
-  const landingKind = useMemo(() => {
-    if (!replayHero || mode !== "outcome") return null;
-    return ticketLanding(activeTicket, replayHero.crashPointBps).kind;
-  }, [activeTicket, mode, replayHero]);
-
-  const landing = useMemo(() => {
-    if (!replayHero || mode !== "outcome" || landingKind === null) return null;
-    return presentLanding({ kind: landingKind }, replayHero.displayCrashPoint);
-  }, [landingKind, mode, replayHero]);
+  const graphLanding = replayHero
+    ? ticketLanding(activeTicket, replayHero.crashPointBps)
+    : null;
 
   const countdownSeconds = theaterCountdownSeconds(theater.live);
   const urgency = countdownUrgency(mode, countdownSeconds);
@@ -159,9 +161,6 @@ export function CrashStage() {
   const actionRoundId = liveRoundId;
   const showOutcomeGraph =
     (mode === "replay" || mode === "outcome") && replayHero !== null;
-  const graphLanding = replayHero
-    ? ticketLanding(activeTicket, replayHero.crashPointBps)
-    : { kind: "spectator" as const };
 
   const canvasProps: CrashCanvasProps = {
     mode,
@@ -171,12 +170,8 @@ export function CrashStage() {
     locked: showLockedLabel && mode !== "countdown",
     entries,
     playerAddress,
-    crashPointBps: replayHero?.crashPointBps ?? null,
-    replayProgress,
-    playerTierBps: activeTicket?.leverageBps ?? null,
     chipStates,
-    landing: mode === "outcome" ? landing : null,
-    landingKind: mode === "outcome" ? landingKind : null,
+    outcomeKind: mode === "outcome" ? (graphLanding?.kind ?? null) : null,
   };
 
   if (theater.live.kind === "error" || theater.live.kind === "unavailable") {
@@ -234,26 +229,14 @@ export function CrashStage() {
         />
 
         <div className="flex min-h-0 flex-1 flex-col justify-center px-4 py-2 sm:px-6">
-          {showOutcomeGraph && replayHero ? (
-            theater.reducedMotion ? (
-              <div className="mx-auto w-full max-w-xl">
-                <RoundResultCard
-                  crashPointBps={replayHero.crashPointBps}
-                  displayCrashPoint={replayHero.displayCrashPoint}
-                  finalizeTransactionUrl={replayHero.finalizeTransactionUrl}
-                  landing={graphLanding}
-                  playerTierBps={activeTicket?.leverageBps ?? null}
-                  tiers={replayHero.tiers}
-                />
-              </div>
-            ) : (
-              <StageOutcomeGraph
-                crashPointBps={replayHero.crashPointBps}
-                landing={graphLanding}
-                playerTierBps={activeTicket?.leverageBps ?? null}
-                progress={replayProgress}
-              />
-            )
+          {showOutcomeGraph && replayHero && graphLanding ? (
+            <StageOutcomeGraph
+              landing={graphLanding}
+              playerTierBps={activeTicket?.leverageBps ?? null}
+              progress={replayProgress}
+              reducedMotion={theater.reducedMotion}
+              replayHero={replayHero}
+            />
           ) : null}
         </div>
 

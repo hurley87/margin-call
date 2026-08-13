@@ -50,8 +50,6 @@ type CrashRoundEntryProps = {
   roundId: bigint;
   phase: CrashRoundPhase;
   countdownSeconds: number;
-  /** Floor dock: hide the confirmed-ticket card and tighten chrome. */
-  compact?: boolean;
 };
 
 /**
@@ -63,7 +61,6 @@ export function CrashRoundEntry({
   roundId,
   phase,
   countdownSeconds,
-  compact = false,
 }: CrashRoundEntryProps) {
   const entry = useCrashRoundEntry({ roundId });
   const reducedMotion = useReducedMotion();
@@ -83,7 +80,7 @@ export function CrashRoundEntry({
 
   if (phase === "uninitialized" || phase === "prelaunch") {
     return (
-      <EntryShell compact={compact}>
+      <EntryShell>
         <p className="text-sm text-[var(--t-muted)]">
           Waiting for an ETH-holding opener to initialize this epoch. Embedded
           wallets never create rounds, so entry stays closed until a handle is
@@ -94,12 +91,9 @@ export function CrashRoundEntry({
   }
 
   if (entry.ticket) {
-    // Floor HUD already shows the ticket chip; a second card would push
-    // Verify and settle out of the first viewport.
-    if (compact) return null;
     const justEntered = entry.status === "confirmed";
     return (
-      <EntryShell compact={compact}>
+      <EntryShell>
         <div className={justEntered ? "mc-onboard-flash" : undefined}>
           <CrashLiveTicket ticket={entry.ticket} />
         </div>
@@ -113,7 +107,7 @@ export function CrashRoundEntry({
 
   if (!canOfferEntry(phase, countdownSeconds)) {
     return (
-      <EntryShell compact={compact}>
+      <EntryShell>
         <p className="text-sm text-[var(--t-amber-hot)]" role="status">
           Entry cutoff — less than five seconds remain before onchain lock. New
           entries are no longer offered.
@@ -124,7 +118,7 @@ export function CrashRoundEntry({
 
   if (!entry.walletAddress) {
     return (
-      <EntryShell compact={compact}>
+      <EntryShell>
         <p className="text-sm text-[var(--t-muted)]">
           Sign in with phone to enter this round with a sponsored transaction.
         </p>
@@ -134,7 +128,7 @@ export function CrashRoundEntry({
 
   if (entry.status === "unavailable") {
     return (
-      <EntryShell compact={compact}>
+      <EntryShell>
         <p className="text-sm text-[var(--t-red)]" role="alert">
           {entry.error}
         </p>
@@ -151,7 +145,7 @@ export function CrashRoundEntry({
     : "Retry";
 
   return (
-    <EntryShell compact={compact}>
+    <EntryShell>
       <p className="text-sm text-[var(--t-text)]">
         Choose margin and Arcade Leverage. Expected payout is the maximum
         reservation, not a guaranteed return.
@@ -206,7 +200,7 @@ export function CrashRoundEntry({
           className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
           disabled={!entry.canEnter}
           onClick={() => void entry.enter()}
-          size={compact ? "hero" : "lg"}
+          size="hero"
         >
           {entry.needsApproval ? "Approve & enter" : "Enter round"}
         </GameButton>
@@ -277,22 +271,9 @@ export function CrashRoundEntry({
   );
 }
 
-function EntryShell({
-  children,
-  compact,
-}: {
-  children: React.ReactNode;
-  compact: boolean;
-}) {
+function EntryShell({ children }: { children: React.ReactNode }) {
   return (
-    <div
-      aria-labelledby="crash-entry-heading"
-      className={
-        compact
-          ? "text-left"
-          : "mt-4 border-t border-[var(--t-divider)] pt-4 text-left"
-      }
-    >
+    <div aria-labelledby="crash-entry-heading" className="text-left">
       <h3
         id="crash-entry-heading"
         className="font-[family-name:var(--font-plex-sans)] text-lg font-bold uppercase tracking-tight text-[var(--t-accent)]"

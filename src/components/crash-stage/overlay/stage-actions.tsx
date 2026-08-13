@@ -5,11 +5,7 @@ import { CrashRoundEntry } from "@/components/current-round/crash-round-entry";
 import { CrashTicketRefund } from "@/components/current-round/crash-ticket-refund";
 import type { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import { canOfferEntry, type CrashRoundPhase } from "@/lib/margin-call-crash";
-import {
-  deriveStageCtaKind,
-  type CrashStageMode,
-  type StageCtaKind,
-} from "../use-crash-stage-mode";
+import type { CrashStageMode } from "../use-crash-stage-mode";
 import { StageSettleDock } from "./stage-settle-dock";
 
 export type StageActionsProps = {
@@ -21,23 +17,9 @@ export type StageActionsProps = {
   settlement: ReturnType<typeof useCrashTicketSettlement>;
 };
 
-const SETTLE_KINDS = new Set<StageCtaKind>([
-  "verify",
-  "claim",
-  "settle-loss",
-  "retry",
-]);
-
-function isSettleKind(
-  kind: StageCtaKind
-): kind is "verify" | "claim" | "settle-loss" | "retry" {
-  return SETTLE_KINDS.has(kind);
-}
-
 /**
  * Floor action dock in document flow so Enter / Verify stay fully on-screen.
- * Collapses when there is no CTA (including after settle, when the outcome
- * graph owns the pit).
+ * Entry vs settle is the settlement/entry flags — not a parallel CTA enum.
  */
 export function StageActions({
   mode,
@@ -47,22 +29,14 @@ export function StageActions({
   hasTicket,
   settlement,
 }: StageActionsProps) {
-  const offerEntry = canOfferEntry(phase, countdownSeconds) && !hasTicket;
-  const ctaKind = deriveStageCtaKind({
-    mode,
-    offerEntry,
-    hasTicket,
-    canEnter: false,
-    canVerify: settlement.canVerify,
-    canClaim: settlement.canClaim,
-    canSettle: settlement.canSettle,
-    canRefund: false,
-    canExpire: false,
-    canRetry: settlement.canRetry,
-  });
-
-  const showEnter = ctaKind === "enter";
-  const showSettle = SETTLE_KINDS.has(ctaKind);
+  const showSettle =
+    settlement.ticket !== null &&
+    (settlement.canVerify ||
+      settlement.canClaim ||
+      settlement.canSettle ||
+      settlement.canRetry);
+  const showEnter =
+    canOfferEntry(phase, countdownSeconds) && !hasTicket && !showSettle;
   const showRefund = mode === "expired" && !showSettle;
 
   if (!showEnter && !showSettle && !showRefund) return null;
@@ -70,29 +44,29 @@ export function StageActions({
   return (
     <div
       className="pointer-events-auto shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-6"
-      data-cta={ctaKind}
       data-testid="stage-actions"
     >
-      <div className="mx-auto w-full max-w-xl space-y-3 rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-4 backdrop-blur-md sm:p-5">
-        {showEnter ? (
-          <CrashRoundEntry
-            compact
-            countdownSeconds={countdownSeconds}
-            phase={phase}
-            roundId={roundId}
-          />
-        ) : null}
+      {showEnter || showSettle ? (
+        <div className="mx-auto w-full max-w-xl space-y-3 rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-4 backdrop-blur-md sm:p-5">
+          {showEnter ? (
+            <CrashRoundEntry
+              countdownSeconds={countdownSeconds}
+              phase={phase}
+              roundId={roundId}
+            />
+          ) : null}
+          {showSettle ? (
+            <AuthGate>
+              <StageSettleDock settlement={settlement} />
+            </AuthGate>
+          ) : null}
+        </div>
+      ) : null}
+      {showRefund ? (
         <AuthGate>
-          {showSettle && isSettleKind(ctaKind) ? (
-            <StageSettleDock ctaKind={ctaKind} settlement={settlement} />
-          ) : null}
-          {showRefund ? (
-            <div className="[&_section]:mt-0">
-              <CrashTicketRefund />
-            </div>
-          ) : null}
+          <CrashTicketRefund />
         </AuthGate>
-      </div>
+      ) : null}
     </div>
   );
 }

@@ -109,6 +109,30 @@ describe("StageActions", () => {
     ).toBeNull();
   });
 
+  it("still offers enter during a previous-round outcome while the next round is open", () => {
+    sdk.settlement = sdk.makeSettlement({
+      ticket: null,
+      canVerify: false,
+      canClaim: false,
+      canSettle: false,
+      canRetry: false,
+    });
+    render(
+      <StageActions
+        countdownSeconds={22}
+        hasTicket={false}
+        mode="outcome"
+        phase="open"
+        roundId={12n}
+        settlement={sdk.settlement}
+      />
+    );
+    expect(screen.getByTestId("entry-form")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Verify and settle" })
+    ).toBeNull();
+  });
+
   it("hides the dock when the outcome graph owns the pit", () => {
     sdk.settlement = sdk.makeSettlement({
       canVerify: false,

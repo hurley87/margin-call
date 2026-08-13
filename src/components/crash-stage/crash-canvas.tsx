@@ -3,10 +3,7 @@
 import { Canvas, useFrame } from "@react-three/fiber";
 import { useEffect, useState } from "react";
 import type { TicketTapeEntry } from "@/lib/margin-call-crash";
-import type {
-  LandingPresentation,
-  TicketLanding,
-} from "@/components/round-theater/landing-frame";
+import type { TicketLanding } from "@/components/round-theater/landing-frame";
 import type { CrashStageMode } from "./use-crash-stage-mode";
 import {
   CountdownScene,
@@ -22,12 +19,8 @@ export type CrashCanvasProps = {
   locked: boolean;
   entries: readonly TicketTapeEntry[];
   playerAddress: string | null;
-  crashPointBps: bigint | null;
-  replayProgress: number;
-  playerTierBps: bigint | null;
   chipStates: ReadonlyMap<string, TicketChipState>;
-  landing: LandingPresentation | null;
-  landingKind: TicketLanding["kind"] | null;
+  outcomeKind: TicketLanding["kind"] | null;
 };
 
 /**
@@ -92,10 +85,7 @@ function StageContent(props: CrashCanvasProps) {
     props.mode === "expired" ||
     props.mode === "loading";
 
-  const showOutcome =
-    props.mode === "outcome" &&
-    props.landing !== null &&
-    props.landingKind !== null;
+  const showOutcome = props.mode === "outcome" && props.outcomeKind !== null;
   const showField =
     props.mode !== "loading" &&
     (showCountdown || props.mode === "replay" || props.mode === "outcome");
@@ -120,12 +110,8 @@ function StageContent(props: CrashCanvasProps) {
           playerAddress={props.playerAddress}
         />
       ) : null}
-      {showOutcome && props.landing && props.landingKind ? (
-        <OutcomeBurst
-          kind={props.landingKind}
-          landing={props.landing}
-          showLabels={false}
-        />
+      {showOutcome && props.outcomeKind ? (
+        <OutcomeBurst kind={props.outcomeKind} />
       ) : null}
     </>
   );

@@ -5,36 +5,27 @@ import { GameButton } from "@/components/ui/game-button";
 import type { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import { formatLeverageBps } from "@/lib/margin-call-crash";
 import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
-import { settlementStatusCopy } from "@/lib/settlement-status-copy";
+import {
+  settlementRetryLabels,
+  settlementStatusCopy,
+} from "@/lib/settlement-status-copy";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
-import type { StageCtaKind } from "../use-crash-stage-mode";
 
 type Settlement = ReturnType<typeof useCrashTicketSettlement>;
 
-const retryLabels = {
-  refresh: "Retry",
-  verify: "Retry verify and settle",
-  claim: "Retry claim",
-  settle: "Retry settle loss",
-  "reveal-receipt-check": "Retry reveal receipt check",
-  "finalize-receipt-check": "Retry finalization receipt check",
-  "claim-receipt-check": "Retry claim receipt check",
-  "settle-receipt-check": "Retry settle receipt check",
-} as const;
-
 export type StageSettleDockProps = {
-  ctaKind: Exclude<StageCtaKind, "none" | "enter" | "refund" | "expire">;
   settlement: Settlement;
 };
 
 /**
- * Compact Floor settlement dock. Verify / claim / settle stay in the first
- * viewport — never nested under a ticket card in a scroll region.
+ * Compact Floor settlement dock. Buttons follow the settlement flags;
+ * copy follows the same priority as the awaiting-settle CTA.
  */
-export function StageSettleDock({ ctaKind, settlement }: StageSettleDockProps) {
+export function StageSettleDock({ settlement }: StageSettleDockProps) {
   const ticket = settlement.ticket;
   if (!ticket) return null;
 
+  const kind = settleKind(settlement);
   const isAlert = settlement.status === "error";
   const statusMessage = isAlert
     ? settlement.error
@@ -42,15 +33,15 @@ export function StageSettleDock({ ctaKind, settlement }: StageSettleDockProps) {
   const isLiquidatedLoss =
     settlement.outcome === "lost" || settlement.outcome === "settled-loss";
   const retryLabel = settlement.retryAction
-    ? retryLabels[settlement.retryAction]
+    ? settlementRetryLabels[settlement.retryAction]
     : "Retry";
 
   return (
     <div className="text-left" data-testid="stage-settle-dock">
       <h2 className="font-[family-name:var(--font-plex-sans)] text-lg font-bold uppercase tracking-tight text-[var(--t-accent)]">
-        {dockTitle(ctaKind)}
+        {kind.title}
       </h2>
-      <p className="mt-2 text-sm text-[var(--t-text)]">{dockBody(ctaKind)}</p>
+      <p className="mt-2 text-sm text-[var(--t-text)]">{kind.body}</p>
       <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
         {formatDeskDollarsAmount(ticket.margin)} ·{" "}
         {formatLeverageBps(ticket.leverageBps)}
@@ -81,29 +72,26 @@ export function StageSettleDock({ ctaKind, settlement }: StageSettleDockProps) {
       ) : null}
 
       <div className="mt-4 flex flex-col gap-3">
-        {ctaKind === "verify" ? (
+        {settlement.canVerify ? (
           <GameButton
             className="bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-            disabled={!settlement.canVerify}
             onClick={() => void settlement.verifyAndSettle()}
             size="hero"
           >
             Verify and settle
           </GameButton>
         ) : null}
-        {ctaKind === "claim" ? (
+        {settlement.canClaim ? (
           <GameButton
             className="bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-            disabled={!settlement.canClaim}
             onClick={() => void settlement.claim()}
             size="hero"
           >
             Claim payout
           </GameButton>
         ) : null}
-        {ctaKind === "settle-loss" ? (
+        {settlement.canSettle ? (
           <GameButton
-            disabled={!settlement.canSettle}
             onClick={() => void settlement.settleLoss()}
             size="hero"
             variant="danger"
@@ -111,7 +99,7 @@ export function StageSettleDock({ ctaKind, settlement }: StageSettleDockProps) {
             Settle loss
           </GameButton>
         ) : null}
-        {ctaKind === "retry" || settlement.canRetry ? (
+        {settlement.canRetry ? (
           <button
             className={TERMINAL_ACTION_BUTTON_CLASS}
             onClick={() => void settlement.retry()}
@@ -125,36 +113,27 @@ export function StageSettleDock({ ctaKind, settlement }: StageSettleDockProps) {
   );
 }
 
-function dockTitle(kind: StageSettleDockProps["ctaKind"]): string {
-  switch (kind) {
-    case "verify":
-      return "Verify this round";
-    case "claim":
-      return "Claim your payout";
-    case "settle-loss":
-      return "Settle this ticket";
-    case "retry":
-      return "Retry settlement";
-    default: {
-      const _exhaustive: never = kind;
-      return _exhaustive;
-    }
+function settleKind(settlement: Settlement): { title: string; body: string } {
+  if (settlement.canVerify) {
+    return {
+      title: "Verify this round",
+      body: "Verify and settle to reveal the Crash Point and see whether your Ticket won or took the margin call.",
+    };
   }
-}
-
-function dockBody(kind: StageSettleDockProps["ctaKind"]): string {
-  switch (kind) {
-    case "verify":
-      return "Verify and settle to reveal the Crash Point and see whether your Ticket won or took the margin call.";
-    case "claim":
-      return "Your Arcade Leverage closed at or below the verified Crash Point.";
-    case "settle-loss":
-      return "The Crash Point died below your Arcade Leverage.";
-    case "retry":
-      return "The last settlement step did not confirm. Retry to continue.";
-    default: {
-      const _exhaustive: never = kind;
-      return _exhaustive;
-    }
+  if (settlement.canClaim) {
+    return {
+      title: "Claim your payout",
+      body: "Your Arcade Leverage closed at or below the verified Crash Point.",
+    };
   }
+  if (settlement.canSettle) {
+    return {
+      title: "Settle this ticket",
+      body: "The Crash Point died below your Arcade Leverage.",
+    };
+  }
+  return {
+    title: "Retry settlement",
+    body: "The last settlement step did not confirm. Retry to continue.",
+  };
 }
