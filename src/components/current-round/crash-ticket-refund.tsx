@@ -14,7 +14,7 @@ const statusCopy: Partial<Record<CrashRefundStatus, string>> = {
   "expire-pending": "Expiry pending until its Base Sepolia receipt succeeds…",
   "refund-submitting": "Submitting your margin refund…",
   "refund-pending":
-    "Refund pending until its Base Sepolia receipt succeeds. tUSD will not update until confirmation.",
+    "Refund pending until its Base Sepolia receipt succeeds. USDC will not update until confirmation.",
   confirmed: "Refund confirmed on Base Sepolia.",
 };
 

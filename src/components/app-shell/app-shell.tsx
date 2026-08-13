@@ -7,12 +7,13 @@ import { NoRealValueDisclosure } from "@/components/no-real-value-disclosure";
 
 const NAV = [
   { href: "/", label: "Floor" },
-  { href: "/history", label: "Recent rounds" },
-  { href: "/lp", label: "LP Desk" },
+  { href: "/record", label: "Record" },
+  { href: "/history", label: "Rounds" },
+  { href: "/lp", label: "LP" },
 ] as const;
 
 /**
- * Shared chrome: brand, Floor / Recent rounds / LP Desk nav, compact auth,
+ * Shared chrome: brand, Floor / Record / Rounds / LP nav, compact auth,
  * disclosure. Leaves page content as the primary workspace.
  */
 export function AppShell({
@@ -25,8 +26,8 @@ export function AppShell({
   return (
     <div className="min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
       <header className="border-b border-[var(--t-border)] bg-[var(--t-panel-strong)]">
-        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-4 px-4 py-4 sm:px-6">
-          <div className="flex flex-wrap items-center gap-6">
+        <div className="mx-auto flex w-full max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 flex-wrap items-center gap-4 sm:gap-6">
             <Link
               className="font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-tight text-[var(--t-accent)] sm:text-2xl"
               href="/"
@@ -46,7 +47,7 @@ export function AppShell({
                 return (
                   <Link
                     aria-current={isActive ? "page" : undefined}
-                    className={`px-3 py-1.5 text-xs font-bold uppercase tracking-[0.16em] transition-colors duration-[var(--mc-dur-fast)] ${
+                    className={`px-2.5 py-1 text-xs font-bold uppercase tracking-[0.16em] transition-colors duration-[var(--mc-dur-fast)] sm:px-3 ${
                       isActive
                         ? "border-b-2 border-[var(--t-accent)] text-[var(--t-accent)]"
                         : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
@@ -62,7 +63,7 @@ export function AppShell({
           </div>
           <AuthControls />
         </div>
-        <div className="mx-auto w-full max-w-7xl px-4 pb-3 sm:px-6">
+        <div className="mx-auto w-full max-w-7xl px-4 pb-2 sm:px-6">
           <NoRealValueDisclosure />
         </div>
       </header>

@@ -7,9 +7,9 @@ export function NoRealValueDisclosure() {
     <p
       role="note"
       data-testid="no-real-value-disclosure"
-      className="border border-[var(--t-amber)] px-3 py-2 text-xs leading-5 text-[var(--t-muted)]"
+      className="text-[10px] leading-4 text-[var(--t-muted)] sm:text-xs sm:leading-5"
     >
-      Base Sepolia only. Desk Dollars (tUSD) and vault shares have no real value
+      Base Sepolia only. Desk Dollars (USDC) and vault shares have no real value
       and no claim on real US dollars.
     </p>
   );

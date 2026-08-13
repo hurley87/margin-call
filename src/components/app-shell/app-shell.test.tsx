@@ -43,7 +43,7 @@ describe("AppShell", () => {
 
   afterEach(cleanup);
 
-  it("renders Floor, Recent rounds, and LP Desk navigation links", () => {
+  it("renders Floor, Record, Rounds, and LP navigation links", () => {
     render(
       <AppShell>
         <p>Floor content</p>
@@ -53,19 +53,38 @@ describe("AppShell", () => {
     const nav = screen.getByTestId("app-shell-nav");
     expect(nav).toBeTruthy();
     const floor = screen.getByRole("link", { name: "Floor" });
-    const history = screen.getByRole("link", { name: "Recent rounds" });
-    const lp = screen.getByRole("link", { name: "LP Desk" });
+    const record = screen.getByRole("link", { name: "Record" });
+    const rounds = screen.getByRole("link", { name: "Rounds" });
+    const lp = screen.getByRole("link", { name: "LP" });
     expect(floor.getAttribute("href")).toBe("/");
-    expect(history.getAttribute("href")).toBe("/history");
+    expect(record.getAttribute("href")).toBe("/record");
+    expect(rounds.getAttribute("href")).toBe("/history");
     expect(lp.getAttribute("href")).toBe("/lp");
     expect(floor.getAttribute("aria-current")).toBe("page");
-    expect(history.getAttribute("aria-current")).toBeNull();
+    expect(record.getAttribute("aria-current")).toBeNull();
+    expect(rounds.getAttribute("aria-current")).toBeNull();
     expect(lp.getAttribute("aria-current")).toBeNull();
     expect(screen.getByTestId("no-real-value-disclosure")).toBeTruthy();
     expect(screen.getByText("Floor content")).toBeTruthy();
   });
 
-  it("marks Recent rounds as current on /history", () => {
+  it("marks Record as current on /record", () => {
+    sdk.pathname = "/record";
+    render(
+      <AppShell>
+        <p>Record content</p>
+      </AppShell>
+    );
+
+    expect(
+      screen.getByRole("link", { name: "Record" }).getAttribute("aria-current")
+    ).toBe("page");
+    expect(
+      screen.getByRole("link", { name: "Floor" }).getAttribute("aria-current")
+    ).toBeNull();
+  });
+
+  it("marks Rounds as current on /history", () => {
     sdk.pathname = "/history";
     render(
       <AppShell>
@@ -74,19 +93,17 @@ describe("AppShell", () => {
     );
 
     expect(
-      screen
-        .getByRole("link", { name: "Recent rounds" })
-        .getAttribute("aria-current")
+      screen.getByRole("link", { name: "Rounds" }).getAttribute("aria-current")
     ).toBe("page");
     expect(
       screen.getByRole("link", { name: "Floor" }).getAttribute("aria-current")
     ).toBeNull();
     expect(
-      screen.getByRole("link", { name: "LP Desk" }).getAttribute("aria-current")
+      screen.getByRole("link", { name: "LP" }).getAttribute("aria-current")
     ).toBeNull();
   });
 
-  it("marks LP Desk as current on /lp", () => {
+  it("marks LP as current on /lp", () => {
     sdk.pathname = "/lp";
     render(
       <AppShell>
@@ -95,15 +112,13 @@ describe("AppShell", () => {
     );
 
     expect(
-      screen.getByRole("link", { name: "LP Desk" }).getAttribute("aria-current")
+      screen.getByRole("link", { name: "LP" }).getAttribute("aria-current")
     ).toBe("page");
     expect(
       screen.getByRole("link", { name: "Floor" }).getAttribute("aria-current")
     ).toBeNull();
     expect(
-      screen
-        .getByRole("link", { name: "Recent rounds" })
-        .getAttribute("aria-current")
+      screen.getByRole("link", { name: "Rounds" }).getAttribute("aria-current")
     ).toBeNull();
   });
 });

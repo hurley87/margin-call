@@ -45,26 +45,45 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe("DeskDollarsPanel", () => {
-  it("uses required testnet/value copy and never presents the balance as USD", () => {
+  it("hides claim when the wallet already has a balance and uses USDC copy", () => {
     render(<DeskDollarsPanel />);
     expect(
       screen.getByText(
         (_, element) =>
           element?.tagName === "P" &&
-          element.textContent === "Balance: 123.45 tUSD"
+          element.textContent === "Balance: 123.45 USDC"
       )
     ).not.toBeNull();
     expect(screen.getByText(/Base Sepolia only/)).not.toBeNull();
     expect(screen.getByText(/no real value/)).not.toBeNull();
+    expect(screen.getByText("Desk Dollars (USDC)")).not.toBeNull();
     expect(
-      screen.getByText("Eligible to claim 100 tUSD from the faucet.")
-    ).not.toBeNull();
+      screen.queryByText("Eligible to claim 100 USDC from the faucet.")
+    ).toBeNull();
+    expect(screen.queryByRole("button", { name: "Claim 100 USDC" })).toBeNull();
     expect(screen.queryByText(/\$/)).toBeNull();
   });
 
-  it("reports cooldown and pending receipt semantics honestly", () => {
+  it("shows claim when the wallet balance is zero", () => {
     sdk.faucet = {
       ...sdk.faucet,
+      balance: 0n,
+      eligible: true,
+      canClaim: true,
+    };
+    render(<DeskDollarsPanel />);
+    expect(
+      screen.getByText("Eligible to claim 100 USDC from the faucet.")
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Claim 100 USDC" })
+    ).not.toBeNull();
+  });
+
+  it("reports cooldown and pending receipt semantics honestly when unfunded", () => {
+    sdk.faucet = {
+      ...sdk.faucet,
+      balance: 0n,
       status: "pending",
       eligible: false,
       cooldownSeconds: 3600n,
@@ -74,10 +93,17 @@ describe("DeskDollarsPanel", () => {
     expect(
       screen.getByText(/pending until its Base Sepolia receipt succeeds/)
     ).not.toBeNull();
-    sdk.faucet = { ...sdk.faucet, status: "ready", cooldownSeconds: 3600n };
+    sdk.faucet = {
+      ...sdk.faucet,
+      balance: 0n,
+      status: "ready",
+      cooldownSeconds: 3600n,
+      eligible: false,
+      canClaim: false,
+    };
     rerender(<DeskDollarsPanel />);
     expect(
-      screen.getByText("Next 100 tUSD faucet claim in 60 minutes.")
+      screen.getByText("Next 100 USDC faucet claim in 60 minutes.")
     ).not.toBeNull();
   });
 });

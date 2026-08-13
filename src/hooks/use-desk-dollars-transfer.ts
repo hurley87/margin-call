@@ -49,7 +49,7 @@ const stageCopy: Record<Stage, StageErrorCopy> = {
 };
 
 /**
- * Validates a tUSD transfer form before any sponsored call is submitted.
+ * Validates a USDC transfer form before any sponsored call is submitted.
  * Rejects the zero address, the sender's own wallet, zero amounts, and
  * amounts above the known balance.
  */
@@ -73,7 +73,7 @@ export function validateDeskDollarsTransfer(
   if (amount === null) {
     return {
       ok: false,
-      error: "Enter a tUSD amount with up to 6 decimal places.",
+      error: "Enter a USDC amount with up to 6 decimal places.",
     };
   }
   if (amount <= 0n) {

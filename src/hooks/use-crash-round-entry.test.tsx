@@ -89,7 +89,7 @@ describe("useCrashRoundEntry", () => {
 
   afterEach(() => cleanup());
 
-  it("approves a bounded 1,000 tUSD allowance once, then enters", async () => {
+  it("approves a bounded 1,000 USDC allowance once, then enters", async () => {
     const { result } = renderHook(() => useCrashRoundEntry({ roundId }));
     await waitFor(() => expect(result.current.status).toBe("ready"));
     await act(async () => {

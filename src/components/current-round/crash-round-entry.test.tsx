@@ -80,7 +80,7 @@ describe("CrashRoundEntry", () => {
       screen.getByText(/0x0000000000000000000000000000000000000002/)
     ).toBeTruthy();
     expect(
-      screen.getByText(/One-time bounded approval: 1000 tUSD/)
+      screen.getByText(/One-time bounded approval: 1000 USDC/)
     ).toBeTruthy();
     expect(
       screen.getByText(/never requests an unlimited allowance/)
@@ -109,9 +109,9 @@ describe("CrashRoundEntry", () => {
     render(<CrashRoundEntry {...sdk.props} />);
     expect(screen.getByText("Your live ticket")).toBeTruthy();
     expect(screen.getByText("7")).toBeTruthy();
-    expect(screen.getByText("5 tUSD")).toBeTruthy();
+    expect(screen.getByText("5 USDC")).toBeTruthy();
     expect(screen.getByText("2.00x")).toBeTruthy();
-    expect(screen.getByText("10 tUSD")).toBeTruthy();
+    expect(screen.getByText("10 USDC")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /enter/i })).toBeNull();
   });
 

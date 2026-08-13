@@ -3,6 +3,9 @@ import { baseSepoliaPublicClient } from "./base-sepolia";
 
 export const TUSD_DECIMALS = 6;
 
+/** Player-facing ticker. Onchain symbol remains tUSD; never Circle USDC. */
+export const DISPLAY_ASSET_SYMBOL = "USDC";
+
 // Desk Dollars is a plain ERC-20 to its consumers; the faucet ABI below is
 // the only custom surface.
 export const deskDollarsAbi = erc20Abi;
@@ -106,13 +109,13 @@ export function formatDeskDollars(value: bigint, decimals: number) {
   return fraction ? `${whole}.${fraction}` : whole.toString();
 }
 
-/** "100 tUSD" once both reads have landed, null while either is pending. */
+/** "100 USDC" once both reads have landed, null while either is pending. */
 export function formatDeskDollarsBalanceLabel(
   balance: bigint | null,
   decimals: number | null
 ): string | null {
   return balance !== null && decimals !== null
-    ? `${formatDeskDollars(balance, decimals)} tUSD`
+    ? `${formatDeskDollars(balance, decimals)} ${DISPLAY_ASSET_SYMBOL}`
     : null;
 }
 

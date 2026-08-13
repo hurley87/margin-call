@@ -15,7 +15,7 @@ type BalanceState = {
 };
 
 /**
- * Display-only tUSD balance for always-mounted chrome (AppShell header).
+ * Display-only USDC balance for always-mounted chrome (AppShell header).
  * Unlike useDeskDollarsFaucet, it carries no claim plumbing and no cooldown
  * ticker, so consumers never re-render on the faucet's one-second interval.
  */

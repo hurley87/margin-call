@@ -137,7 +137,7 @@ export function CrashLiveTicket({
         <div>
           <dt className="text-[var(--t-muted)]">Margin</dt>
           <dd className="tabular-nums text-[var(--t-text)]">
-            {formatDeskDollars(ticket.margin, TUSD_DECIMALS)} tUSD
+            {formatDeskDollars(ticket.margin, TUSD_DECIMALS)} USDC
           </dd>
         </div>
         <div>
@@ -160,7 +160,7 @@ export function CrashLiveTicket({
           </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
             {formatDeskDollars(payout ?? ticket.reservedPayout, TUSD_DECIMALS)}{" "}
-            tUSD
+            USDC
           </dd>
         </div>
         {outcome ? (

@@ -29,10 +29,10 @@ function formatAmount(value: bigint | undefined, unit: string) {
 }
 
 function formatSignedAmount(value: bigint | undefined) {
-  if (value === undefined) return "— tUSD";
+  if (value === undefined) return "— USDC";
   const sign = value < 0n ? "−" : value > 0n ? "+" : "";
   const abs = value < 0n ? -value : value;
-  return `${sign}${formatDeskDollars(abs, TUSD_DECIMALS)} tUSD`;
+  return `${sign}${formatDeskDollars(abs, TUSD_DECIMALS)} USDC`;
 }
 
 function formatUtilization(bps: bigint | undefined) {
@@ -61,9 +61,9 @@ const depositAmountCopy = {
 };
 
 const withdrawalAmountCopy = {
-  limitLoading: "Your withdrawable tUSD limit is still loading.",
+  limitLoading: "Your withdrawable USDC limit is still loading.",
   overLimit:
-    "Withdrawal amount cannot exceed your immediately withdrawable tUSD limit.",
+    "Withdrawal amount cannot exceed your immediately withdrawable USDC limit.",
 };
 
 function validateAmount(
@@ -75,8 +75,8 @@ function validateAmount(
 ): string | null {
   if (amount.length === 0) return null;
   if (parsed === null)
-    return `Enter a tUSD amount with no more than ${TUSD_DECIMALS} decimal places.`;
-  if (parsed <= 0n) return "Enter a positive tUSD amount.";
+    return `Enter a USDC amount with no more than ${TUSD_DECIMALS} decimal places.`;
+  if (parsed <= 0n) return "Enter a positive USDC amount.";
   if (limit === undefined) {
     return status === "loading" ? copy.limitLoading : null;
   }
@@ -86,9 +86,9 @@ function validateAmount(
 
 const statusCopy: Partial<Record<BankrollVaultDepositStatus, string>> = {
   loading: "Loading your Bankroll Vault balances…",
-  "approval-submitting": "Submitting an exact tUSD approval…",
+  "approval-submitting": "Submitting an exact USDC approval…",
   "approval-pending":
-    "Exact tUSD approval pending until its Base Sepolia receipt succeeds…",
+    "Exact USDC approval pending until its Base Sepolia receipt succeeds…",
   "deposit-submitting": "Submitting your LP deposit…",
   "deposit-pending":
     "LP deposit pending until its Base Sepolia receipt succeeds. Vault shares will not update until confirmation.",
@@ -99,7 +99,7 @@ const withdrawalPhaseCopy: Partial<Record<BankrollVaultDepositStatus, string>> =
   {
     "withdrawal-submitting": "Submitting your LP withdrawal…",
     "withdrawal-pending":
-      "LP withdrawal pending until its Base Sepolia receipt succeeds. Wallet tUSD, shares, and limits will not update until confirmation.",
+      "LP withdrawal pending until its Base Sepolia receipt succeeds. Wallet USDC, shares, and limits will not update until confirmation.",
     "withdrawal-confirmed": "LP withdrawal confirmed on Base Sepolia.",
   };
 
@@ -253,7 +253,7 @@ function TierCapacityList({ tiers }: { tiers: TierCapacity[] | undefined }) {
       {tiers.map((tier) => (
         <li key={tier.label}>
           <span className="text-[var(--t-muted)]">{tier.label}</span>
-          <div>{formatAmount(tier.maxMargin, "tUSD max margin")}</div>
+          <div>{formatAmount(tier.maxMargin, "USDC max margin")}</div>
         </li>
       ))}
     </ul>
@@ -335,11 +335,11 @@ export function LpDesk() {
         </p>
       </div>
       <p className="mt-2 text-sm text-[var(--t-text)]">
-        Provide Desk Dollars (tUSD) to receive vault shares.
+        Provide Desk Dollars (USDC) to receive vault shares.
       </p>
       <p className="mt-3 border border-[var(--t-amber)] p-3 text-sm text-[var(--t-text)]">
         Warning: vault-share value can decline as game results are realized.
-        Liquidity providers can lose tUSD when players win.
+        Liquidity providers can lose USDC when players win.
       </p>
 
       {isFrozen ? (
@@ -353,7 +353,7 @@ export function LpDesk() {
       <dl className="mt-5 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
         <Metric
           label="Wallet Desk Dollars"
-          value={formatAmount(vault.tUsdBalance, "tUSD")}
+          value={formatAmount(vault.tUsdBalance, "USDC")}
         />
         <Metric
           label="Wallet vault shares"
@@ -361,7 +361,7 @@ export function LpDesk() {
         />
         <Metric
           label="Share price (assets per share)"
-          value={formatAmount(vault.assetsPerShare, "tUSD")}
+          value={formatAmount(vault.assetsPerShare, "USDC")}
         />
         <Metric
           label="Realized vault gain/loss"
@@ -369,11 +369,11 @@ export function LpDesk() {
         />
         <Metric
           label="Gross assets"
-          value={formatAmount(vault.grossAssets, "tUSD")}
+          value={formatAmount(vault.grossAssets, "USDC")}
         />
         <Metric
           label="Net total assets"
-          value={formatAmount(vault.totalAssets, "tUSD")}
+          value={formatAmount(vault.totalAssets, "USDC")}
         />
         <Metric
           label="Total supply"
@@ -381,31 +381,31 @@ export function LpDesk() {
         />
         <Metric
           label="Pending obligations"
-          value={formatAmount(vault.pendingObligations, "tUSD")}
+          value={formatAmount(vault.pendingObligations, "USDC")}
         />
         <Metric
           label="Unrecognized margin"
-          value={formatAmount(vault.unrecognizedMargin, "tUSD")}
+          value={formatAmount(vault.unrecognizedMargin, "USDC")}
         />
         <Metric
           label="Reserved liabilities"
-          value={formatAmount(vault.reservedLiabilities, "tUSD")}
+          value={formatAmount(vault.reservedLiabilities, "USDC")}
         />
         <Metric
           label="Safety buffer"
-          value={formatAmount(vault.safetyBuffer, "tUSD")}
+          value={formatAmount(vault.safetyBuffer, "USDC")}
         />
         <Metric
           label="Global free liquidity"
-          value={formatAmount(vault.freeLiquidity, "tUSD")}
+          value={formatAmount(vault.freeLiquidity, "USDC")}
         />
         <Metric
           label="Utilization"
           value={formatUtilization(vault.utilizationBps)}
         />
         <Metric
-          label="Your immediately withdrawable tUSD"
-          value={formatAmount(vault.maxWithdraw, "tUSD")}
+          label="Your immediately withdrawable USDC"
+          value={formatAmount(vault.maxWithdraw, "USDC")}
         />
       </dl>
 
@@ -421,7 +421,7 @@ export function LpDesk() {
       </div>
 
       <p className="mt-3 text-xs text-[var(--t-muted)]">
-        Gross assets are live vault tUSD. Net total assets price shares after
+        Gross assets are live vault USDC. Net total assets price shares after
         pending obligations and unrecognized margin. Share price marks to market
         the moment a round finalizes — before any claim is pulled. Realized
         vault gain/loss is the cumulative verified game result.
@@ -437,7 +437,7 @@ export function LpDesk() {
         onSubmit={submit}
       >
         <label className="block text-sm font-bold" htmlFor="lp-deposit-amount">
-          LP deposit amount (tUSD)
+          LP deposit amount (USDC)
         </label>
         <input
           aria-describedby="lp-deposit-help lp-deposit-validation"
@@ -452,7 +452,7 @@ export function LpDesk() {
         <p id="lp-deposit-help" className="mt-2 text-xs text-[var(--t-muted)]">
           {isFrozen
             ? "Deposits are blocked while share operations are frozen."
-            : "An exact tUSD approval for this deposit may occur first. The LP Desk never requests unlimited approval."}
+            : "An exact USDC approval for this deposit may occur first. The LP Desk never requests unlimited approval."}
         </p>
         {validationError ? (
           <p id="lp-deposit-validation" role="alert" className="mt-2 text-sm">
@@ -470,7 +470,7 @@ export function LpDesk() {
               ? "LP deposit pending…"
               : isFrozen
                 ? "Deposits frozen"
-                : "Deposit tUSD"}
+                : "Deposit USDC"}
         </button>
       </form>
 
@@ -482,7 +482,7 @@ export function LpDesk() {
           className="block text-sm font-bold"
           htmlFor="lp-withdrawal-amount"
         >
-          LP withdrawal amount (tUSD)
+          LP withdrawal amount (USDC)
         </label>
         <input
           aria-describedby="lp-withdrawal-help lp-withdrawal-validation"
@@ -500,7 +500,7 @@ export function LpDesk() {
         >
           {isFrozen
             ? "Withdrawals are blocked while share operations are frozen."
-            : "Withdraw tUSD, not shares, up to your authoritative immediately withdrawable limit. This limit is separate from global free liquidity."}
+            : "Withdraw USDC, not shares, up to your authoritative immediately withdrawable limit. This limit is separate from global free liquidity."}
         </p>
         {withdrawalValidationError ? (
           <p
@@ -522,7 +522,7 @@ export function LpDesk() {
               ? "Withdrawal pending…"
               : isFrozen
                 ? "Withdrawals frozen"
-                : "Withdraw tUSD"}
+                : "Withdraw USDC"}
         </button>
       </form>
 

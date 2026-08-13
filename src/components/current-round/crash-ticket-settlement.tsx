@@ -22,7 +22,7 @@ const statusCopy: Partial<Record<CrashSettlementStatus, string>> = {
     "Finalization pending until its Base Sepolia receipt succeeds…",
   "claim-submitting": "Submitting your claim…",
   "claim-pending":
-    "Claim pending until its Base Sepolia receipt succeeds. tUSD will not update until confirmation.",
+    "Claim pending until its Base Sepolia receipt succeeds. USDC will not update until confirmation.",
   "settle-submitting": "Submitting loss settlement…",
   "settle-pending":
     "Loss settlement pending until its Base Sepolia receipt succeeds…",

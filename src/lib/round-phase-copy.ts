@@ -63,14 +63,9 @@ export const countdownCopy = {
   entryClosesIn: "Entry closes in",
   nextRoundOpensIn: "Next round opens in",
   nextRoundOpening: "Next round opening…",
-  nextRoundOpensNamed: (roundId: string, clock: string) =>
-    `Next round ${roundId} opens in ${clock}`,
-  nextRoundOpeningNamed: (roundId: string) => `Next round ${roundId} opening…`,
-  nextRoundEntryOpen: (roundId: string, clock: string) =>
-    `Round ${roundId} entry is open — closes in ${clock}`,
-  entriesReopen: (clock: string, roundId: string) =>
-    `Entries reopen in ${clock} · Round ${roundId}`,
-  entriesOpening: (roundId: string) => `Round ${roundId} opening…`,
+  nextRoundEntryOpen: (clock: string) => `Entry is open — closes in ${clock}`,
+  entriesReopen: (clock: string) => `Entries reopen in ${clock}`,
+  entriesOpening: "Next round opening…",
 } as const;
 
 /** Full strip sentence for the active timeline countdown. */
@@ -91,24 +86,20 @@ export function formatTimelineCountdownLabel(timeline: RoundTimeline): string {
     : countdownCopy.nextRoundOpensIn;
 }
 
-/** Result handoff line; names the upcoming round because the caption is the result. */
+/** Result handoff line — stage-first; live chrome does not name round ids. */
 export function formatNextRoundHandoff(next: {
   roundId: bigint;
   countdown: RoundTimelineCountdown;
 }): string {
-  const roundId = next.roundId.toString();
+  void next.roundId;
   if (next.countdown.kind === "entry-closes") {
     return countdownCopy.nextRoundEntryOpen(
-      roundId,
       formatCountdown(next.countdown.seconds)
     );
   }
   return next.countdown.seconds > 0
-    ? countdownCopy.nextRoundOpensNamed(
-        roundId,
-        formatCountdown(next.countdown.seconds)
-      )
-    : countdownCopy.nextRoundOpeningNamed(roundId);
+    ? `${countdownCopy.nextRoundOpensIn} ${formatCountdown(next.countdown.seconds)}`
+    : countdownCopy.nextRoundOpening;
 }
 
 /**
@@ -116,10 +107,9 @@ export function formatNextRoundHandoff(next: {
  * `next-opens`; otherwise treats the next epoch as due.
  */
 export function formatEntriesReopenNotice(timeline: RoundTimeline): string {
-  const nextRoundId = (timeline.roundId + 1n).toString();
   const seconds =
     timeline.countdown.kind === "next-opens" ? timeline.countdown.seconds : 0;
   return seconds > 0
-    ? countdownCopy.entriesReopen(formatCountdown(seconds), nextRoundId)
-    : countdownCopy.entriesOpening(nextRoundId);
+    ? countdownCopy.entriesReopen(formatCountdown(seconds))
+    : countdownCopy.entriesOpening;
 }

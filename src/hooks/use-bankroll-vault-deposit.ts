@@ -72,9 +72,9 @@ const withdrawalFailedAndRefreshFailed =
   "Your LP withdrawal did not complete, and we couldn't reload your balances and limits. Retry reloads them.";
 const stageCopy: Record<Stage, StageErrorCopy> = {
   approval: {
-    failed: "We couldn't approve this exact tUSD amount. Please try again.",
+    failed: "We couldn't approve this exact USDC amount. Please try again.",
     unconfirmed:
-      "Your tUSD approval was submitted, but we couldn't confirm it yet. Retry to check its status.",
+      "Your USDC approval was submitted, but we couldn't confirm it yet. Retry to check its status.",
   },
   deposit: {
     failed:

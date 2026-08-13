@@ -61,15 +61,15 @@ describe("WalletDialog", () => {
     );
 
     expect(screen.getByTestId("wallet-dialog-address").textContent).toBe(FROM);
-    expect(screen.getByText("100 tUSD")).not.toBeNull();
+    expect(screen.getByText("100 USDC")).not.toBeNull();
 
     fireEvent.change(screen.getByLabelText("Recipient"), {
       target: { value: TO },
     });
-    fireEvent.change(screen.getByLabelText("Amount (tUSD)"), {
+    fireEvent.change(screen.getByLabelText("Amount (USDC)"), {
       target: { value: "10" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Send tUSD" }));
+    fireEvent.click(screen.getByRole("button", { name: "Send USDC" }));
 
     await waitFor(() =>
       expect(sdk.transfer).toHaveBeenCalledWith({
@@ -93,7 +93,7 @@ describe("WalletDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Max" }));
     expect(
-      (screen.getByLabelText("Amount (tUSD)") as HTMLInputElement).value
+      (screen.getByLabelText("Amount (USDC)") as HTMLInputElement).value
     ).toBe("12.5");
   });
 

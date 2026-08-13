@@ -38,7 +38,7 @@ export function TicketTape({
       key={entry.ticketId.toString()}
     >
       <span className="text-[var(--t-green-hot)]">
-        {formatDeskDollars(entry.margin, TUSD_DECIMALS)} tUSD
+        {formatDeskDollars(entry.margin, TUSD_DECIMALS)} USDC
       </span>
       <span className="text-[var(--t-amber-hot)]">
         {formatLeverageBps(entry.leverageBps)}

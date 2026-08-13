@@ -5,8 +5,8 @@ A shared-round crash game on Base Sepolia: every minute a round opens, players p
 ## Language
 
 **Desk Dollars (tUSD)**:
-The project-deployed 6-decimal testnet ERC-20 used for all margin, payouts, and LP deposits. Claimable from the in-app faucet; explicitly worthless and never presented as Circle USDC or real dollars. Mainnet intent is real Circle USDC.
-_Avoid_: tUSDC, USDC, test USDC
+The project-deployed 6-decimal testnet ERC-20 used for all margin, payouts, and LP deposits. Claimable from the in-app faucet; explicitly worthless and never presented as Circle USDC or real dollars. Mainnet intent is real Circle USDC. Player-facing UI shows the ticker as `USDC`; the onchain symbol remains `tUSD` and must never be presented as Circle USDC.
+_Avoid_: tUSDC, test USDC, Circle USDC (in testnet UI)
 
 **Arcade Leverage**:
 The fixed multiplier tier a player selects at entry — exactly one of `1.25x`, `1.50x`, `2.00x`, `3.00x`, `5.00x`, or `10.00x`. It is both the automatic close threshold and the gross payout multiple.

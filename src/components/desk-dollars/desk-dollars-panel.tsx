@@ -2,7 +2,10 @@
 
 import { usePrivy } from "@privy-io/react-auth";
 import { FlashValue } from "@/components/ui/flash-value";
-import { formatDeskDollarsBalanceLabel } from "@/lib/desk-dollars";
+import {
+  DISPLAY_ASSET_SYMBOL,
+  formatDeskDollarsBalanceLabel,
+} from "@/lib/desk-dollars";
 import { getEvmWalletAddress } from "@/lib/privy/wallet";
 import { useDeskDollarsFaucet } from "@/hooks/use-desk-dollars-faucet";
 
@@ -16,7 +19,12 @@ export function DeskDollarsPanel() {
   const walletAddress = getEvmWalletAddress(user);
   const faucet = useDeskDollarsFaucet(walletAddress);
   const balance =
-    formatDeskDollarsBalanceLabel(faucet.balance, faucet.decimals) ?? "— tUSD";
+    formatDeskDollarsBalanceLabel(faucet.balance, faucet.decimals) ??
+    `— ${DISPLAY_ASSET_SYMBOL}`;
+  const isFunded = faucet.balance !== null && faucet.balance > 0n;
+  const showFaucetOffer = !isFunded && faucet.status === "ready";
+  const showClaimButton =
+    !isFunded || faucet.status === "pending" || faucet.canRetry;
 
   return (
     <section
@@ -27,7 +35,7 @@ export function DeskDollarsPanel() {
         id="desk-dollars-heading"
         className="font-bold text-[var(--t-accent)]"
       >
-        Desk Dollars (tUSD)
+        Desk Dollars ({DISPLAY_ASSET_SYMBOL})
       </h2>
       <p className="mt-2 text-sm text-[var(--t-text)]">
         Balance:{" "}
@@ -65,29 +73,33 @@ export function DeskDollarsPanel() {
           {faucet.error}
         </p>
       ) : null}
-      {faucet.status === "ready" && !faucet.eligible ? (
+      {showFaucetOffer && !faucet.eligible ? (
         <p className="mt-3 text-sm">
-          Next 100 tUSD faucet claim in {formatCooldown(faucet.cooldownSeconds)}
-          .
+          Next 100 {DISPLAY_ASSET_SYMBOL} faucet claim in{" "}
+          {formatCooldown(faucet.cooldownSeconds)}.
         </p>
       ) : null}
-      {faucet.status === "ready" && faucet.eligible ? (
+      {showFaucetOffer && faucet.eligible ? (
         <p className="mt-3 text-sm">
-          Eligible to claim 100 tUSD from the faucet.
+          Eligible to claim 100 {DISPLAY_ASSET_SYMBOL} from the faucet.
         </p>
       ) : null}
-      <button
-        className="mt-4 rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:opacity-50"
-        disabled={!faucet.canClaim && !faucet.canRetry}
-        onClick={() => void (faucet.canRetry ? faucet.retry() : faucet.claim())}
-        type="button"
-      >
-        {faucet.canRetry
-          ? "Retry"
-          : faucet.status === "pending"
-            ? "Claim pending…"
-            : "Claim 100 tUSD"}
-      </button>
+      {showClaimButton ? (
+        <button
+          className="mt-4 rounded-sm bg-[var(--t-accent)] px-4 py-2 text-sm font-bold text-[var(--t-bg)] disabled:opacity-50"
+          disabled={!faucet.canClaim && !faucet.canRetry}
+          onClick={() =>
+            void (faucet.canRetry ? faucet.retry() : faucet.claim())
+          }
+          type="button"
+        >
+          {faucet.canRetry
+            ? "Retry"
+            : faucet.status === "pending"
+              ? "Claim pending…"
+              : `Claim 100 ${DISPLAY_ASSET_SYMBOL}`}
+        </button>
+      ) : null}
     </section>
   );
 }

@@ -12,7 +12,7 @@ import { useDeskDollarsBalance } from "@/hooks/use-desk-dollars-balance";
 import { getAuthBoundaryState } from "./auth-boundary";
 
 /**
- * Compact shell auth: login/logout, wallet chip, live tUSD balance,
+ * Compact shell auth: login/logout, wallet chip, live USDC balance,
  * and the Desk phone switch for liquidation calls.
  * Does not gate children — use AuthGate for signed-in-only surfaces.
  */

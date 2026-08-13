@@ -53,10 +53,7 @@ export function PersonalHistory() {
 
   if (history.status === "unavailable" || history.status === "error") {
     return (
-      <section
-        aria-labelledby="personal-history-error"
-        className="mt-8 text-left"
-      >
+      <section aria-labelledby="personal-history-error" className="text-left">
         <p
           id="personal-history-error"
           className="text-sm text-[var(--t-red-hot)]"
@@ -77,7 +74,7 @@ export function PersonalHistory() {
 
   if (history.status !== "ready") {
     return (
-      <section className="mt-8 text-left">
+      <section className="text-left">
         <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
           Loading your ticket history…
         </p>
@@ -86,15 +83,12 @@ export function PersonalHistory() {
   }
 
   return (
-    <section
-      aria-labelledby="personal-history-heading"
-      className="mt-8 text-left"
-    >
+    <section aria-labelledby="personal-history-heading" className="text-left">
       <h2
         id="personal-history-heading"
         className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.24em] text-[var(--t-muted)]"
       >
-        Personal history
+        Record
       </h2>
       <p className="mt-3 max-w-2xl text-xs leading-5 text-[var(--t-muted)]">
         Every ticket in the lookback window. Claim and refund actions wait for
@@ -188,7 +182,7 @@ function PersonalHistoryRow({
         <div>
           <dt className="text-[var(--t-muted)]">Margin</dt>
           <dd className="tabular-nums text-[var(--t-text)]">
-            {formatDeskDollars(item.ticket.margin, TUSD_DECIMALS)} tUSD
+            {formatDeskDollars(item.ticket.margin, TUSD_DECIMALS)} USDC
           </dd>
         </div>
         <div>
@@ -214,7 +208,7 @@ function PersonalHistoryRow({
             {amountLabels[item.amountKind]}
           </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {formatDeskDollars(item.displayAmount, TUSD_DECIMALS)} tUSD
+            {formatDeskDollars(item.displayAmount, TUSD_DECIMALS)} USDC
           </dd>
         </div>
         <div className="sm:col-span-2">

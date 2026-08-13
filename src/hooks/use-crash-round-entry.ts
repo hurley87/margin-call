@@ -74,9 +74,9 @@ const loadFailed = "We couldn't load your entry state. Please try again.";
 const stageCopy: Record<Stage, StageErrorCopy> = {
   approval: {
     failed:
-      "We couldn't approve the bounded 1,000 tUSD allowance. Please try again.",
+      "We couldn't approve the bounded 1,000 USDC allowance. Please try again.",
     unconfirmed:
-      "Your tUSD approval was submitted, but we couldn't confirm it yet. Retry to check its status.",
+      "Your USDC approval was submitted, but we couldn't confirm it yet. Retry to check its status.",
   },
   entry: {
     failed: "We couldn't complete your entry. Please try again.",
@@ -115,7 +115,7 @@ async function readEntryState(
 }
 
 /**
- * Orchestrates the bounded 1,000 tUSD approval and subsequent sponsored enter calls.
+ * Orchestrates the bounded 1,000 USDC approval and subsequent sponsored enter calls.
  * Approval is requested once when allowance is below the selected margin; entry never
  * requests an unlimited allowance.
  */

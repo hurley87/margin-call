@@ -160,7 +160,7 @@ describe("PersonalHistory", () => {
   it("lists every ticket with claim and refund actions when unsettled", () => {
     render(<PersonalHistory />);
 
-    expect(screen.getByText("Personal history")).toBeTruthy();
+    expect(screen.getByText("Record")).toBeTruthy();
     expect(screen.getByText("Won — claim your payout")).toBeTruthy();
     expect(screen.getByText("Round expired — refund your margin")).toBeTruthy();
     expect(screen.getByText("Payout claimed")).toBeTruthy();

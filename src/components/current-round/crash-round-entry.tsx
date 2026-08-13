@@ -22,7 +22,7 @@ import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashEntryStatus, string>> = {
   loading: "Loading your entry state…",
-  "approval-submitting": "Submitting a one-time 1,000 tUSD approval…",
+  "approval-submitting": "Submitting a one-time 1,000 USDC approval…",
   "approval-pending":
     "Bounded approval pending until its Base Sepolia receipt succeeds…",
   "entry-submitting": "Submitting your sponsored entry…",
@@ -51,7 +51,7 @@ function formatTUsd(value: bigint) {
 
 /**
  * Player entry surface for the current Crash round.
- * Offers 1/5/10 tUSD margins and six leverage tiers only into initialized
+ * Offers 1/5/10 USDC margins and six leverage tiers only into initialized
  * open rounds with more than five seconds remaining before lock.
  */
 export function CrashRoundEntry({
@@ -153,7 +153,7 @@ export function CrashRoundEntry({
         legend="Margin"
         options={ENTRY_MARGINS_TUSD}
         selected={entry.selectedMargin}
-        format={(margin) => `${formatTUsd(margin)} tUSD`}
+        format={(margin) => `${formatTUsd(margin)} USDC`}
         onSelect={entry.selectMargin}
       />
 
@@ -172,26 +172,26 @@ export function CrashRoundEntry({
             {entry.tUsdBalance === undefined
               ? "—"
               : formatTUsd(entry.tUsdBalance)}{" "}
-            tUSD
+            USDC
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Expected maximum payout</dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {formatTUsd(entry.expectedPayout)} tUSD
+            {formatTUsd(entry.expectedPayout)} USDC
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Current vault allowance</dt>
           <dd className="tabular-nums">
             {entry.allowance === undefined ? "—" : formatTUsd(entry.allowance)}{" "}
-            tUSD
+            USDC
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Selected margin</dt>
           <dd className="tabular-nums">
-            {formatTUsd(entry.selectedMargin)} tUSD
+            {formatTUsd(entry.selectedMargin)} USDC
           </dd>
         </div>
       </dl>
@@ -210,7 +210,7 @@ export function CrashRoundEntry({
         </p>
         <p className="mt-2">
           One-time bounded approval: {formatTUsd(BOUNDED_ENTRY_ALLOWANCE_TUSD)}{" "}
-          tUSD. Later entries reuse this allowance with sponsored enter-only
+          USDC. Later entries reuse this allowance with sponsored enter-only
           transactions. This interface never requests an unlimited allowance.
         </p>
         <p className="mt-2">

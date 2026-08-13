@@ -301,7 +301,7 @@ function OpenStage({
                 className="live-pulse h-1.5 w-1.5 bg-[var(--t-accent)]"
               />
               Your Ticket ·{" "}
-              {formatDeskDollars(playerTicket.margin, TUSD_DECIMALS)} tUSD ·{" "}
+              {formatDeskDollars(playerTicket.margin, TUSD_DECIMALS)} USDC ·{" "}
               {formatLeverageBps(playerTicket.leverageBps)}
             </p>
           ) : null}

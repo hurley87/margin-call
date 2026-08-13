@@ -14,7 +14,7 @@ export default function LpPage() {
         title="LP Desk"
         titleId="lp-heading"
       >
-        Provide Desk Dollars (tUSD) to receive vault shares. Sign in to deposit
+        Provide Desk Dollars (USDC) to receive vault shares. Sign in to deposit
         or withdraw.
       </RoutePageIntro>
       <AuthGate>

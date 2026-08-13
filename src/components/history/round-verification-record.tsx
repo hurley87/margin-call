@@ -92,13 +92,13 @@ export function RoundVerificationRecord({
         <div>
           <dt className="text-[var(--t-muted)]">Aggregate margin</dt>
           <dd className="tabular-nums text-[var(--t-text)]">
-            {formatDeskDollars(round.totalMargin, TUSD_DECIMALS)} tUSD
+            {formatDeskDollars(round.totalMargin, TUSD_DECIMALS)} USDC
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Reserved payouts</dt>
           <dd className="tabular-nums text-[var(--t-text)]">
-            {formatDeskDollars(round.reservedPayout, TUSD_DECIMALS)} tUSD
+            {formatDeskDollars(round.reservedPayout, TUSD_DECIMALS)} USDC
           </dd>
         </div>
         <div>

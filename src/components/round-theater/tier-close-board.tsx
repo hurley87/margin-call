@@ -70,8 +70,8 @@ export function TierCloseBoard({
               {tier.ticketCount === 0
                 ? theaterCopy.noTicketsAtTier
                 : wins && closed
-                  ? `${formatDeskDollars(tier.reservedPayout, TUSD_DECIMALS)} tUSD · ${tier.ticketCount} Ticket${tier.ticketCount === 1 ? "" : "s"}`
-                  : `${tier.ticketCount} Ticket${tier.ticketCount === 1 ? "" : "s"} · ${formatDeskDollars(tier.totalMargin, TUSD_DECIMALS)} tUSD margin`}
+                  ? `${formatDeskDollars(tier.reservedPayout, TUSD_DECIMALS)} USDC · ${tier.ticketCount} Ticket${tier.ticketCount === 1 ? "" : "s"}`
+                  : `${tier.ticketCount} Ticket${tier.ticketCount === 1 ? "" : "s"} · ${formatDeskDollars(tier.totalMargin, TUSD_DECIMALS)} USDC margin`}
             </span>
           </li>
         );

@@ -42,9 +42,16 @@ export function RoundTimelineStrip({ timeline }: { timeline: RoundTimeline }) {
       data-testid="round-timeline"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <p className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.18em] text-[var(--t-muted)]">
-          Round {timeline.roundId.toString()} ·{" "}
-          <span className="text-[var(--t-text)]">{copy.badge}</span>
+        <p className="text-[var(--t-type-label)] font-bold uppercase tracking-[0.18em] text-[var(--t-text)]">
+          {timeline.phase === "open" ? (
+            <span className="mr-1.5 inline-flex items-center gap-1.5">
+              <span
+                aria-hidden="true"
+                className="live-pulse h-1.5 w-1.5 bg-[var(--t-green-hot)]"
+              />
+            </span>
+          ) : null}
+          {copy.badge}
         </p>
         <p
           aria-live="polite"
@@ -55,18 +62,24 @@ export function RoundTimelineStrip({ timeline }: { timeline: RoundTimeline }) {
         </p>
       </div>
 
-      <ol aria-hidden="true" className="mt-2 flex gap-1">
+      <ol aria-hidden="true" className="mt-2.5 flex gap-1.5">
         {timeline.segments.map((segment) => (
           <li className={`min-w-0 ${segmentGrow[segment.id]}`} key={segment.id}>
             <p
-              className={`truncate text-[9px] font-bold uppercase tracking-[0.14em] ${
+              className={`flex items-center gap-1 truncate text-[10px] font-bold uppercase tracking-[0.14em] sm:text-[11px] ${
                 segment.state === "active"
-                  ? "text-[var(--t-text)]"
+                  ? "text-[var(--t-accent)]"
                   : segment.state === "skipped"
                     ? "text-[var(--t-muted)] line-through"
                     : "text-[var(--t-muted)]"
               }`}
             >
+              {segment.state === "active" ? (
+                <span
+                  aria-hidden="true"
+                  className="live-pulse h-1.5 w-1.5 shrink-0 bg-[var(--t-accent)]"
+                />
+              ) : null}
               {segmentLabels[segment.id]}
             </p>
             <SegmentTrack segment={segment} />
