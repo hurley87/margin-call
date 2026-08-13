@@ -41,6 +41,7 @@ const sdk = vi.hoisted(() => {
     canVerify: false,
     canExpire: false,
     canRefund: false,
+    settlementTransaction: null,
   };
   const refundable: PlayerTicketHistoryItem = {
     ticket: {
@@ -76,6 +77,7 @@ const sdk = vi.hoisted(() => {
     canVerify: false,
     canExpire: false,
     canRefund: true,
+    settlementTransaction: null,
   };
   const settled: PlayerTicketHistoryItem = {
     ticket: {
@@ -111,6 +113,10 @@ const sdk = vi.hoisted(() => {
     canVerify: false,
     canExpire: false,
     canRefund: false,
+    settlementTransaction: {
+      kind: "claim" as const,
+      url: "https://sepolia.basescan.org/tx/0xeee5",
+    },
   };
 
   return {
@@ -178,6 +184,18 @@ describe("PersonalHistory", () => {
     // The settled row remains the only claimed label; pending claim does not
     // flip the unsettled ticket's displayed settlement state.
     expect(screen.getByText("Won — claim your payout")).toBeTruthy();
+  });
+
+  it("links a settled ticket to its settlement transaction on BaseScan", () => {
+    render(<PersonalHistory />);
+    const link = screen.getByRole("link", {
+      name: "View claim transaction on BaseScan",
+    });
+    expect(link.getAttribute("href")).toBe(
+      "https://sepolia.basescan.org/tx/0xeee5"
+    );
+    // Unsettled rows have no settlement to link yet.
+    expect(screen.queryAllByRole("link", { name: /BaseScan/ })).toHaveLength(1);
   });
 
   it("shows pending claim copy without marking the ticket claimed", () => {

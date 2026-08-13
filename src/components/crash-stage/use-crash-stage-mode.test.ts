@@ -60,7 +60,9 @@ function baseInput(
 ): CrashStageModeInput {
   return {
     live: openLive(),
+    ceremonyPhase: "idle",
     hasUnsettledTicket: false,
+    hasStaleUnsettledTicket: false,
     mayClimb: true,
     hasReplayHero: false,
     isReplayComplete: false,
@@ -162,5 +164,79 @@ describe("deriveCrashStageMode", () => {
         })
       )
     ).toBe("expired");
+  });
+
+  it("lets the ceremony take over every ready live kind", () => {
+    for (const live of [openLive(), delayedLive(), finalizedLive()]) {
+      expect(
+        deriveCrashStageMode(baseInput({ live, ceremonyPhase: "verifying" }))
+      ).toBe("settling");
+      expect(
+        deriveCrashStageMode(baseInput({ live, ceremonyPhase: "climbing" }))
+      ).toBe("replay");
+      expect(
+        deriveCrashStageMode(baseInput({ live, ceremonyPhase: "landed" }))
+      ).toBe("outcome");
+    }
+  });
+
+  it("holds a landed ceremony across a flip to the next open round", () => {
+    expect(
+      deriveCrashStageMode(
+        baseInput({
+          live: openLive(),
+          ceremonyPhase: "landed",
+          hasUnsettledTicket: false,
+          mayClimb: true,
+        })
+      )
+    ).toBe("outcome");
+  });
+
+  it("blocks the next round's countdown behind a stale unsettled ticket", () => {
+    expect(
+      deriveCrashStageMode(
+        baseInput({
+          live: openLive(),
+          hasUnsettledTicket: true,
+          hasStaleUnsettledTicket: true,
+          mayClimb: false,
+        })
+      )
+    ).toBe("awaiting-settle");
+  });
+
+  it("keeps expired routing to refund over the stale-ticket gate", () => {
+    expect(
+      deriveCrashStageMode(
+        baseInput({
+          live: {
+            kind: "expired",
+            roundId: 12n,
+            tape: null,
+            timeline,
+          },
+          hasUnsettledTicket: true,
+          hasStaleUnsettledTicket: true,
+          mayClimb: false,
+        })
+      )
+    ).toBe("expired");
+  });
+
+  it("still returns loading and error over an active ceremony", () => {
+    expect(
+      deriveCrashStageMode(
+        baseInput({ live: { kind: "loading" }, ceremonyPhase: "verifying" })
+      )
+    ).toBe("loading");
+    expect(
+      deriveCrashStageMode(
+        baseInput({
+          live: { kind: "error", error: "boom" },
+          ceremonyPhase: "landed",
+        })
+      )
+    ).toBe("error");
   });
 });

@@ -40,6 +40,18 @@ export function ticketLanding(
 }
 
 /**
+ * Null unless the ticket belongs to the given round. Guards personal landings
+ * against a recovered ticket from an earlier round being judged against
+ * another round's Crash Point.
+ */
+export function ticketForRound(
+  ticket: CrashTicket | null,
+  roundId: bigint
+): CrashTicket | null {
+  return ticket !== null && ticket.roundId === roundId ? ticket : null;
+}
+
+/**
  * Pure presentation of a finalized freeze. Both animated and reduced-motion
  * surfaces render these fields; they do not re-derive policy.
  */

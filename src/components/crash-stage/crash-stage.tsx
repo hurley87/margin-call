@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useEffect, useMemo, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import { useReplayClock } from "@/hooks/use-replay-clock";
@@ -10,11 +10,19 @@ import {
   type TheaterLive,
   type TheaterReplayHero,
 } from "@/hooks/use-round-theater";
+import { useSettleCeremony } from "@/hooks/use-settle-ceremony";
 import { useTheaterPlayerTicket } from "@/hooks/use-theater-player-ticket";
 import { useTheaterTierSounds } from "@/hooks/use-theater-tier-sounds";
-import { ticketLanding } from "@/components/round-theater/landing-frame";
 import {
+  ticketForRound,
+  ticketLanding,
+  type TicketLanding,
+} from "@/components/round-theater/landing-frame";
+import {
+  aggregateTierExposure,
   ENTRY_LEVERAGE_TIERS_BPS,
+  formatCrashPointBps,
+  isCrashPointPublished,
   type CrashRoundPhase,
   type TicketTapeEntry,
 } from "@/lib/margin-call-crash";
@@ -38,6 +46,8 @@ import type { TicketChipState } from "./scenes/ticket-field";
 import { StageActions } from "./overlay/stage-actions";
 import { StageHud } from "./overlay/stage-hud";
 import { StageOutcomeGraph } from "./overlay/stage-outcome-graph";
+import { StageOutcomePanel } from "./overlay/stage-outcome-panel";
+import { StageVerifyProgress } from "./overlay/stage-verify-progress";
 import {
   deriveCrashStageMode,
   type CrashStageMode,
@@ -61,20 +71,61 @@ export function CrashStage() {
   const liveRoundId = theaterLiveRoundId(theater.live);
   const { ticket: playerTicket } = useTheaterPlayerTicket(displayRoundId);
   const { ticket: liveRoundTicket } = useTheaterPlayerTicket(liveRoundId);
-  const settlement = useCrashTicketSettlement();
 
-  const previousSettlementStatus = useRef(settlement.status);
+  const reducedMotion = theater.reducedMotion;
+  const [ceremony, ceremonyDispatch] = useSettleCeremony(playerAddress);
+  const onCrashPointKnown = useCallback(
+    (crashPointBps: bigint) =>
+      ceremonyDispatch({
+        type: "crash-point-known",
+        crashPointBps,
+        reducedMotion,
+      }),
+    [ceremonyDispatch, reducedMotion]
+  );
+  const settlement = useCrashTicketSettlement({ onCrashPointKnown });
+
+  // The settlement recovery read is the stalest round source: re-check it when
+  // the live round flips so a cross-round ticket doesn't linger for a poll.
+  const { refreshIfIdle } = settlement;
+  const previousLiveRoundId = useRef(liveRoundId);
   useEffect(() => {
-    if (
-      !theater.reducedMotion &&
-      settlement.status === "confirmed" &&
-      previousSettlementStatus.current !== "confirmed" &&
-      settlement.outcome === "settled-win"
-    ) {
-      getTheaterAudio().playWinRegister();
+    if (liveRoundId !== null && previousLiveRoundId.current !== liveRoundId) {
+      refreshIfIdle();
     }
-    previousSettlementStatus.current = settlement.status;
-  }, [settlement.outcome, settlement.status, theater.reducedMotion]);
+    previousLiveRoundId.current = liveRoundId;
+  }, [liveRoundId, refreshIfIdle]);
+
+  // Freeze the ceremony snapshot at click time so poll churn cannot mutate
+  // the displayed graph, tiers, or ticket mid-sequence.
+  const liveTape = isTheaterLiveReady(theater.live) ? theater.live.tape : null;
+  const settlementTicket = settlement.ticket;
+  const beginCeremony = useCallback(() => {
+    if (!settlementTicket || settlementTicket.settled) return;
+    const tape =
+      liveTape && liveTape.roundId === settlementTicket.roundId
+        ? liveTape
+        : null;
+    ceremonyDispatch({
+      type: "start",
+      snapshot: {
+        roundId: settlementTicket.roundId,
+        ticket: settlementTicket,
+        tape,
+        tiers: tape?.tiers ?? aggregateTierExposure([]),
+      },
+    });
+  }, [ceremonyDispatch, liveTape, settlementTicket]);
+
+  // Flows that never touch the attestation (claim/settle on an externally
+  // finalized round, receipt resumes) reveal from the recovered round.
+  useEffect(() => {
+    if (ceremony.phase !== "verifying") return;
+    const round = settlement.round;
+    if (!round || round.id !== ceremony.snapshot.roundId) return;
+    if (!isCrashPointPublished(round)) return;
+    onCrashPointKnown(round.crashPointBps);
+  }, [ceremony, onCrashPointKnown, settlement.round]);
 
   const replayHero: TheaterReplayHero | null =
     theater.hero.type === "replay" ? theater.hero : null;
@@ -85,6 +136,10 @@ export function CrashStage() {
       ? settlement.ticket
       : null);
   const hasUnsettledTicket = unsettledTicket !== null;
+  const hasStaleUnsettledTicket =
+    unsettledTicket !== null &&
+    liveRoundId !== null &&
+    unsettledTicket.roundId < liveRoundId;
 
   const settleReceiptOk =
     settlement.status === "confirmed" ||
@@ -92,63 +147,164 @@ export function CrashStage() {
     Boolean(settlement.ticket?.settled);
   const mayClimb = !hasUnsettledTicket || settleReceiptOk;
 
+  const ceremonyClimb =
+    ceremony.phase === "climbing" || ceremony.phase === "landed"
+      ? ceremony
+      : null;
   const shouldRunReplayClock = replayHero !== null && mayClimb;
+  // The ceremony clock seeds from zero (null timestamps) so the settling
+  // player always sees the full climb; spectators keep the chain seek.
+  const clockCrashPoint = ceremonyClimb
+    ? ceremonyClimb.reveal.crashPointBps
+    : shouldRunReplayClock && replayHero
+      ? replayHero.crashPointBps
+      : null;
 
   const clock = useReplayClock({
-    crashPointBps:
-      shouldRunReplayClock && replayHero ? replayHero.crashPointBps : null,
+    crashPointBps: clockCrashPoint,
     finalizedAtSeconds:
-      shouldRunReplayClock && replayHero ? replayHero.finalizedAtSeconds : null,
+      !ceremonyClimb && shouldRunReplayClock && replayHero
+        ? replayHero.finalizedAtSeconds
+        : null,
     chainTimestamp:
-      shouldRunReplayClock && replayHero ? replayHero.chainTimestamp : null,
-    reducedMotion: theater.reducedMotion || !shouldRunReplayClock,
+      !ceremonyClimb && shouldRunReplayClock && replayHero
+        ? replayHero.chainTimestamp
+        : null,
+    reducedMotion: reducedMotion || clockCrashPoint === null,
+    restartNonce: ceremonyClimb?.startNonce ?? 0,
   });
 
-  const replayProgress = shouldRunReplayClock ? clock.progress : 0;
-  const climbComplete = shouldRunReplayClock && clock.isComplete;
+  const replayProgress =
+    ceremony.phase === "landed"
+      ? 1
+      : clockCrashPoint !== null
+        ? clock.progress
+        : 0;
+  const climbComplete =
+    ceremony.phase === "landed" ||
+    (clockCrashPoint !== null && clock.isComplete);
+
+  const clockComplete = clock.isComplete;
+  useEffect(() => {
+    if (ceremony.phase !== "climbing") return;
+    // Reduced motion mid-climb would otherwise stall the ceremony forever.
+    if (clockComplete || reducedMotion) {
+      ceremonyDispatch({ type: "climb-complete" });
+    }
+  }, [ceremony.phase, ceremonyDispatch, clockComplete, reducedMotion]);
 
   const mode = deriveCrashStageMode({
     live: theater.live,
+    ceremonyPhase: ceremony.phase,
     hasUnsettledTicket,
+    hasStaleUnsettledTicket,
     mayClimb,
     hasReplayHero: replayHero !== null,
     isReplayComplete: climbComplete,
   });
 
+  // Ceremony hero: locally built from the frozen snapshot + reveal so the 10s
+  // theater poll can never blank or swap the graph mid-ceremony.
+  const finalizeTransactionUrl =
+    settlement.transactions.find((t) => t.stage === "finalize")?.url ??
+    (theater.live.kind === "finalized" &&
+    ceremonyClimb !== null &&
+    theater.live.roundId === ceremonyClimb.snapshot.roundId
+      ? theater.live.finalizeTransactionUrl
+      : null);
+  const ceremonyHero: TheaterReplayHero | null = ceremonyClimb
+    ? {
+        type: "replay",
+        roundId: ceremonyClimb.snapshot.roundId,
+        crashPointBps: ceremonyClimb.reveal.crashPointBps,
+        displayCrashPoint: formatCrashPointBps(
+          ceremonyClimb.reveal.crashPointBps
+        ),
+        finalizedAtSeconds: null,
+        chainTimestamp: 0n,
+        finalizeTransactionUrl,
+        tape: ceremonyClimb.snapshot.tape,
+        tiers: ceremonyClimb.snapshot.tiers,
+      }
+    : null;
+  const graphHero = ceremonyHero ?? replayHero;
+
+  const activeTicket = unsettledTicket ?? playerTicket ?? settlement.ticket;
+  // Personal landing/tier readouts only apply to a ticket from the hero round.
+  const heroTicket = ceremonyClimb
+    ? ceremonyClimb.snapshot.ticket
+    : replayHero
+      ? ticketForRound(activeTicket, replayHero.roundId)
+      : null;
+
   useStageAudio({
     mode,
     liveKind: theater.live.kind,
     countdownSeconds: theaterCountdownSeconds(theater.live),
-    reducedMotion: theater.reducedMotion,
-    crashPointBps:
-      shouldRunReplayClock && replayHero ? replayHero.crashPointBps : null,
+    reducedMotion,
+    crashPointBps: clockCrashPoint,
     progress: replayProgress,
     isComplete: climbComplete,
-    playerTierBps:
-      unsettledTicket?.leverageBps ?? playerTicket?.leverageBps ?? null,
+    playerTierBps: heroTicket?.leverageBps ?? null,
+    restartNonce: ceremonyClimb?.startNonce ?? 0,
   });
 
-  const entries = theaterTapeEntries(theater);
-  const chipStates = useMemo(
-    () =>
-      buildChipStates(
-        entries,
-        replayHero?.crashPointBps ?? null,
-        mode === "replay" || mode === "outcome" ? replayProgress : 0,
-        mode === "outcome" || climbComplete
-      ),
-    [entries, replayHero?.crashPointBps, replayProgress, mode, climbComplete]
+  const entries = ceremonyClimb
+    ? (ceremonyClimb.snapshot.tape?.entries ?? [])
+    : theaterTapeEntries(theater);
+  const chipStates = buildChipStates(
+    entries,
+    graphHero ? graphHero.crashPointBps : null,
+    mode === "replay" || mode === "outcome" ? replayProgress : 0,
+    mode === "outcome" || climbComplete
   );
 
-  const activeTicket = unsettledTicket ?? playerTicket ?? settlement.ticket;
-  const graphLanding = replayHero
-    ? ticketLanding(activeTicket, replayHero.crashPointBps)
-    : null;
+  const graphLanding: TicketLanding | null = ceremonyClimb
+    ? ceremonyClimb.reveal.outcome === "won"
+      ? { kind: "won" }
+      : { kind: "margin-called" }
+    : replayHero
+      ? ticketLanding(heroTicket, replayHero.crashPointBps)
+      : null;
+
+  // The dock's settle actions open the ceremony before running their flow so
+  // the stage takes over on the same click.
+  const {
+    verifyAndSettle: rawVerifyAndSettle,
+    claim: rawClaim,
+    settleLoss: rawSettleLoss,
+    retry: rawRetry,
+    retryAction,
+  } = settlement;
+  const ceremonialVerifyAndSettle = useCallback(() => {
+    beginCeremony();
+    return rawVerifyAndSettle();
+  }, [beginCeremony, rawVerifyAndSettle]);
+  const ceremonialClaim = useCallback(() => {
+    beginCeremony();
+    return rawClaim();
+  }, [beginCeremony, rawClaim]);
+  const ceremonialSettleLoss = useCallback(() => {
+    beginCeremony();
+    return rawSettleLoss();
+  }, [beginCeremony, rawSettleLoss]);
+  const ceremonialRetry = useCallback(() => {
+    if (retryAction !== "refresh") beginCeremony();
+    return rawRetry();
+  }, [beginCeremony, rawRetry, retryAction]);
+  const stageSettlement: typeof settlement = {
+    ...settlement,
+    verifyAndSettle: ceremonialVerifyAndSettle,
+    claim: ceremonialClaim,
+    settleLoss: ceremonialSettleLoss,
+    retry: ceremonialRetry,
+  };
 
   const countdownSeconds = theaterCountdownSeconds(theater.live);
   const urgency = countdownUrgency(mode, countdownSeconds);
   const showLockedLabel =
     mode === "awaiting-settle" ||
+    mode === "settling" ||
     theater.live.kind === "delayed" ||
     theater.live.kind === "expired";
 
@@ -160,12 +316,12 @@ export function CrashStage() {
   const actionPhase = theaterLivePhase(theater.live);
   const actionRoundId = liveRoundId;
   const showOutcomeGraph =
-    (mode === "replay" || mode === "outcome") && replayHero !== null;
+    (mode === "replay" || mode === "outcome") && graphHero !== null;
 
   const canvasProps: CrashCanvasProps = {
     mode,
     countdownSeconds:
-      showLockedLabel && mode === "awaiting-settle" ? 0 : countdownSeconds,
+      mode === "awaiting-settle" || mode === "settling" ? 0 : countdownSeconds,
     urgency,
     locked: showLockedLabel && mode !== "countdown",
     entries,
@@ -222,32 +378,57 @@ export function CrashStage() {
         <StageHud
           countdownLabel={countdownLabel}
           countdownSeconds={countdownSeconds}
-          isAlert={settlement.status === "error"}
+          isAlert={settlement.status === "error" && ceremony.phase === "idle"}
           playerTicket={activeTicket}
-          statusMessage={stageStatusMessage(mode, settlement)}
+          statusMessage={
+            // The stepper and outcome panel own settlement messaging while a
+            // ceremony is active.
+            ceremony.phase === "idle"
+              ? stageStatusMessage(mode, settlement)
+              : null
+          }
           suggestSound={mode === "replay" || mode === "outcome"}
         />
 
         <div className="flex min-h-0 flex-1 flex-col justify-center px-4 py-2 sm:px-6">
-          {showOutcomeGraph && replayHero && graphLanding ? (
+          {mode === "settling" ? (
+            <StageVerifyProgress
+              onCancel={() => ceremonyDispatch({ type: "reset" })}
+              settlement={stageSettlement}
+            />
+          ) : showOutcomeGraph && graphHero && graphLanding ? (
             <StageOutcomeGraph
               landing={graphLanding}
-              playerTierBps={activeTicket?.leverageBps ?? null}
+              playerTierBps={heroTicket?.leverageBps ?? null}
               progress={replayProgress}
               reducedMotion={theater.reducedMotion}
-              replayHero={replayHero}
+              replayHero={graphHero}
             />
           ) : null}
         </div>
 
-        {actionRoundId !== null && actionPhase !== null ? (
+        {ceremony.phase === "landed" && ceremonyClimb ? (
+          <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-6">
+            <StageOutcomePanel
+              finalizeTransactionUrl={finalizeTransactionUrl}
+              onContinue={() => ceremonyDispatch({ type: "acknowledge" })}
+              onRewatch={() => ceremonyDispatch({ type: "rewatch" })}
+              reducedMotion={theater.reducedMotion}
+              reveal={ceremonyClimb.reveal}
+              settleConfirmed={settleReceiptOk}
+              settlement={stageSettlement}
+              snapshot={ceremonyClimb.snapshot}
+            />
+          </div>
+        ) : ceremony.phase !== "idle" ? null : actionRoundId !== null &&
+          actionPhase !== null ? (
           <StageActions
             countdownSeconds={countdownSeconds ?? 0}
-            hasTicket={liveRoundTicket !== null}
+            hasTicket={liveRoundTicket !== null || hasStaleUnsettledTicket}
             mode={mode}
             phase={actionPhase}
             roundId={actionRoundId}
-            settlement={settlement}
+            settlement={stageSettlement}
           />
         ) : null}
       </div>
@@ -301,7 +482,7 @@ function ReducedMotionFloor({
         className={`font-[family-name:var(--font-plex-sans)] text-7xl font-black tabular-nums sm:text-9xl ${urgencyClass}`}
         data-testid="reduced-motion-countdown"
       >
-        {locked && mode === "awaiting-settle"
+        {locked && (mode === "awaiting-settle" || mode === "settling")
           ? "LOCKED"
           : countdownSeconds === null
             ? "—"
@@ -333,7 +514,9 @@ function countdownUrgency(
   mode: CrashStageMode,
   seconds: number | null
 ): CountdownUrgency {
-  if (mode === "awaiting-settle" || mode === "expired") return "locked";
+  if (mode === "awaiting-settle" || mode === "settling" || mode === "expired") {
+    return "locked";
+  }
   if (seconds === null) return "calm";
   if (seconds <= 5) return "threat";
   if (seconds <= 10) return "warn";
@@ -390,6 +573,7 @@ function useStageAudio(options: {
   progress: number;
   isComplete: boolean;
   playerTierBps: bigint | null;
+  restartNonce: number;
 }) {
   const previousKind = useRef(options.liveKind);
 
@@ -420,5 +604,6 @@ function useStageAudio(options: {
       !options.reducedMotion &&
       (options.mode === "replay" || options.mode === "outcome"),
     playerTierBps: options.playerTierBps,
+    restartNonce: options.restartNonce,
   });
 }

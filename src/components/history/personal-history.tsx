@@ -42,6 +42,12 @@ const amountLabels: Record<PlayerTicketHistoryItem["amountKind"], string> = {
   reserved: "Reserved payout",
 };
 
+const settlementLinkLabels: Record<string, string> = {
+  claim: "View claim transaction on BaseScan",
+  loss: "View loss settlement on BaseScan",
+  refund: "View refund transaction on BaseScan",
+};
+
 /**
  * Wallet-scoped ticket list with receipt-backed claim/refund actions.
  * Page chrome (title / lede) lives on /record.
@@ -200,6 +206,21 @@ function PersonalHistoryRow({
             {ticketOutcomeCopy[item.outcome]}
           </dd>
         </div>
+        {item.settlementTransaction ? (
+          <div className="sm:col-span-2">
+            <dt className="text-[var(--t-muted)]">Settlement</dt>
+            <dd>
+              <a
+                className="text-xs font-bold uppercase tracking-[0.12em] text-[var(--t-accent)] underline decoration-[var(--t-border)] underline-offset-4 hover:text-[var(--t-text)]"
+                href={item.settlementTransaction.url}
+                rel="noreferrer"
+                target="_blank"
+              >
+                {settlementLinkLabels[item.settlementTransaction.kind]}
+              </a>
+            </dd>
+          </div>
+        ) : null}
       </dl>
 
       <div className="mt-4 flex flex-wrap gap-3">

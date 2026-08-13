@@ -1,12 +1,41 @@
 import { describe, expect, it } from "vitest";
 import {
   presentLanding,
+  ticketForRound,
   ticketLanding,
   type TicketLanding,
 } from "./landing-frame";
 import { theaterCopy } from "./theater-copy";
 
 const CRASH = "2.50x";
+
+describe("ticketForRound", () => {
+  const ticket = {
+    id: 1n,
+    player: "0x00000000000000000000000000000000000000aa" as const,
+    roundId: 12n,
+    margin: 5_000_000n,
+    leverageBps: 20_000n,
+    reservedPayout: 10_000_000n,
+    settled: false,
+    claimed: false,
+  };
+
+  it("passes a ticket from the same round through", () => {
+    expect(ticketForRound(ticket, 12n)).toBe(ticket);
+  });
+
+  it("nulls a ticket from another round so it lands as spectator", () => {
+    expect(ticketForRound(ticket, 13n)).toBeNull();
+    expect(ticketLanding(ticketForRound(ticket, 13n), 25_000n)).toEqual({
+      kind: "spectator",
+    });
+  });
+
+  it("passes null through", () => {
+    expect(ticketForRound(null, 12n)).toBeNull();
+  });
+});
 
 describe("ticketLanding", () => {
   it("returns spectator when there is no ticket", () => {

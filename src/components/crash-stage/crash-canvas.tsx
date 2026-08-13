@@ -82,6 +82,7 @@ function StageContent(props: CrashCanvasProps) {
   const showCountdown =
     props.mode === "countdown" ||
     props.mode === "awaiting-settle" ||
+    props.mode === "settling" ||
     props.mode === "expired" ||
     props.mode === "loading";
 
@@ -90,7 +91,10 @@ function StageContent(props: CrashCanvasProps) {
     props.mode !== "loading" &&
     (showCountdown || props.mode === "replay" || props.mode === "outcome");
 
-  const frozen = props.mode === "awaiting-settle" || props.mode === "expired";
+  const frozen =
+    props.mode === "awaiting-settle" ||
+    props.mode === "settling" ||
+    props.mode === "expired";
 
   return (
     <>

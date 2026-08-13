@@ -147,4 +147,88 @@ describe("useCrashTicketSettlement", () => {
     });
     expect(sdk.transaction.submit).toHaveBeenCalled();
   });
+
+  it("keeps confirmed status observable and records the claim transaction", async () => {
+    // Initial load recovers the unsettled ticket; the post-flow refresh sees
+    // it settled onchain.
+    sdk.readPlayerRecentTicket
+      .mockResolvedValueOnce({ ticket, round: finalizedRound })
+      .mockResolvedValue({
+        ticket: { ...ticket, settled: true, claimed: true },
+        round: finalizedRound,
+      });
+    const { result } = renderHook(() => useCrashTicketSettlement());
+    await waitFor(() => expect(result.current.canClaim).toBe(true));
+
+    await act(async () => {
+      await result.current.claim();
+    });
+
+    // Regression: refresh() after the flow used to batch a loading overwrite
+    // into the same render, so "confirmed" was never observable.
+    expect(result.current.status).toBe("confirmed");
+    expect(result.current.transactions).toEqual([
+      {
+        stage: "claim",
+        hash: "0xabc",
+        url: expect.stringContaining("/tx/0xabc"),
+        confirmed: true,
+      },
+    ]);
+  });
+
+  it("records each verify stage hash and reports the crash point early", async () => {
+    // Round still Open onchain: the full reveal → attest → finalize path runs.
+    sdk.readPlayerRecentTicket
+      .mockResolvedValueOnce({
+        ticket,
+        round: { ...finalizedRound, status: 1 as const, crashPointBps: 0n },
+      })
+      .mockResolvedValue({
+        ticket: { ...ticket, settled: true, claimed: true },
+        round: { ...finalizedRound, crashPointBps: 20_000n },
+      });
+    // 99_000_000 / (10_000 - 5_050) = 20_000 bps — the ticket's tier, a win.
+    sdk.fetchCrashAttestation.mockResolvedValue({
+      plaintext: 5_050n,
+      signatures: ["0x01"],
+    });
+    sdk.transaction.getSubmittedHash
+      .mockReturnValueOnce("0xaaa1")
+      .mockReturnValueOnce("0xaaa2")
+      .mockReturnValueOnce("0xaaa3");
+
+    const onCrashPointKnown = vi.fn();
+    const { result } = renderHook(() =>
+      useCrashTicketSettlement({ onCrashPointKnown })
+    );
+    await waitFor(() => expect(result.current.status).toBe("ready"));
+
+    await act(async () => {
+      await result.current.verifyAndSettle();
+    });
+
+    expect(onCrashPointKnown).toHaveBeenCalledWith(20_000n);
+    expect(result.current.transactions).toEqual([
+      {
+        stage: "reveal",
+        hash: "0xaaa1",
+        url: expect.stringContaining("/tx/0xaaa1"),
+        confirmed: true,
+      },
+      {
+        stage: "finalize",
+        hash: "0xaaa2",
+        url: expect.stringContaining("/tx/0xaaa2"),
+        confirmed: true,
+      },
+      {
+        stage: "claim",
+        hash: "0xaaa3",
+        url: expect.stringContaining("/tx/0xaaa3"),
+        confirmed: true,
+      },
+    ]);
+    expect(result.current.status).toBe("confirmed");
+  });
 });
