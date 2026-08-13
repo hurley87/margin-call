@@ -1,6 +1,7 @@
 import { AuthGate } from "@/components/auth/auth-gate";
 import { LpDesk } from "@/components/lp-desk/lp-desk";
 import { RoutePageIntro } from "@/components/route-page-intro";
+import { DISPLAY_ASSET_SYMBOL } from "@/lib/desk-dollars";
 
 /**
  * Liquidity desk — vault metrics, deposit, and withdraw. Sign-in required for
@@ -14,8 +15,8 @@ export default function LpPage() {
         title="LP Desk"
         titleId="lp-heading"
       >
-        Provide Desk Dollars (USDC) to receive vault shares. Sign in to deposit
-        or withdraw.
+        Provide Desk Dollars ({DISPLAY_ASSET_SYMBOL}) to receive vault shares.
+        Sign in to deposit or withdraw.
       </RoutePageIntro>
       <AuthGate>
         <LpDesk />

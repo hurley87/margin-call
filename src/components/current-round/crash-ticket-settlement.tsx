@@ -11,6 +11,7 @@ import { useReducedMotion } from "@/hooks/use-reduced-motion";
 import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { CrashLiveTicket } from "./crash-live-ticket";
+import { DISPLAY_ASSET_SYMBOL } from "@/lib/desk-dollars";
 
 const statusCopy: Partial<Record<CrashSettlementStatus, string>> = {
   loading: "Loading your ticket settlement state…",
@@ -21,8 +22,7 @@ const statusCopy: Partial<Record<CrashSettlementStatus, string>> = {
   "finalize-pending":
     "Finalization pending until its Base Sepolia receipt succeeds…",
   "claim-submitting": "Submitting your claim…",
-  "claim-pending":
-    "Claim pending until its Base Sepolia receipt succeeds. USDC will not update until confirmation.",
+  "claim-pending": `Claim pending until its Base Sepolia receipt succeeds. ${DISPLAY_ASSET_SYMBOL} will not update until confirmation.`,
   "settle-submitting": "Submitting loss settlement…",
   "settle-pending":
     "Loss settlement pending until its Base Sepolia receipt succeeds…",

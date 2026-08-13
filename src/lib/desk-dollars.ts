@@ -109,13 +109,41 @@ export function formatDeskDollars(value: bigint, decimals: number) {
   return fraction ? `${whole}.${fraction}` : whole.toString();
 }
 
+/** Player-facing amount with ticker, e.g. "100 USDC". */
+export function formatDeskDollarsAmount(
+  value: bigint,
+  decimals: number = TUSD_DECIMALS
+): string {
+  return `${formatDeskDollars(value, decimals)} ${DISPLAY_ASSET_SYMBOL}`;
+}
+
+/** Amount label, or "— USDC" when the read has not landed. */
+export function formatDeskDollarsAmountLabel(
+  value: bigint | null | undefined,
+  decimals: number = TUSD_DECIMALS
+): string {
+  return value === null || value === undefined
+    ? `— ${DISPLAY_ASSET_SYMBOL}`
+    : formatDeskDollarsAmount(value, decimals);
+}
+
+/** Signed amount for P&L-style vault metrics, e.g. "+1.25 USDC". */
+export function formatDeskDollarsSignedAmount(
+  value: bigint,
+  decimals: number = TUSD_DECIMALS
+): string {
+  const sign = value < 0n ? "−" : value > 0n ? "+" : "";
+  const abs = value < 0n ? -value : value;
+  return `${sign}${formatDeskDollarsAmount(abs, decimals)}`;
+}
+
 /** "100 USDC" once both reads have landed, null while either is pending. */
 export function formatDeskDollarsBalanceLabel(
   balance: bigint | null,
   decimals: number | null
 ): string | null {
   return balance !== null && decimals !== null
-    ? `${formatDeskDollars(balance, decimals)} ${DISPLAY_ASSET_SYMBOL}`
+    ? formatDeskDollarsAmount(balance, decimals)
     : null;
 }
 

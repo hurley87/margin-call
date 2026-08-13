@@ -16,13 +16,17 @@ import {
   formatLeverageBps,
   type CrashRoundPhase,
 } from "@/lib/margin-call-crash";
-import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import {
+  DISPLAY_ASSET_SYMBOL,
+  formatDeskDollarsAmount,
+  formatDeskDollarsAmountLabel,
+} from "@/lib/desk-dollars";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashEntryStatus, string>> = {
   loading: "Loading your entry state…",
-  "approval-submitting": "Submitting a one-time 1,000 USDC approval…",
+  "approval-submitting": `Submitting a one-time 1,000 ${DISPLAY_ASSET_SYMBOL} approval…`,
   "approval-pending":
     "Bounded approval pending until its Base Sepolia receipt succeeds…",
   "entry-submitting": "Submitting your sponsored entry…",
@@ -44,10 +48,6 @@ type CrashRoundEntryProps = {
   phase: CrashRoundPhase;
   countdownSeconds: number;
 };
-
-function formatTUsd(value: bigint) {
-  return formatDeskDollars(value, TUSD_DECIMALS);
-}
 
 /**
  * Player entry surface for the current Crash round.
@@ -153,7 +153,7 @@ export function CrashRoundEntry({
         legend="Margin"
         options={ENTRY_MARGINS_TUSD}
         selected={entry.selectedMargin}
-        format={(margin) => `${formatTUsd(margin)} USDC`}
+        format={(margin) => formatDeskDollarsAmount(margin)}
         onSelect={entry.selectMargin}
       />
 
@@ -169,29 +169,25 @@ export function CrashRoundEntry({
         <div>
           <dt className="text-[var(--t-muted)]">Wallet Desk Dollars</dt>
           <dd className="tabular-nums">
-            {entry.tUsdBalance === undefined
-              ? "—"
-              : formatTUsd(entry.tUsdBalance)}{" "}
-            USDC
+            {formatDeskDollarsAmountLabel(entry.tUsdBalance)}
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Expected maximum payout</dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {formatTUsd(entry.expectedPayout)} USDC
+            {formatDeskDollarsAmount(entry.expectedPayout)}
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Current vault allowance</dt>
           <dd className="tabular-nums">
-            {entry.allowance === undefined ? "—" : formatTUsd(entry.allowance)}{" "}
-            USDC
+            {formatDeskDollarsAmountLabel(entry.allowance)}
           </dd>
         </div>
         <div>
           <dt className="text-[var(--t-muted)]">Selected margin</dt>
           <dd className="tabular-nums">
-            {formatTUsd(entry.selectedMargin)} USDC
+            {formatDeskDollarsAmount(entry.selectedMargin)}
           </dd>
         </div>
       </dl>
@@ -209,9 +205,10 @@ export function CrashRoundEntry({
           ) : null}
         </p>
         <p className="mt-2">
-          One-time bounded approval: {formatTUsd(BOUNDED_ENTRY_ALLOWANCE_TUSD)}{" "}
-          USDC. Later entries reuse this allowance with sponsored enter-only
-          transactions. This interface never requests an unlimited allowance.
+          One-time bounded approval:{" "}
+          {formatDeskDollarsAmount(BOUNDED_ENTRY_ALLOWANCE_TUSD)}. Later entries
+          reuse this allowance with sponsored enter-only transactions. This
+          interface never requests an unlimited allowance.
         </p>
         <p className="mt-2">
           Game contract

@@ -7,14 +7,14 @@ import {
 } from "@/hooks/use-crash-ticket-refund";
 import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
 import { CrashLiveTicket } from "./crash-live-ticket";
+import { DISPLAY_ASSET_SYMBOL } from "@/lib/desk-dollars";
 
 const statusCopy: Partial<Record<CrashRefundStatus, string>> = {
   loading: "Loading your ticket refund state…",
   "expire-submitting": "Submitting round expiry…",
   "expire-pending": "Expiry pending until its Base Sepolia receipt succeeds…",
   "refund-submitting": "Submitting your margin refund…",
-  "refund-pending":
-    "Refund pending until its Base Sepolia receipt succeeds. USDC will not update until confirmation.",
+  "refund-pending": `Refund pending until its Base Sepolia receipt succeeds. ${DISPLAY_ASSET_SYMBOL} will not update until confirmation.`,
   confirmed: "Refund confirmed on Base Sepolia.",
 };
 

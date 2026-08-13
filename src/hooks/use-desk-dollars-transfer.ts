@@ -10,6 +10,7 @@ import {
   type Hex,
 } from "viem";
 import {
+  DISPLAY_ASSET_SYMBOL,
   deskDollarsAbi,
   getDeskDollarsTokenAddress,
   parseTUsdInput,
@@ -73,7 +74,7 @@ export function validateDeskDollarsTransfer(
   if (amount === null) {
     return {
       ok: false,
-      error: "Enter a USDC amount with up to 6 decimal places.",
+      error: `Enter a ${DISPLAY_ASSET_SYMBOL} amount with up to 6 decimal places.`,
     };
   }
   if (amount <= 0n) {

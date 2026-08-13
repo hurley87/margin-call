@@ -4,7 +4,7 @@ import {
   formatLeverageBps,
   type TicketTapeEntry,
 } from "@/lib/margin-call-crash";
-import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
 import { formatShortAddress } from "@/lib/utils";
 import { theaterCopy } from "./theater-copy";
 
@@ -38,7 +38,7 @@ export function TicketTape({
       key={entry.ticketId.toString()}
     >
       <span className="text-[var(--t-green-hot)]">
-        {formatDeskDollars(entry.margin, TUSD_DECIMALS)} USDC
+        {formatDeskDollarsAmount(entry.margin)}
       </span>
       <span className="text-[var(--t-amber-hot)]">
         {formatLeverageBps(entry.leverageBps)}

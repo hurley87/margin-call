@@ -10,7 +10,7 @@ import {
   type TheaterView,
 } from "@/hooks/use-round-theater";
 import { useTheaterPlayerTicket } from "@/hooks/use-theater-player-ticket";
-import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
 import { getTierCloseProgress } from "@/lib/round-replay";
 import {
   ENTRY_LEVERAGE_TIERS_BPS,
@@ -300,8 +300,7 @@ function OpenStage({
                 aria-hidden="true"
                 className="live-pulse h-1.5 w-1.5 bg-[var(--t-accent)]"
               />
-              Your Ticket ·{" "}
-              {formatDeskDollars(playerTicket.margin, TUSD_DECIMALS)} USDC ·{" "}
+              Your Ticket · {formatDeskDollarsAmount(playerTicket.margin)} ·{" "}
               {formatLeverageBps(playerTicket.leverageBps)}
             </p>
           ) : null}

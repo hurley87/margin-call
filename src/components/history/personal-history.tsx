@@ -5,7 +5,7 @@ import {
   type HistoryTicketActionStatus,
 } from "@/hooks/use-history-ticket-actions";
 import { usePersonalHistory } from "@/hooks/use-personal-history";
-import { formatDeskDollars, TUSD_DECIMALS } from "@/lib/desk-dollars";
+import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
 import {
   formatLeverageBps,
   type PlayerTicketHistoryItem,
@@ -182,7 +182,7 @@ function PersonalHistoryRow({
         <div>
           <dt className="text-[var(--t-muted)]">Margin</dt>
           <dd className="tabular-nums text-[var(--t-text)]">
-            {formatDeskDollars(item.ticket.margin, TUSD_DECIMALS)} USDC
+            {formatDeskDollarsAmount(item.ticket.margin)}
           </dd>
         </div>
         <div>
@@ -208,7 +208,7 @@ function PersonalHistoryRow({
             {amountLabels[item.amountKind]}
           </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {formatDeskDollars(item.displayAmount, TUSD_DECIMALS)} USDC
+            {formatDeskDollarsAmount(item.displayAmount)}
           </dd>
         </div>
         <div className="sm:col-span-2">
