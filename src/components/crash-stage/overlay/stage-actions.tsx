@@ -2,9 +2,16 @@
 
 import { AuthGate } from "@/components/auth/auth-gate";
 import { CrashRoundEntry } from "@/components/current-round/crash-round-entry";
-import { CrashTicketRefund } from "@/components/current-round/crash-ticket-refund";
+import {
+  CrashTicketRefund,
+  type CrashTicketRefundState,
+} from "@/components/current-round/crash-ticket-refund";
 import type { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
-import { canOfferEntry, type CrashRoundPhase } from "@/lib/margin-call-crash";
+import {
+  canOfferEntry,
+  isExpiryRefundTicket,
+  type CrashRoundPhase,
+} from "@/lib/margin-call-crash";
 import type { CrashStageMode } from "../use-crash-stage-mode";
 import { StageSettleDock } from "./stage-settle-dock";
 
@@ -15,6 +22,8 @@ export type StageActionsProps = {
   countdownSeconds: number;
   hasTicket: boolean;
   settlement: ReturnType<typeof useCrashTicketSettlement>;
+  /** Floor-owned refund brain — same instance as the HUD clear action. */
+  refund: CrashTicketRefundState;
 };
 
 /**
@@ -28,6 +37,7 @@ export function StageActions({
   countdownSeconds,
   hasTicket,
   settlement,
+  refund,
 }: StageActionsProps) {
   const showSettle =
     settlement.ticket !== null &&
@@ -37,7 +47,12 @@ export function StageActions({
       settlement.canRetry);
   const showEnter =
     canOfferEntry(phase, countdownSeconds) && !hasTicket && !showSettle;
-  const showRefund = mode === "expired" && !showSettle;
+  // Expiry leftovers can block the next Open round — show refund even when the
+  // live theater is no longer on the expired round.
+  const showRefund =
+    !showSettle &&
+    (mode === "expired" ||
+      isExpiryRefundTicket(settlement.phase, settlement.outcome));
 
   if (!showEnter && !showSettle && !showRefund) return null;
 
@@ -64,7 +79,7 @@ export function StageActions({
       ) : null}
       {showRefund ? (
         <AuthGate>
-          <CrashTicketRefund />
+          <CrashTicketRefund refund={refund} />
         </AuthGate>
       ) : null}
     </div>

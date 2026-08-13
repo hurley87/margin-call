@@ -8,6 +8,9 @@ import {
 import { formatLeverageBps, type CrashTicket } from "@/lib/margin-call-crash";
 import { formatCountdown } from "@/lib/utils";
 
+const TICKET_CHIP_CLASS =
+  "mt-2 inline-flex items-center gap-2 border border-[var(--t-accent)]/60 bg-[var(--t-bg)]/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-accent)] backdrop-blur-sm";
+
 export type StageHudProps = {
   countdownLabel: string | null;
   countdownSeconds: number | null;
@@ -15,6 +18,12 @@ export type StageHudProps = {
   isAlert?: boolean;
   playerTicket: CrashTicket | null;
   suggestSound?: boolean;
+  /** When set with clearLabel, the ticket chip becomes the primary resolve CTA. */
+  onClear?: () => void;
+  clearLabel?: string;
+  clearBusy?: boolean;
+  /** Current Open entry — chip is informational until the round locks. */
+  lockedInOpen?: boolean;
 };
 
 /**
@@ -28,7 +37,13 @@ export function StageHud({
   isAlert = false,
   playerTicket,
   suggestSound = false,
+  onClear,
+  clearLabel,
+  clearBusy = false,
+  lockedInOpen = false,
 }: StageHudProps) {
+  const isClearable = Boolean(playerTicket && onClear && clearLabel);
+
   return (
     <div
       className="flex shrink-0 flex-col gap-2 px-4 sm:px-6"
@@ -48,23 +63,31 @@ export function StageHud({
             </p>
           ) : null}
           {playerTicket ? (
-            <p
-              className="mt-2 inline-flex items-center gap-2 border border-[var(--t-accent)]/60 bg-[var(--t-bg)]/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-accent)] backdrop-blur-sm"
-              data-testid="stage-player-ticket"
-            >
-              <span
-                aria-hidden="true"
-                className="live-pulse h-1.5 w-1.5 bg-[var(--t-accent)]"
-              />
-              Your Ticket · {formatDeskDollarsAmount(playerTicket.margin)} ·{" "}
-              {formatLeverageBps(playerTicket.leverageBps)}
-              {playerTicket.reservedPayout > 0n ? (
-                <span className="text-[var(--t-muted)]">
-                  · max{" "}
-                  {formatDeskDollarsAmountLabel(playerTicket.reservedPayout)}
-                </span>
-              ) : null}
-            </p>
+            isClearable ? (
+              <button
+                aria-label={clearLabel}
+                className={`${TICKET_CHIP_CLASS} cursor-pointer disabled:cursor-not-allowed disabled:opacity-60`}
+                data-testid="stage-player-ticket"
+                disabled={clearBusy}
+                onClick={onClear}
+                title={clearLabel}
+                type="button"
+              >
+                <TicketChipBody ticket={playerTicket} />
+              </button>
+            ) : (
+              <p
+                className={`${TICKET_CHIP_CLASS} cursor-default`}
+                data-testid="stage-player-ticket"
+                title={
+                  lockedInOpen
+                    ? "Locked in until entry closes — settle after the round locks"
+                    : undefined
+                }
+              >
+                <TicketChipBody ticket={playerTicket} />
+              </p>
+            )
           ) : null}
         </div>
         <div className="pointer-events-auto">
@@ -84,5 +107,23 @@ export function StageHud({
         </p>
       ) : null}
     </div>
+  );
+}
+
+function TicketChipBody({ ticket }: { ticket: CrashTicket }) {
+  return (
+    <>
+      <span
+        aria-hidden="true"
+        className="live-pulse h-1.5 w-1.5 bg-[var(--t-accent)]"
+      />
+      Your Ticket · {formatDeskDollarsAmount(ticket.margin)} ·{" "}
+      {formatLeverageBps(ticket.leverageBps)}
+      {ticket.reservedPayout > 0n ? (
+        <span className="text-[var(--t-muted)]">
+          · max {formatDeskDollarsAmountLabel(ticket.reservedPayout)}
+        </span>
+      ) : null}
+    </>
   );
 }

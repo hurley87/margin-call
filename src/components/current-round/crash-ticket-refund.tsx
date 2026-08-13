@@ -2,12 +2,12 @@
 
 import {
   useCrashTicketRefund,
-  type CrashRefundRetryAction,
   type CrashRefundStatus,
 } from "@/hooks/use-crash-ticket-refund";
-import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
-import { CrashLiveTicket } from "./crash-live-ticket";
 import { DISPLAY_ASSET_SYMBOL } from "@/lib/desk-dollars";
+import { isExpiryRefundTicket } from "@/lib/margin-call-crash";
+import { refundRetryLabels } from "@/lib/settlement-status-copy";
+import { CrashLiveTicket } from "./crash-live-ticket";
 
 const statusCopy: Partial<Record<CrashRefundStatus, string>> = {
   loading: "Loading your ticket refund state…",
@@ -18,21 +18,21 @@ const statusCopy: Partial<Record<CrashRefundStatus, string>> = {
   confirmed: "Refund confirmed on Base Sepolia.",
 };
 
-const retryLabels: Record<CrashRefundRetryAction, string> = {
-  refresh: "Retry",
-  expire: "Retry mark expired",
-  refund: "Retry refund",
-  "expire-receipt-check": "Retry expiry receipt check",
-  "refund-receipt-check": "Retry refund receipt check",
+export type CrashTicketRefundState = ReturnType<typeof useCrashTicketRefund>;
+
+export type CrashTicketRefundProps = {
+  /**
+   * Floor-owned refund brain. When set, this surface does not mount its own
+   * hook — keeps HUD clear and the dock on one inFlight/status machine.
+   */
+  refund: CrashTicketRefundState;
 };
 
 /**
  * Return-safe expiry refund surface: recovers a prior-round ticket so a player
  * can expire an unresolved round and pull original margin back.
  */
-export function CrashTicketRefund() {
-  const refund = useCrashTicketRefund();
-
+export function CrashTicketRefund({ refund }: CrashTicketRefundProps) {
   if (!refund.walletAddress) return null;
   if (refund.status === "unavailable") return null;
   if (refund.status === "loading" && !refund.ticket) {
@@ -70,7 +70,7 @@ export function CrashTicketRefund() {
           outcome={refund.outcome}
           payout={refund.payout}
           retryLabel={
-            refund.retryAction ? retryLabels[refund.retryAction] : "Retry"
+            refund.retryAction ? refundRetryLabels[refund.retryAction] : "Retry"
           }
           statusMessage={statusMessage}
           ticket={refund.ticket}

@@ -1,3 +1,4 @@
+import type { CrashRefundRetryAction } from "@/hooks/use-crash-ticket-refund";
 import type {
   CrashSettlementRetryAction,
   CrashSettlementStatus,
@@ -34,3 +35,12 @@ export const settlementRetryLabels: Record<CrashSettlementRetryAction, string> =
     "claim-receipt-check": "Retry claim receipt check",
     "settle-receipt-check": "Retry settle receipt check",
   };
+
+/** Shared refund retry CTA labels for Floor dock, HUD clear, and expiry refund. */
+export const refundRetryLabels: Record<CrashRefundRetryAction, string> = {
+  refresh: "Retry",
+  expire: "Retry mark expired",
+  refund: "Retry refund",
+  "expire-receipt-check": "Retry expiry receipt check",
+  "refund-receipt-check": "Retry refund receipt check",
+};

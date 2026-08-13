@@ -53,7 +53,9 @@ vi.mock("@/components/current-round/crash-round-entry", () => ({
 }));
 
 vi.mock("@/components/current-round/crash-ticket-refund", () => ({
-  CrashTicketRefund: () => null,
+  CrashTicketRefund: () => (
+    <div data-testid="refund-surface">Refund surface</div>
+  ),
 }));
 
 vi.mock("@/components/desk-phone/margin-call-voice-trigger", () => ({
@@ -61,6 +63,26 @@ vi.mock("@/components/desk-phone/margin-call-voice-trigger", () => ({
 }));
 
 import { StageActions } from "./stage-actions";
+
+const emptyRefund = {
+  status: "ready" as const,
+  error: null,
+  walletAddress: null,
+  ticket: null,
+  round: null,
+  outcome: null,
+  payout: null,
+  phase: null,
+  canExpire: false,
+  canRefund: false,
+  canRetry: false,
+  retryAction: null,
+  busy: false,
+  expireRound: vi.fn(),
+  refund: vi.fn(),
+  retry: vi.fn(),
+  refresh: vi.fn(),
+};
 
 describe("StageActions", () => {
   beforeEach(() => {
@@ -76,6 +98,7 @@ describe("StageActions", () => {
         hasTicket
         mode="awaiting-settle"
         phase="locked"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -101,6 +124,7 @@ describe("StageActions", () => {
         hasTicket
         mode="awaiting-settle"
         phase="locked"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -121,6 +145,7 @@ describe("StageActions", () => {
         hasTicket={false}
         mode="countdown"
         phase="open"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -145,6 +170,7 @@ describe("StageActions", () => {
         hasTicket={false}
         mode="outcome"
         phase="open"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
@@ -175,10 +201,39 @@ describe("StageActions", () => {
         hasTicket
         mode="outcome"
         phase="finalized"
+        refund={emptyRefund}
         roundId={12n}
         settlement={sdk.settlement}
       />
     );
     expect(container.textContent).toBe("");
+  });
+
+  it("shows refund during Open when a leftover expiry ticket blocks entry", () => {
+    sdk.settlement = sdk.makeSettlement({
+      canVerify: false,
+      canClaim: false,
+      canSettle: false,
+      canRetry: false,
+      phase: "expired",
+      outcome: "refundable",
+    });
+    render(
+      <StageActions
+        countdownSeconds={22}
+        hasTicket
+        mode="countdown"
+        phase="open"
+        refund={emptyRefund}
+        roundId={13n}
+        settlement={sdk.settlement}
+      />
+    );
+
+    expect(screen.getByTestId("refund-surface")).toBeTruthy();
+    expect(screen.queryByTestId("entry-form")).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Verify and settle" })
+    ).toBeNull();
   });
 });

@@ -5,11 +5,9 @@ import { GameButton } from "@/components/ui/game-button";
 import type { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import { formatLeverageBps } from "@/lib/margin-call-crash";
 import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
-import {
-  settlementRetryLabels,
-  settlementStatusCopy,
-} from "@/lib/settlement-status-copy";
+import { settlementStatusCopy } from "@/lib/settlement-status-copy";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
+import { ticketResolveCandidates } from "./primary-ticket-resolve-action";
 
 type Settlement = ReturnType<typeof useCrashTicketSettlement>;
 
@@ -18,11 +16,22 @@ export type StageSettleDockProps = {
 };
 
 type SettleAction = {
-  show: boolean;
   label: string;
   busyLabel: string;
   variant: "primary" | "danger" | "terminal";
   onClick: () => void;
+};
+
+const settleBusyLabel: Record<string, string> = {
+  "Verify and settle": "Verifying…",
+  "Claim payout": "Claiming…",
+  "Settle loss": "Settling…",
+};
+
+const settleVariant: Record<string, SettleAction["variant"]> = {
+  "Verify and settle": "primary",
+  "Claim payout": "primary",
+  "Settle loss": "danger",
 };
 
 /**
@@ -40,40 +49,18 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
     : (settlementStatusCopy[settlement.status] ?? null);
   const isLiquidatedLoss =
     settlement.outcome === "lost" || settlement.outcome === "settled-loss";
-  const retryLabel = settlement.retryAction
-    ? settlementRetryLabels[settlement.retryAction]
-    : "Retry";
   const busy = settlement.busy;
-  const actions: SettleAction[] = [
-    {
-      show: settlement.canVerify,
-      label: "Verify and settle",
-      busyLabel: "Verifying…",
-      variant: "primary",
-      onClick: () => void settlement.verifyAndSettle(),
-    },
-    {
-      show: settlement.canClaim,
-      label: "Claim payout",
-      busyLabel: "Claiming…",
-      variant: "primary",
-      onClick: () => void settlement.claim(),
-    },
-    {
-      show: settlement.canSettle,
-      label: "Settle loss",
-      busyLabel: "Settling…",
-      variant: "danger",
-      onClick: () => void settlement.settleLoss(),
-    },
-    {
-      show: settlement.canRetry,
-      label: retryLabel,
-      busyLabel: retryLabel,
-      variant: "terminal",
-      onClick: () => void settlement.retry(),
-    },
-  ];
+  const actions: SettleAction[] = ticketResolveCandidates({
+    settlement,
+    refund: null,
+  })
+    .filter((action) => action.show)
+    .map((action) => ({
+      label: action.label,
+      busyLabel: settleBusyLabel[action.label] ?? action.label,
+      variant: settleVariant[action.label] ?? "terminal",
+      onClick: action.run,
+    }));
 
   return (
     <div className="text-left" data-testid="stage-settle-dock">
@@ -111,36 +98,34 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
       ) : null}
 
       <div className="mt-4 flex flex-col gap-3">
-        {actions
-          .filter((action) => action.show)
-          .map((action) =>
-            action.variant === "terminal" ? (
-              <button
-                className={TERMINAL_ACTION_BUTTON_CLASS}
-                disabled={busy}
-                key={action.label}
-                onClick={action.onClick}
-                type="button"
-              >
-                {busy ? action.busyLabel : action.label}
-              </button>
-            ) : (
-              <GameButton
-                className={
-                  action.variant === "primary"
-                    ? "bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-                    : undefined
-                }
-                disabled={busy}
-                key={action.label}
-                onClick={action.onClick}
-                size="hero"
-                variant={action.variant === "danger" ? "danger" : "primary"}
-              >
-                {busy ? action.busyLabel : action.label}
-              </GameButton>
-            )
-          )}
+        {actions.map((action) =>
+          action.variant === "terminal" ? (
+            <button
+              className={TERMINAL_ACTION_BUTTON_CLASS}
+              disabled={busy}
+              key={action.label}
+              onClick={action.onClick}
+              type="button"
+            >
+              {busy ? action.busyLabel : action.label}
+            </button>
+          ) : (
+            <GameButton
+              className={
+                action.variant === "primary"
+                  ? "bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+                  : undefined
+              }
+              disabled={busy}
+              key={action.label}
+              onClick={action.onClick}
+              size="hero"
+              variant={action.variant === "danger" ? "danger" : "primary"}
+            >
+              {busy ? action.busyLabel : action.label}
+            </GameButton>
+          )
+        )}
       </div>
     </div>
   );
