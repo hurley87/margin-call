@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { MarginCallVoiceBeat } from "@/components/round-theater/margin-call-voice-beat";
+import { MarginCallVoiceTrigger } from "@/components/desk-phone/margin-call-voice-trigger";
 import {
   useCrashTicketSettlement,
   type CrashSettlementRetryAction,
@@ -83,8 +83,7 @@ export function CrashTicketSettlement() {
       ? settlement.error
       : (statusCopy[settlement.status] ?? null);
   const isAlert = settlement.status === "error";
-  // Settlement is return-safe and does not require watching the theater climb.
-  // Fire the promotional desk-phone call once the personal loss is known.
+  // Desk-phone voice owns this surface only — not theater replay.
   const isLiquidatedLoss =
     settlement.outcome === "lost" || settlement.outcome === "settled-loss";
 
@@ -101,9 +100,7 @@ export function CrashTicketSettlement() {
       </h2>
       <div className="mt-4">
         {isLiquidatedLoss ? (
-          <MarginCallVoiceBeat
-            isComplete
-            isLiquidated
+          <MarginCallVoiceTrigger
             roundId={settlement.ticket.roundId}
             ticketId={settlement.ticket.id}
           />

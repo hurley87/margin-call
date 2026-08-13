@@ -149,10 +149,6 @@ vi.mock("@/hooks/use-replay-clock", () => ({
   }),
 }));
 
-vi.mock("./margin-call-voice-beat", () => ({
-  MarginCallVoiceBeat: () => null,
-}));
-
 vi.mock("@/lib/theater-audio", () => {
   let enabled = false;
   const listeners = new Set<() => void>();

@@ -26,32 +26,20 @@ describe("useMarginCallVoice", () => {
 
   afterEach(() => cleanup());
 
-  it("requests once when a liquidated replay completes", async () => {
+  it("requests once when ticket facts are present and Desk phone is on", async () => {
     const { rerender } = renderHook(
-      (props: {
-        isComplete: boolean;
-        isLiquidated: boolean;
-        ticketId: string | null;
-      }) =>
+      (props: { ticketId: string | null }) =>
         useMarginCallVoice({
           ticketId: props.ticketId,
           roundId: "7",
           walletAddress: WALLET,
-          isLiquidated: props.isLiquidated,
-          isComplete: props.isComplete,
         }),
-      {
-        initialProps: {
-          isComplete: false,
-          isLiquidated: true,
-          ticketId: "42",
-        },
-      }
+      { initialProps: { ticketId: null as string | null } }
     );
 
     expect(sdk.requestMarginCall).not.toHaveBeenCalled();
 
-    rerender({ isComplete: true, isLiquidated: true, ticketId: "42" });
+    rerender({ ticketId: "42" });
 
     await waitFor(() =>
       expect(sdk.requestMarginCall).toHaveBeenCalledWith({
@@ -61,7 +49,7 @@ describe("useMarginCallVoice", () => {
       })
     );
 
-    rerender({ isComplete: true, isLiquidated: true, ticketId: "42" });
+    rerender({ ticketId: "42" });
     expect(sdk.requestMarginCall).toHaveBeenCalledTimes(1);
   });
 
@@ -72,8 +60,6 @@ describe("useMarginCallVoice", () => {
         ticketId: "42",
         roundId: "7",
         walletAddress: WALLET,
-        isLiquidated: true,
-        isComplete: true,
       })
     );
 
@@ -81,14 +67,12 @@ describe("useMarginCallVoice", () => {
     expect(sdk.requestMarginCall).not.toHaveBeenCalled();
   });
 
-  it("does not request on a winning ticket", async () => {
+  it("does not request without a wallet", async () => {
     renderHook(() =>
       useMarginCallVoice({
         ticketId: "42",
         roundId: "7",
-        walletAddress: WALLET,
-        isLiquidated: false,
-        isComplete: true,
+        walletAddress: null,
       })
     );
 

@@ -59,23 +59,12 @@ vi.mock("@/hooks/use-crash-ticket-settlement", () => ({
 }));
 
 const voice = vi.hoisted(() => ({
-  beat: vi.fn(
-    (_props: {
-      ticketId: bigint | null;
-      roundId: bigint;
-      isLiquidated: boolean;
-      isComplete: boolean;
-    }) => null
-  ),
+  trigger: vi.fn((_props: { ticketId: bigint; roundId: bigint }) => null),
 }));
 
-vi.mock("@/components/round-theater/margin-call-voice-beat", () => ({
-  MarginCallVoiceBeat: (props: {
-    ticketId: bigint | null;
-    roundId: bigint;
-    isLiquidated: boolean;
-    isComplete: boolean;
-  }) => voice.beat(props),
+vi.mock("@/components/desk-phone/margin-call-voice-trigger", () => ({
+  MarginCallVoiceTrigger: (props: { ticketId: bigint; roundId: bigint }) =>
+    voice.trigger(props),
 }));
 
 import { CrashTicketSettlement } from "./crash-ticket-settlement";
@@ -83,7 +72,7 @@ import { CrashTicketSettlement } from "./crash-ticket-settlement";
 describe("CrashTicketSettlement", () => {
   beforeEach(() => {
     sdk.settlement = sdk.makeSettlement();
-    voice.beat.mockClear();
+    voice.trigger.mockClear();
   });
 
   afterEach(cleanup);
@@ -126,7 +115,21 @@ describe("CrashTicketSettlement", () => {
     expect(sdk.settlement.settleLoss).toHaveBeenCalledOnce();
   });
 
-  it("requests a desk-phone beat for a personal loss without waiting on theater", () => {
+  it("requests desk-phone for a lost ticket before settle", () => {
+    sdk.settlement = sdk.makeSettlement({
+      outcome: "lost",
+      payout: 0n,
+      canClaim: false,
+      canSettle: true,
+    });
+    render(<CrashTicketSettlement />);
+    expect(voice.trigger).toHaveBeenCalledWith({
+      roundId: 12n,
+      ticketId: 7n,
+    });
+  });
+
+  it("requests desk-phone for a settled-loss ticket", () => {
     sdk.settlement = sdk.makeSettlement({
       outcome: "settled-loss",
       payout: 0n,
@@ -134,17 +137,15 @@ describe("CrashTicketSettlement", () => {
       canSettle: false,
     });
     render(<CrashTicketSettlement />);
-    expect(voice.beat).toHaveBeenCalledWith({
-      isComplete: true,
-      isLiquidated: true,
+    expect(voice.trigger).toHaveBeenCalledWith({
       roundId: 12n,
       ticketId: 7n,
     });
   });
 
-  it("does not request a desk-phone beat for a winning ticket", () => {
+  it("does not request desk-phone for a winning ticket", () => {
     render(<CrashTicketSettlement />);
-    expect(voice.beat).not.toHaveBeenCalled();
+    expect(voice.trigger).not.toHaveBeenCalled();
   });
 
   it("hides when the wallet has no recoverable ticket", () => {

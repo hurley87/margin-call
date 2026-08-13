@@ -10,27 +10,21 @@ type MarginCallVoiceOptions = {
   /** Round id as decimal string. */
   roundId: string | null;
   walletAddress: `0x${string}` | null;
-  /** True when the player's ticket was liquidated (crash before their tier). */
-  isLiquidated: boolean;
-  /** True when the dramatized climb finished (or reduced-motion static result). */
-  isComplete: boolean;
 };
 
 /**
- * Fires a one-shot `requestMarginCall` when a liquidated ticket is known and
- * the Desk phone switch is on. Callers pass `isComplete` once the trigger beat
- * is reached (theater hard-stop, or settlement UI after a personal loss).
+ * Fires a one-shot `requestMarginCall` when ticket facts are present and the
+ * Desk phone switch is on. Callers mount this only after a personal loss is
+ * known (ticket settlement). Server idempotency is the once-per-ticket gate.
  */
 export function useMarginCallVoice(options: MarginCallVoiceOptions) {
-  const { ticketId, roundId, walletAddress, isLiquidated, isComplete } =
-    options;
+  const { ticketId, roundId, walletAddress } = options;
 
   const consent = useQuery(api.marginCall.myMarginCallConsent);
   const requestMarginCall = useMutation(api.marginCall.requestMarginCall);
   const firedForTicket = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!isComplete || !isLiquidated) return;
     if (!ticketId || !roundId || !walletAddress) return;
     if (consent?.optedIn !== true) return;
     if (firedForTicket.current === ticketId) return;
@@ -41,18 +35,10 @@ export function useMarginCallVoice(options: MarginCallVoiceOptions) {
       roundId,
       walletAddress,
     }).catch(() => {
-      // Promotional overlay — never surface failures in the theater UI.
+      // Promotional overlay — never surface failures in settlement UI.
       if (firedForTicket.current === ticketId) {
         firedForTicket.current = null;
       }
     });
-  }, [
-    consent?.optedIn,
-    isComplete,
-    isLiquidated,
-    requestMarginCall,
-    roundId,
-    ticketId,
-    walletAddress,
-  ]);
+  }, [consent?.optedIn, requestMarginCall, roundId, ticketId, walletAddress]);
 }
