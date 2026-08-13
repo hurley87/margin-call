@@ -15,11 +15,14 @@ import {
   parseTUsdInput,
 } from "@/lib/desk-dollars";
 import {
-  confirmSponsoredCall,
-  submitSponsoredCall,
+  resumeSponsoredStage,
+  runSponsoredStage,
+  type StageErrorCopy,
 } from "@/lib/sponsored-call";
 import { notifyWalletBalancesChanged } from "@/lib/wallet-balance-sync";
 import { usePrivySponsoredTransaction } from "./use-privy-sponsored-transaction";
+
+type Stage = "transfer";
 
 export type DeskDollarsTransferStatus =
   "idle" | "submitting" | "pending" | "confirmed" | "error" | "unavailable";
@@ -33,12 +36,17 @@ export type DeskDollarsTransferInput = {
 export type DeskDollarsTransferValidation =
   { ok: true; to: Address; amount: bigint } | { ok: false; error: string };
 
-const transferFailed =
-  "We couldn't complete your Desk Dollars transfer. Please try again.";
-const transferUnconfirmed =
-  "Your transfer was submitted, but we couldn't confirm it yet. Retry to check its status.";
 const tokenUnavailable =
   "Desk Dollars is not configured for this Base Sepolia deployment.";
+
+const stageCopy: Record<Stage, StageErrorCopy> = {
+  transfer: {
+    failed:
+      "We couldn't complete your Desk Dollars transfer. Please try again.",
+    unconfirmed:
+      "Your transfer was submitted, but we couldn't confirm it yet. Retry to check its status.",
+  },
+};
 
 /**
  * Validates a tUSD transfer form before any sponsored call is submitted.
@@ -83,8 +91,8 @@ export function validateDeskDollarsTransfer(
 
 /**
  * Sponsored ERC-20 transfer of Desk Dollars from the signed-in embedded wallet.
- * Pending-hash recovery mirrors the faucet: confirmation-unknown retries re-check
- * the same receipt and never resubmit.
+ * Uses the canonical sponsored-stage helpers so pending-hash resume never
+ * resubmits and outcome copy stays centralized in applyStageResult.
  */
 export function useDeskDollarsTransfer(walletAddress: Address | null) {
   const transaction = usePrivySponsoredTransaction();
@@ -97,71 +105,68 @@ export function useDeskDollarsTransfer(walletAddress: Address | null) {
   );
   const [lastHash, setLastHash] = useState<Hex | null>(null);
   const inFlight = useRef(false);
-  const pendingTransfer = useRef<Hex | null>(null);
+  const pendingStage = useRef<{ stage: Stage; hash: Hex } | null>(null);
   const lastRequest = useRef<{ to: Address; amount: bigint } | null>(null);
-  const retryKind = useRef<"transfer" | "receipt-check" | null>(null);
+  const retryKind = useRef<Stage | null>(null);
+
+  const onStageStatus = useCallback(
+    (next: `${Stage}-submitting` | `${Stage}-pending`) => {
+      if (next === "transfer-pending" && pendingStage.current) {
+        setLastHash(pendingStage.current.hash);
+      }
+      setStatus(next === "transfer-submitting" ? "submitting" : "pending");
+      setError(null);
+    },
+    []
+  );
 
   const submitTransfer = useCallback(
     async (to: Address, amount: bigint): Promise<boolean> => {
-      if (!tokenAddress || !walletAddress || inFlight.current) return false;
+      if (
+        !tokenAddress ||
+        !walletAddress ||
+        inFlight.current ||
+        pendingStage.current
+      ) {
+        return false;
+      }
 
       inFlight.current = true;
       lastRequest.current = { to, amount };
       retryKind.current = "transfer";
-      setStatus("submitting");
-      setError(null);
 
       try {
-        const result = pendingTransfer.current
-          ? await confirmSponsoredCall(pendingTransfer.current)
-          : await submitSponsoredCall(
-              transaction,
-              {
-                to: tokenAddress,
-                data: encodeFunctionData({
-                  abi: deskDollarsAbi,
-                  functionName: "transfer",
-                  args: [to, amount],
-                }) as Hex,
-              },
-              (hash) => {
-                pendingTransfer.current = hash;
-                setLastHash(hash);
-                setStatus("pending");
-              }
-            );
-
-        if (result.outcome !== "confirmation-unknown") {
-          pendingTransfer.current = null;
-        }
-        if (result.outcome === "confirmed") {
-          retryKind.current = null;
-          setStatus("confirmed");
-          setError(null);
-          setLastHash(result.hash);
-          notifyWalletBalancesChanged();
-          return true;
-        }
-        if (result.outcome === "confirmation-unknown") {
-          retryKind.current = "receipt-check";
-          setStatus("error");
-          setError(transferUnconfirmed);
-          setLastHash(result.hash);
-          return false;
-        }
-        retryKind.current = "transfer";
+        await runSponsoredStage({
+          transaction,
+          pendingStage,
+          stage: "transfer",
+          copy: stageCopy.transfer,
+          request: {
+            to: tokenAddress,
+            data: encodeFunctionData({
+              abi: deskDollarsAbi,
+              functionName: "transfer",
+              args: [to, amount],
+            }) as Hex,
+          },
+          onStatus: onStageStatus,
+        });
+        retryKind.current = null;
+        setStatus("confirmed");
+        setError(null);
+        notifyWalletBalancesChanged();
+        return true;
+      } catch (caught) {
         setStatus("error");
         setError(
-          result.outcome === "submission-failed"
-            ? (result.message ?? transferFailed)
-            : transferFailed
+          caught instanceof Error ? caught.message : stageCopy.transfer.failed
         );
         return false;
       } finally {
         inFlight.current = false;
       }
     },
-    [tokenAddress, transaction, walletAddress]
+    [onStageStatus, tokenAddress, transaction, walletAddress]
   );
 
   const transfer = useCallback(
@@ -190,32 +195,25 @@ export function useDeskDollarsTransfer(walletAddress: Address | null) {
   );
 
   const retry = useCallback(async (): Promise<boolean> => {
-    if (retryKind.current === "receipt-check" && pendingTransfer.current) {
+    if (pendingStage.current) {
       if (inFlight.current) return false;
       inFlight.current = true;
-      setStatus("pending");
-      setError(null);
       try {
-        const result = await confirmSponsoredCall(pendingTransfer.current);
-        if (result.outcome === "confirmed") {
-          pendingTransfer.current = null;
-          retryKind.current = null;
-          setStatus("confirmed");
-          setError(null);
-          setLastHash(result.hash);
-          notifyWalletBalancesChanged();
-          return true;
-        }
-        if (result.outcome === "confirmation-unknown") {
-          retryKind.current = "receipt-check";
-          setStatus("error");
-          setError(transferUnconfirmed);
-          return false;
-        }
-        pendingTransfer.current = null;
-        retryKind.current = "transfer";
+        await resumeSponsoredStage({
+          pendingStage,
+          copyByStage: stageCopy,
+          onStatus: onStageStatus,
+        });
+        retryKind.current = null;
+        setStatus("confirmed");
+        setError(null);
+        notifyWalletBalancesChanged();
+        return true;
+      } catch (caught) {
         setStatus("error");
-        setError(transferFailed);
+        setError(
+          caught instanceof Error ? caught.message : stageCopy.transfer.failed
+        );
         return false;
       } finally {
         inFlight.current = false;
@@ -225,7 +223,7 @@ export function useDeskDollarsTransfer(walletAddress: Address | null) {
     const request = lastRequest.current;
     if (!request) return false;
     return submitTransfer(request.to, request.amount);
-  }, [submitTransfer]);
+  }, [onStageStatus, submitTransfer]);
 
   return {
     status,
@@ -236,7 +234,7 @@ export function useDeskDollarsTransfer(walletAddress: Address | null) {
       !!walletAddress &&
       (status === "idle" || status === "confirmed" || status === "error") &&
       !inFlight.current &&
-      retryKind.current !== "receipt-check",
+      pendingStage.current === null,
     canRetry: status === "error" && retryKind.current !== null,
     transfer,
     retry,
