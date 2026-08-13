@@ -65,8 +65,11 @@ export const markAttempt = internalMutation({
     if (!attempt) {
       return null;
     }
-    // Never overwrite a terminal placed/skipped/failed with pending.
-    if (attempt.status !== "pending" && args.status === "pending") {
+    // Attempts are single-shot: only pending → placed|skipped|failed.
+    if (attempt.status !== "pending") {
+      return null;
+    }
+    if (args.status === "pending") {
       return null;
     }
 

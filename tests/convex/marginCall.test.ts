@@ -158,4 +158,39 @@ describe("marginCall consent + request", () => {
       reason: "not_opted_in",
     });
   });
+
+  it("refuses to rewrite a terminal attempt status", async () => {
+    const t = authed();
+    await t.mutation(api.marginCall.setMarginCallConsent, {
+      optedIn: true,
+      walletAddress: WALLET,
+    });
+    const scheduled = await t.mutation(api.marginCall.requestMarginCall, {
+      ticketId: "55",
+      roundId: "4",
+      walletAddress: WALLET,
+    });
+    expect(scheduled.scheduled).toBe(true);
+    if (!scheduled.scheduled) throw new Error("expected schedule");
+
+    await t.mutation(internal.marginCallStore.markAttempt, {
+      attemptId: scheduled.attemptId,
+      status: "placed",
+      twilioCallSid: "CA_test",
+    });
+    await t.mutation(internal.marginCallStore.markAttempt, {
+      attemptId: scheduled.attemptId,
+      status: "skipped",
+      reason: "not_opted_in",
+    });
+
+    const attempt = await t.query(internal.marginCallStore.getAttempt, {
+      attemptId: scheduled.attemptId,
+    });
+    expect(attempt).toMatchObject({
+      status: "placed",
+      twilioCallSid: "CA_test",
+    });
+    expect(attempt?.reason).toBeUndefined();
+  });
 });
