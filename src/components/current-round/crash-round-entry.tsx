@@ -388,7 +388,9 @@ function ApprovalDetails({ entry }: { entry: EntryView }) {
 }
 
 /**
- * Scrollable pickers + pinned footer CTA so Enter stays on screen.
+ * Content-sized pickers + pinned footer CTA. No flex-1: a grow child with
+ * min-h-0 inside an auto-height card collapses to zero. The card's max-h-full
+ * bounds this shell when the Floor slot is shorter than the form.
  */
 function EntryShell({
   children,
@@ -402,10 +404,10 @@ function EntryShell({
   return (
     <div
       aria-labelledby="crash-entry-heading"
-      className="flex min-h-0 flex-1 flex-col text-left"
+      className="flex max-h-full min-h-0 flex-col overflow-hidden text-left"
     >
       <div
-        className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4"
+        className="min-h-0 overflow-y-auto p-2.5 sm:p-4"
         data-testid="stage-actions-body"
       >
         <h3
