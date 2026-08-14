@@ -150,6 +150,9 @@ describe("StageOutcomePanel", () => {
 
   it("continues and rewatches once confirmed", () => {
     const props = renderPanel();
+    expect(
+      screen.getByRole("list", { name: "Arcade Leverage tier closes" })
+    ).toBeTruthy();
     fireEvent.click(
       screen.getByRole("button", { name: "Continue to the Floor" })
     );

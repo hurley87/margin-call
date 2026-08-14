@@ -71,7 +71,7 @@ export function StageVerifyProgress({
 
   return (
     <div
-      className="pointer-events-auto mx-auto w-full max-w-xl rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-4 backdrop-blur-md sm:p-5"
+      className="pointer-events-auto mx-auto flex max-h-full w-full max-w-xl flex-col overflow-hidden rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-3 backdrop-blur-md sm:p-5"
       data-testid="stage-verify-progress"
     >
       <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]">
@@ -85,14 +85,14 @@ export function StageVerifyProgress({
         </p>
       ) : null}
 
-      <ol className="mt-4 space-y-2">
+      <ol className="mt-3 min-h-0 space-y-1.5 overflow-y-auto sm:mt-4 sm:space-y-2">
         {STEPS.map((step, index) => {
           const done = index < activeIndex;
           const isActive = index === activeIndex;
           const failed = isError && isActive;
           return (
             <li
-              className={`flex items-start gap-3 border px-3 py-2 ${
+              className={`flex items-start gap-2 border px-2.5 py-1.5 sm:gap-3 sm:px-3 sm:py-2 ${
                 failed
                   ? "border-[var(--t-red)]/50"
                   : isActive
@@ -141,7 +141,7 @@ export function StageVerifyProgress({
                 >
                   {step.title}
                 </span>
-                <span className="mt-0.5 block text-[11px] text-[var(--t-muted)]">
+                <span className="mt-0.5 hidden text-[11px] text-[var(--t-muted)] sm:block">
                   {step.detail}
                 </span>
                 <StepTransactions settlement={settlement} step={step.id} />
@@ -153,7 +153,7 @@ export function StageVerifyProgress({
 
       {statusLine ? (
         <p
-          className={`mt-3 text-sm ${
+          className={`mt-2 shrink-0 text-sm sm:mt-3 ${
             isError ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
           }`}
           role={isError ? "alert" : "status"}
@@ -163,7 +163,7 @@ export function StageVerifyProgress({
       ) : null}
 
       {isError ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-3 flex shrink-0 flex-wrap items-center gap-3">
           {settlement.canRetry ? (
             <button
               className={TERMINAL_ACTION_BUTTON_CLASS}

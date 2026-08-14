@@ -147,12 +147,13 @@ export function CrashRoundEntry({
 
   return (
     <EntryShell>
-      <p className="text-sm text-[var(--t-text)]">
+      <p className="hidden text-sm text-[var(--t-text)] sm:block">
         Choose margin and Arcade Leverage. Expected payout is the maximum
         reservation, not a guaranteed return.
       </p>
 
       <EntryOptionGroup
+        columns={3}
         legend="Margin"
         options={ENTRY_MARGINS_TUSD}
         selected={entry.selectedMargin}
@@ -161,6 +162,7 @@ export function CrashRoundEntry({
       />
 
       <EntryOptionGroup
+        columns={3}
         legend="Arcade Leverage"
         options={ENTRY_LEVERAGE_TIERS_BPS}
         selected={entry.selectedLeverageBps}
@@ -168,7 +170,7 @@ export function CrashRoundEntry({
         onSelect={entry.selectLeverage}
       />
 
-      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
+      <dl className="mt-3 hidden grid-cols-2 gap-3 text-sm sm:mt-4 sm:grid">
         <div>
           <dt className="text-[var(--t-muted)]">Wallet Desk Dollars</dt>
           <dd className="tabular-nums">
@@ -182,12 +184,23 @@ export function CrashRoundEntry({
           </dd>
         </div>
       </dl>
+      <p className="mt-3 text-[11px] tabular-nums text-[var(--t-muted)] sm:hidden">
+        Wallet {formatDeskDollarsAmountLabel(entry.tUsdBalance)}
+        <span className="mx-1.5 text-[var(--t-divider)]" aria-hidden>
+          ·
+        </span>
+        <span className="text-[var(--t-green-hot)]">
+          Max {formatDeskDollarsAmount(entry.expectedPayout)}
+        </span>
+      </p>
 
-      <DeskDollarsFaucet />
+      <div className="sm:mt-0 [&_[data-testid=desk-dollars-faucet]]:mt-3 sm:[&_[data-testid=desk-dollars-faucet]]:mt-4">
+        <DeskDollarsFaucet />
+      </div>
 
       {statusMessage ? (
         <p
-          className={`mt-4 text-sm ${
+          className={`mt-3 text-sm sm:mt-4 ${
             isAlert ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
           }`}
           role={isAlert ? "alert" : "status"}
@@ -196,9 +209,10 @@ export function CrashRoundEntry({
         </p>
       ) : null}
 
-      <div className="mt-4 flex flex-col gap-3">
+      {/* Sticky pin keeps Enter visible when the dock body scrolls on phones. */}
+      <div className="sticky bottom-0 z-10 -mx-1 mt-3 space-y-3 bg-[var(--t-bg)]/95 px-1 pt-2 backdrop-blur-sm sm:static sm:mx-0 sm:mt-4 sm:bg-transparent sm:px-0 sm:pt-0 sm:backdrop-blur-none">
         <GameButton
-          className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+          className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] max-sm:min-h-12 max-sm:px-6 max-sm:py-3.5 max-sm:text-base max-sm:tracking-[0.16em]"
           disabled={!entry.canEnter}
           onClick={() => void entry.enter()}
           size="hero"
@@ -216,7 +230,7 @@ export function CrashRoundEntry({
         ) : null}
       </div>
 
-      <details className="mt-4 text-xs leading-5 text-[var(--t-muted)]">
+      <details className="mt-3 text-xs leading-5 text-[var(--t-muted)] sm:mt-4">
         <summary className="cursor-pointer font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
           Approval details
         </summary>
@@ -277,11 +291,11 @@ function EntryShell({ children }: { children: React.ReactNode }) {
     <div aria-labelledby="crash-entry-heading" className="text-left">
       <h3
         id="crash-entry-heading"
-        className="font-[family-name:var(--font-plex-sans)] text-lg font-bold uppercase tracking-tight text-[var(--t-accent)]"
+        className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg"
       >
         Enter this round
       </h3>
-      <div className="mt-3">{children}</div>
+      <div className="mt-2 sm:mt-3">{children}</div>
     </div>
   );
 }

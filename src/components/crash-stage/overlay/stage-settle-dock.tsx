@@ -64,10 +64,10 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
 
   return (
     <div className="text-left" data-testid="stage-settle-dock">
-      <h2 className="font-[family-name:var(--font-plex-sans)] text-lg font-bold uppercase tracking-tight text-[var(--t-accent)]">
+      <h2 className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg">
         {kind.title}
       </h2>
-      <p className="mt-2 text-sm text-[var(--t-text)]">{kind.body}</p>
+      <p className="mt-1.5 text-sm text-[var(--t-text)] sm:mt-2">{kind.body}</p>
       <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
         {formatDeskDollarsAmount(ticket.margin)} ·{" "}
         {formatLeverageBps(ticket.leverageBps)}
@@ -97,11 +97,11 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
         </p>
       ) : null}
 
-      <div className="mt-4 flex flex-col gap-3">
+      <div className="sticky bottom-0 z-10 -mx-1 mt-3 space-y-3 bg-[var(--t-bg)]/95 px-1 pt-2 backdrop-blur-sm sm:static sm:mx-0 sm:mt-4 sm:bg-transparent sm:px-0 sm:pt-0 sm:backdrop-blur-none">
         {actions.map((action) =>
           action.variant === "terminal" ? (
             <button
-              className={TERMINAL_ACTION_BUTTON_CLASS}
+              className={`${TERMINAL_ACTION_BUTTON_CLASS} w-full`}
               disabled={busy}
               key={action.label}
               onClick={action.onClick}
@@ -113,8 +113,8 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
             <GameButton
               className={
                 action.variant === "primary"
-                  ? "bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-                  : undefined
+                  ? "w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] max-sm:min-h-12 max-sm:px-6 max-sm:py-3.5 max-sm:text-base max-sm:tracking-[0.16em]"
+                  : "w-full max-sm:min-h-12 max-sm:px-6 max-sm:py-3.5 max-sm:text-base max-sm:tracking-[0.16em]"
               }
               disabled={busy}
               key={action.label}

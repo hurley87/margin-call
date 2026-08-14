@@ -392,7 +392,8 @@ export function CrashStage() {
       data-mode={mode}
       data-testid="crash-stage"
     >
-      <div className="absolute inset-0">
+      {/* Full-bleed under the in-flow translucent Floor header. */}
+      <div className="pointer-events-none fixed inset-0 z-0">
         {theater.reducedMotion ? (
           showOutcomeGraph ? null : (
             <ReducedMotionFloor
@@ -407,7 +408,7 @@ export function CrashStage() {
         )}
       </div>
 
-      <div className="pointer-events-none relative z-20 flex min-h-0 flex-1 flex-col pt-[6.75rem]">
+      <div className="pointer-events-none relative z-20 flex min-h-0 flex-1 flex-col">
         {ceremony.phase === "landed" &&
         ceremonyClimb?.reveal.outcome === "won" &&
         !theater.reducedMotion ? (
@@ -435,7 +436,7 @@ export function CrashStage() {
           suggestSound={mode === "replay" || mode === "outcome"}
         />
 
-        <div className="flex min-h-0 flex-1 flex-col justify-center px-4 py-2 sm:px-6">
+        <div className="flex min-h-0 flex-1 flex-col justify-center px-3 py-1.5 sm:px-6 sm:py-2">
           {mode === "settling" ? (
             <StageVerifyProgress
               onCancel={() => ceremonyDispatch({ type: "reset" })}
@@ -453,7 +454,7 @@ export function CrashStage() {
         </div>
 
         {ceremony.phase === "landed" && ceremonyClimb ? (
-          <div className="shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-6">
+          <div className="min-h-0 shrink-0 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1.5 sm:px-6 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-2">
             <StageOutcomePanel
               finalizeTransactionUrl={finalizeTransactionUrl}
               onContinue={() => ceremonyDispatch({ type: "acknowledge" })}
@@ -523,9 +524,9 @@ function ReducedMotionFloor({
   }
 
   return (
-    <div className="flex h-full items-center justify-center px-4 pb-40 pt-28">
+    <div className="flex h-full items-center justify-center px-4 pb-32 pt-16 sm:pb-40 sm:pt-28">
       <p
-        className={`font-[family-name:var(--font-plex-sans)] text-7xl font-black tabular-nums sm:text-9xl ${urgencyClass}`}
+        className={`font-[family-name:var(--font-plex-sans)] text-5xl font-black tabular-nums sm:text-9xl ${urgencyClass}`}
         data-testid="reduced-motion-countdown"
       >
         {locked && (mode === "awaiting-settle" || mode === "settling")

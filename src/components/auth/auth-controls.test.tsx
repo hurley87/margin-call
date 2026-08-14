@@ -164,6 +164,14 @@ describe("AuthControls", () => {
     expect(screen.getByRole("button", { name: /Desk phone/i })).not.toBeNull();
   });
 
+  it("exposes Desk phone in the wallet dialog", () => {
+    renderSignedInControls();
+    fireEvent.click(screen.getByTestId("wallet-chip"));
+    const phones = screen.getAllByRole("button", { name: /Desk phone/i });
+    expect(phones.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByTestId("wallet-dialog")).not.toBeNull();
+  });
+
   it("opens the wallet dialog from the header chip", () => {
     renderSignedInControls();
     expect(screen.queryByTestId("wallet-dialog")).toBeNull();

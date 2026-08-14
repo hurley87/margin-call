@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans_Condensed } from "next/font/google";
 import { AppShell } from "@/components/app-shell/app-shell";
 import { MarginCallPrivyProvider } from "@/components/providers/privy-provider";
@@ -35,6 +35,13 @@ export const metadata: Metadata = {
     description:
       "A shared-round Crash game with pre-committed encrypted outcomes on Base Sepolia.",
   },
+};
+
+/** Notched phones: safe-area insets on Floor docks. Pinch-zoom stays unlocked. */
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

@@ -15,8 +15,9 @@ const NAV = [
 
 /**
  * Shared chrome: brand, Floor / Record / Rounds / LP nav, compact auth,
- * disclosure. Floor (`/`) is full-bleed with an overlaid header so the
- * immersive stage owns the viewport; other routes keep the document layout.
+ * disclosure. Floor (`/`) is a locked viewport with an in-flow translucent
+ * header so the immersive stage fills the leftover height; other routes keep
+ * the document layout.
  */
 export function AppShell({
   children,
@@ -30,32 +31,32 @@ export function AppShell({
     <DeskDollarsFaucetProvider>
       <div
         className={`bg-[var(--t-bg)] font-mono text-[var(--t-text)] ${
-          isFloor ? "h-svh overflow-hidden" : "min-h-screen"
+          isFloor ? "flex h-svh flex-col overflow-hidden" : "min-h-screen"
         }`}
         data-floor={isFloor ? "true" : undefined}
       >
         <header
           className={
             isFloor
-              ? "absolute inset-x-0 top-0 z-40 border-b border-[var(--t-border)]/60 bg-[var(--t-bg)]/70 backdrop-blur-md"
-              : "border-b border-[var(--t-border)] bg-[var(--t-panel-strong)]"
+              ? "relative z-40 shrink-0 border-b border-[var(--t-border)]/60 bg-[var(--t-bg)]/70 pt-[env(safe-area-inset-top)] backdrop-blur-md"
+              : "border-b border-[var(--t-border)] bg-[var(--t-panel-strong)] pt-[env(safe-area-inset-top)]"
           }
         >
           <div
-            className={`mx-auto flex w-full flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6 ${
+            className={`mx-auto flex w-full flex-nowrap items-center justify-between gap-x-3 px-3 py-2 sm:gap-x-4 sm:px-6 sm:py-3 ${
               isFloor ? "" : "max-w-7xl"
             }`}
           >
-            <div className="flex min-w-0 flex-wrap items-center gap-4 sm:gap-6">
+            <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-6">
               <Link
-                className="font-[family-name:var(--font-plex-sans)] text-xl font-black uppercase tracking-tight text-[var(--t-accent)] sm:text-2xl"
+                className="shrink-0 font-[family-name:var(--font-plex-sans)] text-base font-black uppercase tracking-tight text-[var(--t-accent)] sm:text-2xl"
                 href="/"
               >
                 Margin Call
               </Link>
               <nav
                 aria-label="Primary"
-                className="flex items-center gap-1"
+                className="-mx-1 flex min-w-0 items-center gap-0.5 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                 data-testid="app-shell-nav"
               >
                 {NAV.map((item) => {
@@ -66,7 +67,7 @@ export function AppShell({
                   return (
                     <Link
                       aria-current={isActive ? "page" : undefined}
-                      className={`px-2.5 py-1 text-xs font-bold uppercase tracking-[0.16em] transition-colors duration-[var(--mc-dur-fast)] sm:px-3 ${
+                      className={`inline-flex min-h-11 shrink-0 items-center px-2.5 py-1 text-xs font-bold uppercase tracking-[0.16em] transition-colors duration-[var(--mc-dur-fast)] sm:px-3 ${
                         isActive
                           ? "border-b-2 border-[var(--t-accent)] text-[var(--t-accent)]"
                           : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
@@ -80,20 +81,20 @@ export function AppShell({
                 })}
               </nav>
             </div>
-            <AuthControls />
+            <AuthControls compact={isFloor} />
           </div>
           <div
-            className={`mx-auto w-full px-4 pb-2 sm:px-6 ${
+            className={`mx-auto w-full px-3 pb-1.5 sm:px-6 sm:pb-2 ${
               isFloor ? "" : "max-w-7xl"
             }`}
           >
-            <NoRealValueDisclosure />
+            <NoRealValueDisclosure compact={isFloor} />
           </div>
         </header>
         <main
           className={
             isFloor
-              ? "relative h-full w-full text-left"
+              ? "relative min-h-0 flex-1 text-left"
               : "mx-auto w-full max-w-7xl px-4 py-6 text-left sm:px-6 sm:py-8"
           }
           data-testid={isFloor ? "app-shell-floor-main" : undefined}

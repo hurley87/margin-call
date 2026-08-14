@@ -29,6 +29,8 @@ export type StageActionsProps = {
 /**
  * Floor action dock in document flow so Enter / Verify stay fully on-screen.
  * Entry vs settle is the settlement/entry flags — not a parallel CTA enum.
+ * The root never scrolls; tall forms scroll an inner body while sticky CTAs
+ * inside entry/settle keep the primary action pinned.
  */
 export function StageActions({
   mode,
@@ -58,23 +60,28 @@ export function StageActions({
 
   return (
     <div
-      className="pointer-events-auto shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-2 sm:px-6"
+      className="pointer-events-auto flex min-h-0 max-h-[min(70%,32rem)] shrink flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1.5 sm:max-h-[min(75%,36rem)] sm:px-6 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-2"
       data-testid="stage-actions"
     >
       {showEnter || showSettle ? (
-        <div className="mx-auto w-full max-w-xl space-y-3 rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-4 backdrop-blur-md sm:p-5">
-          {showEnter ? (
-            <CrashRoundEntry
-              countdownSeconds={countdownSeconds}
-              phase={phase}
-              roundId={roundId}
-            />
-          ) : null}
-          {showSettle ? (
-            <AuthGate>
-              <StageSettleDock settlement={settlement} />
-            </AuthGate>
-          ) : null}
+        <div className="mx-auto flex min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 backdrop-blur-md">
+          <div
+            className="min-h-0 overflow-y-auto p-3 sm:p-5"
+            data-testid="stage-actions-body"
+          >
+            {showEnter ? (
+              <CrashRoundEntry
+                countdownSeconds={countdownSeconds}
+                phase={phase}
+                roundId={roundId}
+              />
+            ) : null}
+            {showSettle ? (
+              <AuthGate>
+                <StageSettleDock settlement={settlement} />
+              </AuthGate>
+            ) : null}
+          </div>
         </div>
       ) : null}
       {showRefund ? (

@@ -107,8 +107,32 @@ describe("StageActions", () => {
     const dock = screen.getByTestId("stage-actions");
     expect(dock.className).not.toMatch(/overflow-y-auto/);
     expect(screen.queryByTestId("entry-form")).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Verify and settle" })
+    ).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Verify and settle" }));
     expect(sdk.settlement.verifyAndSettle).toHaveBeenCalledOnce();
+  });
+
+  it("keeps Enter available in the dock during open countdown", () => {
+    sdk.settlement = sdk.makeSettlement({
+      ticket: null,
+      canVerify: false,
+      walletAddress: "0x0000000000000000000000000000000000000003",
+    });
+    render(
+      <StageActions
+        countdownSeconds={22}
+        hasTicket={false}
+        mode="countdown"
+        phase="open"
+        refund={emptyRefund}
+        roundId={12n}
+        settlement={sdk.settlement}
+      />
+    );
+    expect(screen.getByTestId("stage-actions")).toBeTruthy();
+    expect(screen.getByTestId("entry-form")).toBeTruthy();
   });
 
   it("disables and relabels verify while settlement is in flight", () => {

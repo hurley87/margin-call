@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { MarginCallVoiceTrigger } from "@/components/desk-phone/margin-call-voice-trigger";
 import { FinalizeLink } from "@/components/round-theater/finalize-link";
 import { theaterCopy } from "@/components/round-theater/theater-copy";
@@ -39,6 +40,20 @@ const STAGE_LABELS: Record<string, string> = {
   settle: "Loss settlement tx",
 };
 
+const SM_UP_QUERY = "(min-width: 640px)";
+
+function subscribeSmUp(onChange: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const media = window.matchMedia(SM_UP_QUERY);
+  media.addEventListener("change", onChange);
+  return () => media.removeEventListener("change", onChange);
+}
+
+function readSmUp() {
+  if (typeof window.matchMedia !== "function") return true;
+  return window.matchMedia(SM_UP_QUERY).matches;
+}
+
 /**
  * Held result panel for the ceremony's `landed` phase: the payout number,
  * per-tier closes, every settlement transaction, and the only exit — an
@@ -67,44 +82,57 @@ export function StageOutcomePanel({
     : "Retry";
 
   const showTierBoard = !reducedMotion && hasTickets(snapshot.tiers);
+  // Phones: tier board starts collapsed. `sm+` and SSR/tests keep it open.
+  const isSmUp = useSyncExternalStore(subscribeSmUp, readSmUp, () => true);
+  const [tiersOpen, setTiersOpen] = useState(isSmUp);
+  useEffect(() => {
+    setTiersOpen(isSmUp);
+  }, [isSmUp]);
 
   return (
     <div
-      className="pointer-events-auto mx-auto w-full max-w-3xl rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-4 backdrop-blur-md sm:p-5"
+      className="pointer-events-auto mx-auto flex max-h-[min(52svh,28rem)] w-full max-w-3xl flex-col overflow-hidden rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 p-3 backdrop-blur-md sm:max-h-[min(60svh,36rem)] sm:p-5"
       data-testid="stage-outcome-panel"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p
-          className={`font-[family-name:var(--font-plex-sans)] text-lg font-black uppercase tracking-tight ${
-            won ? "text-[var(--t-green-hot)]" : "text-[var(--t-red-hot)]"
-          }`}
-          data-testid="outcome-headline"
-        >
-          {won
-            ? `Won · paid ${formatDeskDollarsAmount(reveal.payout)}`
-            : `Margin called · ${formatDeskDollarsAmount(snapshot.ticket.margin)} lost`}
-        </p>
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
-          {theaterCopy.crashPointSupporting(
-            formatCrashPointBps(reveal.crashPointBps)
-          )}
-        </p>
-      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <p
+            className={`font-[family-name:var(--font-plex-sans)] text-base font-black uppercase tracking-tight sm:text-lg ${
+              won ? "text-[var(--t-green-hot)]" : "text-[var(--t-red-hot)]"
+            }`}
+            data-testid="outcome-headline"
+          >
+            {won
+              ? `Won · paid ${formatDeskDollarsAmount(reveal.payout)}`
+              : `Margin called · ${formatDeskDollarsAmount(snapshot.ticket.margin)} lost`}
+          </p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
+            {theaterCopy.crashPointSupporting(
+              formatCrashPointBps(reveal.crashPointBps)
+            )}
+          </p>
+        </div>
 
-      <div
-        className={
-          showTierBoard ? "mt-2 max-h-[26svh] overflow-y-auto pr-1" : "mt-2"
-        }
-      >
-        {/* Reduced motion renders RoundResultCard above — its tier board
-            already covers this. */}
         {showTierBoard ? (
-          <TierCloseBoard
-            crashPointBps={reveal.crashPointBps}
-            playerTierBps={snapshot.ticket.leverageBps}
-            progress={1}
-            tiers={snapshot.tiers}
-          />
+          <details
+            className="mt-2"
+            onToggle={(event) => setTiersOpen(event.currentTarget.open)}
+            open={tiersOpen}
+          >
+            <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-accent)] sm:hidden">
+              Tier closes
+            </summary>
+            <div className="max-h-[20svh] overflow-y-auto pr-1 sm:max-h-[26svh]">
+              {/* Reduced motion renders RoundResultCard above — its tier board
+                  already covers this. */}
+              <TierCloseBoard
+                crashPointBps={reveal.crashPointBps}
+                playerTierBps={snapshot.ticket.leverageBps}
+                progress={1}
+                tiers={snapshot.tiers}
+              />
+            </div>
+          </details>
         ) : null}
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -132,22 +160,22 @@ export function StageOutcomePanel({
             />
           </div>
         ) : null}
+
+        {pendingLine ? (
+          <p
+            className={`mt-3 text-sm ${
+              isError ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
+            }`}
+            role={isError ? "alert" : "status"}
+          >
+            {pendingLine}
+          </p>
+        ) : null}
       </div>
 
-      {pendingLine ? (
-        <p
-          className={`mt-3 text-sm ${
-            isError ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
-          }`}
-          role={isError ? "alert" : "status"}
-        >
-          {pendingLine}
-        </p>
-      ) : null}
-
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-stretch">
+      <div className="mt-3 flex shrink-0 flex-col gap-2 sm:mt-4 sm:flex-row sm:items-stretch sm:gap-3">
         <GameButton
-          className="h-14 min-h-14 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50 sm:text-base"
+          className="h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50 sm:h-14 sm:min-h-14 sm:text-base"
           disabled={!settleConfirmed}
           onClick={onContinue}
           size="default"
@@ -156,7 +184,7 @@ export function StageOutcomePanel({
         </GameButton>
         {!reducedMotion ? (
           <button
-            className={`${TERMINAL_ACTION_BUTTON_CLASS} inline-flex h-14 min-h-14 shrink-0 items-center justify-center whitespace-nowrap px-6 py-0 leading-none`}
+            className={`${TERMINAL_ACTION_BUTTON_CLASS} inline-flex h-12 min-h-12 shrink-0 items-center justify-center whitespace-nowrap px-6 py-0 leading-none sm:h-14 sm:min-h-14`}
             onClick={onRewatch}
             type="button"
           >
@@ -165,7 +193,7 @@ export function StageOutcomePanel({
         ) : null}
         {isError && settlement.canRetry ? (
           <button
-            className={`${TERMINAL_ACTION_BUTTON_CLASS} inline-flex h-14 min-h-14 shrink-0 items-center justify-center whitespace-nowrap px-6 py-0 leading-none`}
+            className={`${TERMINAL_ACTION_BUTTON_CLASS} inline-flex h-12 min-h-12 shrink-0 items-center justify-center whitespace-nowrap px-6 py-0 leading-none sm:h-14 sm:min-h-14`}
             onClick={() => void settlement.retry()}
             type="button"
           >

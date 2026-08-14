@@ -9,7 +9,7 @@ import { formatLeverageBps, type CrashTicket } from "@/lib/margin-call-crash";
 import { formatCountdown } from "@/lib/utils";
 
 const TICKET_CHIP_CLASS =
-  "mt-2 inline-flex items-center gap-2 border border-[var(--t-accent)]/60 bg-[var(--t-bg)]/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-accent)] backdrop-blur-sm";
+  "mt-1.5 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 border border-[var(--t-accent)]/60 bg-[var(--t-bg)]/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-accent)] backdrop-blur-sm sm:mt-2";
 
 export type StageHudProps = {
   countdownLabel: string | null;
@@ -46,15 +46,15 @@ export function StageHud({
 
   return (
     <div
-      className="flex shrink-0 flex-col gap-2 px-4 sm:px-6"
+      className="flex shrink-0 flex-col gap-1.5 px-3 pt-2 sm:gap-2 sm:px-6 sm:pt-3"
       data-testid="stage-hud"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="pointer-events-auto">
+      <div className="flex flex-nowrap items-start justify-between gap-2 sm:gap-3">
+        <div className="pointer-events-auto min-w-0">
           {countdownLabel && countdownSeconds !== null ? (
             <p
               aria-live="polite"
-              className="text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]"
+              className="truncate text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]"
             >
               {countdownLabel}{" "}
               <span className="tabular-nums text-[var(--t-text)]">
@@ -90,7 +90,7 @@ export function StageHud({
             )
           ) : null}
         </div>
-        <div className="pointer-events-auto">
+        <div className="pointer-events-auto shrink-0">
           <TheaterSoundToggle suggest={suggestSound} />
         </div>
       </div>
@@ -98,7 +98,7 @@ export function StageHud({
       {statusMessage ? (
         <p
           aria-live={isAlert ? undefined : "polite"}
-          className={`pointer-events-auto max-w-xl text-xs leading-5 ${
+          className={`pointer-events-auto line-clamp-3 max-w-xl text-xs leading-5 sm:line-clamp-none ${
             isAlert ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
           }`}
           role={isAlert ? "alert" : undefined}
@@ -115,15 +115,17 @@ function TicketChipBody({ ticket }: { ticket: CrashTicket }) {
     <>
       <span
         aria-hidden="true"
-        className="live-pulse h-1.5 w-1.5 bg-[var(--t-accent)]"
+        className="live-pulse h-1.5 w-1.5 shrink-0 bg-[var(--t-accent)]"
       />
-      Your Ticket · {formatDeskDollarsAmount(ticket.margin)} ·{" "}
-      {formatLeverageBps(ticket.leverageBps)}
-      {ticket.reservedPayout > 0n ? (
-        <span className="text-[var(--t-muted)]">
-          · max {formatDeskDollarsAmountLabel(ticket.reservedPayout)}
-        </span>
-      ) : null}
+      <span className="min-w-0">
+        Your Ticket · {formatDeskDollarsAmount(ticket.margin)} ·{" "}
+        {formatLeverageBps(ticket.leverageBps)}
+        {ticket.reservedPayout > 0n ? (
+          <span className="text-[var(--t-muted)]">
+            · max {formatDeskDollarsAmountLabel(ticket.reservedPayout)}
+          </span>
+        ) : null}
+      </span>
     </>
   );
 }

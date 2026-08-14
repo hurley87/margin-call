@@ -73,6 +73,9 @@ describe("AppShell", () => {
     expect(screen.getByTestId("no-real-value-disclosure")).toBeTruthy();
     expect(screen.getByText("Floor content")).toBeTruthy();
     expect(screen.getByTestId("app-shell-floor-main")).toBeTruthy();
+    expect(document.querySelector('[data-floor="true"]')?.className).toMatch(
+      /flex h-svh/
+    );
   });
 
   it("uses document layout main (not floor) on Record", () => {
