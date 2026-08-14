@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthControls } from "@/components/auth/auth-controls";
 import { DeskDollarsFaucetProvider } from "@/components/desk-dollars/desk-dollars-faucet";
-import { NoRealValueDisclosure } from "@/components/no-real-value-disclosure";
 import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
 
 const NAV = [
@@ -18,8 +17,8 @@ const NAV_LINK_CLASS =
   "inline-flex min-h-11 shrink-0 items-center px-2.5 py-1 text-xs font-bold uppercase tracking-[0.16em] transition-colors duration-[var(--mc-dur-fast)] sm:px-3";
 
 /**
- * Shared chrome: brand, Floor / Record / Rounds / LP / Docs nav, compact auth,
- * disclosure. Floor (`/`) is a locked `h-svh` column: in-flow header, then
+ * Shared chrome: brand, Floor / Record / Rounds / LP / Docs nav, compact auth.
+ * Floor (`/`) is a locked `h-svh` column: in-flow header, then
  * `main` as the sole stage paint owner (CrashStage fills it). Other routes
  * keep the document layout.
  */
@@ -95,13 +94,6 @@ export function AppShell({
               </nav>
             </div>
             <AuthControls />
-          </div>
-          <div
-            className={`mx-auto w-full px-3 pb-1.5 sm:px-6 sm:pb-2 ${
-              isFloor ? "" : "max-w-7xl"
-            }`}
-          >
-            <NoRealValueDisclosure />
           </div>
         </header>
         <main
