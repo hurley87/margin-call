@@ -6,6 +6,7 @@ import type { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settleme
 import { formatLeverageBps } from "@/lib/margin-call-crash";
 import { formatDeskDollarsAmount } from "@/lib/desk-dollars";
 import { settlementStatusCopy } from "@/lib/settlement-status-copy";
+import { STAGE_DOCK_STICKY_CTA_CLASS } from "./stage-dock-chrome";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { ticketResolveCandidates } from "./primary-ticket-resolve-action";
 
@@ -97,7 +98,7 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
         </p>
       ) : null}
 
-      <div className="sticky bottom-0 z-10 -mx-1 mt-3 space-y-3 bg-[var(--t-bg)]/95 px-1 pt-2 backdrop-blur-sm sm:static sm:mx-0 sm:mt-4 sm:bg-transparent sm:px-0 sm:pt-0 sm:backdrop-blur-none">
+      <div className={STAGE_DOCK_STICKY_CTA_CLASS}>
         {actions.map((action) =>
           action.variant === "terminal" ? (
             <button
@@ -113,8 +114,8 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
             <GameButton
               className={
                 action.variant === "primary"
-                  ? "w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] max-sm:min-h-12 max-sm:px-6 max-sm:py-3.5 max-sm:text-base max-sm:tracking-[0.16em]"
-                  : "w-full max-sm:min-h-12 max-sm:px-6 max-sm:py-3.5 max-sm:text-base max-sm:tracking-[0.16em]"
+                  ? "w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+                  : "w-full"
               }
               disabled={busy}
               key={action.label}

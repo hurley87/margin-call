@@ -21,7 +21,7 @@ const gameButtonVariants = cva(
         default: "px-6 py-3",
         sm: "min-h-9 px-3 py-2 text-[11px] tracking-[0.14em]",
         lg: "min-h-12 px-8 py-3.5 text-base",
-        hero: "min-h-16 w-full px-8 py-5 text-xl tracking-[0.2em] sm:text-2xl",
+        hero: "min-h-12 w-full px-6 py-3.5 text-base tracking-[0.16em] sm:min-h-16 sm:px-8 sm:py-5 sm:text-xl sm:tracking-[0.2em] sm:text-2xl",
       },
     },
     defaultVariants: {

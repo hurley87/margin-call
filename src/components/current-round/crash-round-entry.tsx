@@ -21,6 +21,7 @@ import {
   formatDeskDollarsAmount,
   formatDeskDollarsAmountLabel,
 } from "@/lib/desk-dollars";
+import { STAGE_DOCK_STICKY_CTA_CLASS } from "@/components/crash-stage/overlay/stage-dock-chrome";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { entrySubmitLabel } from "@/lib/entry-submit-label";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
@@ -209,10 +210,9 @@ export function CrashRoundEntry({
         </p>
       ) : null}
 
-      {/* Sticky pin keeps Enter visible when the dock body scrolls on phones. */}
-      <div className="sticky bottom-0 z-10 -mx-1 mt-3 space-y-3 bg-[var(--t-bg)]/95 px-1 pt-2 backdrop-blur-sm sm:static sm:mx-0 sm:mt-4 sm:bg-transparent sm:px-0 sm:pt-0 sm:backdrop-blur-none">
+      <div className={STAGE_DOCK_STICKY_CTA_CLASS}>
         <GameButton
-          className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] max-sm:min-h-12 max-sm:px-6 max-sm:py-3.5 max-sm:text-base max-sm:tracking-[0.16em]"
+          className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
           disabled={!entry.canEnter}
           onClick={() => void entry.enter()}
           size="hero"
