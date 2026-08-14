@@ -154,7 +154,6 @@ export function CrashRoundEntry({
       </p>
 
       <EntryOptionGroup
-        columns={3}
         legend="Margin"
         options={ENTRY_MARGINS_TUSD}
         selected={entry.selectedMargin}
@@ -163,7 +162,6 @@ export function CrashRoundEntry({
       />
 
       <EntryOptionGroup
-        columns={3}
         legend="Arcade Leverage"
         options={ENTRY_LEVERAGE_TIERS_BPS}
         selected={entry.selectedLeverageBps}
