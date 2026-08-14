@@ -174,7 +174,7 @@ export function CrashRoundEntry({
     return (
       <EntryShell heading="Enter this round">
         <p className="hidden text-sm text-[var(--t-text)] sm:block">
-          Choose margin and Arcade Leverage. Expected payout is the maximum
+          Choose margin and leverage. Expected payout is the maximum
           reservation, not a guaranteed return.
         </p>
         <EntryPickers entry={entry} signedOut />
@@ -240,8 +240,8 @@ export function CrashRoundEntry({
       heading="Enter this round"
     >
       <p className="hidden text-sm text-[var(--t-text)] sm:block">
-        Choose margin and Arcade Leverage. Expected payout is the maximum
-        reservation, not a guaranteed return.
+        Choose margin and leverage. Expected payout is the maximum reservation,
+        not a guaranteed return.
       </p>
 
       <EntryPickers entry={entry} />
@@ -284,7 +284,7 @@ function EntryPickers({
       />
 
       <EntryOptionGroup
-        legend="Arcade Leverage"
+        legend="Leverage"
         options={ENTRY_LEVERAGE_TIERS_BPS}
         selected={entry.selectedLeverageBps}
         format={formatLeverageBps}

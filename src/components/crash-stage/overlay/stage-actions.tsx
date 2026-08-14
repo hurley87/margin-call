@@ -24,8 +24,10 @@ export type StageActionsProps = {
 };
 
 /**
- * Floor action dock — centered entry / settle card. Pickers scroll in the
- * body; the primary Enter / Verify CTA stays pinned at the card footer.
+ * Floor action dock — centered entry / settle card. Sized to fit the
+ * entry form without scrolling on typical viewports; overflow remains a
+ * fallback for short screens or expanded approval details. The primary
+ * Enter / Verify CTA stays pinned at the card footer.
  */
 export function StageActions({
   mode,
@@ -62,7 +64,7 @@ export function StageActions({
       data-testid="stage-actions"
     >
       {showEntry || showSettle ? (
-        <div className="flex max-h-[min(70svh,32rem)] min-h-0 w-full flex-col overflow-hidden rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 backdrop-blur-md">
+        <div className="flex max-h-[min(88svh,44rem)] min-h-0 w-full flex-col overflow-hidden rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 backdrop-blur-md">
           {showEntry ? (
             <CrashRoundEntry
               armed={kind === "arm"}
