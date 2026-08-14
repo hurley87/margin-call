@@ -24,7 +24,7 @@ export function dialogPopupClass(size: keyof typeof DIALOG_POPUP_SIZE_CLASS) {
 export const TERMINAL_ACTION_BUTTON_CLASS =
   "border border-[var(--t-accent)] px-4 py-2 text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] hover:bg-[var(--t-accent-soft)]";
 
-/** Compact Floor HUD chip — How to Play / Sound Off keep matching heights. */
+/** Compact chip styling — RoundTheater sound toggle and similar HUD controls. */
 export const STAGE_HUD_CHIP_CLASS =
   "border border-[var(--t-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)]";
 

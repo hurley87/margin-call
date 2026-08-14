@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { FloorHowToPlay } from "@/components/app-shell/floor-how-to-play";
 import { AuthControls } from "@/components/auth/auth-controls";
 import { DeskDollarsFaucetProvider } from "@/components/desk-dollars/desk-dollars-faucet";
 import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
@@ -93,7 +94,10 @@ export function AppShell({
                 </a>
               </nav>
             </div>
-            <AuthControls />
+            <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+              {isFloor ? <FloorHowToPlay /> : null}
+              <AuthControls />
+            </div>
           </div>
         </header>
         <main

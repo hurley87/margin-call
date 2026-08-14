@@ -2,9 +2,14 @@
 
 import { memo, useEffect, useRef } from "react";
 import { HOW_TO_PLAY_URL } from "@/lib/product-docs";
-import { STAGE_HUD_CHIP_CLASS } from "@/lib/utils";
+import { cn, STAGE_HUD_CHIP_CLASS } from "@/lib/utils";
 
 const SEEN_KEY = "mc-floor-howto-seen";
+
+const HEADER_CHIP_CLASS = cn(
+  STAGE_HUD_CHIP_CLASS,
+  "rounded-sm px-2.5 sm:text-xs"
+);
 
 const steps = [
   {
@@ -43,7 +48,7 @@ export const FloorHowToPlay = memo(function FloorHowToPlay() {
     <div className="relative" data-testid="floor-how-to-play">
       <details className="group" ref={detailsRef}>
         <summary
-          className={`inline-flex cursor-pointer list-none items-center ${STAGE_HUD_CHIP_CLASS} marker:content-none [&::-webkit-details-marker]:hidden`}
+          className={`inline-flex cursor-pointer list-none items-center ${HEADER_CHIP_CLASS} marker:content-none [&::-webkit-details-marker]:hidden`}
         >
           How to play
         </summary>

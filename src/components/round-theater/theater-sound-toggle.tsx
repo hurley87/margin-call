@@ -17,7 +17,13 @@ const HINT_SEEN_KEY = "margin-call-sound-hint";
  * is on screen) and sound is off, it flashes once with a dismissable hint —
  * once per browser, ever.
  */
-export function TheaterSoundToggle({ suggest = false }: { suggest?: boolean }) {
+export function TheaterSoundToggle({
+  suggest = false,
+  className = STAGE_HUD_CHIP_CLASS,
+}: {
+  suggest?: boolean;
+  className?: string;
+}) {
   const enabled = useSyncExternalStore(
     subscribeTheaterSound,
     readTheaterSoundEnabled,
@@ -55,9 +61,7 @@ export function TheaterSoundToggle({ suggest = false }: { suggest?: boolean }) {
       ) : null}
       <button
         aria-pressed={enabled}
-        className={`${STAGE_HUD_CHIP_CLASS} ${
-          showHint ? "mc-onboard-flash" : ""
-        }`}
+        className={`${className} ${showHint ? "mc-onboard-flash" : ""}`}
         onClick={toggle}
         title={theaterCopy.soundHint}
         type="button"
