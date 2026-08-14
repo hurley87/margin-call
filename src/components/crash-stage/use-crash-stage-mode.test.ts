@@ -17,6 +17,7 @@ function openLive(): Extract<TheaterLive, { kind: "open" }> {
   return {
     kind: "open",
     roundId: 12n,
+    phaseLabel: "open",
     tape: null,
     timeline,
   };

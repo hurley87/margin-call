@@ -3,11 +3,14 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CrashTicket } from "@/lib/margin-call-crash";
-import { HOW_TO_PLAY_URL } from "@/lib/product-docs";
 import { StageHud } from "./stage-hud";
 
 vi.mock("@/components/round-theater/theater-sound-toggle", () => ({
   TheaterSoundToggle: () => <div data-testid="sound-toggle" />,
+}));
+
+vi.mock("@/components/crash-stage/overlay/floor-how-to-play", () => ({
+  FloorHowToPlay: () => <div data-testid="floor-how-to-play" />,
 }));
 
 const ticket: CrashTicket = {
@@ -74,7 +77,7 @@ describe("StageHud", () => {
     ).toHaveProperty("disabled", true);
   });
 
-  it("links How a round works to the GitBook how-to-play page", () => {
+  it("renders the Floor how-to-play control beside sound", () => {
     render(
       <StageHud
         countdownLabel={null}
@@ -84,10 +87,7 @@ describe("StageHud", () => {
       />
     );
 
-    const link = screen.getByTestId("stage-hud-how-to-play");
-    expect(link.getAttribute("href")).toBe(HOW_TO_PLAY_URL);
-    expect(link.getAttribute("target")).toBe("_blank");
-    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
-    expect(link.textContent).toBe("How a round works");
+    expect(screen.getByTestId("floor-how-to-play")).toBeTruthy();
+    expect(screen.getByTestId("sound-toggle")).toBeTruthy();
   });
 });

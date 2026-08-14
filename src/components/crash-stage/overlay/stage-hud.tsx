@@ -1,12 +1,12 @@
 "use client";
 
+import { FloorHowToPlay } from "@/components/crash-stage/overlay/floor-how-to-play";
 import { TheaterSoundToggle } from "@/components/round-theater/theater-sound-toggle";
 import {
   formatDeskDollarsAmount,
   formatDeskDollarsAmountLabel,
 } from "@/lib/desk-dollars";
 import { formatLeverageBps, type CrashTicket } from "@/lib/margin-call-crash";
-import { HOW_TO_PLAY_URL } from "@/lib/product-docs";
 import { formatCountdown } from "@/lib/utils";
 
 const TICKET_CHIP_CLASS =
@@ -28,7 +28,7 @@ export type StageHudProps = {
 };
 
 /**
- * Compact floor HUD: live region, YOU ticket chip, how-to-play docs, sound.
+ * Compact floor HUD: live region, YOU ticket chip, how-to-play, sound.
  * Faucet lives on CrashRoundEntry in the action overlay.
  */
 export function StageHud({
@@ -91,16 +91,8 @@ export function StageHud({
             )
           ) : null}
         </div>
-        <div className="pointer-events-auto flex shrink-0 items-center gap-2 sm:gap-3">
-          <a
-            className="inline-flex min-h-11 items-center text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)] transition-colors duration-[var(--mc-dur-fast)] hover:text-[var(--t-accent)]"
-            data-testid="stage-hud-how-to-play"
-            href={HOW_TO_PLAY_URL}
-            rel="noopener noreferrer"
-            target="_blank"
-          >
-            How a round works
-          </a>
+        <div className="pointer-events-auto flex shrink-0 items-start gap-2">
+          <FloorHowToPlay />
           <TheaterSoundToggle suggest={suggestSound} />
         </div>
       </div>

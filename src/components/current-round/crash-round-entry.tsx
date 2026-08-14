@@ -21,7 +21,9 @@ import {
   formatDeskDollarsAmount,
   formatDeskDollarsAmountLabel,
 } from "@/lib/desk-dollars";
+import { armedEntryCopy, formatArmedEntryCta } from "@/lib/round-phase-copy";
 import { STAGE_DOCK_STICKY_CTA_CLASS } from "@/components/crash-stage/overlay/stage-dock-chrome";
+import { SignInCta } from "@/components/auth/sign-in-cta";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { entrySubmitLabel } from "@/lib/entry-submit-label";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
@@ -52,17 +54,24 @@ type CrashRoundEntryProps = {
   roundId: bigint;
   phase: CrashRoundPhase;
   countdownSeconds: number;
+  /**
+   * Pre-entry wait: pickers stay interactive, CTA disabled until the next
+   * window opens. Mounted by StageActions when dock kind is `arm`.
+   */
+  armed?: boolean;
 };
 
 /**
  * Player entry surface for the current Crash round.
  * Offers 1/5/10 USDC margins and six leverage tiers only into initialized
- * open rounds with more than five seconds remaining before lock.
+ * open rounds with more than five seconds remaining before lock. When `armed`,
+ * the same pickers stay visible with a disabled countdown CTA.
  */
 export function CrashRoundEntry({
   roundId,
   phase,
   countdownSeconds,
+  armed = false,
 }: CrashRoundEntryProps) {
   const entry = useCrashRoundEntry({ roundId });
   const reducedMotion = useReducedMotion();
@@ -80,25 +89,51 @@ export function CrashRoundEntry({
     previousStatus.current = entry.status;
   }, [entry.status, reducedMotion]);
 
+  if (entry.ticket) {
+    const justEntered = entry.status === "confirmed";
+    return (
+      <EntryShell heading="Enter this round">
+        <div className={justEntered ? "mc-onboard-flash" : undefined}>
+          <CrashLiveTicket ticket={entry.ticket} />
+        </div>
+      </EntryShell>
+    );
+  }
+
+  if (armed) {
+    return (
+      <EntryShell heading="Next round">
+        <p className="text-sm text-[var(--t-muted)]">{armedEntryCopy(phase)}</p>
+        <EntryPickers entry={entry} signedOut={!entry.walletAddress} />
+        {!entry.walletAddress ? (
+          <SignInCta className="mt-3 sm:mt-4" />
+        ) : (
+          <>
+            <DeskDollarsFaucet className="mt-3 sm:mt-4" />
+            <div className={STAGE_DOCK_STICKY_CTA_CLASS}>
+              <GameButton
+                className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+                disabled
+                size="hero"
+              >
+                {formatArmedEntryCta(countdownSeconds)}
+              </GameButton>
+            </div>
+            <ApprovalDetails entry={entry} />
+          </>
+        )}
+      </EntryShell>
+    );
+  }
+
   if (phase === "uninitialized" || phase === "prelaunch") {
     return (
-      <EntryShell>
+      <EntryShell heading="Enter this round">
         <p className="text-sm text-[var(--t-muted)]">
           Waiting for an ETH-holding opener to initialize this epoch. Embedded
           wallets never create rounds, so entry stays closed until a handle is
           pre-committed onchain.
         </p>
-      </EntryShell>
-    );
-  }
-
-  if (entry.ticket) {
-    const justEntered = entry.status === "confirmed";
-    return (
-      <EntryShell>
-        <div className={justEntered ? "mc-onboard-flash" : undefined}>
-          <CrashLiveTicket ticket={entry.ticket} />
-        </div>
       </EntryShell>
     );
   }
@@ -109,7 +144,7 @@ export function CrashRoundEntry({
 
   if (!canOfferEntry(phase, countdownSeconds)) {
     return (
-      <EntryShell>
+      <EntryShell heading="Enter this round">
         <p className="text-sm text-[var(--t-amber-hot)]" role="status">
           Entry cutoff — less than five seconds remain before onchain lock. New
           entries are no longer offered.
@@ -120,17 +155,20 @@ export function CrashRoundEntry({
 
   if (!entry.walletAddress) {
     return (
-      <EntryShell>
-        <p className="text-sm text-[var(--t-muted)]">
-          Sign in with phone to enter this round with a sponsored transaction.
+      <EntryShell heading="Enter this round">
+        <p className="hidden text-sm text-[var(--t-text)] sm:block">
+          Choose margin and Arcade Leverage. Expected payout is the maximum
+          reservation, not a guaranteed return.
         </p>
+        <EntryPickers entry={entry} signedOut />
+        <SignInCta className="mt-3 sm:mt-4" />
       </EntryShell>
     );
   }
 
   if (entry.status === "unavailable") {
     return (
-      <EntryShell>
+      <EntryShell heading="Enter this round">
         <p className="text-sm text-[var(--t-red)]" role="alert">
           {entry.error}
         </p>
@@ -147,48 +185,13 @@ export function CrashRoundEntry({
     : "Retry";
 
   return (
-    <EntryShell>
+    <EntryShell heading="Enter this round">
       <p className="hidden text-sm text-[var(--t-text)] sm:block">
         Choose margin and Arcade Leverage. Expected payout is the maximum
         reservation, not a guaranteed return.
       </p>
 
-      <EntryOptionGroup
-        legend="Margin"
-        options={ENTRY_MARGINS_TUSD}
-        selected={entry.selectedMargin}
-        format={(margin) => formatDeskDollarsAmount(margin)}
-        onSelect={entry.selectMargin}
-      />
-
-      <EntryOptionGroup
-        legend="Arcade Leverage"
-        options={ENTRY_LEVERAGE_TIERS_BPS}
-        selected={entry.selectedLeverageBps}
-        format={formatLeverageBps}
-        onSelect={entry.selectLeverage}
-      />
-
-      <dl className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[11px] tabular-nums sm:mt-4 sm:grid sm:grid-cols-2 sm:gap-3 sm:text-sm">
-        <div className="flex items-baseline gap-1.5 sm:block">
-          <dt className="text-[var(--t-muted)]">
-            <span className="sm:hidden">Wallet</span>
-            <span className="hidden sm:inline">Wallet Desk Dollars</span>
-          </dt>
-          <dd className="tabular-nums text-[var(--t-text)]">
-            {formatDeskDollarsAmountLabel(entry.tUsdBalance)}
-          </dd>
-        </div>
-        <div className="flex items-baseline gap-1.5 sm:block">
-          <dt className="text-[var(--t-muted)]">
-            <span className="sm:hidden">Max</span>
-            <span className="hidden sm:inline">Expected maximum payout</span>
-          </dt>
-          <dd className="tabular-nums text-[var(--t-green-hot)]">
-            {formatDeskDollarsAmount(entry.expectedPayout)}
-          </dd>
-        </div>
-      </dl>
+      <EntryPickers entry={entry} />
 
       <DeskDollarsFaucet className="mt-3 sm:mt-4" />
 
@@ -223,70 +226,144 @@ export function CrashRoundEntry({
         ) : null}
       </div>
 
-      <details className="mt-3 text-xs leading-5 text-[var(--t-muted)] sm:mt-4">
-        <summary className="cursor-pointer font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
-          Approval details
-        </summary>
-        <div className="mt-2 border border-[var(--t-border)] p-3">
-          <p>
-            Spender: Bankroll Vault
-            {entry.vaultAddress ? (
-              <>
-                {" "}
-                <code className="break-all text-[var(--t-accent)]">
-                  {entry.vaultAddress}
-                </code>
-              </>
-            ) : null}
-          </p>
-          <p className="mt-2">
-            One-time bounded approval:{" "}
-            {formatDeskDollarsAmount(BOUNDED_ENTRY_ALLOWANCE_TUSD)}. Later
-            entries reuse this allowance with sponsored enter-only transactions.
-            This interface never requests an unlimited allowance.
-          </p>
-          <p className="mt-2">
-            Game contract
-            {entry.gameAddress ? (
-              <>
-                :{" "}
-                <code className="break-all text-[var(--t-accent)]">
-                  {entry.gameAddress}
-                </code>
-              </>
-            ) : null}
-            . Margin moves directly from your wallet to the vault.
-          </p>
-          <p className="mt-2">
-            Current vault allowance:{" "}
-            {formatDeskDollarsAmountLabel(entry.allowance)}. Selected margin:{" "}
-            {formatDeskDollarsAmount(entry.selectedMargin)}.
-          </p>
-          {entry.needsApproval ? (
-            <p className="mt-2 text-[var(--t-amber-hot)]">
-              Your first entry will submit the bounded approval, wait for its
-              receipt, then submit enter.
-            </p>
-          ) : (
-            <p className="mt-2 text-[var(--t-green)]">
-              Allowance already covers this margin. Only a sponsored enter will
-              be submitted.
-            </p>
-          )}
-        </div>
-      </details>
+      <ApprovalDetails entry={entry} />
     </EntryShell>
   );
 }
 
-function EntryShell({ children }: { children: React.ReactNode }) {
+type EntryView = ReturnType<typeof useCrashRoundEntry>;
+
+function EntryPickers({
+  entry,
+  signedOut = false,
+}: {
+  entry: EntryView;
+  signedOut?: boolean;
+}) {
+  return (
+    <>
+      <EntryOptionGroup
+        legend="Margin"
+        options={ENTRY_MARGINS_TUSD}
+        selected={entry.selectedMargin}
+        format={(margin) => formatDeskDollarsAmount(margin)}
+        onSelect={entry.selectMargin}
+      />
+
+      <EntryOptionGroup
+        legend="Arcade Leverage"
+        options={ENTRY_LEVERAGE_TIERS_BPS}
+        selected={entry.selectedLeverageBps}
+        format={formatLeverageBps}
+        onSelect={entry.selectLeverage}
+      />
+
+      {!signedOut ? (
+        <dl className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[11px] tabular-nums sm:mt-4 sm:grid sm:grid-cols-2 sm:gap-3 sm:text-sm">
+          <div className="flex items-baseline gap-1.5 sm:block">
+            <dt className="text-[var(--t-muted)]">
+              <span className="sm:hidden">Wallet</span>
+              <span className="hidden sm:inline">Wallet Desk Dollars</span>
+            </dt>
+            <dd className="tabular-nums text-[var(--t-text)]">
+              {formatDeskDollarsAmountLabel(entry.tUsdBalance)}
+            </dd>
+          </div>
+          <div className="flex items-baseline gap-1.5 sm:block">
+            <dt className="text-[var(--t-muted)]">
+              <span className="sm:hidden">Max</span>
+              <span className="hidden sm:inline">Expected maximum payout</span>
+            </dt>
+            <dd className="tabular-nums text-[var(--t-green-hot)]">
+              {formatDeskDollarsAmount(entry.expectedPayout)}
+            </dd>
+          </div>
+        </dl>
+      ) : (
+        <dl className="mt-3 text-[11px] tabular-nums sm:mt-4 sm:text-sm">
+          <div className="flex items-baseline gap-1.5 sm:block">
+            <dt className="text-[var(--t-muted)]">Expected maximum payout</dt>
+            <dd className="tabular-nums text-[var(--t-green-hot)]">
+              {formatDeskDollarsAmount(entry.expectedPayout)}
+            </dd>
+          </div>
+        </dl>
+      )}
+    </>
+  );
+}
+
+function ApprovalDetails({ entry }: { entry: EntryView }) {
+  return (
+    <details className="mt-3 text-xs leading-5 text-[var(--t-muted)] sm:mt-4">
+      <summary className="cursor-pointer font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
+        Approval details
+      </summary>
+      <div className="mt-2 border border-[var(--t-border)] p-3">
+        <p>
+          Spender: Bankroll Vault
+          {entry.vaultAddress ? (
+            <>
+              {" "}
+              <code className="break-all text-[var(--t-accent)]">
+                {entry.vaultAddress}
+              </code>
+            </>
+          ) : null}
+        </p>
+        <p className="mt-2">
+          One-time bounded approval:{" "}
+          {formatDeskDollarsAmount(BOUNDED_ENTRY_ALLOWANCE_TUSD)}. Later entries
+          reuse this allowance with sponsored enter-only transactions. This
+          interface never requests an unlimited allowance.
+        </p>
+        <p className="mt-2">
+          Game contract
+          {entry.gameAddress ? (
+            <>
+              :{" "}
+              <code className="break-all text-[var(--t-accent)]">
+                {entry.gameAddress}
+              </code>
+            </>
+          ) : null}
+          . Margin moves directly from your wallet to the vault.
+        </p>
+        <p className="mt-2">
+          Current vault allowance:{" "}
+          {formatDeskDollarsAmountLabel(entry.allowance)}. Selected margin:{" "}
+          {formatDeskDollarsAmount(entry.selectedMargin)}.
+        </p>
+        {entry.needsApproval ? (
+          <p className="mt-2 text-[var(--t-amber-hot)]">
+            Your first entry will submit the bounded approval, wait for its
+            receipt, then submit enter.
+          </p>
+        ) : (
+          <p className="mt-2 text-[var(--t-green)]">
+            Allowance already covers this margin. Only a sponsored enter will be
+            submitted.
+          </p>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function EntryShell({
+  children,
+  heading,
+}: {
+  children: React.ReactNode;
+  heading: string;
+}) {
   return (
     <div aria-labelledby="crash-entry-heading" className="text-left">
       <h3
         id="crash-entry-heading"
         className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg"
       >
-        Enter this round
+        {heading}
       </h3>
       <div className="mt-2 sm:mt-3">{children}</div>
     </div>

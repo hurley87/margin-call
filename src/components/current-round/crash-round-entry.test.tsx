@@ -51,6 +51,14 @@ vi.mock("@/components/desk-dollars/desk-dollars-faucet", () => ({
   DeskDollarsFaucet: () => null,
 }));
 
+vi.mock("@/components/auth/sign-in-cta", () => ({
+  SignInCta: () => (
+    <button data-testid="sign-in-cta" type="button">
+      Continue with phone
+    </button>
+  ),
+}));
+
 import { CrashRoundEntry } from "./crash-round-entry";
 
 describe("CrashRoundEntry", () => {
@@ -175,5 +183,32 @@ describe("CrashRoundEntry", () => {
       screen.getByRole("button", { name: "Retry entry receipt check" })
     );
     expect(sdk.entry.retry).toHaveBeenCalledOnce();
+  });
+
+  it("arms pickers with a disabled countdown CTA between rounds", () => {
+    sdk.props.phase = "locked";
+    sdk.props.countdownSeconds = 8;
+    render(<CrashRoundEntry {...sdk.props} armed />);
+    expect(screen.getByRole("heading", { name: "Next round" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Margin" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Arcade Leverage" })).toBeTruthy();
+    const cta = screen.getByRole("button", { name: /Entry opens in/ });
+    expect(cta).toHaveProperty("disabled", true);
+    expect(
+      screen.queryByRole("button", { name: /Approve & enter/ })
+    ).toBeNull();
+  });
+
+  it("keeps pickers and a sign-in CTA when signed out", () => {
+    sdk.entry = sdk.makeEntry({
+      walletAddress: null,
+      canEnter: false,
+    });
+    render(<CrashRoundEntry {...sdk.props} />);
+    expect(screen.getByRole("group", { name: "Margin" })).toBeTruthy();
+    expect(screen.getByTestId("sign-in-cta")).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: /Approve & enter/ })
+    ).toBeNull();
   });
 });
