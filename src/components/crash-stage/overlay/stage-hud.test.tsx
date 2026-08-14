@@ -3,6 +3,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CrashTicket } from "@/lib/margin-call-crash";
+import { HOW_TO_PLAY_URL } from "@/lib/product-docs";
 import { StageHud } from "./stage-hud";
 
 vi.mock("@/components/round-theater/theater-sound-toggle", () => ({
@@ -71,5 +72,22 @@ describe("StageHud", () => {
     expect(
       screen.getByRole("button", { name: "Refund margin" })
     ).toHaveProperty("disabled", true);
+  });
+
+  it("links How a round works to the GitBook how-to-play page", () => {
+    render(
+      <StageHud
+        countdownLabel={null}
+        countdownSeconds={null}
+        playerTicket={null}
+        statusMessage={null}
+      />
+    );
+
+    const link = screen.getByTestId("stage-hud-how-to-play");
+    expect(link.getAttribute("href")).toBe(HOW_TO_PLAY_URL);
+    expect(link.getAttribute("target")).toBe("_blank");
+    expect(link.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(link.textContent).toBe("How a round works");
   });
 });
