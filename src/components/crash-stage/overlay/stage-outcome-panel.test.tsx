@@ -139,13 +139,34 @@ describe("StageOutcomePanel", () => {
   it("gates Continue behind the settle receipt", () => {
     const props = renderPanel({
       settleConfirmed: false,
-      settlement: makeSettlement({ status: "claim-pending" }),
+      settlement: makeSettlement({
+        status: "claim-pending",
+        canClaim: false,
+      }),
     });
     const button = screen.getByRole("button", { name: "Settling onchain…" });
     expect(button.hasAttribute("disabled")).toBe(true);
     fireEvent.click(button);
     expect(props.onContinue).not.toHaveBeenCalled();
     expect(screen.getByRole("status").textContent).toContain("Claim pending");
+  });
+
+  it("offers Claim payout when the ticket won but is still unsettled", () => {
+    const settlement = makeSettlement({
+      status: "ready",
+      outcome: "won",
+      canClaim: true,
+      canSettle: false,
+      canRetry: false,
+      transactions: [],
+    });
+    renderPanel({ settleConfirmed: false, settlement });
+    expect(screen.getByRole("status").textContent).toContain("Payout is ready");
+    fireEvent.click(screen.getByRole("button", { name: "Claim payout" }));
+    expect(settlement.claim).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: "Continue to the Floor" })
+    ).toBeNull();
   });
 
   it("continues and rewatches once confirmed", () => {
@@ -169,7 +190,7 @@ describe("StageOutcomePanel", () => {
     ).toBeNull();
   });
 
-  it("surfaces a background settle failure with retry", () => {
+  it("surfaces a background settle failure with retry as the primary CTA", () => {
     const settlement = makeSettlement({
       status: "error",
       error: "We couldn't claim your payout. Please try again.",
@@ -180,5 +201,8 @@ describe("StageOutcomePanel", () => {
     expect(screen.getByRole("alert").textContent).toContain("couldn't claim");
     fireEvent.click(screen.getByRole("button", { name: "Retry claim" }));
     expect(settlement.retry).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: "Settling onchain…" })
+    ).toBeNull();
   });
 });

@@ -1,13 +1,14 @@
 "use client";
 
 import { FloorHowToPlay } from "@/components/crash-stage/overlay/floor-how-to-play";
+import { CountdownDial } from "@/components/crash-stage/overlay/countdown-dial";
+import type { CountdownUrgency } from "@/components/crash-stage/scenes/countdown-scene";
 import { TheaterSoundToggle } from "@/components/round-theater/theater-sound-toggle";
 import {
   formatDeskDollarsAmount,
   formatDeskDollarsAmountLabel,
 } from "@/lib/desk-dollars";
 import { formatLeverageBps, type CrashTicket } from "@/lib/margin-call-crash";
-import { formatCountdown } from "@/lib/utils";
 
 const TICKET_CHIP_CLASS =
   "mt-1.5 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 border border-[var(--t-accent)]/60 bg-[var(--t-bg)]/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-accent)] backdrop-blur-sm sm:mt-2";
@@ -15,6 +16,9 @@ const TICKET_CHIP_CLASS =
 export type StageHudProps = {
   countdownLabel: string | null;
   countdownSeconds: number | null;
+  /** 0..1 fill of the active timeline segment for the dial ring. */
+  countdownProgress?: number | null;
+  urgency?: CountdownUrgency;
   statusMessage: string | null;
   isAlert?: boolean;
   playerTicket: CrashTicket | null;
@@ -28,12 +32,14 @@ export type StageHudProps = {
 };
 
 /**
- * Compact floor HUD: live region, YOU ticket chip, how-to-play, sound.
+ * Compact floor HUD: timer + entry chip on the left, how-to-play + sound right.
  * Faucet lives on CrashRoundEntry in the action overlay.
  */
 export function StageHud({
   countdownLabel,
   countdownSeconds,
+  countdownProgress = null,
+  urgency = "calm",
   statusMessage,
   isAlert = false,
   playerTicket,
@@ -44,24 +50,23 @@ export function StageHud({
   lockedInOpen = false,
 }: StageHudProps) {
   const isClearable = Boolean(playerTicket && onClear && clearLabel);
+  const showDial = countdownLabel !== null || countdownSeconds !== null;
 
   return (
     <div
       className="flex shrink-0 flex-col gap-1.5 px-3 pt-2 sm:gap-2 sm:px-6 sm:pt-3"
       data-testid="stage-hud"
     >
-      <div className="flex flex-nowrap items-start justify-between gap-2 sm:gap-3">
-        <div className="pointer-events-auto min-w-0">
-          {countdownLabel && countdownSeconds !== null ? (
-            <p
-              aria-live="polite"
-              className="truncate text-[10px] font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]"
-            >
-              {countdownLabel}{" "}
-              <span className="tabular-nums text-[var(--t-text)]">
-                {formatCountdown(countdownSeconds)}
-              </span>
-            </p>
+      <div className="flex items-start justify-between gap-2 sm:gap-3">
+        <div className="pointer-events-auto flex min-w-0 flex-col items-start">
+          {showDial ? (
+            <CountdownDial
+              label={countdownLabel}
+              locked={urgency === "locked"}
+              progress={countdownProgress}
+              seconds={countdownSeconds}
+              urgency={urgency}
+            />
           ) : null}
           {playerTicket ? (
             isClearable ? (
@@ -91,6 +96,7 @@ export function StageHud({
             )
           ) : null}
         </div>
+
         <div className="pointer-events-auto flex shrink-0 items-center gap-2">
           <FloorHowToPlay />
           <TheaterSoundToggle suggest={suggestSound} />

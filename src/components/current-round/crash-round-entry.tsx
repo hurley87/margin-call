@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import {
   useCrashRoundEntry,
   type CrashEntryRetryAction,
@@ -28,6 +28,7 @@ import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { entrySubmitLabel } from "@/lib/entry-submit-label";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
 import { GameButton } from "@/components/ui/game-button";
+import { FlashValue } from "@/components/ui/flash-value";
 import { EntryOptionGroup } from "./entry-option-group";
 import { CrashLiveTicket } from "./crash-live-ticket";
 
@@ -101,8 +102,33 @@ export function CrashRoundEntry({
   }
 
   if (armed) {
+    const drainFraction = Math.min(1, Math.max(0, countdownSeconds / 60));
     return (
-      <EntryShell heading="Next round">
+      <EntryShell
+        footer={
+          entry.walletAddress ? (
+            <div className="relative overflow-hidden">
+              <GameButton
+                className="relative z-10 w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+                disabled
+                size="hero"
+              >
+                {formatArmedEntryCta(countdownSeconds)}
+              </GameButton>
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-y-0 left-0 z-0 origin-left bg-[var(--t-accent)]/35"
+                style={{
+                  width: "100%",
+                  transform: `scaleX(${drainFraction})`,
+                  transition: "transform var(--mc-dur-base) var(--mc-ease-out)",
+                }}
+              />
+            </div>
+          ) : null
+        }
+        heading="Next round"
+      >
         <p className="text-sm text-[var(--t-muted)]">{armedEntryCopy(phase)}</p>
         <EntryPickers entry={entry} signedOut={!entry.walletAddress} />
         {!entry.walletAddress ? (
@@ -110,15 +136,6 @@ export function CrashRoundEntry({
         ) : (
           <>
             <DeskDollarsFaucet className="mt-3 sm:mt-4" />
-            <div className={STAGE_DOCK_STICKY_CTA_CLASS}>
-              <GameButton
-                className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-                disabled
-                size="hero"
-              >
-                {formatArmedEntryCta(countdownSeconds)}
-              </GameButton>
-            </div>
             <ApprovalDetails entry={entry} />
           </>
         )}
@@ -183,9 +200,45 @@ export function CrashRoundEntry({
   const retryLabel = entry.retryAction
     ? retryLabels[entry.retryAction]
     : "Retry";
+  const entryJustOpened = canOfferEntry(phase, countdownSeconds);
 
   return (
-    <EntryShell heading="Enter this round">
+    <EntryShell
+      footer={
+        <>
+          <div
+            className={`relative overflow-hidden ${
+              entryJustOpened ? "mc-onboard-flash" : ""
+            }`}
+          >
+            <GameButton
+              className="relative z-10 w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+              disabled={!entry.canEnter}
+              onClick={() => void entry.enter()}
+              size="hero"
+            >
+              {entrySubmitLabel(entry.status, entry.needsApproval)}
+            </GameButton>
+            {entry.canEnter ? (
+              <span
+                aria-hidden="true"
+                className="mc-cta-shimmer pointer-events-none absolute inset-0 z-20"
+              />
+            ) : null}
+          </div>
+          {entry.canRetry ? (
+            <button
+              className={TERMINAL_ACTION_BUTTON_CLASS}
+              onClick={() => void entry.retry()}
+              type="button"
+            >
+              {retryLabel}
+            </button>
+          ) : null}
+        </>
+      }
+      heading="Enter this round"
+    >
       <p className="hidden text-sm text-[var(--t-text)] sm:block">
         Choose margin and Arcade Leverage. Expected payout is the maximum
         reservation, not a guaranteed return.
@@ -205,26 +258,6 @@ export function CrashRoundEntry({
           {statusMessage}
         </p>
       ) : null}
-
-      <div className={STAGE_DOCK_STICKY_CTA_CLASS}>
-        <GameButton
-          className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-          disabled={!entry.canEnter}
-          onClick={() => void entry.enter()}
-          size="hero"
-        >
-          {entrySubmitLabel(entry.status, entry.needsApproval)}
-        </GameButton>
-        {entry.canRetry ? (
-          <button
-            className={TERMINAL_ACTION_BUTTON_CLASS}
-            onClick={() => void entry.retry()}
-            type="button"
-          >
-            {retryLabel}
-          </button>
-        ) : null}
-      </div>
 
       <ApprovalDetails entry={entry} />
     </EntryShell>
@@ -275,7 +308,9 @@ function EntryPickers({
               <span className="hidden sm:inline">Expected maximum payout</span>
             </dt>
             <dd className="tabular-nums text-[var(--t-green-hot)]">
-              {formatDeskDollarsAmount(entry.expectedPayout)}
+              <FlashValue value={entry.expectedPayout}>
+                {formatDeskDollarsAmount(entry.expectedPayout)}
+              </FlashValue>
             </dd>
           </div>
         </dl>
@@ -284,7 +319,9 @@ function EntryPickers({
           <div className="flex items-baseline gap-1.5 sm:block">
             <dt className="text-[var(--t-muted)]">Expected maximum payout</dt>
             <dd className="tabular-nums text-[var(--t-green-hot)]">
-              {formatDeskDollarsAmount(entry.expectedPayout)}
+              <FlashValue value={entry.expectedPayout}>
+                {formatDeskDollarsAmount(entry.expectedPayout)}
+              </FlashValue>
             </dd>
           </div>
         </dl>
@@ -350,22 +387,38 @@ function ApprovalDetails({ entry }: { entry: EntryView }) {
   );
 }
 
+/**
+ * Scrollable pickers + pinned footer CTA so Enter stays on screen.
+ */
 function EntryShell({
   children,
   heading,
+  footer,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   heading: string;
+  footer?: ReactNode;
 }) {
   return (
-    <div aria-labelledby="crash-entry-heading" className="text-left">
-      <h3
-        id="crash-entry-heading"
-        className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg"
+    <div
+      aria-labelledby="crash-entry-heading"
+      className="flex min-h-0 flex-1 flex-col text-left"
+    >
+      <div
+        className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4"
+        data-testid="stage-actions-body"
       >
-        {heading}
-      </h3>
-      <div className="mt-2 sm:mt-3">{children}</div>
+        <h3
+          id="crash-entry-heading"
+          className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg"
+        >
+          {heading}
+        </h3>
+        <div className="mt-2 sm:mt-3">{children}</div>
+      </div>
+      {footer ? (
+        <div className={STAGE_DOCK_STICKY_CTA_CLASS}>{footer}</div>
+      ) : null}
     </div>
   );
 }

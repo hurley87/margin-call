@@ -5,6 +5,7 @@ import {
   computeCrashPointBps,
   deriveTicketOutcome,
   finalizeRequest,
+  readCrashRound,
   revealRequest,
   ROUND_STATUS,
   settleLossRequest,
@@ -27,6 +28,10 @@ export type SettlementStage = "reveal" | "finalize" | "claim" | "settle";
  * The crash point is a pure function of the attested plaintext, so a
  * presentation layer may reveal the outcome while finalize/claim confirm in
  * the background.
+ *
+ * A keeper may finalize between attestation and our finalize submit. When that
+ * happens we adopt the onchain finalized round and continue to claim/settle
+ * instead of treating the finalize revert as a hard failure.
  */
 export async function runVerifyAndSettleFlow(options: {
   contractAddress: Address;
@@ -66,20 +71,15 @@ export async function runVerifyAndSettleFlow(options: {
     const attestation = await requestCrashAttestation(round.crashRandom);
     const crashPointBps = computeCrashPointBps(attestation.plaintext);
     onCrashPointKnown?.(crashPointBps);
-    await runStage(
-      "finalize",
-      finalizeRequest(
-        contractAddress,
-        round.id,
-        attestation.plaintext,
-        attestation.signatures
-      )
-    );
-    round = {
-      ...round,
-      status: ROUND_STATUS.finalized,
+
+    round = await ensureRoundFinalized({
+      contractAddress,
+      round,
       crashPointBps,
-    };
+      plaintext: attestation.plaintext,
+      signatures: attestation.signatures,
+      runStage,
+    });
     onRoundChange?.(round);
   }
 
@@ -89,4 +89,53 @@ export async function runVerifyAndSettleFlow(options: {
   } else if (outcome === "lost") {
     await runStage("settle", settleLossRequest(contractAddress, ticket.id));
   }
+}
+
+async function ensureRoundFinalized(options: {
+  contractAddress: Address;
+  round: CrashRound;
+  crashPointBps: bigint;
+  plaintext: bigint;
+  signatures: readonly `0x${string}`[];
+  runStage: (
+    stage: SettlementStage,
+    request: CrashCallRequest
+  ) => Promise<void>;
+}): Promise<CrashRound> {
+  const {
+    contractAddress,
+    round,
+    crashPointBps,
+    plaintext,
+    signatures,
+    runStage,
+  } = options;
+
+  const adopted = await adoptFinalizedRoundIfPresent(contractAddress, round.id);
+  if (adopted) return adopted;
+
+  try {
+    await runStage(
+      "finalize",
+      finalizeRequest(contractAddress, round.id, plaintext, signatures)
+    );
+    return {
+      ...round,
+      status: ROUND_STATUS.finalized,
+      crashPointBps,
+    };
+  } catch (error) {
+    // Keeper may have finalized between our pre-check and submit.
+    const raced = await adoptFinalizedRoundIfPresent(contractAddress, round.id);
+    if (raced) return raced;
+    throw error;
+  }
+}
+
+async function adoptFinalizedRoundIfPresent(
+  contractAddress: Address,
+  roundId: bigint
+): Promise<CrashRound | null> {
+  const latest = await readCrashRound(contractAddress, roundId);
+  return latest.status === ROUND_STATUS.finalized ? latest : null;
 }

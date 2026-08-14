@@ -1,7 +1,8 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { Group } from "three";
 import type { TicketTapeEntry } from "@/lib/margin-call-crash";
 import type { TicketLanding } from "@/components/round-theater/landing-frame";
 import type { CrashStageMode } from "./use-crash-stage-mode";
@@ -70,28 +71,55 @@ export function CrashCanvas(props: CrashCanvasProps) {
       <ambientLight intensity={0.35} />
       <pointLight color="#d6a660" intensity={1.2} position={[4, 6, 4]} />
       <pointLight color="#7ec8ff" intensity={0.55} position={[-5, 3, -2]} />
-      <IdleCamera />
+      <IdleCamera urgency={props.urgency} />
       <StageContent {...props} />
-      <mesh position={[0, -2.2, 0]} rotation={[-Math.PI / 2, 0, 0]}>
-        <circleGeometry args={[8, 64]} />
-        <meshStandardMaterial
-          color="#12151c"
-          metalness={0.4}
-          roughness={0.85}
-        />
-      </mesh>
+      <GridHorizon />
     </Canvas>
   );
 }
 
-function IdleCamera() {
+function IdleCamera({ urgency }: { urgency: CountdownUrgency }) {
   useFrame(({ clock, camera }) => {
     const t = clock.getElapsedTime();
+    const dolly = urgency === "threat" ? 6.6 : urgency === "warn" ? 7.0 : 7.5;
     camera.position.x = Math.sin(t * 0.15) * 0.35;
     camera.position.y = 1.2 + Math.sin(t * 0.22) * 0.12;
+    camera.position.z = dolly + Math.sin(t * 0.11) * 0.08;
     camera.lookAt(0, 0.3, 0);
   });
   return null;
+}
+
+/**
+ * Scrolling trading-floor grid that fades into fog at distance.
+ * Position offset runs in useFrame so React never re-renders for the scroll.
+ */
+function GridHorizon() {
+  const groupRef = useRef<Group>(null);
+
+  useFrame(({ clock }) => {
+    const group = groupRef.current;
+    if (!group) return;
+    const t = clock.getElapsedTime();
+    group.position.z = (t * 0.55) % 1.2;
+  });
+
+  return (
+    <group ref={groupRef}>
+      <mesh position={[0, -2.21, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+        <circleGeometry args={[10, 64]} />
+        <meshStandardMaterial
+          color="#0e1118"
+          metalness={0.35}
+          roughness={0.9}
+        />
+      </mesh>
+      <gridHelper
+        args={[22, 22, "#3a4558", "#1c2433"]}
+        position={[0, -2.19, 0]}
+      />
+    </group>
+  );
 }
 
 function StageContent(props: CrashCanvasProps) {
@@ -116,6 +144,7 @@ function StageContent(props: CrashCanvasProps) {
     <>
       {showCountdown ? (
         <CountdownScene
+          entryCount={props.entries.length}
           frozen={frozen}
           locked={props.locked}
           seconds={props.countdownSeconds}

@@ -179,15 +179,30 @@ describe("useCrashTicketSettlement", () => {
 
   it("records each verify stage hash and reports the crash point early", async () => {
     // Round still Open onchain: the full reveal → attest → finalize path runs.
+    const openRound = {
+      ...finalizedRound,
+      status: 1 as const,
+      crashPointBps: 0n,
+    };
     sdk.readPlayerRecentTicket
       .mockResolvedValueOnce({
         ticket,
-        round: { ...finalizedRound, status: 1 as const, crashPointBps: 0n },
+        round: openRound,
       })
       .mockResolvedValue({
         ticket: { ...ticket, settled: true, claimed: true },
         round: { ...finalizedRound, crashPointBps: 20_000n },
       });
+    // Keep getRound non-finalized so ensureRoundFinalized still submits finalize
+    // (the flow adopts an onchain finalized round when the keeper wins the race).
+    sdk.readContract.mockImplementation(
+      async (params: { functionName?: string }) => {
+        if (params.functionName === "getRound") {
+          return { ...openRound, status: 2 as const };
+        }
+        return 12n;
+      }
+    );
     // 99_000_000 / (10_000 - 5_050) = 20_000 bps — the ticket's tier, a win.
     sdk.fetchCrashAttestation.mockResolvedValue({
       plaintext: 5_050n,

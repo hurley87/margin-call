@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { TheaterLive, TheaterView } from "@/hooks/use-round-theater";
 import {
   isTheaterLiveReady,
+  summarizeTapePot,
+  theaterCountdownProgress,
   theaterCountdownSeconds,
   theaterDisplayRoundId,
   theaterLiveRoundId,
@@ -100,5 +102,58 @@ describe("theater-live", () => {
       retry: async () => {},
     };
     expect(theaterTapeEntries(loadingView)).toHaveLength(1);
+  });
+
+  it("sums tape pot totals from public entries", () => {
+    expect(summarizeTapePot([])).toEqual({
+      totalMargin: 0n,
+      reservedPayout: 0n,
+      ticketCount: 0,
+    });
+    expect(summarizeTapePot(openLive.tape!.entries)).toEqual({
+      totalMargin: 1_000_000n,
+      reservedPayout: 1_250_000n,
+      ticketCount: 1,
+    });
+    expect(
+      summarizeTapePot([
+        { margin: 1_000_000n, reservedPayout: 1_250_000n },
+        { margin: 5_000_000n, reservedPayout: 10_000_000n },
+      ])
+    ).toEqual({
+      totalMargin: 6_000_000n,
+      reservedPayout: 11_250_000n,
+      ticketCount: 2,
+    });
+  });
+
+  it("reads countdown dial progress from the matching timeline segment", () => {
+    expect(theaterCountdownProgress(null)).toBeNull();
+    expect(
+      theaterCountdownProgress({
+        ...timeline,
+        countdown: { kind: "entry-closes", seconds: 22 },
+        segments: [
+          { id: "entry", state: "active", progress: 0.37 },
+          { id: "locked", state: "upcoming", progress: null },
+          { id: "reveal", state: "upcoming", progress: null },
+          { id: "result", state: "upcoming", progress: null },
+          { id: "next", state: "upcoming", progress: null },
+        ],
+      })
+    ).toBe(0.37);
+    expect(
+      theaterCountdownProgress({
+        ...timeline,
+        countdown: { kind: "next-opens", seconds: 12 },
+        segments: [
+          { id: "entry", state: "done", progress: 1 },
+          { id: "locked", state: "done", progress: null },
+          { id: "reveal", state: "done", progress: null },
+          { id: "result", state: "done", progress: null },
+          { id: "next", state: "active", progress: 0.8 },
+        ],
+      })
+    ).toBe(0.8);
   });
 });
