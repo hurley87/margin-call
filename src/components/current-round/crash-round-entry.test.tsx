@@ -88,7 +88,7 @@ describe("CrashRoundEntry", () => {
   it("offers margin, leverage, and enter without requiring the helper paragraph", () => {
     render(<CrashRoundEntry {...sdk.props} />);
     expect(screen.getByRole("group", { name: "Margin" })).toBeTruthy();
-    expect(screen.getByRole("group", { name: "Arcade Leverage" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Leverage" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Approve & enter" })
     ).toBeTruthy();
@@ -191,7 +191,7 @@ describe("CrashRoundEntry", () => {
     render(<CrashRoundEntry {...sdk.props} armed />);
     expect(screen.getByRole("heading", { name: "Next round" })).toBeTruthy();
     expect(screen.getByRole("group", { name: "Margin" })).toBeTruthy();
-    expect(screen.getByRole("group", { name: "Arcade Leverage" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Leverage" })).toBeTruthy();
     const cta = screen.getByRole("button", { name: /Entry opens in/ });
     expect(cta).toHaveProperty("disabled", true);
     expect(
