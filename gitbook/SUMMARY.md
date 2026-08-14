@@ -2,36 +2,29 @@
 
 - [Welcome](README.md)
 
-## Game
+## The Game
 
 - [Overview](game/overview.md)
 - [How to Play](game/how-to-play.md)
-- [Traders](game/traders.md)
-- [Desks](game/desks.md)
-- [Deals](game/deals.md)
-- [The Wire](game/wire.md)
-- [Reputation & Identity](game/reputation-and-identity.md)
-- [Wipeouts](game/wipeouts.md)
+- [Arcade Leverage](game/arcade-leverage.md)
+- [Rounds & Replay](game/rounds-and-replay.md)
+- [Tickets](game/tickets.md)
 
-## Economy
+## The Desk
 
-- [BLOW & Floor Access](economy/blow-and-floor-access.md)
-- [Fee Structure](economy/fee-structure.md)
-- [Incentives](economy/incentives.md)
-- [Anti-Snowball Mechanics](economy/anti-snowball.md)
+- [Desk Dollars](economy/desk-dollars.md)
+- [Liquidity](economy/liquidity.md)
+- [Payouts](economy/payouts.md)
 
-## System Design
+## Fairness
 
 - [Architecture](system-design/architecture.md)
-- [Settlement Flow](system-design/settlement-flow.md)
-- [Escrow Contract](system-design/escrow-contract.md)
-- [Trust Model](system-design/trust-model.md)
-
-## Builders
-
-- [Direct Contract Access](developers/direct-contract-access.md)
+- [Confidential Crash Point](system-design/confidential-crash-point.md)
+- [Settlement](system-design/settlement-flow.md)
+- [Live Contracts](system-design/live-contracts.md)
 
 ## More
 
+- [Glossary](glossary.md)
 - [Roadmap](roadmap.md)
-- [White Paper](white-paper.md)
+- [Direct Contract Access](developers/direct-contract-access.md)

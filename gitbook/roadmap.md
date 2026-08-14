@@ -1,60 +1,60 @@
 # Roadmap
 
-This roadmap is meant to build pressure, depth, and ambition in stages.
+This roadmap is direction, not a promise sheet.
 
-Each step should make the floor feel sharper than the one before it.
-
----
-
-## Phase 1: The Floor Opens — Shipped
-
-The first goal was to make the fantasy work, and the core loop is now live:
-
-- Desk managers create and manage traders
-- Traders operate through an autonomous trade cycle with five- or ten-minute eligibility based on floor capacity
-- Deals are adversarial and zero-sum
-- Wins and losses have real financial weight
-- Identity and reputation stay attached to each trader
-- The market follows real NYSE hours
-- One verified Wire dispatch drops each hour at :30 and can be turned into a deal
-- Each trader gets a deterministic portrait tied to its identity
-- `$BLOW` floor capacity is live on Base Sepolia: Gallery, Seat, and Corner Office tiers change cadence and unresolved-entry limits without changing outcomes
-- MCP server + Base MCP plugin let software agents run non-custodial AGENT DESKS from the terminal
+Nothing here weakens the live MVP guarantees around Desk Dollars, vault custody, bounded reservations, Inco integrity, or permissionless recovery.
 
 ---
 
-## Phase 2: The Floor Gets Meaner — In Progress
+## Shipped — Game Jam Floor
 
-Once the loop works, it needs texture:
-
-- Richer trader asset and inventory systems
-- Stronger dashboards with realtime activity views and P&L tracking
-- Improved approval flows and desk control surfaces
-- More confidence that the floor behaves cleanly under pressure
-- Broader market browsing and trader marketplace context
-- Clearer `$BLOW` onboarding and testnet distribution tooling
-
----
-
-## Phase 3: More Players Join
-
-The next step is opening the market to more kinds of participants:
-
-- **Direct contract access** — advanced players and software connect straight to the escrow on Base
-- **Fully autonomous desk managers** — agents that create deals, allocate capital, and run multiple traders without human intervention beyond treasury approval
-- **Agent-vs-agent meta** — software desks competing against human desks in the same economy, with reputation and P&L on the line
-
-The MCP path and testnet `$BLOW` capacity are live. Phase 3 is about what happens when the floor fills up with them.
+- Shared-round Crash on Base Sepolia
+- Phone login with sponsored embedded wallets
+- Desk Dollars faucet and bounded vault approvals
+- Six Arcade Leverage Tiers and `1` / `5` / `10` Margin sizes
+- Pre-committed confidential Crash Point via Inco Lightning
+- Immersive Floor Replay that never gates settlement
+- Record, Rounds history, and LP Desk
+- Permissionless claim, refund, reveal, finalize, and expire paths
 
 ---
 
-## Phase 4: A Real Wall Street
+## Deferred Strategy Modes
 
-If the core game holds up, the long-term vision gets bigger:
+Ideas that need their own design review before they touch product scope:
 
-- Coordinated desks with specialized roles and internal strategy layers
-- Richer adversarial meta-game (counter-strategies, deal-type specialization, coalition play)
-- Deeper reputation systems with richer public history
-- A separately gated Base mainnet launch, including an official `$BLOW` token address, supply, distribution plan, liquidity venue, and reviewed SeatVault compatibility
+- **Laddered Tickets** — split Margin across up to three Tiers against one Crash Point
+- **Persistent desk runs** — virtual career score over independently settled Tickets (non-redeemable score, not an ERC-20)
+- **Public market regimes** — announced conditions with separately documented math (never a cosmetic label on unchanged odds)
+- **Confidential analyst report** — imperfect private hint that must never disclose the exact Crash Point
 
-The current Sepolia `$BLOW` contract is test infrastructure. It is not evidence of a mainnet launch, market value, or promised token economics. Any future utility beyond capacity must be specified and reviewed before it appears as current product behavior.
+---
+
+## Deferred Experience
+
+- **AI broker margin call / appeal** — optional 1980s risk-manager voice after a finalized loss; must stay independent of core settlement and LP funds
+- Richer analytics, cadence experiments, and presentation polish
+
+No refund probabilities, budgets, or appeal mechanics are committed.
+
+---
+
+## Deferred LP Mechanics
+
+- Constrained FIFO withdrawal queue for moments when free liquidity is tight
+- Testnet **Margin Call (`$CALL`)** LP reward token and distributor
+
+Neither ships in the current MVP. Withdrawals today are free-liquidity only; there are no LP reward emissions.
+
+---
+
+## Mainnet Direction
+
+After the Base Sepolia Game Jam:
+
+- Intended settlement asset: real Circle USDC
+- Intended brand token path: externally issued ERC-20 via Bankr (separate from deferred testnet `$CALL`)
+
+Supply, allocation, utility, governance, and launch mechanics are undecided. This page does not imply a claim on vault assets, Desk Dollars, protocol revenue, or ownership.
+
+Mainnet wagering and jurisdictional availability require dedicated legal, security, economic, and deployment review.

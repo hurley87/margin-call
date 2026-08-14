@@ -1,6 +1,7 @@
 "use client";
 
 import { memo, useEffect, useRef } from "react";
+import { HOW_TO_PLAY_URL } from "@/lib/product-docs";
 
 const SEEN_KEY = "mc-floor-howto-seen";
 
@@ -57,6 +58,18 @@ export const FloorHowToPlay = memo(function FloorHowToPlay() {
               </li>
             ))}
           </ol>
+          <p className="mt-3 border-t border-[var(--t-divider)] pt-3 text-xs leading-5 text-[var(--t-muted)]">
+            Want the full playbook?{" "}
+            <a
+              className="font-bold uppercase tracking-[0.14em] text-[var(--t-accent)] underline-offset-2 hover:underline"
+              data-testid="floor-how-to-play-docs"
+              href={HOW_TO_PLAY_URL}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
+              Learn more in the docs
+            </a>
+          </p>
         </div>
       </details>
     </div>

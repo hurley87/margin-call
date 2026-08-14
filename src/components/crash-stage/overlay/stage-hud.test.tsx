@@ -76,4 +76,18 @@ describe("StageHud", () => {
       screen.getByRole("button", { name: "Refund margin" })
     ).toHaveProperty("disabled", true);
   });
+
+  it("renders the Floor how-to-play control beside sound", () => {
+    render(
+      <StageHud
+        countdownLabel={null}
+        countdownSeconds={null}
+        playerTicket={null}
+        statusMessage={null}
+      />
+    );
+
+    expect(screen.getByTestId("floor-how-to-play")).toBeTruthy();
+    expect(screen.getByTestId("sound-toggle")).toBeTruthy();
+  });
 });
