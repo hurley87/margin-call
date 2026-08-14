@@ -13,5 +13,6 @@ describe("NoRealValueDisclosure", () => {
     expect(note.textContent).toMatch(/Base Sepolia only/);
     expect(note.textContent).toMatch(/no real value/);
     expect(note.textContent).toMatch(/no claim on real US dollars/);
+    expect(note.getAttribute("title")).toMatch(/no claim on real US dollars/);
   });
 });

@@ -16,12 +16,7 @@ import { getAuthBoundaryState } from "./auth-boundary";
  * and the Desk phone switch for liquidation calls.
  * Does not gate children — use AuthGate for signed-in-only surfaces.
  */
-export function AuthControls({
-  compact = false,
-}: {
-  /** Floor header: hide status copy and desk-phone switch on small screens. */
-  compact?: boolean;
-} = {}) {
+export function AuthControls() {
   const { ready: privyReady, authenticated, logout, user } = usePrivy();
   const { ready: walletsReady } = useWallets();
   const [loginError, setLoginError] = useState(false);
@@ -83,11 +78,7 @@ export function AuthControls({
     >
       <p
         aria-live="polite"
-        className={
-          compact
-            ? "sr-only sm:not-sr-only sm:max-w-[12rem] sm:truncate sm:text-xs sm:text-[var(--t-muted)]"
-            : "max-w-[14rem] truncate text-xs text-[var(--t-muted)]"
-        }
+        className="max-w-[10rem] truncate text-xs text-[var(--t-muted)] sm:max-w-[14rem]"
       >
         {state.message}
       </p>
@@ -115,9 +106,7 @@ export function AuthControls({
             open={walletOpen}
             walletAddress={signedInWallet}
           />
-          <div className={compact ? "hidden sm:block" : undefined}>
-            <DeskPhoneSwitch walletAddress={signedInWallet} />
-          </div>
+          <DeskPhoneSwitch walletAddress={signedInWallet} />
         </>
       ) : null}
       {state.action === "login" ? (

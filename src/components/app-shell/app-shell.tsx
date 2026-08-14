@@ -81,14 +81,14 @@ export function AppShell({
                 })}
               </nav>
             </div>
-            <AuthControls compact={isFloor} />
+            <AuthControls />
           </div>
           <div
             className={`mx-auto w-full px-3 pb-1.5 sm:px-6 sm:pb-2 ${
               isFloor ? "" : "max-w-7xl"
             }`}
           >
-            <NoRealValueDisclosure compact={isFloor} />
+            <NoRealValueDisclosure />
           </div>
         </header>
         <main
