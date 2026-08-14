@@ -9,6 +9,10 @@ vi.mock("@/components/round-theater/theater-sound-toggle", () => ({
   TheaterSoundToggle: () => <div data-testid="sound-toggle" />,
 }));
 
+vi.mock("@/components/crash-stage/overlay/floor-how-to-play", () => ({
+  FloorHowToPlay: () => <div data-testid="floor-how-to-play" />,
+}));
+
 const ticket: CrashTicket = {
   id: 7n,
   player: "0x0000000000000000000000000000000000000003",

@@ -27,6 +27,8 @@ export type TheaterLive =
   | {
       kind: "open";
       roundId: bigint;
+      /** Real pre-lock phase — open only when the round can accept entries. */
+      phaseLabel: "prelaunch" | "uninitialized" | "open";
       tape: RoundTicketTape | null;
       timeline: RoundTimeline;
     }
@@ -242,6 +244,7 @@ function toTheaterView(options: {
     const live: Extract<TheaterLive, { kind: "open" }> = {
       kind: "open",
       roundId: round.roundId,
+      phaseLabel: phase,
       tape,
       timeline: round.timeline,
     };
