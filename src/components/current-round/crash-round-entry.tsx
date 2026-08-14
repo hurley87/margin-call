@@ -171,33 +171,28 @@ export function CrashRoundEntry({
         onSelect={entry.selectLeverage}
       />
 
-      <dl className="mt-3 hidden grid-cols-2 gap-3 text-sm sm:mt-4 sm:grid">
-        <div>
-          <dt className="text-[var(--t-muted)]">Wallet Desk Dollars</dt>
-          <dd className="tabular-nums">
+      <dl className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[11px] tabular-nums sm:mt-4 sm:grid sm:grid-cols-2 sm:gap-3 sm:text-sm">
+        <div className="flex items-baseline gap-1.5 sm:block">
+          <dt className="text-[var(--t-muted)]">
+            <span className="sm:hidden">Wallet</span>
+            <span className="hidden sm:inline">Wallet Desk Dollars</span>
+          </dt>
+          <dd className="tabular-nums text-[var(--t-text)]">
             {formatDeskDollarsAmountLabel(entry.tUsdBalance)}
           </dd>
         </div>
-        <div>
-          <dt className="text-[var(--t-muted)]">Expected maximum payout</dt>
+        <div className="flex items-baseline gap-1.5 sm:block">
+          <dt className="text-[var(--t-muted)]">
+            <span className="sm:hidden">Max</span>
+            <span className="hidden sm:inline">Expected maximum payout</span>
+          </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
             {formatDeskDollarsAmount(entry.expectedPayout)}
           </dd>
         </div>
       </dl>
-      <p className="mt-3 text-[11px] tabular-nums text-[var(--t-muted)] sm:hidden">
-        Wallet {formatDeskDollarsAmountLabel(entry.tUsdBalance)}
-        <span className="mx-1.5 text-[var(--t-divider)]" aria-hidden>
-          ·
-        </span>
-        <span className="text-[var(--t-green-hot)]">
-          Max {formatDeskDollarsAmount(entry.expectedPayout)}
-        </span>
-      </p>
 
-      <div className="sm:mt-0 [&_[data-testid=desk-dollars-faucet]]:mt-3 sm:[&_[data-testid=desk-dollars-faucet]]:mt-4">
-        <DeskDollarsFaucet />
-      </div>
+      <DeskDollarsFaucet className="mt-3 sm:mt-4" />
 
       {statusMessage ? (
         <p
