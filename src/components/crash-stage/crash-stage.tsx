@@ -47,6 +47,7 @@ import type { CrashCanvasProps } from "./crash-canvas";
 import type { CountdownUrgency } from "./scenes/countdown-scene";
 import type { TicketChipState } from "./scenes/ticket-field";
 import { StageActions } from "./overlay/stage-actions";
+import { CountdownBanner } from "./overlay/countdown-banner";
 import { StageFloorTape } from "./overlay/stage-floor-tape";
 import { StageHud } from "./overlay/stage-hud";
 import { stageHeroTicket } from "./overlay/stage-hero-ticket";
@@ -362,6 +363,7 @@ export function CrashStage() {
     mode === "loading";
   const showLiveTape =
     showCountdownChrome && ceremony.phase === "idle" && !showOutcomeGraph;
+  const showBanner = countdownLabel !== null || countdownSeconds !== null;
 
   // Decorative lock flash when open → delayed; CRT wipe when the live round flips.
   const previousLiveKind = useRef(theater.live.kind);
@@ -470,12 +472,18 @@ export function CrashStage() {
             nonce={ceremonyClimb.startNonce}
           />
         ) : null}
+        {showBanner ? (
+          <CountdownBanner
+            label={countdownLabel}
+            locked={urgency === "locked"}
+            progress={countdownProgress}
+            seconds={countdownSeconds}
+            urgency={urgency}
+          />
+        ) : null}
         <StageHud
           clearBusy={hudClearBusy}
           clearLabel={hudClear?.label}
-          countdownLabel={countdownLabel}
-          countdownProgress={countdownProgress}
-          countdownSeconds={countdownSeconds}
           isAlert={settlement.status === "error" && ceremony.phase === "idle"}
           lockedInOpen={isLiveOpenEntry}
           onClear={hudClear?.run}
@@ -487,8 +495,6 @@ export function CrashStage() {
               ? stageStatusMessage(mode, settlement)
               : null
           }
-          suggestSound={mode === "replay" || mode === "outcome"}
-          urgency={urgency}
         />
 
         {showLiveTape ? <StagePot pot={pot} /> : null}

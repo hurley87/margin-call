@@ -5,6 +5,7 @@ import { useCallback, useState, type FormEvent } from "react";
 import type { Address } from "viem";
 import { DeskPhoneSwitch } from "@/components/auth/desk-phone-switch";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
+import { TheaterSoundToggle } from "@/components/round-theater/theater-sound-toggle";
 import { FlashValue } from "@/components/ui/flash-value";
 import { GameButton } from "@/components/ui/game-button";
 import { TransactionConfirm } from "@/components/ui/transaction-confirm";
@@ -273,6 +274,13 @@ export function WalletDialog({
 
           <div className="mt-4 flex justify-start">
             <DeskPhoneSwitch walletAddress={walletAddress} />
+          </div>
+
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--t-muted)]">
+              Sound
+            </p>
+            <TheaterSoundToggle className={TERMINAL_ACTION_BUTTON_CLASS} />
           </div>
 
           <DeskDollarsFaucet />
