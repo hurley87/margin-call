@@ -113,12 +113,12 @@ describe("CrashRoundEntry", () => {
     expect(sdk.entry.enter).toHaveBeenCalledOnce();
   });
 
-  it("places the enter CTA before the approval disclosure", () => {
+  it("pins the enter CTA after the approval disclosure so it stays visible", () => {
     render(<CrashRoundEntry {...sdk.props} />);
     const cta = screen.getByRole("button", { name: "Approve & enter" });
     const spender = screen.getByText(/Spender: Bankroll Vault/);
     expect(
-      cta.compareDocumentPosition(spender) & Node.DOCUMENT_POSITION_FOLLOWING
+      spender.compareDocumentPosition(cta) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 

@@ -68,3 +68,43 @@ export function theaterTapeEntries(
   }
   return [];
 }
+
+export type TapePotSummary = {
+  totalMargin: bigint;
+  reservedPayout: bigint;
+  ticketCount: number;
+};
+
+/**
+ * Decorative pot totals from public TicketEntered rows. Settlement never
+ * reads this — it is Floor HUD chrome only.
+ */
+export function summarizeTapePot(
+  entries: ReadonlyArray<Pick<TicketTapeEntry, "margin" | "reservedPayout">>
+): TapePotSummary {
+  let totalMargin = 0n;
+  let reservedPayout = 0n;
+  for (const entry of entries) {
+    totalMargin += entry.margin;
+    reservedPayout += entry.reservedPayout;
+  }
+  return {
+    totalMargin,
+    reservedPayout,
+    ticketCount: entries.length,
+  };
+}
+
+/**
+ * Active timeline segment progress (0..1) for the countdown dial ring.
+ * Uses the segment that matches the countdown kind; null when indeterminate.
+ */
+export function theaterCountdownProgress(
+  timeline: RoundTimeline | null
+): number | null {
+  if (!timeline) return null;
+  const segmentId =
+    timeline.countdown.kind === "entry-closes" ? "entry" : "next";
+  const segment = timeline.segments.find((s) => s.id === segmentId);
+  return segment?.progress ?? null;
+}

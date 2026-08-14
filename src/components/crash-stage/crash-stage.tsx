@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
 import { useCrashTicketRefund } from "@/hooks/use-crash-ticket-refund";
@@ -33,11 +33,13 @@ import { getClosedTiersAtProgress, isReplayComplete } from "@/lib/round-replay";
 import { settlementStatusCopy } from "@/lib/settlement-status-copy";
 import {
   isTheaterLiveReady,
+  theaterCountdownProgress,
   theaterCountdownSeconds,
   theaterDisplayRoundId,
   theaterLiveRoundId,
   theaterLiveTimeline,
   theaterTapeEntries,
+  summarizeTapePot,
 } from "@/lib/theater-live";
 import { getTheaterAudio } from "@/lib/theater-audio";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
@@ -45,10 +47,12 @@ import type { CrashCanvasProps } from "./crash-canvas";
 import type { CountdownUrgency } from "./scenes/countdown-scene";
 import type { TicketChipState } from "./scenes/ticket-field";
 import { StageActions } from "./overlay/stage-actions";
+import { StageFloorTape } from "./overlay/stage-floor-tape";
 import { StageHud } from "./overlay/stage-hud";
 import { stageHeroTicket } from "./overlay/stage-hero-ticket";
 import { StageOutcomeGraph } from "./overlay/stage-outcome-graph";
 import { StageOutcomePanel } from "./overlay/stage-outcome-panel";
+import { StagePot } from "./overlay/stage-pot";
 import { StageVerifyProgress } from "./overlay/stage-verify-progress";
 import { ticketHudClearAction } from "./overlay/ticket-hud-clear-action";
 import { WinConfetti } from "./overlay/win-confetti";
@@ -341,11 +345,54 @@ export function CrashStage() {
   const countdownLabel = liveTimeline
     ? formatTimelineCountdownLabel(liveTimeline)
     : null;
+  const countdownProgress = theaterCountdownProgress(liveTimeline);
+  const tapeEntries = theaterTapeEntries(theater);
+  const pot = summarizeTapePot(
+    ceremonyClimb ? (ceremonyClimb.snapshot.tape?.entries ?? []) : tapeEntries
+  );
 
   const actionPhase = theaterLivePhase(theater.live);
   const actionRoundId = liveRoundId;
   const showOutcomeGraph =
     (mode === "replay" || mode === "outcome") && graphHero !== null;
+  const showCountdownChrome =
+    mode === "countdown" ||
+    mode === "awaiting-settle" ||
+    mode === "expired" ||
+    mode === "loading";
+  const showLiveTape =
+    showCountdownChrome && ceremony.phase === "idle" && !showOutcomeGraph;
+
+  // Decorative lock flash when open → delayed; CRT wipe when the live round flips.
+  const previousLiveKind = useRef(theater.live.kind);
+  const previousRoundForWipe = useRef(liveRoundId);
+  const [lockFlash, setLockFlash] = useState(false);
+  const [roundWipe, setRoundWipe] = useState(false);
+  useEffect(() => {
+    if (
+      theater.live.kind === "delayed" &&
+      previousLiveKind.current === "open"
+    ) {
+      setLockFlash(true);
+      const id = window.setTimeout(() => setLockFlash(false), 900);
+      previousLiveKind.current = theater.live.kind;
+      return () => window.clearTimeout(id);
+    }
+    previousLiveKind.current = theater.live.kind;
+  }, [theater.live.kind]);
+  useEffect(() => {
+    if (
+      liveRoundId !== null &&
+      previousRoundForWipe.current !== null &&
+      previousRoundForWipe.current !== liveRoundId
+    ) {
+      setRoundWipe(true);
+      const id = window.setTimeout(() => setRoundWipe(false), 750);
+      previousRoundForWipe.current = liveRoundId;
+      return () => window.clearTimeout(id);
+    }
+    previousRoundForWipe.current = liveRoundId;
+  }, [liveRoundId]);
 
   const canvasProps: CrashCanvasProps = {
     mode,
@@ -388,20 +435,26 @@ export function CrashStage() {
   return (
     <section
       aria-label="Crash floor"
-      className="relative flex h-full min-h-0 w-full flex-col overflow-hidden"
+      className={`relative flex h-full min-h-0 w-full flex-col overflow-hidden ${
+        lockFlash ? "mc-moment-edge" : ""
+      }`}
       data-mode={mode}
       data-testid="crash-stage"
+      style={
+        lockFlash
+          ? { ["--mc-moment-color" as string]: "rgba(214, 166, 96, 0.35)" }
+          : undefined
+      }
     >
       {/* Stage paint stays inside Floor main — not viewport-fixed. */}
-      <div className="pointer-events-none absolute inset-0 z-0">
+      <div
+        className={`pointer-events-none absolute inset-0 z-0 ${
+          roundWipe ? "mc-crt-reveal" : ""
+        }`}
+      >
         {theater.reducedMotion ? (
           showOutcomeGraph ? null : (
-            <ReducedMotionFloor
-              countdownSeconds={countdownSeconds}
-              locked={showLockedLabel && mode !== "countdown"}
-              mode={mode}
-              urgency={urgency}
-            />
+            <ReducedMotionFloor urgency={urgency} />
           )
         ) : (
           <CrashCanvas {...canvasProps} />
@@ -421,6 +474,7 @@ export function CrashStage() {
           clearBusy={hudClearBusy}
           clearLabel={hudClear?.label}
           countdownLabel={countdownLabel}
+          countdownProgress={countdownProgress}
           countdownSeconds={countdownSeconds}
           isAlert={settlement.status === "error" && ceremony.phase === "idle"}
           lockedInOpen={isLiveOpenEntry}
@@ -434,9 +488,12 @@ export function CrashStage() {
               : null
           }
           suggestSound={mode === "replay" || mode === "outcome"}
+          urgency={urgency}
         />
 
-        <div className="flex min-h-0 flex-1 flex-col justify-center px-3 py-1.5 sm:px-6 sm:py-2">
+        {showLiveTape ? <StagePot pot={pot} /> : null}
+
+        <div className="flex min-h-0 flex-1 flex-col justify-center gap-2 px-3 py-1.5 sm:gap-3 sm:px-6 sm:py-2">
           {mode === "settling" ? (
             <StageVerifyProgress
               onCancel={() => ceremonyDispatch({ type: "reset" })}
@@ -450,6 +507,21 @@ export function CrashStage() {
               reducedMotion={theater.reducedMotion}
               replayHero={graphHero}
             />
+          ) : ceremony.phase === "idle" &&
+            actionRoundId !== null &&
+            actionPhase !== null ? (
+            <>
+              {showLiveTape ? <StageFloorTape entries={tapeEntries} /> : null}
+              <StageActions
+                countdownSeconds={countdownSeconds ?? 0}
+                hasTicket={liveRoundTicket !== null || hasStaleUnsettledTicket}
+                mode={mode}
+                phase={actionPhase}
+                refund={refund}
+                roundId={actionRoundId}
+                settlement={stageSettlement}
+              />
+            </>
           ) : null}
         </div>
 
@@ -466,17 +538,6 @@ export function CrashStage() {
               snapshot={ceremonyClimb.snapshot}
             />
           </div>
-        ) : ceremony.phase !== "idle" ? null : actionRoundId !== null &&
-          actionPhase !== null ? (
-          <StageActions
-            countdownSeconds={countdownSeconds ?? 0}
-            hasTicket={liveRoundTicket !== null || hasStaleUnsettledTicket}
-            mode={mode}
-            phase={actionPhase}
-            refund={refund}
-            roundId={actionRoundId}
-            settlement={stageSettlement}
-          />
         ) : null}
       </div>
     </section>
@@ -499,43 +560,29 @@ function CanvasFallback() {
   );
 }
 
-function ReducedMotionFloor({
-  mode,
-  countdownSeconds,
-  urgency,
-  locked,
-}: {
-  mode: CrashStageMode;
-  countdownSeconds: number | null;
-  urgency: CountdownUrgency;
-  locked: boolean;
-}) {
-  const urgencyClass =
+function ReducedMotionFloor({ urgency }: { urgency: CountdownUrgency }) {
+  const glow =
     urgency === "threat"
-      ? "text-[var(--t-threat)]"
+      ? "rgba(255, 107, 92, 0.14)"
       : urgency === "warn"
-        ? "text-[var(--t-urgency)]"
+        ? "rgba(240, 163, 90, 0.12)"
         : urgency === "locked"
-          ? "text-[var(--t-accent)]"
-          : "text-[var(--t-green-hot)]";
-
-  if (mode === "replay" || mode === "outcome") {
-    return null;
-  }
+          ? "rgba(214, 166, 96, 0.1)"
+          : "rgba(146, 245, 184, 0.1)";
 
   return (
-    <div className="flex h-full items-center justify-center px-4 pb-32 pt-16 sm:pb-40 sm:pt-28">
-      <p
-        className={`font-[family-name:var(--font-plex-sans)] text-5xl font-black tabular-nums sm:text-9xl ${urgencyClass}`}
-        data-testid="reduced-motion-countdown"
-      >
-        {locked && (mode === "awaiting-settle" || mode === "settling")
-          ? "LOCKED"
-          : countdownSeconds === null
-            ? "—"
-            : String(Math.max(0, countdownSeconds)).padStart(2, "0")}
-      </p>
-    </div>
+    <div
+      className="absolute inset-0 mc-grid-scroll"
+      data-testid="reduced-motion-floor"
+      style={{
+        backgroundImage: `
+          linear-gradient(${glow} 1px, transparent 1px),
+          linear-gradient(90deg, ${glow} 1px, transparent 1px),
+          radial-gradient(circle at 50% 42%, ${glow}, transparent 42%)
+        `,
+        backgroundSize: "48px 48px, 48px 48px, auto",
+      }}
+    />
   );
 }
 

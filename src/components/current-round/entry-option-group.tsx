@@ -32,7 +32,7 @@ export function EntryOptionGroup({
               aria-pressed={isSelected}
               className={`min-h-11 w-full border px-2 py-2 text-sm font-bold tabular-nums sm:px-3 ${
                 isSelected
-                  ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
+                  ? "mc-tier-pop border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)] shadow-[0_0_12px_rgba(214,166,96,0.28)]"
                   : "border-[var(--t-border)] text-[var(--t-text)] hover:border-[var(--t-accent)]"
               }`}
               key={option.toString()}

@@ -61,10 +61,11 @@ export function TicketField({
       const h = hashOrbit(id);
       return {
         ticketId: id,
-        radius: 2.4 + (h % 100) / 80 + (index % 5) * 0.15,
-        speed: 0.12 + (h % 50) / 400,
+        // Tighter orbits fill the center vacated by the retired giant numerals.
+        radius: 1.55 + (h % 100) / 110 + (index % 5) * 0.12,
+        speed: 0.14 + (h % 50) / 380,
         phase: (h % 360) * (Math.PI / 180),
-        height: ((h % 70) - 35) / 40,
+        height: ((h % 70) - 35) / 45 + 0.15,
         entry,
         isYou:
           playerAddress !== null &&
@@ -110,17 +111,25 @@ export function TicketField({
           : `${formatDeskDollarsAmount(chip.entry.margin)} ${formatLeverageBps(chip.entry.leverageBps)} ${formatShortAddress(chip.entry.player)}`;
 
         return (
-          <group key={chip.ticketId}>
+          <group key={chip.ticketId} scale={chip.isYou ? 1.12 : 1}>
             <mesh>
               <boxGeometry args={[1.35, 0.38, 0.08]} />
               <meshStandardMaterial
                 color={color}
                 emissive={color}
-                emissiveIntensity={chip.isYou ? 0.55 : 0.28}
+                emissiveIntensity={chip.isYou ? 0.75 : 0.28}
                 metalness={0.2}
                 roughness={0.45}
               />
             </mesh>
+            {chip.isYou ? (
+              <pointLight
+                color="#d6a660"
+                distance={2.4}
+                intensity={0.85}
+                position={[0, 0.2, 0.4]}
+              />
+            ) : null}
             <Text
               anchorX="center"
               anchorY="middle"

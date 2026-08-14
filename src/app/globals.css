@@ -667,6 +667,112 @@
     infinite;
 }
 
+/* ── Floor liveliness: dial tick, halo, CTA shimmer, pot bump ── */
+
+@keyframes mc-tick-pop {
+  0% {
+    transform: scale(1.12);
+    filter: brightness(1.35);
+  }
+  100% {
+    transform: scale(1);
+    filter: brightness(1);
+  }
+}
+
+.mc-tick-pop {
+  animation: mc-tick-pop var(--mc-dur-fast) var(--mc-ease-snap) both;
+  display: inline-block;
+}
+
+@keyframes mc-dial-halo {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 calc(4px * var(--mc-glow)) var(--mc-dial-color));
+    opacity: 0.85;
+  }
+  50% {
+    filter: drop-shadow(0 0 calc(14px * var(--mc-glow)) var(--mc-dial-color));
+    opacity: 1;
+  }
+}
+
+.mc-dial-halo {
+  animation: mc-dial-halo 1.1s ease-in-out infinite;
+}
+
+@keyframes mc-dial-throb {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.mc-dial-throb {
+  animation: mc-dial-throb 0.9s ease-in-out infinite;
+}
+
+@keyframes mc-cta-shimmer {
+  0% {
+    background-position: -120% 0;
+  }
+  100% {
+    background-position: 220% 0;
+  }
+}
+
+.mc-cta-shimmer {
+  background-image: linear-gradient(
+    105deg,
+    transparent 35%,
+    rgba(244, 239, 230, 0.28) 50%,
+    transparent 65%
+  );
+  background-size: 200% 100%;
+  animation: mc-cta-shimmer 1.4s var(--mc-ease-out) both;
+}
+
+@keyframes mc-pot-bump {
+  0% {
+    transform: translateY(0);
+  }
+  35% {
+    transform: translateY(-2px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+.mc-pot-bump {
+  animation: mc-pot-bump var(--mc-dur-slow) var(--mc-ease-snap) both;
+}
+
+@keyframes mc-grid-scroll {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 0 48px;
+  }
+}
+
+.mc-grid-scroll {
+  animation: mc-grid-scroll 4s linear infinite;
+}
+
+@keyframes mc-cta-drain {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+
 @keyframes mc-confetti-cannon {
   0% {
     transform: translate3d(0, 0, 0) rotate(0deg);
@@ -753,6 +859,12 @@
   .mc-margin-call-flash,
   .mc-phone-ring,
   .mc-head-pulse,
+  .mc-tick-pop,
+  .mc-dial-halo,
+  .mc-dial-throb,
+  .mc-cta-shimmer,
+  .mc-pot-bump,
+  .mc-grid-scroll,
   .mc-confetti-cannon,
   .mc-confetti-rain {
     animation: none;

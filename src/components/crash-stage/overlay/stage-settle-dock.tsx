@@ -64,70 +64,82 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
     }));
 
   return (
-    <div className="text-left" data-testid="stage-settle-dock">
-      <h2 className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg">
-        {kind.title}
-      </h2>
-      <p className="mt-1.5 text-sm text-[var(--t-text)] sm:mt-2">{kind.body}</p>
-      <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
-        {formatDeskDollarsAmount(ticket.margin)} ·{" "}
-        {formatLeverageBps(ticket.leverageBps)}
-        {settlement.displayCrashPoint
-          ? ` · Crash Point ${settlement.displayCrashPoint}`
-          : null}
-      </p>
+    <div
+      className="flex min-h-0 flex-1 flex-col text-left"
+      data-testid="stage-settle-dock"
+    >
+      <div
+        className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4"
+        data-testid="stage-actions-body"
+      >
+        <h2 className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg">
+          {kind.title}
+        </h2>
+        <p className="mt-1.5 text-sm text-[var(--t-text)] sm:mt-2">
+          {kind.body}
+        </p>
+        <p className="mt-2 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
+          {formatDeskDollarsAmount(ticket.margin)} ·{" "}
+          {formatLeverageBps(ticket.leverageBps)}
+          {settlement.displayCrashPoint
+            ? ` · Crash Point ${settlement.displayCrashPoint}`
+            : null}
+        </p>
 
-      {isLiquidatedLoss && settlement.walletAddress ? (
-        <div className="mt-3">
-          <MarginCallVoiceTrigger
-            roundId={ticket.roundId}
-            ticketId={ticket.id}
-            walletAddress={settlement.walletAddress}
-          />
+        {isLiquidatedLoss && settlement.walletAddress ? (
+          <div className="mt-3">
+            <MarginCallVoiceTrigger
+              roundId={ticket.roundId}
+              ticketId={ticket.id}
+              walletAddress={settlement.walletAddress}
+            />
+          </div>
+        ) : null}
+
+        {statusMessage ? (
+          <p
+            className={`mt-3 text-sm ${
+              isAlert ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
+            }`}
+            role={isAlert ? "alert" : "status"}
+          >
+            {statusMessage}
+          </p>
+        ) : null}
+      </div>
+
+      {actions.length > 0 ? (
+        <div className={STAGE_DOCK_STICKY_CTA_CLASS}>
+          {actions.map((action) =>
+            action.variant === "terminal" ? (
+              <button
+                className={`${TERMINAL_ACTION_BUTTON_CLASS} w-full`}
+                disabled={busy}
+                key={action.label}
+                onClick={action.onClick}
+                type="button"
+              >
+                {busy ? action.busyLabel : action.label}
+              </button>
+            ) : (
+              <GameButton
+                className={
+                  action.variant === "primary"
+                    ? "w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
+                    : "w-full"
+                }
+                disabled={busy}
+                key={action.label}
+                onClick={action.onClick}
+                size="hero"
+                variant={action.variant === "danger" ? "danger" : "primary"}
+              >
+                {busy ? action.busyLabel : action.label}
+              </GameButton>
+            )
+          )}
         </div>
       ) : null}
-
-      {statusMessage ? (
-        <p
-          className={`mt-3 text-sm ${
-            isAlert ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
-          }`}
-          role={isAlert ? "alert" : "status"}
-        >
-          {statusMessage}
-        </p>
-      ) : null}
-
-      <div className={STAGE_DOCK_STICKY_CTA_CLASS}>
-        {actions.map((action) =>
-          action.variant === "terminal" ? (
-            <button
-              className={`${TERMINAL_ACTION_BUTTON_CLASS} w-full`}
-              disabled={busy}
-              key={action.label}
-              onClick={action.onClick}
-              type="button"
-            >
-              {busy ? action.busyLabel : action.label}
-            </button>
-          ) : (
-            <GameButton
-              className={
-                action.variant === "primary"
-                  ? "w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
-                  : "w-full"
-              }
-              disabled={busy}
-              key={action.label}
-              onClick={action.onClick}
-              size="hero"
-              variant={action.variant === "danger" ? "danger" : "primary"}
-            >
-              {busy ? action.busyLabel : action.label}
-            </GameButton>
-          )
-        )}
-      </div>
     </div>
   );
 }
