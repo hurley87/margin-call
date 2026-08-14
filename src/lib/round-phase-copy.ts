@@ -63,9 +63,45 @@ export const countdownCopy = {
   entryClosesIn: "Entry closes in",
   nextRoundOpensIn: "Next round opens in",
   nextRoundOpening: "Next round opening…",
+  entryOpensIn: "Entry opens in",
+  entryOpening: "Entry opening…",
   nextRoundEntryOpen: (clock: string) => `Entry is open — closes in ${clock}`,
   entriesReopen: (clock: string) => `Entries reopen in ${clock}`,
 } as const;
+
+/** Disabled CTA label while the player arms picks for the next entry window. */
+export function formatArmedEntryCta(seconds: number): string {
+  return seconds > 0
+    ? `${countdownCopy.entryOpensIn} ${formatCountdown(seconds)}`
+    : countdownCopy.entryOpening;
+}
+
+/**
+ * Plain-language dock copy while entry is closed. Uses CONTEXT.md vocabulary.
+ */
+export function armedEntryCopy(phase: CrashRoundPhase): string {
+  switch (phase) {
+    case "prelaunch":
+      return "This epoch has not started yet. Pick your Margin and Arcade Leverage now — entry opens for 45 seconds every 60-second Epoch.";
+    case "uninitialized":
+      return "This epoch is on the grid but no round has been opened onchain yet. Pick your Margin and Arcade Leverage; entry unlocks once an opener pre-commits the encrypted Crash Point.";
+    case "open":
+      return "Entry cutoff — less than five seconds remain before onchain lock. Keep your Margin and Arcade Leverage ready for the next round.";
+    case "locked":
+      return "Entry for this round is closed. Pick your Margin and Arcade Leverage now and you are ready the moment the next window opens.";
+    case "reveal-requested":
+      return "Entry for this round is closed — the Crash Point is being attested onchain. Pick your Margin and Arcade Leverage now and you are ready the moment the next window opens.";
+    case "finalized":
+      return "This round is finalized. The Replay dramatizes the attested Crash Point. Pick your Margin and Arcade Leverage for the next entry window.";
+    case "expired-eligible":
+    case "expired":
+      return "This round cannot finalize. Pick your Margin and Arcade Leverage for the next entry window once it opens.";
+    default: {
+      const _exhaustive: never = phase;
+      return _exhaustive;
+    }
+  }
+}
 
 /** Full strip sentence for the active timeline countdown. */
 export function formatTimelineCountdown(timeline: RoundTimeline): string {

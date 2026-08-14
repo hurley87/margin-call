@@ -7,10 +7,13 @@ import { getBankrollVaultConfig } from "@/lib/bankroll-vault";
 import { baseSepoliaPublicClient } from "@/lib/base-sepolia";
 import { DISPLAY_ASSET_SYMBOL, deskDollarsAbi } from "@/lib/desk-dollars";
 import {
+  setEntryLeverage,
+  setEntryMargin,
+  useEntryPreferences,
+} from "@/lib/entry-preferences";
+import {
   BOUNDED_ENTRY_ALLOWANCE_TUSD,
   computeMaximumPayout,
-  ENTRY_LEVERAGE_TIERS_BPS,
-  ENTRY_MARGINS_TUSD,
   getMarginCallCrashConfig,
   marginCallCrashAbi,
   readPlayerTicket,
@@ -57,15 +60,11 @@ type EntryValues = {
 type State = Partial<EntryValues> & {
   status: CrashEntryStatus;
   error: string | null;
-  selectedMargin: bigint;
-  selectedLeverageBps: bigint;
 };
 
 const initialState: State = {
   status: "loading",
   error: null,
-  selectedMargin: ENTRY_MARGINS_TUSD[0],
-  selectedLeverageBps: ENTRY_LEVERAGE_TIERS_BPS[0],
 };
 
 const unavailable =
@@ -123,12 +122,17 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
   const transaction = usePrivySponsoredTransaction();
   const gameConfig = useMemo(() => getMarginCallCrashConfig(), []);
   const vaultConfig = useMemo(() => getBankrollVaultConfig(), []);
+  const prefs = useEntryPreferences();
   const [state, setState] = useState<State>(initialState);
   const inFlight = useRef(false);
   const retryKind = useRef<Stage | "refresh" | null>(null);
   // A stage whose transaction was submitted but whose receipt is unresolved.
   // Retry must re-check this hash — resubmitting could double-enter.
   const pendingStage = useRef<{ stage: Stage; hash: Hex } | null>(null);
+  // Keep submitEntry reading the latest picks without rebuilding the callback
+  // on every preference change mid-flight.
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
 
   const refresh = useCallback(async () => {
     if (!gameConfig || !vaultConfig || !walletAddress) return false;
@@ -204,11 +208,11 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
   );
 
   const selectMargin = useCallback((margin: bigint) => {
-    setState((current) => ({ ...current, selectedMargin: margin }));
+    setEntryMargin(margin);
   }, []);
 
   const selectLeverage = useCallback((leverageBps: bigint) => {
-    setState((current) => ({ ...current, selectedLeverageBps: leverageBps }));
+    setEntryLeverage(leverageBps);
   }, []);
 
   const submitEntry = useCallback(
@@ -222,8 +226,7 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
       if (pending && mode !== "resume") return false;
       if (mode === "resume" && !pending) return false;
 
-      const margin = state.selectedMargin;
-      const leverageBps = state.selectedLeverageBps;
+      const { margin, leverageBps } = prefsRef.current;
       inFlight.current = true;
 
       try {
@@ -288,8 +291,6 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
       roundId,
       runStage,
       state.allowance,
-      state.selectedLeverageBps,
-      state.selectedMargin,
       vaultConfig,
       walletAddress,
     ]
@@ -305,11 +306,13 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
     );
   }, [refresh, submitEntry]);
 
+  const selectedMargin = prefs.margin;
+  const selectedLeverageBps = prefs.leverageBps;
   const expectedPayout = computeMaximumPayout(
-    state.selectedMargin,
-    state.selectedLeverageBps
+    selectedMargin,
+    selectedLeverageBps
   );
-  const needsApproval = (state.allowance ?? 0n) < state.selectedMargin;
+  const needsApproval = (state.allowance ?? 0n) < selectedMargin;
   const canSubmitAfterError =
     state.status === "error" &&
     (retryKind.current === "approval" || retryKind.current === "entry") &&
@@ -327,6 +330,8 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
 
   return {
     ...state,
+    selectedMargin,
+    selectedLeverageBps,
     walletAddress,
     expectedPayout,
     needsApproval,
@@ -338,7 +343,7 @@ export function useCrashRoundEntry({ roundId }: { roundId: bigint }) {
       !!walletAddress &&
       !state.ticket &&
       (state.status === "ready" || canSubmitAfterError) &&
-      (state.tUsdBalance ?? 0n) >= state.selectedMargin &&
+      (state.tUsdBalance ?? 0n) >= selectedMargin &&
       !inFlight.current,
     canRetry:
       state.status === "error" &&

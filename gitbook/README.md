@@ -1,68 +1,54 @@
 # Margin Call
 
-**An AI trading game about nerve, traps, and surviving the floor.**
+**Post margin. Choose your leverage. Walk away.**
 
-You do not play as a lone genius trader.
+If the market reaches your number before the red phone rings, you clear the trade.
 
-You run a desk.
-
-You hire traders, give them rules, send them into the market, and decide when to step in.
-
-Other players are doing the same thing.
-
-They are also writing deals designed to make your traders look foolish.
-
-Every win comes from someone else's mistake.
+If it crashes first, you get the margin call.
 
 ---
 
-## The Game in 30 Seconds
+## The Floor in 30 Seconds
 
-1. **Connect your wallet** and become a desk manager
-2. **Create a trader** with its own identity and bankroll
-3. **Fund the trader** and set its risk rules
-4. **Let it trade** while you watch the floor
-5. **Step in** when a deal feels too big or too dangerous
-6. **Write your own deals** to bait rival desks
-7. **Build a reputation** through wins, losses, and close calls
-8. **Post testnet `$BLOW`** for more floor capacity without changing the odds
-9. **Cash out or trade up** if your desk survives long enough
+1. **Log in with a phone number** — an embedded wallet on Base Sepolia appears automatically
+2. **Claim Desk Dollars** from the in-app faucet (the UI shows the ticker as `USDC`)
+3. **Enter a shared round** — post `1`, `5`, or `10` and pick one Arcade Leverage Tier
+4. **Wait for the Crash Point** — it was encrypted before anyone entered, then attested after lock
+5. **Watch the Replay** — a dramatized climb of an already-final result
+6. **Claim a win**, take the margin call, or pull back an expiry refund
+7. **Enter the next round** — a new epoch opens every 60 seconds, even if an earlier Ticket still needs settling
+
+No lobby. No opponent. No mid-climb cashout. One decision per round, then the Floor does the rest.
+
+{% hint style="info" %}
+Everything here is Base Sepolia only. Desk Dollars and vault shares have no real value and no claim on real US dollars.
+{% endhint %}
 
 ---
 
-## Why This Game Is Different
+## Why This Game Hits
 
-Most AI games ask one question:
+Most crash games ask you to click at the right second.
 
-"How smart is the bot?"
+Margin Call asks whether you can live with the number you chose.
 
-Margin Call asks a better one:
+You post Margin. You pick a Tier. The market either clears your Ticket or it doesn't. The climb you watch is a **Replay** of a Crash Point that was committed before entry — watching it never changes settlement.
 
-"Can you run the meanest desk on the street?"
-
-This is a game about judgment under pressure.
-
-Your edge comes from discipline, timing, bluff-reading, and knowing when not to chase.
-
-The dream is not controlling every move.
-
-The dream is building a machine that can survive without you, until the moment it can't.
-
-Human desk managers and software agents now compete in the same economy — same rules, same traps, same wipeouts.
-
-> Intelligence in markets is institutional before it is individual.
+The fantasy is a 1980s trading pit: CRT greens, amber terminals, ticker tape, a red desk phone for the margin call. The money layer is quieter and meaner — a vault that reserves every accepted payout before the round locks.
 
 ---
 
 ## Quick Links
 
-|                                                                |                                                      |
-| -------------------------------------------------------------- | ---------------------------------------------------- |
-| [How to Play](game/how-to-play.md)                             | Start your desk and survive your first trades        |
-| [Traders](game/traders.md)                                     | Meet the agents who take the risks                   |
-| [Deals](game/deals.md)                                         | Learn why the best opportunities are often bait      |
-| [BLOW & Floor Access](economy/blow-and-floor-access.md)        | Understand Gallery, Seat, and Corner Office capacity |
-| [Fee Structure](economy/fee-structure.md)                      | See how the game takes its cut                       |
-| [Architecture](system-design/architecture.md)                  | Understand the big picture without the weeds         |
-| [Direct Contract Access](developers/direct-contract-access.md) | Low-level contract notes (rebuild pending)           |
-| [Roadmap](roadmap.md)                                          | Where Margin Call goes next                          |
+|                                                                       |                                                |
+| --------------------------------------------------------------------- | ---------------------------------------------- |
+| [How to Play](game/how-to-play.md)                                    | Enter your first round without guessing        |
+| [Arcade Leverage](game/arcade-leverage.md)                            | The six Tiers, and what they pay               |
+| [Rounds & Replay](game/rounds-and-replay.md)                          | Why the climb is theater, not a live event     |
+| [Tickets](game/tickets.md)                                            | Wins, margin calls, and expiry refunds         |
+| [Desk Dollars](economy/desk-dollars.md)                               | The testnet bankroll you claim from the faucet |
+| [Liquidity](economy/liquidity.md)                                     | How the vault funds the Floor                  |
+| [Confidential Crash Point](system-design/confidential-crash-point.md) | Why nobody can peek while entry is open        |
+| [Live Contracts](system-design/live-contracts.md)                     | Addresses and BaseScan on Base Sepolia         |
+| [Glossary](glossary.md)                                               | The words the Floor actually uses              |
+| [Roadmap](roadmap.md)                                                 | What shipped, what is still a maybe            |

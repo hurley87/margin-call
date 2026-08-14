@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AuthControls } from "@/components/auth/auth-controls";
 import { DeskDollarsFaucetProvider } from "@/components/desk-dollars/desk-dollars-faucet";
+import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
 
 const NAV = [
   { href: "/", label: "Floor" },
@@ -12,8 +13,11 @@ const NAV = [
   { href: "/lp", label: "LP" },
 ] as const;
 
+const NAV_LINK_CLASS =
+  "inline-flex min-h-11 shrink-0 items-center px-2.5 py-1 text-xs font-bold uppercase tracking-[0.16em] transition-colors duration-[var(--mc-dur-fast)] sm:px-3";
+
 /**
- * Shared chrome: brand, Floor / Record / Rounds / LP nav, compact auth.
+ * Shared chrome: brand, Floor / Record / Rounds / LP / Docs nav, compact auth.
  * Floor (`/`) is a locked `h-svh` column: in-flow header, then
  * `main` as the sole stage paint owner (CrashStage fills it). Other routes
  * keep the document layout.
@@ -66,7 +70,7 @@ export function AppShell({
                   return (
                     <Link
                       aria-current={isActive ? "page" : undefined}
-                      className={`inline-flex min-h-11 shrink-0 items-center px-2.5 py-1 text-xs font-bold uppercase tracking-[0.16em] transition-colors duration-[var(--mc-dur-fast)] sm:px-3 ${
+                      className={`${NAV_LINK_CLASS} ${
                         isActive
                           ? "border-b-2 border-[var(--t-accent)] text-[var(--t-accent)]"
                           : "text-[var(--t-muted)] hover:text-[var(--t-text)]"
@@ -78,6 +82,15 @@ export function AppShell({
                     </Link>
                   );
                 })}
+                <a
+                  className={`${NAV_LINK_CLASS} text-[var(--t-muted)] hover:text-[var(--t-text)]`}
+                  data-testid="app-shell-docs-link"
+                  href={PRODUCT_DOCS_URL}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Docs
+                </a>
               </nav>
             </div>
             <AuthControls />

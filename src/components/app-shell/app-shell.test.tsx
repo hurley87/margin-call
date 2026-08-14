@@ -38,6 +38,7 @@ vi.mock("@/components/desk-dollars/desk-dollars-faucet", () => ({
   DeskDollarsFaucet: () => null,
 }));
 
+import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
 import { AppShell } from "./app-shell";
 
 describe("AppShell", () => {
@@ -49,7 +50,7 @@ describe("AppShell", () => {
 
   afterEach(cleanup);
 
-  it("renders Floor, Record, Rounds, and LP navigation links", () => {
+  it("renders Floor, Record, Rounds, LP, and Docs navigation links", () => {
     render(
       <AppShell>
         <p>Floor content</p>
@@ -62,10 +63,15 @@ describe("AppShell", () => {
     const record = screen.getByRole("link", { name: "Record" });
     const rounds = screen.getByRole("link", { name: "Rounds" });
     const lp = screen.getByRole("link", { name: "LP" });
+    const docs = screen.getByTestId("app-shell-docs-link");
     expect(floor.getAttribute("href")).toBe("/");
     expect(record.getAttribute("href")).toBe("/record");
     expect(rounds.getAttribute("href")).toBe("/history");
     expect(lp.getAttribute("href")).toBe("/lp");
+    expect(docs.getAttribute("href")).toBe(PRODUCT_DOCS_URL);
+    expect(docs.getAttribute("target")).toBe("_blank");
+    expect(docs.getAttribute("rel")).toBe("noopener noreferrer");
+    expect(docs.getAttribute("aria-current")).toBeNull();
     expect(floor.getAttribute("aria-current")).toBe("page");
     expect(record.getAttribute("aria-current")).toBeNull();
     expect(rounds.getAttribute("aria-current")).toBeNull();

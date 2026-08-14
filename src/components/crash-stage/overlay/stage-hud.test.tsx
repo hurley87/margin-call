@@ -9,6 +9,10 @@ vi.mock("@/components/round-theater/theater-sound-toggle", () => ({
   TheaterSoundToggle: () => <div data-testid="sound-toggle" />,
 }));
 
+vi.mock("@/components/crash-stage/overlay/floor-how-to-play", () => ({
+  FloorHowToPlay: () => <div data-testid="floor-how-to-play" />,
+}));
+
 const ticket: CrashTicket = {
   id: 7n,
   player: "0x0000000000000000000000000000000000000003",
@@ -71,5 +75,19 @@ describe("StageHud", () => {
     expect(
       screen.getByRole("button", { name: "Refund margin" })
     ).toHaveProperty("disabled", true);
+  });
+
+  it("renders the Floor how-to-play control beside sound", () => {
+    render(
+      <StageHud
+        countdownLabel={null}
+        countdownSeconds={null}
+        playerTicket={null}
+        statusMessage={null}
+      />
+    );
+
+    expect(screen.getByTestId("floor-how-to-play")).toBeTruthy();
+    expect(screen.getByTestId("sound-toggle")).toBeTruthy();
   });
 });

@@ -2,124 +2,81 @@
 
 ## Getting Started
 
-### 1. Connect Your Wallet
+### 1. Log In With Your Phone
 
-Open Margin Call and connect your wallet.
+Open [margincall.fun](https://margincall.fun) and sign in with a phone number and SMS code.
 
-That is your seat on the floor.
+An embedded smart wallet on Base Sepolia is created for you. No browser extension. No seed phrase. No test ETH. Gas for in-app actions is sponsored.
 
-Once you are in, you are a desk manager.
+### 2. Claim Desk Dollars
 
-{% hint style="info" %}
-Want to run a desk from the terminal instead? See MCP (removed) — an AI agent can operate a full AGENT DESK through MCP or the Base MCP plugin.
-{% endhint %}
+Hit the faucet.
 
-### 2. Mint a Trader
+You get `100` Desk Dollars per hour. The Floor shows the ticker as `USDC`. The onchain symbol is `tUSD`. Neither is Circle USDC, and neither has real value.
 
-Create your first trader.
+### 3. Wait for Entry Open
 
-Give them a name.
+Rounds run on a fixed 60-second grid. The entry window is the first 45 seconds.
 
-If they survive, the market will remember it.
+When the Floor says **Entry open**, you are in business. The interface stops offering entry a few seconds before lock so a late transaction cannot straddle the close.
 
-### 3. Fund Your Trader
+### 4. Pick Margin and Arcade Leverage
 
-Fund your trader with a bankroll.
+Choose exactly one Margin amount:
 
-This is the money they put at risk when they chase deals.
+| Margin | What it means                    |
+| ------ | -------------------------------- |
+| `1`    | Small ticket — learn the Floor   |
+| `5`    | Standard size                    |
+| `10`   | Full size for the current matrix |
 
-### 4. Configure the Mandate
+Then choose exactly one Arcade Leverage Tier: `1.25x`, `1.50x`, `2.00x`, `3.00x`, `5.00x`, or `10.00x`.
 
-The mandate is the soul of the desk.
+That Tier is both your automatic close threshold and your gross payout multiple.
 
-It tells your trader what is worth chasing, what feels too dangerous, and when to call you in.
+See [Arcade Leverage](arcade-leverage.md) for the disclosed reach odds.
 
-| Setting                | What It Does                                                                                                |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **Risk tolerance**     | Conservative, moderate, or aggressive — governs how the trader weighs potential loss against potential gain |
-| **Deal size limits**   | Minimum and maximum pot sizes the trader will consider                                                      |
-| **Bankroll rules**     | Maximum percentage of the trader's balance that can be risked on a single deal                              |
-| **Approval threshold** | The deal size above which the trader pauses and requests your approval before entering                      |
-| **Filters**            | Optional constraints on deal type, counterparty reputation, or other deal metadata                          |
+### 5. Approve Once, Then Enter
 
-A sharp mandate keeps a good trader alive.
+The first time you play, you approve a bounded `1,000` Desk Dollars allowance for the vault. Unlimited allowances are never requested. Later entries reuse that allowance.
 
-A sloppy one turns confidence into a headline.
-
-### 5. Let It Run
-
-Once your trader is live, it starts scanning the floor for opportunities.
-
-You can watch the desk work in real time.
-
-Every trader begins in the **Gallery**, with a ten-minute eligibility cadence and one unresolved-entry slot. If your desk holds testnet `$BLOW`, you can post it against a trader to take a [Seat or Corner Office](../economy/blow-and-floor-access.md) and increase capacity. This never changes the trader's odds.
-
-### 6. Intervene When It Matters
-
-Some moments are too important to leave alone.
-
-When a trade crosses your threshold, your trader stops and asks for a call.
-
-Approve it, reject it, or let the moment pass.
-
-### 7. Create Deals
-
-You are not only defending yourself.
-
-You are also setting traps.
-
-Write deals that look irresistible from across the room.
-
-If rival traders misread them, the pot grows in your favor.
+Confirm entry. Your Margin moves into the bankroll vault and your Ticket's maximum payout is reserved atomically. If the vault cannot reserve it, the transaction reverts and nothing is kept.
 
 {% hint style="info" %}
-You can request AI-generated deal prompts through the platform. Provide a theme and the system suggests three scenario variations as a starting point.
+One Ticket per wallet per Round. If you already entered this epoch, wait for the next one.
 {% endhint %}
 
-### 8. Cash Out or Trade Up
+### 6. Leave or Watch
 
-- **Withdraw** USDC from your trader's escrow balance back to your wallet
-- **Mint new traders** with different strategies to diversify your desk
+You do not need to babysit the climb.
 
-Trader identities are NFTs with persistent history, but Margin Call does not currently ship a marketplace or supported ownership-transfer flow. Marketplace support remains future work.
+After lock, players with an unsettled Ticket see **Verify and settle**. The 3D Replay for a Ticket holder starts after settlement confirms. Spectators see the climb once the Round is finalized.
 
-`$BLOW` is separate from the bankroll. USDC is the money at risk; `$BLOW` is testnet floor-access principal.
+### 7. Settle Your Ticket
 
----
+| Outcome       | What you do                                                 |
+| ------------- | ----------------------------------------------------------- |
+| Win           | Claim the reserved payout (`floor(Margin × Tier)`)          |
+| Margin call   | Ticket settles at zero — Margin stays in the vault          |
+| Expiry refund | If the Round never finalizes, reclaim exact original Margin |
 
-## The PvP Dynamic
-
-Every player lives on both sides of the market:
-
-- **As a desk manager** — you fund traders, set strategy, and intervene on high-stakes decisions
-- **As a deal creator** — you write prompts that sound lucrative but may be traps, funding the pot and profiting when traders lose
-- **As a trader owner** — your AI agents chase value before the floor takes them out
-
-If one desk celebrates, another one usually has a reason not to.
+Then enter the next Round. A delayed claim never blocks later epochs.
 
 ---
 
-## When The Market Is Open
+## First-Session Checklist
 
-The floor follows NYSE hours.
-
-- **Monday to Friday, 9:30am to 4:00pm Eastern.**
-- Outside those hours, traders do not enter new deals and no fresh deals or [wire drops](wire.md) appear.
-- Settlements already in flight when the bell rings get a short grace window so nothing settles in limbo.
-
-If you log in on a weekend or after the close, the floor is quiet. That is intentional — the game is meant to feel like a desk, not a 24/7 grind.
+1. Phone login works and you see a wallet address
+2. Faucet claim lands Desk Dollars in the UI
+3. You enter an Open Round with Margin `1` and Tier `1.25x`
+4. You verify after lock and see a Crash Point on the Record
+5. You claim, settle a loss, or understand the refund path
 
 ---
 
-## What Happens in a Single Cycle
+## Where to Look Afterward
 
-Every active trader repeats the same basic rhythm while the market is open. Gallery traders become eligible every ten minutes; Seat and Corner Office traders every five:
-
-1. **Scan** the floor
-2. **Filter** for what fits the mandate
-3. **Choose** the best shot
-4. **Pause** if the risk is big enough to need you
-5. **Resolve** the outcome
-6. **Move** the money
-7. **Update** the trader's record
-8. **Do it again**
+- **Floor** (`/`) — live Round, entry, Replay
+- **Record** (`/record`) — your Tickets and claim / refund actions
+- **Rounds** (`/history`) — recent finalized Rounds and verification trail
+- **LP** (`/lp`) — vault deposits and withdrawals
