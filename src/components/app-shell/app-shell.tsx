@@ -15,9 +15,9 @@ const NAV = [
 
 /**
  * Shared chrome: brand, Floor / Record / Rounds / LP nav, compact auth,
- * disclosure. Floor (`/`) is a locked viewport with an in-flow translucent
- * header so the immersive stage fills the leftover height; other routes keep
- * the document layout.
+ * disclosure. Floor (`/`) is a locked `h-svh` column: in-flow header, then
+ * `main` as the sole stage paint owner (CrashStage fills it). Other routes
+ * keep the document layout.
  */
 export function AppShell({
   children,

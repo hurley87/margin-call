@@ -392,8 +392,8 @@ export function CrashStage() {
       data-mode={mode}
       data-testid="crash-stage"
     >
-      {/* Full-bleed under the in-flow translucent Floor header. */}
-      <div className="pointer-events-none fixed inset-0 z-0">
+      {/* Stage paint stays inside Floor main — not viewport-fixed. */}
+      <div className="pointer-events-none absolute inset-0 z-0">
         {theater.reducedMotion ? (
           showOutcomeGraph ? null : (
             <ReducedMotionFloor
