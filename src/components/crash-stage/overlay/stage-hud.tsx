@@ -91,7 +91,7 @@ export function StageHud({
             )
           ) : null}
         </div>
-        <div className="pointer-events-auto flex shrink-0 items-start gap-2">
+        <div className="pointer-events-auto flex shrink-0 items-center gap-2">
           <FloorHowToPlay />
           <TheaterSoundToggle suggest={suggestSound} />
         </div>

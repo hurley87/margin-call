@@ -72,6 +72,7 @@ describe("WalletDialog", () => {
       <WalletDialog
         balance={100_000_000n}
         decimals={6}
+        onLogout={vi.fn()}
         onOpenChange={vi.fn()}
         open
         walletAddress={FROM}
@@ -120,6 +121,7 @@ describe("WalletDialog", () => {
       <WalletDialog
         balance={12_500_000n}
         decimals={6}
+        onLogout={vi.fn()}
         onOpenChange={vi.fn()}
         open
         walletAddress={FROM}
@@ -143,6 +145,7 @@ describe("WalletDialog", () => {
       <WalletDialog
         balance={100_000_000n}
         decimals={6}
+        onLogout={vi.fn()}
         onOpenChange={vi.fn()}
         open
         walletAddress={FROM}
@@ -152,5 +155,22 @@ describe("WalletDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => expect(sdk.retry).toHaveBeenCalledTimes(1));
     expect(sdk.transferValidated).not.toHaveBeenCalled();
+  });
+
+  it("exposes Log out and calls onLogout", () => {
+    const onLogout = vi.fn();
+    render(
+      <WalletDialog
+        balance={100_000_000n}
+        decimals={6}
+        onLogout={onLogout}
+        onOpenChange={vi.fn()}
+        open
+        walletAddress={FROM}
+      />
+    );
+
+    fireEvent.click(screen.getByTestId("wallet-dialog-logout"));
+    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 });

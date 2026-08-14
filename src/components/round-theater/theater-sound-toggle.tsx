@@ -6,6 +6,7 @@ import {
   readTheaterSoundEnabled,
   subscribeTheaterSound,
 } from "@/lib/theater-audio";
+import { STAGE_HUD_CHIP_CLASS } from "@/lib/utils";
 import { theaterCopy } from "./theater-copy";
 
 const HINT_SEEN_KEY = "margin-call-sound-hint";
@@ -54,7 +55,7 @@ export function TheaterSoundToggle({ suggest = false }: { suggest?: boolean }) {
       ) : null}
       <button
         aria-pressed={enabled}
-        className={`border border-[var(--t-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] ${
+        className={`${STAGE_HUD_CHIP_CLASS} ${
           showHint ? "mc-onboard-flash" : ""
         }`}
         onClick={toggle}

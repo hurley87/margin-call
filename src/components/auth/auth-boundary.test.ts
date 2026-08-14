@@ -87,8 +87,8 @@ describe("authentication boundary", () => {
       })
     ).toEqual({
       status: "signed-in",
-      message: "Signed in.",
-      action: "logout",
+      message: null,
+      action: null,
     });
   });
 
@@ -128,13 +128,31 @@ describe("authentication boundary", () => {
     });
   });
 
-  it("keeps the signed-in state and restores logout retry after a logout failure", () => {
+  it("keeps the signed-in wallet chip and leaves logout retry to the dialog after a logout failure", () => {
     expect(
       getAuthBoundaryState({
         privyReady: true,
         authenticated: true,
         walletsReady: true,
         walletAddress: "0x1234",
+        loginError: false,
+        logoutPending: false,
+        logoutError: true,
+      })
+    ).toEqual({
+      status: "logout-error",
+      message: "We couldn't sign you out. Please try again.",
+      action: null,
+    });
+  });
+
+  it("keeps header logout reachable after a logout failure with no wallet chip", () => {
+    expect(
+      getAuthBoundaryState({
+        privyReady: true,
+        authenticated: true,
+        walletsReady: false,
+        walletAddress: null,
         loginError: false,
         logoutPending: false,
         logoutError: true,

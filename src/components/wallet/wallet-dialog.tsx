@@ -38,6 +38,7 @@ type WalletDialogProps = {
   walletAddress: Address;
   balance: bigint | null;
   decimals: number | null;
+  onLogout: () => void | Promise<void>;
 };
 
 type TransferStatusMessage = {
@@ -113,6 +114,7 @@ export function WalletDialog({
   walletAddress,
   balance,
   decimals,
+  onLogout,
 }: WalletDialogProps) {
   const transfer = useDeskDollarsTransfer(walletAddress);
   const [recipient, setRecipient] = useState("");
@@ -380,6 +382,17 @@ export function WalletDialog({
               </GameButton>
             </form>
           )}
+
+          <div className="mt-6 border-t border-[var(--t-border)] pt-5">
+            <button
+              className="w-full rounded-sm border border-[var(--t-muted)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-text)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] sm:text-xs"
+              data-testid="wallet-dialog-logout"
+              onClick={() => void onLogout()}
+              type="button"
+            >
+              Log out
+            </button>
+          </div>
         </Dialog.Popup>
       </Dialog.Portal>
     </Dialog.Root>
