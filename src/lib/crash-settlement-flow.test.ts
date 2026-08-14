@@ -4,10 +4,22 @@ const attestation = vi.hoisted(() => ({
   requestCrashAttestation: vi.fn(),
 }));
 
+const crashReads = vi.hoisted(() => ({
+  readCrashRound: vi.fn(),
+}));
+
 vi.mock("./inco-attestation", () => ({
   requestCrashAttestation: (...args: unknown[]) =>
     attestation.requestCrashAttestation(...args),
 }));
+
+vi.mock("./margin-call-crash", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./margin-call-crash")>();
+  return {
+    ...actual,
+    readCrashRound: (...args: unknown[]) => crashReads.readCrashRound(...args),
+  };
+});
 
 import {
   runVerifyAndSettleFlow,
@@ -60,9 +72,26 @@ function makeRecorder() {
   return { events, runStage, onCrashPointKnown };
 }
 
+function openRoundRead(): CrashRound {
+  return {
+    ...baseRound,
+    status: ROUND_STATUS.revealRequested,
+  };
+}
+
+function finalizedRoundRead(crashPointBps: bigint): CrashRound {
+  return {
+    ...baseRound,
+    status: ROUND_STATUS.finalized,
+    crashPointBps,
+  };
+}
+
 describe("runVerifyAndSettleFlow onCrashPointKnown", () => {
   beforeEach(() => {
     attestation.requestCrashAttestation.mockReset();
+    crashReads.readCrashRound.mockReset();
+    crashReads.readCrashRound.mockResolvedValue(openRoundRead());
   });
 
   it("fires after attestation and before the finalize stage", async () => {
@@ -111,6 +140,7 @@ describe("runVerifyAndSettleFlow onCrashPointKnown", () => {
 
     expect(onCrashPointKnown).toHaveBeenCalledWith(34_200n);
     expect(attestation.requestCrashAttestation).not.toHaveBeenCalled();
+    expect(crashReads.readCrashRound).not.toHaveBeenCalled();
     expect(events).toEqual(["crash-point:34200", "stage:claim"]);
   });
 
@@ -152,5 +182,106 @@ describe("runVerifyAndSettleFlow onCrashPointKnown", () => {
     ).rejects.toThrow("covalidators unavailable");
 
     expect(onCrashPointKnown).not.toHaveBeenCalled();
+    expect(crashReads.readCrashRound).not.toHaveBeenCalled();
+  });
+
+  it("skips finalize and claims when the keeper already finalized", async () => {
+    const expected = computeCrashPointBps(WINNING_PLAINTEXT);
+    attestation.requestCrashAttestation.mockResolvedValue({
+      plaintext: WINNING_PLAINTEXT,
+      signatures: ["0x01"],
+    });
+    crashReads.readCrashRound.mockResolvedValue(finalizedRoundRead(expected));
+    const { events, runStage, onCrashPointKnown } = makeRecorder();
+    const onRoundChange = vi.fn();
+
+    await runVerifyAndSettleFlow({
+      contractAddress,
+      ticket,
+      round: baseRound,
+      runStage,
+      onAttesting: () => events.push("attesting"),
+      onCrashPointKnown,
+      onRoundChange,
+    });
+
+    expect(runStage).not.toHaveBeenCalledWith("finalize", expect.anything());
+    expect(events).toEqual([
+      "stage:reveal",
+      "attesting",
+      `crash-point:${expected}`,
+      "stage:claim",
+    ]);
+    expect(onRoundChange).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: ROUND_STATUS.finalized,
+        crashPointBps: expected,
+      })
+    );
+  });
+
+  it("continues to claim when finalize reverts after a keeper race", async () => {
+    const expected = computeCrashPointBps(WINNING_PLAINTEXT);
+    attestation.requestCrashAttestation.mockResolvedValue({
+      plaintext: WINNING_PLAINTEXT,
+      signatures: ["0x01"],
+    });
+    crashReads.readCrashRound
+      .mockResolvedValueOnce(openRoundRead())
+      .mockResolvedValueOnce(finalizedRoundRead(expected));
+
+    const { events, runStage, onCrashPointKnown } = makeRecorder();
+    runStage.mockImplementation(async (stage: SettlementStage) => {
+      events.push(`stage:${stage}`);
+      if (stage === "finalize") {
+        throw new Error("RoundAlreadyFinalized");
+      }
+    });
+
+    await runVerifyAndSettleFlow({
+      contractAddress,
+      ticket,
+      round: baseRound,
+      runStage,
+      onAttesting: () => events.push("attesting"),
+      onCrashPointKnown,
+    });
+
+    expect(events).toEqual([
+      "stage:reveal",
+      "attesting",
+      `crash-point:${expected}`,
+      "stage:finalize",
+      "stage:claim",
+    ]);
+    expect(crashReads.readCrashRound).toHaveBeenCalledTimes(2);
+  });
+
+  it("rethrows finalize failure when the round is still not finalized", async () => {
+    attestation.requestCrashAttestation.mockResolvedValue({
+      plaintext: WINNING_PLAINTEXT,
+      signatures: ["0x01"],
+    });
+    crashReads.readCrashRound.mockResolvedValue(openRoundRead());
+
+    const { runStage, onCrashPointKnown } = makeRecorder();
+    runStage.mockImplementation(async (stage: SettlementStage) => {
+      if (stage === "finalize") {
+        throw new Error("Finalize failed");
+      }
+    });
+
+    await expect(
+      runVerifyAndSettleFlow({
+        contractAddress,
+        ticket,
+        round: baseRound,
+        runStage,
+        onAttesting: () => undefined,
+        onCrashPointKnown,
+      })
+    ).rejects.toThrow("Finalize failed");
+
+    expect(runStage).not.toHaveBeenCalledWith("claim", expect.anything());
   });
 });

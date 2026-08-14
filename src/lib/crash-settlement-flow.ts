@@ -5,6 +5,7 @@ import {
   computeCrashPointBps,
   deriveTicketOutcome,
   finalizeRequest,
+  readCrashRound,
   revealRequest,
   ROUND_STATUS,
   settleLossRequest,
@@ -27,6 +28,10 @@ export type SettlementStage = "reveal" | "finalize" | "claim" | "settle";
  * The crash point is a pure function of the attested plaintext, so a
  * presentation layer may reveal the outcome while finalize/claim confirm in
  * the background.
+ *
+ * A keeper may finalize between attestation and our finalize submit. When that
+ * happens we adopt the onchain finalized round and continue to claim/settle
+ * instead of treating the finalize revert as a hard failure.
  */
 export async function runVerifyAndSettleFlow(options: {
   contractAddress: Address;
@@ -66,21 +71,42 @@ export async function runVerifyAndSettleFlow(options: {
     const attestation = await requestCrashAttestation(round.crashRandom);
     const crashPointBps = computeCrashPointBps(attestation.plaintext);
     onCrashPointKnown?.(crashPointBps);
-    await runStage(
-      "finalize",
-      finalizeRequest(
-        contractAddress,
-        round.id,
-        attestation.plaintext,
-        attestation.signatures
-      )
+
+    const alreadyFinalized = await adoptFinalizedRoundIfPresent(
+      contractAddress,
+      round.id
     );
-    round = {
-      ...round,
-      status: ROUND_STATUS.finalized,
-      crashPointBps,
-    };
-    onRoundChange?.(round);
+    if (alreadyFinalized) {
+      round = alreadyFinalized;
+      onRoundChange?.(round);
+    } else {
+      try {
+        await runStage(
+          "finalize",
+          finalizeRequest(
+            contractAddress,
+            round.id,
+            attestation.plaintext,
+            attestation.signatures
+          )
+        );
+        round = {
+          ...round,
+          status: ROUND_STATUS.finalized,
+          crashPointBps,
+        };
+        onRoundChange?.(round);
+      } catch (error) {
+        // Keeper may have finalized between our pre-check and submit.
+        const raced = await adoptFinalizedRoundIfPresent(
+          contractAddress,
+          round.id
+        );
+        if (!raced) throw error;
+        round = raced;
+        onRoundChange?.(round);
+      }
+    }
   }
 
   const outcome = deriveTicketOutcome(ticket, round);
@@ -89,4 +115,12 @@ export async function runVerifyAndSettleFlow(options: {
   } else if (outcome === "lost") {
     await runStage("settle", settleLossRequest(contractAddress, ticket.id));
   }
+}
+
+async function adoptFinalizedRoundIfPresent(
+  contractAddress: Address,
+  roundId: bigint
+): Promise<CrashRound | null> {
+  const latest = await readCrashRound(contractAddress, roundId);
+  return latest.status === ROUND_STATUS.finalized ? latest : null;
 }

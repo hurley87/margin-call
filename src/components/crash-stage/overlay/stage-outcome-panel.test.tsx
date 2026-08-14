@@ -139,13 +139,34 @@ describe("StageOutcomePanel", () => {
   it("gates Continue behind the settle receipt", () => {
     const props = renderPanel({
       settleConfirmed: false,
-      settlement: makeSettlement({ status: "claim-pending" }),
+      settlement: makeSettlement({
+        status: "claim-pending",
+        canClaim: false,
+      }),
     });
     const button = screen.getByRole("button", { name: "Settling onchain…" });
     expect(button.hasAttribute("disabled")).toBe(true);
     fireEvent.click(button);
     expect(props.onContinue).not.toHaveBeenCalled();
     expect(screen.getByRole("status").textContent).toContain("Claim pending");
+  });
+
+  it("offers Claim payout when the ticket won but is still unsettled", () => {
+    const settlement = makeSettlement({
+      status: "ready",
+      outcome: "won",
+      canClaim: true,
+      canSettle: false,
+      canRetry: false,
+      transactions: [],
+    });
+    renderPanel({ settleConfirmed: false, settlement });
+    expect(screen.getByRole("status").textContent).toContain("Payout is ready");
+    fireEvent.click(screen.getByRole("button", { name: "Claim payout" }));
+    expect(settlement.claim).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: "Continue to the Floor" })
+    ).toBeNull();
   });
 
   it("continues and rewatches once confirmed", () => {

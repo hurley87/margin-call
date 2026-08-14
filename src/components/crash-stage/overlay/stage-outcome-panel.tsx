@@ -60,8 +60,12 @@ export function StageOutcomePanel({
     ? null
     : isError
       ? settlement.error
-      : (settlementStatusCopy[settlement.status] ??
-        "Waiting for the settlement receipt on Base Sepolia…");
+      : settlement.canClaim
+        ? "Payout is ready — claim to finish settlement on Base Sepolia."
+        : settlement.canSettle
+          ? "Loss is ready — settle to finish on Base Sepolia."
+          : (settlementStatusCopy[settlement.status] ??
+            "Waiting for the settlement receipt on Base Sepolia…");
   const retryLabel = settlement.retryAction
     ? settlementRetryLabels[settlement.retryAction]
     : "Retry";
@@ -144,14 +148,42 @@ export function StageOutcomePanel({
       </div>
 
       <div className="mt-3 flex shrink-0 flex-col gap-2 sm:mt-4 sm:flex-row sm:items-stretch sm:gap-3">
-        <GameButton
-          className="h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50 sm:h-14 sm:min-h-14 sm:text-base"
-          disabled={!settleConfirmed}
-          onClick={onContinue}
-          size="default"
-        >
-          {settleConfirmed ? "Continue to the Floor" : "Settling onchain…"}
-        </GameButton>
+        {settleConfirmed ? (
+          <GameButton
+            className="h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] sm:h-14 sm:min-h-14 sm:text-base"
+            onClick={onContinue}
+            size="default"
+          >
+            Continue to the Floor
+          </GameButton>
+        ) : settlement.canClaim ? (
+          <GameButton
+            className="h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] sm:h-14 sm:min-h-14 sm:text-base"
+            disabled={settlement.busy}
+            onClick={() => void settlement.claim()}
+            size="default"
+          >
+            {settlement.busy ? "Claiming…" : "Claim payout"}
+          </GameButton>
+        ) : settlement.canSettle ? (
+          <GameButton
+            className="h-12 min-h-12 flex-1 whitespace-nowrap py-0 text-sm leading-none tracking-[0.16em] sm:h-14 sm:min-h-14 sm:text-base"
+            disabled={settlement.busy}
+            onClick={() => void settlement.settleLoss()}
+            size="default"
+            variant="danger"
+          >
+            {settlement.busy ? "Settling…" : "Settle loss"}
+          </GameButton>
+        ) : (
+          <GameButton
+            className="h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50 sm:h-14 sm:min-h-14 sm:text-base"
+            disabled
+            size="default"
+          >
+            Settling onchain…
+          </GameButton>
+        )}
         {!reducedMotion ? (
           <button
             className={`${TERMINAL_ACTION_BUTTON_CLASS} inline-flex h-12 min-h-12 shrink-0 items-center justify-center whitespace-nowrap px-6 py-0 leading-none sm:h-14 sm:min-h-14`}

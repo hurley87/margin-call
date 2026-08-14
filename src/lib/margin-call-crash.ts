@@ -921,23 +921,32 @@ export function formatCrashPointBps(crashPointBps: bigint): string {
   return `${formatHundredths(bounded / 100n)}x`;
 }
 
+/** Loads one game round by id. */
+export async function readCrashRound(
+  gameAddress: Address,
+  roundId: bigint
+): Promise<CrashRound> {
+  const round = await baseSepoliaPublicClient.readContract({
+    address: gameAddress,
+    abi: marginCallCrashAbi,
+    functionName: "getRound",
+    args: [roundId],
+  });
+  return {
+    ...round,
+    status: normalizeRoundStatus(round.status),
+  };
+}
+
 /** Loads a game round for LP finalize/expire actions. */
 export async function readCrashRoundForLp(
   roundId: bigint
 ): Promise<CrashRound | null> {
   const config = getMarginCallCrashConfig();
   if (!config) return null;
-  const round = await baseSepoliaPublicClient.readContract({
-    address: config.address,
-    abi: marginCallCrashAbi,
-    functionName: "getRound",
-    args: [roundId],
-  });
+  const round = await readCrashRound(config.address, roundId);
   if (round.status === ROUND_STATUS.uninitialized) return null;
-  return {
-    ...round,
-    status: normalizeRoundStatus(round.status),
-  };
+  return round;
 }
 
 export async function readCurrentCrashRound(config: MarginCallCrashConfig) {
