@@ -190,7 +190,7 @@ describe("StageOutcomePanel", () => {
     ).toBeNull();
   });
 
-  it("surfaces a background settle failure with retry", () => {
+  it("surfaces a background settle failure with retry as the primary CTA", () => {
     const settlement = makeSettlement({
       status: "error",
       error: "We couldn't claim your payout. Please try again.",
@@ -201,5 +201,8 @@ describe("StageOutcomePanel", () => {
     expect(screen.getByRole("alert").textContent).toContain("couldn't claim");
     fireEvent.click(screen.getByRole("button", { name: "Retry claim" }));
     expect(settlement.retry).toHaveBeenCalledOnce();
+    expect(
+      screen.queryByRole("button", { name: "Settling onchain…" })
+    ).toBeNull();
   });
 });

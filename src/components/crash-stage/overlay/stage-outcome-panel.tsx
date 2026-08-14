@@ -12,11 +12,9 @@ import {
   type TierExposure,
 } from "@/lib/margin-call-crash";
 import type { CeremonyReveal, CeremonySnapshot } from "@/lib/settle-ceremony";
-import {
-  settlementRetryLabels,
-  settlementStatusCopy,
-} from "@/lib/settlement-status-copy";
+import { settlementStatusCopy } from "@/lib/settlement-status-copy";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
+import { primaryTicketResolveAction } from "./primary-ticket-resolve-action";
 
 type Settlement = ReturnType<typeof useCrashTicketSettlement>;
 
@@ -39,6 +37,9 @@ const STAGE_LABELS: Record<string, string> = {
   settle: "Loss settlement tx",
 };
 
+const PRIMARY_CTA_CLASS =
+  "h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] sm:h-14 sm:min-h-14 sm:text-base";
+
 /**
  * Held result panel for the ceremony's `landed` phase: the payout number,
  * per-tier closes, every settlement transaction, and the only exit — an
@@ -56,19 +57,14 @@ export function StageOutcomePanel({
 }: StageOutcomePanelProps) {
   const won = reveal.outcome === "won";
   const isError = settlement.status === "error";
+  const resolveAction = settleConfirmed
+    ? null
+    : primaryTicketResolveAction({ settlement, refund: null });
   const pendingLine = settleConfirmed
     ? null
     : isError
       ? settlement.error
-      : settlement.canClaim
-        ? "Payout is ready — claim to finish settlement on Base Sepolia."
-        : settlement.canSettle
-          ? "Loss is ready — settle to finish on Base Sepolia."
-          : (settlementStatusCopy[settlement.status] ??
-            "Waiting for the settlement receipt on Base Sepolia…");
-  const retryLabel = settlement.retryAction
-    ? settlementRetryLabels[settlement.retryAction]
-    : "Retry";
+      : outcomePendingCopy(settlement, resolveAction?.label ?? null);
 
   const showTierBoard = !reducedMotion && hasTickets(snapshot.tiers);
 
@@ -150,34 +146,28 @@ export function StageOutcomePanel({
       <div className="mt-3 flex shrink-0 flex-col gap-2 sm:mt-4 sm:flex-row sm:items-stretch sm:gap-3">
         {settleConfirmed ? (
           <GameButton
-            className="h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] sm:h-14 sm:min-h-14 sm:text-base"
+            className={PRIMARY_CTA_CLASS}
             onClick={onContinue}
             size="default"
           >
             Continue to the Floor
           </GameButton>
-        ) : settlement.canClaim ? (
+        ) : resolveAction ? (
           <GameButton
-            className="h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] sm:h-14 sm:min-h-14 sm:text-base"
-            disabled={settlement.busy}
-            onClick={() => void settlement.claim()}
+            className={
+              settlement.canSettle
+                ? "h-12 min-h-12 flex-1 whitespace-nowrap py-0 text-sm leading-none tracking-[0.16em] sm:h-14 sm:min-h-14 sm:text-base"
+                : PRIMARY_CTA_CLASS
+            }
+            onClick={resolveAction.run}
             size="default"
+            variant={settlement.canSettle ? "danger" : "primary"}
           >
-            {settlement.busy ? "Claiming…" : "Claim payout"}
-          </GameButton>
-        ) : settlement.canSettle ? (
-          <GameButton
-            className="h-12 min-h-12 flex-1 whitespace-nowrap py-0 text-sm leading-none tracking-[0.16em] sm:h-14 sm:min-h-14 sm:text-base"
-            disabled={settlement.busy}
-            onClick={() => void settlement.settleLoss()}
-            size="default"
-            variant="danger"
-          >
-            {settlement.busy ? "Settling…" : "Settle loss"}
+            {resolveAction.label}
           </GameButton>
         ) : (
           <GameButton
-            className="h-12 min-h-12 flex-1 whitespace-nowrap bg-[var(--t-accent)] py-0 text-sm leading-none tracking-[0.16em] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)] disabled:opacity-50 sm:h-14 sm:min-h-14 sm:text-base"
+            className={`${PRIMARY_CTA_CLASS} disabled:opacity-50`}
             disabled
             size="default"
           >
@@ -193,17 +183,24 @@ export function StageOutcomePanel({
             {theaterCopy.replayAgain}
           </button>
         ) : null}
-        {isError && settlement.canRetry ? (
-          <button
-            className={`${TERMINAL_ACTION_BUTTON_CLASS} inline-flex h-12 min-h-12 shrink-0 items-center justify-center whitespace-nowrap px-6 py-0 leading-none sm:h-14 sm:min-h-14`}
-            onClick={() => void settlement.retry()}
-            type="button"
-          >
-            {retryLabel}
-          </button>
-        ) : null}
       </div>
     </div>
+  );
+}
+
+function outcomePendingCopy(
+  settlement: Settlement,
+  resolveLabel: string | null
+): string | null {
+  if (resolveLabel === "Claim payout") {
+    return "Payout is ready — claim to finish settlement on Base Sepolia.";
+  }
+  if (resolveLabel === "Settle loss") {
+    return "Loss is ready — settle to finish on Base Sepolia.";
+  }
+  return (
+    settlementStatusCopy[settlement.status] ??
+    "Waiting for the settlement receipt on Base Sepolia…"
   );
 }
 
