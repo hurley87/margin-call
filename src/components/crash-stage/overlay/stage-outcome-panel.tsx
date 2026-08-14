@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
 import { MarginCallVoiceTrigger } from "@/components/desk-phone/margin-call-voice-trigger";
 import { FinalizeLink } from "@/components/round-theater/finalize-link";
 import { theaterCopy } from "@/components/round-theater/theater-copy";
@@ -40,20 +39,6 @@ const STAGE_LABELS: Record<string, string> = {
   settle: "Loss settlement tx",
 };
 
-const SM_UP_QUERY = "(min-width: 640px)";
-
-function subscribeSmUp(onChange: () => void) {
-  if (typeof window.matchMedia !== "function") return () => {};
-  const media = window.matchMedia(SM_UP_QUERY);
-  media.addEventListener("change", onChange);
-  return () => media.removeEventListener("change", onChange);
-}
-
-function readSmUp() {
-  if (typeof window.matchMedia !== "function") return true;
-  return window.matchMedia(SM_UP_QUERY).matches;
-}
-
 /**
  * Held result panel for the ceremony's `landed` phase: the payout number,
  * per-tier closes, every settlement transaction, and the only exit — an
@@ -82,12 +67,6 @@ export function StageOutcomePanel({
     : "Retry";
 
   const showTierBoard = !reducedMotion && hasTickets(snapshot.tiers);
-  // Phones: tier board starts collapsed. `sm+` and SSR/tests keep it open.
-  const isSmUp = useSyncExternalStore(subscribeSmUp, readSmUp, () => true);
-  const [tiersOpen, setTiersOpen] = useState(isSmUp);
-  useEffect(() => {
-    setTiersOpen(isSmUp);
-  }, [isSmUp]);
 
   return (
     <div
@@ -114,25 +93,16 @@ export function StageOutcomePanel({
         </div>
 
         {showTierBoard ? (
-          <details
-            className="mt-2"
-            onToggle={(event) => setTiersOpen(event.currentTarget.open)}
-            open={tiersOpen}
-          >
-            <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-accent)] sm:hidden">
-              Tier closes
-            </summary>
-            <div className="max-h-[20svh] overflow-y-auto pr-1 sm:max-h-[26svh]">
-              {/* Reduced motion renders RoundResultCard above — its tier board
-                  already covers this. */}
-              <TierCloseBoard
-                crashPointBps={reveal.crashPointBps}
-                playerTierBps={snapshot.ticket.leverageBps}
-                progress={1}
-                tiers={snapshot.tiers}
-              />
-            </div>
-          </details>
+          <div className="mt-2 max-h-[20svh] overflow-y-auto pr-1 sm:max-h-[26svh]">
+            {/* Reduced motion renders RoundResultCard above — its tier board
+                already covers this. */}
+            <TierCloseBoard
+              crashPointBps={reveal.crashPointBps}
+              playerTierBps={snapshot.ticket.leverageBps}
+              progress={1}
+              tiers={snapshot.tiers}
+            />
+          </div>
         ) : null}
 
         <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
