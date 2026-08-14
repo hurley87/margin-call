@@ -2,7 +2,6 @@
 
 import { useLogin, usePrivy, useWallets } from "@privy-io/react-auth";
 import { useCallback, useRef, useState } from "react";
-import { DeskPhoneSwitch } from "@/components/auth/desk-phone-switch";
 import { FlashValue } from "@/components/ui/flash-value";
 import { WalletDialog } from "@/components/wallet/wallet-dialog";
 import { formatDeskDollarsBalanceLabel } from "@/lib/desk-dollars";
@@ -12,8 +11,8 @@ import { useDeskDollarsBalance } from "@/hooks/use-desk-dollars-balance";
 import { getAuthBoundaryState } from "./auth-boundary";
 
 /**
- * Compact shell auth: login/logout, wallet chip, live USDC balance,
- * and the Desk phone switch for liquidation calls.
+ * Compact shell auth: login/logout, wallet chip, and live USDC balance.
+ * Desk phone consent lives in the wallet dialog (single mount).
  * Does not gate children — use AuthGate for signed-in-only surfaces.
  */
 export function AuthControls() {
@@ -73,10 +72,13 @@ export function AuthControls() {
 
   return (
     <div
-      className="flex flex-wrap items-center justify-end gap-3"
+      className="flex shrink-0 flex-nowrap items-center justify-end gap-2 sm:gap-3"
       data-testid="auth-controls"
     >
-      <p aria-live="polite" className="text-xs text-[var(--t-muted)]">
+      <p
+        aria-live="polite"
+        className="max-w-[10rem] truncate text-xs text-[var(--t-muted)] sm:max-w-[14rem]"
+      >
         {state.message}
       </p>
       {signedInWallet ? (
@@ -84,7 +86,7 @@ export function AuthControls() {
           <button
             aria-expanded={walletOpen}
             aria-haspopup="dialog"
-            className="flex flex-wrap items-center gap-2 rounded-sm border border-transparent px-2 py-1 text-xs tabular-nums text-[var(--t-text)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--t-accent)]"
+            className="flex flex-nowrap items-center gap-1.5 rounded-sm border border-transparent px-1.5 py-1 text-xs tabular-nums text-[var(--t-text)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--t-accent)] sm:gap-2 sm:px-2"
             data-testid="wallet-chip"
             onClick={() => setWalletOpen(true)}
             type="button"
@@ -103,12 +105,11 @@ export function AuthControls() {
             open={walletOpen}
             walletAddress={signedInWallet}
           />
-          <DeskPhoneSwitch walletAddress={signedInWallet} />
         </>
       ) : null}
       {state.action === "login" ? (
         <button
-          className="rounded-sm bg-[var(--t-accent)] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[var(--t-bg)]"
+          className="shrink-0 rounded-sm bg-[var(--t-accent)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-bg)] sm:px-3 sm:text-xs"
           onClick={handleLogin}
           type="button"
         >
@@ -117,7 +118,7 @@ export function AuthControls() {
       ) : null}
       {state.action === "logout" ? (
         <button
-          className="rounded-sm border border-[var(--t-muted)] px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-[var(--t-text)]"
+          className="shrink-0 rounded-sm border border-[var(--t-muted)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-text)] sm:px-3 sm:text-xs"
           onClick={handleLogout}
           type="button"
         >

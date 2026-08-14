@@ -43,6 +43,11 @@ vi.mock("@/components/desk-dollars/desk-dollars-faucet", () => ({
   DeskDollarsFaucet: () => null,
 }));
 
+vi.mock("convex/react", () => ({
+  useQuery: () => ({ optedIn: false }),
+  useMutation: () => vi.fn(),
+}));
+
 import { WalletDialog } from "./wallet-dialog";
 
 const FROM = "0x0000000000000000000000000000000000000003" as const;
@@ -75,6 +80,7 @@ describe("WalletDialog", () => {
 
     expect(screen.getByTestId("wallet-dialog-address").textContent).toBe(FROM);
     expect(screen.getByText("100 USDC")).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Desk phone/i })).not.toBeNull();
 
     fireEvent.change(screen.getByLabelText("Recipient"), {
       target: { value: TO },

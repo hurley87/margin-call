@@ -3,6 +3,7 @@
 import { Dialog } from "@base-ui/react/dialog";
 import { useCallback, useState, type FormEvent } from "react";
 import type { Address } from "viem";
+import { DeskPhoneSwitch } from "@/components/auth/desk-phone-switch";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
 import { FlashValue } from "@/components/ui/flash-value";
 import { GameButton } from "@/components/ui/game-button";
@@ -267,6 +268,10 @@ export function WalletDialog({
               balanceLabel
             )}
           </p>
+
+          <div className="mt-4 flex justify-start">
+            <DeskPhoneSwitch walletAddress={walletAddress} />
+          </div>
 
           <DeskDollarsFaucet />
 

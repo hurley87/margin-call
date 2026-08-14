@@ -77,6 +77,15 @@ describe("CrashRoundEntry", () => {
     ).toBeNull();
   });
 
+  it("offers margin, leverage, and enter without requiring the helper paragraph", () => {
+    render(<CrashRoundEntry {...sdk.props} />);
+    expect(screen.getByRole("group", { name: "Margin" })).toBeTruthy();
+    expect(screen.getByRole("group", { name: "Arcade Leverage" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Approve & enter" })
+    ).toBeTruthy();
+  });
+
   it("discloses the bounded spender, cap, and contract addresses", () => {
     render(<CrashRoundEntry {...sdk.props} />);
     expect(screen.getByText(/Spender: Bankroll Vault/)).toBeTruthy();

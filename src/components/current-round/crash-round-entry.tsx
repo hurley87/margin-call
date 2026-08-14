@@ -21,6 +21,7 @@ import {
   formatDeskDollarsAmount,
   formatDeskDollarsAmountLabel,
 } from "@/lib/desk-dollars";
+import { STAGE_DOCK_STICKY_CTA_CLASS } from "@/components/crash-stage/overlay/stage-dock-chrome";
 import { TERMINAL_ACTION_BUTTON_CLASS } from "@/lib/utils";
 import { entrySubmitLabel } from "@/lib/entry-submit-label";
 import { DeskDollarsFaucet } from "@/components/desk-dollars/desk-dollars-faucet";
@@ -147,7 +148,7 @@ export function CrashRoundEntry({
 
   return (
     <EntryShell>
-      <p className="text-sm text-[var(--t-text)]">
+      <p className="hidden text-sm text-[var(--t-text)] sm:block">
         Choose margin and Arcade Leverage. Expected payout is the maximum
         reservation, not a guaranteed return.
       </p>
@@ -168,26 +169,32 @@ export function CrashRoundEntry({
         onSelect={entry.selectLeverage}
       />
 
-      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm">
-        <div>
-          <dt className="text-[var(--t-muted)]">Wallet Desk Dollars</dt>
-          <dd className="tabular-nums">
+      <dl className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[11px] tabular-nums sm:mt-4 sm:grid sm:grid-cols-2 sm:gap-3 sm:text-sm">
+        <div className="flex items-baseline gap-1.5 sm:block">
+          <dt className="text-[var(--t-muted)]">
+            <span className="sm:hidden">Wallet</span>
+            <span className="hidden sm:inline">Wallet Desk Dollars</span>
+          </dt>
+          <dd className="tabular-nums text-[var(--t-text)]">
             {formatDeskDollarsAmountLabel(entry.tUsdBalance)}
           </dd>
         </div>
-        <div>
-          <dt className="text-[var(--t-muted)]">Expected maximum payout</dt>
+        <div className="flex items-baseline gap-1.5 sm:block">
+          <dt className="text-[var(--t-muted)]">
+            <span className="sm:hidden">Max</span>
+            <span className="hidden sm:inline">Expected maximum payout</span>
+          </dt>
           <dd className="tabular-nums text-[var(--t-green-hot)]">
             {formatDeskDollarsAmount(entry.expectedPayout)}
           </dd>
         </div>
       </dl>
 
-      <DeskDollarsFaucet />
+      <DeskDollarsFaucet className="mt-3 sm:mt-4" />
 
       {statusMessage ? (
         <p
-          className={`mt-4 text-sm ${
+          className={`mt-3 text-sm sm:mt-4 ${
             isAlert ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
           }`}
           role={isAlert ? "alert" : "status"}
@@ -196,7 +203,7 @@ export function CrashRoundEntry({
         </p>
       ) : null}
 
-      <div className="mt-4 flex flex-col gap-3">
+      <div className={STAGE_DOCK_STICKY_CTA_CLASS}>
         <GameButton
           className="w-full bg-[var(--t-accent)] text-[var(--t-bg)] hover:bg-[var(--t-accent)] hover:text-[var(--t-bg)]"
           disabled={!entry.canEnter}
@@ -216,7 +223,7 @@ export function CrashRoundEntry({
         ) : null}
       </div>
 
-      <details className="mt-4 text-xs leading-5 text-[var(--t-muted)]">
+      <details className="mt-3 text-xs leading-5 text-[var(--t-muted)] sm:mt-4">
         <summary className="cursor-pointer font-bold uppercase tracking-[0.14em] text-[var(--t-accent)]">
           Approval details
         </summary>
@@ -277,11 +284,11 @@ function EntryShell({ children }: { children: React.ReactNode }) {
     <div aria-labelledby="crash-entry-heading" className="text-left">
       <h3
         id="crash-entry-heading"
-        className="font-[family-name:var(--font-plex-sans)] text-lg font-bold uppercase tracking-tight text-[var(--t-accent)]"
+        className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg"
       >
         Enter this round
       </h3>
-      <div className="mt-3">{children}</div>
+      <div className="mt-2 sm:mt-3">{children}</div>
     </div>
   );
 }

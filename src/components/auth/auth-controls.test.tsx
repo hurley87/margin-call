@@ -156,12 +156,20 @@ describe("AuthControls", () => {
     expect(sdk.login).toHaveBeenCalledTimes(2);
   });
 
-  it("shows truncated wallet, USDC balance, and Desk phone switch when signed in", () => {
+  it("shows truncated wallet and USDC balance when signed in", () => {
     renderSignedInControls();
     expect(screen.getByText("0x1234")).not.toBeNull();
     expect(screen.getByText("100 USDC")).not.toBeNull();
     expect(screen.queryByText("+15555550123")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Desk phone/i })).toBeNull();
+  });
+
+  it("exposes Desk phone only in the wallet dialog", () => {
+    renderSignedInControls();
+    expect(screen.queryByRole("button", { name: /Desk phone/i })).toBeNull();
+    fireEvent.click(screen.getByTestId("wallet-chip"));
     expect(screen.getByRole("button", { name: /Desk phone/i })).not.toBeNull();
+    expect(screen.getByTestId("wallet-dialog")).not.toBeNull();
   });
 
   it("opens the wallet dialog from the header chip", () => {

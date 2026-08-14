@@ -2,6 +2,7 @@
 
 /**
  * Shared margin / Arcade Leverage option pills for entry surfaces.
+ * Always a 3-column equal-width grid (3 margins; 6 leverage tiers = 3×2).
  */
 export function EntryOptionGroup({
   legend,
@@ -23,13 +24,13 @@ export function EntryOptionGroup({
       <legend className="text-[var(--t-type-label)] uppercase tracking-[0.18em] text-[var(--t-muted)]">
         {legend}
       </legend>
-      <div className="mt-2 flex flex-wrap gap-2">
+      <div className="mt-2 grid grid-cols-3 gap-2">
         {options.map((option) => {
           const isSelected = selected === option;
           return (
             <button
               aria-pressed={isSelected}
-              className={`min-h-11 border px-3 py-2 text-sm font-bold tabular-nums ${
+              className={`min-h-11 w-full border px-2 py-2 text-sm font-bold tabular-nums sm:px-3 ${
                 isSelected
                   ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)] text-[var(--t-accent)]"
                   : "border-[var(--t-border)] text-[var(--t-text)] hover:border-[var(--t-accent)]"

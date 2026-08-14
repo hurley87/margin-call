@@ -10,6 +10,7 @@ import {
   useDeskDollarsFaucet,
   type DeskDollarsFaucetSession,
 } from "@/hooks/use-desk-dollars-faucet";
+import { cn } from "@/lib/utils";
 
 function formatCooldown(seconds: bigint) {
   const minutes = Number((seconds + 59n) / 60n);
@@ -58,7 +59,7 @@ function useSharedDeskDollarsFaucet() {
  * Claim chrome for empty or in-flight faucet states. Funded idle wallets
  * render nothing — balance lives on the wallet chip, not a duplicate card.
  */
-export function DeskDollarsFaucet() {
+export function DeskDollarsFaucet({ className }: { className?: string } = {}) {
   const { walletAddress, faucet } = useSharedDeskDollarsFaucet();
   const chrome = getDeskDollarsFaucetChrome({
     balance: faucet.balance,
@@ -78,7 +79,10 @@ export function DeskDollarsFaucet() {
   }
 
   return (
-    <div className="mt-4 text-left" data-testid="desk-dollars-faucet">
+    <div
+      className={cn("mt-4 text-left", className)}
+      data-testid="desk-dollars-faucet"
+    >
       {faucet.status === "unavailable" ? (
         <p role="alert" className="text-sm text-[var(--t-red)]">
           {faucet.error}
