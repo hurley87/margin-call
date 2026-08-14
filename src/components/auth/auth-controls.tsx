@@ -142,7 +142,7 @@ export function AuthControls() {
           Continue with phone
         </button>
       ) : null}
-      {state.action === "logout" && !signedInWallet ? (
+      {state.action === "logout" ? (
         <button
           className="shrink-0 rounded-sm border border-[var(--t-muted)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-text)] sm:px-3 sm:text-xs"
           onClick={handleLogout}

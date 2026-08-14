@@ -19,7 +19,9 @@ export type AuthBoundaryState = {
     | "signed-in"
     | "logout-pending"
     | "logout-error";
-  message: string;
+  /** Header live-region copy; null when chrome should stay quiet. */
+  message: string | null;
+  /** Header CTA only — dialog owns logout when a wallet chip is available. */
   action: "login" | "logout" | null;
 };
 
@@ -46,7 +48,8 @@ export function getAuthBoundaryState(
     return {
       status: "logout-error",
       message: "We couldn't sign you out. Please try again.",
-      action: "logout",
+      // Wallet chip + dialog own retry when an address is available.
+      action: input.walletAddress ? null : "logout",
     };
   }
 
@@ -63,8 +66,8 @@ export function getAuthBoundaryState(
   if (input.authenticated) {
     return {
       status: "signed-in",
-      message: "",
-      action: "logout",
+      message: null,
+      action: null,
     };
   }
 
