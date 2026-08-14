@@ -41,7 +41,7 @@ export const FloorHowToPlay = memo(function FloorHowToPlay() {
   return (
     <div className="relative" data-testid="floor-how-to-play">
       <details className="group" ref={detailsRef}>
-        <summary className="cursor-pointer list-none rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/70 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-accent)] backdrop-blur-sm marker:content-none [&::-webkit-details-marker]:hidden">
+        <summary className="inline-flex cursor-pointer list-none items-center border border-[var(--t-border)] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] marker:content-none [&::-webkit-details-marker]:hidden">
           How to play
         </summary>
         <div className="pointer-events-auto absolute right-0 top-full z-30 mt-1.5 w-[min(calc(100vw-1.5rem),22rem)] border border-[var(--t-border)] bg-[var(--t-panel)] p-3 shadow-lg sm:w-[28rem] sm:p-4">

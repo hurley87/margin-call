@@ -87,7 +87,7 @@ describe("authentication boundary", () => {
       })
     ).toEqual({
       status: "signed-in",
-      message: "Signed in.",
+      message: "",
       action: "logout",
     });
   });

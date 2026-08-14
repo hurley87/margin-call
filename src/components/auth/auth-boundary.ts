@@ -63,7 +63,7 @@ export function getAuthBoundaryState(
   if (input.authenticated) {
     return {
       status: "signed-in",
-      message: "Signed in.",
+      message: "",
       action: "logout",
     };
   }

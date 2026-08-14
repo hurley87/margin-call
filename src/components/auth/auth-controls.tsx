@@ -10,6 +10,27 @@ import { formatShortAddress } from "@/lib/utils";
 import { useDeskDollarsBalance } from "@/hooks/use-desk-dollars-balance";
 import { getAuthBoundaryState } from "./auth-boundary";
 
+function WalletIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      height="14"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.75"
+      viewBox="0 0 24 24"
+      width="14"
+    >
+      <path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+      <path d="M3 9h18a1 1 0 0 1 1 1v6a1 1 0 0 1-1 1H3" />
+      <path d="M17 13h.01" />
+    </svg>
+  );
+}
+
 /**
  * Compact shell auth: login/logout, wallet chip, and live USDC balance.
  * Desk phone consent lives in the wallet dialog (single mount).
@@ -75,22 +96,26 @@ export function AuthControls() {
       className="flex shrink-0 flex-nowrap items-center justify-end gap-2 sm:gap-3"
       data-testid="auth-controls"
     >
-      <p
-        aria-live="polite"
-        className="max-w-[10rem] truncate text-xs text-[var(--t-muted)] sm:max-w-[14rem]"
-      >
-        {state.message}
-      </p>
+      {state.message ? (
+        <p
+          aria-live="polite"
+          className="max-w-[10rem] truncate text-xs text-[var(--t-muted)] sm:max-w-[14rem]"
+        >
+          {state.message}
+        </p>
+      ) : null}
       {signedInWallet ? (
         <>
           <button
             aria-expanded={walletOpen}
             aria-haspopup="dialog"
-            className="flex flex-nowrap items-center gap-1.5 rounded-sm border border-transparent px-1.5 py-1 text-xs tabular-nums text-[var(--t-text)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--t-accent)] sm:gap-2 sm:px-2"
+            aria-label="Wallet"
+            className="flex flex-nowrap items-center gap-1.5 rounded-sm border border-[var(--t-border)] px-2.5 py-1.5 text-xs tabular-nums text-[var(--t-text)] transition-colors hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] focus-visible:border-[var(--t-accent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--t-accent)] sm:gap-2"
             data-testid="wallet-chip"
             onClick={() => setWalletOpen(true)}
             type="button"
           >
+            <WalletIcon className="shrink-0" />
             <span>{formatShortAddress(signedInWallet)}</span>
             {balanceLabel && balance !== null ? (
               <FlashValue className="text-[var(--t-green-hot)]" value={balance}>
@@ -101,6 +126,7 @@ export function AuthControls() {
           <WalletDialog
             balance={balance}
             decimals={decimals}
+            onLogout={handleLogout}
             onOpenChange={setWalletOpen}
             open={walletOpen}
             walletAddress={signedInWallet}
@@ -116,7 +142,7 @@ export function AuthControls() {
           Continue with phone
         </button>
       ) : null}
-      {state.action === "logout" ? (
+      {state.action === "logout" && !signedInWallet ? (
         <button
           className="shrink-0 rounded-sm border border-[var(--t-muted)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--t-text)] sm:px-3 sm:text-xs"
           onClick={handleLogout}

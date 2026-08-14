@@ -160,8 +160,10 @@ describe("AuthControls", () => {
     renderSignedInControls();
     expect(screen.getByText("0x1234")).not.toBeNull();
     expect(screen.getByText("100 USDC")).not.toBeNull();
+    expect(screen.queryByText("Signed in.")).toBeNull();
     expect(screen.queryByText("+15555550123")).toBeNull();
     expect(screen.queryByRole("button", { name: /Desk phone/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
   });
 
   it("exposes Desk phone only in the wallet dialog", () => {
@@ -195,6 +197,7 @@ describe("AuthControls", () => {
     );
     renderSignedInControls();
 
+    fireEvent.click(screen.getByTestId("wallet-chip"));
     const logoutButton = screen.getByRole("button", { name: "Log out" });
     act(() => {
       fireEvent.click(logoutButton);
@@ -214,12 +217,14 @@ describe("AuthControls", () => {
       .mockResolvedValueOnce();
     renderSignedInControls();
 
+    fireEvent.click(screen.getByTestId("wallet-chip"));
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
 
     await screen.findByText("We couldn't sign you out. Please try again.");
     expect(screen.getByText("0x1234")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Log out" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Log out" })).toBeNull();
 
+    fireEvent.click(screen.getByTestId("wallet-chip"));
     fireEvent.click(screen.getByRole("button", { name: "Log out" }));
     await waitFor(() => expect(sdk.logout).toHaveBeenCalledTimes(2));
   });
