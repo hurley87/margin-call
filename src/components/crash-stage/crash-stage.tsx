@@ -475,7 +475,6 @@ export function CrashStage() {
         {showBanner ? (
           <CountdownBanner
             label={countdownLabel}
-            locked={urgency === "locked"}
             progress={countdownProgress}
             seconds={countdownSeconds}
             urgency={urgency}

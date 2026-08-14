@@ -22,11 +22,10 @@ describe("CountdownBanner", () => {
     expect(screen.getByText("00:22")).toBeTruthy();
   });
 
-  it("shows LOCKED when locked with no seconds", () => {
+  it("shows LOCKED when urgency is locked with no seconds", () => {
     render(
       <CountdownBanner
         label={null}
-        locked
         progress={null}
         seconds={null}
         urgency="locked"

@@ -59,4 +59,13 @@ describe("StageHud", () => {
       screen.getByRole("button", { name: "Refund margin" })
     ).toHaveProperty("disabled", true);
   });
+
+  it("renders nothing when there is no ticket and no status", () => {
+    const { container } = render(
+      <StageHud playerTicket={null} statusMessage={null} />
+    );
+
+    expect(container.firstChild).toBeNull();
+    expect(screen.queryByTestId("stage-hud")).toBeNull();
+  });
 });

@@ -2,11 +2,14 @@
 
 import { memo, useEffect, useRef } from "react";
 import { HOW_TO_PLAY_URL } from "@/lib/product-docs";
+import { cn, STAGE_HUD_CHIP_CLASS } from "@/lib/utils";
 
 const SEEN_KEY = "mc-floor-howto-seen";
 
-const HEADER_CHIP_CLASS =
-  "rounded-sm border border-[var(--t-border)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)] hover:border-[var(--t-accent)] hover:text-[var(--t-accent)] sm:text-xs";
+const HEADER_CHIP_CLASS = cn(
+  STAGE_HUD_CHIP_CLASS,
+  "rounded-sm px-2.5 sm:text-xs"
+);
 
 const steps = [
   {

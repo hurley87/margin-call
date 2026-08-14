@@ -37,6 +37,8 @@ export function StageHud({
 }: StageHudProps) {
   const isClearable = Boolean(playerTicket && onClear && clearLabel);
 
+  if (!playerTicket && !statusMessage) return null;
+
   return (
     <div
       className="flex shrink-0 flex-col gap-1.5 px-3 pt-2 sm:gap-2 sm:px-6 sm:pt-3"

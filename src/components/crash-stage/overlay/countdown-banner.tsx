@@ -17,7 +17,6 @@ export type CountdownBannerProps = {
   /** 0..1 fill of the active timeline segment; null = no fill. */
   progress: number | null;
   urgency: CountdownUrgency;
-  locked?: boolean;
 };
 
 /**
@@ -30,12 +29,11 @@ export function CountdownBanner({
   seconds,
   progress,
   urgency,
-  locked = false,
 }: CountdownBannerProps) {
   const color = URGENCY_COLOR[urgency];
   const clamped = progress === null ? null : Math.min(1, Math.max(0, progress));
   const display =
-    locked && seconds === null
+    urgency === "locked" && seconds === null
       ? "LOCKED"
       : seconds === null
         ? "—"
