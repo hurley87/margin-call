@@ -41,6 +41,7 @@ const sdk = vi.hoisted(() => {
     live: {
       kind: "open",
       roundId: 12n,
+      phaseLabel: "open",
       timeline: makeTimeline(),
       tape: {
         roundId: 12n,
@@ -363,6 +364,7 @@ describe("RoundTheater", () => {
       live: {
         kind: "open",
         roundId: 13n,
+        phaseLabel: "open",
         tape: null,
         timeline: sdk.makeTimeline(
           "open",

@@ -7,12 +7,9 @@ import {
   type CrashTicketRefundState,
 } from "@/components/current-round/crash-ticket-refund";
 import type { useCrashTicketSettlement } from "@/hooks/use-crash-ticket-settlement";
-import {
-  canOfferEntry,
-  isExpiryRefundTicket,
-  type CrashRoundPhase,
-} from "@/lib/margin-call-crash";
+import type { CrashRoundPhase } from "@/lib/margin-call-crash";
 import type { CrashStageMode } from "../use-crash-stage-mode";
+import { deriveStageDockKind } from "./stage-dock-state";
 import { StageSettleDock } from "./stage-settle-dock";
 
 export type StageActionsProps = {
@@ -41,36 +38,40 @@ export function StageActions({
   settlement,
   refund,
 }: StageActionsProps) {
-  const showSettle =
-    settlement.ticket !== null &&
-    (settlement.canVerify ||
-      settlement.canClaim ||
-      settlement.canSettle ||
-      settlement.canRetry);
-  const showEnter =
-    canOfferEntry(phase, countdownSeconds) && !hasTicket && !showSettle;
-  // Expiry leftovers can block the next Open round — show refund even when the
-  // live theater is no longer on the expired round.
-  const showRefund =
-    !showSettle &&
-    (mode === "expired" ||
-      isExpiryRefundTicket(settlement.phase, settlement.outcome));
+  const kind = deriveStageDockKind({
+    mode,
+    phase,
+    countdownSeconds,
+    hasTicket,
+    hasSettlementTicket: settlement.ticket !== null,
+    canVerify: settlement.canVerify,
+    canClaim: settlement.canClaim,
+    canSettle: settlement.canSettle,
+    canRetry: settlement.canRetry,
+    settlementPhase: settlement.phase,
+    settlementOutcome: settlement.outcome,
+  });
 
-  if (!showEnter && !showSettle && !showRefund) return null;
+  if (kind === "none") return null;
+
+  const showEntry = kind === "enter" || kind === "arm";
+  const showSettle = kind === "settle";
+  const showRefund = kind === "refund";
 
   return (
     <div
       className="pointer-events-auto flex min-h-0 max-h-[min(70%,32rem)] shrink flex-col px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-1.5 sm:max-h-[min(75%,36rem)] sm:px-6 sm:pb-[max(1rem,env(safe-area-inset-bottom))] sm:pt-2"
       data-testid="stage-actions"
     >
-      {showEnter || showSettle ? (
+      {showEntry || showSettle ? (
         <div className="mx-auto flex min-h-0 w-full max-w-xl flex-col overflow-hidden rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 backdrop-blur-md">
           <div
             className="min-h-0 overflow-y-auto p-3 sm:p-5"
             data-testid="stage-actions-body"
           >
-            {showEnter ? (
+            {showEntry ? (
               <CrashRoundEntry
+                armed={kind === "arm"}
                 countdownSeconds={countdownSeconds}
                 phase={phase}
                 roundId={roundId}

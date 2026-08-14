@@ -543,7 +543,7 @@ function theaterLivePhase(live: TheaterLive): CrashRoundPhase | null {
   if (!isTheaterLiveReady(live)) return null;
   switch (live.kind) {
     case "open":
-      return "open";
+      return live.phaseLabel;
     case "delayed":
       return live.phaseLabel;
     case "finalized":

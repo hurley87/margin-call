@@ -49,7 +49,9 @@ vi.mock("@/components/auth/auth-gate", () => ({
 }));
 
 vi.mock("@/components/current-round/crash-round-entry", () => ({
-  CrashRoundEntry: () => <div data-testid="entry-form">Enter form</div>,
+  CrashRoundEntry: ({ armed }: { armed?: boolean }) => (
+    <div data-testid="entry-form">{armed ? "Armed form" : "Enter form"}</div>
+  ),
 }));
 
 vi.mock("@/components/current-round/crash-ticket-refund", () => ({
@@ -133,6 +135,30 @@ describe("StageActions", () => {
     );
     expect(screen.getByTestId("stage-actions")).toBeTruthy();
     expect(screen.getByTestId("entry-form")).toBeTruthy();
+    expect(screen.getByText("Enter form")).toBeTruthy();
+  });
+
+  it("keeps an armed dock mounted between rounds", () => {
+    sdk.settlement = sdk.makeSettlement({
+      ticket: null,
+      canVerify: false,
+      canClaim: false,
+      canSettle: false,
+      canRetry: false,
+    });
+    render(
+      <StageActions
+        countdownSeconds={8}
+        hasTicket={false}
+        mode="countdown"
+        phase="locked"
+        refund={emptyRefund}
+        roundId={12n}
+        settlement={sdk.settlement}
+      />
+    );
+    expect(screen.getByTestId("stage-actions")).toBeTruthy();
+    expect(screen.getByText("Armed form")).toBeTruthy();
   });
 
   it("disables and relabels verify while settlement is in flight", () => {

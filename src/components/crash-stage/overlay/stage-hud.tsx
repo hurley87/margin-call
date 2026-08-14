@@ -1,5 +1,6 @@
 "use client";
 
+import { FloorHowToPlay } from "@/components/crash-stage/overlay/floor-how-to-play";
 import { TheaterSoundToggle } from "@/components/round-theater/theater-sound-toggle";
 import {
   formatDeskDollarsAmount,
@@ -27,7 +28,7 @@ export type StageHudProps = {
 };
 
 /**
- * Compact floor HUD: live region, YOU ticket chip, sound.
+ * Compact floor HUD: live region, YOU ticket chip, how-to-play, sound.
  * Faucet lives on CrashRoundEntry in the action overlay.
  */
 export function StageHud({
@@ -90,7 +91,8 @@ export function StageHud({
             )
           ) : null}
         </div>
-        <div className="pointer-events-auto shrink-0">
+        <div className="pointer-events-auto flex shrink-0 items-start gap-2">
+          <FloorHowToPlay />
           <TheaterSoundToggle suggest={suggestSound} />
         </div>
       </div>

@@ -20,6 +20,7 @@ const timeline = {
 const openLive: Extract<TheaterLive, { kind: "open" }> = {
   kind: "open",
   roundId: 12n,
+  phaseLabel: "open",
   tape: {
     roundId: 12n,
     entries: [
