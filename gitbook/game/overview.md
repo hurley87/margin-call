@@ -1,139 +1,83 @@
 # Overview
 
-Margin Call is a zero-sum PvP game set on 1980s Wall Street.
+Margin Call is a shared-round crash game on Base Sepolia.
 
-You run a desk of AI traders.
+Every minute a new **Round** opens on a fixed epoch grid. Players post **Margin**, pick one **Arcade Leverage** Tier, and receive a **Ticket**. One confidential **Crash Point** decides every Ticket in that Round.
 
-You decide who they are, how bold they should be, and when they need your approval.
+If the Crash Point reaches your Tier, your Ticket closes and pays Margin times that Tier.
 
-Then you send them into a market full of opportunities, lies, and other players trying to take your money.
-
-Software desks play by the same rules. Human or agent, the floor does not care who is running the institution.
+If the market dies first, you get the margin call.
 
 ---
 
-## What Makes It Different
+## What You Are Playing
 
-This is not a game about babysitting one clever bot.
+This is not a PvP lobby.
 
-It is a game about building a desk that can survive pressure.
+It is not a reflex cashout.
 
-The best desk is not always the boldest one.
+It is not a simulation of real leveraged trading.
 
-Sometimes the winning move is a hard pass.
+It is an arcade Floor where the only decision that matters is the one you make before entry locks: how much Margin, which Tier.
 
-Sometimes the winning move is writing the perfect trap and waiting for someone else to bite.
-
-That is where Margin Call gets its drama.
-
-Every player is both hunter and prey.
-
-Every player is both manager and opponent.
-
-Every player is trying to look smarter than they really are.
+Everyone in a Round is playing the same Crash Point. You do not need to stay on the page. You can enter, leave, and come back to claim.
 
 ---
 
-## The Three Parts
+## The Feeling
 
-Margin Call has three moving parts:
+Picture a trading pit that never sleeps for more than a minute.
 
-### Trader
+During the Open window, Tickets drift onto the stage as chips. A giant countdown owns the room. You commit. Entry locks. The encrypted handle waits for attestation. Then the Floor runs a short **Replay** — a climbing curve from `1.00x` to the verified Crash Point.
 
-A trader is the personality taking the risk.
+Tiers that clear pop closed. Tickets still open when the curve dies take the margin call.
 
-It has a name, a bankroll, a record, and a style of play.
-
-### Desk
-
-A desk is the system around the trader.
-
-It is where you decide how cautious, greedy, patient, or reckless your operation should be.
-
-### Market
-
-The market is where everyone collides.
-
-Some deals are genuine.
-
-Some are bait dressed up as easy money.
-
-The market follows real NYSE hours — Monday through Friday, 9:30am to 4:00pm Eastern. Outside those hours the floor is dark. While the bell is ringing, a [news wire](wire.md) drops fresh rumors and shocks every hour at :30 past, shaping which deals appear and how traders read them.
+{% hint style="info" %}
+The Replay is theater. Settlement already lives onchain. Watching, skipping, or replaying never changes your Ticket.
+{% endhint %}
 
 ---
 
-## A Scene From The Floor
+## The Three Moves
 
-A trader named Gordon has been on a heater.
+### Enter
 
-He has a strong record, a growing bankroll, and a reputation for attacking big pots.
+Post `1`, `5`, or `10` Desk Dollars and choose one of six Arcade Leverage Tiers. One Ticket per wallet per Round.
 
-Then a new deal appears.
+### Verify
 
-It looks clean. It looks urgent. It looks rich.
+After lock, an Inco attestation finalizes the Crash Point. Players with Tickets press **Verify and settle**. Spectators can watch the Replay as soon as the Round is finalized.
 
-Your trader wants in.
+### Claim or walk
 
-You open the approval screen and notice the person behind the deal has a history of ruining good desks.
+Winners pull the reserved payout. Losers settle at zero. If a Round expires without a verified Crash Point, every Ticket owner can reclaim exactly their original Margin.
 
-You wait.
+---
 
-You let the window expire.
+## Who It Is For
 
-A rival desk jumps in instead.
+Casual players who want a short game, phone-only login, and proof the operator could not peek at the Crash Point while entries were open.
 
-Minutes later, that trader is wiped out.
+Liquidity providers who fund the vault, watch utilization, and withdraw free liquidity when it is available.
 
-The deal was a trap.
-
-That is the feeling Margin Call is built around.
-
-Not just winning.
-
-The feeling of knowing why you won.
-
-Or why you didn't.
+Builders who want the contracts, the attestation trail, and the permissionless settlement path.
 
 ---
 
 ## Design Principles
 
-### Zero-Sum Competition
+### One decision
 
-Every gain comes from somebody else's mistake.
+Margin and Arcade Leverage. That is the whole play.
 
-### Floor Access, Not Better Luck
+### Pre-committed confidentiality
 
-Every trader can operate from the Gallery. Desks that post testnet [`$BLOW`](../economy/blow-and-floor-access.md) against a trader can increase its cycle cadence and unresolved-entry capacity by taking a Seat or Corner Office.
+The Crash Point exists as encrypted state before any Ticket is accepted. Nobody decrypts it while entry is open.
 
-That buys throughput, not better outcomes. Stake never changes deal selection, win probability, payouts, rake, or deal creation.
+### Full reservation
 
-That makes every result sharper, meaner, and easier to care about.
+Every accepted Ticket reserves its maximum payout in the vault before the Round locks.
 
-### Persistent Reputation
+### Permissionless recovery
 
-A trader's history sticks.
-
-Good desks earn fear.
-
-Bad desks earn a reputation they cannot talk their way out of.
-
-### Adversarial Prompt Design
-
-Deals are not neutral content.
-
-They are written by rivals who want your trader to misread the room.
-
-### Constrained Autonomy
-
-Your traders act on their own, but never completely on their own.
-
-The rules you set shape what kind of trouble they can get into.
-
-### Selective Human Intervention
-
-You are not there to click every button.
-
-You are there for the moments that matter.
-
-> The fantasy is not "play instead of the agent." It is "govern the institution the agent belongs to."
+Claims, refunds, reveals, and finalizations do not depend on a keeper. Later Rounds never wait on earlier ones.

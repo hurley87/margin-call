@@ -1,73 +1,62 @@
 # Architecture
 
-Margin Call has a simple promise:
+Margin Call should feel like a trading pit.
 
-the game should feel dramatic, fast, and alive, but the money should still feel real.
+The money should feel like a vault.
 
----
-
-## System Overview
-
-To do that, the game is built around a few clear pieces:
-
-- **The desk** where you manage traders and make judgment calls
-- **The market** where deals appear and reputations collide
-- **The model layer** where scenarios turn into outcomes
-- **The money layer** where wins and losses become real
-- **The capacity layer** where posted `$BLOW` grants per-trader floor access without touching outcome logic
-- **The clock** where the floor follows NYSE hours and a [news wire](../game/wire.md) drops each hour at :30
-- **The live game view** that keeps the experience readable
-- **The agent layer** where software desks connect through MCP (removed) and compete on the same floor
-
-Margin Call is built on **Base**.
-
-That matters because the money side of the game does not live only inside the app.
-
-Deal pots, trader balances, and payouts settle through a public escrow contract on Base.
-
-`$BLOW` principal sits in a separate SeatVault. The vault never holds USDC, and the escrow never treats `$BLOW` as bankroll.
+Those two jobs stay separate on purpose.
 
 ---
 
-## The Idea Behind It
+## The Stack
 
-Most of the game should feel immediate.
+- **Floor (web app)** — phone login, sponsored gas, immersive Round theater, Record / Rounds / LP
+- **`MarginCallCrash`** — epochs, Tickets, entry window, reveal, finalize, expire
+- **`BankrollVault`** — Desk Dollars custody, reservations, LP shares, claims, refunds
+- **`DeskDollars` (`tUSD`)** — testnet ERC-20 + rate-limited faucet
+- **Inco Lightning** — confidential randomness handle and covalidator attestation
 
-You should be able to open the app, read the room, and make a call fast.
-
-But the part that handles money and history should feel durable.
-
-That mix is what gives Margin Call its tone.
-
-It is part fantasy, part machine, part public scorecard.
+Network today: **Base Sepolia** (`84532`).
 
 ---
 
-## Source of Truth
+## Money Path
 
-The financial side of the game has a final record.
+```text
+Player wallet
+    │  Margin on enter
+    ▼
+BankrollVault  ◄── LP deposits / withdrawals (free liquidity only)
+    │
+    │  ticket-scoped reserve / release / pay / refund
+    ▼
+MarginCallCrash (coordinates; never holds general bankroll)
+```
 
-The front end keeps things fast and readable.
-
-The money layer keeps the consequences honest.
-
-Today, the live contract used by the app is on **Base Sepolia**:
-
-- **Escrow contract:** `0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03`
-- **Test `$BLOW` token:** `0x0d93099c1b24C848e7A7DD77c5a50de0735A60d7`
-- **SeatVault:** `0xA901DFC8C46faF3A24F4002849dE98dFE9722C95`
-- **BaseScan:** [View the escrow](https://sepolia.basescan.org/address/0x9A7Ca01E00be0717d28509E1fdC2a8543dE86D03)
-
-If you want to understand where money actually settles, this is the most important link in the system.
-
-If you want to understand floor capacity, see [BLOW & Floor Access](../economy/blow-and-floor-access.md). The active SeatVault's `tierOf(traderId)` read is authoritative. Chain or configuration failures fail closed to Gallery.
+Player Margin never parks in a free-floating game balance. The vault is the only general custody layer.
 
 ---
 
-## Application Layer
+## Trust Split
 
-Behind the scenes, the game keeps traders moving, resolves outcomes, updates records, and syncs the world back into the interface you see.
+| Public while Open               | Confidential while Open              |
+| ------------------------------- | ------------------------------------ |
+| Round id, timestamps, wallets   | Crash Point plaintext                |
+| Margin, Tier, Ticket ownership  | Encrypted randomness handle's secret |
+| Vault balances and reservations |                                      |
 
-None of that is the fantasy.
+After lock and attestation, the Crash Point is public and verifiable. Claims use only that verified plaintext plus public Ticket data.
 
-The fantasy is the feeling that your desk is out there working, even when you are not touching it — whether you are watching from the browser or running the desk from a terminal through MCP.
+---
+
+## Operator Limits
+
+Administrative actions are public. They cannot:
+
+- regenerate or substitute a Round's encrypted handle
+- rewrite a finalized Crash Point
+- pull arbitrary vault funds through the game contract
+
+If attestation never arrives before expiry, Tickets refund original Margin. The Floor does not invent an outcome to keep the theater moving.
+
+See [Live Contracts](live-contracts.md) for addresses and [Settlement](settlement-flow.md) for the permissionless path.
