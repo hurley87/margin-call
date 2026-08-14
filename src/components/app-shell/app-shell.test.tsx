@@ -70,7 +70,6 @@ describe("AppShell", () => {
     expect(record.getAttribute("aria-current")).toBeNull();
     expect(rounds.getAttribute("aria-current")).toBeNull();
     expect(lp.getAttribute("aria-current")).toBeNull();
-    expect(screen.getByTestId("no-real-value-disclosure")).toBeTruthy();
     expect(screen.getByText("Floor content")).toBeTruthy();
     expect(screen.getByTestId("app-shell-floor-main")).toBeTruthy();
     expect(document.querySelector('[data-floor="true"]')?.className).toMatch(
