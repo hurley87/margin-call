@@ -65,11 +65,11 @@ export function StageSettleDock({ settlement }: StageSettleDockProps) {
 
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col text-left"
+      className="flex max-h-full min-h-0 flex-col overflow-hidden text-left"
       data-testid="stage-settle-dock"
     >
       <div
-        className="min-h-0 flex-1 overflow-y-auto p-2.5 sm:p-4"
+        className="min-h-0 overflow-y-auto p-2.5 sm:p-4"
         data-testid="stage-actions-body"
       >
         <h2 className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)] sm:text-lg">

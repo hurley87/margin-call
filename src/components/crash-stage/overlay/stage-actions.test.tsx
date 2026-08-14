@@ -108,6 +108,7 @@ describe("StageActions", () => {
 
     const dock = screen.getByTestId("stage-actions");
     expect(dock.className).not.toMatch(/overflow-y-auto/);
+    expect(dock.className).toMatch(/max-h-full/);
     expect(screen.queryByTestId("entry-form")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Verify and settle" })
@@ -136,6 +137,9 @@ describe("StageActions", () => {
     expect(screen.getByTestId("stage-actions")).toBeTruthy();
     expect(screen.getByTestId("entry-form")).toBeTruthy();
     expect(screen.getByText("Enter form")).toBeTruthy();
+    const card = screen.getByTestId("stage-actions").firstElementChild;
+    expect(card?.className).toMatch(/max-h-full/);
+    expect(card?.className).not.toMatch(/svh/);
   });
 
   it("keeps an armed dock mounted between rounds", () => {

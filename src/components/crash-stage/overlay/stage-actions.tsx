@@ -24,8 +24,10 @@ export type StageActionsProps = {
 };
 
 /**
- * Floor action dock — centered entry / settle card. Sized to fit the
- * entry form without scrolling on typical viewports; overflow remains a
+ * Floor action dock — centered entry / settle card. Height is content-sized
+ * and capped to the Floor slot (`max-h-full`), not the viewport: an `svh`
+ * cap is taller than the remaining column once the header and banner are
+ * in, and `flex-1 min-h-0` then collapses the card to zero. Overflow is a
  * fallback for short screens or expanded approval details. The primary
  * Enter / Verify CTA stays pinned at the card footer.
  */
@@ -60,11 +62,11 @@ export function StageActions({
 
   return (
     <div
-      className="pointer-events-auto mx-auto flex min-h-0 w-full max-w-xl flex-col"
+      className="pointer-events-auto mx-auto flex max-h-full min-h-0 w-full max-w-xl flex-col"
       data-testid="stage-actions"
     >
       {showEntry || showSettle ? (
-        <div className="flex max-h-[min(88svh,44rem)] min-h-0 w-full flex-col overflow-hidden rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 backdrop-blur-md">
+        <div className="flex max-h-full min-h-0 w-full flex-col overflow-hidden rounded-sm border border-[var(--t-border)]/70 bg-[var(--t-bg)]/90 backdrop-blur-md">
           {showEntry ? (
             <CrashRoundEntry
               armed={kind === "arm"}
