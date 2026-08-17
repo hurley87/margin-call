@@ -13,6 +13,6 @@
     "./parse-private-key": "./src/parse-private-key.ts"
   },
   "dependencies": {
-    "viem": "^2.55.11"
+    "viem": "^2.55.16"
   }
 }
