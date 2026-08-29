@@ -1,7 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans_Condensed } from "next/font/google";
-import { AppShell } from "@/components/app-shell/app-shell";
-import { MarginCallPrivyProvider } from "@/components/providers/privy-provider";
 import "./globals.css";
 
 const plexMono = IBM_Plex_Mono({
@@ -21,23 +19,19 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   ),
   title: "MARGIN CALL",
-  description:
-    "A shared-round Crash game with pre-committed encrypted outcomes on Base Sepolia.",
+  description: "Margin Call — coming soon.",
   openGraph: {
     title: "MARGIN CALL",
-    description:
-      "A shared-round Crash game with pre-committed encrypted outcomes on Base Sepolia.",
+    description: "Margin Call — coming soon.",
     type: "website",
   },
   twitter: {
     card: "summary",
     title: "MARGIN CALL",
-    description:
-      "A shared-round Crash game with pre-committed encrypted outcomes on Base Sepolia.",
+    description: "Margin Call — coming soon.",
   },
 };
 
-/** Notched phones: safe-area insets on Floor docks. Pinch-zoom stays unlocked. */
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -52,9 +46,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${plexMono.variable} ${plexSans.variable} antialiased`}>
-        <MarginCallPrivyProvider>
-          <AppShell>{children}</AppShell>
-        </MarginCallPrivyProvider>
+        {children}
       </body>
     </html>
   );

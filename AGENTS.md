@@ -2,14 +2,13 @@
 
 ## Project overview
 
-Margin Call is a Next.js 16 application being rebuilt around the Base Sepolia Crash Game Jam MVP. The prior Pack Rip application, backend flows, and contracts are retired. Use these documents as the source of truth:
+Margin Call is a Next.js 16 application between product versions. The Crash game has been retired. The site shows a coming-soon landing page with no login. Use this repository as scaffolding for the next product:
 
-- `CONTEXT.md` — canonical glossary for product terms across docs, contracts, and UI copy
-- `docs/2026-08-07-margin-call-crash-prd.md`
-- `docs/2026-08-08-margin-call-crash-technical-design.md`
-- `docs/2026-08-08-margin-call-crash-roadmap.md`
+- Privy (SMS + embedded wallet helpers retained, not mounted on the landing page)
+- Convex (auth + empty HTTP router + empty schema)
+- Foundry (reproducible workspace pins; no product contracts yet)
 
-The repository retains neutral Next.js, Convex, Privy, shared TypeScript, Foundry, and CI scaffolding. Do not treat future Crash contracts, UI, keeper, or indexing as implemented.
+Do not treat future product contracts, UI, keeper, or indexing as implemented.
 
 ## Commands
 
