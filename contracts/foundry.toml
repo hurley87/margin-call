@@ -1,13 +1,12 @@
 # Margin Call contract workspace.
 #
-# Retained reproducible baseline for the future Crash contract implementation.
+# Retained reproducible baseline for future product contracts.
 
 [profile.default]
 src = "src"
 out = "out"
 libs = ["lib", "../node_modules"]
 remappings = [
-    "@inco/=../node_modules/@inco/",
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "@openzeppelin/contracts-upgradeable/=lib/openzeppelin-contracts-upgradeable/contracts/",
     "forge-std/=lib/forge-std/src/",
@@ -21,10 +20,6 @@ optimizer = true
 # 1_000_000 stays under Blockscout/Etherscan's ~10M recompile ceiling while
 # matching LazerForge's guidance that bytecode is typically flat past ~1M runs.
 optimizer_runs = 1_000_000
-# Required by the deploy scripts' string.concat record builders (stack too deep
-# on the legacy pipeline); src/ alone compiles without it, but tests import the
-# scripts, so the flag must be global.
-via_ir = true
 
 # Keep metadata out of the bytecode so builds are reproducible.
 bytecode_hash = "none"

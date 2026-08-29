@@ -2,14 +2,12 @@
 
 ## Project overview
 
-Margin Call is being rebuilt as a shared-round Crash game for Base Sepolia. The retired Pack Rip implementation has been removed. Product decisions live in:
+Margin Call is between product versions. The Crash game has been retired from this repository. The site is a coming-soon landing page with no login. Stack scaffolding remains for the next build:
 
-- `CONTEXT.md` — canonical glossary for product terms across docs, contracts, and UI copy
-- `docs/2026-08-07-margin-call-crash-prd.md`
-- `docs/2026-08-08-margin-call-crash-technical-design.md`
-- `docs/2026-08-08-margin-call-crash-roadmap.md`
+- `CONTEXT.md` — product glossary (empty until the next product defines terms)
+- Privy, Convex, and Foundry scaffolding only — no gameplay yet
 
-Do not infer that the Crash contracts or frontend are already implemented. Add them only through separately scoped work against the PRD and technical design.
+Do not infer that product contracts or frontend are already implemented. Add them only through separately scoped work.
 
 ## Commands
 
@@ -26,7 +24,7 @@ Do not infer that the Crash contracts or frontend are already implemented. Add t
 - `src/` — neutral Next.js shell, styling, authentication helpers, and UI primitives
 - `convex/` — Convex auth and HTTP infrastructure
 - `packages/shared/` — framework-neutral validation helpers
-- `contracts/` — Foundry scaffolding; Crash product contracts are future work
+- `contracts/` — Foundry scaffolding; product contracts are future work
 
 ## Conventions
 

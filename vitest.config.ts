@@ -18,27 +18,6 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: "@margin-call/shared/margin-call-voice",
-        replacement: path.resolve(
-          __dirname,
-          "./packages/shared/src/margin-call-voice.ts"
-        ),
-      },
-      {
-        find: "@margin-call/shared/crash-outcome",
-        replacement: path.resolve(
-          __dirname,
-          "./packages/shared/src/crash-outcome.ts"
-        ),
-      },
-      {
-        find: "@margin-call/shared/crash-keeper",
-        replacement: path.resolve(
-          __dirname,
-          "./packages/shared/src/crash-keeper.ts"
-        ),
-      },
-      {
         find: "@margin-call/shared/address",
         replacement: path.resolve(
           __dirname,

@@ -1,9 +1,17 @@
-import { CrashStage } from "@/components/crash-stage/crash-stage";
-
-/**
- * Full-bleed immersive Floor — Three.js trading pit with huge CTAs.
- * Record / history / LP live on their own tabs.
- */
 export default function Home() {
-  return <CrashStage />;
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] px-6 font-mono text-[var(--t-text)]">
+      <div className="max-w-xl text-center">
+        <p className="text-xs font-bold uppercase tracking-[0.28em] text-[var(--t-green)]">
+          Margin Call
+        </p>
+        <h1 className="mt-4 font-[family-name:var(--font-plex-sans)] text-5xl font-black uppercase tracking-tight text-[var(--t-accent)] sm:text-7xl">
+          Coming soon
+        </h1>
+        <p className="mt-5 text-sm leading-6 text-[var(--t-muted)]">
+          The next version of Margin Call is being built. Check back soon.
+        </p>
+      </div>
+    </main>
+  );
 }
