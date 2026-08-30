@@ -1,796 +1,241 @@
-# Margin Call Protocol Overview
+# Proposed Margin Call Protocol Overview
 
-## Executive Summary
+> **Status: product and protocol proposal.** Margin Call is currently a coming-soon application scaffold. The custody, inventory, pricing, reservation, claim, withdrawal, and settlement behavior described here is not implemented or shipped.
 
-**Margin Call is a permissionless inventory and execution protocol for tokenized equities.**
+## Thesis
 
-Stock holders make single-sided tokenized-equity positions available as **callable inventory**. Buyers and applications can request a firm quote for a block of stock and settle directly against that inventory. The stock provider receives USDC at the current execution price and earns compensation for making the position available.
+Margin Call is a proposed shared protocol for real financial inventory.
 
-The protocol separates three functions that are usually bundled together inside a dealer:
+Applications can contribute approved inventory; Margin Call holds and accounts for it under common rules; and permissionless applications can build games, markets, portfolio and collection experiences, liquidity tools, and other products on the same inventory.
 
-1. **Capital provision** — permissionless stock holders provide inventory.
-2. **Pricing** — a quote engine determines a firm execution price.
-3. **Settlement** — smart contracts atomically exchange stock for USDC.
+**Stock Gacha is the first proposed application and proof of the protocol. It is not the definition or limit of Margin Call.**
 
-This creates a market structure that is different from an AMM. Rather than requiring stock and USDC to sit continuously in a two-sided pool, Margin Call aggregates the stock that holders already own and brings in buyer capital only when demand arrives.
+The protocol creates a shared inventory layer rather than one more application-specific treasury. Value created when applications use inventory can flow to three participants:
 
-The initial target is tokenized equities on Base, particularly markets where AMM liquidity is thin and direct holder-to-buyer execution may be more capital efficient.
+- the contributor who supplied the inventory;
+- the application that created demand and owns its product economics; and
+- Margin Call, which supplies the common custody and accounting rules.
 
----
+This overview deliberately does not assign fixed percentages to those participants.
 
-## 1. The Problem
+## The problem
 
-Tokenized equities inherit the composability of crypto, but liquidity remains uneven.
+An application that delivers real financial assets must ordinarily source, custody, price, manage, and settle its own inventory. Each new application repeats that work.
 
-For the largest names, deep AMMs and professional market makers can provide excellent execution. For the long tail of tokenized stocks, maintaining deep two-sided liquidity for every ticker can be expensive and capital inefficient.
+The result is fragmentation:
 
-A traditional AMM requires capital on both sides:
+- liquidity is split across application treasuries;
+- inventory deposited for one experience is trapped in that silo;
+- contributors cannot make the same idle supply useful to multiple applications;
+- every application must recreate solvency, pricing, custody, and settlement controls; and
+- users must trust each application to keep its offered rewards or allocations funded.
 
-`STOCK + USDC -> liquidity pool`
+Margin Call proposes to make approved inventory reusable across applications without making it unaccountable. Applications share access to supply; contributors retain attributable ownership and economics; and the protocol prevents the same unit from backing more than one obligation.
 
-Even when very little trading occurs, both sides of the pool must remain funded.
+## Available inventory and provenance
 
-Margin Call asks a different question:
+**Available inventory** is the aggregate quantity of approved deposited units currently free for an application to use. This is the canonical term; the protocol does not call it a “shared pool.”
 
-> If holders already own the stock, can their existing positions become the sell-side inventory for an onchain market?
+Each unit has exactly one protocol state:
 
-The result is a single-sided inventory model:
+| State                 | Meaning                                                                                                                           |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| **Available**         | Deposited, accepted, and free to reserve or allocate.                                                                             |
+| **Reserved**          | Locked for a specific pending application obligation and unavailable elsewhere.                                                   |
+| **Claimed**           | Backing a vested user ownership claim and unavailable to applications or contributors.                                            |
+| **Withdrawn/settled** | No longer available to the protocol because the contributor or claimant received the inventory through the applicable final path. |
 
-`Stock holder -> callable stock inventory`
+No transition may allocate one unit twice. Reserved inventory cannot be withdrawn or reserved by another application. Claimed inventory remains locked for its owner until it is withdrawn or transferred through a supported path.
 
-`Buyer -> USDC when a trade is requested`
+Inventory is pooled for application access, but not stripped of provenance. Margin Call must preserve the relationship between contributed units and their contributor so it can attribute:
 
-The protocol crosses the two when there is demand.
+- contributor earnings;
+- contributor withdrawals;
+- audit history; and
+- evidence needed to resolve disputes.
 
----
+Aggregate application access and contributor attribution are both protocol requirements.
 
-## 2. Core Primitive: Callable Inventory
+## Supply and access
 
-A tokenized-stock holder deposits or authorizes a stock position as **callable**.
+### Contributing inventory
 
-Example:
+Any wallet or application may propose a deposit, but Margin Call accepts only assets on the V1 operator’s public asset registry. The V1 operator publicly maintains both the registry and the acceptance criteria used to whitelist assets.
 
-- Asset: NVDAc
-- Quantity: 2.32 NVDAc
-- Current value: approximately $500
-- Callable: 100%
+This means contribution is open at the wallet level but bounded at the asset level. Permissionless deposits do not imply that an arbitrary token becomes protocol inventory.
 
-While the position remains callable, it can earn protocol incentives. If a buyer consumes $100 of the position, that slice of NVDAc is transferred to the buyer and the provider receives approximately $100 USDC at the current execution price.
+A contributor may withdraw only inventory that is still available. Inventory cannot be withdrawn while it is reserved for an application or backing a user claim.
 
-Afterward, the provider might hold:
+### Using inventory
 
-- approximately $400 of NVDAc
-- $100 USDC
-- accrued $CALL
-- accrued execution fees
+Application access is open and permissionless. An application does not need a bespoke integration approval to use approved available inventory, but it must use the protocol’s public terms and state transitions.
 
-The position is never represented as a permanently fixed $500 claim. The canonical inventory unit is always the underlying stock quantity.
+An application:
 
----
+- cannot reach into a contributor’s wallet;
+- cannot use an asset outside the public registry;
+- cannot allocate reserved, claimed, or withdrawn inventory;
+- cannot override the protocol’s valuation; and
+- cannot bypass the principal, fee, finality, or solvency checks for an allocation.
 
-## 3. Position Accounting
+## Responsibility boundary
 
-Each provider should have an individualized inventory position.
+Margin Call and its applications have distinct responsibilities.
 
-```solidity
-struct InventoryPosition {
-    uint256 id;
-    address owner;
-    address asset;
-    uint256 amount;
-    uint256 callableAmount;
-    uint256 entryPrice;
-    uint256 entryValueUsd;
-    uint256 createdAt;
-}
-```
+| Margin Call owns                     | Applications own                                         |
+| ------------------------------------ | -------------------------------------------------------- |
+| Custody of deposited inventory       | Product experience and user interface                    |
+| Inventory state and provenance       | Application pricing and entry payments                   |
+| Approved price inputs                | Odds and outcome distribution                            |
+| Reservations and ownership claims    | Product-specific pools and their composition             |
+| Contributor and claimant withdrawals | Selection of eligible inventory to request               |
+| Settlement                           | Product risk, upside, working capital, and subsidy       |
+| Protocol solvency invariants         | Application-specific randomness and outcome verification |
 
-The **entry price** is a historical snapshot used for analytics and potentially initial reward accounting.
+Stock Gacha therefore owns its randomness. Draws should be independently verifiable, but the protocol does not decide which user receives which outcome and does not set the game’s odds.
 
-The **current oracle/reference price** is used for live inventory valuation and settlement.
+For a proposed Stock Gacha allocation, Margin Call validates only:
 
-Example:
+- the selected asset is eligible;
+- the required inventory is available;
+- the user’s purchase is final;
+- the application supplies the full locked protocol-quoted inventory value plus the allocation fee; and
+- the requested state transition preserves protocol invariants.
 
-```text
-Position #1048
+**Games decide outcomes; the protocol makes valid outcomes real.**
 
-Asset                 NVDAc
-Original quantity     2.3256
-Entry price           $215.00
-Entry value           $500.00
+## Stock Gacha: the first proof
 
-Current price         $240.00
-Current value         $558.14
+Stock Gacha is the proposed first application because it can prove that shared inventory supports a consumer experience whose rewards are real assets rather than application credits.
 
-Callable quantity     2.3256
-USDC settled          $0.00
-CALL accrued          412 CALL
-```
+Before a user plays, Stock Gacha publishes:
 
-If $100 of inventory is called at the current price, the required NVDAc quantity is calculated at execution time and removed from the position.
+- the entry price;
+- the reward inventory in the offered pool;
+- the remaining availability or pool size; and
+- the odds of each outcome.
 
----
+V1 does not require the application to calculate or display expected value. The published inputs must nevertheless be sufficient for an independent observer to verify the draw rules and pool state.
 
-## 4. Virtual Lots and Provenance
+Every meaningful V1 reward is actual protocol inventory. Points, credits, cosmetic upgrades, or internal balances do not substitute for the financial inventory promised by an offered outcome.
 
-Margin Call does not need to create hundreds of literal onchain lot objects.
+### Game economics and solvency
 
-A large provider position can be treated as a collection of **virtual lots** that are created only when inventory is consumed.
+Stock Gacha collects entry payments directly. It may use those payments to acquire or reserve inventory through Margin Call, but the protocol does not socialize the game’s risk.
 
-A $50,000 NVDAc position can service requests for:
+Stock Gacha owns both the upside and downside of its outcome distribution. It must maintain enough pre-funded reserve or working capital—or an explicit subsidy—to settle the full locked protocol-quoted value of higher-value outcomes and the separate allocation fee. Every offered pool must be solvent before its first draw.
 
-- $25
-- $100
-- $1,000
-- $10,000
-- or a larger block
+The application may set its odds and pool size to target a positive expected game margin. Margin Call does not set or guarantee that margin.
 
-When a fill occurs, the protocol records exactly which provider positions supplied it.
+The solvency order is strict:
 
-Example event:
+1. the application defines and funds an offered pool;
+2. the user’s purchase reaches payment finality;
+3. the application settles the inventory’s full locked protocol-quoted value to the contributor, pays the separate allocation fee, and atomically creates the backed user ownership claim; and
+4. only then may the application reveal the funded outcome.
 
-```solidity
-event InventoryCalled(
-    uint256 indexed positionId,
-    address indexed owner,
-    address indexed asset,
-    uint256 assetAmount,
-    uint256 settlementAmount,
-    uint256 executionFee
-);
-```
+If that atomic transition fails, no application funding, inventory, fee, or claim moves. Stock Gacha must retry or refund rather than reveal an unfunded reward.
 
-This preserves provenance: every unit of stock consumed can be traced back to the provider whose inventory supplied it.
+## Inventory principal, allocation fee, and value flow
 
----
+An allocation has two distinct economic amounts:
 
-## 5. How a Trade Works
+1. **Inventory principal** — the inventory’s full locked protocol-quoted value, denominated in USDC and settled by the consuming application to the contributor in exchange for the ownership represented by the user’s claim.
+2. **Allocation fee** — a separate application-access fee calculated as one public V1 percentage of that locked value, also denominated in USDC.
 
-A caller requests a block of stock.
+The allocation fee is not payment for the inventory principal. Paying the fee alone never transfers ownership of contributor inventory.
 
-Example:
+The fee:
 
-> Buy $50,000 of NVDAc.
+- uses the protocol’s locked quote for the allocation;
+- is transparently split between the inventory contributor and Margin Call; and
+- uses one operator-set rate uniformly across all approved V1 assets.
 
-The flow:
+The thesis does not hard-code the V1 fee percentage or split. Asset-specific rates are a possible later extension, not a V1 behavior.
 
-1. The caller or agent submits an RFQ.
-2. The quote engine checks:
-   - callable NVDAc inventory
-   - current reference price
-   - executable DEX prices
-   - requested size
-   - inventory scarcity
-   - volatility and risk parameters
-3. The engine returns a firm quote.
-4. The quote is signed and valid for a short period.
-5. The caller accepts.
-6. The smart contract verifies the quote and guardrails.
-7. USDC and NVDAc settle atomically.
-8. Provider positions are debited for the stock used.
-9. Providers receive USDC settlement plus their share of execution economics.
+The application’s economics are separate from both settlement amounts. Stock Gacha collects its entry payments and bears its game outcomes. For an allocation, it must fund any difference between the user’s entry payment and the full inventory principal plus allocation fee from its reserve, working capital, or explicit subsidy.
 
-Example:
+At a high level, inventory use therefore creates value for the contributor, application, and protocol without confusing the contributor’s principal with fee revenue.
 
-```text
-Reference stock value      $50,000
-Execution spread              20 bps
-Caller pays                $50,100
+## Public asset registry and pricing
 
-Stock delivered            $50,000 of NVDAc
-Execution fee                 $100
-```
+Each whitelisted asset has a public registry entry that defines:
 
-The exact fee structure is a protocol parameter.
+- the asset’s onchain address;
+- its canonical unit convention;
+- one approved external oracle or pricing adapter; and
+- the maximum permitted age of a price.
 
----
+At reservation or allocation, Margin Call reads the approved quote, snapshots it, calculates and locks both the USDC-denominated inventory principal and allocation fee, and rejects the transition if the price is missing or stale. Applications cannot provide or substitute their own protocol valuation.
 
-## 6. Pricing Architecture
+The registry must make unit handling explicit. For B20 assets in particular, it must distinguish:
 
-Margin Call should not let an LLM invent execution prices.
+- the raw onchain token amount;
+- the scaled economic unit used for prices and user ownership; and
+- any corporate-action multiplier connecting the two.
 
-A clean architecture is:
+Reservations, claims, principal, fees, and withdrawals must use the same canonical conversion. A split, consolidation, or multiplier change must not create or destroy a claimant’s economic ownership. The registry and accounting history must make it possible to translate the locked economic claim into the correct underlying units after such an event.
 
-### LLM / Agent
+This overview intentionally does not prescribe a specific oracle provider or contract interface. Those choices require technical design and asset-specific diligence.
 
-Interprets intent.
+## Settlement and ownership
 
-> "Buy me $250,000 of Nvidia, but don't pay more than 30 bps over market."
+An allocation is valid only when the application’s full USDC inventory principal and separate allocation fee, reservation of eligible available inventory, and creation of the user’s ownership claim succeed atomically after the user purchase is final.
 
-### Offchain Quote Engine
+On failure, nothing moves. In particular, there is no state in which:
 
-Computes the actual quote using deterministic market inputs.
+- the contributor transferred inventory without receiving the locked principal;
+- the application paid only the allocation fee for user-owned inventory;
+- the user has paid but no funded claim exists;
+- a game has revealed a reward that is not backed;
+- the same inventory backs multiple claims; or
+- an allocation fee is charged for a failed allocation.
 
-Potential inputs:
+The ownership claim vests only after the user’s purchase or payment is final. Once vested, it is immediately visible as the user’s ownership, does not expire, and remains backed by locked protocol inventory until withdrawal or transfer.
 
-- Chainlink or other trusted reference feed
-- DEX executable prices
-- order size
-- available callable inventory
-- inventory concentration
-- current volatility
-- replacement/hedging cost
-- protocol spread rules
+V1 proposes withdrawal of the actual inventory at a later time. It explicitly does **not** promise cash redemption, protocol buyback, or a guaranteed exit price at launch.
 
-### Smart Contract
+## Proposed V1 invariants
 
-Enforces settlement.
+The V1 design is not complete until its technical specification and tests can enforce these statements:
 
-Possible checks:
+1. Only assets in the public operator registry can become protocol inventory.
+2. Application access to approved available inventory is permissionless.
+3. Each inventory unit is available, reserved, claimed, or withdrawn/settled—never more than one at once.
+4. Contributor provenance remains attributable through aggregate application access.
+5. Contributors can withdraw only inventory that is neither reserved nor backing a claim.
+6. Applications cannot provide protocol valuations or use stale or missing quotes.
+7. B20 raw units, scaled units, and corporate-action multipliers preserve economic ownership.
+8. Every offered Stock Gacha pool is solvent before its first draw.
+9. Every meaningful V1 Stock Gacha reward is real protocol inventory.
+10. The consuming application settles the full locked inventory principal plus the separate allocation fee.
+11. Principal settlement, fee payment, reservation, and claim creation are atomic after user payment finality.
+12. A vested ownership claim is visible, non-expiring, and fully backed until withdrawal or transfer.
+13. V1 promises actual-inventory withdrawal, not cash redemption or buyback.
 
-- authorized quote-engine signature
-- quote expiry
-- maximum permitted deviation from oracle/reference
-- maximum spread
-- sufficient callable inventory
-- minimum output
-- pause state
+## Deliberate non-decisions
 
-The LLM is the interface. The quote engine is the pricing desk. The contract is the clearing and settlement layer.
+This proposal does not yet choose:
 
----
+- the initial asset list or published asset-acceptance criteria;
+- the oracle or pricing adapter for any asset;
+- the public V1 allocation-fee percentage or contributor/protocol split;
+- the exact representation and transfer mechanics of ownership claims;
+- the reservation lifetime, cancellation rules, and any pre-allocation collateral requirement;
+- the timing and operational flow for actual-inventory withdrawals;
+- the initial Stock Gacha entry price, pool composition, odds, or subsidy; or
+- the detailed treatment of a specific B20 corporate action beyond the invariant that economic ownership is preserved.
 
-## 7. Why This Can Beat an AMM
+Those are inputs to later product, economic, and technical specifications. They must not be inferred from this thesis or described as implemented until the repository contains and verifies them.
 
-Margin Call is not intended to replace AMMs for every trade.
+## Positioning
 
-For a small trade in a deep market, an AMM may be cheaper.
+**Margin Call makes approved financial inventory reusable across permissionless applications while preserving contributor attribution and user ownership.**
 
-Margin Call becomes more interesting when:
+For contributors:
 
-- the tokenized stock has thin onchain liquidity
-- the requested order is large relative to AMM depth
-- the buyer wants a firm block price
-- an application needs guaranteed or reserved capacity
+**Contribute approved inventory once; let multiple applications create demand under common rules.**
 
-### Example
+For applications:
 
-Suppose a tokenized small-cap stock has:
-
-- $40,000 of AMM liquidity
-- $600,000 of callable holder inventory
-
-A buyer wants $75,000.
-
-Executing $75,000 through the AMM could produce significant price impact.
-
-Margin Call can instead aggregate the existing stock holders and return a firm quote against their inventory.
-
-The key capital-efficiency difference:
-
-**AMM**
-
-`stock capital + quote capital must be pre-funded`
-
-**Margin Call**
-
-`stock inventory is pre-committed`
-
-`buyer USDC arrives only when needed`
-
-This may be especially valuable for the long tail of tokenized equities.
-
----
-
-## 8. Relationship to Traditional OTC / RFQ Markets
-
-Margin Call resembles an automated, decentralized OTC desk.
-
-A traditional dealer bundles:
-
-- balance sheet
-- pricing
-- risk management
-- execution
-
-Margin Call unbundles those functions.
-
-```text
-Permissionless providers -> dealer inventory
-Quote engine             -> dealer pricing
-Smart contracts          -> clearing and settlement
-```
-
-The buyer does not negotiate independently with every provider. Margin Call aggregates the inventory and returns one executable quote.
-
-This makes the system closer to an electronic RFQ network than an AMM.
-
----
-
-## 9. Inventory Providers
-
-Inventory providers are stock holders who make positions callable.
-
-They are not conventional two-sided AMM LPs.
-
-Their value proposition is:
-
-> Keep your stock exposure while it is available. Earn for making it executable. If a slice is called, receive USDC settlement for that slice.
-
-Potential provider economics:
-
-1. **$CALL availability incentives**
-2. **Execution fees**
-3. **Reservation fees** in future versions
-
-The desired long-term progression is:
-
-`token subsidy -> real execution/reservation revenue`
-
-$CALL can bootstrap inventory, but real utilization should increasingly support provider yield.
-
----
-
-## 10. $CALL: Inventory Coordination
-
-The cleanest purpose for $CALL is:
-
-> **$CALL coordinates the supply of callable stock inventory.**
-
-Margin Call has a fixed emissions budget for an epoch and allocates it across whitelisted stock markets.
-
-Example:
-
-```text
-Weekly CALL emissions: 100,000
-
-NVDAc gauge     20%
-AAPLc gauge     15%
-COINc gauge     35%
-TSLAc gauge     20%
-CRCLc gauge     10%
-```
-
-If COINc inventory becomes scarce relative to demand, the protocol can direct more of the emissions budget toward COINc providers.
-
-This creates an inventory feedback loop:
-
-```text
-Demand consumes inventory
-        ↓
-Inventory scarcity rises
-        ↓
-CALL allocation increases
-        ↓
-Provider yield increases
-        ↓
-More holders supply stock
-        ↓
-Inventory replenishes
-```
-
-In early versions, gauge allocations can be manually administered.
-
-Later, they can become algorithmic based on measurable variables such as:
-
-- inventory versus target
-- utilization
-- execution volume
-- reservation demand
-- concentration
-- withdrawal rate
-
----
-
-## 11. Inventory Targets
-
-Each whitelisted stock can have a target inventory level.
-
-Example:
-
-```text
-Asset     Target       Available       Status
-NVDAc     $1,000,000     $940,000      Healthy
-COINc       $500,000     $135,000      Scarce
-AAPLc       $750,000     $910,000      Oversupplied
-```
-
-The protocol should not reward one stock because it is "better."
-
-It rewards inventory according to how much the network currently needs that asset.
-
----
-
-## 12. Execution Fee Model
-
-A simple first execution model:
-
-- provider receives spot/reference settlement for the stock
-- caller pays an execution spread
-- spread is split between the inventory actually used and the protocol
-
-Example:
-
-```text
-Trade notional:       $10,000
-Execution fee:          20 bps = $20
-
-Provider share:          80% = $16
-Protocol share:          20% = $4
-```
-
-If multiple provider positions fill the order, the provider portion is distributed according to actual contribution.
-
-Later, the protocol can consider:
-
-- pooled ticker-level fees
-- dynamic spreads
-- size-based pricing
-- scarcity-based spreads
-- reservation fees
-
----
-
-## 13. Reservation Markets: Future Extension
-
-A caller may want to guarantee inventory before it needs to execute.
-
-Example:
-
-> Reserve $500,000 of NVDAc for the next six hours.
-
-Margin Call can lock the necessary callable inventory and charge a reservation fee.
-
-This adds a third provider revenue stream:
-
-- $CALL for availability
-- reservation fees for committed capacity
-- execution fees when inventory is consumed
-
-Reservation is one of the strongest cases where pre-positioned inventory provides functionality that a spot AMM cannot guarantee.
-
----
-
-## 14. Smart Accounts and Redeployment
-
-Provider positions are path dependent.
-
-One holder may have:
-
-- 20% of NVDA called
-- settlement left in USDC
-- another provider may auto-rebuy NVDA
-- another may rotate into COINc
-
-For that reason, Margin Call should treat user positions individually even if inventory is aggregated for execution.
-
-A smart-account-based experience could show:
-
-```text
-NVDA POSITION
-
-NVDA remaining          $412
-USDC settlement         $100
-CALL earned             428
-Execution fees          $1.42
-```
-
-Then:
-
-> Redeploy $100
-
-- Rebuy NVDA
-- Supply COINc — higher current CALL allocation
-- Supply AAPLc
-- Keep USDC
-
-Users can eventually opt into automated rules, such as:
-
-- automatically rebuy the same stock after a call
-- redeploy to the highest-incentive whitelisted stock
-- keep a fixed cash allocation
-
----
-
-## 15. Agentic Frontend
-
-One first-party product can be an agentic trading interface.
-
-The user says:
-
-> "Buy me $25,000 of Nvidia."
-
-The agent:
-
-1. obtains a Margin Call quote
-2. obtains DEX/router quotes
-3. compares execution
-4. chooses the best venue subject to user constraints
-5. executes
-6. reports settlement
-
-For example:
-
-```text
-Aerodrome      41 bps estimated cost
-Uniswap        33 bps estimated cost
-Margin Call    18 bps firm quote
-
-Route: Margin Call
-```
-
-For a small liquid trade, the agent may select a DEX instead.
-
-The frontend therefore optimizes for the user rather than forcing every trade through Margin Call.
-
-Potential commands:
-
-- "Buy $5,000 of Nvidia."
-- "Build me a $10,000 AI portfolio."
-- "Sell half my Tesla and move it into Microsoft."
-- "Don't execute above 25 bps."
-- "Redeploy any Margin Call settlements back into the same stock."
-
----
-
-# 16. Example Product: Stock Gacha / Randomized Stock Discovery
-
-The original stock-gacha concept can exist as one application built on Margin Call.
-
-It is not the protocol itself.
-
-## Product Concept
-
-A user pays a fixed amount of USDC to open a stock position.
-
-Example:
-
-> Pay $10 USDC -> receive a randomized amount of a whitelisted tokenized stock.
-
-The payout distribution is positively skewed:
-
-- most outcomes are modest
-- occasional outcomes are larger
-- a very small number are significant jackpots
-
-Example distribution:
-
-```text
-Very common       $3-$8 stock
-Common            approximately $10
-Uncommon          $20-$50
-Rare              $100-$250
-Jackpot            $500+
-```
-
-The important psychological mechanic is not simply ticker randomness. It is the possibility of a large multiple.
-
-Example reveal:
-
-```text
-POSITION FILLED
-
-NVDA
-$247.50
-
-24.75x
-```
-
-The user receives the actual tokenized stock.
-
-## How It Uses Margin Call
-
-The gacha application does not need to maintain its own stock treasury.
-
-It requests inventory from Margin Call.
-
-Example:
-
-1. User pays $10 USDC.
-2. Randomness determines a $100 NVDAc payout.
-3. The gacha application requests $100 of NVDAc from Margin Call.
-4. Margin Call selects callable NVDAc inventory.
-5. The provider's NVDAc is transferred to the winner.
-6. Provider receives USDC settlement.
-7. The provider's remaining callable position decreases.
-8. The provider continues earning CALL on the remaining inventory.
-
-This creates real demand for the underlying protocol.
-
-```text
-Gacha users
-    ↓
-consume stock inventory
-    ↓
-Margin Call utilization
-    ↓
-execution fees
-    ↓
-provider economics
-```
-
-## Why This Product Matters
-
-The gacha product can serve as Margin Call's first demand engine.
-
-Instead of launching a vault and waiting for third-party applications, Margin Call can prove that:
-
-- inventory can be sourced
-- inventory can be consumed repeatedly
-- providers can be settled
-- utilization can be measured
-- stock-specific demand changes over time
-- CALL gauges can respond to real scarcity
-
-It also demonstrates something uniquely enabled by tokenized equities:
-
-> A consumer application can deliver real stocks as programmable onchain rewards.
-
----
-
-## 17. Other Products That Can Use Margin Call
-
-Potential inventory consumers include:
-
-### Block Trade / OTC Terminal
-
-A direct RFQ interface for larger tokenized-equity trades.
-
-### Agentic Brokerage
-
-Natural-language portfolio construction and execution across Margin Call and DEX venues.
-
-### Stock Rewards
-
-Consumer apps can request actual stock for rewards or loyalty programs.
-
-### Structured Settlement
-
-Products that must deliver a specific stock upon an outcome.
-
-### Portfolio / Basket Creation
-
-Applications can assemble tokenized-equity baskets from firm inventory.
-
-### Reservation Markets
-
-Apps can reserve future execution capacity for a ticker.
-
-### Autonomous Portfolios
-
-Smart accounts can hold stocks, make them callable, collect settlements, and automatically redeploy capital.
-
----
-
-## 18. Comparison: Margin Call vs AMM vs Twofold
-
-### Conventional AMM
-
-```text
-LP capital -> stock + USDC pool
-trade -> AMM curve
-LP earns -> swap fees
-```
-
-Best at continuous, high-frequency liquidity.
-
-### Twofold
-
-```text
-LP capital -> AMM
-idle quote capital -> lending vault
-trade arrives -> just-in-time AMM liquidity
-LP earns -> lending yield + swap fees
-```
-
-Twofold improves the efficiency of AMM capital.
-
-### Margin Call
-
-```text
-stock holder -> single-sided callable inventory
-buyer -> USDC when demand arrives
-protocol -> firm quote and direct settlement
-provider earns -> CALL + execution/reservation fees
-```
-
-Margin Call asks whether some tokenized-equity markets need a continuously funded AMM at all.
-
-The systems can coexist.
-
-For a $100 NVDAc purchase, a deep AMM may win.
-
-For a $100,000 purchase in a thin stock market, Margin Call may provide the better quote.
-
----
-
-## 19. Initial V1
-
-The first technical prototype should remain deliberately small.
-
-### V1 Goal
-
-Prove:
-
-`Wallet A -> Margin Call -> Wallet B`
-
-using a real B20 tokenized stock on Base.
-
-### V1 Functions
-
-- whitelist tokenized stock
-- configure oracle/reference feed
-- deposit stock
-- create inventory position
-- mark quantity callable
-- read total callable inventory
-- withdraw unconsumed inventory
-- execute a controlled stock-for-USDC call
-- settle provider
-- emit provenance events
-
-No token emissions are required to prove the core market structure.
-
-The first economic test can be run with a manually configured execution spread.
-
----
-
-## 20. Core Metrics
-
-Margin Call should measure whether the inventory is actually useful.
-
-### Inventory Utilization
-
-`stock value called during period / average callable inventory`
-
-### Quote Win Rate
-
-`Margin Call quotes selected / total comparable RFQs`
-
-### Execution Savings
-
-Difference between Margin Call execution and best available DEX route.
-
-### Provider Revenue Mix
-
-Percentage of provider yield coming from:
-
-- CALL incentives
-- execution fees
-- reservation fees
-
-Over time, the protocol should want real fee revenue to represent a greater share of provider returns.
-
-### Inventory Coverage
-
-Available callable inventory relative to target inventory by ticker.
-
----
-
-## 21. Protocol Thesis
-
-The protocol thesis is not:
-
-> Tokenized stocks need another yield farm.
-
-It is:
-
-> **The long tail of tokenized equities may be better served by single-sided holder inventory and direct RFQ execution than by requiring deep two-sided AMM liquidity for every ticker.**
-
-Margin Call turns existing stock ownership into distributed dealer inventory.
-
-The protocol separates:
-
-- **capital** — supplied permissionlessly by stock holders
-- **pricing** — produced by a deterministic quote engine
-- **settlement** — enforced by smart contracts
-
-AMMs remain an important execution venue. Margin Call competes where committed single-sided inventory can provide a firmer or more capital-efficient market.
-
----
-
-## 22. One-Line Positioning
-
-**Margin Call turns tokenized-stock holders into a permissionless dealer network.**
-
-Alternative:
-
-**Single-sided stock inventory. Firm onchain execution.**
-
-For inventory providers:
-
-**Keep your stocks. Get paid to make them callable.**
-
-For traders and applications:
-
-**Request a block. Get a firm quote. Settle onchain.**
+**Build the experience and economics; use Margin Call for valid, solvent inventory transitions.**
