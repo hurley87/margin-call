@@ -2,7 +2,29 @@
 
 Margin Call is between product versions. The Crash game has been retired.
 
-The next product is proposed, not implemented. These terms describe its canonical product language so future specifications, contracts, and UI copy can stay aligned.
+The next product is proposed, not implemented. The immediate product is the standalone Stock Gacha MVP; the generalized Margin Call protocol remains a later proposal. These terms describe canonical product language so future specifications, contracts, and UI copy can stay aligned.
+
+## Stock Gacha MVP vocabulary
+
+**Stock Gacha MVP** — The first game proposed for Base. It directly custodies four approved Coinbase B20 stocks and settles USDC rips without depending on the future generalized Margin Call protocol.
+
+**Maker** — A user who deposits one supported B20 stock position into the game.
+
+**Lot** — One quantity of one supported stock deposited by one Maker. A lot is a contract record, not an NFT or a multi-stock basket.
+
+**Grade** — A lot's current oracle-valued NAV in USDC terms. It is not ETH backing.
+
+**Ripper** — A buyer who pays USDC for one verifiably random active lot.
+
+**Rip** — One USDC purchase, random lot selection, Maker settlement, and delivery of the actual B20 stock to the Ripper.
+
+**Rip Price** — The active lots' inverse-NAV-weighted expected value plus the public game surcharge.
+
+**House Reserve** — USDC funded by the game treasury and reserved as necessary to settle a selected lot whose locked NAV is greater than its Rip Price.
+
+**Reward token** — A standard ERC-20 explicitly whitelisted for pre-funded Maker or Ripper rewards. $CALL is the primary launch reward; $BNKR and other reviewed tokens may be added.
+
+**Rewards Vault** — The separate contract that accepts permissionless deposits of whitelisted reward tokens and prevents epoch commitments from exceeding each token's funded balance.
 
 ## Proposed protocol vocabulary
 
@@ -26,4 +48,4 @@ The next product is proposed, not implemented. These terms describe its canonica
 
 **Allocation** — The atomic protocol transition in which a consuming application settles inventory principal and the allocation fee, inventory becomes claim-backing, and a funded user ownership claim is created.
 
-**Stock Gacha** — The proposed first application and protocol proof; it owns its game experience, pools, odds, and independently verifiable randomness, but does not define Margin Call's scope.
+**Stock Gacha** — The future protocol-backed form of the game. The standalone MVP may own its own custody and settlement first; later migration to the shared protocol must preserve the game's experience, odds, and independently verifiable randomness.
