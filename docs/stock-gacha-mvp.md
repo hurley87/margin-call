@@ -387,7 +387,7 @@ Contracts remain authoritative for custody, prices accepted at request time, ran
 10. A pending rip cannot be undercollateralized against its maximum possible selected NAV.
 11. House Reserve, pending USDC, Maker proceeds, and withdrawable treasury USDC are accounted separately.
 12. For every whitelisted reward token, committed rewards never exceed that token's deposited balance.
-13. No admin path can seize Maker stock, Ripper stock, Maker proceeds, or committed $CALL rewards.
+13. No admin path can seize Maker stock, Ripper stock, Maker proceeds, or committed rewards of any whitelisted token.
 
 ## Explicit non-goals
 
