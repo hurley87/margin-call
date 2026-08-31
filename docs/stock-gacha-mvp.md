@@ -12,12 +12,13 @@ Build a simplified version of [StockRip](https://stockrip.com/docs) on Base:
 - let buyers pay USDC to rip one randomly selected lot;
 - transfer the actual B20 stock directly to the buyer;
 - settle the selected depositor at the lot's locked USDC value;
-- launch $CALL through Bankr on Base and distribute it from a separately funded rewards vault; and
+- launch $CALL through Bankr on Base and distribute it from a separately funded, multi-token rewards vault;
+- allow additional standard ERC-20 rewards such as $BNKR after an admin explicitly whitelists them; and
 - do not block this game on the generalized Margin Call protocol.
 
 The MVP should prove one loop:
 
-**Deposit a real stock lot → price the pool → pay USDC → select a lot fairly → settle the depositor → deliver the stock → accrue $CALL rewards.**
+**Deposit a real stock lot → price the pool → pay USDC → select a lot fairly → settle the depositor → deliver the stock → accrue whitelisted token rewards.**
 
 ## What we borrow from StockRip
 
@@ -26,7 +27,7 @@ The MVP should prove one loop:
 - a pool-derived rip price based on expected value;
 - verifiable randomness;
 - actual tokenized-stock delivery; and
-- a native reward token that bootstraps both supply and demand.
+- pre-funded token rewards that bootstrap both supply and demand.
 
 ## What we remove for the MVP
 
@@ -74,7 +75,7 @@ The registry also stores token decimals, feed decimals, maximum price age, minim
 
 **House Reserve** — USDC supplied by the game treasury to cover the difference when a selected lot is worth more than that rip's purchase price.
 
-**$CALL Rewards Vault** — a separately funded contract that holds fixed-supply $CALL and pays budgeted Maker and Ripper rewards.
+**Rewards Vault** — a separately funded contract that holds whitelisted ERC-20 rewards. $CALL is the primary launch reward; additional tokens such as $BNKR can be enabled without changing the game.
 
 ## User experience
 
@@ -83,10 +84,10 @@ The registry also stores token decimals, feed decimals, maximum price age, minim
 1. Connect a wallet.
 2. Choose NVDAc, METAc, AAPLc, or GOOGLc.
 3. Enter a fractional token amount.
-4. Preview the live grade, estimated selection odds, and current $CALL reward rate.
+4. Preview the live grade, estimated selection odds, and current reward rates.
 5. Approve the B20 token and create the lot.
 6. The game transfers the tokens into custody and activates the lot if its grade is within the allowed range.
-7. While active, the Maker accrues $CALL rewards.
+7. While active, the Maker accrues the enabled rewards for that epoch.
 8. If the lot is ripped, the Maker receives its locked NAV in USDC.
 9. If the lot has not been ripped, the Maker may withdraw it whenever no rip is pending.
 
@@ -102,7 +103,7 @@ One deposit creates one single-asset lot. Supporting baskets later should not co
 6. Anyone may finalize after randomness arrives.
 7. The selected lot's B20 tokens transfer directly to the Ripper.
 8. The selected Maker receives the lot's locked NAV in USDC.
-9. The completed rip becomes eligible for a $CALL reward.
+9. The completed rip becomes eligible for the enabled Ripper rewards.
 
 There is no mystery credit or internal stock balance. A settled Ripper owns the actual B20 tokens.
 
@@ -179,7 +180,7 @@ The House Reserve absorbs per-rip variance:
 
 - if the selected NAV is greater than the Rip Price, reserve USDC covers the difference;
 - if the selected NAV is lower than the Rip Price, the remainder stays in the reserve; and
-- in expectation, the reserve earns the surcharge before randomness costs, $CALL incentives, and operating expenses.
+- in expectation, the reserve earns the surcharge before randomness costs, token incentives, and operating expenses.
 
 At request time, the contract reserves enough USDC to settle the most expensive possible result from that snapshot:
 
@@ -192,7 +193,7 @@ A rip cannot begin unless that coverage is available. The reserved amount cannot
 For the MVP, Makers receive:
 
 - the locked NAV when their lot is selected; and
-- separately budgeted $CALL rewards while their lot is active.
+- separately budgeted whitelisted-token rewards while their lot is active.
 
 They do not also receive a share of the surcharge. That separation keeps principal settlement, game margin, and token incentives understandable.
 
@@ -227,7 +228,7 @@ If settlement cannot complete because an asset becomes paused or a B20 policy re
 
 A timeout path must allow the Ripper to refund if randomness or settlement does not complete within the configured deadline.
 
-## $CALL launch and rewards
+## $CALL launch and multi-token rewards
 
 $CALL launches through [Bankr](https://docs.bankr.bot/token-launching/overview/) explicitly on Base.
 
@@ -238,19 +239,23 @@ Bankr's current standard launch creates a fixed, non-mintable 100 billion token 
 
 These are external launch rules, not game-contract assumptions, and must be rechecked before launch.
 
-The game does not receive mint authority and does not depend on Bankr for reward accounting. $CALL is an ordinary ERC-20 input to a separate rewards vault.
+The game does not receive mint authority and does not depend on Bankr for reward accounting. $CALL is an ordinary ERC-20 input to a separate, token-agnostic rewards vault. $CALL is the primary launch reward, but the same vault may distribute $BNKR or another standard ERC-20 after that token is explicitly whitelisted.
 
 ### Funding the game contract
 
 The rewards vault exposes a permissionless funding path:
 
 ~~~
-fundRewards(amount):
+fundRewards(token, amount):
+    require rewardTokenWhitelist[token]
+    balanceBefore = balanceOf(token, rewardsVault)
     transferFrom(msg.sender, rewardsVault, amount)
-    emit RewardsFunded(msg.sender, amount)
+    received = balanceOf(token, rewardsVault) - balanceBefore
+    creditAvailable(token, received)
+    emit RewardsFunded(token, msg.sender, received)
 ~~~
 
-Anyone can therefore approve and deposit $CALL into the game. Funding does not grant admin rights, change odds, or create a withdrawal claim.
+Anyone can therefore approve and deposit any whitelisted reward token into the game. Funding does not grant admin rights, change odds, or create a withdrawal claim. Accounting uses the amount actually received so a non-standard token cannot create an unfunded balance.
 
 Recommended launch flow:
 
@@ -264,9 +269,13 @@ Recommended launch flow:
 
 The Bankr liquidity pair and the game's payment asset are separate concerns. Game rips use USDC even if $CALL trades against WETH or another Bankr-supported quote token.
 
+### Reward-token whitelist
+
+Only the rewards admin can add a token to the whitelist. A candidate must be reviewed as a non-rebasing ERC-20 with safe transfer behavior before it is enabled. Removing a token stops new funding and new epoch commitments but never blocks already valid claims. Whitelisting a reward token cannot change stock eligibility, Rip Price, selection odds, House Reserve accounting, or game administration.
+
 ### Reward accounting
 
-Use fixed, pre-funded epochs. An epoch cannot promise more $CALL than the uncommitted vault balance.
+Use fixed, pre-funded epochs per reward token. An epoch cannot promise more of a token than that token's uncommitted vault balance. One epoch may distribute $CALL, $BNKR, both, or neither.
 
 Starting distribution proposal:
 
@@ -277,13 +286,13 @@ Square-root Maker weighting rewards more supplied value without allowing the lar
 
 For the first implementation, an offchain indexer calculates epoch allocations and the owner publishes a Merkle root with the exact funded total. Users claim onchain. The vault enforces:
 
-- cumulative epoch allocations never exceed deposited $CALL;
+- cumulative epoch allocations for each token never exceed that token's deposited balance;
 - each leaf can be claimed once;
 - committed rewards cannot be withdrawn;
 - a replaced root can only reduce no user's already claimed amount; and
 - an emergency pause stops new epochs but not valid claims.
 
-$CALL is not required to deposit or rip, and holding it does not improve odds or stock payouts in the MVP.
+No reward token is required to deposit or rip, and holding $CALL, $BNKR, or another reward token does not improve odds or stock payouts in the MVP.
 
 ## Suggested contract boundary
 
@@ -301,17 +310,18 @@ Owns:
 - B20 delivery and refunds; and
 - pause and bounded parameter controls.
 
-### CallRewardsVault
+### RewardsVault
 
 Owns:
 
-- permissionless $CALL deposits;
-- available versus committed reward balances;
-- epoch roots and totals;
+- an admin-managed reward-token whitelist;
+- permissionless deposits of whitelisted ERC-20s;
+- per-token available versus committed balances;
+- per-token epoch roots and totals;
 - claims; and
 - reward-specific pause controls.
 
-Keeping $CALL accounting separate prevents a reward bug from touching stock custody or USDC settlement.
+Keeping all reward accounting separate prevents a reward-token bug from touching stock custody, USDC settlement, or game odds.
 
 ### Offchain services
 
@@ -341,7 +351,7 @@ Contracts remain authoritative for custody, prices accepted at request time, ran
 
 - supported-stock balances;
 - amount and grade preview;
-- odds and estimated $CALL rewards;
+- odds and estimated reward-token earnings;
 - active lots; and
 - withdraw action.
 
@@ -350,7 +360,7 @@ Contracts remain authoritative for custody, prices accepted at request time, ran
 - stocks won;
 - lots currently active;
 - USDC earned;
-- claimable $CALL; and
+- claimable $CALL, $BNKR, and other enabled rewards; and
 - personal rip/deposit history.
 
 ### Activity
@@ -376,7 +386,7 @@ Contracts remain authoritative for custody, prices accepted at request time, ran
 9. Selection probability is derived only from the public snapshot and VRF word.
 10. A pending rip cannot be undercollateralized against its maximum possible selected NAV.
 11. House Reserve, pending USDC, Maker proceeds, and withdrawable treasury USDC are accounted separately.
-12. Committed $CALL rewards never exceed deposited $CALL.
+12. For every whitelisted reward token, committed rewards never exceed that token's deposited balance.
 13. No admin path can seize Maker stock, Ripper stock, Maker proceeds, or committed $CALL rewards.
 
 ## Explicit non-goals
@@ -389,7 +399,7 @@ Contracts remain authoritative for custody, prices accepted at request time, ran
 - stock baskets;
 - cash redemption of won stocks;
 - lending idle stocks;
-- $CALL governance, staking, or fee sharing;
+- reward-token governance, staking, or fee sharing;
 - multiple simultaneous rips;
 - gas sponsorship;
 - mobile-native applications; and
@@ -408,8 +418,8 @@ Contracts remain authoritative for custody, prices accepted at request time, ran
 ### Phase 2: Base fork and testnet prototype
 
 - implement StockGacha with mocked B20s, USDC, feeds, and VRF;
-- implement CallRewardsVault;
-- test multiplier changes, stale feeds, failed B20 transfers, refunds, and reward exhaustion;
+- implement the multi-token RewardsVault;
+- test multiplier changes, stale feeds, failed B20 transfers, refunds, token whitelisting, and per-token reward exhaustion;
 - build the Rip, Deposit, Portfolio, and Activity surfaces; and
 - prove the entire loop with reproducible transactions.
 
@@ -419,6 +429,7 @@ Contracts remain authoritative for custody, prices accepted at request time, ran
 - deploy and fund the House Reserve;
 - launch $CALL through Bankr on Base;
 - acquire and deposit the first $CALL reward budget;
+- whitelist and deposit any additional launch reward such as $BNKR;
 - cap active lots, lot value, and one-rip throughput;
 - monitor solvency, settlement latency, feed freshness, and reward spend; and
 - expand limits only after observed behavior matches the simulation.
@@ -432,7 +443,8 @@ Contracts remain authoritative for custody, prices accepted at request time, ran
 - maximum VRF and settlement timeout;
 - exact feed freshness policy outside market hours;
 - Base mainnet USDC address and transfer behavior;
-- reward epoch length and first $CALL budget;
+- reward epoch length, first $CALL budget, and any initial $BNKR budget;
+- reward-token whitelist and admin process;
 - final Maker/Ripper reward split;
 - treasury and emergency-admin addresses; and
 - whether the MVP launches directly on Base mainnet or first uses mocked B20 assets on Base Sepolia.
@@ -447,5 +459,5 @@ The MVP succeeds when an external observer can verify that:
 4. Chainlink VRF selected the lot;
 5. the depositor received the locked USDC NAV;
 6. the buyer received the actual B20 stock;
-7. both users could claim only pre-funded $CALL rewards; and
+7. both users could claim only pre-funded rewards from explicitly whitelisted tokens; and
 8. no generalized Margin Call protocol was required to complete the loop.
