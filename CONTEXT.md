@@ -14,17 +14,17 @@ The next product is proposed, not implemented. The immediate product is the stan
 
 **Grade** — A lot's current oracle-valued NAV in USDC terms. It is not ETH backing.
 
-**Ripper** — A buyer who pays USDC for one verifiably random active lot.
+**Ripper** — A buyer who irrevocably pays USDC for one verifiably random active lot and binds one eligible delivery recipient at purchase.
 
-**Rip** — One USDC purchase, random lot selection, Maker settlement, and delivery of the actual B20 stock to the Ripper.
+**Rip** — One atomic USDC purchase and VRF request, immutable random lot selection, and permissionless retryable settlement of the Maker and actual B20 stock to the bound recipient.
 
 **Rip Price** — The active lots' inverse-NAV-weighted expected value plus the public game surcharge.
 
 **House Reserve** — USDC funded by the game treasury and reserved as necessary to settle a selected lot whose locked NAV is greater than its Rip Price.
 
-**Reward token** — A standard ERC-20 explicitly whitelisted for pre-funded Maker or Ripper rewards. $CALL is the primary launch reward; $BNKR and other reviewed tokens may be added.
+**Reward token** — A standard ERC-20 explicitly whitelisted for pre-funded stock-LP rewards. $CALL is the primary launch reward; $BNKR and other reviewed tokens may be added.
 
-**Rewards Vault** — The separate contract that accepts permissionless deposits of whitelisted reward tokens and prevents epoch commitments from exceeding each token's funded balance.
+**Rewards Vault** — The separate contract that accepts permissionless deposits of whitelisted reward tokens and lets an authorized publisher add funded claimable balances for a capped set of stock LPs without reducing prior accruals.
 
 ## Proposed protocol vocabulary
 
