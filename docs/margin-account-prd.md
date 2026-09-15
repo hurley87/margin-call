@@ -13,7 +13,7 @@ The canonical V1 flow is deliberately narrow:
 5. Margin Call draws USDC from its Credit Vault.
 6. That USDC is atomically swapped through Uniswap into **more of the same stock**.
 7. The resulting stock remains inside an isolated Position Account.
-8. The USDC financing accrues simple interest at a fixed protocol APR while debt is outstanding.
+8. The USDC financing accrues simple interest at the current protocol APR while debt is outstanding.
 9. Margin Call mints a Position NFT representing ownership/control of the entire live financed account.
 10. The NFT may be transferred or sold without selling the stock or refinancing the debt; accrued interest remains attached to the position.
 11. On a normal close, Margin Call sells only enough stock to repay principal, accrued interest, and required fees, returns the remaining stock to the current NFT owner, and burns the NFT. If debt was already repaid with external USDC, the stock can be returned without a sale. Liquidation remains a full unwind.
@@ -86,9 +86,11 @@ V1 is intentionally restrictive:
 - Margin Call lends USDC only to buy **more of that same stock**.
 - Borrowed USDC is never freely withdrawable.
 - Maximum gross leverage initially `1.5x`.
-- One fixed protocol borrow APR, initially `10%` for the hackathon/demo.
+- One protocol-wide borrow APR, initially `10%` for the hackathon/demo.
+- The contract owner/admin may update the borrow APR prospectively, subject to a hard V1 maximum of `50% APR`.
+- APR changes never retroactively reprice elapsed time.
 - Simple linear interest; no compounding.
-- Interest accrues lazily from timestamps; no periodic onchain keeper transaction is required.
+- Interest accrues lazily using a cumulative rate accumulator; no periodic onchain keeper transaction is required.
 - Approved Coinbase B20 tokenized equities only.
 - Chainlink-approved pricing for solvency.
 - Uniswap for spot execution.
@@ -128,15 +130,16 @@ A complete demo must prove:
 6. The borrowed USDC is atomically swapped into more of the **same** B20 stock.
 7. A Position Account holds the combined stock inventory and records USDC principal.
 8. Borrow interest accrues over elapsed time without requiring periodic write transactions.
-9. A Position NFT is minted to the owner.
-10. The live position page shows stock exposure, principal, accrued interest, current debt, APR, equity, P&L, leverage, health, thesis, and dynamic NFT art.
-11. The NFT can be transferred to a second wallet while the underlying stock and debt remain unchanged.
-12. The old owner and old executor lose control after transfer.
-13. The new NFT owner gains control of the same financed account and inherits its current debt obligation.
-14. The owner can reduce leverage, repay, or close the position while preserving as much of the underlying stock exposure as possible.
-15. A simulated price decline or enough elapsed interest can make the account liquidatable.
-16. A permissionless liquidator can unwind the account, repay the vault first, collect the configured reward, return residual equity, and burn the NFT.
-17. At least one tiny live Base position uses real USDC, a supported B20 stock, Chainlink pricing, and Uniswap execution.
+9. The owner/admin can update the borrow APR and the new rate applies only from the update timestamp forward.
+10. A Position NFT is minted to the owner.
+11. The live position page shows stock exposure, principal, accrued interest, current debt, APR, equity, P&L, leverage, health, thesis, and dynamic NFT art.
+12. The NFT can be transferred to a second wallet while the underlying stock and debt remain unchanged.
+13. The old owner and old executor lose control after transfer.
+14. The new NFT owner gains control of the same financed account and inherits its current debt obligation.
+15. The owner can reduce leverage, repay, or close the position while preserving as much of the underlying stock exposure as possible.
+16. A simulated price decline or enough elapsed interest can make the account liquidatable.
+17. A permissionless liquidator can unwind the account, repay the vault first, collect the configured reward, return residual equity, and burn the NFT.
+18. At least one tiny live Base position uses real USDC, a supported B20 stock, Chainlink pricing, and Uniswap execution.
 
 ---
 
@@ -152,7 +155,7 @@ The following are intentionally out of scope:
 - Letting borrowed USDC leave the Position Account.
 - General-purpose lending.
 - Public permissionless LP deposits.
-- Utilization-based or variable interest-rate curves.
+- Utilization-based or automatically variable interest-rate curves.
 - Per-stock borrow rates.
 - Compounding interest.
 - Partial liquidations.
@@ -225,6 +228,19 @@ For V1, the Margin Call treasury is the intended depositor.
 
 The vault still uses ERC-4626 so external LPs can be enabled later without replacing the core credit primitive.
 
+### Protocol owner/admin
+
+For the hackathon, the deployed protocol owner/admin controls explicit risk/economic configuration including the global borrow APR.
+
+The owner/admin may:
+
+- update the borrow APR up to the hard `50% APR` V1 ceiling;
+- configure other explicitly admin-controlled risk parameters described by the protocol.
+
+APR changes are forward-looking only. The admin cannot rewrite interest that has already accrued under a previous rate.
+
+Longer term this authority should move behind a timelock and/or a dedicated risk-admin role rather than remain an unrestricted hot-wallet owner action.
+
 ---
 
 ## Position model
@@ -275,19 +291,29 @@ Debt record -> CreditVault
 
 ### Debt state
 
-V1 keeps the debt model deliberately simple.
+V1 keeps the debt model deliberately simple while still allowing forward-looking APR updates.
 
 Per position, track conceptually:
 
 ```text
 principal
 accruedInterestStored
-lastAccruedAt
+rateAccumulatorSnapshot
 ```
 
-All V1 positions use the same protocol-wide fixed APR. For the hackathon/demo, use a starting value of `10% APR`.
+Protocol-wide rate state tracks conceptually:
 
-To avoid rate-history complexity, the V1 admin must not change the borrow APR while any principal is outstanding. A future version can replace this restriction with a borrow index or rate snapshots.
+```text
+borrowApr
+cumulativeRateSeconds
+lastRateUpdateAt
+```
+
+For the hackathon/demo, `borrowApr` starts at `10% APR`.
+
+The cumulative rate accumulator lets a position account for multiple historical APR periods without iterating over every position when the admin changes the global rate.
+
+When the APR changes, the protocol first advances `cumulativeRateSeconds` from `lastRateUpdateAt` to the current timestamp using the **old** APR, then stores the new APR and timestamp. Positions therefore preserve all interest earned under prior rates and begin accruing at the new rate only from that point forward.
 
 ### Why the account may temporarily hold USDC
 
@@ -312,7 +338,7 @@ Example:
 User owns            $100 NVDAc
 Target leverage      1.5x
 Maximum new debt      $50 USDC
-Borrow APR                 10%
+Current borrow APR         10%
 ```
 
 The user calls conceptually:
@@ -333,7 +359,7 @@ Margin Call atomically:
 4. Draws the required USDC from the Credit Vault.
 5. Swaps that USDC through the approved execution adapter into NVDAc.
 6. Sends the purchased NVDAc to the same Position Account.
-7. Records the USDC principal and accrual timestamp.
+7. Records the USDC principal and current rate-accumulator snapshot.
 8. Mints the Position NFT to the owner.
 
 Expected result:
@@ -386,13 +412,13 @@ increaseLeverage(tokenId, targetLeverage)
 
 Margin Call:
 
-1. accrues interest through the current timestamp;
+1. accrues interest through the current global rate accumulator;
 2. values the account using current debt;
 3. calculates additional allowable principal;
 4. draws USDC from the Credit Vault;
 5. swaps USDC into the position's configured stock;
 6. keeps the purchased stock in the Position Account;
-7. records the additional principal.
+7. records the additional principal and updated rate-accumulator snapshot.
 
 Credit cannot be redirected to another token.
 
@@ -406,7 +432,7 @@ reduceLeverage(tokenId, targetLeverage)
 
 Margin Call:
 
-1. accrues interest through the current timestamp;
+1. accrues interest through the current global rate accumulator;
 2. calculates how much debt must be repaid;
 3. sells the required quantity of the configured stock into USDC;
 4. applies repayment to accrued interest first, then principal;
@@ -430,25 +456,37 @@ Borrow interest is Margin Call's primary V1 protocol revenue and the natural pri
 
 ### Initial model
 
-Use a single fixed, configurable protocol APR with an initial hackathon/demo value of **10% APR**.
+Use a single protocol-wide APR with an initial hackathon/demo value of **10% APR**.
+
+The protocol owner/admin may update that APR prospectively using an owner-restricted setter, subject to `MAX_BORROW_APR = 50%` in V1.
 
 Interest is:
 
 - denominated in USDC;
 - simple, not compounding;
 - charged only while principal is outstanding;
-- calculated from elapsed time;
+- calculated from elapsed time and the rate schedule implied by the global accumulator;
 - attached to the position and transferred with the NFT;
 - repaid before principal when a repayment occurs.
 
-The conceptual calculation is:
+Conceptually, the protocol maintains a cumulative rate-time accumulator:
 
 ```text
-newInterest = principal * APR * elapsedSeconds / 365 days
+currentRateAccumulator =
+  cumulativeRateSeconds
+  + currentBorrowApr * (now - lastRateUpdateAt)
+
+newInterest =
+  principal
+  * (currentRateAccumulator - rateAccumulatorSnapshot)
+  / 365 days
+
 currentDebt = principal + accruedInterestStored + newInterest
 ```
 
-For example, a position with `50 USDC` principal at `10% APR` has approximately:
+The exact implementation uses scaled fixed-point APR units and explicit integer rounding rules.
+
+For example, a position with `50 USDC` principal held entirely at `10% APR` has approximately:
 
 ```text
 At open       50.000 USDC debt
@@ -457,15 +495,46 @@ After 30 days 50.411 USDC debt
 After 1 year  55.000 USDC debt
 ```
 
-Exact implementation uses integer fixed-point arithmetic and defined rounding behavior.
+### Admin APR updates
+
+V1 exposes conceptually:
+
+```text
+setBorrowApr(newApr)
+```
+
+restricted to the protocol owner/admin.
+
+Before changing the rate, the contract must checkpoint the global rate accumulator through the current timestamp using the old APR. It then stores the new APR and the current timestamp.
+
+Example:
+
+```text
+Day 0-10     10% APR
+Admin update at Day 10
+Day 10+      12% APR
+```
+
+A position open across that boundary owes 10% annualized interest for the first interval and 12% annualized interest only for time after the update. The new rate never applies retroactively.
+
+Requirements:
+
+- `newApr <= MAX_BORROW_APR`;
+- initial V1 hard maximum: `50% APR`;
+- emit `BorrowAprUpdated(oldApr, newApr, effectiveAt)`;
+- rate changes do not require iterating over open positions;
+- rate changes do not reset a position's principal, accrued interest, or ownership;
+- all UI and agent surfaces should display the current protocol APR.
+
+Longer term, APR administration should move behind a timelock and/or dedicated `RISK_ADMIN_ROLE`.
 
 ### Lazy accrual
 
-Do not write interest to storage every block or run a keeper merely to accrue interest.
+Do not write interest to each position every block or run a keeper merely to accrue interest.
 
-`currentDebt(positionId)` should be a view calculation based on stored debt state plus time elapsed since `lastAccruedAt`.
+`currentDebt(positionId)` should be a view calculation based on stored position debt state and the current global rate accumulator.
 
-Before any state-changing action that depends on debt, Margin Call should checkpoint interest conceptually via `_accrue(positionId)`:
+Before any state-changing action that depends on debt, Margin Call should checkpoint position interest conceptually via `_accrue(positionId)`:
 
 - increase leverage;
 - reduce leverage;
@@ -474,7 +543,9 @@ Before any state-changing action that depends on debt, Margin Call should checkp
 - liquidation;
 - any other debt-changing operation.
 
-Transfer-health checks must use `currentDebt()` including uncheckpointed elapsed interest even if the transfer itself does not write an accrual checkpoint.
+The checkpoint adds earned interest to `accruedInterestStored` and updates the position's `rateAccumulatorSnapshot` to the current global accumulator.
+
+Transfer-health checks must use `currentDebt()` including uncheckpointed elapsed interest even if the transfer itself does not write a position accrual checkpoint.
 
 ### Repayment ordering
 
@@ -558,7 +629,7 @@ Conceptually:
 totalAssets = liquidUSDC + outstandingPrincipal + accruedInterestReceivable
 ```
 
-Because V1 uses one fixed APR for all outstanding principal, the protocol can maintain aggregate principal/accrual accounting without iterating over every position. `totalAssets()` may include projected aggregate interest since the last global accrual checkpoint.
+Because V1 uses one global APR for all outstanding principal at any moment, aggregate receivable interest can also be checkpointed in O(1): before principal changes or the APR changes, accrue aggregate interest through the current timestamp using total outstanding principal and the old/current APR, then update aggregate principal or the rate.
 
 On repayment, receivable decreases while vault cash increases. On interest payment, vault assets increase by the earned interest. Any future bad-debt path must explicitly write off unrecoverable receivables.
 
@@ -586,7 +657,8 @@ Use configurable parameters with these starting values:
 
 - Maximum gross leverage: `1.5x`.
 - Maximum principal at open: `50%` of oracle-valued contributed stock equity.
-- Borrow APR: `10%`, fixed protocol-wide for V1.
+- Borrow APR: `10%` initially, owner/admin configurable prospectively.
+- Maximum borrow APR: `50%` hard V1 ceiling.
 - Maintenance equity ratio: `30%`.
 - Full liquidation below maintenance.
 - No partial liquidation in V1.
@@ -802,7 +874,7 @@ when the account is below the configured liquidation threshold.
 
 V1 uses full liquidation:
 
-1. Accrue interest through the liquidation timestamp.
+1. Accrue interest through the liquidation timestamp using the current rate accumulator.
 2. Validate liquidatability using a fresh approved oracle price and current debt.
 3. Sell the entire stock balance into USDC through the approved execution adapter.
 4. Repay the Credit Vault in full, including accrued borrow interest.
@@ -834,7 +906,7 @@ The default V1 close should preserve the owner's underlying stock exposure rathe
 
 `closePosition(tokenId)` should:
 
-1. accrue borrow interest through the current timestamp;
+1. accrue borrow interest through the current rate accumulator;
 2. calculate the USDC required to repay principal, accrued interest, and any required closing/protocol fees;
 3. sell only the minimum required quantity of the configured stock into USDC, subject to slippage bounds;
 4. repay the Credit Vault in full;
@@ -1025,7 +1097,7 @@ Image content:
 - gross stock exposure;
 - current debt;
 - accrued interest;
-- borrow APR;
+- current borrow APR;
 - equity;
 - leverage;
 - health;
@@ -1043,7 +1115,7 @@ Examples:
 - `Return Bucket = +20% to +50%`
 - `Health = Healthy | Warning | Critical`
 - `Leverage Bucket = 1.0x-1.2x | 1.2x-1.5x`
-- `Borrow APR = 10%`
+- `Current Borrow APR = 10%`
 - `Manager = Claude | Codex | Agent | Manual`
 
 Metadata should be compatible with marketplaces such as OpenSea.
@@ -1165,8 +1237,11 @@ Responsibilities:
 - calculate allowable credit;
 - atomically draw USDC and buy more of the same stock;
 - account for principal and accrued interest;
+- maintain the global rate accumulator;
 - expose current debt as a time-aware view;
 - checkpoint interest on debt-changing actions;
+- allow the owner/admin to update borrow APR prospectively up to `MAX_BORROW_APR`;
+- emit rate-update events;
 - validate owner/executor authorization;
 - increase/reduce leverage;
 - add collateral;
@@ -1177,6 +1252,14 @@ Responsibilities:
 - liquidate positions;
 - coordinate NFT mint/burn;
 - coordinate Credit Vault draws/repayments.
+
+Conceptual admin surface:
+
+```text
+setBorrowApr(newApr) // onlyOwner, newApr <= MAX_BORROW_APR
+```
+
+For V1, use OpenZeppelin ownership/access-control building blocks rather than custom authorization.
 
 ### `OracleAdapter`
 
@@ -1201,6 +1284,7 @@ Suggested events:
 - `PositionOpened`
 - `CreditDrawn`
 - `InterestAccrued`
+- `BorrowAprUpdated`
 - `ExposureIncreased`
 - `ExposureReduced`
 - `CollateralAdded`
@@ -1241,24 +1325,25 @@ Implement:
 8. Verify principal = 50 USDC, accrued interest = 0, and current debt = 50 USDC at open.
 9. Mint Position NFT to owner.
 10. Verify owner/executor permissions and healthy risk state.
-11. Warp time forward and verify current debt increases according to the fixed APR without an accrual transaction.
-12. Verify health/equity calculations use current debt including interest.
-13. Transfer the NFT to a second owner and verify transfer-health logic uses current debt.
-14. Verify stock and debt do not move and accrued interest is not reset.
-15. Verify old owner loses control.
-16. Verify old executor is revoked.
-17. Verify new owner controls the same Position Account.
-18. Manipulate the oracle downward.
-19. Verify increasing leverage reverts once constraints are breached.
-20. Push price/current debt below maintenance.
-21. Third-party liquidator calls liquidation.
-22. Accrue interest through liquidation timestamp.
-23. Sell stock into mock USDC.
-24. Repay Credit Vault principal plus accrued interest first.
-25. Pay liquidator/protocol fees if sufficient residual equity exists.
-26. Send remaining equity to current NFT owner.
-27. Burn NFT.
-28. Verify no residual debt or stranded assets remain.
+11. Warp time forward and verify current debt increases according to the current APR without an accrual transaction.
+12. Change the APR as owner/admin and verify elapsed interest before the update is preserved at the old rate while future time accrues at the new rate.
+13. Verify health/equity calculations use current debt including interest.
+14. Transfer the NFT to a second owner and verify transfer-health logic uses current debt.
+15. Verify stock and debt do not move and accrued interest is not reset.
+16. Verify old owner loses control.
+17. Verify old executor is revoked.
+18. Verify new owner controls the same Position Account.
+19. Manipulate the oracle downward.
+20. Verify increasing leverage reverts once constraints are breached.
+21. Push price/current debt below maintenance.
+22. Third-party liquidator calls liquidation.
+23. Accrue interest through liquidation timestamp.
+24. Sell stock into mock USDC.
+25. Repay Credit Vault principal plus accrued interest first.
+26. Pay liquidator/protocol fees if sufficient residual equity exists.
+27. Send remaining equity to current NFT owner.
+28. Burn NFT.
+29. Verify no residual debt or stranded assets remain.
 
 ### Interest accrual test
 
@@ -1271,6 +1356,21 @@ Use deterministic time travel such as `vm.warp`.
 5. Call a debt-changing action and verify interest checkpoints correctly.
 6. Repay partially and verify accrued interest is paid before principal.
 7. Verify the resulting principal, accrued interest, vault accounting, equity, and health.
+
+### APR update test
+
+Use deterministic time travel to prove prospective repricing.
+
+1. Set APR to 10% and open a position with 50 USDC principal.
+2. Warp 10 days.
+3. Owner calls `setBorrowApr(12%)`.
+4. Verify the global accumulator checkpoints the first 10 days at 10% before storing 12%.
+5. Warp another 10 days.
+6. Verify `currentDebt()` includes 10 days at 10% plus 10 days at 12%, not 20 days at either single rate.
+7. Verify the APR update emits `BorrowAprUpdated(10%, 12%, effectiveAt)`.
+8. Verify a non-owner cannot update the APR.
+9. Verify setting APR above `50%` reverts.
+10. Verify an APR update does not require iterating over or mutating each open position.
 
 ### Normal close test
 
@@ -1361,6 +1461,7 @@ Show:
 - total user equity;
 - total current debt;
 - total accrued interest;
+- current borrow APR;
 - number of open positions;
 - available Margin Call credit;
 - position cards.
@@ -1373,7 +1474,7 @@ Human flow:
 2. Select an approved stock already held by the owner wallet.
 3. Enter how much stock to deposit.
 4. Choose target leverage up to 1.5x.
-5. Review estimated additional exposure, principal, borrow APR, and risk.
+5. Review estimated additional exposure, principal, current borrow APR, and risk.
 6. Confirm.
 7. Margin Call deposits stock, finances more of the same stock, creates the Position Account, and mints the NFT.
 
@@ -1392,7 +1493,7 @@ Show:
 - principal borrowed;
 - accrued interest;
 - current debt;
-- borrow APR;
+- current borrow APR;
 - equity;
 - leverage;
 - health;
@@ -1404,7 +1505,9 @@ Show:
 - close (sell only enough stock to settle current debt/fees and return the rest);
 - share link.
 
-The UI may update accrued interest and current debt continuously using the same deterministic formula and the latest onchain timestamp/state. This is display-only convenience; the contract's `currentDebt()` calculation is authoritative.
+The UI may update accrued interest and current debt continuously using the same deterministic accumulator formula and latest onchain state. This is display-only convenience; the contract's `currentDebt()` calculation is authoritative.
+
+If the owner/admin changes APR, the UI should reflect the new current APR while historical debt remains correctly calculated across the prior rate interval.
 
 ### Historical page
 
@@ -1422,11 +1525,14 @@ After burn, preserve a read-only historical page and final image state, includin
 - Uniswap is execution, never the solvency oracle.
 - Agent executors do not gain NFT ownership merely by receiving trade authority.
 - NFT transfer invalidates prior executor permissions.
-- NFT transfer does not reset principal, accrued interest, or accrual timestamps.
+- NFT transfer does not reset principal, accrued interest, or rate-accumulator state.
 - Credit Vault repayment is senior to protocol revenue and owner withdrawals.
 - Oracle freshness is checked before risk-increasing actions and liquidation.
-- Interest math and rounding behavior must be deterministic and tested at boundary timestamps.
-- The V1 fixed APR cannot change while outstanding principal exists.
+- Interest math and rounding behavior must be deterministic and tested at APR-change boundaries.
+- APR changes are owner/admin-only and forward-looking; elapsed time is never repriced retroactively.
+- APR changes must checkpoint the global accumulator at the old rate before the new rate becomes effective.
+- V1 enforces a hard `50% APR` maximum.
+- Every APR update emits an explicit event.
 - Risk parameters are explicit and admin-controlled for the hackathon.
 - Prefer OpenZeppelin standards and restrictive adapters over custom generalized execution.
 
@@ -1441,10 +1547,11 @@ After burn, preserve a read-only historical page and final image state, includin
 - Position Account + factory.
 - Margin Call coordinator/risk engine.
 - Fixed-rate simple-interest accounting and `currentDebt()`.
+- Global cumulative rate accumulator and owner-controlled prospective APR updates.
 - Aggregate Credit Vault receivable accounting.
 - Oracle and execution interfaces.
 - Local mocks.
-- Open-from-stock, finance-same-stock, interest accrual, transfer, deleverage, stock-preserving close, external-repayment close, and liquidation Foundry tests.
+- Open-from-stock, finance-same-stock, interest accrual, APR update, transfer, deleverage, stock-preserving close, external-repayment close, and liquidation Foundry tests.
 
 ### Phase 2 — Base execution
 
@@ -1464,7 +1571,7 @@ After burn, preserve a read-only historical page and final image state, includin
 - Dynamic email onboarding;
 - embedded owner wallet;
 - position dashboard;
-- live APR/accrued-interest/current-debt display;
+- live current-APR/accrued-interest/current-debt display;
 - delegated executor flow.
 
 ### Phase 5 — NFT/social layer
@@ -1491,18 +1598,19 @@ These do not block starting the protocol core but must be resolved before meanin
 2. Exact Chainlink feed addresses and freshness thresholds.
 3. Final maintenance equity ratio and transfer-health threshold after simulation.
 4. Exact liquidation-fee basis and insufficient-residual-equity behavior.
-5. Final fixed V1 borrow APR before live capital; `10%` is the initial hackathon/demo default.
-6. Exact fixed-point precision and rounding rules for interest accrual.
+5. Final initial V1 borrow APR before live capital; `10%` is the initial hackathon/demo default.
+6. Exact fixed-point precision and rounding rules for the cumulative rate accumulator and interest accrual.
 7. Position Account implementation: minimal custom account vs heavier smart-account standard. Default: minimal custom account.
 8. Exact Uniswap route/adapter implementation while preserving the same-stock invariant.
 9. Flash account/signing requirements.
 10. Whether thesis updates remain signed offchain records or also commit a hash/URI onchain.
 11. Exact Bankr fee-beneficiary and conversion flow for `$MARGINCALL`.
 12. Whether USDC-only position opening should be added later as a convenience path; it is not the canonical V1 thesis.
-13. Future public-LP design: utilization curve, reserve factor, bad-debt accounting, and whether interest uses a global borrow index.
+13. Future public-LP design: utilization curve, reserve factor, and bad-debt accounting.
+14. Post-hackathon admin hardening: timelock, dedicated risk-admin role, and any delay/notice policy for APR updates.
 
 ---
 
 ## Product statement
 
-> **Margin Call finances real tokenized equities and creates a secondary market for financed spot positions. Deposit an approved stock, choose your leverage, and Margin Call uses USDC credit to acquire more of that same stock. The financing accrues transparent borrow interest while open, and the resulting live asset-plus-debt account is represented by a transferable NFT that can change owners without unwinding the trade.**
+> **Margin Call finances real tokenized equities and creates a secondary market for financed spot positions. Deposit an approved stock, choose your leverage, and Margin Call uses USDC credit to acquire more of that same stock. The financing accrues transparent borrow interest while open, the protocol APR can be updated prospectively by the admin, and the resulting live asset-plus-debt account is represented by a transferable NFT that can change owners without unwinding the trade.**
