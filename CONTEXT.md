@@ -59,7 +59,7 @@ NAV minus current debt. Negative equity describes a collateral shortfall, not pe
 NAV divided by positive equity. V1 leverage is selected at opening from exactly five presets: 1.0x, 1.1x, 1.25x, 1.4x, or 1.5x. There is no post-open leverage-increase action.
 
 **Maintenance equity ratio**:
-The minimum equity-to-NAV ratio before a financed position becomes eligible for liquidation. V1 starts at 30% pending simulation. It never restricts NFT transfer.
+The verified V1 minimum equity-to-NAV ratio before a financed position becomes eligible for liquidation: 30%. This is a maintenance threshold, not opening margin or 30% LTV. It never restricts NFT transfer.
 
 **Health factor**:
 Equity ratio divided by maintenance equity ratio. A financed position is liquidatable when pricing is LIVE and health factor is below 1.0.
