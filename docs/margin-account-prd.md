@@ -282,6 +282,50 @@ Repayment, reduction, close, and liquidation restore only the USDC actually retu
 
 ---
 
+## Risk model
+
+All solvency calculations use a `LIVE` Chainlink observation. `currentDebt()` remains time-based and readable even when pricing is `HELD` or `INVALID`.
+
+For one position:
+
+```text
+NAV = oracle value of recorded NVDAc
+currentDebt = principal + all accrued interest through now
+equity = NAV - currentDebt
+equityRatio = equity / NAV
+healthFactor = equityRatio / maintenanceEquityRatio
+```
+
+V1 risk constants are defined in one place:
+
+```text
+Minimum opening leverage      1.0x
+Maximum opening leverage      1.5x
+Initial borrow APR            10%
+Borrow APR hard cap           50%
+Maintenance equity ratio      30%   (provisional pending simulation)
+Liquidation threshold         healthFactor < 1.0
+Liquidation                   full unwind
+```
+
+A financed position is liquidatable only when pricing is `LIVE` and `healthFactor < 1.0`.
+
+Implement the predicate without unsafe unsigned subtraction or division:
+
+- if `NAV == 0` and debt is positive, the position is liquidatable;
+- if `currentDebt >= NAV`, equity is zero or negative and the position is liquidatable;
+- otherwise calculate positive equity, `equityRatio`, and `healthFactor` normally.
+
+A zero-debt `1.0x` position is not liquidatable for lender solvency.
+
+The `1.5x` value is an **opening ceiling**, not a maintenance threshold. After opening, market moves and interest may push gross leverage above `1.5x`; liquidation occurs only when the maintenance predicate above is breached.
+
+Transfer never consults this risk model. A liquidatable or underwater position may still transfer, and its existing liquidation eligibility follows the NFT.
+
+The `30%` maintenance equity ratio is the V1 starting parameter and must be validated with simulation before meaningful live capital is deployed.
+
+---
+
 ## Repayment
 
 ### `repay`
@@ -494,12 +538,12 @@ The protocol operates a first-party keeper to ensure eligible liquidations are a
 liquidate(tokenId)
 ```
 
-Liquidation requires `LIVE` pricing and a financed position below maintenance.
+Liquidation requires `LIVE` pricing and a financed position with `healthFactor < 1.0` under the Risk Model above.
 
 V1 performs a full unwind:
 
 1. accrue interest and snapshot current owner/debt;
-2. validate liquidation eligibility using the live Chainlink mark;
+2. validate liquidation eligibility using the live Chainlink mark and the Risk Model predicate;
 3. sell this position's entire recorded NVDAc -> USDC through the approved bounded execution path;
 4. apply realized proceeds to settlement;
 5. remove the position's entire remaining principal from global `outstandingPrincipal` exactly once;
@@ -600,6 +644,9 @@ At minimum, tests must cover:
 - opening `1.0x` through `1.5x`, including cost-aware post-swap leverage checks;
 - finite CreditPool capacity and zero-credit `1.0x` opening;
 - lazy simple interest and interest-first ordinary repayment;
+- exact Risk Model math for NAV, current debt, equity, equity ratio, and health factor using the 30% maintenance ratio;
+- liquidation at `healthFactor < 1.0`, non-liquidation at/above the threshold, and safe handling of zero NAV / zero or negative equity;
+- leverage drift above `1.5x` without liquidation until the maintenance threshold is breached;
 - no `increaseLeverage` or `addCollateral` path;
 - `reduceExposure(tokenId, stockAmount, minOut)` exact-input accounting and bounds;
 - executor permissions limited to repayment/reduction;
@@ -696,6 +743,8 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 - `reduceExposure` requires `LIVE` pricing plus caller and protocol execution bounds.
 - Chainlink determines solvency; Uniswap is execution only.
 - Raw NVDAc units are valued directly against the total-return feed; the B20 multiplier is never applied twice.
+- Maintenance is a 30% equity ratio in V1, so liquidation eligibility is `healthFactor < 1.0` using the explicit Risk Model; zero/negative-equity edge cases must not underflow or divide by zero.
+- The `1.5x` leverage limit applies to opening, not to later market/interest drift.
 - Active NFT transfer is independent of price, health, leverage, or liquidation eligibility.
 - Transfer clears the old executor before recipient callbacks.
 - Executor permissions never create principal or withdraw assets to the executor.
@@ -717,7 +766,8 @@ Before real funds are used, verify and pin:
 - raw-unit total-return normalization;
 - executable USDC -> NVDAc route for financed opening;
 - executable NVDAc -> USDC route for reduction/liquidation;
-- practical slippage bounds at demo size.
+- practical slippage bounds at demo size;
+- simulation evidence supporting or revising the provisional 30% maintenance equity ratio before meaningful live capital.
 
 Mocks must reflect the verified semantics.
 
