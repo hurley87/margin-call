@@ -310,11 +310,13 @@ Recommended UI presets:
 
 ```text
 1.0x   Spot only      no borrowing
-1.1x   Conservative   borrow 10% of contributed equity
-1.25x  Balanced       borrow 25% of contributed equity
-1.4x   Aggressive     borrow 40% of contributed equity
-1.5x   Max            borrow 50% of contributed equity
+1.1x   Conservative   ideal target; borrow up to 10% before costs
+1.25x  Balanced       ideal target; borrow up to 25% before costs
+1.4x   Aggressive     ideal target; borrow up to 40% before costs
+1.5x   Max            ideal target; borrow up to 50% before costs
 ```
+
+The percentages are idealized, fee-free targets for contributed equity. They are not promises of principal or post-execution leverage. Fees, slippage, and rounding reduce the borrow amount needed to stay within a preset's ceiling.
 
 For a fresh position with contributed stock equity `E` and target leverage `L`:
 
@@ -322,6 +324,14 @@ For a fresh position with contributed stock equity `E` and target leverage `L`:
 initialPrincipal = E * (L - 1)
 grossStockExposure = E * L
 ```
+
+For the actual transaction, let `q` be the conservative minimum oracle-valued NVDAc received per USDC borrowed after all caller-supplied execution bounds, where `0 < q <= 1` and both values use the same normalized units. To enforce the ceiling after execution, cap principal at:
+
+```text
+costAdjustedPrincipal = (E * (L - 1)) / (L - (L - 1) * q)
+```
+
+Round this amount down, then verify recorded post-swap NAV and current debt directly. If execution returns less than the bound or the final assertion fails, the entire opening/increase reverts.
 
 For a `$100` NVDAc deposit:
 
@@ -397,6 +407,8 @@ Required principal     $50 USDC
 Borrow APR                  10%
 ```
 
+The `$50` amount is an idealized fee-free quote. The transaction uses the cost-adjusted principal below and may borrow less to preserve the post-execution 1.5x ceiling.
+
 Conceptually:
 
 ```text
@@ -420,7 +432,7 @@ Margin Call atomically:
 
 The `1.0x` path only deposits and records NVDAc and mints the NFT. It skips borrowing, swaps, and oracle-dependent validation; unavailable pricing affects display, not zero-debt opening.
 
-At `1.5x`:
+At fee-free `1.5x` before execution costs:
 
 ```text
 NVDAc gross value       $150
@@ -1307,10 +1319,11 @@ Use a fee-free mock and no elapsed interest for these idealized sizing examples.
 ### Execution and administration tests
 
 1. Reject the $100 deposit / $50 loan / $49 purchased-stock example because actual leverage exceeds 1.5x.
-2. Verify cost-aware sizing can open/increase within the ceiling and failed post-execution validation rolls back the entire draw and swap.
+2. Verify cost-adjusted sizing uses the conservative execution bound, rounds principal down, and opens/increases within the ceiling; failed post-execution validation rolls back the entire draw and swap.
 3. Allow market/interest-driven leverage above 1.5x without automatic liquidation until maintenance is breached under a `LIVE` observation.
-4. Cover zero NAV, zero equity, and negative equity without unsigned subtraction or division errors hiding liquidation eligibility; zero-debt positions remain exempt.
-5. Verify immutable deployment parameters and absence of a protocol-admin NFT transfer pause.
+4. Cover every row of the `LIVE` / `HELD` / `INVALID` action matrix, including full-debt close and debt-free actions.
+5. Cover zero NAV, zero equity, and negative equity without unsigned subtraction or division errors hiding liquidation eligibility; zero-debt positions remain exempt.
+6. Verify immutable deployment parameters and absence of a protocol-admin NFT transfer pause.
 
 ### History and performance acceptance
 
