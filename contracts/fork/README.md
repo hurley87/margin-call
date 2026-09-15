@@ -2,7 +2,9 @@
 
 Issue #420 verification. The first commit pins deployed token and oracle reads plus a
 native NVDAc transfer. The second commit pins the test-only `LIVE` / `HELD` /
-`INVALID` classifier and `MAX_LIVE_AGE`. There is still no production `OracleAdapter`.
+`INVALID` classifier and `MAX_LIVE_AGE`. The third commit pins raw NVDAc valuation
+against the total-return feed. There is still no production `OracleAdapter` or
+valuation implementation.
 
 ## Run from the repository root
 
@@ -49,6 +51,7 @@ Block **51,356,323**, selected from the RPC's finalized head:
 | NVDA feed         | `0x04689a41629776563E6822F76f2e57D148d28513` | Code exists, decimals `8`, description `Coinbase NVDA`, complete positive non-future round                    |
 | Coinbase registry | `0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD` | Code exists; `getOracleParams(NVDAc)` returns `(1000000000000000000, false)`                                  |
 | Sequencer feed    | `0xBCF85224fc0756B9Fa45aA7892530B47e10b6433` | Code exists, description `L2 Sequencer Uptime Status Feed`, standard `latestRoundData()` succeeds, answer `0` |
+| USDC              | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` | Code exists, symbol `USDC`, decimals `6`                                                                      |
 
 Exact `latestRoundData()` tuples are asserted in the test:
 
@@ -95,7 +98,74 @@ snapshot, not every future transfer.
 No balances, roles, pause flags, policy storage, or bytecode are overwritten.
 No mock calls, private keys, signatures, or mainnet transactions are used.
 
-First-commit `BaseMainnetTest` expected result: **6 passed, 0 failed, 0 skipped**.
+## Raw-unit valuation and B20 semantics
+
+Test-only reference: `contracts/test/valuation/NvdaValuation.sol`. Its RPC-free tests
+pin this exact formula for the verified decimal configuration:
+
+```text
+valueUsdcRaw =
+    stockAmountRaw
+    * feedAnswer
+    * 10^6
+    / 10^8
+    / 10^8
+
+equivalently:
+
+valueUsdcRaw = floor(stockAmountRaw * feedAnswer / 10^10)
+```
+
+The implementation uses OpenZeppelin `Math.mulDiv` with explicit floor rounding.
+For lender-risk valuation, rounding down is conservative: a sub-micro-USDC
+remainder cannot overstate collateral NAV or delay liquidation. Full-precision
+`mulDiv` also permits an intermediate `stockAmountRaw * feedAnswer` larger than
+`uint256` when the normalized result fits.
+
+`balanceOf` and `transfer` are the canonical raw custody/accounting surface. At the
+pinned block, the holder's `balanceOf` is `79781200000` raw units and the native
+transfer debits/credits exactly its requested raw amount. NVDAc returns `8` decimals.
+The deployed B20 presentation reads `scaledBalanceOf`, `toScaledBalance`, and
+`toRawBalance` are also exercised. The scaled values happen to equal the raw amount
+at this snapshot because `multiplier()` is `1e18`; they must not replace raw custody
+amounts when a future multiplier differs. Base documents that scaled/UI reads apply
+`raw * multiplier / 1e18`, while raw balances and transfer amounts stay unchanged:
+https://github.com/base/base-std/blob/main/docs/guides/scheduling-stock-splits.md
+
+The pinned native runtime rejects the newer ERC-8056 aliases such as
+`uiMultiplier()` even though current Base source documents them as aliases. The
+legacy/canonical B20 methods above are the callable snapshot evidence. This ABI
+version difference does not affect raw custody or valuation semantics.
+
+The registry returns the same current `1e18` multiplier as NVDAc. Chainlink
+documents that the Coinbase NVDA feed is already a Total Return Value:
+
+```text
+feed token price = underlying equity market price * B20 multiplier
+```
+
+Therefore the reference API accepts only the raw token amount and the already
+multiplier-adjusted feed answer. Applying `multiplier()` again double counts the
+corporate-action/dividend adjustment. The RPC-free invariant demonstrates that a
+hypothetical `1.02e18` second application incorrectly changes `$220.00` to `$224.40`.
+Today's `1e18` happens to hide that bug; this snapshot alone does not prove future
+non-1 behavior. The no-double-application rule comes from the documented Base raw/UI
+split and Chainlink total-return semantics:
+https://docs.chain.link/data-feeds/tokenized-equity-feeds/coinbase
+
+Pinned examples:
+
+- `1 NVDAc` at `$220.00` -> `220000000` USDC raw (`$220.00`).
+- `1.25 NVDAc` (`125000000` raw) at `$220.00` (`22000000000`) ->
+  `275000000` USDC raw (`$275.00`).
+- `0.12345678 NVDAc` at the pinned `$211.785` answer -> `26146294`
+  USDC raw (`$26.146294`), flooring the remaining `0.1523` base unit.
+- `5.75 NVDAc` at the pinned answer -> `1217763750` USDC raw
+  (`$1,217.763750`).
+- One smallest NVDAc raw unit at `$220.00` -> `2` USDC raw; a value below
+  one USDC base unit rounds to zero.
+
+Current `BaseMainnetTest` expected result: **9 passed, 0 failed, 0 skipped**.
 
 ## Oracle-state policy
 
