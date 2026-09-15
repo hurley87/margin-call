@@ -15,7 +15,7 @@ The canonical V1 flow is deliberately narrow:
 7. The resulting stock remains inside an isolated Position Account.
 8. Margin Call mints a Position NFT representing ownership/control of the entire live financed account.
 9. The NFT may be transferred or sold without selling the stock or refinancing the debt.
-10. Closing or liquidation unwinds the position, repays the Credit Vault first, distributes residual equity, and burns the NFT.
+10. On a normal close, Margin Call sells only enough stock to repay debt and fees, returns the remaining stock to the current NFT owner, and burns the NFT. If debt was already repaid with external USDC, the stock can be returned without a sale. Liquidation remains a full unwind.
 
 The user never receives borrowed USDC as freely spendable capital. Margin Call exposes **leveraged spot ownership**, not a general-purpose credit line.
 
@@ -125,7 +125,7 @@ A complete demo must prove:
 10. The NFT can be transferred to a second wallet while the underlying stock and debt remain unchanged.
 11. The old owner and old executor lose control after transfer.
 12. The new NFT owner gains control of the same financed account.
-13. The owner can reduce leverage or close the position.
+13. The owner can reduce leverage or close the position while preserving as much of the underlying stock exposure as possible.
 14. A simulated price decline can make the account liquidatable.
 15. A permissionless liquidator can unwind the account, repay the vault first, collect the configured reward, return residual equity, and burn the NFT.
 16. At least one tiny live Base position uses real USDC, a supported B20 stock, Chainlink pricing, and Uniswap execution.
@@ -171,7 +171,7 @@ The owner may:
 - appoint or revoke an executor;
 - transfer or sell the Position NFT while the account is transferable;
 - repay debt;
-- close the account and receive residual equity.
+- close the account and receive residual stock/equity.
 
 The owner may be:
 
@@ -267,7 +267,7 @@ Debt record -> CreditVault
 USDC may exist transiently when:
 
 - selling stock to reduce leverage;
-- selling stock during close;
+- selling only enough stock to repay debt during a normal close;
 - selling stock during liquidation;
 - receiving proceeds from an advanced order.
 
@@ -616,9 +616,8 @@ The owner can choose between:
 
 ```text
 Close
-  -> sell stock
-  -> repay debt
-  -> receive residual USDC
+  -> sell only enough stock to repay debt and fees
+  -> receive the remaining stock
 ```
 
 or:
@@ -688,15 +687,56 @@ Margin Call may run its own keeper initially, but the protocol must not depend o
 
 The current NFT owner may close an active position at any time, subject to execution availability.
 
-`closePosition(tokenId)`:
+The default V1 close should preserve the owner's underlying stock exposure rather than unnecessarily converting the entire position to USDC.
 
-1. sells the stock balance into USDC;
-2. repays outstanding Credit Vault debt;
-3. pays any configured closing/protocol fee;
-4. sends residual USDC to the current NFT owner;
-5. burns the NFT.
+`closePosition(tokenId)` should:
 
-The current owner receives the residual equity even if they were not the original opener.
+1. calculate the USDC required to repay outstanding Credit Vault debt plus any required closing/protocol fees;
+2. sell only the minimum required quantity of the configured stock into USDC, subject to slippage bounds;
+3. repay the Credit Vault in full;
+4. settle any applicable fees;
+5. return all remaining configured stock and any residual USDC to the current NFT owner;
+6. burn the NFT.
+
+Example:
+
+```text
+Before close
+NVDAc value       $180
+USDC debt          $50
+Net equity        $130
+
+Default close
+sell ~ $50 of NVDAc (plus required fees)
+repay $50 USDC debt
+return ~ $130 of NVDAc to current owner
+burn NFT
+```
+
+This is distinct from liquidation, where the protocol performs a full unwind because lender protection takes priority.
+
+### Repay externally and keep all stock
+
+`repay()` remains a normal debt-reduction primitive rather than a separate bespoke close mode.
+
+If the owner supplies external USDC and repays the account's debt before closing, `closePosition` should not force a stock sale merely to recreate USDC the account no longer owes. Once debt and required fees are fully settled, closing releases the entire remaining stock balance to the current NFT owner and burns the NFT.
+
+Conceptually:
+
+```text
+Position holds      $180 NVDAc
+Debt                 $50 USDC
+
+owner repays         $50 USDC externally
+Debt                   $0
+
+close
+-> sell no NVDAc for debt repayment
+-> return $180 NVDAc
+-> burn NFT
+```
+
+The current owner receives the remaining stock/equity even if they were not the original opener.
 
 ---
 
@@ -961,7 +1001,7 @@ Responsibilities:
 - repay debt;
 - set/revoke executors;
 - enforce transfer/risk constraints;
-- close positions;
+- close positions while preserving remaining stock exposure;
 - liquidate positions;
 - coordinate NFT mint/burn;
 - coordinate Credit Vault draws/repayments.
@@ -1049,10 +1089,20 @@ Implement:
 1. Open a healthy financed NVDA position.
 2. Optionally transfer the NFT.
 3. Current owner calls `closePosition`.
-4. Sell all NVDA into USDC.
-5. Repay vault.
-6. Return residual USDC to current NFT owner.
-7. Burn NFT.
+4. Sell only enough NVDA to cover outstanding USDC debt plus required fees.
+5. Repay the Credit Vault in full.
+6. Return all remaining NVDA and any residual USDC to the current NFT owner.
+7. Burn the NFT.
+8. Verify no debt remains and no unnecessary stock was sold.
+
+### External repayment close test
+
+1. Open a healthy financed NVDA position.
+2. Current owner supplies external USDC through `repay()` until debt is zero.
+3. Current owner calls `closePosition`.
+4. Verify no NVDA is sold for debt repayment.
+5. Return the entire remaining NVDA balance to the current owner.
+6. Burn the NFT.
 
 ### Deleverage test
 
@@ -1156,7 +1206,7 @@ Show:
 - journal;
 - increase/decrease leverage;
 - add collateral/repay;
-- close;
+- close (sell only enough stock to settle debt/fees and return the rest);
 - share link.
 
 ### Historical page
@@ -1170,6 +1220,7 @@ After burn, preserve a read-only historical page and final image state.
 - Borrowed USDC never becomes freely withdrawable user capital.
 - Credit drawn for a stock can only buy more of that same stock.
 - Financed stock cannot leave the Position Account while debt exists except through approved reduce/close/liquidation paths.
+- Normal close should not sell more stock than is required to settle debt and fees.
 - Uniswap is execution, never the solvency oracle.
 - Agent executors do not gain NFT ownership merely by receiving trade authority.
 - NFT transfer invalidates prior executor permissions.
@@ -1190,7 +1241,7 @@ After burn, preserve a read-only historical page and final image state.
 - Margin Call coordinator/risk engine.
 - Oracle and execution interfaces.
 - Local mocks.
-- Open-from-stock, finance-same-stock, transfer, deleverage, close, and liquidation Foundry tests.
+- Open-from-stock, finance-same-stock, transfer, deleverage, stock-preserving close, external-repayment close, and liquidation Foundry tests.
 
 ### Phase 2 — Base execution
 
