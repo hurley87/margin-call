@@ -6,6 +6,8 @@
 
 The product is not implemented. The repository currently provides a coming-soon site, retained application helpers, and a Foundry workspace. Contracts, keeper, indexing, app/agent flows, and live integration evidence remain work to complete.
 
+V1 deliberately keeps ownership and position accounting in one contract: `MarginCall` itself inherits ERC-721 and mints/burns the Position NFTs. There is no separate `PositionNFT` contract.
+
 - [Canonical product glossary](../CONTEXT.md)
 - [NFT transfer availability decision](adr/0001-independent-nft-transfer-availability.md)
 - [Treasury loss and liquidation decision](adr/0002-finalize-shortfalls-as-treasury-losses.md)
