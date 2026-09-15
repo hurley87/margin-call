@@ -37,7 +37,7 @@ V1 demonstrates **transferable financed positions**, not a functioning secondary
 - NVDAc only.
 - One stock per position.
 - Margin Call directly custodies position NVDAc.
-- Opening leverage from `1.0x` through `1.5x`.
+- Opening leverage uses one of five fixed presets: `1.0x`, `1.1x`, `1.25x`, `1.4x`, or `1.5x`.
 - `1.0x` is spot-only and draws no credit.
 - Above `1.0x`, borrowed USDC can only buy more NVDAc.
 - Borrowed USDC is never freely withdrawable.
@@ -50,7 +50,7 @@ V1 demonstrates **transferable financed positions**, not a functioning secondary
 - Standard ERC-721 transfer semantics with **no financial transfer gate**.
 - One optional executor per position.
 
-The post-open management surface is deliberately minimal. There is no leverage-increase action and no add-collateral action in V1.
+The post-open management surface is deliberately minimal. There is no leverage-increase action, add-collateral action, or arbitrary target-leverage adjustment in V1.
 
 ---
 
@@ -78,7 +78,7 @@ There is intentionally no:
 - protocol liquidation fee;
 - liquidator token or USDC reward.
 
-A user who wants a different leveraged position can close and reopen. V1 does not optimize ongoing portfolio adjustment.
+A user who wants a materially different leveraged position can settle, close, and reopen. V1 does not optimize continuous portfolio adjustment.
 
 ---
 
@@ -102,7 +102,7 @@ Responsibilities:
 
 - custody NVDAc for all live positions;
 - maintain position accounting by `tokenId`;
-- open positions at `1.0x-1.5x`;
+- open positions at one of the five allowed leverage presets;
 - draw USDC from `CreditPool` only during financed opening;
 - buy additional NVDAc during financed opening;
 - accrue simple interest;
@@ -162,13 +162,60 @@ sum(stockAmount of all live positions)
 
 One position must never consume another position's recorded stock.
 
+V1 does not maintain a per-position USDC balance. Repayment transfers only the amount actually owed, `reduceExposure` immediately sends any sale surplus to the current owner, and close returns the position's remaining NVDAc.
+
+---
+
+## Risk model
+
+All solvency calculations use a `LIVE` Chainlink observation. `currentDebt()` remains time-based and readable even when pricing is `HELD` or `INVALID`.
+
+For one position:
+
+```text
+NAV = oracle value of recorded NVDAc
+currentDebt = principal + all accrued interest through now
+equity = NAV - currentDebt
+equityRatio = equity / NAV
+healthFactor = equityRatio / maintenanceEquityRatio
+```
+
+V1 risk constants are defined in one place:
+
+```text
+Minimum opening leverage      1.0x
+Maximum opening leverage      1.5x
+Allowed opening presets       1.0x, 1.1x, 1.25x, 1.4x, 1.5x
+Initial borrow APR            10%
+Borrow APR hard cap           50%
+Maintenance equity ratio      30%   (provisional pending simulation)
+Liquidation threshold         healthFactor < 1.0
+Liquidation                   full unwind
+```
+
+A financed position is liquidatable only when pricing is `LIVE` and `healthFactor < 1.0`.
+
+Implement the predicate without unsafe unsigned subtraction or division:
+
+- if `NAV == 0` and debt is positive, the position is liquidatable;
+- if `currentDebt >= NAV`, equity is zero or negative and the position is liquidatable;
+- otherwise calculate positive equity, `equityRatio`, and `healthFactor` normally.
+
+A zero-debt `1.0x` position is not liquidatable for lender solvency.
+
+The `1.5x` value is an **opening ceiling**, not a maintenance threshold. After opening, market moves and interest may push gross leverage above `1.5x`; liquidation occurs only when the maintenance predicate above is breached.
+
+Transfer never consults this risk model. A liquidatable or underwater position may still transfer, and its existing liquidation eligibility follows the NFT.
+
+The `30%` maintenance equity ratio is the V1 starting parameter and must be validated with simulation before meaningful live capital is deployed.
+
 ---
 
 ## Opening a position
 
-### Leverage choices
+### Fixed leverage presets
 
-The user chooses leverage only when opening:
+The contract accepts only these opening leverage values:
 
 ```text
 1.0x   Spot only
@@ -178,7 +225,7 @@ The user chooses leverage only when opening:
 1.5x   Max
 ```
 
-The contract may accept intermediate values from `1.0x` through `1.5x`.
+Intermediate leverage values are intentionally rejected in V1. This keeps contract validation and UI behavior aligned and removes a feature that adds no demo value.
 
 For a fee-free example with `$100` of contributed NVDAc:
 
@@ -191,7 +238,7 @@ Target    Principal    Gross exposure
 1.5x      $50          $150
 ```
 
-Execution costs must be included when sizing the actual loan so post-execution leverage does not exceed the selected target or the hard `1.5x` ceiling.
+Execution costs must be included when sizing the actual loan so post-execution leverage does not exceed the selected preset or the hard `1.5x` ceiling.
 
 ### `openPosition`
 
@@ -203,21 +250,21 @@ openPosition(stockAmount, targetLeverage, minNvdaOut)
 
 For `1.0x`, Margin Call transfers in NVDAc, records the position, and mints the NFT. No oracle, credit draw, or swap is required.
 
-For financed opening above `1.0x`, Margin Call atomically:
+For a financed preset above `1.0x`, Margin Call atomically:
 
 1. transfers the contributed NVDAc into custody;
 2. requires a `LIVE` oracle observation;
 3. values the contribution using the total-return feed;
-4. validates the requested target from `1.0x-1.5x`;
+4. validates that the target is one of the five allowed presets;
 5. sizes the USDC principal conservatively for execution costs;
 6. checks liquid USDC capacity in `CreditPool`;
 7. draws the principal;
 8. swaps USDC -> NVDAc with caller `minNvdaOut` plus protocol execution bounds;
 9. records the resulting NVDAc and principal;
-10. verifies post-execution leverage is no greater than the requested target / `1.5x` ceiling;
+10. verifies post-execution leverage is no greater than the selected preset / `1.5x` ceiling;
 11. mints the Position NFT.
 
-Failure of the oracle check, credit-capacity check, swap, or post-execution leverage check reverts the entire financed opening.
+Failure of the preset check, oracle check, credit-capacity check, swap, or post-execution leverage check reverts the entire financed opening.
 
 There is no later `increaseLeverage`. Opening is the only action that creates principal.
 
@@ -282,50 +329,6 @@ Repayment, reduction, close, and liquidation restore only the USDC actually retu
 
 ---
 
-## Risk model
-
-All solvency calculations use a `LIVE` Chainlink observation. `currentDebt()` remains time-based and readable even when pricing is `HELD` or `INVALID`.
-
-For one position:
-
-```text
-NAV = oracle value of recorded NVDAc
-currentDebt = principal + all accrued interest through now
-equity = NAV - currentDebt
-equityRatio = equity / NAV
-healthFactor = equityRatio / maintenanceEquityRatio
-```
-
-V1 risk constants are defined in one place:
-
-```text
-Minimum opening leverage      1.0x
-Maximum opening leverage      1.5x
-Initial borrow APR            10%
-Borrow APR hard cap           50%
-Maintenance equity ratio      30%   (provisional pending simulation)
-Liquidation threshold         healthFactor < 1.0
-Liquidation                   full unwind
-```
-
-A financed position is liquidatable only when pricing is `LIVE` and `healthFactor < 1.0`.
-
-Implement the predicate without unsafe unsigned subtraction or division:
-
-- if `NAV == 0` and debt is positive, the position is liquidatable;
-- if `currentDebt >= NAV`, equity is zero or negative and the position is liquidatable;
-- otherwise calculate positive equity, `equityRatio`, and `healthFactor` normally.
-
-A zero-debt `1.0x` position is not liquidatable for lender solvency.
-
-The `1.5x` value is an **opening ceiling**, not a maintenance threshold. After opening, market moves and interest may push gross leverage above `1.5x`; liquidation occurs only when the maintenance predicate above is breached.
-
-Transfer never consults this risk model. A liquidatable or underwater position may still transfer, and its existing liquidation eligibility follows the NFT.
-
-The `30%` maintenance equity ratio is the V1 starting parameter and must be validated with simulation before meaningful live capital is deployed.
-
----
-
 ## Repayment
 
 ### `repay`
@@ -336,7 +339,15 @@ repay(tokenId, amount)
 
 `repay` is oracle-free.
 
-The caller supplies USDC. Margin Call accrues interest, applies payment to interest first and principal second, and returns the repaid USDC to `CreditPool`.
+Margin Call first accrues interest and calculates `debtBefore = currentDebt(tokenId)`. The actual payment is capped at the debt:
+
+```text
+payAmount = min(amount, debtBefore)
+```
+
+Only `payAmount` is transferred from the caller. If `amount > debtBefore`, the excess never leaves the caller; there is no refund transaction and no residual USDC credited to the position.
+
+Apply `payAmount` to accrued interest first and principal second, then return that USDC to `CreditPool`. `DebtRepaid` records the actual amount applied, not the caller's larger requested cap.
 
 The owner or executor may repay. Payment cannot be redirected to either caller.
 
@@ -363,8 +374,8 @@ Margin Call:
 5. sells exactly `stockAmount` NVDAc -> USDC;
 6. enforces caller `minOut` and the protocol's oracle-derived slippage floor;
 7. applies realized USDC to accrued interest first and principal second;
-8. returns repaid USDC to `CreditPool`;
-9. if realized USDC exceeds current debt, sends only the surplus to the current NFT owner;
+8. returns the debt repayment to `CreditPool`;
+9. if realized USDC exceeds current debt, immediately sends the excess to the current NFT owner;
 10. reduces the position's recorded NVDAc by the exact amount sold.
 
 `reduceExposure` does not accept a target leverage and never borrows additional USDC.
@@ -520,9 +531,11 @@ If debt remains, the owner must first either:
 
 Once debt is zero, close is oracle-free:
 
-1. return all remaining recorded NVDAc and any residual USDC to the current NFT owner;
+1. return all remaining recorded NVDAc to the current NFT owner;
 2. mark the position closed;
 3. burn the NFT.
+
+There is no position-attributed residual USDC to return: `repay` never takes an overpayment and `reduceExposure` sends sale surplus to the owner immediately.
 
 This deliberately removes debt-covering swap logic from the close function.
 
@@ -618,20 +631,22 @@ There is no `ExposureIncreased` or `CollateralAdded` event because those actions
 
 The live demo must prove the actual product, not merely open/display/close.
 
+The demo is intentionally scheduled for a `LIVE` oracle window because the executor step must exercise `reduceExposure`. Before beginning the financed opening, confirm the adapter is `LIVE` and that the expected feed window is long enough to reach step 4. If the feed becomes `HELD` or `INVALID` before that step, do not use a stale mark or weaken the rule; wait for a qualifying `LIVE` observation and resume the demo.
+
 Required sequence:
 
-1. **A opens a financed NVDAc position.** Confirm contributed NVDAc, borrowed USDC, purchased NVDAc, principal, and NFT ownership.
+1. **A opens a financed NVDAc position during a `LIVE` window.** Confirm contributed NVDAc, borrowed USDC, purchased NVDAc, principal, and NFT ownership.
 2. **Interest accrues.** Wait or advance time and prove `currentDebt > principal` without a keeper transaction.
 3. **A appoints executor E.**
-4. **E acts.** E successfully performs a permitted management action, preferably a small `reduceExposure`, proving delegated control works.
+4. **E reduces exposure during `LIVE` pricing.** E performs a small `reduceExposure`, proving delegated management and the bounded NVDAc -> USDC path.
 5. **A transfers the Position NFT to B.** No oracle/health gate may block the transfer. Stock and debt remain in place; the executor is cleared.
 6. **A and E lose authority.** Calls by A or E to `repay`, `reduceExposure`, `setExecutor`, or `closePosition` must revert where authorization is required. Standard ERC-721 ownership/approval behavior applies separately.
 7. **B manages the inherited position.** B may appoint a new executor, repay, or reduce exposure.
 8. **B settles the debt to zero.** For the simplest live path, B repays the remaining debt with external USDC.
-9. **B closes.** All remaining NVDAc/residual USDC goes to B and the NFT burns.
+9. **B closes.** All remaining recorded NVDAc goes to B and the NFT burns.
 10. Record transaction receipts and before/after accounting for A, E, B, the position, and `CreditPool`.
 
-If the demo crosses a held market period, the UI must visibly report `HELD`. Transfer, repayment, executor updates, and debt-free close remain available; financed opening, reduction, and liquidation do not.
+If the demo later crosses a held market period, the UI must visibly report `HELD`. Transfer, repayment, executor updates, and debt-free close remain available; financed opening, reduction, and liquidation do not.
 
 A purchase payment is not part of this V1 acceptance test. Do not claim that the demo creates a functioning secondary market.
 
@@ -641,9 +656,11 @@ A purchase payment is not part of this V1 acceptance test. Do not claim that the
 
 At minimum, tests must cover:
 
-- opening `1.0x` through `1.5x`, including cost-aware post-swap leverage checks;
+- exactly the five opening leverage presets, including rejection of intermediate values;
+- cost-aware post-swap leverage checks for each financed preset;
 - finite CreditPool capacity and zero-credit `1.0x` opening;
 - lazy simple interest and interest-first ordinary repayment;
+- `repay(tokenId, amount)` with `amount > currentDebt`, proving only current debt is transferred and no residual/refund balance is created;
 - exact Risk Model math for NAV, current debt, equity, equity ratio, and health factor using the 30% maintenance ratio;
 - liquidation at `healthFactor < 1.0`, non-liquidation at/above the threshold, and safe handling of zero NAV / zero or negative equity;
 - leverage drift above `1.5x` without liquidation until the maintenance threshold is breached;
@@ -653,6 +670,7 @@ At minimum, tests must cover:
 - executor clearing on transfer;
 - transfers of healthy, liquidatable, underwater, `HELD`, `INVALID`, and reverting-oracle positions without any oracle call;
 - debt-free close only, including close after external repayment;
+- close returning remaining NVDAc only, with no position-attributed residual USDC path;
 - full liquidation with no reward/fee;
 - shortfall finalization and split `BadDebtRealized` accounting;
 - oracle `LIVE` / `HELD` / `INVALID` schedule behavior;
@@ -667,12 +685,21 @@ At minimum, tests must cover:
 
 ### Open
 
-Show:
+Show the five fixed leverage presets only:
+
+```text
+1.0x
+1.1x
+1.25x
+1.4x
+1.5x
+```
+
+Also show:
 
 ```text
 NVDAc deposit
 Oracle state
-Leverage choice
 Available credit
 Borrow APR
 Estimated principal
@@ -700,6 +727,8 @@ Show:
 - close when debt is zero;
 - lifecycle history and share link.
 
+For repayment, the UI may allow a large user-entered cap or a "Repay all" action, but must communicate that the contract transfers at most `currentDebt`.
+
 There is no increase-leverage or add-collateral control.
 
 ### Agent surface
@@ -718,7 +747,7 @@ close_position
 liquidate
 ```
 
-NFT transfer uses the standard wallet/ERC-721 interface.
+`open_position` accepts only the five supported leverage presets. NFT transfer uses the standard wallet/ERC-721 interface.
 
 ---
 
@@ -736,8 +765,10 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 
 - Borrowed USDC is never freely withdrawable.
 - Opening is the only action that creates new principal.
+- Opening accepts only the five fixed leverage presets.
 - Borrowed USDC can only buy NVDAc.
 - No position may consume another position's recorded NVDAc.
+- `repay` transfers at most current debt; an over-sized requested amount never becomes position USDC.
 - Financed opening and liquidation require `LIVE` solvency pricing.
 - `repay`, transfer, executor updates, and debt-free close are oracle-independent.
 - `reduceExposure` requires `LIVE` pricing plus caller and protocol execution bounds.
@@ -748,7 +779,7 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 - Active NFT transfer is independent of price, health, leverage, or liquidation eligibility.
 - Transfer clears the old executor before recipient callbacks.
 - Executor permissions never create principal or withdraw assets to the executor.
-- Close requires zero debt.
+- Close requires zero debt and returns remaining recorded NVDAc.
 - Liquidation is full, permissionless, and unrewarded in V1.
 - Shortfall losses are isolated to the protocol treasury and finalized exactly once.
 
@@ -767,6 +798,7 @@ Before real funds are used, verify and pin:
 - executable USDC -> NVDAc route for financed opening;
 - executable NVDAc -> USDC route for reduction/liquidation;
 - practical slippage bounds at demo size;
+- the actual `LIVE` feed window in which the required live acceptance flow will be run;
 - simulation evidence supporting or revising the provisional 30% maintenance equity ratio before meaningful live capital.
 
 Mocks must reflect the verified semantics.
@@ -777,6 +809,7 @@ Mocks must reflect the verified semantics.
 
 - `increaseLeverage` / post-open re-levering;
 - add collateral;
+- arbitrary/intermediate opening leverage values beyond the five presets;
 - target-leverage adjustment;
 - purchase/payment settlement for NFT sales;
 - first-party marketplace;
@@ -799,4 +832,4 @@ Mocks must reflect the verified semantics.
 
 ## Final V1 thesis
 
-> **Deposit NVDAc, choose leverage once, finance more NVDAc with finite protocol USDC, and receive a transferable NFT representing the live stock-plus-debt position. Repay or reduce exposure, transfer the position without an oracle/health gate, and let the new owner settle and close it.**
+> **Deposit NVDAc, choose one of five opening leverage presets, finance more NVDAc with finite protocol USDC, and receive a transferable NFT representing the live stock-plus-debt position. Repay or reduce exposure, transfer the position without an oracle/health gate, and let the new owner settle and close it.**
