@@ -31,7 +31,7 @@ The core product thesis remains:
 
 > **Margin Call makes financed spot positions transferable without unwinding them.**
 
-A secondary market is the product thesis. V1 proves transfer and continued management by a new owner; purchase settlement and market demand are not established by an ERC-721 transfer alone.
+V1 proves transferability and continued management by a new owner. It does **not** claim to create a functioning secondary market: purchase/payment settlement, order execution, marketplace liquidity, and market demand are not implemented in V1 and are deferred until after the hackathon.
 
 The hackathon implementation intentionally does **not** attempt to solve public LPs, generalized multi-asset custody, smart accounts per position, dynamic interest-rate markets, or production-grade governance.
 
@@ -78,6 +78,8 @@ The NFT is therefore not just a receipt or collectible wrapper. It is the owners
 
 When the NFT changes hands, the underlying stock and debt do not move. Only ownership/control changes.
 
+The V1 proof is the ownership/control handoff itself: the position remains live before and after transfer, old authorities lose control, and the new owner can continue managing and ultimately close the same financed position. Atomic purchase settlement is a future extension, not part of the V1 product claim.
+
 ---
 
 ## V1 scope
@@ -109,6 +111,7 @@ V1 is deliberately narrow:
 - Active NFTs may transfer regardless of oracle availability or position health, including while liquidatable. Margin Call imposes no oracle, health, or admin pause on NFT transfers.
 - Shortfall liquidation realizes a treasury loss without recourse to any NFT owner or other position.
 - A first-party keeper is required to submit underwater liquidations that pay no reward.
+- Purchase/payment settlement for NFT sales is out of scope; V1 proves transferable financed positions, not a complete secondary marketplace.
 
 The hackathon goal is to prove this lifecycle locally and then execute the smallest practical real position on Base.
 
@@ -836,11 +839,11 @@ All standard ERC-721 transfer entry points allow an active NFT to transfer regar
 
 This includes already-liquidatable and underwater positions. The new owner receives the unchanged position and its existing liquidation risk; no personal debt claim attaches to any owner. A transfer grants no grace period or exemption from liquidation. After transfer, any liquidation residual belongs to the new current owner.
 
-NFT sales are always available at the Margin Call transfer layer while the NFT exists. Marketplace availability and payment settlement are separate integrations. A close or liquidation burns the NFT, so an order referencing that NFT can no longer settle afterward. A sale executed before liquidation does not prevent the new owner's position from being liquidated next.
+NFT transfers are always available at the Margin Call transfer layer while the NFT exists. A future purchase-settlement layer may atomically exchange payment for the NFT, but that mechanism is not part of V1. A close or liquidation burns the NFT, so an order referencing that NFT can no longer settle afterward. A transfer executed before liquidation does not prevent the new owner's position from being liquidated next.
 
 Clear the old executor before any recipient callback can manage the transferred position. Permission tests must cover owner transfers, approved addresses, operators, and both safe-transfer variants.
 
-Position pages and sale presentations must expose current debt and indicate `LIVE`, `HELD`, or `INVALID` pricing state plus the last price timestamp where available. A displayed held estimate is not a promise that stock, debt, or health is current. V1 proves transferability, not protected purchase settlement for a mutable position.
+Position pages and transfer/sale presentations must expose current debt and indicate `LIVE`, `HELD`, or `INVALID` pricing state plus the last price timestamp where available. A displayed held estimate is not a promise that stock, debt, or health is current. V1 proves transferability, not protected purchase settlement for a mutable position.
 
 ---
 
@@ -1218,19 +1221,23 @@ Implement:
 The amounts below assume a fee-free mock execution rate equal to the oracle price. The execution-cost tests separately cover real post-execution leverage.
 
 1. Fund Credit Pool with `500 USDC`.
-2. Give owner mock NVDAc worth `100 USDC`.
-3. Open at `1.5x` with a `LIVE` observation and caller `minNvdaOut`.
+2. Give wallet A mock NVDAc worth `100 USDC`.
+3. A opens a financed position at `1.5x` with a `LIVE` observation and caller `minNvdaOut`.
 4. Verify Margin Call receives the original NVDAc.
 5. Verify `50 USDC` is drawn from Credit Pool.
 6. Verify mock execution converts it into more NVDAc held by Margin Call.
 7. Verify position accounting shows approximately `150 USDC` of NVDAc, `50 USDC` principal, and `100 USDC` equity.
 8. Verify Credit Pool liquid USDC falls by `50`.
 9. Warp time and verify interest grows lazily.
-10. Transfer the NFT to a second wallet and verify stock/debt remain unchanged, the old executor clears, and the previous owner/executor can no longer manage it.
-11. Reduce leverage with caller bounds and verify NVDAc is sold and principal returns to Credit Pool.
-12. Increase leverage again if capacity and `LIVE` pricing exist.
-13. Put oracle into `HELD`, close with caller `maxNvdaIn`, and verify only enough NVDAc is sold to repay current debt while remaining NVDAc returns to the owner.
-14. Open another position, push a `LIVE` oracle price below maintenance, liquidate, repay Credit Pool first, pay liquidator reward, return residual equity, and burn NFT.
+10. A appoints executor E.
+11. E performs a real authorized management action before transfer, preferably a small bounded deleverage while pricing is `LIVE`; verify stock/debt/accounting change as expected and A remains owner.
+12. A transfers the NFT to wallet B. Verify the same stock/debt state follows the NFT and E is cleared during transfer.
+13. After transfer, verify A and E both fail every owner/executor-only management path they previously could use, including increase leverage, reduce leverage, reduce to `1.0x`, repay, executor management, and close; also verify A no longer has NFT transfer authority unless B separately approves it.
+14. Verify B can manage the same position. Exercise at least one bounded management action that is valid for the current oracle state.
+15. B closes the position. Verify current debt is repaid in full, the NFT burns, and all remaining position equity/residual NVDAc/USDC is paid to B, not A or E.
+16. Open another position, push a `LIVE` oracle price below maintenance, liquidate, repay Credit Pool first, pay liquidator reward, return residual equity, and burn NFT.
+
+This owner → executor → transferee lifecycle is the core V1 product acceptance test. A simpler open → display → close path is insufficient.
 
 ### Capacity test
 
@@ -1372,13 +1379,27 @@ If bounded exact-output is unavailable, record the exact bounded fallback used f
 - draw for one tiny position;
 - repay/close and verify USDC returns.
 
-### 4. Tiny end-to-end position
+### 4. Required two-owner acceptance flow
 
-Wallet A opens the smallest practical real NVDAc position and appoints an executor. After interest has accrued, A transfers the NFT to wallet B. Display the unchanged stock/debt, verify A and its executor can no longer manage the position, then have B manage and close it and receive the residual stock/USDC. Record receipts and accounting before and after transfer.
+The live acceptance flow must test the actual V1 ownership/delegation product, not merely open → display → close.
+
+Required sequence:
+
+1. **Wallet A opens financed.** A deposits real NVDAc and opens the smallest practical financed position above `1.0x`.
+2. **Interest accrues.** Wait or advance enough real time for `currentDebt()` to exceed opening principal; record the before/after debt.
+3. **A appoints executor E.** Verify the executor assignment onchain.
+4. **E acts before transfer.** E performs one real authorized bounded management action, preferably a small deleverage while pricing is `LIVE`. Record the transaction and resulting stock/debt state.
+5. **A transfers the Position NFT to wallet B.** No unwind, debt repayment, refinance, or oracle gate occurs. Verify stock/debt remain the same across the transfer and E is cleared.
+6. **A and E lose authority.** Attempt each owner/executor-only management path that A or E previously could use and verify it reverts: increase, reduce, reduce-to-one, repay, executor management, and close. Verify A also cannot transfer the NFT after ownership moved unless B separately approves A.
+7. **B manages the same live financed position.** B performs at least one valid bounded management action under the current oracle state.
+8. **B closes.** The protocol repays current debt in full, burns the NFT, and sends all remaining residual NVDAc/USDC/equity to B. A and E receive nothing from the close.
+9. **Record evidence.** Capture transaction hashes, ownership/executor state, principal/current debt, stock amount, and Credit Pool balance at each material step.
 
 If the demo crosses a `HELD` feed period, the UI must visibly show that state. Financing increases/liquidation remain disabled, while the bounded full-debt close path remains usable if the execution integration has passed its acceptance test.
 
-This is the required transferability demonstration. A purchase payment is not part of this acceptance test; no functioning secondary market is claimed from the transfer alone.
+This is the required V1 acceptance demonstration: **a financed spot position can be delegated, acted on, transferred without unwind, controlled by the new owner, and closed with residual equity paid to that new owner.**
+
+A purchase payment is deliberately not part of this acceptance test. Until atomic purchase/payment settlement exists, Margin Call should say it **makes financed positions transferable** rather than claiming it has created a functioning secondary market.
 
 A live liquidation can be demonstrated on a fork/local environment if intentionally pushing a real position into liquidation is impractical.
 
@@ -1493,7 +1514,7 @@ Character state can be derived from P&L, health, and lifecycle status only when 
 
 The financial metrics remain visible in the position page/card. Art never affects accounting.
 
-A first-party NFT marketplace is not required. Standard ERC-721 transferability plus continued management and close by the new owner demonstrates the V1 primitive. Payment settlement and market demand remain outside that proof.
+A first-party NFT marketplace is not required. Standard ERC-721 transferability plus continued management and close by the new owner demonstrates the V1 primitive. Do not claim a functioning secondary market until purchase/payment settlement exists and can atomically exchange consideration for the Position NFT. Marketplace liquidity and demand remain separate product questions.
 
 ---
 
@@ -1584,7 +1605,7 @@ Do not add token rewards to liquidation in V1.
 - Schedule-aware Chainlink/registry adapter.
 - Bounded Uniswap adapter.
 - Real-USDC Credit Pool.
-- Tiny live open, interest accrual, transfer to a second wallet, management, and close.
+- Run the required live acceptance flow: A opens financed → interest accrues → A appoints E → E acts → A transfers to B → A/E lose authority → B manages → B closes and receives residual equity.
 
 ### Phase 3 — App/agent demo
 
@@ -1606,6 +1627,8 @@ Do not add token rewards to liquidation in V1.
 
 Only add these if the core product is worth extending:
 
+- purchase/payment settlement for Position NFT sales, including atomic NFT-for-payment settlement and any first-party secondary-market order flow;
+- marketplace liquidity/discovery infrastructure beyond standard ERC-721 transferability;
 - ERC-4626 / public LP shares;
 - LP withdrawals and reserve management;
 - utilization-based variable APR;
@@ -1634,7 +1657,7 @@ The product decisions above are settled for this V1 proposal. The following impl
 4. Validate the starting 30% maintenance equity ratio with a simulation before deployment, then fix the selected value for that deployment.
 5. Integer precision and rounding for leverage, raw-unit total-return valuation, accrual, repayment, loss accounting, and fractional-interest remainder handling. Accrual frequency must not allow material interest avoidance.
 6. Keeper polling/retry settings, gas budget, and persistent-failure reporting.
-7. Demo Credit Pool funding amount and receipt-based live acceptance evidence.
+7. Demo Credit Pool funding amount and receipt-based evidence for every step of the required A → E → B live acceptance flow.
 8. Performance valuation conventions for contributions/withdrawals and held/invalid-price handling, consistent with the since-inception definition.
 
 These verification items do not reopen the oracle action matrix, raw-unit total-return valuation rule, transfer availability, loss allocation, permission separation, or the two-owner demonstration. Any integration evidence that requires changing those decisions must be surfaced explicitly.
