@@ -40,14 +40,14 @@ The Credit Pool's liquid USDC available for new financed openings.
 **Principal**:
 Borrowed USDC that remains unpaid on a position, excluding interest.
 
+**Borrow APR**:
+The immutable V1 financing rate: 10% simple APR. V1 has no rate setter or APR-admin surface.
+
 **Accrued interest**:
-The simple financing charge earned on outstanding principal over elapsed time.
+The simple financing charge earned on outstanding principal over elapsed time at the fixed 10% V1 APR.
 
 **Current debt**:
 Remaining principal plus all accrued interest through the current time.
-
-**Outstanding principal**:
-The sum of remaining principal across active positions. Finalized liquidation removes the affected position's remaining principal, including any unrecovered portion.
 
 **NAV**:
 The oracle-valued gross NVDAc exposure of a position before subtracting debt.
@@ -84,13 +84,10 @@ Standard ERC-721 ownership transfer with no oracle, health, leverage, or positiv
 A permissionless full unwind of an eligible financed position. V1 pays no liquidator reward or protocol liquidation fee.
 
 **Shortfall**:
-The amount by which current debt exceeds actual liquidation proceeds, including unrecovered principal and unpaid interest.
+The amount by which current debt exceeds actual liquidation proceeds.
 
 **Realized bad debt**:
-The shortfall recorded when liquidation finalizes, absorbed by the protocol treasury without a claim on any NFT owner or other position.
-
-**Principal loss**:
-Borrowed principal not recovered by liquidation proceeds, tracked separately from unpaid interest.
+The liquidation shortfall recorded by `BadDebtRealized(tokenId, shortfall)`, absorbed by the protocol treasury without a claim on any NFT owner or other position.
 
 **First-party keeper**:
 The protocol-operated participant that submits eligible liquidations. It has no privileged bypass and receives no protocol liquidation reward.
