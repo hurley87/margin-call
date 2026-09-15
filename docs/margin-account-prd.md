@@ -611,6 +611,8 @@ event BadDebtRealized(
 );
 ```
 
+The principal-versus-interest decomposition is intentionally derived offchain rather than emitted: with fixed 10% simple interest, interest-first repayment, and the `CreditDrawn`, `DebtRepaid`, and `ExposureReduced` event history, an indexer can reconstruct it deterministically.
+
 The treasury absorbs the shortfall. There is no claim on the current owner, any prior owner, or another position, and no aggregate principal state needs to be repaired or decremented during finalization.
 
 A successful shortfall liquidation still deletes live state and burns the NFT. Failed oracle, token-transfer, or bounded-swap execution reverts atomically and leaves the position active.
