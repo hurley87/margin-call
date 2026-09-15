@@ -5,7 +5,7 @@ Margin Call is the proposed product for transferable financed spot positions. Th
 ## Positions and ownership
 
 **Margin Call**:
-The product that finances additional NVDAc exposure and makes each stock-plus-debt position transferable.
+The product that finances additional NVDAc exposure and makes each stock-plus-debt position transferable. In V1, `MarginCall` itself inherits OpenZeppelin ERC-721 and is the Position NFT contract; there is no separate `PositionNFT` contract.
 _Avoid_: Stock Gacha, shared inventory protocol
 
 **Position**:
@@ -13,8 +13,8 @@ One attributed quantity of NVDAc together with its remaining principal, accrued 
 _Avoid_: Lot, Position Account
 
 **Position NFT**:
-The transferable ownership representation of an active position, including its existing debt and liquidation risk.
-_Avoid_: Collectible, debt-free receipt
+The ERC-721 ownership representation of an active position, minted and burned directly by `MarginCall`, including its existing debt and liquidation risk.
+_Avoid_: Separate PositionNFT contract, collectible, debt-free receipt
 
 **Position owner**:
 The current holder of a Position NFT and beneficiary of that position's residual assets. Ownership does not create personal liability for a liquidation shortfall.
@@ -76,7 +76,7 @@ Sell a caller-specified amount of NVDAc into USDC and apply realized proceeds to
 Owner-initiated exit available only after current debt reaches zero. It returns remaining recorded NVDAc and burns the NFT.
 
 **Transfer**:
-Standard ERC-721 ownership transfer with no oracle, health, leverage, or positive-equity gate. Existing stock, debt, interest, and liquidation risk follow the NFT unchanged.
+Standard ERC-721 ownership transfer implemented directly by `MarginCall`, with no oracle, health, leverage, or positive-equity gate. Existing stock, debt, interest, and liquidation risk follow the NFT unchanged. The old executor is cleared internally during the ERC-721 ownership update before any safe-transfer receiver callback.
 
 ## Settlement and losses
 
