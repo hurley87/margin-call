@@ -42,7 +42,7 @@ V1 demonstrates **transferable financed positions**, not a functioning secondary
 - Above `1.0x`, borrowed USDC can only buy more NVDAc.
 - Borrowed USDC is never freely withdrawable.
 - Protocol-owned USDC `CreditPool`; no public LP vault.
-- Simple borrow interest, initially `10% APR`.
+- Simple borrow interest at an immutable `10% APR`.
 - Chainlink total-return pricing for solvency.
 - Uniswap for NVDAc/USDC execution.
 - Full liquidation only.
@@ -76,7 +76,8 @@ There is intentionally no:
 - arbitrary execution call;
 - partial liquidation;
 - protocol liquidation fee;
-- liquidator token or USDC reward.
+- liquidator token or USDC reward;
+- APR setter or rate-admin action.
 
 A user who wants a materially different leveraged position can settle, close, and reopen. V1 does not optimize continuous portfolio adjustment.
 
@@ -105,7 +106,7 @@ Responsibilities:
 - open positions at one of the five allowed leverage presets;
 - draw USDC from `CreditPool` only during financed opening;
 - buy additional NVDAc during financed opening;
-- accrue simple interest;
+- accrue simple interest at the fixed V1 APR;
 - accept external USDC repayment;
 - reduce exposure by selling caller-specified NVDAc and applying proceeds to debt;
 - manage one executor;
@@ -130,7 +131,7 @@ Single NVDAc Chainlink total-return pricing/state adapter.
 
 Single-purpose NVDAc/USDC Uniswap adapter with fixed approved tokens, fixed settlement path, and bounded execution.
 
-There is no ERC-4626 vault, Position Account clone, asset registry, utilization-rate module, or generalized router in V1.
+There is no ERC-4626 vault, Position Account clone, asset registry, utilization-rate module, generalized router, APR admin module, or global outstanding-principal counter in V1.
 
 ---
 
@@ -186,8 +187,7 @@ V1 risk constants are defined in one place:
 Minimum opening leverage      1.0x
 Maximum opening leverage      1.5x
 Allowed opening presets       1.0x, 1.1x, 1.25x, 1.4x, 1.5x
-Initial borrow APR            10%
-Borrow APR hard cap           50%
+Borrow APR                    10%   (immutable in V1)
 Maintenance equity ratio      30%   (provisional pending simulation)
 Liquidation threshold         healthFactor < 1.0
 Liquidation                   full unwind
@@ -272,7 +272,9 @@ There is no later `increaseLeverage`. Opening is the only action that creates pr
 
 ## Borrow interest
 
-Initial V1 APR: **10%**.
+V1 borrow APR is **fixed at 10% and immutable**.
+
+Implement it as a compile-time protocol constant (for example `BORROW_APR = 10%`), not constructor-configurable governance state. There is no `setBorrowApr`, no APR cap, no rate-admin role, and no requirement to track aggregate outstanding principal for rate changes.
 
 Interest is:
 
@@ -295,7 +297,7 @@ Conceptually:
 ```text
 unaccruedInterest =
     principal
-    * borrowApr
+    * 10%
     * (now - lastAccruedAt)
     / 365 days
 
@@ -309,7 +311,7 @@ Ordinary repayment applies USDC:
 2. principal
 ```
 
-APR may be changed by the protocol owner only when global `outstandingPrincipal == 0`. V1 caps configured APR at `50%`.
+Changing borrow-rate policy is explicitly deferred beyond V1.
 
 ---
 
@@ -557,53 +559,43 @@ Liquidation requires `LIVE` pricing and a financed position with `healthFactor <
 
 V1 performs a full unwind:
 
-1. accrue interest and snapshot current owner/debt;
+1. accrue interest and snapshot current owner/current debt;
 2. validate liquidation eligibility using the live Chainlink mark and the Risk Model predicate;
 3. sell this position's entire recorded NVDAc -> USDC through the approved bounded execution path;
-4. apply realized proceeds to settlement;
-5. remove the position's entire remaining principal from global `outstandingPrincipal` exactly once;
-6. finalize the position and burn the NFT.
+4. settle the liquidation proceeds;
+5. finalize the position and burn the NFT.
 
-There is no protocol liquidation fee and no liquidator payout.
+There is no protocol liquidation fee, no liquidator payout, and no global outstanding-principal counter to decrement.
 
 ### Sufficient proceeds
 
 If gross USDC proceeds cover current debt:
 
 ```text
-repay accrued interest
-repay principal
+send currentDebt to CreditPool
 send all remaining USDC to current NFT owner
 ```
 
+The position is then finalized and burned.
+
 ### Shortfall liquidation
 
-If proceeds are less than current debt, all proceeds go to `CreditPool`, applied principal first and then interest for loss accounting.
+If proceeds are less than current debt, send all realized USDC to `CreditPool` and finalize anyway.
 
 ```text
-P = remaining principal
-I = accrued interest
-S = actual gross USDC proceeds
-
-principalRecovered = min(S, P)
-interestRecovered = min(max(S - P, 0), I)
-principalLoss = P - principalRecovered
-unpaidInterest = I - interestRecovered
-shortfall = principalLoss + unpaidInterest
+shortfall = currentDebt - actualGrossUsdcProceeds
 ```
 
-The treasury absorbs the loss. There is no claim on the current owner, any prior owner, or another position.
-
-Emit:
+Emit the shortfall as the complete bad-debt record:
 
 ```solidity
 event BadDebtRealized(
     uint256 indexed tokenId,
-    uint256 principalLoss,
-    uint256 unpaidInterest,
     uint256 shortfall
 );
 ```
+
+The treasury absorbs the shortfall. There is no claim on the current owner, any prior owner, or another position, and no aggregate principal state needs to be repaired or decremented during finalization.
 
 A successful shortfall liquidation still finalizes and burns the NFT. Failed oracle, token-transfer, or bounded-swap execution reverts atomically and leaves the position active.
 
@@ -616,16 +608,15 @@ Emit only lifecycle/accounting events needed by the simplified surface:
 - `PositionOpened`
 - `CreditDrawn`
 - `InterestAccrued`
-- `BorrowAprUpdated`
 - `DebtRepaid`
 - `ExposureReduced`
 - `ExecutorUpdated`
 - ERC-721 `Transfer`
 - `PositionClosed`
 - `PositionLiquidated`
-- `BadDebtRealized(tokenId, principalLoss, unpaidInterest, shortfall)`
+- `BadDebtRealized(tokenId, shortfall)`
 
-There is no `ExposureIncreased` or `CollateralAdded` event because those actions do not exist in V1.
+There is no `ExposureIncreased`, `CollateralAdded`, or `BorrowAprUpdated` event because those actions do not exist in V1.
 
 ---
 
@@ -661,7 +652,8 @@ At minimum, tests must cover:
 - exactly the five opening leverage presets, including rejection of intermediate values;
 - cost-aware post-swap leverage checks for each financed preset;
 - finite CreditPool capacity and zero-credit `1.0x` opening;
-- lazy simple interest and interest-first ordinary repayment;
+- lazy simple interest at the immutable 10% APR and interest-first ordinary repayment;
+- absence of any APR setter/rate-admin path or global outstanding-principal counter;
 - `repay(tokenId, amount)` with `amount > currentDebt`, proving only current debt is transferred and no residual/refund balance is created;
 - exact Risk Model math for NAV, current debt, equity, equity ratio, and health factor using the 30% maintenance ratio;
 - liquidation at `healthFactor < 1.0`, non-liquidation at/above the threshold, and safe handling of zero NAV / zero or negative equity;
@@ -675,7 +667,7 @@ At minimum, tests must cover:
 - debt-free close only, including close after external repayment;
 - close returning remaining NVDAc only, with no position-attributed residual USDC path;
 - full liquidation with no reward/fee;
-- shortfall finalization and split `BadDebtRealized` accounting;
+- shortfall finalization by returning all realized proceeds to `CreditPool`, emitting `BadDebtRealized(tokenId, shortfall)`, and burning the NFT;
 - oracle `LIVE` / `HELD` / `INVALID` schedule behavior;
 - post-hold requirement for a new qualifying round;
 - raw NVDAc units × total-return price with no second multiplier application;
@@ -704,7 +696,7 @@ Also show:
 NVDAc deposit
 Oracle state
 Available credit
-Borrow APR
+Borrow APR (fixed 10%)
 Estimated principal
 Estimated gross exposure
 Estimated health
@@ -723,7 +715,7 @@ Show:
 - principal;
 - accrued interest;
 - current debt;
-- APR;
+- fixed 10% APR;
 - equity/leverage/health when live;
 - repay;
 - reduce exposure;
@@ -734,7 +726,7 @@ Show:
 
 For repayment, the UI may allow a large user-entered cap or a "Repay all" action, but must communicate that the contract transfers at most `currentDebt`.
 
-There is no increase-leverage or add-collateral control.
+There is no increase-leverage, add-collateral, or APR-admin control.
 
 ### Agent surface
 
@@ -773,6 +765,7 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 - Opening accepts only the five fixed leverage presets.
 - Borrowed USDC can only buy NVDAc.
 - No position may consume another position's recorded NVDAc.
+- Borrow APR is an immutable V1 constant at 10%; there is no rate setter or APR admin surface.
 - `repay` transfers at most current debt; an over-sized requested amount never becomes position USDC.
 - Financed opening and liquidation require `LIVE` solvency pricing.
 - `repay`, transfer, executor updates, and debt-free close are oracle-independent.
@@ -787,7 +780,7 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 - Executor permissions never create principal or withdraw assets to the executor.
 - Close requires zero debt and returns remaining recorded NVDAc.
 - Liquidation is full, permissionless, and unrewarded in V1.
-- Shortfall losses are isolated to the protocol treasury and finalized exactly once.
+- Liquidation shortfalls are treasury losses recorded by `BadDebtRealized`; no aggregate principal counter participates in finalization.
 
 ---
 
@@ -821,7 +814,7 @@ Mocks must reflect the verified semantics.
 - first-party marketplace;
 - ERC-4626 / public LP shares;
 - LP withdrawals and reserve management;
-- utilization-based variable APR;
+- configurable or utilization-based variable APR;
 - reserve factor / LP revenue split;
 - global borrow index;
 - per-position smart accounts / ERC-6551;
@@ -838,4 +831,4 @@ Mocks must reflect the verified semantics.
 
 ## Final V1 thesis
 
-> **Deposit NVDAc, choose one of five opening leverage presets, finance more NVDAc with finite protocol USDC, and receive a transferable NFT representing the live stock-plus-debt position. Repay or reduce exposure, transfer the position without an oracle/health gate, and let the new owner settle and close it.**
+> **Deposit NVDAc, choose one of five opening leverage presets, finance more NVDAc with finite protocol USDC at a fixed 10% APR, and receive a transferable NFT representing the live stock-plus-debt position. Repay or reduce exposure, transfer the position without an oracle/health gate, and let the new owner settle and close it.**
