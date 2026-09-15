@@ -1,5 +1,13 @@
 # Margin Call — Transferable Financed Spot Positions PRD
 
+## Status and document authority
+
+This is the current proposed product for Margin Call. It supersedes the standalone Stock Gacha MVP and generalized inventory-protocol proposals as the active product direction.
+
+The repository currently contains a coming-soon site and retained application/Foundry scaffolding. The contracts, keeper, indexing, agent tools, and product UI described here are requirements, not implemented features. Product decisions below were resolved in the PR #419 documentation review; live integration feasibility remains to be verified.
+
+Use [CONTEXT.md](../CONTEXT.md) for canonical vocabulary and the [docs index](README.md) for the associated architecture decisions.
+
 ## Summary
 
 Margin Call finances real tokenized equities on Base and turns each live spot position into a transferable ERC-721.
@@ -21,7 +29,9 @@ The user never receives borrowed USDC as freely spendable capital. Credit drawn 
 
 The core product thesis remains:
 
-> **Margin Call creates a secondary market for financed spot positions.**
+> **Margin Call makes financed spot positions transferable without unwinding them.**
+
+A secondary market is the product thesis. V1 proves transfer and continued management by a new owner; purchase settlement and market demand are not established by an ERC-721 transfer alone.
 
 The hackathon implementation intentionally does **not** attempt to solve public LPs, generalized multi-asset custody, smart accounts per position, dynamic interest-rate markets, or production-grade governance.
 
@@ -79,7 +89,7 @@ V1 is deliberately narrow:
 - **NVDAc only** for the first end-to-end implementation.
 - One stock per position.
 - Margin Call itself custodies position stock; there is no per-position smart account in V1.
-- Target leverage from `1.0x` through `1.5x`.
+- Target leverage from `1.0x` through `1.5x`, with the ceiling enforced on actual post-execution leverage at opening and increase.
 - UI presets at `1.0x`, `1.1x`, `1.25x`, `1.4x`, and `1.5x`.
 - Protocol may accept any valid target inside that range.
 - `1.0x` has no debt and no borrow interest.
@@ -95,7 +105,9 @@ V1 is deliberately narrow:
 - One `1%` liquidator reward; no separate protocol liquidation fee.
 - Standard ERC-721 position ownership.
 - Simple owner/executor authorization.
-- NFT transfers are blocked only when a financed position is already liquidatable; there is no separate transfer-health threshold.
+- Active NFTs may transfer regardless of oracle availability or position health, including while liquidatable. Margin Call imposes no oracle, health, or admin pause on NFT transfers.
+- Shortfall liquidation realizes a treasury loss without recourse to any NFT owner or other position.
+- A first-party keeper is required to submit underwater liquidations that pay no reward.
 
 The hackathon goal is to prove this lifecycle locally and then execute the smallest practical real position on Base.
 
@@ -163,11 +175,9 @@ V1 has a `1%` liquidator reward and no additional protocol liquidation fee.
 
 Margin Call's primary protocol revenue is borrow interest.
 
-### One health threshold
+### Health does not gate transfers
 
-V1 uses the liquidation threshold for both solvency and transfer safety.
-
-A position may transfer if it is not currently liquidatable. There is no separate transfer-health configuration.
+V1 uses maintenance health to determine liquidation eligibility only. NFT transfers do not consult the oracle or apply a health threshold. A transfer never cures an unhealthy position or postpones liquidation.
 
 ---
 
@@ -185,7 +195,7 @@ The owner may:
 - reduce leverage;
 - repay with external USDC;
 - appoint or revoke an executor;
-- transfer the Position NFT while the position is not liquidatable;
+- transfer the Position NFT regardless of oracle availability or position health;
 - close the position and receive remaining NVDAc/USDC.
 
 The owner may be a human wallet, a Dynamic embedded wallet, or an agent wallet.
@@ -199,9 +209,8 @@ The executor may:
 - increase leverage within limits and available credit;
 - reduce leverage;
 - repay debt;
-- perform supported execution actions.
 
-The executor may not:
+Executor appointment alone does not authorize the following:
 
 - transfer the NFT;
 - withdraw owner equity;
@@ -215,7 +224,9 @@ Authorization should be intentionally small:
 executorOf[tokenId] = address
 ```
 
-Owner or executor may perform approved management actions. Only the NFT owner may transfer or close for owner withdrawal.
+Owner or executor may perform the management actions listed above. Only the NFT owner may close for owner withdrawal or appoint/revoke the executor. Payout recipients are fixed by the protocol and cannot be chosen by the executor.
+
+ERC-721 approved addresses and operators may initiate NFT transfers under standard ERC-721 authorization. An NFT approval alone grants no position-management permission. Executor appointment alone grants no NFT-transfer permission. A wallet may hold both roles only through separate authorization.
 
 When the NFT transfers, the previous executor is cleared.
 
@@ -225,13 +236,23 @@ Any address may call `liquidate(tokenId)` once a financed position is below main
 
 The contract determines liquidatability. The liquidator does not choose pricing, repayment priority, or payout routing.
 
+### First-party keeper
+
+The protocol operates a keeper that discovers liquidatable positions and submits liquidation transactions, including underwater positions with no reward. It is required for V1 operations, but is not a privileged contract role; anyone may submit the same transaction.
+
+The treasury funds keeper gas. Failed attempts use bounded retries and surface persistent execution failures for operator attention. The keeper cannot bypass oracle validity, token transfer restrictions, or execution bounds. Keeper availability is separate from permissionless liquidation eligibility.
+
 ### Protocol owner/admin
 
 For V1, the protocol owner may:
 
 - fund the Credit Pool;
 - change the protocol APR only when no principal is outstanding;
-- manage deployment/integration configuration required for the hackathon.
+- choose deployment/integration configuration before deployment.
+
+NVDAc/USDC addresses, oracle/execution adapters, maintenance parameters, and the 1% liquidator reward are fixed for a V1 deployment. Changing them requires a new deployment; existing positions keep their original rules.
+
+V1 grants no general configuration setter, custody-withdrawal override, or transfer-pause power. No additional emergency powers are specified for V1. Any later proposal must enumerate its exact authority and which actions it affects before implementation.
 
 Longer-term governance/timelocks are out of scope.
 
@@ -255,6 +276,8 @@ struct Position {
 
 mapping(uint256 tokenId => Position) positions;
 ```
+
+The `executor` field is the sole stored executor authority; `executorOf(tokenId)` is its accessor, not a second independent authorization mapping. Terminal position records remain available for history after the NFT is burned.
 
 NVDAc itself is held by the `MarginCall` contract.
 
@@ -280,7 +303,7 @@ ownerOf(tokenId)
 
 ## Leverage selection
 
-V1 supports gross leverage from `1.0x` through `1.5x`.
+V1 accepts target leverage from `1.0x` through `1.5x`. Existing positions' current leverage can move outside this range as prices and interest change.
 
 Recommended UI presets:
 
@@ -314,7 +337,7 @@ Presets are only UX conveniences. The contract may accept intermediate targets i
 
 ### Capacity-constrained leverage
 
-`1.5x` is the risk ceiling, not a guarantee that enough capital is available.
+`1.5x` is the post-execution ceiling for opening/increasing leverage, not a guarantee that enough capital is available. Market moves and interest may subsequently push an existing position above 1.5x; maintenance determines liquidation eligibility.
 
 ```text
 availableCredit = USDC.balanceOf(CreditPool)
@@ -340,6 +363,14 @@ The UI should disable choices above the currently financeable maximum.
 
 The transaction must still check capacity atomically because another position can consume USDC between quote and execution.
 
+### Execution costs and the leverage ceiling
+
+The opening and capacity formulas above are idealized estimates before fees, slippage, and rounding. They do not establish the actual position leverage.
+
+For example, depositing $100 of NVDAc and borrowing $50 that buys only $49 of oracle-valued NVDAc leaves NAV of $149, debt of $50, and equity of $99. Actual leverage is approximately `1.505x`, which must fail the 1.5x post-execution ceiling.
+
+Opening and increasing leverage must size borrowing using bounded execution costs, then validate actual recorded stock and current debt against the same valid oracle observation. Equity must be positive and actual leverage must not exceed 1.5x. An out-of-bounds result reverts the entire transaction, including the draw and swap. The UI must show attainable estimates after costs; selecting the max preset is not a promise of exactly 1.500x execution.
+
 ### `1.0x` positions
 
 A `1.0x` position:
@@ -356,7 +387,7 @@ A `1.0x` position may open even when `availableCredit == 0`.
 
 ## Canonical opening flow
 
-Example:
+Idealized example before execution costs:
 
 ```text
 User deposits         $100 NVDAc
@@ -382,8 +413,11 @@ Margin Call atomically:
 7. swaps that USDC through the approved Uniswap execution path into NVDAc;
 8. keeps purchased NVDAc in `MarginCall` custody;
 9. records the position's total NVDAc amount and principal;
-10. sets `lastAccruedAt`;
-11. mints the Position NFT to the owner.
+10. for a financed opening, verifies actual post-execution leverage does not exceed 1.5x and maintenance is satisfied;
+11. sets `lastAccruedAt`;
+12. mints the Position NFT to the owner.
+
+The `1.0x` path only deposits and records NVDAc and mints the NFT. It skips borrowing, swaps, and oracle-dependent validation; unavailable pricing affects display, not zero-debt opening.
 
 At `1.5x`:
 
@@ -431,7 +465,8 @@ Margin Call:
 7. checks Credit Pool USDC capacity;
 8. draws the additional USDC;
 9. swaps it into NVDAc;
-10. increases the position's recorded `stockAmount` and `principal`.
+10. increases the position's recorded `stockAmount` and `principal`;
+11. verifies actual post-execution leverage does not exceed 1.5x and maintenance is satisfied; otherwise the whole transaction reverts.
 
 Borrowed USDC may only buy NVDAc.
 
@@ -459,6 +494,10 @@ Reducing to `1.0x` fully repays current debt while preserving the remaining NVDA
 
 Principal returned to the Credit Pool immediately becomes available for new financing.
 
+### Adding collateral
+
+The owner may deposit additional NVDAc into an active position. Credit only the actual received amount to that position's stock accounting. Adding collateral does not draw credit, automatically change principal, or require oracle pricing. Any displayed valuation or leverage remains unavailable until valid pricing returns.
+
 ---
 
 ## Borrow interest
@@ -476,7 +515,7 @@ Interest is:
 - charged only while principal is outstanding;
 - calculated lazily from timestamps;
 - attached to the position when the NFT transfers;
-- repaid before principal.
+- repaid before principal in ordinary repayment and sufficient-proceeds liquidation; shortfall liquidation applies proceeds to principal first.
 
 Per-position debt state:
 
@@ -508,6 +547,8 @@ After 1 year   ~55.000 USDC debt
 ```
 
 No keeper or periodic interest transaction is required.
+
+This applies to interest accrual only. The first-party liquidation keeper remains required.
 
 Before a debt-changing action, `_accrue(tokenId)` stores elapsed interest and updates `lastAccruedAt`.
 
@@ -548,6 +589,8 @@ V1 uses a simple USDC pool, not ERC-4626.
 - exposes liquid USDC / available credit;
 - tracks or exposes global outstanding principal as needed for accounting and APR-change gating.
 
+`outstandingPrincipal` is the sum of remaining principal on active positions. Draws increase it; principal repayments decrease it. Finalized liquidation removes the position's entire remaining principal, including any unrecovered principal. Interest never contributes to this counter. Realized bad debt is recorded separately, so written-off debt does not permanently block APR changes.
+
 Conceptually:
 
 ```text
@@ -575,7 +618,7 @@ New financed openings and leverage increases are first-come, first-served.
 
 If requested principal exceeds current liquid USDC, the transaction reverts.
 
-Repayment, deleveraging, close, and liquidation return USDC to the pool and restore capacity immediately.
+Repayment, deleveraging, close, and liquidation increase capacity only by the USDC actually returned to the pool. A successful zero-proceeds liquidation restores no liquid capacity; realized losses are never available credit.
 
 ### Funding
 
@@ -593,7 +636,7 @@ For one NVDAc position:
 
 ```text
 NAV = Chainlink value of recorded NVDAc amount
-Current Debt = principal + accrued interest
+Current Debt = principal + all accrued interest, including elapsed interest not yet stored
 Equity = NAV - Current Debt
 Equity Ratio = Equity / NAV
 Gross Leverage = NAV / Equity
@@ -619,18 +662,21 @@ Health Factor = Equity Ratio / Maintenance Equity Ratio
 
 `Health Factor < 1.0` means liquidatable.
 
+Financed positions with zero or negative equity are also liquidatable when pricing is valid. Implement health checks without unsigned-subtraction or division failures at zero NAV/equity. A negative equity display does not create personal recourse against the owner.
+
 A zero-debt `1.0x` position is not liquidatable for lender solvency.
 
 ### Risk-increasing actions
 
 Before opening a financed position or increasing leverage, verify:
 
-- caller is owner or executor;
-- position is active;
+- for an increase, caller is owner or executor and the position is active;
+- for an opening, the caller supplies the initial stock and receives the new NFT;
 - target leverage is within `1.0x-1.5x`;
 - Chainlink price is fresh/valid;
 - current debt includes elapsed interest;
 - resulting position remains above maintenance;
+- actual leverage after a successful opening/increase is at most 1.5x;
 - sufficient Credit Pool USDC is available;
 - execution buys only NVDAc.
 
@@ -646,13 +692,24 @@ Chainlink is the solvency oracle.
 
 Uniswap spot price is never used to decide health or liquidation.
 
-If the Chainlink price is stale/invalid:
+When pricing is stale, invalid, or frozen, use this action policy:
 
-- block new financing;
-- block leverage increases;
-- block liquidation until a valid price is available;
-- allow direct USDC repayment;
-- allow other clearly risk-reducing actions where implementation can do so safely.
+| Action                                          | Available without valid oracle pricing?                                                                     |
+| ----------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Open a zero-debt position                       | Yes; no borrowing or swap.                                                                                  |
+| Open financed / increase leverage               | No.                                                                                                         |
+| Transfer an active NFT, including one with debt | Yes; no oracle or health check.                                                                             |
+| Repay with external USDC                        | Yes.                                                                                                        |
+| Add NVDAc collateral                            | Yes, subject to token transfer availability.                                                                |
+| Close a zero-debt position                      | Yes, subject to token transfer availability.                                                                |
+| Close a financed position                       | Yes only when bounded execution repays current debt in full without relying on unavailable oracle pricing.  |
+| Reduce to an intermediate leverage target       | No; target sizing requires valid valuation.                                                                 |
+| Reduce to 1.0x                                  | Yes only when bounded execution fully repays current debt, preserving remaining stock in the same position. |
+| Liquidate                                       | No; requires valid pricing.                                                                                 |
+
+Interest continues to accrue while pricing is unavailable. Liquidation can therefore be delayed even as debt grows. NFT transfers and sale settlement are not paused by that condition.
+
+Do not label unavailable health or NAV as current. Debt remains computable without the stock price. Token pauses or execution failures may separately prevent moving underlying stock; they do not create a Margin Call health/oracle gate on NFT transfer.
 
 ---
 
@@ -674,15 +731,17 @@ On transfer:
 - the old executor is cleared;
 - debt and stock state remain unchanged.
 
-### Transfer check
+### Transfer availability and sale semantics
 
-V1 has no separate transfer-health threshold.
+All standard ERC-721 transfer entry points allow an active NFT to transfer regardless of debt, oracle availability, or position health. Transfer must not call the oracle, require a price, apply a health threshold, or honor a protocol-admin transfer pause. Standard ownership/approval, recipient, and NFT-existence rules still apply.
 
-A financed NFT may transfer if the position is **not currently liquidatable** using fresh Chainlink pricing and current debt.
+This includes already-liquidatable and underwater positions. The new owner receives the unchanged position and its existing liquidation risk; no personal debt claim attaches to any owner. A transfer grants no grace period or exemption from liquidation. After transfer, any liquidation residual belongs to the new current owner.
 
-If `Health Factor < 1.0`, transfer reverts and the position must be repaid/deleveraged or liquidated.
+NFT sales are always available at the Margin Call transfer layer while the NFT exists. Marketplace availability and payment settlement are separate integrations. A close or liquidation burns the NFT, so an order referencing that NFT can no longer settle afterward. A sale executed before liquidation does not prevent the new owner's position from being liquidated next.
 
-A `1.0x` zero-debt position transfers normally.
+Clear the old executor before any recipient callback can manage the transferred position. Permission tests must cover owner transfers, approved addresses, operators, and both safe-transfer variants.
+
+Position pages and sale presentations must expose current debt and indicate unavailable pricing or known liquidation risk. A displayed estimate is not a promise that stock, debt, or health will be unchanged by sale settlement. V1 proves transferability, not protected purchase settlement for a mutable position.
 
 ---
 
@@ -698,14 +757,15 @@ liquidate(tokenId)
 
 V1 full liquidation:
 
-1. accrue interest;
-2. validate `Health Factor < 1.0` with a fresh Chainlink price;
-3. sell the position's entire recorded NVDAc amount to USDC through the approved Uniswap path;
-4. repay Credit Pool current debt first;
-5. pay the liquidator reward;
-6. return remaining USDC to the NFT owner;
-7. mark the position liquidated;
-8. burn the NFT.
+1. accrue interest and snapshot the position's remaining principal, accrued interest, and current owner;
+2. validate liquidation eligibility with valid, non-frozen Chainlink pricing;
+3. sell only this position's entire recorded NVDAc amount to USDC through the approved Uniswap path, subject to execution bounds;
+4. apply the realized proceeds using the sufficient-proceeds or shortfall waterfall below;
+5. remove the position's entire remaining principal from global `outstandingPrincipal` exactly once;
+6. clear the active stock/debt/executor state and mark the position liquidated, retaining historical outcome data;
+7. burn the NFT and emit the liquidation outcome.
+
+Finalization cannot fail merely because realized proceeds are insufficient to repay debt. Execution must still succeed within bounds. If the token transfer or swap fails, oracle pricing is unavailable, or slippage bounds are violated, the transaction reverts atomically and leaves the position active and unchanged for a later attempt. "Unconditional finalization" applies to the debt shortfall after successful execution; it is not permission to bypass those prerequisites.
 
 There is **no separate protocol liquidation fee** in V1.
 
@@ -713,15 +773,43 @@ There is **no separate protocol liquidation fee** in V1.
 
 Target V1 reward: `1%`.
 
-Keep the Credit Pool senior. Conceptually:
+When gross liquidation proceeds are at least current debt:
 
 ```text
-repay Credit Pool first
-reward = min(1% of gross liquidation proceeds, remaining equity)
-remaining equity -> NFT owner
+repay Credit Pool current debt in full (interest first, then principal)
+residual = gross proceeds - current debt
+reward = min(1% of gross proceeds, residual)
+owner payout = residual - reward
 ```
 
-If there is no residual equity after Credit Pool repayment, the liquidator reward may be reduced or zero. More sophisticated keeper economics are future work.
+Gross liquidation proceeds means actual USDC received from the sale, before Credit Pool repayment and payouts. It is not oracle NAV or a pre-swap quote. At exact debt coverage, both reward and owner payout are zero.
+
+### Shortfall liquidation
+
+If gross proceeds are less than current debt, all proceeds go to the Credit Pool, applied to **principal first, then interest**. This differs intentionally from ordinary repayments and sufficient-proceeds liquidation, which pay interest first.
+
+```text
+P = remaining principal immediately before liquidation
+I = accrued interest immediately before liquidation
+S = actual gross USDC proceeds, where S < P + I
+
+principal recovered = min(S, P)
+interest recovered = min(max(S - P, 0), I)
+principal loss = P - principal recovered
+unpaid interest = I - interest recovered
+shortfall = principal loss + unpaid interest = P + I - S
+outstandingPrincipal decreases by P
+liquidator reward = 0
+owner payout = 0
+```
+
+Emit `BadDebtRealized(tokenId, shortfall)` and record the principal-loss and unpaid-interest components separately in liquidation outcome data/events. The protocol treasury absorbs the economic loss; finalization does not require a synchronous treasury top-up. Only USDC actually recovered restores liquid lending capacity. Writing off principal does not create USDC.
+
+The global counter removes the **entire remaining principal**, not the lifetime original borrowing amount. For example, after borrowing $50 and previously repaying $20 of principal, a position owes $30 principal plus $2 interest. If liquidation receives $25, return $25 to the pool, reduce `outstandingPrincipal` by $30, and emit a $7 shortfall consisting of $5 principal loss and $2 unpaid interest.
+
+No claim attaches to the current or any prior NFT owner. No other position's collateral or accounting is affected. The position is finalized and its NFT burned even though the Credit Pool recovered less than current debt.
+
+The first-party keeper must submit these zero-reward liquidations when pricing and execution permit. It cannot guarantee immediate liquidation during an oracle, token, or execution outage.
 
 No `$MARGINCALL` token incentive is required for liquidation.
 
@@ -729,7 +817,7 @@ No `$MARGINCALL` token incentive is required for liquidation.
 
 ## Normal close
 
-The NFT owner may close at any time, subject to execution availability.
+The NFT owner may close subject to execution availability and full debt repayment. A normal close cannot write off debt; if the position cannot repay in full, it must receive external repayment/collateral or use the eligible liquidation path.
 
 Default close preserves as much stock as possible.
 
@@ -819,6 +907,20 @@ Responsibilities:
 - expose freshness/validity;
 - use the selected Chainlink feed semantics correctly.
 
+### Documented Base integration facts and feasibility gate
+
+The [official Base integration documentation](https://docs.base.org/build-on-base/integrate-defi/list-tokenized-stocks) documents:
+
+- NVDAc: `0xb20000000000000000000078ee7ce2fE4908108C`.
+- Coinbase NVDA Chainlink proxy: `0x04689a41629776563E6822F76f2e57D148d28513`.
+- The feed has 8 decimals and already includes the B20 multiplier in its total-return value; do not apply the multiplier again.
+- Updates use a 0.5% deviation or 24-hour heartbeat during supported hours; values freeze off-hours and during corporate actions. A callable feed is not necessarily a usable price.
+- B20 tokens are native precompiles with no deployed bytecode. Transfer policies and function pauses may reject underlying-token transfers independently of allowance.
+
+These are documented facts checked during review, not verified deployment results. Before completing the mock-based core, perform a read-only/fork feasibility check: verify token units and adapter compatibility, feed and registry pause semantics, and an executable USDC/NVDAc Uniswap route in both directions at the intended size. In particular, prove that stock-preserving close can bound the stock sold while covering exact current debt. A conventional mock ERC-20 does not prove compatibility with native B20 tokens.
+
+The executable route, current liquidity, practical slippage, token decimals, and precise freshness policy remain verification items. Pin verified results and the tested block in an integration record. Mocks must reflect those semantics. This feasibility gate does not authorize deployment, funding, or live trades.
+
 No generalized asset registry is required.
 
 ### `ExecutionAdapter`
@@ -869,7 +971,7 @@ Responsibilities:
 - increase/reduce leverage;
 - accept direct repayment;
 - manage one executor per position;
-- enforce transfer check;
+- clear executor on transfer without consulting pricing or health;
 - close positions;
 - liquidate positions;
 - coordinate NFT mint/burn.
@@ -881,7 +983,8 @@ OpenZeppelin ERC-721.
 Responsibilities:
 
 - represent ownership of each live position;
-- call/consult Margin Call transfer validation;
+- support standard owner/approved-address/operator transfer authorization;
+- transfer active positions independently of oracle availability and health;
 - clear executor on transfer through Margin Call lifecycle;
 - burn only on close/liquidation.
 
@@ -924,6 +1027,9 @@ Emit enough events to reconstruct the lifecycle:
 - ERC-721 `Transfer`
 - `PositionClosed`
 - `PositionLiquidated`
+- `BadDebtRealized(tokenId, shortfall)`
+
+Liquidation outcome data must distinguish gross proceeds, principal recovered, interest recovered, principal loss, unpaid interest, reward, and owner payout, and identify the owner at finalization. Transfer history must retain the prior and new owner; terminal history cannot depend on `ownerOf` after burn.
 
 Convex can index these events for the application, charts, history, and social surfaces.
 
@@ -946,6 +1052,8 @@ Implement:
 
 ### Canonical lifecycle test
 
+The amounts below assume a fee-free mock execution rate equal to the oracle price. The execution-cost tests separately cover real post-execution leverage.
+
 1. Fund Credit Pool with `500 USDC`.
 2. Give owner mock NVDAc worth `100 USDC`.
 3. Open at `1.5x`.
@@ -955,7 +1063,7 @@ Implement:
 7. Verify position accounting shows approximately `150 USDC` of NVDAc, `50 USDC` principal, and `100 USDC` equity.
 8. Verify Credit Pool liquid USDC falls by `50`.
 9. Warp time and verify interest grows lazily.
-10. Transfer the NFT and verify stock/debt remain unchanged and old executor clears.
+10. Transfer the NFT to a second wallet and verify stock/debt remain unchanged, the old executor clears, and the previous owner/executor can no longer manage it.
 11. Reduce leverage and verify NVDAc is sold and principal returns to Credit Pool.
 12. Increase leverage again if capacity exists.
 13. Close and verify only enough NVDAc is sold to repay current debt, with remaining NVDAc returned to the owner.
@@ -971,6 +1079,8 @@ Implement:
 6. Repay/deleverage/close/liquidate and verify available credit returns immediately.
 
 ### Leverage test
+
+Use a fee-free mock and no elapsed interest for these idealized sizing examples.
 
 1. Open `$100` NVDAc at `1.0x` and verify zero debt.
 2. Increase to `1.25x` and verify roughly `$25` principal / `$125` gross exposure.
@@ -1006,6 +1116,43 @@ Implement:
 3. Verify actions on one position cannot consume another position's stock accounting.
 4. Verify aggregate recorded live stock never exceeds actual NVDAc held by Margin Call.
 
+### Transfer availability and authorization tests
+
+1. Transfer active zero-debt, healthy financed, liquidatable, and underwater positions.
+2. Repeat with stale, frozen, invalid, and reverting oracle responses; transfer must not call the oracle.
+3. Cover owner, approved-address, and operator authorization through `transferFrom` and both `safeTransferFrom` variants.
+4. Verify executor appointment alone cannot transfer and NFT approval alone cannot manage or close a position.
+5. Verify old owner/executor lose management authority and executor clearing precedes recipient callbacks.
+6. Transfer a liquidatable position, then liquidate it with valid pricing. Eligibility is unchanged, and any residual goes to the new owner.
+7. Verify transfer after close/liquidation fails because the NFT has been burned.
+
+### Loss realization and failed-execution tests
+
+1. Liquidate with proceeds above debt, exactly equal to debt, between principal and total debt, below principal, and zero if a successful bounded execution can produce that result.
+2. Verify shortfall proceeds repay principal first, whereas ordinary repayments pay interest first.
+3. Use the $30 principal / $2 interest / $25 proceeds example: pool receives $25, global principal falls by $30, and bad debt is $7 ($5 principal plus $2 interest).
+4. Verify zero reward and owner payout for shortfalls, no personal claim, terminal status, and NFT burn.
+5. Verify unrelated positions' stock, principal, interest, and executors remain unchanged.
+6. Verify removed principal is counted exactly once; realized loss does not create available credit and does not leave phantom principal blocking APR updates.
+7. Force oracle, token, swap, and slippage failures. Verify atomic rollback with no burn, loss event, or accounting change.
+8. Verify the keeper retries transient failures within configured bounds and surfaces persistent failures; zero reward does not exclude a position from its work.
+
+### Execution, oracle, and administration tests
+
+1. Reject the $100 deposit / $50 loan / $49 purchased-stock example because actual leverage exceeds 1.5x.
+2. Verify cost-aware sizing can open/increase within the ceiling and failed post-execution validation rolls back the entire draw and swap.
+3. Allow market/interest-driven leverage above 1.5x without automatic liquidation until maintenance is breached.
+4. Cover every row of the unavailable-oracle action policy, including full-debt close and debt-free actions.
+5. Cover zero NAV, zero equity, and negative equity without unsigned subtraction or division errors hiding liquidation eligibility; zero-debt positions remain exempt.
+6. Verify immutable deployment parameters and absence of a protocol-admin NFT transfer pause.
+
+### History and performance acceptance
+
+1. Contributions and repayments affect the performance baseline; borrowed principal does not count as an owner contribution.
+2. Transfer changes ownership without resetting position performance or inventing the buyer's purchase cost.
+3. Closing/liquidation retains a historical page with final owner, asset flows, and outcome despite NFT burn.
+4. Unavailable valuation is shown explicitly; stale marks are not presented as current P&L.
+
 ---
 
 ## Live Base spike
@@ -1040,7 +1187,9 @@ Verify:
 
 ### 4. Tiny end-to-end position
 
-Open the smallest practical real NVDAc position, finance it, display it, and close it.
+Wallet A opens the smallest practical real NVDAc position and appoints an executor. After interest has accrued, A transfers the NFT to wallet B. Display the unchanged stock/debt, verify A and its executor can no longer manage the position, then have B manage and close it and receive the residual stock/USDC. Record receipts and accounting before and after transfer.
+
+This is the required transferability demonstration. A purchase payment is not part of this acceptance test; no functioning secondary market is claimed from the transfer alone.
 
 A live liquidation can be demonstrated on a fork/local environment if intentionally pushing a real position into liquidation is impractical.
 
@@ -1101,6 +1250,14 @@ Show:
 
 The UI may calculate live accrued interest from the onchain timestamp/state for smooth display. Contract `currentDebt()` remains authoritative.
 
+Label P&L as **position performance since inception**. Adjust its baseline for owner-contributed NVDAc and externally supplied USDC repayments, and include value returned on exit. Borrowing is financing, not an owner contribution. Execution costs and accrued interest must be reflected without double counting.
+
+NFT transfer neither resets this baseline nor supplies a buyer acquisition price. Do not present the metric as the current owner's investment return. Record actual asset flows and their valuation basis; when a required valuation is unavailable, display that limitation instead of inventing a price. Realized bad debt is a separate loss outcome, not owner profit.
+
+Preserve thesis/history, ownership changes, asset flows, and final close/liquidation outcomes in an addressable historical page after burn. Capture the final owner before burning; a historical page cannot resolve ownership using `ownerOf` on a burned token.
+
+Show unavailable pricing and known liquidation risk while keeping transfer actions available. Never use a stale-health display as an implicit transfer block.
+
 ### Agent interface
 
 Keep the agent surface small:
@@ -1139,7 +1296,7 @@ Character state can be derived from P&L, health, and lifecycle status.
 
 The financial metrics remain visible in the position page/card. Art never affects accounting.
 
-A first-party NFT marketplace is not required. Standard ERC-721 transferability is enough to demonstrate the secondary-market primitive.
+A first-party NFT marketplace is not required. Standard ERC-721 transferability plus continued management and close by the new owner demonstrates the V1 primitive. Payment settlement and market demand remain outside that proof.
 
 ---
 
@@ -1150,6 +1307,8 @@ Do not let sponsor integrations block the core protocol.
 ### Dynamic
 
 Use Dynamic for human onboarding/embedded wallet if useful. Existing agent wallets remain first-class and can own NFTs directly.
+
+The retained repository helpers currently use Privy and Base Sepolia; Dynamic is not integrated, and those helpers do not establish mainnet readiness. Human wallet-provider selection remains an application integration choice and must not block the two-wallet protocol demonstration.
 
 ### Flash
 
@@ -1177,16 +1336,29 @@ Do not add token rewards to liquidation in V1.
 - Chainlink determines solvency; Uniswap is execution only.
 - Owner/executor permissions are narrow.
 - NFT transfer clears the old executor.
-- NFT transfer is blocked only if the position is already liquidatable.
+- Active NFT transfer is independent of oracle availability and health, including when liquidatable or underwater; transfer never resets debt or liquidation eligibility.
+- NFT approvals and executor permissions are distinct; all transfer entry points clear the executor before recipient callbacks.
 - Credit Pool repayment is senior to liquidator reward and owner residual equity.
+- Successful shortfall liquidation applies proceeds to principal first, realizes treasury bad debt, removes remaining principal exactly once, and creates no claim against any owner or other position.
+- Failed execution leaves the position unchanged; the required first-party keeper retries within bounds.
 - Normal close sells only enough stock to repay current debt.
+- Opening and leverage increase enforce the 1.5x ceiling after execution costs.
 - APR cannot change while any principal is outstanding.
+- Other deployment parameters are fixed; there is no protocol-admin transfer pause.
 - Full liquidation only in V1.
 - Prefer simple, restrictive functions over generalized call execution.
 
 ---
 
 ## Build order
+
+### Phase 0 — Integration feasibility
+
+- Verify documented token/feed addresses and units through read-only/fork checks.
+- Pin total-return pricing, pause detection, and freshness semantics.
+- Verify native B20 transfer/approval compatibility.
+- Prove both execution directions and bounded debt-covering close at intended sizes.
+- Record the verified route, block, liquidity, and limitations before finalizing mocks.
 
 ### Phase 1 — Local protocol core
 
@@ -1201,6 +1373,8 @@ Do not add token rewards to liquidation in V1.
 - Transfer + executor clear.
 - Stock-preserving close.
 - Permissionless liquidation + 1% liquidator reward.
+- Shortfall finalization, treasury loss accounting, and unrestricted active NFT transfer.
+- First-party keeper with bounded retries, gas funding requirements, and failure visibility.
 - Full Foundry lifecycle tests.
 
 ### Phase 2 — Base plumbing
@@ -1209,7 +1383,7 @@ Do not add token rewards to liquidation in V1.
 - Chainlink adapter.
 - Uniswap adapter.
 - Real-USDC Credit Pool.
-- Tiny live open/close.
+- Tiny live open, interest accrual, transfer to a second wallet, management, and close.
 
 ### Phase 3 — App/agent demo
 
@@ -1241,7 +1415,6 @@ Only add these if the core product is worth extending:
 - multi-stock asset registry;
 - per-stock risk parameters;
 - per-stock APRs;
-- separate transfer-health threshold;
 - partial liquidation;
 - protocol liquidation fee;
 - complex executor policy engine;
@@ -1252,20 +1425,21 @@ Only add these if the core product is worth extending:
 
 ## Remaining implementation questions
 
-These are the only important questions that should remain before coding the simplified core:
+The product decisions above are settled for this V1 proposal. The following implementation evidence and numerical choices must be recorded before the relevant phase proceeds:
 
-1. Exact NVDAc token address/decimals on Base.
-2. Exact Chainlink feed and normalization semantics for NVDAc/B20.
-3. Exact Uniswap pool/route and practical slippage for NVDAc/USDC.
-4. Final maintenance equity ratio after a small simulation; `30%` is the starting value.
-5. Exact integer precision/rounding for leverage and simple interest.
-6. Whether the `1%` liquidator reward is calculated from gross liquidation proceeds or another simple basis; Credit Pool must remain senior either way.
-7. Exact amount of USDC to seed into the Credit Pool for the demo.
+1. Read-only/fork confirmation of documented token/feed addresses, token decimals, total-return normalization, and native B20 compatibility.
+2. Exact executable Uniswap pool/route, practical slippage, and bounded debt-covering close behavior.
+3. Precise price-age/pause rules consistent with the documented feed schedule; NFT transfers are never gated by them.
+4. Validate the starting 30% maintenance equity ratio with a simulation before deployment, then fix the selected value for that deployment.
+5. Integer precision and rounding for leverage, accrual, repayment, loss accounting, and fractional-interest remainder handling. Accrual frequency must not allow material interest avoidance.
+6. Keeper polling/retry settings, gas budget, and persistent-failure reporting.
+7. Demo Credit Pool funding amount and receipt-based live acceptance evidence.
+8. Performance valuation conventions for contributions/withdrawals and unavailable-price handling, consistent with the since-inception definition.
 
-Everything else can wait.
+These verification items do not reopen transfer availability, loss allocation, permission separation, or the two-owner demonstration. Any failure that requires changing those decisions must be surfaced explicitly.
 
 ---
 
 ## Product statement
 
-> **Margin Call finances real NVDAc spot exposure and creates a secondary market for financed positions. Deposit NVDAc, choose leverage from `1.0x` through `1.5x`, and Margin Call uses finite protocol-owned USDC to buy more NVDAc. The position accrues transparent borrow interest while financed and is represented by a transferable NFT that can change owners without unwinding the trade.**
+> **Margin Call finances real NVDAc spot exposure and makes the financed position transferable. Deposit NVDAc, choose leverage from `1.0x` through `1.5x`, and Margin Call uses finite protocol-owned USDC to buy more NVDAc. The position accrues transparent borrow interest and can change owners without unwinding the trade, regardless of oracle availability or position health. Its existing liquidation risk follows the NFT.**

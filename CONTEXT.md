@@ -1,51 +1,92 @@
 # Margin Call
 
-Margin Call is between product versions. The Crash game has been retired.
+Margin Call is the proposed product for transferable financed spot positions. This glossary describes that product; implementation requirements and status live in the PRD.
 
-The next product is proposed, not implemented. The immediate product is the standalone Stock Gacha MVP; the generalized Margin Call protocol remains a later proposal. These terms describe canonical product language so future specifications, contracts, and UI copy can stay aligned.
+## Positions and ownership
 
-## Stock Gacha MVP vocabulary
+**Margin Call**:
+The product that finances additional NVDAc exposure and makes each stock-plus-debt position transferable.
+_Avoid_: Stock Gacha, shared inventory protocol
 
-**Stock Gacha MVP** — The first game proposed for Base. It directly custodies four approved Coinbase B20 stocks and settles USDC rips without depending on the future generalized Margin Call protocol.
+**Position**:
+One attributed quantity of NVDAc together with its remaining principal, accrued interest, and lifecycle history.
+_Avoid_: Lot, Position Account
 
-**Maker** — A user who deposits one supported B20 stock position into the game.
+**Position NFT**:
+The transferable ownership representation of an active position, including its equity and existing liquidation risk.
+_Avoid_: Collectible, debt-free receipt
 
-**Lot** — One quantity of one supported stock deposited by one Maker. A lot is a contract record, not an NFT or a multi-stock basket.
+**Position owner**:
+The current holder of a Position NFT and beneficiary of that position's residual assets. Ownership does not create a personal claim for a liquidation shortfall.
+_Avoid_: Original depositor when referring to the current owner
 
-**Grade** — A lot's current oracle-valued NAV in USDC terms. It is not ETH backing.
+**Executor**:
+An optional delegate authorized to manage leverage and repayment for one position. This role is distinct from authority to transfer its NFT.
 
-**Ripper** — A buyer who irrevocably pays USDC for one verifiably random active lot and binds one eligible delivery recipient at purchase.
+**NFT operator**:
+An address approved to transfer an owner's NFTs. Transfer authority alone does not grant position-management authority.
 
-**Rip** — One atomic USDC purchase and VRF request, immutable random lot selection, and permissionless retryable settlement of the Maker and actual B20 stock to the bound recipient.
+## Financing and valuation
 
-**Rip Price** — The active lots' inverse-NAV-weighted expected value plus the public game surcharge.
+**NVDAc**:
+The supported Coinbase tokenized NVIDIA equity asset; token units are distinct from the share-equivalent quantity represented by those units.
+_Avoid_: One token equals one share
 
-**House Reserve** — USDC funded by the game treasury and reserved as necessary to settle a selected lot whose locked NAV is greater than its Rip Price.
+**Credit Pool**:
+Protocol-owned USDC capital available to finance purchases of additional NVDAc.
+_Avoid_: Public LP vault, House Reserve
 
-**Reward token** — A standard ERC-20 explicitly whitelisted for pre-funded stock-LP rewards. $CALL is the primary launch reward; $BNKR and other reviewed tokens may be added.
+**Available credit**:
+The Credit Pool's liquid USDC available for new financing. Outstanding loans and realized losses are not available credit.
 
-**Rewards Vault** — The separate contract that accepts permissionless deposits of whitelisted reward tokens and lets an authorized publisher add funded claimable balances for a capped set of stock LPs without reducing prior accruals.
+**Principal**:
+Borrowed USDC that remains unpaid on a position, excluding interest.
+_Avoid_: Lifetime borrowing, inventory principal
 
-## Proposed protocol vocabulary
+**Accrued interest**:
+The simple financing charge earned on outstanding principal over elapsed time, whether or not it has yet been stored.
 
-**Margin Call** — The proposed shared protocol that holds and accounts for approved real financial inventory under common rules for use by permissionless applications.
+**Current debt**:
+A position's remaining principal plus all accrued interest through the current time.
 
-**Inventory contributor** — A wallet or application whose deposited inventory remains attributable for earnings, withdrawals, audit, and disputes.
+**Outstanding principal**:
+The sum of remaining principal across active positions. Finalized liquidation removes the affected position's remaining principal, including any unrecovered portion.
 
-**Approved asset** — An asset accepted under the V1 operator's public asset registry and acceptance criteria.
+**NAV**:
+The oracle-valued gross NVDAc exposure of a position before subtracting debt.
+_Avoid_: Equity, net position value
 
-**Available inventory** — Aggregate approved deposited units currently free for an application to reserve or allocate. Do not call this a “shared pool.”
+**Equity**:
+NAV minus current debt. A negative value describes a collateral shortfall, not a personal liability of the owner.
 
-**Reserved inventory** — Inventory locked for one pending application obligation and unavailable for withdrawal or any other allocation.
+**Gross leverage**:
+NAV divided by positive equity. Target leverage describes a requested action; current leverage changes with prices, costs, and interest.
 
-**Ownership claim** — A vested, non-expiring user ownership record backed by locked protocol inventory until withdrawal or transfer.
+**Maintenance equity ratio**:
+The minimum equity-to-NAV ratio before a financed position becomes eligible for liquidation. It does not restrict NFT transfer.
 
-**Protocol-quoted value** — The USDC value obtained from an asset's registry-approved price adapter under its maximum-price-age rule; applications do not supply it.
+**Position performance**:
+Performance since inception, adjusted for contributions, repayments, and returned assets. It does not represent the current owner's return on an unknown NFT purchase price.
 
-**Inventory principal** — The full locked protocol-quoted value that a consuming application settles to the contributor for inventory represented by a user ownership claim; it is separate from the allocation fee.
+## Settlement and losses
 
-**Allocation fee** — The additional USDC application-access fee charged as the public V1 percentage of locked protocol-quoted value and split between the contributor and Margin Call.
+**Normal close**:
+An owner-initiated exit that repays current debt in full and returns remaining assets, preserving as much NVDAc as execution permits.
 
-**Allocation** — The atomic protocol transition in which a consuming application settles inventory principal and the allocation fee, inventory becomes claim-backing, and a funded user ownership claim is created.
+**Liquidation**:
+A permissionless full unwind of an eligible financed position, with sale proceeds distributed according to repayment priority.
 
-**Stock Gacha** — The future protocol-backed form of the game. The standalone MVP may own its own custody and settlement first; later migration to the shared protocol must preserve the game's experience, odds, and independently verifiable randomness.
+**Shortfall**:
+The amount by which current debt exceeds actual liquidation proceeds. It includes unrecovered principal and unpaid interest.
+
+**Realized bad debt**:
+The shortfall recorded when liquidation finalizes, absorbed by the protocol treasury without a claim on any NFT owner or other position.
+
+**Principal loss**:
+The borrowed principal that liquidation proceeds did not recover, separate from unpaid interest.
+
+**Liquidator reward**:
+The liquidation incentive capped at 1% of gross realized sale proceeds and limited by what remains after full debt repayment.
+
+**First-party keeper**:
+The protocol-operated participant that submits eligible liquidations, including those offering no reward. It has the same execution and oracle constraints as any other liquidator.
