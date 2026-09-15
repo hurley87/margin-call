@@ -130,14 +130,36 @@ Single NVDAc Chainlink total-return pricing/state adapter.
 
 Single-purpose NVDAc/USDC Uniswap adapter with fixed approved tokens, fixed settlement path, and bounded execution.
 
-V1 uses the direct Base Uniswap V3 USDC/NVDAc pool at fee tier `3000` and
-enforces a maximum **100 bps (1.00%) total adverse oracle-relative execution
-deviation** for the verified `$10–$250` demo range. That total comprises venue
-fee, AMM price impact, and pool/oracle basis; it must not be described entirely
-as “slippage.” The 100 bps value is a conservative hackathon/demo parameter
-based on executable and historical fork evidence, not a permanent production
-risk parameter. Enforce the stricter of this oracle-derived floor and the
-caller's `minOut`.
+The verified Base V1 path is:
+
+```text
+Base USDC              0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+NVDAc                  0xb20000000000000000000078ee7ce2fE4908108C
+Uniswap V3 factory     0x33128a8fC17869897dcE68Ed026d694621f6FDfD
+SwapRouter02           0x2626664c2603336E57B271c5C0b26F421741e481
+QuoterV2               0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a
+Direct USDC/NVDAc pool 0x60661b315553EB81872deEA9a66d567Cf0CCd33B
+Fee tier               3000
+```
+
+V1 enforces a maximum **100 bps (1.00%) total adverse oracle-relative
+execution deviation** for the verified `$10–$250` demo range. That total
+comprises venue fee, AMM price impact, and pool/oracle basis; it must not be
+described entirely as “slippage.” Production execution uses:
+
+```text
+effectiveMinOut = max(callerMinOut, protocolOracleMinOut)
+```
+
+Derive `protocolOracleMinOut` from the current `LIVE` oracle mark and the 100 bps
+adverse bound. Round conservatively so integer truncation cannot allow accepted
+output to exceed the configured adverse deviation.
+
+The 100 bps value is a V1 hackathon/demo parameter based on executable and
+historical fork evidence, not a permanent production risk parameter. It must be
+recalibrated before materially larger capital or trades. Aerodrome benchmarked
+better at the pinned snapshot, but it is comparison evidence only and is not a
+V1 production route. Do not add generalized DEX routing.
 
 There is no separate `PositionNFT` contract, ERC-4626 vault, Position Account clone, asset registry, utilization-rate module, generalized router, APR admin module, global outstanding-principal counter, or `PositionStatus` enum in V1.
 
@@ -197,7 +219,7 @@ Minimum opening leverage      1.0x
 Maximum opening leverage      1.5x
 Allowed opening presets       1.0x, 1.1x, 1.25x, 1.4x, 1.5x
 Borrow APR                    10%   (immutable in V1)
-Maintenance equity ratio      30%   (provisional pending simulation)
+Maintenance equity ratio      30%
 Liquidation threshold         healthFactor < 1.0
 Liquidation                   full unwind
 ```
@@ -216,7 +238,10 @@ The `1.5x` value is an **opening ceiling**, not a maintenance threshold. After o
 
 Transfer never consults this risk model. A liquidatable or underwater position may still transfer, and its existing liquidation eligibility follows the NFT.
 
-The `30%` maintenance equity ratio is the V1 starting parameter and must be validated with simulation before meaningful live capital is deployed.
+The `30%` maintenance equity ratio is the verified V1 constant. It means
+liquidation begins when `equity / NAV < 0.30`, equivalently when
+`currentDebt / NAV > 0.70`. It is a maintenance threshold, not a 30% opening
+margin requirement and not 30% LTV.
 
 ---
 
@@ -469,6 +494,20 @@ V1 proves transferability. Purchase settlement is deferred.
 
 Chainlink determines solvency. Uniswap spot price is never a solvency oracle.
 
+The verified Base V1 configuration is:
+
+```text
+NVDAc                              0xb20000000000000000000078ee7ce2fE4908108C
+Coinbase/Chainlink NVDA feed       0x04689a41629776563E6822F76f2e57D148d28513
+Coinbase oracle registry           0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD
+Base sequencer uptime feed         0xBCF85224fc0756B9Fa45aA7892530B47e10b6433
+NVDAc decimals                     8
+NVDA feed decimals                 8
+USDC decimals                      6
+MAX_LIVE_AGE                       8 hours
+Sequencer recovery grace period    3600 seconds
+```
+
 `OracleAdapter` classifies the NVDAc observation as:
 
 ```text
@@ -479,15 +518,30 @@ INVALID
 
 ### `LIVE`
 
-A `LIVE` observation requires a complete positive round, valid timestamp, no Coinbase corporate-action pause, a supported update window, a round within the configured live-age bound, and a new qualifying round after any prior held period.
+A `LIVE` observation requires the Coinbase registry to be unpaused; the Base
+sequencer to be up and beyond its recovery grace period; and a complete,
+positive, non-future Chainlink round no older than `MAX_LIVE_AGE`. After an
+explicit hold, `LIVE` additionally requires a qualifying round strictly newer
+than the frozen round before the adapter may recover.
 
 ### `HELD`
 
-`HELD` means the latest mark is intentionally frozen because of a known scheduled market hold or corporate action. It may be displayed with timestamp/reason but is never a current solvency mark.
+`HELD` means the Coinbase registry explicitly reports `paused == true`. This is
+the only onchain proof of a hold. Stale data alone is not `HELD`. The last feed
+value may be displayed as the held mark, but it is never current solvency
+pricing.
 
 ### `INVALID`
 
-`INVALID` means the adapter cannot prove either a valid live observation or a legitimate held state. The adapter fails closed.
+`INVALID` means the adapter cannot prove either `LIVE` or explicit `HELD`. This
+includes stale unpaused data, failed dependency reads, malformed, incomplete,
+zero, negative, or future rounds, sequencer down or in its recovery grace
+period, and registry unpause before a fresh post-hold round.
+
+The production `OracleAdapter` must retain enough information to enforce the
+fresh-round-after-`HELD` rule, such as the frozen `roundId` and `updatedAt` or
+equivalent state. A purely stateless current-read classifier cannot prove that a
+pause occurred between calls.
 
 ### V1 action matrix
 
@@ -514,22 +568,32 @@ Interest continues accruing while pricing is held or invalid.
 
 The Coinbase NVDA Chainlink feed publishes the B20 total-return value: underlying equity price multiplied by the B20 multiplier.
 
-Margin Call values **raw NVDAc units directly against that total-return price** and must never apply the B20 multiplier separately.
+Custody and position accounting use raw ERC-20 `balanceOf` and `transfer` units.
+Scaled/UI B20 balances are presentation values and must not be used to determine
+the position amount held by Margin Call.
+
+Margin Call values **raw NVDAc units directly against the total-return feed
+answer**. The feed is already multiplier-adjusted, so the B20 multiplier must
+never be applied again.
 
 Conceptually:
 
 ```text
-valueUsdcBase =
+valueUsdcRaw =
     stockAmountRaw
-    * priceRaw
+    * feedAnswer
     * 10^usdcDecimals
     / 10^stockDecimals
     / 10^feedDecimals
 ```
 
-Use one overflow-safe normalization helper everywhere valuation is required.
+For V1, `stockDecimals = 8`, `feedDecimals = 8`, and `usdcDecimals = 6`.
+Production valuation must use overflow-safe `mulDiv` and conservative floor
+rounding so NAV never overstates collateral value.
 
-Do not multiply `scaledBalanceOf`, `toScaledBalance`, or `multiplier()` into the total-return price. Doing so double counts the multiplier.
+Do not use `scaledBalanceOf`, `balanceOfUI`, `toUIAmount`, or the B20 multiplier
+for custody or position accounting. Applying the multiplier to the total-return
+feed again double counts the corporate-action/dividend adjustment.
 
 ---
 
@@ -817,23 +881,18 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 
 ---
 
-## Live Base feasibility gate
+## Verified Base V1 assumptions
 
-Before real funds are used, verify and pin:
+Issue #420's executable Base-mainnet verification pins the addresses, decimals,
+raw B20 custody semantics, total-return valuation, oracle-state policy,
+`MAX_LIVE_AGE`, sequencer grace period, bidirectional Uniswap V3 path, 100 bps
+execution bound for the `$10–$250` demo range, and 30% maintenance equity ratio
+documented above.
 
-- NVDAc address/decimals and native B20 transfer semantics;
-- Coinbase NVDA Chainlink proxy and feed decimals;
-- Coinbase oracle-registry pause semantics;
-- supported live/held schedule and freshness policy;
-- post-hold new-round behavior;
-- raw-unit total-return normalization;
-- executable USDC -> NVDAc route for financed opening;
-- executable NVDAc -> USDC route for reduction/liquidation;
-- practical total oracle-relative execution bounds at demo size;
-- the actual `LIVE` feed window in which the required live acceptance flow will be run;
-- simulation evidence supporting or revising the provisional 30% maintenance equity ratio before meaningful live capital.
-
-Mocks must reflect the verified semantics.
+Mocks and production implementations must reflect those verified semantics.
+Before running the live acceptance flow, confirm the adapter is currently
+`LIVE`; that operational check does not reopen the pinned architecture or risk
+decisions.
 
 ---
 
