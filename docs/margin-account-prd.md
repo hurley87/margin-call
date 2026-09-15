@@ -8,15 +8,17 @@ The canonical V1 flow is deliberately narrow:
 
 1. A user or agent already owns an approved Coinbase B20 stock such as NVDAc.
 2. They deposit that stock into Margin Call.
-3. They choose leverage up to the configured maximum, initially `1.5x`.
+3. They choose target leverage from `1.0x` up to the configured maximum, initially `1.5x`.
 4. Margin Call values the deposited stock with the approved oracle.
-5. Margin Call draws USDC from its Credit Vault.
+5. If target leverage is above `1.0x`, Margin Call draws the required USDC from its Credit Vault.
 6. That USDC is atomically swapped through Uniswap into **more of the same stock**.
 7. The resulting stock remains inside an isolated Position Account.
-8. The USDC financing accrues simple interest at the current protocol APR while debt is outstanding.
-9. Margin Call mints a Position NFT representing ownership/control of the entire live financed account.
+8. The USDC financing accrues simple interest at the current protocol APR while principal is outstanding.
+9. Margin Call mints a Position NFT representing ownership/control of the entire live position.
 10. The NFT may be transferred or sold without selling the stock or refinancing the debt; accrued interest remains attached to the position.
 11. On a normal close, Margin Call sells only enough stock to repay principal, accrued interest, and required fees, returns the remaining stock to the current NFT owner, and burns the NFT. If debt was already repaid with external USDC, the stock can be returned without a sale. Liquidation remains a full unwind.
+
+At `1.0x`, no USDC is borrowed and no financing interest accrues. The stock can still live inside the same Position Account/NFT structure and can later be levered up without replacing the NFT.
 
 The user never receives borrowed USDC as freely spendable capital. Margin Call exposes **leveraged spot ownership**, not a general-purpose credit line.
 
@@ -50,11 +52,12 @@ Margin Call position
 
 real tokenized stock
    -> deposit stock
-   -> finance more of the same stock
-   -> live financed spot position
+   -> optionally finance more of the same stock
+   -> live spot position
    -> ERC-721 ownership
               |
               +-> hold
+              +-> increase leverage
               +-> deleverage
               +-> repay
               +-> close
@@ -64,8 +67,8 @@ real tokenized stock
 A Margin Call NFT is therefore not just a receipt or collectible wrapper. It is the ownership/control primitive for a live account containing:
 
 - actual B20 stock;
-- USDC-denominated principal;
-- accrued borrow interest;
+- optional USDC-denominated principal;
+- accrued borrow interest when financed;
 - current equity;
 - liquidation state;
 - an optional agent executor;
@@ -83,6 +86,10 @@ V1 is intentionally restrictive:
 - Long only.
 - One stock per position.
 - Position opens by depositing an approved B20 stock.
+- Target gross leverage may range from `1.0x` through `1.5x`.
+- Product UI presets: `1.0x`, `1.1x`, `1.25x`, `1.4x`, and `1.5x`.
+- Presets are only UX conveniences; the protocol may accept any valid target leverage inside the configured range.
+- `1.0x` means no financing, no USDC debt, and no borrow interest.
 - Margin Call lends USDC only to buy **more of that same stock**.
 - Borrowed USDC is never freely withdrawable.
 - Maximum gross leverage initially `1.5x`.
@@ -109,6 +116,7 @@ The hackathon goal is to prove the primitive end to end locally and then execute
 
 - Finance actual tokenized-stock ownership rather than synthetic exposure.
 - Let a stock holder increase spot exposure without selling their original stock first.
+- Let a user create the same live NFT/account at `1.0x` and add financing later.
 - Ensure borrowed USDC can only acquire more of the position's configured stock.
 - Charge a legible financing cost while debt remains outstanding.
 - Keep every financed position isolated and independently liquidatable.
@@ -125,21 +133,22 @@ A complete demo must prove:
 1. The Credit Vault is seeded with USDC.
 2. A wallet starts with an approved B20 stock.
 3. The wallet deposits that stock into Margin Call.
-4. Margin Call values the deposit using the approved oracle.
-5. Margin Call draws USDC credit from the Credit Vault according to the chosen leverage.
-6. The borrowed USDC is atomically swapped into more of the **same** B20 stock.
-7. A Position Account holds the combined stock inventory and records USDC principal.
-8. Borrow interest accrues over elapsed time without requiring periodic write transactions.
-9. The owner/admin can update the borrow APR and the new rate applies only from the update timestamp forward.
-10. A Position NFT is minted to the owner.
-11. The live position page shows stock exposure, principal, accrued interest, current debt, APR, equity, P&L, leverage, health, thesis, and dynamic NFT art.
-12. The NFT can be transferred to a second wallet while the underlying stock and debt remain unchanged.
-13. The old owner and old executor lose control after transfer.
-14. The new NFT owner gains control of the same financed account and inherits its current debt obligation.
-15. The owner can reduce leverage, repay, or close the position while preserving as much of the underlying stock exposure as possible.
-16. A simulated price decline or enough elapsed interest can make the account liquidatable.
-17. A permissionless liquidator can unwind the account, repay the vault first, collect the configured reward, return residual equity, and burn the NFT.
-18. At least one tiny live Base position uses real USDC, a supported B20 stock, Chainlink pricing, and Uniswap execution.
+4. The owner can open at `1.0x` with no debt or choose a financed target up to `1.5x`.
+5. For financed positions, Margin Call values the deposit using the approved oracle.
+6. Margin Call draws USDC credit from the Credit Vault according to the chosen leverage.
+7. The borrowed USDC is atomically swapped into more of the **same** B20 stock.
+8. A Position Account holds the combined stock inventory and records USDC principal.
+9. Borrow interest accrues over elapsed time without requiring periodic write transactions.
+10. The owner/admin can update the borrow APR and the new rate applies only from the update timestamp forward.
+11. A Position NFT is minted to the owner.
+12. The live position page shows stock exposure, principal, accrued interest, current debt, APR, equity, P&L, leverage, health, thesis, and dynamic NFT art.
+13. The NFT can be transferred to a second wallet while the underlying stock and debt remain unchanged.
+14. The old owner and old executor lose control after transfer.
+15. The new NFT owner gains control of the same financed account and inherits its current debt obligation.
+16. The owner can increase leverage, reduce leverage, repay, or close the position while preserving as much of the underlying stock exposure as possible.
+17. A simulated price decline or enough elapsed interest can make a financed account liquidatable.
+18. A permissionless liquidator can unwind the account, repay the vault first, collect the configured reward, return residual equity, and burn the NFT.
+19. At least one tiny live Base position uses real USDC, a supported B20 stock, Chainlink pricing, and Uniswap execution.
 
 ---
 
@@ -158,6 +167,7 @@ The following are intentionally out of scope:
 - Utilization-based or automatically variable interest-rate curves.
 - Per-stock borrow rates.
 - Compounding interest.
+- Gross leverage above `1.5x`.
 - Partial liquidations.
 - Portfolio margin.
 - Governance.
@@ -177,10 +187,11 @@ The wallet that owns the Position NFT.
 The owner may:
 
 - deposit the initial approved stock;
+- choose initial leverage from `1.0x` through `1.5x`;
 - add more of the same stock as collateral;
 - add USDC for repayment/deleveraging;
 - increase leverage within protocol limits;
-- reduce leverage;
+- reduce leverage, including back to `1.0x`;
 - appoint or revoke an executor;
 - transfer or sell the Position NFT while the account is transferable;
 - repay debt;
@@ -245,14 +256,14 @@ Longer term this authority should move behind a timelock and/or a dedicated risk
 
 ## Position model
 
-### One NFT = one stock = one isolated financed position
+### One NFT = one stock = one isolated live position
 
 Each live position contains exactly:
 
 - one approved B20 stock;
 - an optional transient USDC balance from execution/deleveraging;
-- USDC principal owed to the Credit Vault;
-- accrued borrow interest;
+- optional USDC principal owed to the Credit Vault;
+- accrued borrow interest when principal is outstanding;
 - risk/accounting state;
 - an optional executor;
 - application-layer metadata/thesis/history.
@@ -275,7 +286,7 @@ Each NFT maps to an isolated `PositionAccount`, preferably factory-deployed as a
 
 The Position Account is a custody/execution container. It is not the risk engine.
 
-It holds the financed stock and any temporary USDC generated by approved execution.
+It holds the stock and any temporary USDC generated by approved execution.
 
 ```text
 PositionNFT #184
@@ -288,6 +299,8 @@ PositionAccount #184
       v
 Debt record -> CreditVault
 ```
+
+At `1.0x`, the debt record is zero. The Position Account/NFT still exists and can later use the same `increaseLeverage` lifecycle.
 
 ### Debt state
 
@@ -328,11 +341,61 @@ That USDC is not general-purpose user cash while debt is outstanding. It is used
 
 ---
 
+## Leverage selection
+
+V1 supports gross leverage from **`1.0x` through `1.5x`**.
+
+The protocol should accept a target leverage anywhere inside that valid range, subject to fixed-point precision and risk checks. The UI should make the decision simpler with presets:
+
+```text
+1.0x   Spot only      no borrowing
+1.1x   Conservative   borrow 10% of contributed equity
+1.25x  Balanced       borrow 25% of contributed equity
+1.4x   Aggressive     borrow 40% of contributed equity
+1.5x   Max            borrow 50% of contributed equity
+```
+
+For a fresh position before fees or interest, if contributed stock equity is `E` and target leverage is `L`:
+
+```text
+initialPrincipal = E * (L - 1)
+grossStockExposure = E * L
+```
+
+For a `$100` stock deposit:
+
+```text
+Target    USDC principal    Gross stock exposure
+1.0x      $0                $100
+1.1x      $10               $110
+1.25x     $25               $125
+1.4x      $40               $140
+1.5x      $50               $150
+```
+
+The presets are product-layer labels, not separate protocol products. An advanced slider/input may allow any target inside the configured range.
+
+### `1.0x` positions
+
+A `1.0x` position is the same account/NFT primitive without financing:
+
+1. Deposit approved stock into a Position Account.
+2. Draw no USDC from the Credit Vault.
+3. Perform no financing swap.
+4. Record zero principal and zero accrued interest.
+5. Mint the Position NFT.
+
+The owner can later call `increaseLeverage` to move from `1.0x` to a financed target such as `1.25x` or `1.5x` without minting a replacement NFT.
+
+This gives users a lower-risk entry point into the living NFT/account model and keeps the account lifecycle consistent whether financing is added immediately or later.
+
+---
+
 ## Canonical opening flow
 
 The default V1 opening experience starts with stock, not cash.
 
-Example:
+Example at maximum leverage:
 
 ```text
 User owns            $100 NVDAc
@@ -355,14 +418,15 @@ Margin Call atomically:
 
 1. Transfers the deposited NVDAc into a new Position Account.
 2. Values the deposited NVDAc using the approved oracle.
-3. Calculates maximum allowable USDC debt for the chosen leverage.
-4. Draws the required USDC from the Credit Vault.
-5. Swaps that USDC through the approved execution adapter into NVDAc.
-6. Sends the purchased NVDAc to the same Position Account.
-7. Records the USDC principal and current rate-accumulator snapshot.
-8. Mints the Position NFT to the owner.
+3. Validates `1.0x <= targetLeverage <= maxLeverage`.
+4. Calculates the USDC principal required for the chosen leverage.
+5. If principal is greater than zero, draws that USDC from the Credit Vault.
+6. If principal is greater than zero, swaps that USDC through the approved execution adapter into NVDAc.
+7. Sends the purchased NVDAc to the same Position Account.
+8. Records the USDC principal and current rate-accumulator snapshot.
+9. Mints the Position NFT to the owner.
 
-Expected result:
+Expected result at `1.5x`:
 
 ```text
 Position #184
@@ -376,7 +440,20 @@ Net equity              $100
 Gross leverage          1.50x
 ```
 
-If the swap cannot execute within the configured slippage bound, the leveraged opening should revert rather than leave a partially financed position.
+Expected result at `1.0x`:
+
+```text
+Position #185
+
+NVDAc gross value       $100
+USDC principal            $0
+Accrued interest          $0
+Current debt              $0
+Net equity              $100
+Gross leverage          1.00x
+```
+
+If a financing swap cannot execute within the configured slippage bound, a leveraged opening should revert rather than leave a partially financed position.
 
 ### No visible borrow step
 
@@ -391,7 +468,7 @@ borrow 50 USDC
 Instead, the economic action is:
 
 ```text
-increase NVDAc exposure to 1.5x
+choose target NVDAc exposure
 ```
 
 USDC debt exists internally because the Credit Vault is denominated in USDC, but the protocol immediately routes that credit into the configured stock.
@@ -402,7 +479,7 @@ USDC debt exists internally because the Credit Vault is denominated in USDC, but
 
 ### Increase leverage
 
-A healthy position may increase exposure up to the configured maximum.
+A healthy position may increase exposure to any valid target up to the configured maximum.
 
 Conceptually:
 
@@ -414,13 +491,16 @@ Margin Call:
 
 1. accrues interest through the current global rate accumulator;
 2. values the account using current debt;
-3. calculates additional allowable principal;
-4. draws USDC from the Credit Vault;
-5. swaps USDC into the position's configured stock;
-6. keeps the purchased stock in the Position Account;
-7. records the additional principal and updated rate-accumulator snapshot.
+3. validates the requested target leverage;
+4. calculates additional allowable principal;
+5. draws USDC from the Credit Vault;
+6. swaps USDC into the position's configured stock;
+7. keeps the purchased stock in the Position Account;
+8. records the additional principal and updated rate-accumulator snapshot.
 
 Credit cannot be redirected to another token.
+
+A position opened at `1.0x` can therefore become a financed position later without changing its NFT or Position Account.
 
 ### Reduce leverage
 
@@ -433,11 +513,14 @@ reduceLeverage(tokenId, targetLeverage)
 Margin Call:
 
 1. accrues interest through the current global rate accumulator;
-2. calculates how much debt must be repaid;
-3. sells the required quantity of the configured stock into USDC;
-4. applies repayment to accrued interest first, then principal;
-5. returns repayment to the Credit Vault;
-6. leaves the remaining stock in the Position Account.
+2. validates a lower target leverage down to `1.0x`;
+3. calculates how much debt must be repaid;
+4. sells the required quantity of the configured stock into USDC;
+5. applies repayment to accrued interest first, then principal;
+6. returns repayment to the Credit Vault;
+7. leaves the remaining stock in the Position Account.
+
+Reducing to `1.0x` should repay all current debt while preserving the remaining stock in the same Position Account/NFT.
 
 ### Add collateral
 
@@ -465,6 +548,7 @@ Interest is:
 - denominated in USDC;
 - simple, not compounding;
 - charged only while principal is outstanding;
+- zero for a `1.0x` position with no principal;
 - calculated from elapsed time and the rate schedule implied by the global accumulator;
 - attached to the position and transferred with the NFT;
 - repaid before principal when a repayment occurs.
@@ -593,19 +677,20 @@ For V1:
 
 ### Initial leverage
 
-Maximum gross leverage: **1.5x**.
+Supported gross leverage: **`1.0x` through `1.5x`**.
 
 For a deposit worth $100:
 
 ```text
-Deposited stock value    $100
-Maximum USDC principal    $50
-Gross stock exposure     $150
-Initial USDC debt          $50
-Net equity                $100
+Target    USDC principal    Gross stock exposure
+1.0x      $0                $100
+1.1x      $10               $110
+1.25x     $25               $125
+1.4x      $40               $140
+1.5x      $50               $150
 ```
 
-This is economically equivalent to financing 50% additional spot exposure against the contributed stock value.
+The `1.5x` ceiling is economically equivalent to financing at most 50% additional spot exposure against the contributed stock value at opening.
 
 ### Capacity
 
@@ -655,6 +740,7 @@ Gross Leverage = NAV / Equity
 
 Use configurable parameters with these starting values:
 
+- Minimum gross leverage: `1.0x`.
 - Maximum gross leverage: `1.5x`.
 - Maximum principal at open: `50%` of oracle-valued contributed stock equity.
 - Borrow APR: `10%` initially, owner/admin configurable prospectively.
@@ -671,13 +757,16 @@ Health Factor = Equity Ratio / Maintenance Equity Ratio
 
 `Health Factor < 1.0` means liquidatable.
 
+A `1.0x` position with zero debt has no lender insolvency risk and should not be liquidatable merely because its stock price declines. Liquidation logic applies once current debt is greater than zero.
+
 ### Risk-increasing actions
 
-Before opening or increasing leverage, Margin Call must verify:
+Before opening a financed position or increasing leverage, Margin Call must verify:
 
 - caller is owner or current executor;
 - position is active;
 - asset is approved;
+- requested target leverage is within the configured range;
 - credit is used only for the position's configured stock;
 - oracle price is valid and fresh;
 - execution uses an approved venue;
@@ -696,7 +785,7 @@ If the approved price feed is stale or invalid:
 
 Block:
 
-- opening new leveraged positions;
+- opening new financed positions;
 - increasing leverage;
 - other actions that increase risk.
 
@@ -785,7 +874,7 @@ A full-exit Flash fill should eventually be finalized by Margin Call:
 
 Use OpenZeppelin ERC-721.
 
-The NFT represents control of the entire financed account.
+The NFT represents control of the entire live account.
 
 If Position #184 contains:
 
@@ -810,6 +899,8 @@ The transfer does **not**:
 
 Only control changes.
 
+An unfinanced `1.0x` NFT is transferable under the same ownership primitive and may later become financed after transfer if its owner chooses to increase leverage.
+
 ### Transfer semantics
 
 On successful NFT transfer:
@@ -821,7 +912,7 @@ On successful NFT transfer:
 - the previous executor authorization is cleared;
 - the new owner may appoint a new executor.
 
-Transfers revert when the account is below the configured transfer-health threshold using current debt including elapsed interest.
+Transfers revert when a financed account is below the configured transfer-health threshold using current debt including elapsed interest.
 
 ### Why a secondary market matters
 
@@ -837,8 +928,8 @@ or:
 
 ```text
 Sell NFT
-  -> buyer acquires the existing financed spot account
-  -> buyer inherits current debt
+  -> buyer acquires the existing live spot account
+  -> if financed, buyer inherits current debt
   -> no stock unwind
   -> no debt refinance
 ```
@@ -856,13 +947,13 @@ The NFT is burned only after a terminal lifecycle event:
 - normal close; or
 - liquidation.
 
-Therefore, an existing Position NFT always maps to a live financed account.
+Therefore, an existing Position NFT always maps to a live account.
 
 ---
 
 ## Liquidation
 
-Liquidation is permissionless.
+Liquidation is permissionless for financed positions.
 
 Anyone may call:
 
@@ -870,7 +961,9 @@ Anyone may call:
 liquidate(positionId)
 ```
 
-when the account is below the configured liquidation threshold.
+when a financed account is below the configured liquidation threshold.
+
+A zero-debt `1.0x` position is not liquidatable.
 
 V1 uses full liquidation:
 
@@ -908,11 +1001,13 @@ The default V1 close should preserve the owner's underlying stock exposure rathe
 
 1. accrue borrow interest through the current rate accumulator;
 2. calculate the USDC required to repay principal, accrued interest, and any required closing/protocol fees;
-3. sell only the minimum required quantity of the configured stock into USDC, subject to slippage bounds;
+3. if current debt is greater than zero, sell only the minimum required quantity of the configured stock into USDC, subject to slippage bounds;
 4. repay the Credit Vault in full;
 5. settle any applicable fees;
 6. return all remaining configured stock and any residual USDC to the current NFT owner;
 7. burn the NFT.
+
+For a `1.0x` zero-debt position, normal close simply returns the stock and burns the NFT without a financing sale.
 
 Example:
 
@@ -964,7 +1059,9 @@ V1 should prioritize simple and explicit economics.
 
 ### Primary revenue: borrow interest
 
-Borrow interest is the core Margin Call business model.
+Borrow interest is the core Margin Call business model for financed positions.
+
+A `1.0x` zero-debt position pays no borrow interest. Margin Call earns financing revenue only once the position draws credit.
 
 The initial protocol-funded Credit Vault earns the full financing interest because Margin Call provides the capital itself. When external LPs are introduced later, a reserve factor can split borrower interest between LP yield and protocol revenue.
 
@@ -1010,7 +1107,8 @@ An agent that already has an EVM wallet can interact directly with Margin Call.
 It may:
 
 - own the B20 stock;
-- open the financed position;
+- open the live position;
+- choose leverage from `1.0x` to `1.5x`;
 - own the Position NFT;
 - act as its own executor.
 
@@ -1067,7 +1165,7 @@ Initial tool surface:
 
 Notice that the V1 agent interface does **not** expose a generic `borrow_usdc` tool.
 
-The agent asks for an economic action such as increasing NVDAc leverage; Margin Call performs the internal USDC credit and same-asset purchase.
+The agent asks for an economic action such as opening at `1.25x` or increasing NVDAc leverage; Margin Call performs the internal USDC credit and same-asset purchase.
 
 `get_position` and `get_health` must report current debt including uncheckpointed accrued interest.
 
@@ -1114,7 +1212,7 @@ Examples:
 - `P&L Direction = Up`
 - `Return Bucket = +20% to +50%`
 - `Health = Healthy | Warning | Critical`
-- `Leverage Bucket = 1.0x-1.2x | 1.2x-1.5x`
+- `Leverage Bucket = 1.0x | 1.0x-1.2x | 1.2x-1.5x`
 - `Current Borrow APR = 10%`
 - `Manager = Claude | Codex | Agent | Manual`
 
@@ -1140,7 +1238,8 @@ The position NFT is both a financial ownership object and a distribution object.
 
 ```text
 holder deposits tokenized stock
-  -> Margin Call finances more of the same stock
+  -> chooses leverage from 1.0x to 1.5x
+  -> Margin Call optionally finances more of the same stock
   -> dynamic Position NFT
   -> P&L / thesis / liquidation risk becomes shareable
   -> people discover the position
@@ -1208,9 +1307,9 @@ Potential later utility may include LP incentives or fee benefits.
 ### `PositionNFT`
 
 - OpenZeppelin ERC-721.
-- One token per live financed position.
+- One token per live position, financed or unfinanced.
 - Transfer clears executor authorization.
-- Transfer checks transfer-health requirements using current debt including accrued interest.
+- Transfer checks transfer-health requirements for financed accounts using current debt including accrued interest.
 - Burn restricted to terminal Margin Call lifecycle.
 
 ### `PositionAccount`
@@ -1232,10 +1331,11 @@ Primary coordinator and risk engine.
 
 Responsibilities:
 
-- open positions from deposited B20 stock;
+- open positions from deposited B20 stock at a target from `1.0x` through configured max leverage;
 - value contributed stock;
 - calculate allowable credit;
-- atomically draw USDC and buy more of the same stock;
+- skip credit draw entirely for `1.0x` openings;
+- atomically draw USDC and buy more of the same stock for financed openings/increases;
 - account for principal and accrued interest;
 - maintain the global rate accumulator;
 - expose current debt as a time-aware view;
@@ -1243,13 +1343,13 @@ Responsibilities:
 - allow the owner/admin to update borrow APR prospectively up to `MAX_BORROW_APR`;
 - emit rate-update events;
 - validate owner/executor authorization;
-- increase/reduce leverage;
+- increase/reduce leverage across the valid range;
 - add collateral;
 - repay debt;
 - set/revoke executors;
 - enforce transfer/risk constraints using current debt;
 - close positions while preserving remaining stock exposure;
-- liquidate positions;
+- liquidate financed positions;
 - coordinate NFT mint/burn;
 - coordinate Credit Vault draws/repayments.
 
@@ -1344,6 +1444,18 @@ Implement:
 27. Send remaining equity to current NFT owner.
 28. Burn NFT.
 29. Verify no residual debt or stranded assets remain.
+
+### Leverage-selection test
+
+1. Deposit mock NVDA worth 100 USDC and open at `1.0x`.
+2. Verify gross exposure is 100 USDC, principal/current debt are zero, no Credit Vault draw occurs, and the Position NFT is minted.
+3. Increase that same NFT to `1.25x`.
+4. Verify 25 USDC principal is drawn and swapped into additional NVDA, producing approximately 125 USDC gross exposure.
+5. Increase to `1.5x` and verify approximately 150 USDC gross exposure and 50 USDC principal before interest.
+6. Reduce to `1.1x` and verify the required NVDA is sold and debt falls to the corresponding target within rounding tolerance.
+7. Reduce to `1.0x` and verify all current debt is repaid while the remaining NVDA stays in the same Position Account.
+8. Verify attempts below `1.0x` or above `1.5x` revert.
+9. Verify an intermediate non-preset target inside the range is accepted at the protocol layer.
 
 ### Interest accrual test
 
@@ -1473,10 +1585,12 @@ Human flow:
 1. Connect/sign in.
 2. Select an approved stock already held by the owner wallet.
 3. Enter how much stock to deposit.
-4. Choose target leverage up to 1.5x.
-5. Review estimated additional exposure, principal, current borrow APR, and risk.
-6. Confirm.
-7. Margin Call deposits stock, finances more of the same stock, creates the Position Account, and mints the NFT.
+4. Choose target leverage from `1.0x` through `1.5x`.
+5. Show recommended presets: `1.0x Spot`, `1.1x Conservative`, `1.25x Balanced`, `1.4x Aggressive`, `1.5x Max`.
+6. Optionally expose an advanced slider/input for intermediate targets inside the range.
+7. Review estimated additional exposure, principal, current borrow APR, and risk. At `1.0x`, show zero financing and zero borrow interest.
+8. Confirm.
+9. Margin Call deposits stock, optionally finances more of the same stock, creates the Position Account, and mints the NFT.
 
 The user should not see a standalone USDC borrowing step.
 
@@ -1505,6 +1619,8 @@ Show:
 - close (sell only enough stock to settle current debt/fees and return the rest);
 - share link.
 
+The leverage control should use the same preset labels while allowing an advanced target anywhere from `1.0x` through `1.5x`. Moving a financed position back to `1.0x` should be presented as fully repaying the financing while retaining the NFT and remaining stock.
+
 The UI may update accrued interest and current debt continuously using the same deterministic accumulator formula and latest onchain state. This is display-only convenience; the contract's `currentDebt()` calculation is authoritative.
 
 If the owner/admin changes APR, the UI should reflect the new current APR while historical debt remains correctly calculated across the prior rate interval.
@@ -1520,7 +1636,9 @@ After burn, preserve a read-only historical page and final image state, includin
 - Borrowed USDC never becomes freely withdrawable user capital.
 - Credit drawn for a stock can only buy more of that same stock.
 - Financed stock cannot leave the Position Account while debt exists except through approved reduce/close/liquidation paths.
-- Every solvency calculation uses current debt including accrued interest.
+- Protocol leverage targets are bounded to the configured `1.0x`-`1.5x` range.
+- A zero-debt `1.0x` position does not accrue borrow interest and is not liquidatable for lender solvency.
+- Every financed solvency calculation uses current debt including accrued interest.
 - Normal close should not sell more stock than is required to settle current debt and fees.
 - Uniswap is execution, never the solvency oracle.
 - Agent executors do not gain NFT ownership merely by receiving trade authority.
@@ -1546,12 +1664,13 @@ After burn, preserve a read-only historical page and final image state, includin
 - OpenZeppelin ERC-721 Position NFT.
 - Position Account + factory.
 - Margin Call coordinator/risk engine.
+- `1.0x`-`1.5x` target-leverage validation and financing math.
 - Fixed-rate simple-interest accounting and `currentDebt()`.
 - Global cumulative rate accumulator and owner-controlled prospective APR updates.
 - Aggregate Credit Vault receivable accounting.
 - Oracle and execution interfaces.
 - Local mocks.
-- Open-from-stock, finance-same-stock, interest accrual, APR update, transfer, deleverage, stock-preserving close, external-repayment close, and liquidation Foundry tests.
+- Open-from-stock, `1.0x` zero-debt opening, leverage selection, finance-same-stock, interest accrual, APR update, transfer, deleverage, stock-preserving close, external-repayment close, and liquidation Foundry tests.
 
 ### Phase 2 — Base execution
 
@@ -1571,6 +1690,7 @@ After burn, preserve a read-only historical page and final image state, includin
 - Dynamic email onboarding;
 - embedded owner wallet;
 - position dashboard;
+- leverage preset control + advanced target input;
 - live current-APR/accrued-interest/current-debt display;
 - delegated executor flow.
 
@@ -1599,7 +1719,7 @@ These do not block starting the protocol core but must be resolved before meanin
 3. Final maintenance equity ratio and transfer-health threshold after simulation.
 4. Exact liquidation-fee basis and insufficient-residual-equity behavior.
 5. Final initial V1 borrow APR before live capital; `10%` is the initial hackathon/demo default.
-6. Exact fixed-point precision and rounding rules for the cumulative rate accumulator and interest accrual.
+6. Exact fixed-point precision and rounding rules for leverage targets, the cumulative rate accumulator, and interest accrual.
 7. Position Account implementation: minimal custom account vs heavier smart-account standard. Default: minimal custom account.
 8. Exact Uniswap route/adapter implementation while preserving the same-stock invariant.
 9. Flash account/signing requirements.
@@ -1613,4 +1733,4 @@ These do not block starting the protocol core but must be resolved before meanin
 
 ## Product statement
 
-> **Margin Call finances real tokenized equities and creates a secondary market for financed spot positions. Deposit an approved stock, choose your leverage, and Margin Call uses USDC credit to acquire more of that same stock. The financing accrues transparent borrow interest while open, the protocol APR can be updated prospectively by the admin, and the resulting live asset-plus-debt account is represented by a transferable NFT that can change owners without unwinding the trade.**
+> **Margin Call finances real tokenized equities and creates a secondary market for live spot positions. Deposit an approved stock, choose leverage from `1.0x` through `1.5x`, and Margin Call uses USDC credit to acquire more of that same stock when financing is requested. The financing accrues transparent borrow interest while open, the protocol APR can be updated prospectively by the admin, and the resulting live asset-plus-debt account is represented by a transferable NFT that can change owners without unwinding the trade.**
