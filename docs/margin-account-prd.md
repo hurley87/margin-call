@@ -803,9 +803,36 @@ liquidator reward = 0
 owner payout = 0
 ```
 
-Emit `BadDebtRealized(tokenId, shortfall)` and record the principal-loss and unpaid-interest components separately in liquidation outcome data/events. The protocol treasury absorbs the economic loss; finalization does not require a synchronous treasury top-up. Only USDC actually recovered restores liquid lending capacity. Writing off principal does not create USDC.
+Emit exactly one loss event on successful shortfall finalization, with the loss components explicitly split:
+
+```solidity
+event BadDebtRealized(
+    uint256 indexed tokenId,
+    uint256 principalLoss,
+    uint256 unpaidInterest,
+    uint256 shortfall
+);
+```
+
+All amount fields use USDC base units, and `shortfall == principalLoss + unpaidInterest`. An interest-only shortfall still emits the event with `principalLoss == 0`. Sufficient-proceeds liquidation, including exact debt coverage, emits no `BadDebtRealized` event. A reverted attempt leaves no persisted loss event or realized-loss accounting.
+
+The protocol treasury absorbs the economic loss; finalization does not require a synchronous treasury top-up. Only USDC actually recovered restores liquid lending capacity. Writing off principal does not create USDC.
 
 The global counter removes the **entire remaining principal**, not the lifetime original borrowing amount. For example, after borrowing $50 and previously repaying $20 of principal, a position owes $30 principal plus $2 interest. If liquidation receives $25, return $25 to the pool, reduce `outstandingPrincipal` by $30, and emit a $7 shortfall consisting of $5 principal loss and $2 unpaid interest.
+
+The required end-state is `outstandingPrincipalAfter == outstandingPrincipalBefore - P`. Recovered principal and written-off principal together account for this single decrease; do not subtract recovered principal and then subtract all of `P` again. Once the last active position's principal is repaid or removed by finalized liquidation, the counter reaches zero and the APR gate opens. Any principal still outstanding on another active position keeps the gate closed.
+
+Settlement examples for `P = 30 USDC` and `I = 2 USDC` (display units, not raw event amounts):
+
+| Gross proceeds | Pool receives | Principal loss | Unpaid interest | Total shortfall | Liquidator reward | Owner payout |
+| -------------- | ------------- | -------------- | --------------- | --------------- | ----------------- | ------------ |
+| 0              | 0             | 30             | 2               | 32              | 0                 | 0            |
+| 25             | 25            | 5              | 2               | 7               | 0                 | 0            |
+| 31             | 31            | 0              | 1               | 1               | 0                 | 0            |
+| 32             | 32            | 0              | 0               | 0               | 0                 | 0            |
+| 35             | 32            | 0              | 0               | 0               | 0.35              | 2.65         |
+
+Each finalized row removes 30 USDC of remaining principal from the global counter. The zero-proceeds row applies only if execution can successfully satisfy its bounds with that outcome; it does not permit bypassing execution bounds.
 
 No claim attaches to the current or any prior NFT owner. No other position's collateral or accounting is affected. The position is finalized and its NFT burned even though the Credit Pool recovered less than current debt.
 
@@ -1027,7 +1054,7 @@ Emit enough events to reconstruct the lifecycle:
 - ERC-721 `Transfer`
 - `PositionClosed`
 - `PositionLiquidated`
-- `BadDebtRealized(tokenId, shortfall)`
+- `BadDebtRealized(tokenId, principalLoss, unpaidInterest, shortfall)`
 
 Liquidation outcome data must distinguish gross proceeds, principal recovered, interest recovered, principal loss, unpaid interest, reward, and owner payout, and identify the owner at finalization. Transfer history must retain the prior and new owner; terminal history cannot depend on `ownerOf` after burn.
 
@@ -1108,6 +1135,8 @@ Use a fee-free mock and no elapsed interest for these idealized sizing examples.
 5. Verify APR may now change.
 6. Verify non-owner changes revert.
 7. Verify APR above the hard cap reverts.
+8. Shortfall-liquidate the last financed position after a partial principal repayment. Verify the entire remaining principal is removed, historical bad debt remains recorded, and the owner can change APR once the counter reaches zero.
+9. Repeat with principal outstanding on a second position. Verify its principal is unchanged and APR updates still revert.
 
 ### Shared-custody accounting test
 
@@ -1130,12 +1159,12 @@ Use a fee-free mock and no elapsed interest for these idealized sizing examples.
 
 1. Liquidate with proceeds above debt, exactly equal to debt, between principal and total debt, below principal, and zero if a successful bounded execution can produce that result.
 2. Verify shortfall proceeds repay principal first, whereas ordinary repayments pay interest first.
-3. Use the $30 principal / $2 interest / $25 proceeds example: pool receives $25, global principal falls by $30, and bad debt is $7 ($5 principal plus $2 interest).
+3. Verify each settlement-table row, including $30 principal / $2 interest / $25 proceeds: pool receives $25, global principal falls by exactly $30, and the event records $5 principal loss, $2 unpaid interest, and $7 total shortfall in USDC base units. Verify one event for each shortfall, including interest-only loss, and none for exact/full coverage.
 4. Verify zero reward and owner payout for shortfalls, no personal claim, terminal status, and NFT burn.
 5. Verify unrelated positions' stock, principal, interest, and executors remain unchanged.
 6. Verify removed principal is counted exactly once; realized loss does not create available credit and does not leave phantom principal blocking APR updates.
 7. Force oracle, token, swap, and slippage failures. Verify atomic rollback with no burn, loss event, or accounting change.
-8. Verify the keeper retries transient failures within configured bounds and surfaces persistent failures; zero reward does not exclude a position from its work.
+8. Verify the keeper retries transient failures within configured bounds and surfaces persistent failures; zero reward does not exclude a position from its work. Run the same invalid-price, token-restriction, and slippage cases as both keeper and public caller: both must revert with identical accounting preservation.
 
 ### Execution, oracle, and administration tests
 
