@@ -171,27 +171,33 @@ Current `BaseMainnetTest` expected result: **9 passed, 0 failed, 0 skipped**.
 ## Execution route
 
 `contracts/fork/NvdaExecutionRoutes.t.sol` proves real exact-input swaps in both
-directions through the direct **Aerodrome Slipstream Gauges V3** USDC/NVDAc pool
-at the pinned block. Aerodrome is retained as the strongest measured benchmark,
-not selected as the V1 venue:
+directions through the selected direct **Uniswap V3** USDC/NVDAc pool at the
+pinned block. It also preserves equivalent Aerodrome Slipstream execution as
+benchmark evidence:
 
-| Contract        | Address                                      | Pinned evidence                                                |
-| --------------- | -------------------------------------------- | -------------------------------------------------------------- |
-| Pool factory    | `0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef` | Factory recognizes and returns the benchmark pool              |
-| Swap router     | `0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F` | Router bytecode exists and reports the benchmark factory       |
-| Quoter          | `0x514c8B5f54112481E28028F1166Bd78501089259` | Direct exact-input quotes succeed                              |
-| USDC/NVDAc pool | `0x853F5f1B92b16714Fe6CDA67CAad0856B83C7ab9` | Token pair, factory, tick spacing, fee, and state are asserted |
+| Selected Uniswap contract | Address                                      | Pinned evidence                                                     |
+| ------------------------- | -------------------------------------------- | ------------------------------------------------------------------- |
+| V3 factory                | `0x33128a8fC17869897dcE68Ed026d694621f6FDfD` | Factory returns the selected pool for USDC/NVDAc at fee tier 3000   |
+| SwapRouter02              | `0x2626664c2603336E57B271c5C0b26F421741e481` | Real swaps execute; router reports the selected V3 factory          |
+| QuoterV2                  | `0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a` | Direct exact-input quotes equal actual output from the same state   |
+| USDC/NVDAc pool           | `0x60661b315553EB81872deEA9a66d567Cf0CCd33B` | Factory, pair, fee, tick spacing, liquidity, and state are asserted |
 
-The path is direct: `USDC --tick spacing 10--> NVDAc`, reversed for sales. The
-factory's dynamic fee and the pool's `fee()` both resolve to **500 pips (5 bps)**
-at block `51356323`. This is the actual fee at the snapshot, not a promise that a
-dynamic fee can never change.
+The selected path is direct: `USDC --fee 3000--> NVDAc`, reversed for sales.
+The fee tier is **3000 pips (30 bps)**. Addresses are checked against
+[Uniswap's Base deployment list](https://developers.uniswap.org/docs/protocols/v3/deployments/v3-base-deployments),
+then verified against deployed code and factory/router getters on the fork.
+The test's router struct is the exact no-deadline `ExactInputSingleParams` from
+[Uniswap's `IV3SwapRouter`](https://github.com/Uniswap/swap-router-contracts/blob/main/contracts/interfaces/IV3SwapRouter.sol).
 
-The router, quoter, and factory addresses come from Aerodrome's
+The preserved Aerodrome benchmark uses factory
+`0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef`, router
+`0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F`, quoter
+`0x514c8B5f54112481E28028F1166Bd78501089259`, and pool
+`0x853F5f1B92b16714Fe6CDA67CAad0856B83C7ab9`. These addresses come from
+Aerodrome's
 [upstream Slipstream deployment list](https://github.com/aerodrome-finance/slipstream#gauges-v3-deployment).
-The pool is not taken on trust from a market-data site: the deployed factory's
-`getPool(USDC, NVDAc, 10)` returns it on the fork. Test interfaces are minimal
-subsets of the corresponding upstream interfaces.
+Its deployed factory returns that pool for tick spacing 10, and its dynamic fee
+was **500 pips (5 bps)** at the snapshot.
 
 ### Pinned pool state
 
@@ -210,60 +216,90 @@ subsets of the corresponding upstream interfaces.
 Token balances are context, not constant-product reserves: both venues use
 concentrated liquidity, and `liquidity()` is only currently active liquidity.
 
-### Demo-size execution results
+### Selected Uniswap demo-size execution results
 
 All rows start from the unchanged pinned pool state. Positive deviation is worse
 than the oracle mark; negative deviation is favorable. For a buy,
 `oracleFairValue` is the USDC input and `actualExecutionValue` is the received raw
 NVDAc valued once with `NvdaValuation` at the pinned feed answer
 `21178500000`. For a sale, fair value is the input raw NVDAc's oracle USDC value
-and actual value is the USDC received.
+and actual value is the USDC received. Each QuoterV2 quote is taken immediately
+before the swap from the same state and equals both SwapRouter02's return value
+and the recipient's output-token balance delta exactly.
 
-| USDC buy input | Actual NVDAc received | Actual oracle value | Total oracle deviation |
-| -------------: | --------------------: | ------------------: | ---------------------: |
-|   `$10.000000` |          `0.04711543` |         `$9.978341` |            `21.65 bps` |
-|   `$50.000000` |          `0.23557695` |        `$49.891664` |            `21.66 bps` |
-|  `$100.000000` |          `0.47115338` |        `$99.783218` |            `21.67 bps` |
-|  `$250.000000` |          `1.17787951` |       `$249.457212` |            `21.71 bps` |
+| USDC input | QuoterV2 / actual NVDAc output | Output oracle value | Total oracle-relative deviation |
+| ---------: | -----------------------------: | ------------------: | ------------------------------: |
+|      `$10` |                   `0.04709509` |         `$9.974033` |                     `25.96 bps` |
+|      `$50` |                   `0.23544184` |        `$49.863050` |                     `27.39 bps` |
+|     `$100` |                   `0.47079948` |        `$99.708267` |                     `29.17 bps` |
+|     `$250` |                   `1.17636750` |       `$249.136990` |                     `34.52 bps` |
 
-| Approximate sale notional |              Raw NVDAc input | Oracle fair value | Actual USDC received | Total oracle deviation |
-| ------------------------: | ---------------------------: | ----------------: | -------------------: | ---------------------: |
-|                     `$10` |   `4,721,769` (`0.04721769`) |       `$9.999998` |         `$10.011679` |           `-11.68 bps` |
-|                     `$50` |  `23,608,848` (`0.23608848`) |      `$49.999998` |         `$50.058359` |           `-11.67 bps` |
-|                    `$100` |  `47,217,697` (`0.47217697`) |      `$99.999999` |        `$100.116610` |           `-11.66 bps` |
-|                    `$250` | `118,044,242` (`1.18044242`) |     `$249.999997` |        `$250.290682` |           `-11.62 bps` |
+| Approx. notional |              Raw NVDAc input | Oracle fair value | QuoterV2 / actual USDC output | Total oracle-relative deviation |
+| ---------------: | ---------------------------: | ----------------: | ----------------------------: | ------------------------------: |
+|            `$10` |   `4,721,769` (`0.04721769`) |       `$9.999998` |                   `$9.965010` |                     `34.98 bps` |
+|            `$50` |  `23,608,848` (`0.23608848`) |      `$49.999998` |                  `$49.813432` |                     `37.31 bps` |
+|           `$100` |  `47,217,697` (`0.47217697`) |      `$99.999999` |                  `$99.597805` |                     `40.21 bps` |
+|           `$250` | `118,044,242` (`1.18044242`) |     `$249.999997` |                 `$248.776805` |                     `48.92 bps` |
 
-The Aerodrome benchmark fee is **5 bps of input**. Separately, comparing each quote
-with the pool's pre-swap spot output after that fee gives measured price impact of
-approximately **0.0021, 0.0110, 0.0222, and 0.0558 bps** for the four sizes in
-each direction. The remainder of total oracle-relative deviation is primarily
-the difference between the live pool price and the pinned Chainlink mark; it is
-not AMM slippage and is not relabeled as such.
+The total is **total oracle-relative deviation**, not “slippage.” For reporting,
+the test evidence is decomposed as:
+
+```text
+total oracle-relative deviation
+= venue fee + AMM price impact + pool/oracle basis
+```
+
+The fee is the fixed 30 bps tier. Price impact compares actual output with the
+pre-swap spot output after that fee. Pool/oracle basis is the signed residual, so
+the rounded components sum to the total:
+
+| Direction / size | Venue fee | AMM price impact | Pool/oracle basis |     Total |
+| ---------------- | --------: | ---------------: | ----------------: | --------: |
+| Buy `$10`        | 30.00 bps |         0.37 bps |         -4.41 bps | 25.97 bps |
+| Buy `$50`        | 30.00 bps |         1.80 bps |         -4.41 bps | 27.39 bps |
+| Buy `$100`       | 30.00 bps |         3.59 bps |         -4.42 bps | 29.17 bps |
+| Buy `$250`       | 30.00 bps |         8.95 bps |         -4.43 bps | 34.52 bps |
+| Sell `~$10`      | 30.00 bps |         0.59 bps |          4.40 bps | 34.99 bps |
+| Sell `~$50`      | 30.00 bps |         2.92 bps |          4.40 bps | 37.31 bps |
+| Sell `~$100`     | 30.00 bps |         5.83 bps |          4.39 bps | 40.22 bps |
+| Sell `~$250`     | 30.00 bps |        14.57 bps |          4.35 bps | 48.93 bps |
 
 Tests seed only the test contract's USDC balance with Foundry's local `deal`
 fixture. Sale tests impersonate the already documented NVDAc holder and transfer
 the exact raw input through the native B20 contract. The router then spends that
 raw `balanceOf` delta through `transferFrom`. No pool/token/router bytecode,
 liquidity, reserve, issuer policy, or quote result is mocked or overwritten, and
-no mainnet transaction is submitted.
+no mainnet transaction is submitted. Every demo size is a separate Foundry test,
+so every quote and swap begins from block `51356323`; no prior trade contaminates
+the pool. Both directions also prove that `amountOutMinimum = quote + 1` reaches
+the real SwapRouter02 revert path.
 
-### Uniswap benchmark and V1 decision
+### Aerodrome benchmark comparison
 
-The PRD names Uniswap, so the test also quotes its direct 0.30% V3 pool
-`0x60661b315553eB81872DeEA9a66D567cF0CCd33b` through official Base QuoterV2
-`0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a`. The official factory is
-`0x33128a8fC17869897dcE68Ed026d694621f6FDfD` and SwapRouter02 is
-`0x2626664c2603336E57B271c5C0b26F421741e481`; see
-[Uniswap's Base deployment list](https://developers.uniswap.org/docs/protocols/v3/deployments/v3-base-deployments).
-The deployed factory returns the comparison pool for fee tier `3000`.
+Aerodrome's executable results remain **21.65/21.66/21.67/21.71 bps** for buys
+and **-11.68/-11.67/-11.66/-11.62 bps** for sales at the same sizes. Its 5 bps
+fee, approximately `0.0021/0.0110/0.0222/0.0558 bps` price impact, and stronger
+pinned liquidity produced more output than Uniswap in every comparison. This
+result is retained; it is benchmark evidence, not the V1 route.
 
-Uniswap's buy deviations for `$10/$50/$100/$250` are
-**25.96/27.39/29.17/34.52 bps**. Its equivalent sale deviations are
-**34.98/37.31/40.21/48.92 bps**. Aerodrome returns more output for every tested
-trade in both directions, charges 5 bps rather than 30 bps at the snapshot, and
-has materially stronger pinned liquidity. This is useful evidence that execution
-quality was independently evaluated; it does not override the external product
-constraint below.
+### Historical Uniswap sampling and V1 bound
+
+The public Base RPC reproduced three additional historical blocks where the
+deployed pool existed and `OracleStatePolicy` classified the onchain feed,
+registry, and sequencer observation as `LIVE`. These are quote samples, not
+executed historical transactions:
+
+|      Block |    Timestamp |                Feed / age | `$250` buy output / deviation | Fixed `1.18044242 NVDAc` sale output / deviation |
+| ---------: | -----------: | ------------------------: | ----------------------------: | -----------------------------------------------: |
+| `51314900` | `1789419147` |  `$211.95000000` / `820s` |    `1.17550642` / `34.05 bps` |                      `$249.050711` / `45.72 bps` |
+| `51345000` | `1789479347` |  `$213.02895000` / `594s` |    `1.16898055` / `38.93 bps` |                      `$250.440186` / `40.88 bps` |
+| `51351200` | `1789491747` | `$211.78500000` / `7802s` |    `1.17600276` / `37.61 bps` |                      `$248.898525` / `44.05 bps` |
+
+At `$250`, the sampled price impacts were `8.94–10.72 bps` for buys and
+`9.16–12.80 bps` for sales. The signed pool/oracle-basis residual ranged from
+`-4.88` to `-1.33 bps` on buys and `+1.26` to `+4.82 bps` on sales. Together
+with the pinned executable snapshot, the largest observed total adverse
+deviation was the executable `$250` sale at **48.92 bps**.
 
 Margin Call is entering Runtime's Uniswap **New Assets, New Agents** track, whose
 requirements call for integrating Uniswap's API, AMM, or CCA for tokenized
@@ -273,25 +309,18 @@ V1/hackathon execution venue, consistent with the PRD. The production
 caller `minOut` and a protocol oracle-derived minimum so materially poor
 execution fails closed.
 
-The protocol's maximum adverse oracle-relative execution deviation is
-**unresolved**. The previously proposed 30 bps bound is incompatible with this
-snapshot: Uniswap reached `34.52 bps` on the `$250` buy and `48.92 bps` on the
-equivalent sale. Calibration must precede `ExecutionAdapter` implementation and
-must account separately for the 30 bps venue fee, AMM price impact, and normal
-oracle/pool basis. Testing should include whether a bound around **100 bps**
-provides enough tolerance for normal basis while remaining appropriately
-protective; 100 bps is a candidate to test, not a selected constant. Divergence
-beyond the eventual evidence-backed bound must halt execution.
-
-The current fork fixture executes the Aerodrome benchmark and quotes the
-deployed Uniswap path; production Uniswap integration must retain executable
-fork coverage in both directions. Before Runtime submission, the final public
-repository README must point reviewers directly to that Uniswap integration
-code, and the repository will need `FEEDBACK.md`. Those submission documents are
-outside this #420 verification correction and are not created here.
+The selected V1 maximum adverse oracle-relative execution deviation is
+**100 bps (1.00%)**. The rejected 30 bps proposal would fail normal observed
+Uniswap execution. The selected bound is just over twice the 48.92 bps observed
+maximum, leaving about 51 bps of headroom for ordinary basis and demo-size impact
+while still rejecting a pool price more than 1% adverse to the live oracle. It
+includes the 30 bps venue fee and applies to the complete realized deviation,
+not to price impact alone. This is a conservative V1 hackathon/demo assumption
+for the verified `$10–$250` range, not a permanent production risk parameter;
+recalibrate it before larger trades, liquidity changes, or meaningful capital.
 
 Current `NvdaExecutionRoutesTest` expected result:
-**12 passed, 0 failed, 0 skipped**.
+**25 passed, 0 failed, 0 skipped**.
 
 ## Oracle-state policy
 
@@ -416,5 +445,5 @@ Use an archive-capable URL through the same environment variable for historical
 `getRoundData` / extra-block checks. Never commit a credential-bearing URL.
 
 Fork profile expected result: `BaseMainnetTest` **9 passed**,
-`NvdaOracleCadenceTest` **5 passed**, and `NvdaExecutionRoutesTest` **12 passed**.
+`NvdaOracleCadenceTest` **5 passed**, and `NvdaExecutionRoutesTest` **25 passed**.
 RPC-free policy, cadence-helper, and valuation tests run in the normal suite.

@@ -4,6 +4,7 @@ pragma solidity 0.8.29;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import {OracleStatePolicy} from "../test/oracle/OracleStatePolicy.sol";
 import {NvdaValuation} from "../test/valuation/NvdaValuation.sol";
 
 interface IAerodromePoolFactory {
@@ -80,13 +81,67 @@ interface IUniswapV3Factory {
     function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address);
 }
 
+interface IUniswapV3Pool {
+    function factory() external view returns (address);
+    function token0() external view returns (address);
+    function token1() external view returns (address);
+    function fee() external view returns (uint24);
+    function tickSpacing() external view returns (int24);
+    function liquidity() external view returns (uint128);
+    function slot0()
+        external
+        view
+        returns (
+            uint160 sqrtPriceX96,
+            int24 tick,
+            uint16 observationIndex,
+            uint16 observationCardinality,
+            uint16 observationCardinalityNext,
+            uint8 feeProtocol,
+            bool unlocked
+        );
+}
+
+/// @dev Exact deployed SwapRouter02 V3 ABI from Uniswap's IV3SwapRouter.
+/// https://github.com/Uniswap/swap-router-contracts/blob/main/contracts/interfaces/IV3SwapRouter.sol
+interface IUniswapV3SwapRouter {
+    struct ExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint24 fee;
+        address recipient;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function factory() external view returns (address);
+    function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
+}
+
+interface IAggregatorV3 {
+    function latestRoundData()
+        external
+        view
+        returns (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound);
+}
+
+interface ICoinbaseOracleRegistry {
+    function getOracleParams(address token) external view returns (uint256 multiplier, bool paused);
+}
+
 /// @dev Fork-only execution evidence for issue #420. This is not ExecutionAdapter.
 contract NvdaExecutionRoutesTest is Test {
+    using OracleStatePolicy for OracleStatePolicy.Input;
+
     uint256 internal constant BASE_BLOCK = 51_356_323;
 
     address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     address internal constant NVDAC = 0xb20000000000000000000078ee7ce2fE4908108C;
     address internal constant NVDA_HOLDER = 0xf8191D98ae98d2f7aBDFB63A9b0b812b93C873AA;
+    address internal constant NVDA_FEED = 0x04689a41629776563E6822F76f2e57D148d28513;
+    address internal constant ORACLE_REGISTRY = 0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD;
+    address internal constant SEQUENCER_FEED = 0xBCF85224fc0756B9Fa45aA7892530B47e10b6433;
 
     address internal constant AERODROME_FACTORY = 0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef;
     address internal constant AERODROME_POOL = 0x853F5f1B92b16714Fe6CDA67CAad0856B83C7ab9;
@@ -102,6 +157,7 @@ contract NvdaExecutionRoutesTest is Test {
     uint24 internal constant UNISWAP_FEE = 3000;
 
     uint256 internal constant PINNED_FEED_ANSWER = 21_178_500_000;
+    int256 internal constant MAX_V1_ORACLE_DEVIATION_BPS_X100 = 10_000;
     int256 internal constant MIN_BUY_DEVIATION_BPS_X100 = 2_100;
     int256 internal constant MAX_BUY_DEVIATION_BPS_X100 = 2_200;
     int256 internal constant MIN_SELL_DEVIATION_BPS_X100 = -1_200;
@@ -111,7 +167,7 @@ contract NvdaExecutionRoutesTest is Test {
         vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), BASE_BLOCK);
     }
 
-    function test_selectedDirectRouteAndPinnedPoolState() public view {
+    function test_aerodromeBenchmarkDirectRouteAndPinnedPoolState() public view {
         IAerodromePoolFactory factory = IAerodromePoolFactory(AERODROME_FACTORY);
         IAerodromePool pool = IAerodromePool(AERODROME_POOL);
 
@@ -141,20 +197,25 @@ contract NvdaExecutionRoutesTest is Test {
         assertEq(IERC20(NVDAC).balanceOf(AERODROME_POOL), 747_987_245_703);
     }
 
-    function test_uniswapComparisonRouteAndPinnedPoolState() public view {
-        IAerodromePool pool = IAerodromePool(UNISWAP_POOL);
+    function test_selectedUniswapDirectRouteAndPinnedPoolState() public view {
+        IUniswapV3Pool pool = IUniswapV3Pool(UNISWAP_POOL);
 
         assertGt(UNISWAP_FACTORY.code.length, 0);
         assertGt(UNISWAP_ROUTER.code.length, 0);
         assertGt(UNISWAP_QUOTER.code.length, 0);
         assertGt(UNISWAP_POOL.code.length, 0);
         assertEq(IUniswapV3Factory(UNISWAP_FACTORY).getPool(USDC, NVDAC, UNISWAP_FEE), UNISWAP_POOL);
+        assertEq(IUniswapV3SwapRouter(UNISWAP_ROUTER).factory(), UNISWAP_FACTORY);
         assertEq(pool.factory(), UNISWAP_FACTORY);
         assertEq(pool.token0(), USDC);
         assertEq(pool.token1(), NVDAC);
         assertEq(pool.tickSpacing(), 60);
         assertEq(pool.fee(), UNISWAP_FEE);
         assertEq(pool.liquidity(), 117_332_603_442);
+        (uint160 sqrtPriceX96, int24 tick,,,,, bool unlocked) = pool.slot0();
+        assertEq(sqrtPriceX96, 54_453_769_713_070_014_786_430_184_762);
+        assertEq(tick, -7_500);
+        assertTrue(unlocked);
         assertEq(IERC20(USDC).balanceOf(UNISWAP_POOL), 10_841_574_687);
         assertEq(IERC20(NVDAC).balanceOf(UNISWAP_POOL), 5_522_489_748);
     }
@@ -174,39 +235,71 @@ contract NvdaExecutionRoutesTest is Test {
         }
     }
 
-    function test_buyTenDollarsExecutes() public {
-        _assertBuyExecution(10e6);
+    function test_aerodromeBenchmarkBuyTenDollarsExecutes() public {
+        _assertAerodromeBuyExecution(10e6);
     }
 
-    function test_buyFiftyDollarsExecutes() public {
-        _assertBuyExecution(50e6);
+    function test_aerodromeBenchmarkBuyFiftyDollarsExecutes() public {
+        _assertAerodromeBuyExecution(50e6);
     }
 
-    function test_buyOneHundredDollarsExecutes() public {
-        _assertBuyExecution(100e6);
+    function test_aerodromeBenchmarkBuyOneHundredDollarsExecutes() public {
+        _assertAerodromeBuyExecution(100e6);
     }
 
-    function test_buyTwoHundredFiftyDollarsExecutes() public {
-        _assertBuyExecution(250e6);
+    function test_aerodromeBenchmarkBuyTwoHundredFiftyDollarsExecutes() public {
+        _assertAerodromeBuyExecution(250e6);
     }
 
-    function test_sellApproximatelyTenDollarsExecutesRawUnits() public {
-        _assertSellExecution(4_721_769);
+    function test_aerodromeBenchmarkSellApproximatelyTenDollarsExecutesRawUnits() public {
+        _assertAerodromeSellExecution(4_721_769);
     }
 
-    function test_sellApproximatelyFiftyDollarsExecutesRawUnits() public {
-        _assertSellExecution(23_608_848);
+    function test_aerodromeBenchmarkSellApproximatelyFiftyDollarsExecutesRawUnits() public {
+        _assertAerodromeSellExecution(23_608_848);
     }
 
-    function test_sellApproximatelyOneHundredDollarsExecutesRawUnits() public {
-        _assertSellExecution(47_217_697);
+    function test_aerodromeBenchmarkSellApproximatelyOneHundredDollarsExecutesRawUnits() public {
+        _assertAerodromeSellExecution(47_217_697);
     }
 
-    function test_sellApproximatelyTwoHundredFiftyDollarsExecutesRawUnits() public {
-        _assertSellExecution(118_044_242);
+    function test_aerodromeBenchmarkSellApproximatelyTwoHundredFiftyDollarsExecutesRawUnits() public {
+        _assertAerodromeSellExecution(118_044_242);
     }
 
-    function test_unrealisticallyTightMinOutReverts() public {
+    function test_uniswapBuyTenDollarsExecutes() public {
+        _assertUniswapBuyExecution(10e6, 4_709_509);
+    }
+
+    function test_uniswapBuyFiftyDollarsExecutes() public {
+        _assertUniswapBuyExecution(50e6, 23_544_184);
+    }
+
+    function test_uniswapBuyOneHundredDollarsExecutes() public {
+        _assertUniswapBuyExecution(100e6, 47_079_948);
+    }
+
+    function test_uniswapBuyTwoHundredFiftyDollarsExecutes() public {
+        _assertUniswapBuyExecution(250e6, 117_636_750);
+    }
+
+    function test_uniswapSellApproximatelyTenDollarsExecutesRawUnits() public {
+        _assertUniswapSellExecution(4_721_769, 9_965_010);
+    }
+
+    function test_uniswapSellApproximatelyFiftyDollarsExecutesRawUnits() public {
+        _assertUniswapSellExecution(23_608_848, 49_813_432);
+    }
+
+    function test_uniswapSellApproximatelyOneHundredDollarsExecutesRawUnits() public {
+        _assertUniswapSellExecution(47_217_697, 99_597_805);
+    }
+
+    function test_uniswapSellApproximatelyTwoHundredFiftyDollarsExecutesRawUnits() public {
+        _assertUniswapSellExecution(118_044_242, 248_776_805);
+    }
+
+    function test_aerodromeBenchmarkUnrealisticallyTightMinOutReverts() public {
         uint256 amountIn = 100e6;
         deal(USDC, address(this), amountIn);
         assertTrue(IERC20(USDC).approve(AERODROME_ROUTER, amountIn));
@@ -216,7 +309,46 @@ contract NvdaExecutionRoutesTest is Test {
         IAerodromeSwapRouter(AERODROME_ROUTER).exactInputSingle(_swapParams(USDC, NVDAC, amountIn, quote + 1));
     }
 
-    function _assertBuyExecution(uint256 amountIn) private {
+    function test_uniswapBuyTighterThanExecutableMinOutReverts() public {
+        uint256 amountIn = 100e6;
+        deal(USDC, address(this), amountIn);
+        assertTrue(IERC20(USDC).approve(UNISWAP_ROUTER, amountIn));
+        uint256 quote = _uniswapQuote(USDC, NVDAC, amountIn);
+        uint256 nvdaBefore = IERC20(NVDAC).balanceOf(address(this));
+
+        vm.expectRevert(abi.encodeWithSignature("Error(string)", "Too little received"));
+        IUniswapV3SwapRouter(UNISWAP_ROUTER).exactInputSingle(_uniswapSwapParams(USDC, NVDAC, amountIn, quote + 1));
+        assertEq(IERC20(USDC).balanceOf(address(this)), amountIn);
+        assertEq(IERC20(NVDAC).balanceOf(address(this)), nvdaBefore);
+    }
+
+    function test_uniswapSellTighterThanExecutableMinOutReverts() public {
+        uint256 amountIn = 47_217_697;
+        vm.prank(NVDA_HOLDER);
+        assertTrue(IERC20(NVDAC).transfer(address(this), amountIn));
+        assertTrue(IERC20(NVDAC).approve(UNISWAP_ROUTER, amountIn));
+        uint256 quote = _uniswapQuote(NVDAC, USDC, amountIn);
+        uint256 usdcBefore = IERC20(USDC).balanceOf(address(this));
+
+        vm.expectRevert(abi.encodeWithSignature("Error(string)", "Too little received"));
+        IUniswapV3SwapRouter(UNISWAP_ROUTER).exactInputSingle(_uniswapSwapParams(NVDAC, USDC, amountIn, quote + 1));
+        assertEq(IERC20(NVDAC).balanceOf(address(this)), amountIn);
+        assertEq(IERC20(USDC).balanceOf(address(this)), usdcBefore);
+    }
+
+    function test_uniswapHistoricalMondayLiveQuotesRemainWithinV1Bound() public {
+        _assertHistoricalUniswapQuotes(51_314_900, 1_789_419_147, 117_550_642, 249_050_711);
+    }
+
+    function test_uniswapHistoricalTuesdayOpenLiveQuotesRemainWithinV1Bound() public {
+        _assertHistoricalUniswapQuotes(51_345_000, 1_789_479_347, 116_898_055, 250_440_186);
+    }
+
+    function test_uniswapHistoricalTuesdayLaterLiveQuotesRemainWithinV1Bound() public {
+        _assertHistoricalUniswapQuotes(51_351_200, 1_789_491_747, 117_600_276, 248_898_525);
+    }
+
+    function _assertAerodromeBuyExecution(uint256 amountIn) private {
         deal(USDC, address(this), amountIn);
         assertTrue(IERC20(USDC).approve(AERODROME_ROUTER, amountIn));
         uint256 quote = _aerodromeQuote(USDC, NVDAC, amountIn);
@@ -235,7 +367,7 @@ contract NvdaExecutionRoutesTest is Test {
         assertLe(deviation, MAX_BUY_DEVIATION_BPS_X100);
     }
 
-    function _assertSellExecution(uint256 amountIn) private {
+    function _assertAerodromeSellExecution(uint256 amountIn) private {
         // Existing holder funds raw NVDAc through the deployed native B20 transfer path.
         // Impersonation affects only this local fork; no token/policy storage is modified.
         vm.prank(NVDA_HOLDER);
@@ -256,6 +388,98 @@ contract NvdaExecutionRoutesTest is Test {
         int256 deviation = _deviationBpsX100(oracleFairValue, amountOut);
         assertGe(deviation, MIN_SELL_DEVIATION_BPS_X100);
         assertLe(deviation, MAX_SELL_DEVIATION_BPS_X100);
+    }
+
+    function _assertUniswapBuyExecution(uint256 amountIn, uint256 expectedAmountOut) private {
+        deal(USDC, address(this), amountIn);
+        assertTrue(IERC20(USDC).approve(UNISWAP_ROUTER, amountIn));
+        uint256 quote = _uniswapQuote(USDC, NVDAC, amountIn);
+        uint256 usdcBefore = IERC20(USDC).balanceOf(address(this));
+        uint256 nvdaBefore = IERC20(NVDAC).balanceOf(address(this));
+
+        uint256 amountOut =
+            IUniswapV3SwapRouter(UNISWAP_ROUTER).exactInputSingle(_uniswapSwapParams(USDC, NVDAC, amountIn, 0));
+
+        assertEq(quote, expectedAmountOut);
+        assertEq(amountOut, quote);
+        assertEq(usdcBefore - IERC20(USDC).balanceOf(address(this)), amountIn);
+        assertEq(IERC20(NVDAC).balanceOf(address(this)) - nvdaBefore, amountOut);
+        uint256 actualExecutionValue = NvdaValuation.toUsdcRawFloor(amountOut, PINNED_FEED_ANSWER);
+        int256 deviation = _deviationBpsX100(amountIn, actualExecutionValue);
+        assertGe(deviation, 0);
+        assertLe(deviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
+
+        emit log_named_uint("Uniswap buy input USDC raw", amountIn);
+        emit log_named_uint("Uniswap buy quote and actual NVDAc raw", amountOut);
+        emit log_named_uint("Uniswap buy output oracle value USDC raw", actualExecutionValue);
+        emit log_named_int("Uniswap buy total oracle deviation bps x100", deviation);
+    }
+
+    function _assertUniswapSellExecution(uint256 amountIn, uint256 expectedAmountOut) private {
+        // Existing holder funds raw NVDAc through the deployed native B20 transfer path.
+        vm.prank(NVDA_HOLDER);
+        assertTrue(IERC20(NVDAC).transfer(address(this), amountIn));
+        assertTrue(IERC20(NVDAC).approve(UNISWAP_ROUTER, amountIn));
+        uint256 quote = _uniswapQuote(NVDAC, USDC, amountIn);
+        uint256 nvdaBefore = IERC20(NVDAC).balanceOf(address(this));
+        uint256 usdcBefore = IERC20(USDC).balanceOf(address(this));
+
+        uint256 amountOut =
+            IUniswapV3SwapRouter(UNISWAP_ROUTER).exactInputSingle(_uniswapSwapParams(NVDAC, USDC, amountIn, 0));
+
+        assertEq(quote, expectedAmountOut);
+        assertEq(amountOut, quote);
+        assertEq(nvdaBefore - IERC20(NVDAC).balanceOf(address(this)), amountIn);
+        assertEq(IERC20(USDC).balanceOf(address(this)) - usdcBefore, amountOut);
+        uint256 oracleFairValue = NvdaValuation.toUsdcRawFloor(amountIn, PINNED_FEED_ANSWER);
+        int256 deviation = _deviationBpsX100(oracleFairValue, amountOut);
+        assertGe(deviation, 0);
+        assertLe(deviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
+
+        emit log_named_uint("Uniswap sell input NVDAc raw", amountIn);
+        emit log_named_uint("Uniswap sell input oracle value USDC raw", oracleFairValue);
+        emit log_named_uint("Uniswap sell quote and actual USDC raw", amountOut);
+        emit log_named_int("Uniswap sell total oracle deviation bps x100", deviation);
+    }
+
+    function _assertHistoricalUniswapQuotes(
+        uint256 forkBlock,
+        uint256 expectedTimestamp,
+        uint256 expectedBuyOutput,
+        uint256 expectedSellOutput
+    ) private {
+        vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), forkBlock);
+        assertEq(block.timestamp, expectedTimestamp);
+        assertEq(IUniswapV3Factory(UNISWAP_FACTORY).getPool(USDC, NVDAC, UNISWAP_FEE), UNISWAP_POOL);
+
+        OracleStatePolicy.Input memory observation = _oracleObservation();
+        assertEq(uint256(observation.classify()), uint256(OracleStatePolicy.State.LIVE));
+
+        uint256 buyInput = 250e6;
+        uint256 buyOutput = _uniswapQuote(USDC, NVDAC, buyInput);
+        uint256 buyOracleValue = NvdaValuation.toUsdcRawFloor(buyOutput, uint256(observation.price.answer));
+        int256 buyDeviation = _deviationBpsX100(buyInput, buyOracleValue);
+
+        uint256 sellInput = 118_044_242;
+        uint256 sellOracleValue = NvdaValuation.toUsdcRawFloor(sellInput, uint256(observation.price.answer));
+        uint256 sellOutput = _uniswapQuote(NVDAC, USDC, sellInput);
+        int256 sellDeviation = _deviationBpsX100(sellOracleValue, sellOutput);
+
+        assertEq(buyOutput, expectedBuyOutput);
+        assertEq(sellOutput, expectedSellOutput);
+        assertGe(buyDeviation, 0);
+        assertLe(buyDeviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
+        assertGe(sellDeviation, 0);
+        assertLe(sellDeviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
+
+        emit log_named_uint("Historical Base block", forkBlock);
+        emit log_named_uint("Historical block timestamp", block.timestamp);
+        emit log_named_uint("Historical feed answer", uint256(observation.price.answer));
+        emit log_named_uint("Historical feed age seconds", block.timestamp - observation.price.updatedAt);
+        emit log_named_uint("Historical $250 buy quote NVDAc raw", buyOutput);
+        emit log_named_int("Historical $250 buy total oracle deviation bps x100", buyDeviation);
+        emit log_named_uint("Historical ~250 sale quote USDC raw", sellOutput);
+        emit log_named_int("Historical ~250 sale total oracle deviation bps x100", sellDeviation);
     }
 
     function _aerodromeQuote(address tokenIn, address tokenOut, uint256 amountIn) private returns (uint256 amountOut) {
@@ -295,6 +519,44 @@ contract NvdaExecutionRoutesTest is Test {
             amountOutMinimum: amountOutMinimum,
             sqrtPriceLimitX96: 0
         });
+    }
+
+    function _uniswapSwapParams(address tokenIn, address tokenOut, uint256 amountIn, uint256 amountOutMinimum)
+        private
+        view
+        returns (IUniswapV3SwapRouter.ExactInputSingleParams memory)
+    {
+        return IUniswapV3SwapRouter.ExactInputSingleParams({
+            tokenIn: tokenIn,
+            tokenOut: tokenOut,
+            fee: UNISWAP_FEE,
+            recipient: address(this),
+            amountIn: amountIn,
+            amountOutMinimum: amountOutMinimum,
+            sqrtPriceLimitX96: 0
+        });
+    }
+
+    function _oracleObservation() private view returns (OracleStatePolicy.Input memory input) {
+        input.feedOk = true;
+        input.registryOk = true;
+        input.sequencerOk = true;
+        input.nowTs = block.timestamp;
+        (
+            input.price.roundId,
+            input.price.answer,
+            input.price.startedAt,
+            input.price.updatedAt,
+            input.price.answeredInRound
+        ) = IAggregatorV3(NVDA_FEED).latestRoundData();
+        (, input.registryPaused) = ICoinbaseOracleRegistry(ORACLE_REGISTRY).getOracleParams(NVDAC);
+        (
+            input.sequencer.roundId,
+            input.sequencer.answer,
+            input.sequencer.startedAt,
+            input.sequencer.updatedAt,
+            input.sequencer.answeredInRound
+        ) = IAggregatorV3(SEQUENCER_FEED).latestRoundData();
     }
 
     function _deviationBpsX100(uint256 oracleFairValue, uint256 actualExecutionValue) private pure returns (int256) {

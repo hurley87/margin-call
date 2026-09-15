@@ -130,6 +130,15 @@ Single NVDAc Chainlink total-return pricing/state adapter.
 
 Single-purpose NVDAc/USDC Uniswap adapter with fixed approved tokens, fixed settlement path, and bounded execution.
 
+V1 uses the direct Base Uniswap V3 USDC/NVDAc pool at fee tier `3000` and
+enforces a maximum **100 bps (1.00%) total adverse oracle-relative execution
+deviation** for the verified `$10–$250` demo range. That total comprises venue
+fee, AMM price impact, and pool/oracle basis; it must not be described entirely
+as “slippage.” The 100 bps value is a conservative hackathon/demo parameter
+based on executable and historical fork evidence, not a permanent production
+risk parameter. Enforce the stricter of this oracle-derived floor and the
+caller's `minOut`.
+
 There is no separate `PositionNFT` contract, ERC-4626 vault, Position Account clone, asset registry, utilization-rate module, generalized router, APR admin module, global outstanding-principal counter, or `PositionStatus` enum in V1.
 
 ---
@@ -217,13 +226,13 @@ The `30%` maintenance equity ratio is the V1 starting parameter and must be vali
 
 The contract accepts only these opening leverage values:
 
-| Preset | Label | Minimum opening health factor |
-| --- | --- | --- |
-| `1.0x` | Spot only | N/A — no debt |
-| `1.1x` | Conservative | `>= 3.03` |
-| `1.25x` | Balanced | `>= 2.67` |
-| `1.4x` | Aggressive | `>= 2.38` |
-| `1.5x` | Max | `>= 2.22` |
+| Preset  | Label        | Minimum opening health factor |
+| ------- | ------------ | ----------------------------- |
+| `1.0x`  | Spot only    | N/A — no debt                 |
+| `1.1x`  | Conservative | `>= 3.03`                     |
+| `1.25x` | Balanced     | `>= 2.67`                     |
+| `1.4x`  | Aggressive   | `>= 2.38`                     |
+| `1.5x`  | Max          | `>= 2.22`                     |
 
 For financed presets, the displayed minimum follows directly from the preset ceiling and the 30% maintenance ratio:
 
@@ -386,7 +395,7 @@ Margin Call:
 3. requires a `LIVE` oracle observation so lender-protective execution bounds can be enforced;
 4. verifies `stockAmount` does not exceed this position's recorded stock;
 5. sells exactly `stockAmount` NVDAc -> USDC;
-6. enforces caller `minOut` and the protocol's oracle-derived slippage floor;
+6. enforces caller `minOut` and the protocol's oracle-derived execution floor;
 7. applies realized USDC to accrued interest first and principal second;
 8. returns the debt repayment to `CreditPool`;
 9. if realized USDC exceeds current debt, immediately sends the excess to the current NFT owner;
@@ -482,17 +491,17 @@ A `LIVE` observation requires a complete positive round, valid timestamp, no Coi
 
 ### V1 action matrix
 
-| Action | `LIVE` | `HELD` | `INVALID` |
-| --- | --- | --- | --- |
-| Open `1.0x` | Yes | Yes | Yes |
-| Open financed | Yes | No | No |
-| Repay external USDC | Yes | Yes | Yes |
-| Reduce exposure | Yes | No | No |
-| Set/clear executor | Yes | Yes | Yes |
-| Transfer NFT | Yes | Yes | Yes |
-| Close debt-free position | Yes | Yes | Yes |
-| Liquidate | Yes | No | No |
-| Read current debt | Yes | Yes | Yes |
+| Action                    | `LIVE`  | `HELD`                                         | `INVALID`   |
+| ------------------------- | ------- | ---------------------------------------------- | ----------- |
+| Open `1.0x`               | Yes     | Yes                                            | Yes         |
+| Open financed             | Yes     | No                                             | No          |
+| Repay external USDC       | Yes     | Yes                                            | Yes         |
+| Reduce exposure           | Yes     | No                                             | No          |
+| Set/clear executor        | Yes     | Yes                                            | Yes         |
+| Transfer NFT              | Yes     | Yes                                            | Yes         |
+| Close debt-free position  | Yes     | Yes                                            | Yes         |
+| Liquidate                 | Yes     | No                                             | No          |
+| Read current debt         | Yes     | Yes                                            | Yes         |
 | Read current NAV / health | Current | Unavailable; held mark may be shown separately | Unavailable |
 
 Interest continues accruing while pricing is held or invalid.
@@ -820,7 +829,7 @@ Before real funds are used, verify and pin:
 - raw-unit total-return normalization;
 - executable USDC -> NVDAc route for financed opening;
 - executable NVDAc -> USDC route for reduction/liquidation;
-- practical slippage bounds at demo size;
+- practical total oracle-relative execution bounds at demo size;
 - the actual `LIVE` feed window in which the required live acceptance flow will be run;
 - simulation evidence supporting or revising the provisional 30% maintenance equity ratio before meaningful live capital.
 
