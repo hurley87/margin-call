@@ -56,21 +56,24 @@ The oracle-valued gross NVDAc exposure of a position before subtracting debt.
 NAV minus current debt. Negative equity describes a collateral shortfall, not personal owner liability.
 
 **Gross leverage**:
-NAV divided by positive equity. V1 leverage is selected at opening only; there is no post-open leverage-increase action.
+NAV divided by positive equity. V1 leverage is selected at opening from exactly five presets: 1.0x, 1.1x, 1.25x, 1.4x, or 1.5x. There is no post-open leverage-increase action.
 
 **Maintenance equity ratio**:
-The minimum equity-to-NAV ratio before a financed position becomes eligible for liquidation. It never restricts NFT transfer.
+The minimum equity-to-NAV ratio before a financed position becomes eligible for liquidation. V1 starts at 30% pending simulation. It never restricts NFT transfer.
+
+**Health factor**:
+Equity ratio divided by maintenance equity ratio. A financed position is liquidatable when pricing is LIVE and health factor is below 1.0.
 
 ## Lifecycle actions
 
 **Repay**:
-Oracle-free external USDC repayment, applied to accrued interest first and principal second.
+Oracle-free external USDC repayment, applied to accrued interest first and principal second. If the caller supplies an amount greater than current debt, only current debt is transferred; the excess never leaves the caller.
 
 **Reduce exposure**:
-Sell a caller-specified amount of NVDAc into USDC and apply realized proceeds to debt. V1 exposes `reduceExposure(tokenId, stockAmount, minOut)` rather than target-leverage adjustment.
+Sell a caller-specified amount of NVDAc into USDC and apply realized proceeds to debt. V1 exposes `reduceExposure(tokenId, stockAmount, minOut)` rather than target-leverage adjustment. It requires LIVE pricing.
 
 **Normal close**:
-Owner-initiated exit available only after current debt reaches zero. It returns remaining assets and burns the NFT.
+Owner-initiated exit available only after current debt reaches zero. It returns remaining recorded NVDAc and burns the NFT.
 
 **Transfer**:
 Standard ERC-721 ownership transfer with no oracle, health, leverage, or positive-equity gate. Existing stock, debt, interest, and liquidation risk follow the NFT unchanged.
