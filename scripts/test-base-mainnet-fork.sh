@@ -19,4 +19,4 @@ fi
 cd "$(dirname "${BASH_SOURCE[0]}")/../contracts"
 export FOUNDRY_PROFILE=base-mainnet
 export FOUNDRY_BASE=true
-exec base-forge test --match-contract '^BaseMainnetTest$' -vv "$@"
+exec base-forge test -vv "$@"
