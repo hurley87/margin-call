@@ -13,9 +13,10 @@ The canonical V1 flow is deliberately narrow:
 5. Margin Call draws USDC from its Credit Vault.
 6. That USDC is atomically swapped through Uniswap into **more of the same stock**.
 7. The resulting stock remains inside an isolated Position Account.
-8. Margin Call mints a Position NFT representing ownership/control of the entire live financed account.
-9. The NFT may be transferred or sold without selling the stock or refinancing the debt.
-10. On a normal close, Margin Call sells only enough stock to repay debt and fees, returns the remaining stock to the current NFT owner, and burns the NFT. If debt was already repaid with external USDC, the stock can be returned without a sale. Liquidation remains a full unwind.
+8. The USDC financing accrues simple interest at a fixed protocol APR while debt is outstanding.
+9. Margin Call mints a Position NFT representing ownership/control of the entire live financed account.
+10. The NFT may be transferred or sold without selling the stock or refinancing the debt; accrued interest remains attached to the position.
+11. On a normal close, Margin Call sells only enough stock to repay principal, accrued interest, and required fees, returns the remaining stock to the current NFT owner, and burns the NFT. If debt was already repaid with external USDC, the stock can be returned without a sale. Liquidation remains a full unwind.
 
 The user never receives borrowed USDC as freely spendable capital. Margin Call exposes **leveraged spot ownership**, not a general-purpose credit line.
 
@@ -55,6 +56,7 @@ real tokenized stock
               |
               +-> hold
               +-> deleverage
+              +-> repay
               +-> close
               `-> sell the entire live position to another owner
 ```
@@ -62,13 +64,14 @@ real tokenized stock
 A Margin Call NFT is therefore not just a receipt or collectible wrapper. It is the ownership/control primitive for a live account containing:
 
 - actual B20 stock;
-- USDC-denominated debt;
+- USDC-denominated principal;
+- accrued borrow interest;
 - current equity;
 - liquidation state;
 - an optional agent executor;
 - thesis/history used by the product layer.
 
-The debt remains attached to the account when the NFT changes hands.
+The debt, including accrued interest, remains attached to the account when the NFT changes hands.
 
 ---
 
@@ -83,6 +86,9 @@ V1 is intentionally restrictive:
 - Margin Call lends USDC only to buy **more of that same stock**.
 - Borrowed USDC is never freely withdrawable.
 - Maximum gross leverage initially `1.5x`.
+- One fixed protocol borrow APR, initially `10%` for the hackathon/demo.
+- Simple linear interest; no compounding.
+- Interest accrues lazily from timestamps; no periodic onchain keeper transaction is required.
 - Approved Coinbase B20 tokenized equities only.
 - Chainlink-approved pricing for solvency.
 - Uniswap for spot execution.
@@ -102,6 +108,7 @@ The hackathon goal is to prove the primitive end to end locally and then execute
 - Finance actual tokenized-stock ownership rather than synthetic exposure.
 - Let a stock holder increase spot exposure without selling their original stock first.
 - Ensure borrowed USDC can only acquire more of the position's configured stock.
+- Charge a legible financing cost while debt remains outstanding.
 - Keep every financed position isolated and independently liquidatable.
 - Represent ownership as a standard transferable ERC-721.
 - Allow the entire financed position to change owners without unwinding stock or refinancing debt.
@@ -119,16 +126,17 @@ A complete demo must prove:
 4. Margin Call values the deposit using the approved oracle.
 5. Margin Call draws USDC credit from the Credit Vault according to the chosen leverage.
 6. The borrowed USDC is atomically swapped into more of the **same** B20 stock.
-7. A Position Account holds the combined stock inventory and records the USDC debt.
-8. A Position NFT is minted to the owner.
-9. The live position page shows stock exposure, debt, equity, P&L, leverage, health, thesis, and dynamic NFT art.
-10. The NFT can be transferred to a second wallet while the underlying stock and debt remain unchanged.
-11. The old owner and old executor lose control after transfer.
-12. The new NFT owner gains control of the same financed account.
-13. The owner can reduce leverage or close the position while preserving as much of the underlying stock exposure as possible.
-14. A simulated price decline can make the account liquidatable.
-15. A permissionless liquidator can unwind the account, repay the vault first, collect the configured reward, return residual equity, and burn the NFT.
-16. At least one tiny live Base position uses real USDC, a supported B20 stock, Chainlink pricing, and Uniswap execution.
+7. A Position Account holds the combined stock inventory and records USDC principal.
+8. Borrow interest accrues over elapsed time without requiring periodic write transactions.
+9. A Position NFT is minted to the owner.
+10. The live position page shows stock exposure, principal, accrued interest, current debt, APR, equity, P&L, leverage, health, thesis, and dynamic NFT art.
+11. The NFT can be transferred to a second wallet while the underlying stock and debt remain unchanged.
+12. The old owner and old executor lose control after transfer.
+13. The new NFT owner gains control of the same financed account and inherits its current debt obligation.
+14. The owner can reduce leverage, repay, or close the position while preserving as much of the underlying stock exposure as possible.
+15. A simulated price decline or enough elapsed interest can make the account liquidatable.
+16. A permissionless liquidator can unwind the account, repay the vault first, collect the configured reward, return residual equity, and burn the NFT.
+17. At least one tiny live Base position uses real USDC, a supported B20 stock, Chainlink pricing, and Uniswap execution.
 
 ---
 
@@ -144,7 +152,9 @@ The following are intentionally out of scope:
 - Letting borrowed USDC leave the Position Account.
 - General-purpose lending.
 - Public permissionless LP deposits.
-- Variable interest-rate curves.
+- Utilization-based or variable interest-rate curves.
+- Per-stock borrow rates.
+- Compounding interest.
 - Partial liquidations.
 - Portfolio margin.
 - Governance.
@@ -225,7 +235,8 @@ Each live position contains exactly:
 
 - one approved B20 stock;
 - an optional transient USDC balance from execution/deleveraging;
-- USDC-denominated debt to the Credit Vault;
+- USDC principal owed to the Credit Vault;
+- accrued borrow interest;
 - risk/accounting state;
 - an optional executor;
 - application-layer metadata/thesis/history.
@@ -262,6 +273,22 @@ PositionAccount #184
 Debt record -> CreditVault
 ```
 
+### Debt state
+
+V1 keeps the debt model deliberately simple.
+
+Per position, track conceptually:
+
+```text
+principal
+accruedInterestStored
+lastAccruedAt
+```
+
+All V1 positions use the same protocol-wide fixed APR. For the hackathon/demo, use a starting value of `10% APR`.
+
+To avoid rate-history complexity, the V1 admin must not change the borrow APR while any principal is outstanding. A future version can replace this restriction with a borrow index or rate snapshots.
+
 ### Why the account may temporarily hold USDC
 
 USDC may exist transiently when:
@@ -285,6 +312,7 @@ Example:
 User owns            $100 NVDAc
 Target leverage      1.5x
 Maximum new debt      $50 USDC
+Borrow APR                 10%
 ```
 
 The user calls conceptually:
@@ -305,7 +333,7 @@ Margin Call atomically:
 4. Draws the required USDC from the Credit Vault.
 5. Swaps that USDC through the approved execution adapter into NVDAc.
 6. Sends the purchased NVDAc to the same Position Account.
-7. Records the USDC debt.
+7. Records the USDC principal and accrual timestamp.
 8. Mints the Position NFT to the owner.
 
 Expected result:
@@ -314,7 +342,10 @@ Expected result:
 Position #184
 
 NVDAc gross value       $150
-USDC debt                $50
+USDC principal           $50
+Accrued interest          $0
+Current debt             $50
+Borrow APR               10%
 Net equity              $100
 Gross leverage          1.50x
 ```
@@ -355,12 +386,13 @@ increaseLeverage(tokenId, targetLeverage)
 
 Margin Call:
 
-1. values the account;
-2. calculates additional allowable debt;
-3. draws USDC from the Credit Vault;
-4. swaps USDC into the position's configured stock;
-5. keeps the purchased stock in the Position Account;
-6. records the additional debt.
+1. accrues interest through the current timestamp;
+2. values the account using current debt;
+3. calculates additional allowable principal;
+4. draws USDC from the Credit Vault;
+5. swaps USDC into the position's configured stock;
+6. keeps the purchased stock in the Position Account;
+7. records the additional principal.
 
 Credit cannot be redirected to another token.
 
@@ -374,10 +406,12 @@ reduceLeverage(tokenId, targetLeverage)
 
 Margin Call:
 
-1. calculates how much debt must be repaid;
-2. sells the required quantity of the configured stock into USDC;
-3. repays the Credit Vault;
-4. leaves the remaining stock in the Position Account.
+1. accrues interest through the current timestamp;
+2. calculates how much debt must be repaid;
+3. sells the required quantity of the configured stock into USDC;
+4. applies repayment to accrued interest first, then principal;
+5. returns repayment to the Credit Vault;
+6. leaves the remaining stock in the Position Account.
 
 ### Add collateral
 
@@ -387,6 +421,89 @@ The owner may add:
 - USDC specifically for debt repayment/deleveraging.
 
 V1 should not treat arbitrary other tokens as collateral.
+
+---
+
+## Borrow interest
+
+Borrow interest is Margin Call's primary V1 protocol revenue and the natural price of the financing product.
+
+### Initial model
+
+Use a single fixed, configurable protocol APR with an initial hackathon/demo value of **10% APR**.
+
+Interest is:
+
+- denominated in USDC;
+- simple, not compounding;
+- charged only while principal is outstanding;
+- calculated from elapsed time;
+- attached to the position and transferred with the NFT;
+- repaid before principal when a repayment occurs.
+
+The conceptual calculation is:
+
+```text
+newInterest = principal * APR * elapsedSeconds / 365 days
+currentDebt = principal + accruedInterestStored + newInterest
+```
+
+For example, a position with `50 USDC` principal at `10% APR` has approximately:
+
+```text
+At open       50.000 USDC debt
+After 1 day   50.014 USDC debt
+After 30 days 50.411 USDC debt
+After 1 year  55.000 USDC debt
+```
+
+Exact implementation uses integer fixed-point arithmetic and defined rounding behavior.
+
+### Lazy accrual
+
+Do not write interest to storage every block or run a keeper merely to accrue interest.
+
+`currentDebt(positionId)` should be a view calculation based on stored debt state plus time elapsed since `lastAccruedAt`.
+
+Before any state-changing action that depends on debt, Margin Call should checkpoint interest conceptually via `_accrue(positionId)`:
+
+- increase leverage;
+- reduce leverage;
+- repay;
+- close;
+- liquidation;
+- any other debt-changing operation.
+
+Transfer-health checks must use `currentDebt()` including uncheckpointed elapsed interest even if the transfer itself does not write an accrual checkpoint.
+
+### Repayment ordering
+
+USDC repayments apply in this order:
+
+1. accrued interest;
+2. principal.
+
+This keeps lender earnings explicit and avoids principal being reduced while earned financing charges remain unpaid.
+
+### Interest and position health
+
+Interest is part of the solvency calculation.
+
+Even if the stock price is flat, debt slowly grows while the position remains financed:
+
+```text
+Stock value    $150
+Debt            $50
+Equity          $100
+
+          time passes
+
+Stock value    $150
+Debt            $55
+Equity           $95
+```
+
+Therefore all leverage, transfer, close, and liquidation checks must use **current debt including accrued interest**, never principal alone.
 
 ---
 
@@ -400,7 +517,8 @@ For V1:
 - external LP UX is not exposed;
 - vault shares still exist according to ERC-4626;
 - Margin Call is the only protocol component authorized to draw position credit;
-- repayments return USDC to the vault.
+- principal repayments and borrow interest return USDC to the vault;
+- while Margin Call itself owns the vault capital, lending interest economically accrues to Margin Call.
 
 ### Initial leverage
 
@@ -410,10 +528,10 @@ For a deposit worth $100:
 
 ```text
 Deposited stock value    $100
-Maximum USDC credit       $50
+Maximum USDC principal    $50
 Gross stock exposure     $150
-USDC debt                 $50
-Net equity               $100
+Initial USDC debt          $50
+Net equity                $100
 ```
 
 This is economically equivalent to financing 50% additional spot exposure against the contributed stock value.
@@ -424,10 +542,27 @@ Credit may only be extended while the vault has sufficient free USDC.
 
 The application should surface:
 
-- vault assets;
-- outstanding credit;
+- vault liquid USDC;
+- outstanding principal;
+- accrued interest receivable;
 - available credit;
 - protocol reserves.
+
+### ERC-4626 accounting
+
+Lent USDC remains an asset of the Credit Vault as a receivable; it must not appear to vanish merely because it has been drawn into positions.
+
+Conceptually:
+
+```text
+totalAssets = liquidUSDC + outstandingPrincipal + accruedInterestReceivable
+```
+
+Because V1 uses one fixed APR for all outstanding principal, the protocol can maintain aggregate principal/accrual accounting without iterating over every position. `totalAssets()` may include projected aggregate interest since the last global accrual checkpoint.
+
+On repayment, receivable decreases while vault cash increases. On interest payment, vault assets increase by the earned interest. Any future bad-debt path must explicitly write off unrecoverable receivables.
+
+Public LP deposits are still out of scope for the hackathon, but this accounting boundary should be correct from the start so ERC-4626 share pricing does not need to be redesigned later.
 
 ---
 
@@ -439,8 +574,8 @@ For a single-stock position:
 
 ```text
 NAV = oracle value(stock balance) + USDC balance
-Debt = USDC principal owed to CreditVault + accrued protocol debt fees
-Equity = NAV - Debt
+Current Debt = principal + current accrued interest
+Equity = NAV - Current Debt
 Equity Ratio = Equity / NAV
 Gross Leverage = NAV / Equity
 ```
@@ -450,7 +585,8 @@ Gross Leverage = NAV / Equity
 Use configurable parameters with these starting values:
 
 - Maximum gross leverage: `1.5x`.
-- Maximum debt at open: `50%` of oracle-valued contributed stock equity.
+- Maximum principal at open: `50%` of oracle-valued contributed stock equity.
+- Borrow APR: `10%`, fixed protocol-wide for V1.
 - Maintenance equity ratio: `30%`.
 - Full liquidation below maintenance.
 - No partial liquidation in V1.
@@ -473,6 +609,7 @@ Before opening or increasing leverage, Margin Call must verify:
 - credit is used only for the position's configured stock;
 - oracle price is valid and fresh;
 - execution uses an approved venue;
+- current debt includes all accrued interest;
 - resulting leverage stays within the configured maximum;
 - resulting account remains above the required health threshold;
 - sufficient Credit Vault liquidity is available.
@@ -563,7 +700,7 @@ Flash manages execution. Margin Call remains responsible for debt repayment and 
 A full-exit Flash fill should eventually be finalized by Margin Call:
 
 1. settle stock into USDC;
-2. repay Credit Vault;
+2. repay principal and accrued interest to the Credit Vault;
 3. pay applicable fees;
 4. return residual equity to current NFT owner;
 5. burn NFT.
@@ -581,9 +718,11 @@ The NFT represents control of the entire financed account.
 If Position #184 contains:
 
 ```text
-NVDAc value       $180
-USDC debt          $50
-Net equity        $130
+NVDAc value           $180
+USDC principal         $50
+Accrued interest        $2
+Current debt           $52
+Net equity            $128
 ```
 
 selling NFT #184 transfers ownership of that same live account.
@@ -591,8 +730,9 @@ selling NFT #184 transfers ownership of that same live account.
 The transfer does **not**:
 
 - sell NVDAc;
-- repay the $50 loan;
+- repay the loan;
 - create a new loan;
+- reset accrued interest;
 - move the Position Account's assets;
 - reset cost basis/history at the protocol layer.
 
@@ -603,12 +743,13 @@ Only control changes.
 On successful NFT transfer:
 
 - the new `ownerOf(tokenId)` becomes the economic owner;
-- stock and debt remain unchanged;
+- stock and current debt remain unchanged;
+- accrued interest remains attached to the position;
 - the Position Account address remains unchanged;
 - the previous executor authorization is cleared;
 - the new owner may appoint a new executor.
 
-Transfers revert when the account is below the configured transfer-health threshold.
+Transfers revert when the account is below the configured transfer-health threshold using current debt including elapsed interest.
 
 ### Why a secondary market matters
 
@@ -616,7 +757,7 @@ The owner can choose between:
 
 ```text
 Close
-  -> sell only enough stock to repay debt and fees
+  -> sell only enough stock to repay principal + interest + fees
   -> receive the remaining stock
 ```
 
@@ -625,11 +766,12 @@ or:
 ```text
 Sell NFT
   -> buyer acquires the existing financed spot account
+  -> buyer inherits current debt
   -> no stock unwind
   -> no debt refinance
 ```
 
-A healthy position may trade around its realizable net equity, at a premium, or at a discount depending on market expectations, history, incentives, execution costs, and liquidation risk.
+A healthy position may trade around its realizable net equity, at a premium, or at a discount depending on market expectations, history, incentives, execution costs, accrued financing cost, and liquidation risk.
 
 This secondary market is a core differentiator from conventional perp positions.
 
@@ -660,13 +802,14 @@ when the account is below the configured liquidation threshold.
 
 V1 uses full liquidation:
 
-1. Validate liquidatability using a fresh approved oracle price.
-2. Sell the entire stock balance into USDC through the approved execution adapter.
-3. Repay the Credit Vault in full first.
-4. Pay the configured liquidation reward and protocol liquidation fee from remaining equity.
-5. Send all remaining equity to the current NFT owner.
-6. Mark the account liquidated.
-7. Burn the Position NFT.
+1. Accrue interest through the liquidation timestamp.
+2. Validate liquidatability using a fresh approved oracle price and current debt.
+3. Sell the entire stock balance into USDC through the approved execution adapter.
+4. Repay the Credit Vault in full, including accrued borrow interest.
+5. Pay the configured liquidation reward and protocol liquidation fee from remaining equity.
+6. Send all remaining equity to the current NFT owner.
+7. Mark the account liquidated.
+8. Burn the Position NFT.
 
 The Credit Vault is senior to protocol revenue and owner equity.
 
@@ -691,25 +834,28 @@ The default V1 close should preserve the owner's underlying stock exposure rathe
 
 `closePosition(tokenId)` should:
 
-1. calculate the USDC required to repay outstanding Credit Vault debt plus any required closing/protocol fees;
-2. sell only the minimum required quantity of the configured stock into USDC, subject to slippage bounds;
-3. repay the Credit Vault in full;
-4. settle any applicable fees;
-5. return all remaining configured stock and any residual USDC to the current NFT owner;
-6. burn the NFT.
+1. accrue borrow interest through the current timestamp;
+2. calculate the USDC required to repay principal, accrued interest, and any required closing/protocol fees;
+3. sell only the minimum required quantity of the configured stock into USDC, subject to slippage bounds;
+4. repay the Credit Vault in full;
+5. settle any applicable fees;
+6. return all remaining configured stock and any residual USDC to the current NFT owner;
+7. burn the NFT.
 
 Example:
 
 ```text
 Before close
-NVDAc value       $180
-USDC debt          $50
-Net equity        $130
+NVDAc value           $180
+USDC principal         $50
+Accrued interest        $2
+Current debt           $52
+Net equity            $128
 
 Default close
-sell ~ $50 of NVDAc (plus required fees)
-repay $50 USDC debt
-return ~ $130 of NVDAc to current owner
+sell ~ $52 of NVDAc (plus required fees)
+repay $52 current debt
+return ~ $128 of NVDAc to current owner
 burn NFT
 ```
 
@@ -719,16 +865,16 @@ This is distinct from liquidation, where the protocol performs a full unwind bec
 
 `repay()` remains a normal debt-reduction primitive rather than a separate bespoke close mode.
 
-If the owner supplies external USDC and repays the account's debt before closing, `closePosition` should not force a stock sale merely to recreate USDC the account no longer owes. Once debt and required fees are fully settled, closing releases the entire remaining stock balance to the current NFT owner and burns the NFT.
+If the owner supplies external USDC and repays the account's current debt before closing, `closePosition` should not force a stock sale merely to recreate USDC the account no longer owes. Once debt and required fees are fully settled, closing releases the entire remaining stock balance to the current NFT owner and burns the NFT.
 
 Conceptually:
 
 ```text
 Position holds      $180 NVDAc
-Debt                 $50 USDC
+Current debt         $52 USDC
 
-owner repays         $50 USDC externally
-Debt                   $0
+owner repays         $52 USDC externally
+Current debt           $0
 
 close
 -> sell no NVDAc for debt repayment
@@ -740,27 +886,44 @@ The current owner receives the remaining stock/equity even if they were not the 
 
 ---
 
-## Fees
+## Fees and protocol revenue
 
-V1 should prioritize simple and explicit seniority.
+V1 should prioritize simple and explicit economics.
+
+### Primary revenue: borrow interest
+
+Borrow interest is the core Margin Call business model.
+
+The initial protocol-funded Credit Vault earns the full financing interest because Margin Call provides the capital itself. When external LPs are introduced later, a reserve factor can split borrower interest between LP yield and protocol revenue.
+
+Example future structure:
+
+```text
+Borrower APR:             10%
+LP/vault yield:       8.5-9%
+Protocol reserve:       1-1.5%
+```
+
+The exact future split is out of scope for V1.
 
 ### Priority of funds
 
 On close or liquidation:
 
-1. Credit Vault debt.
+1. Credit Vault principal and accrued borrow interest.
 2. Required execution costs.
 3. Protocol/liquidator fees.
 4. Residual equity to current NFT owner.
 
-### Potential V1 revenue
+### Other V1 revenue
 
-- configurable origination/opening fee;
+Secondary/supplemental sources may include:
+
 - liquidation protocol fee;
-- integrator/execution fees where available;
+- integrator/execution fees where explicitly available;
 - Bankr creator fees from `$MARGINCALL`.
 
-Continuous borrow interest may be deferred for the hackathon if it adds unnecessary complexity. Longer term, borrow interest is the natural credit-product revenue source.
+V1 should **not** add separate origination, normal close, repayment, or NFT transfer fees unless implementation constraints require them. Uniswap LP fees and slippage are user execution costs, not Margin Call protocol revenue.
 
 ---
 
@@ -834,6 +997,8 @@ Notice that the V1 agent interface does **not** expose a generic `borrow_usdc` t
 
 The agent asks for an economic action such as increasing NVDAc leverage; Margin Call performs the internal USDC credit and same-asset purchase.
 
+`get_position` and `get_health` must report current debt including uncheckpointed accrued interest.
+
 ---
 
 ## NFT metadata, art, and thesis
@@ -858,7 +1023,9 @@ Image content:
 - P&L;
 - sparkline/equity chart;
 - gross stock exposure;
-- debt;
+- current debt;
+- accrued interest;
+- borrow APR;
 - equity;
 - leverage;
 - health;
@@ -876,6 +1043,7 @@ Examples:
 - `Return Bucket = +20% to +50%`
 - `Health = Healthy | Warning | Critical`
 - `Leverage Bucket = 1.0x-1.2x | 1.2x-1.5x`
+- `Borrow APR = 10%`
 - `Manager = Claude | Codex | Agent | Manual`
 
 Metadata should be compatible with marketplaces such as OpenSea.
@@ -962,13 +1130,15 @@ Potential later utility may include LP incentives or fee benefits.
 - Underlying asset: USDC.
 - Protocol-funded initially.
 - Supplies and receives Margin Call credit.
+- Tracks lent principal as a receivable for `totalAssets()` accounting.
+- Receives principal and interest repayments.
 
 ### `PositionNFT`
 
 - OpenZeppelin ERC-721.
 - One token per live financed position.
 - Transfer clears executor authorization.
-- Transfer checks transfer-health requirements.
+- Transfer checks transfer-health requirements using current debt including accrued interest.
 - Burn restricted to terminal Margin Call lifecycle.
 
 ### `PositionAccount`
@@ -994,13 +1164,15 @@ Responsibilities:
 - value contributed stock;
 - calculate allowable credit;
 - atomically draw USDC and buy more of the same stock;
-- account for debt;
+- account for principal and accrued interest;
+- expose current debt as a time-aware view;
+- checkpoint interest on debt-changing actions;
 - validate owner/executor authorization;
 - increase/reduce leverage;
 - add collateral;
 - repay debt;
 - set/revoke executors;
-- enforce transfer/risk constraints;
+- enforce transfer/risk constraints using current debt;
 - close positions while preserving remaining stock exposure;
 - liquidate positions;
 - coordinate NFT mint/burn;
@@ -1028,6 +1200,7 @@ Suggested events:
 
 - `PositionOpened`
 - `CreditDrawn`
+- `InterestAccrued`
 - `ExposureIncreased`
 - `ExposureReduced`
 - `CollateralAdded`
@@ -1065,52 +1238,70 @@ Implement:
 5. Draw 50 USDC from the Credit Vault.
 6. Mock execution swaps the 50 USDC into additional NVDA.
 7. Verify the Position Account contains approximately 150 USDC of NVDA exposure and no freely withdrawable borrowed USDC.
-8. Verify debt = 50 USDC.
+8. Verify principal = 50 USDC, accrued interest = 0, and current debt = 50 USDC at open.
 9. Mint Position NFT to owner.
 10. Verify owner/executor permissions and healthy risk state.
-11. Transfer the NFT to a second owner.
-12. Verify stock and debt do not move.
-13. Verify old owner loses control.
-14. Verify old executor is revoked.
-15. Verify new owner controls the same Position Account.
-16. Manipulate the oracle downward.
-17. Verify increasing leverage reverts once constraints are breached.
-18. Push price below maintenance.
-19. Third-party liquidator calls liquidation.
-20. Sell stock into mock USDC.
-21. Repay Credit Vault first.
-22. Pay liquidator/protocol fees if sufficient residual equity exists.
-23. Send remaining equity to current NFT owner.
-24. Burn NFT.
-25. Verify no residual debt or stranded assets remain.
+11. Warp time forward and verify current debt increases according to the fixed APR without an accrual transaction.
+12. Verify health/equity calculations use current debt including interest.
+13. Transfer the NFT to a second owner and verify transfer-health logic uses current debt.
+14. Verify stock and debt do not move and accrued interest is not reset.
+15. Verify old owner loses control.
+16. Verify old executor is revoked.
+17. Verify new owner controls the same Position Account.
+18. Manipulate the oracle downward.
+19. Verify increasing leverage reverts once constraints are breached.
+20. Push price/current debt below maintenance.
+21. Third-party liquidator calls liquidation.
+22. Accrue interest through liquidation timestamp.
+23. Sell stock into mock USDC.
+24. Repay Credit Vault principal plus accrued interest first.
+25. Pay liquidator/protocol fees if sufficient residual equity exists.
+26. Send remaining equity to current NFT owner.
+27. Burn NFT.
+28. Verify no residual debt or stranded assets remain.
+
+### Interest accrual test
+
+Use deterministic time travel such as `vm.warp`.
+
+1. Open a position with 50 USDC principal at 10% APR.
+2. Warp 30 days.
+3. Verify `currentDebt()` is approximately `50.411 USDC`, subject to exact integer rounding.
+4. Verify no keeper/accrual transaction was required for the view result.
+5. Call a debt-changing action and verify interest checkpoints correctly.
+6. Repay partially and verify accrued interest is paid before principal.
+7. Verify the resulting principal, accrued interest, vault accounting, equity, and health.
 
 ### Normal close test
 
 1. Open a healthy financed NVDA position.
-2. Optionally transfer the NFT.
-3. Current owner calls `closePosition`.
-4. Sell only enough NVDA to cover outstanding USDC debt plus required fees.
-5. Repay the Credit Vault in full.
-6. Return all remaining NVDA and any residual USDC to the current NFT owner.
-7. Burn the NFT.
-8. Verify no debt remains and no unnecessary stock was sold.
+2. Warp time so borrow interest accrues.
+3. Optionally transfer the NFT.
+4. Current owner calls `closePosition`.
+5. Sell only enough NVDA to cover principal, accrued interest, and required fees.
+6. Repay the Credit Vault in full.
+7. Return all remaining NVDA and any residual USDC to the current NFT owner.
+8. Burn the NFT.
+9. Verify no debt remains and no unnecessary stock was sold.
 
 ### External repayment close test
 
 1. Open a healthy financed NVDA position.
-2. Current owner supplies external USDC through `repay()` until debt is zero.
-3. Current owner calls `closePosition`.
-4. Verify no NVDA is sold for debt repayment.
-5. Return the entire remaining NVDA balance to the current owner.
-6. Burn the NFT.
+2. Warp time so borrow interest accrues.
+3. Current owner supplies external USDC through `repay()` until current debt is zero.
+4. Verify repayment clears accrued interest before principal.
+5. Current owner calls `closePosition`.
+6. Verify no NVDA is sold for debt repayment.
+7. Return the entire remaining NVDA balance to the current owner.
+8. Burn the NFT.
 
 ### Deleverage test
 
 1. Open at 1.5x.
-2. Reduce target leverage to 1.2x.
-3. Sell the required amount of NVDA.
-4. Repay the corresponding debt.
-5. Verify remaining exposure and debt match the requested leverage within rounding tolerance.
+2. Warp time so interest accrues.
+3. Reduce target leverage to 1.2x.
+4. Accrue interest, sell the required amount of NVDA, and repay debt.
+5. Verify remaining exposure and current debt match the requested leverage within rounding tolerance.
 
 ---
 
@@ -1168,7 +1359,8 @@ After spot execution works:
 Show:
 
 - total user equity;
-- total debt;
+- total current debt;
+- total accrued interest;
 - number of open positions;
 - available Margin Call credit;
 - position cards.
@@ -1181,7 +1373,7 @@ Human flow:
 2. Select an approved stock already held by the owner wallet.
 3. Enter how much stock to deposit.
 4. Choose target leverage up to 1.5x.
-5. Review estimated additional exposure, debt, and risk.
+5. Review estimated additional exposure, principal, borrow APR, and risk.
 6. Confirm.
 7. Margin Call deposits stock, finances more of the same stock, creates the Position Account, and mints the NFT.
 
@@ -1197,7 +1389,10 @@ Show:
 - executor/manager;
 - ticker and token amount;
 - gross stock exposure;
-- debt;
+- principal borrowed;
+- accrued interest;
+- current debt;
+- borrow APR;
 - equity;
 - leverage;
 - health;
@@ -1206,12 +1401,14 @@ Show:
 - journal;
 - increase/decrease leverage;
 - add collateral/repay;
-- close (sell only enough stock to settle debt/fees and return the rest);
+- close (sell only enough stock to settle current debt/fees and return the rest);
 - share link.
+
+The UI may update accrued interest and current debt continuously using the same deterministic formula and the latest onchain timestamp/state. This is display-only convenience; the contract's `currentDebt()` calculation is authoritative.
 
 ### Historical page
 
-After burn, preserve a read-only historical page and final image state.
+After burn, preserve a read-only historical page and final image state, including total interest paid over the life of the position.
 
 ---
 
@@ -1220,12 +1417,16 @@ After burn, preserve a read-only historical page and final image state.
 - Borrowed USDC never becomes freely withdrawable user capital.
 - Credit drawn for a stock can only buy more of that same stock.
 - Financed stock cannot leave the Position Account while debt exists except through approved reduce/close/liquidation paths.
-- Normal close should not sell more stock than is required to settle debt and fees.
+- Every solvency calculation uses current debt including accrued interest.
+- Normal close should not sell more stock than is required to settle current debt and fees.
 - Uniswap is execution, never the solvency oracle.
 - Agent executors do not gain NFT ownership merely by receiving trade authority.
 - NFT transfer invalidates prior executor permissions.
+- NFT transfer does not reset principal, accrued interest, or accrual timestamps.
 - Credit Vault repayment is senior to protocol revenue and owner withdrawals.
 - Oracle freshness is checked before risk-increasing actions and liquidation.
+- Interest math and rounding behavior must be deterministic and tested at boundary timestamps.
+- The V1 fixed APR cannot change while outstanding principal exists.
 - Risk parameters are explicit and admin-controlled for the hackathon.
 - Prefer OpenZeppelin standards and restrictive adapters over custom generalized execution.
 
@@ -1239,15 +1440,17 @@ After burn, preserve a read-only historical page and final image state.
 - OpenZeppelin ERC-721 Position NFT.
 - Position Account + factory.
 - Margin Call coordinator/risk engine.
+- Fixed-rate simple-interest accounting and `currentDebt()`.
+- Aggregate Credit Vault receivable accounting.
 - Oracle and execution interfaces.
 - Local mocks.
-- Open-from-stock, finance-same-stock, transfer, deleverage, stock-preserving close, external-repayment close, and liquidation Foundry tests.
+- Open-from-stock, finance-same-stock, interest accrual, transfer, deleverage, stock-preserving close, external-repayment close, and liquidation Foundry tests.
 
 ### Phase 2 — Base execution
 
 - B20 + Chainlink validation.
 - Uniswap same-asset financing adapter.
-- Tiny real Base open/finance/close test.
+- Tiny real Base open/finance/accrue/close test.
 - Tiny real liquidation test if practical; otherwise deterministic fork/integration test.
 
 ### Phase 3 — Agent surface
@@ -1261,6 +1464,7 @@ After burn, preserve a read-only historical page and final image state.
 - Dynamic email onboarding;
 - embedded owner wallet;
 - position dashboard;
+- live APR/accrued-interest/current-debt display;
 - delegated executor flow.
 
 ### Phase 5 — NFT/social layer
@@ -1287,16 +1491,18 @@ These do not block starting the protocol core but must be resolved before meanin
 2. Exact Chainlink feed addresses and freshness thresholds.
 3. Final maintenance equity ratio and transfer-health threshold after simulation.
 4. Exact liquidation-fee basis and insufficient-residual-equity behavior.
-5. Whether V1 charges an origination/closing fee or keeps normal usage fee-free during the hackathon.
-6. Position Account implementation: minimal custom account vs heavier smart-account standard. Default: minimal custom account.
-7. Exact Uniswap route/adapter implementation while preserving the same-stock invariant.
-8. Flash account/signing requirements.
-9. Whether thesis updates remain signed offchain records or also commit a hash/URI onchain.
-10. Exact Bankr fee-beneficiary and conversion flow for `$MARGINCALL`.
-11. Whether USDC-only position opening should be added later as a convenience path; it is not the canonical V1 thesis.
+5. Final fixed V1 borrow APR before live capital; `10%` is the initial hackathon/demo default.
+6. Exact fixed-point precision and rounding rules for interest accrual.
+7. Position Account implementation: minimal custom account vs heavier smart-account standard. Default: minimal custom account.
+8. Exact Uniswap route/adapter implementation while preserving the same-stock invariant.
+9. Flash account/signing requirements.
+10. Whether thesis updates remain signed offchain records or also commit a hash/URI onchain.
+11. Exact Bankr fee-beneficiary and conversion flow for `$MARGINCALL`.
+12. Whether USDC-only position opening should be added later as a convenience path; it is not the canonical V1 thesis.
+13. Future public-LP design: utilization curve, reserve factor, bad-debt accounting, and whether interest uses a global borrow index.
 
 ---
 
 ## Product statement
 
-> **Margin Call finances real tokenized equities and creates a secondary market for financed spot positions. Deposit an approved stock, choose your leverage, and Margin Call uses USDC credit to acquire more of that same stock. The resulting live asset-plus-debt account is represented by a transferable NFT that can change owners without unwinding the trade.**
+> **Margin Call finances real tokenized equities and creates a secondary market for financed spot positions. Deposit an approved stock, choose your leverage, and Margin Call uses USDC credit to acquire more of that same stock. The financing accrues transparent borrow interest while open, and the resulting live asset-plus-debt account is represented by a transferable NFT that can change owners without unwinding the trade.**
