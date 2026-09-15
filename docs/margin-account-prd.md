@@ -24,7 +24,7 @@ A live Position NFT represents:
 - current ownership and optional executor;
 - liquidation risk and lifecycle history.
 
-When the NFT transfers, the underlying stock and debt do not move or reset. Control of the existing position simply follows `ownerOf(tokenId)`.
+When the NFT transfers, the underlying stock and debt do not move or reset. Control of the existing position simply follows `ownerOf(tokenId)` on `MarginCall` itself.
 
 V1 demonstrates **transferable financed positions**, not a functioning secondary market. Purchase settlement, bidding, listings, and marketplace guarantees are deferred.
 
@@ -37,6 +37,7 @@ V1 demonstrates **transferable financed positions**, not a functioning secondary
 - NVDAc only.
 - One stock per position.
 - Margin Call directly custodies position NVDAc.
+- `MarginCall` itself is the ERC-721 Position NFT contract; there is no separate `PositionNFT` contract.
 - Opening leverage uses one of five fixed presets: `1.0x`, `1.1x`, `1.25x`, `1.4x`, or `1.5x`.
 - `1.0x` is spot-only and draws no credit.
 - Above `1.0x`, borrowed USDC can only buy more NVDAc.
@@ -85,11 +86,10 @@ A user who wants a materially different leveraged position can settle, close, an
 
 ## Components
 
-V1 has five core components:
+V1 has four core components:
 
 ```text
-MarginCall
-PositionNFT
+MarginCall (also the ERC-721 Position NFT contract)
 CreditPool
 OracleAdapter
 ExecutionAdapter
@@ -97,10 +97,13 @@ ExecutionAdapter
 
 ### `MarginCall`
 
-The coordinator, custody contract, accounting layer, and risk engine.
+The coordinator, custody contract, accounting layer, risk engine, and ERC-721 ownership contract.
+
+It inherits OpenZeppelin ERC-721 directly. Position ownership is `ownerOf(tokenId)` on `MarginCall`; mint, burn, transfer, executor clearing, and financial accounting therefore remain inside one contract boundary.
 
 Responsibilities:
 
+- implement the Position NFT directly as ERC-721;
 - custody NVDAc for all live positions;
 - maintain position accounting by `tokenId`;
 - open positions at one of the five allowed leverage presets;
@@ -110,14 +113,10 @@ Responsibilities:
 - accept external USDC repayment;
 - reduce exposure by selling caller-specified NVDAc and applying proceeds to debt;
 - manage one executor;
-- clear the executor on NFT transfer;
+- clear the executor internally on ERC-721 ownership transfer;
 - close debt-free positions;
 - liquidate unhealthy financed positions;
-- coordinate NFT mint/burn.
-
-### `PositionNFT`
-
-OpenZeppelin ERC-721 representing ownership of each live position.
+- mint and burn its own Position NFTs.
 
 ### `CreditPool`
 
@@ -131,7 +130,7 @@ Single NVDAc Chainlink total-return pricing/state adapter.
 
 Single-purpose NVDAc/USDC Uniswap adapter with fixed approved tokens, fixed settlement path, and bounded execution.
 
-There is no ERC-4626 vault, Position Account clone, asset registry, utilization-rate module, generalized router, APR admin module, or global outstanding-principal counter in V1.
+There is no separate `PositionNFT` contract, ERC-4626 vault, Position Account clone, asset registry, utilization-rate module, generalized router, APR admin module, or global outstanding-principal counter in V1.
 
 ---
 
@@ -152,7 +151,7 @@ struct Position {
 mapping(uint256 tokenId => Position) positions;
 ```
 
-All NVDAc is physically held by `MarginCall`, but each position has isolated accounting.
+All NVDAc is physically held by `MarginCall`, but each position has isolated accounting. The same contract also owns the ERC-721 token state, so `positions[tokenId]` and `ownerOf(tokenId)` cannot drift across contracts.
 
 Invariant:
 
@@ -248,7 +247,7 @@ Conceptually:
 openPosition(stockAmount, targetLeverage, minNvdaOut)
 ```
 
-For `1.0x`, Margin Call transfers in NVDAc, records the position, and mints the NFT. No oracle, credit draw, or swap is required.
+For `1.0x`, Margin Call transfers in NVDAc, records the complete position state, and mints its own ERC-721 token. No oracle, credit draw, or swap is required.
 
 For a financed preset above `1.0x`, Margin Call atomically:
 
@@ -262,7 +261,9 @@ For a financed preset above `1.0x`, Margin Call atomically:
 8. swaps USDC -> NVDAc with caller `minNvdaOut` plus protocol execution bounds;
 9. records the resulting NVDAc and principal;
 10. verifies post-execution leverage is no greater than the selected preset / `1.5x` ceiling;
-11. mints the Position NFT.
+11. records complete position state, then mints the Position NFT from `MarginCall` itself.
+
+Any safe-mint receiver callback occurs only after the position state is fully initialized.
 
 Failure of the preset check, oracle check, credit-capacity check, swap, or post-execution leverage check reverts the entire financed opening.
 
@@ -408,7 +409,7 @@ The executor may not:
 - create new principal;
 - route execution elsewhere.
 
-When the Position NFT transfers, the old executor is cleared before any recipient callback can manage the position.
+When the Position NFT transfers, `MarginCall` clears the old executor internally as part of its ERC-721 ownership update before any safe-transfer recipient callback can manage the position.
 
 ERC-721 approvals and executor permissions are separate authorization systems.
 
@@ -416,7 +417,7 @@ ERC-721 approvals and executor permissions are separate authorization systems.
 
 ## Transfer semantics — no financial gate
 
-A live Position NFT transfers through standard ERC-721 rules.
+A live Position NFT transfers through standard ERC-721 rules implemented directly by `MarginCall`.
 
 There is **no financial transfer gate in V1**.
 
@@ -433,6 +434,8 @@ Transfer must not:
 - honor a protocol-admin financial transfer pause.
 
 The transfer path may enforce only normal ERC-721 authorization, token existence, recipient rules, and executor clearing.
+
+Implementation requirement: `MarginCall` inherits OpenZeppelin ERC-721 and overrides the internal ownership update hook (for OZ v5, `_update`) only as needed to clear `positions[tokenId].executor` on a real ownership transfer. Executor clearing must complete inside `MarginCall` before any `safeTransferFrom` receiver callback. Mint and burn are also internal ERC-721 operations in `MarginCall`; no cross-contract ownership synchronization exists.
 
 The position's existing stock, debt, interest, and liquidation eligibility follow the NFT unchanged to the new owner. Transfer creates no grace period.
 
@@ -537,7 +540,7 @@ Once debt is zero, close is oracle-free:
 
 1. return all remaining recorded NVDAc to the current NFT owner;
 2. mark the position closed;
-3. burn the NFT.
+3. burn the ERC-721 token internally in `MarginCall`.
 
 There is no position-attributed residual USDC to return: `repay` never takes an overpayment and `reduceExposure` sends sale surplus to the owner immediately.
 
@@ -563,7 +566,7 @@ V1 performs a full unwind:
 2. validate liquidation eligibility using the live Chainlink mark and the Risk Model predicate;
 3. sell this position's entire recorded NVDAc -> USDC through the approved bounded execution path;
 4. settle the liquidation proceeds;
-5. finalize the position and burn the NFT.
+5. finalize the position and burn the ERC-721 token internally in `MarginCall`.
 
 There is no protocol liquidation fee, no liquidator payout, and no global outstanding-principal counter to decrement.
 
@@ -628,15 +631,15 @@ The demo is intentionally scheduled for a `LIVE` oracle window because the execu
 
 Required sequence:
 
-1. **A opens a financed NVDAc position during a `LIVE` window.** Confirm contributed NVDAc, borrowed USDC, purchased NVDAc, principal, and NFT ownership.
+1. **A opens a financed NVDAc position during a `LIVE` window.** Confirm contributed NVDAc, borrowed USDC, purchased NVDAc, principal, and ERC-721 ownership on `MarginCall`.
 2. **Interest accrues.** Wait or advance time and prove `currentDebt > principal` without a keeper transaction.
 3. **A appoints executor E.**
 4. **E reduces exposure during `LIVE` pricing.** E performs a small `reduceExposure`, proving delegated management and the bounded NVDAc -> USDC path.
-5. **A transfers the Position NFT to B.** No oracle/health gate may block the transfer. Stock and debt remain in place; the executor is cleared.
+5. **A transfers the Position NFT to B.** No oracle/health gate may block the transfer. Stock and debt remain in place; `MarginCall` clears the executor internally during the ERC-721 ownership update.
 6. **A and E lose authority.** Calls by A or E to `repay`, `reduceExposure`, `setExecutor`, or `closePosition` must revert where authorization is required. Standard ERC-721 ownership/approval behavior applies separately.
 7. **B manages the inherited position.** B may appoint a new executor, repay, or reduce exposure.
 8. **B settles the debt to zero.** For the simplest live path, B repays the remaining debt with external USDC.
-9. **B closes.** All remaining recorded NVDAc goes to B and the NFT burns.
+9. **B closes.** All remaining recorded NVDAc goes to B and `MarginCall` burns the NFT.
 10. Record transaction receipts and before/after accounting for A, E, B, the position, and `CreditPool`.
 
 If the demo later crosses a held market period, the UI must visibly report `HELD`. Transfer, repayment, executor updates, and debt-free close remain available; financed opening, reduction, and liquidation do not.
@@ -649,6 +652,7 @@ A purchase payment is not part of this V1 acceptance test. Do not claim that the
 
 At minimum, tests must cover:
 
+- `MarginCall` directly implementing ERC-721 ownership, approvals, mint, transfer, and burn with no separate `PositionNFT` deployment;
 - exactly the five opening leverage presets, including rejection of intermediate values;
 - cost-aware post-swap leverage checks for each financed preset;
 - finite CreditPool capacity and zero-credit `1.0x` opening;
@@ -661,7 +665,7 @@ At minimum, tests must cover:
 - no `increaseLeverage` or `addCollateral` path;
 - `reduceExposure(tokenId, stockAmount, minOut)` exact-input accounting and bounds;
 - executor permissions limited to repayment/reduction;
-- executor clearing on transfer;
+- executor clearing inside the ERC-721 ownership update before a safe-transfer receiver callback can act;
 - transfers of healthy, liquidatable, underwater, `HELD`, `INVALID`, and reverting-oracle positions without any oracle call;
 - `HELD`/`INVALID` financed-position behavior: `reduceExposure` is unavailable, debt-free close still requires zero debt, external `repay` remains available, and transfer remains available;
 - debt-free close only, including close after external repayment;
@@ -744,7 +748,7 @@ close_position
 liquidate
 ```
 
-`open_position` accepts only the five supported leverage presets. NFT transfer uses the standard wallet/ERC-721 interface.
+`open_position` accepts only the five supported leverage presets. NFT transfer uses the standard wallet/ERC-721 interface exposed by `MarginCall` itself.
 
 ---
 
@@ -760,6 +764,7 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 
 ## Security principles
 
+- `MarginCall` is the sole ERC-721 Position NFT contract; there is no cross-contract ownership/accounting synchronization.
 - Borrowed USDC is never freely withdrawable.
 - Opening is the only action that creates new principal.
 - Opening accepts only the five fixed leverage presets.
@@ -776,7 +781,7 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 - Maintenance is a 30% equity ratio in V1, so liquidation eligibility is `healthFactor < 1.0` using the explicit Risk Model; zero/negative-equity edge cases must not underflow or divide by zero.
 - The `1.5x` leverage limit applies to opening, not to later market/interest drift.
 - Active NFT transfer is independent of price, health, leverage, or liquidation eligibility.
-- Transfer clears the old executor before recipient callbacks.
+- `MarginCall` clears the old executor inside the ERC-721 ownership update before safe-transfer recipient callbacks.
 - Executor permissions never create principal or withdraw assets to the executor.
 - Close requires zero debt and returns remaining recorded NVDAc.
 - Liquidation is full, permissionless, and unrewarded in V1.
@@ -831,4 +836,4 @@ Mocks must reflect the verified semantics.
 
 ## Final V1 thesis
 
-> **Deposit NVDAc, choose one of five opening leverage presets, finance more NVDAc with finite protocol USDC at a fixed 10% APR, and receive a transferable NFT representing the live stock-plus-debt position. Repay or reduce exposure, transfer the position without an oracle/health gate, and let the new owner settle and close it.**
+> **Deposit NVDAc, choose one of five opening leverage presets, finance more NVDAc with finite protocol USDC at a fixed 10% APR, and receive a transferable NFT minted directly by Margin Call representing the live stock-plus-debt position. Repay or reduce exposure, transfer the position without an oracle/health gate, and let the new owner settle and close it.**
