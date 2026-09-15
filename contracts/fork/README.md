@@ -171,13 +171,14 @@ Current `BaseMainnetTest` expected result: **9 passed, 0 failed, 0 skipped**.
 ## Execution route
 
 `contracts/fork/NvdaExecutionRoutes.t.sol` proves real exact-input swaps in both
-directions at the pinned block. The selected V1 route is the direct
-**Aerodrome Slipstream Gauges V3** USDC/NVDAc pool:
+directions through the direct **Aerodrome Slipstream Gauges V3** USDC/NVDAc pool
+at the pinned block. Aerodrome is retained as the strongest measured benchmark,
+not selected as the V1 venue:
 
 | Contract        | Address                                      | Pinned evidence                                                |
 | --------------- | -------------------------------------------- | -------------------------------------------------------------- |
-| Pool factory    | `0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef` | Factory recognizes and returns the selected pool               |
-| Swap router     | `0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F` | Router bytecode exists and reports the selected factory        |
+| Pool factory    | `0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef` | Factory recognizes and returns the benchmark pool              |
+| Swap router     | `0x698Cb2b6dd822994581fEa6eA4Fc755d1363A92F` | Router bytecode exists and reports the benchmark factory       |
 | Quoter          | `0x514c8B5f54112481E28028F1166Bd78501089259` | Direct exact-input quotes succeed                              |
 | USDC/NVDAc pool | `0x853F5f1B92b16714Fe6CDA67CAad0856B83C7ab9` | Token pair, factory, tick spacing, fee, and state are asserted |
 
@@ -194,7 +195,7 @@ subsets of the corresponding upstream interfaces.
 
 ### Pinned pool state
 
-| Field                  |              Aerodrome selected pool |      Uniswap V3 comparison pool |
+| Field                  |             Aerodrome benchmark pool |              Uniswap V3 V1 pool |
 | ---------------------- | -----------------------------------: | ------------------------------: |
 | Pool                   |                      `0x853F...7ab9` |                 `0x6066...d33b` |
 | Factory                |                      `0xf8f2...61Ef` |                 `0x3312...FDfD` |
@@ -232,7 +233,7 @@ and actual value is the USDC received.
 |                    `$100` |  `47,217,697` (`0.47217697`) |      `$99.999999` |        `$100.116610` |           `-11.66 bps` |
 |                    `$250` | `118,044,242` (`1.18044242`) |     `$249.999997` |        `$250.290682` |           `-11.62 bps` |
 
-The selected venue fee is **5 bps of input**. Separately, comparing each quote
+The Aerodrome benchmark fee is **5 bps of input**. Separately, comparing each quote
 with the pool's pre-swap spot output after that fee gives measured price impact of
 approximately **0.0021, 0.0110, 0.0222, and 0.0558 bps** for the four sizes in
 each direction. The remainder of total oracle-relative deviation is primarily
@@ -246,7 +247,7 @@ raw `balanceOf` delta through `transferFrom`. No pool/token/router bytecode,
 liquidity, reserve, issuer policy, or quote result is mocked or overwritten, and
 no mainnet transaction is submitted.
 
-### Uniswap comparison and V1 decision
+### Uniswap benchmark and V1 decision
 
 The PRD names Uniswap, so the test also quotes its direct 0.30% V3 pool
 `0x60661b315553eB81872DeEA9a66D567cF0CCd33b` through official Base QuoterV2
@@ -260,21 +261,34 @@ Uniswap's buy deviations for `$10/$50/$100/$250` are
 **25.96/27.39/29.17/34.52 bps**. Its equivalent sale deviations are
 **34.98/37.31/40.21/48.92 bps**. Aerodrome returns more output for every tested
 trade in both directions, charges 5 bps rather than 30 bps at the snapshot, and
-has materially stronger pinned liquidity. Margin Call V1 should therefore use
-the single direct Aerodrome route. This contradicts the PRD's current Uniswap
-execution requirement; issue #422 and the PRD should be adjusted before a
-production `ExecutionAdapter` is implemented. This verification commit does not
-change either.
+has materially stronger pinned liquidity. This is useful evidence that execution
+quality was independently evaluated; it does not override the external product
+constraint below.
 
-The evidence supports a **30 bps maximum adverse oracle-relative execution
-deviation** for V1 demo-sized trades. The worst selected-route observation is
-`21.71 bps`; 30 bps leaves `8.29 bps` of headroom while remaining below the
-observed `$250` Uniswap buy and every observed Uniswap sale. The future adapter
-must enforce the stricter of caller `minOut` and an oracle-derived 30 bps floor
-in the direction being executed. This bound is fail-closed: oracle/pool
-divergence beyond it should halt the action rather than be mislabeled as price
-impact. It is evidence for the pinned V1 demo range, not a claim that liquidity
-or dynamic fees cannot change, and it should be resampled before larger capital.
+Margin Call is entering Runtime's Uniswap **New Assets, New Agents** track, whose
+requirements call for integrating Uniswap's API, AMM, or CCA for tokenized
+real-world assets or trading agents. Uniswap therefore remains the intended
+V1/hackathon execution venue, consistent with the PRD. The production
+`ExecutionAdapter` must use the approved Uniswap path and enforce the stricter of
+caller `minOut` and a protocol oracle-derived minimum so materially poor
+execution fails closed.
+
+The protocol's maximum adverse oracle-relative execution deviation is
+**unresolved**. The previously proposed 30 bps bound is incompatible with this
+snapshot: Uniswap reached `34.52 bps` on the `$250` buy and `48.92 bps` on the
+equivalent sale. Calibration must precede `ExecutionAdapter` implementation and
+must account separately for the 30 bps venue fee, AMM price impact, and normal
+oracle/pool basis. Testing should include whether a bound around **100 bps**
+provides enough tolerance for normal basis while remaining appropriately
+protective; 100 bps is a candidate to test, not a selected constant. Divergence
+beyond the eventual evidence-backed bound must halt execution.
+
+The current fork fixture executes the Aerodrome benchmark and quotes the
+deployed Uniswap path; production Uniswap integration must retain executable
+fork coverage in both directions. Before Runtime submission, the final public
+repository README must point reviewers directly to that Uniswap integration
+code, and the repository will need `FEEDBACK.md`. Those submission documents are
+outside this #420 verification correction and are not created here.
 
 Current `NvdaExecutionRoutesTest` expected result:
 **12 passed, 0 failed, 0 skipped**.
