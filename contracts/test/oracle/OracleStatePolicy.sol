@@ -34,6 +34,9 @@ library OracleStatePolicy {
         bool registryPaused;
         RoundData sequencer;
         uint256 nowTs;
+        // Production OracleAdapter must persist an equivalent held round across
+        // calls. This reference classifier is stateless and receives the prior
+        // hold from the caller; it is not OracleAdapter.
         bool hasPriorHold;
         uint80 heldRoundId;
         uint256 heldUpdatedAt;

@@ -3,6 +3,7 @@ pragma solidity 0.8.29;
 
 import {Test} from "forge-std/Test.sol";
 
+import {NvdaFeedCadence} from "../test/oracle/NvdaFeedCadence.sol";
 import {OracleStatePolicy} from "../test/oracle/OracleStatePolicy.sol";
 
 interface IAggregatorV3Read {
@@ -45,7 +46,42 @@ contract NvdaOracleCadenceTest is Test {
         assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.LIVE));
     }
 
-    function test_sampledRoundGapsPinMaxLiveAge() public view {
+    function test_phase2ScanReproducesMaxLiveAgeEvidence() public view {
+        IAggregatorV3Read feed = IAggregatorV3Read(NVDA_FEED);
+        (uint80 latestId,,,,) = feed.latestRoundData();
+        uint80 localLatest = latestId - PHASE_BASE;
+        assertEq(localLatest, 362);
+
+        uint256[] memory updatedAt = new uint256[](localLatest);
+        int256[] memory answers = new int256[](localLatest);
+        for (uint80 local = 1; local <= localLatest; local++) {
+            (, int256 answer,, uint256 ts,) = feed.getRoundData(PHASE_BASE + local);
+            updatedAt[local - 1] = ts;
+            answers[local - 1] = answer;
+        }
+
+        NvdaFeedCadence.Stats memory stats =
+            NvdaFeedCadence.summarize(updatedAt, answers, OracleStatePolicy.MAX_LIVE_AGE);
+        assertEq(stats.roundCount, 362);
+        assertEq(stats.gapCount, 361);
+        assertEq(stats.firstUpdatedAt, 1_785_964_885);
+        assertEq(stats.lastUpdatedAt, 1_789_483_945);
+        assertEq(stats.minGap, 30);
+        assertEq(stats.maxGap, 280_578);
+        assertEq(stats.medianGap, 2_102);
+        assertEq(stats.maxGapAtMostMaxLiveAge, 27_196);
+        assertEq(stats.minGapAboveMaxLiveAge, 28_936);
+        assertEq(stats.gapsAboveMaxLiveAge, 24);
+        assertEq(stats.gapsAbove1Day, 6);
+        assertEq(stats.gapsAbove2Days, 6);
+        assertEq(stats.medianAbsBps, 52);
+        assertEq(stats.movesBetween40And70Bps, 336);
+        assertLt(block.timestamp - stats.lastUpdatedAt, OracleStatePolicy.MAX_LIVE_AGE);
+        assertLt(stats.maxGapAtMostMaxLiveAge, OracleStatePolicy.MAX_LIVE_AGE);
+        assertGt(stats.minGapAboveMaxLiveAge, OracleStatePolicy.MAX_LIVE_AGE);
+    }
+
+    function test_representativeGaps() public view {
         IAggregatorV3Read feed = IAggregatorV3Read(NVDA_FEED);
 
         uint256 rthQuiet = _gap(feed, 327, 328);
@@ -61,13 +97,6 @@ contract NvdaOracleCadenceTest is Test {
         assertEq(weekendGap, 188_820);
         assertEq(laborDayGap, 280_578);
         assertEq(sunOpenToMondayPre, 28_936);
-
-        assertLt(rthQuiet, OracleStatePolicy.MAX_LIVE_AGE);
-        assertLt(expectedSessionQuiet, OracleStatePolicy.MAX_LIVE_AGE);
-        assertGt(sunOpenToMondayPre, OracleStatePolicy.MAX_LIVE_AGE);
-        assertGt(overnightGap, OracleStatePolicy.MAX_LIVE_AGE);
-        assertGt(weekendGap, OracleStatePolicy.MAX_LIVE_AGE);
-        assertGt(laborDayGap, OracleStatePolicy.MAX_LIVE_AGE);
     }
 
     function test_weekendUnpausedStaleClassifiesInvalid() public view {

@@ -188,17 +188,22 @@ contract OracleStatePolicyTest is Test {
         assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.HELD));
     }
 
-    function test_maxLiveAgeSitsBetweenExpectedQuietAndOvernight() public pure {
-        uint256 expectedSessionQuiet = 24_254;
-        uint256 shortestOvernightStyleGap = 28_936;
-        uint256 weekendGap = 188_820;
-        uint256 pinnedAge = PINNED_TS - NVDA_UPDATED_AT;
+    function test_maxLiveAgeIsEightHours() public pure {
         assertEq(OracleStatePolicy.MAX_LIVE_AGE, 8 hours);
-        assertLt(expectedSessionQuiet, OracleStatePolicy.MAX_LIVE_AGE);
-        assertLt(pinnedAge, OracleStatePolicy.MAX_LIVE_AGE);
-        assertGt(shortestOvernightStyleGap, OracleStatePolicy.MAX_LIVE_AGE);
-        assertGt(weekendGap, OracleStatePolicy.MAX_LIVE_AGE);
         assertEq(OracleStatePolicy.SEQUENCER_GRACE_PERIOD, 3600);
+        assertLt(PINNED_TS - NVDA_UPDATED_AT, OracleStatePolicy.MAX_LIVE_AGE);
+    }
+
+    function test_ageOnlyPolicyCanRemainLiveIntoQuietClosedPeriod() public pure {
+        OracleStatePolicy.Input memory input = _live();
+        input.price.roundId = FRIDAY_ROUND_ID;
+        input.price.answeredInRound = FRIDAY_ROUND_ID;
+        input.price.startedAt = FRIDAY_UPDATED_AT - 14;
+        input.price.updatedAt = FRIDAY_UPDATED_AT;
+        input.nowTs = FRIDAY_UPDATED_AT + OracleStatePolicy.MAX_LIVE_AGE;
+        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.LIVE));
+        input.nowTs = FRIDAY_UPDATED_AT + OracleStatePolicy.MAX_LIVE_AGE + 1;
+        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
     }
 
     function _live() private pure returns (OracleStatePolicy.Input memory input) {

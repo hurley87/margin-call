@@ -100,8 +100,9 @@ First-commit `BaseMainnetTest` expected result: **6 passed, 0 failed, 0 skipped*
 ## Oracle-state policy
 
 Test-only reference: `contracts/test/oracle/OracleStatePolicy.sol`. RPC-free tests
-live in `contracts/test/oracle/OracleStatePolicy.t.sol` and run with
-`pnpm test:contracts`. Fork cadence evidence is `contracts/fork/NvdaOracleCadence.t.sol`.
+live in `contracts/test/oracle/` and run with `pnpm test:contracts`. Fork cadence
+evidence is `contracts/fork/NvdaOracleCadence.t.sol`, which scans all phase-2 rounds
+through `NvdaFeedCadence`.
 
 This is not `OracleAdapter`, `MarginCall`, or any production contract.
 
@@ -117,6 +118,12 @@ Pause is classified before sequencer and freshness checks: an explicit issuer pa
 `HELD` even if the last mark is stale. A failed registry read cannot prove that pause
 and is `INVALID`.
 
+The reference classifier is stateless. The eventual production `OracleAdapter` must
+retain enough state to enforce the post-`HELD` fresh-round rule: persist
+`heldRoundId` / `heldUpdatedAt` (or an equivalent frozen-round identity) while the
+registry is paused, and after unpause require a strictly newer qualifying Chainlink
+round before returning `LIVE`. This commit does not implement `OracleAdapter`.
+
 ### Sequencer grace period
 
 Pinned to **3600 seconds**, matching Chainlink's current Base sequencer consumer
@@ -129,57 +136,77 @@ a qualifying price round may become `LIVE`.
 
 ### Historical sampling
 
-All phase-2 NVDA rounds were read through `getRoundData` on the pinned fork
-(block `51356323`, 362 local rounds, 2026-08-05 through 2026-09-15). No heartbeat
-constant is published on the aggregator. Consecutive same-session moves clustered
-near **0.5%**, so quiet regular hours can go hours between updates.
+`NvdaOracleCadenceTest` loads every phase-2 NVDA round through `getRoundData` on the
+pinned fork and `NvdaFeedCadence.summarize` reproduces the aggregates below
+(block `51356323`, **362** local rounds, `updatedAt` `1785964885`–`1789483945`).
+No heartbeat constant is published on the aggregator. **336 / 361** consecutive
+moves were 0.40–0.70% (median 0.52%), so quiet periods can last hours between
+updates.
 
-| Local round |              `roundId` |  `updatedAt` | ET (UTC-4)           | Notes                                            |
-| ----------: | ---------------------: | -----------: | -------------------- | ------------------------------------------------ |
-|         313 | `36893488147419103545` | `1788545055` | Fri 2026-09-04 14:04 | Last Friday tick before Labor Day                |
-|         314 | `36893488147419103546` | `1788825633` | Mon 2026-09-07 20:00 | Holiday weekend resume                           |
-|         327 | `36893488147419103559` | `1788961817` | Wed 2026-09-09 09:50 | Start of longest same-day RTH quiet gap          |
-|         328 | `36893488147419103560` | `1788980639` | Wed 2026-09-09 15:03 | End of that RTH gap (`18822s`, 5.23h)            |
-|         334 | `36893488147419103566` | `1789050187` | Thu 2026-09-10 10:23 | Start of longest expected-session quiet gap      |
-|         335 | `36893488147419103567` | `1789074441` | Thu 2026-09-10 17:07 | End of that gap (`24254s`, 6.74h, RTH → post)    |
-|         346 | `36893488147419103578` | `1789155215` | Fri 2026-09-11 15:33 | Last Friday tick                                 |
-|         347 | `36893488147419103579` | `1789344035` | Sun 2026-09-13 20:00 | 24/5 Sunday reopen (`188820s`, 52.45h)           |
-|         360 | `36893488147419103592` | `1789418327` | Mon 2026-09-14 16:38 | Last Monday post-market tick                     |
-|         361 | `36893488147419103593` | `1789478753` | Tue 2026-09-15 09:25 | Tuesday pre-market (`60426s`, 16.79h overnight)  |
-|         362 | `36893488147419103594` | `1789483945` | Tue 2026-09-15 10:52 | Latest at the pinned block (age `18048s`, 5.01h) |
+| Statistic              |              Value | Meaning                                                  |
+| ---------------------- | -----------------: | -------------------------------------------------------- |
+| Rounds scanned         |                362 | Phase-2 local rounds 1–362                               |
+| Consecutive gaps       |                361 | `updatedAt[i+1] - updatedAt[i]`                          |
+| Min gap                |              `30s` | Tightest consecutive update                              |
+| Median gap             |     `2102s` (~35m) | Middle gap after sorting                                 |
+| Max gap                | `280578s` (~77.9h) | Labor Day weekend silence                                |
+| Max gap `<= 8h`        |  `27196s` (~7.55h) | Longest silence still inside `MAX_LIVE_AGE`              |
+| Min gap `> 8h`         |  `28936s` (~8.04h) | Shortest silence that an age-only policy treats as stale |
+| Gaps `> 8h`            |                 24 | Including overnight, weekend, and holiday silences       |
+| Gaps `> 24h` / `> 48h` |              6 / 6 | All six are weekend or Labor Day gaps                    |
+| Pinned snapshot age    |  `18048s` (~5.01h) | Latest round vs block `51356323`                         |
+
+Selected rounds remain useful examples. Session labels are offchain interpretation
+of those timestamps, not an onchain calendar:
+
+| Local round |              `roundId` |  `updatedAt` | ET (UTC-4)           | Notes                                             |
+| ----------: | ---------------------: | -----------: | -------------------- | ------------------------------------------------- |
+|         313 | `36893488147419103545` | `1788545055` | Fri 2026-09-04 14:04 | Last Friday tick before Labor Day                 |
+|         314 | `36893488147419103546` | `1788825633` | Mon 2026-09-07 20:00 | Holiday weekend resume (`280578s`)                |
+|         327 | `36893488147419103559` | `1788961817` | Wed 2026-09-09 09:50 | Start of a 5.23h same-day regular-hours quiet gap |
+|         328 | `36893488147419103560` | `1788980639` | Wed 2026-09-09 15:03 | End of that gap (`18822s`)                        |
+|         334 | `36893488147419103566` | `1789050187` | Thu 2026-09-10 10:23 | Start of a 6.74h regular → post quiet gap         |
+|         335 | `36893488147419103567` | `1789074441` | Thu 2026-09-10 17:07 | End of that gap (`24254s`)                        |
+|         346 | `36893488147419103578` | `1789155215` | Fri 2026-09-11 15:33 | Last Friday tick                                  |
+|         347 | `36893488147419103579` | `1789344035` | Sun 2026-09-13 20:00 | Sunday reopen (`188820s`, 52.45h)                 |
+|         360 | `36893488147419103592` | `1789418327` | Mon 2026-09-14 16:38 | Last Monday post-market tick                      |
+|         361 | `36893488147419103593` | `1789478753` | Tue 2026-09-15 09:25 | Tuesday pre-market (`60426s`, 16.79h)             |
+|         362 | `36893488147419103594` | `1789483945` | Tue 2026-09-15 10:52 | Latest at the pinned block (age `18048s`)         |
 
 Additional `latestRoundData()` calls at other historical blocks, with the registry
 unpaused in both cases:
 
-|      Block |                              Timestamp | Latest local round |               Age | Classification under this policy |
-| ---------: | -------------------------------------: | -----------------: | ----------------: | -------------------------------- |
+|      Block | Timestamp                              | Latest local round |               Age | Classification under this policy |
+| ---------: | -------------------------------------- | -----------------: | ----------------: | -------------------------------- |
 | `51262927` | `1789315201` (Sun 2026-09-13 12:00 ET) | 346 (Friday close) | `159986s` (44.4h) | `INVALID`                        |
 | `51334926` | `1789459199` (Mon 2026-09-14 22:00 ET) |  360 (Monday post) |  `40872s` (11.4h) | `INVALID`                        |
 
-Observed cadence:
-
-- Same-day regular-hours intervals: min 32s, median ~23m, max **5.23h**.
-- Expected 04:00–20:00 ET sessions without an overnight in the middle: max **6.74h**.
-- Shortest overnight-style gap: **8.04h** (Sun 20:00 → Mon 04:02 ET).
-- Typical weekday overnight silence: **12–18h**.
-- Ordinary weekends: **52–55h**, resume Sunday 20:00 ET; Labor Day 2026: **77.94h**, resume Monday 20:00 ET.
-- Saturday had no phase-2 updates. Sunday updates were the 20:00 ET reopen, not midday.
-- Sampled blocks never showed `paused == true`. `HELD` is therefore proven from the
-  verified registry ABI plus classifier fixtures, not from a mainnet pause snapshot.
+Sampled blocks never showed `paused == true`. `HELD` is therefore proven from the
+verified registry ABI plus classifier fixtures, not from a mainnet pause snapshot.
 
 ### Selected `MAX_LIVE_AGE`
 
 **28800 seconds (8 hours).**
 
-Rationale: it is above the longest observed quiet stretch while updates are expected
-(6.74h regular → post) and above the pinned Tuesday afternoon age (5.01h), and it is
-below the shortest overnight-style gap (8.04h), weekday overnight silence (12h+), and
-weekend/holiday holds (52h+). A shorter 6h bound would reject the 6.74h expected-session
-observation. A 12h bound would treat overnight last-close as `LIVE`.
+This is a V1 risk/availability tradeoff from the scanned cadence, not a precise
+session boundary. Eight hours is longer than the pinned Tuesday age (5.01h) and
+longer than many quiet multi-hour update gaps, including the 6.74h regular → post
+example, so financed actions can still see `LIVE` during a quiet open session. It
+is shorter than typical weekday overnight silence (12–18h) and weekend/holiday
+last-close (52–78h), so those unpaused last prints become `INVALID` rather than
+`HELD` or `LIVE`.
 
-Chainlink documents these feeds as 24/5 with no off-hours heartbeat. V1 therefore
-treats unpaused weekend, holiday, and overnight last-close as `INVALID`, not `HELD`.
-That matches issue #420 and does not manufacture a corporate-action hold from staleness.
+An age-only policy can still treat a last price as `LIVE` for up to 8 hours into
+a quiet or closed period. The longest scanned gap still `<= 8h` is 7.55h; the
+shortest scanned gap `> 8h` is 8.04h. Solidity intentionally does not consult an
+offchain NYSE/NASDAQ calendar, so V1 cannot know that a silence is "overnight"
+versus "quiet regular hours." Offchain UI/Convex may annotate weekends and
+holidays. A 6h bound would reject more quiet open-session marks; a 12h bound
+would keep overnight last-close `LIVE`.
+
+Chainlink documents these feeds as 24/5 with no off-hours heartbeat. Unpaused
+weekend, holiday, and overnight last-close is `INVALID`, not `HELD`. That matches
+issue #420 and does not manufacture a corporate-action hold from staleness.
 
 ### How to run
 
@@ -192,4 +219,5 @@ Use an archive-capable URL through the same environment variable for historical
 `getRoundData` / extra-block checks. Never commit a credential-bearing URL.
 
 Fork profile expected result: `BaseMainnetTest` **6 passed** and
-`NvdaOracleCadenceTest` **4 passed**. RPC-free policy tests run in the normal suite.
+`NvdaOracleCadenceTest` **5 passed**. RPC-free policy and cadence-helper tests run
+in the normal suite.
