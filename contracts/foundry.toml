@@ -46,6 +46,11 @@ invariant = { runs = 256, depth = 64 }
 [profile.gas]
 optimizer_runs = 1_000_000
 
+# Explicit opt-in: native B20 execution requires the pinned Base Forge build.
+# Keep RPC-dependent tests outside the default/CI test directory.
+[profile.base-mainnet]
+test = "fork"
+
 [fmt]
 line_length = 120
 tab_width = 4
