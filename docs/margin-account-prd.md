@@ -710,7 +710,7 @@ Estimated gross exposure
 Estimated health
 ```
 
-When a financed preset above `1.0x` is selected, disclose the V1 hold constraint: reducing exposure requires `LIVE` pricing, so during `HELD`/`INVALID` pricing an owner without external USDC may be unable to repay the debt and close until a qualifying live observation returns. NFT transfer remains available.
+When a financed preset above `1.0x` is selected, disclose the V1 hold constraint: reducing exposure requires `LIVE` pricing, so during `HELD`/`INVALID` pricing an owner without external USDC cannot repay from the position itself and therefore cannot close until a qualifying live observation returns. NFT transfer remains available.
 
 ### Position page
 
