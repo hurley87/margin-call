@@ -427,6 +427,7 @@ NVDAc gross value       $150
 USDC principal           $50
 Accrued interest          $0
 Current debt             $50
+Borrow APR               10%
 Net equity              $100
 Gross leverage          1.50x
 ```
