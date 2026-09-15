@@ -481,6 +481,8 @@ A `LIVE` observation requires a complete positive round, valid timestamp, no Coi
 
 Interest continues accruing while pricing is held or invalid.
 
+**Accepted V1 hold constraint:** a financed position with debt outstanding cannot `reduceExposure` or close while pricing is `HELD` or `INVALID`. If the owner has no external USDC to repay the debt, they must wait for a qualifying `LIVE` observation before they can deleverage and close. Standard ERC-721 transfer remains available during the hold. V1 intentionally does not use a stale/frozen mark to manufacture an unwind path.
+
 ---
 
 ## NVDAc valuation rule
@@ -669,6 +671,7 @@ At minimum, tests must cover:
 - executor permissions limited to repayment/reduction;
 - executor clearing on transfer;
 - transfers of healthy, liquidatable, underwater, `HELD`, `INVALID`, and reverting-oracle positions without any oracle call;
+- `HELD`/`INVALID` financed-position behavior: `reduceExposure` is unavailable, debt-free close still requires zero debt, external `repay` remains available, and transfer remains available;
 - debt-free close only, including close after external repayment;
 - close returning remaining NVDAc only, with no position-attributed residual USDC path;
 - full liquidation with no reward/fee;
@@ -706,6 +709,8 @@ Estimated principal
 Estimated gross exposure
 Estimated health
 ```
+
+When a financed preset above `1.0x` is selected, disclose the V1 hold constraint: reducing exposure requires `LIVE` pricing, so during `HELD`/`INVALID` pricing an owner without external USDC may be unable to repay the debt and close until a qualifying live observation returns. NFT transfer remains available.
 
 ### Position page
 
@@ -772,6 +777,7 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 - Financed opening and liquidation require `LIVE` solvency pricing.
 - `repay`, transfer, executor updates, and debt-free close are oracle-independent.
 - `reduceExposure` requires `LIVE` pricing plus caller and protocol execution bounds.
+- During `HELD`/`INVALID`, a financed position with outstanding debt cannot be unwound through `reduceExposure` or close; without external USDC the owner must wait for `LIVE` pricing, though NFT transfer remains available.
 - Chainlink determines solvency; Uniswap is execution only.
 - Raw NVDAc units are valued directly against the total-return feed; the B20 multiplier is never applied twice.
 - Maintenance is a 30% equity ratio in V1, so liquidation eligibility is `healthFactor < 1.0` using the explicit Risk Model; zero/negative-equity edge cases must not underflow or divide by zero.
