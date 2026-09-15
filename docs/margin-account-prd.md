@@ -51,7 +51,7 @@ V1 demonstrates **transferable financed positions**, not a functioning secondary
 - Standard ERC-721 transfer semantics with **no financial transfer gate**.
 - One optional executor per position.
 
-The post-open management surface is deliberately minimal. There is no leverage-increase action, add-collateral action, or arbitrary target-leverage adjustment in V1.
+The post-open management surface is deliberately minimal. There is no leverage-increase action, add-collateral action, arbitrary target-leverage adjustment, or explicit position-status state machine in V1.
 
 ---
 
@@ -130,7 +130,7 @@ Single NVDAc Chainlink total-return pricing/state adapter.
 
 Single-purpose NVDAc/USDC Uniswap adapter with fixed approved tokens, fixed settlement path, and bounded execution.
 
-There is no separate `PositionNFT` contract, ERC-4626 vault, Position Account clone, asset registry, utilization-rate module, generalized router, APR admin module, or global outstanding-principal counter in V1.
+There is no separate `PositionNFT` contract, ERC-4626 vault, Position Account clone, asset registry, utilization-rate module, generalized router, APR admin module, global outstanding-principal counter, or `PositionStatus` enum in V1.
 
 ---
 
@@ -145,13 +145,14 @@ struct Position {
     uint256 accruedInterest;
     uint256 lastAccruedAt;
     address executor;
-    PositionStatus status;
 }
 
 mapping(uint256 tokenId => Position) positions;
 ```
 
 All NVDAc is physically held by `MarginCall`, but each position has isolated accounting. The same contract also owns the ERC-721 token state, so `positions[tokenId]` and `ownerOf(tokenId)` cannot drift across contracts.
+
+There is no separate lifecycle-status field. In V1, ERC-721 token existence is the authoritative active/inactive status: an existing token is an active position; close or liquidation deletes the live position accounting and burns the token. `PositionClosed` and `PositionLiquidated` events distinguish terminal history offchain.
 
 Invariant:
 
@@ -216,13 +217,21 @@ The `30%` maintenance equity ratio is the V1 starting parameter and must be vali
 
 The contract accepts only these opening leverage values:
 
+| Preset | Label | Minimum opening health factor |
+| --- | --- | --- |
+| `1.0x` | Spot only | N/A — no debt |
+| `1.1x` | Conservative | `>= 3.03` |
+| `1.25x` | Balanced | `>= 2.67` |
+| `1.4x` | Aggressive | `>= 2.38` |
+| `1.5x` | Max | `>= 2.22` |
+
+For financed presets, the displayed minimum follows directly from the preset ceiling and the 30% maintenance ratio:
+
 ```text
-1.0x   Spot only
-1.1x   Conservative
-1.25x  Balanced
-1.4x   Aggressive
-1.5x   Max
+minimumOpeningHealthFactor = 1 / (presetLeverage * maintenanceEquityRatio)
 ```
+
+Because post-execution leverage must be no greater than the selected preset, actual opening health must be at least the static value shown above. The open screen does not need to compute a separate dynamic “Estimated health” value.
 
 Intermediate leverage values are intentionally rejected in V1. This keeps contract validation and UI behavior aligned and removes a feature that adds no demo value.
 
@@ -311,6 +320,8 @@ Ordinary repayment applies USDC:
 1. accrued interest
 2. principal
 ```
+
+V1 emits no `InterestAccrued` event. Lazy debt is recomputable from position principal, accrued-interest checkpoint state, `lastAccruedAt`, and the fixed APR; the app/indexer may derive the live debt curve offchain. State-changing debt events record the economically relevant transitions instead.
 
 Changing borrow-rate policy is explicitly deferred beyond V1.
 
@@ -539,12 +550,13 @@ If debt remains, the owner must first either:
 Once debt is zero, close is oracle-free:
 
 1. return all remaining recorded NVDAc to the current NFT owner;
-2. mark the position closed;
-3. burn the ERC-721 token internally in `MarginCall`.
+2. delete the live position accounting;
+3. burn the ERC-721 token internally in `MarginCall`;
+4. emit `PositionClosed` as the terminal-history record.
 
 There is no position-attributed residual USDC to return: `repay` never takes an overpayment and `reduceExposure` sends sale surplus to the owner immediately.
 
-This deliberately removes debt-covering swap logic from the close function.
+This deliberately removes debt-covering swap logic and lifecycle-status storage from the close function.
 
 ---
 
@@ -566,7 +578,8 @@ V1 performs a full unwind:
 2. validate liquidation eligibility using the live Chainlink mark and the Risk Model predicate;
 3. sell this position's entire recorded NVDAc -> USDC through the approved bounded execution path;
 4. settle the liquidation proceeds;
-5. finalize the position and burn the ERC-721 token internally in `MarginCall`.
+5. delete the live position accounting and burn the ERC-721 token internally in `MarginCall`;
+6. emit `PositionLiquidated` as the terminal-history record.
 
 There is no protocol liquidation fee, no liquidator payout, and no global outstanding-principal counter to decrement.
 
@@ -600,7 +613,7 @@ event BadDebtRealized(
 
 The treasury absorbs the shortfall. There is no claim on the current owner, any prior owner, or another position, and no aggregate principal state needs to be repaired or decremented during finalization.
 
-A successful shortfall liquidation still finalizes and burns the NFT. Failed oracle, token-transfer, or bounded-swap execution reverts atomically and leaves the position active.
+A successful shortfall liquidation still deletes live state and burns the NFT. Failed oracle, token-transfer, or bounded-swap execution reverts atomically and leaves the position active.
 
 ---
 
@@ -610,7 +623,6 @@ Emit only lifecycle/accounting events needed by the simplified surface:
 
 - `PositionOpened`
 - `CreditDrawn`
-- `InterestAccrued`
 - `DebtRepaid`
 - `ExposureReduced`
 - `ExecutorUpdated`
@@ -619,7 +631,7 @@ Emit only lifecycle/accounting events needed by the simplified surface:
 - `PositionLiquidated`
 - `BadDebtRealized(tokenId, shortfall)`
 
-There is no `ExposureIncreased`, `CollateralAdded`, or `BorrowAprUpdated` event because those actions do not exist in V1.
+There is no `ExposureIncreased`, `CollateralAdded`, `BorrowAprUpdated`, or `InterestAccrued` event because those actions/state transitions do not need separate V1 event machinery.
 
 ---
 
@@ -632,7 +644,7 @@ The demo is intentionally scheduled for a `LIVE` oracle window because the execu
 Required sequence:
 
 1. **A opens a financed NVDAc position during a `LIVE` window.** Confirm contributed NVDAc, borrowed USDC, purchased NVDAc, principal, and ERC-721 ownership on `MarginCall`.
-2. **Interest accrues.** Wait or advance time and prove `currentDebt > principal` without a keeper transaction.
+2. **Interest accrues.** Wait or advance time and prove `currentDebt > principal` without a keeper transaction or `InterestAccrued` event.
 3. **A appoints executor E.**
 4. **E reduces exposure during `LIVE` pricing.** E performs a small `reduceExposure`, proving delegated management and the bounded NVDAc -> USDC path.
 5. **A transfers the Position NFT to B.** No oracle/health gate may block the transfer. Stock and debt remain in place; `MarginCall` clears the executor internally during the ERC-721 ownership update.
@@ -653,10 +665,12 @@ A purchase payment is not part of this V1 acceptance test. Do not claim that the
 At minimum, tests must cover:
 
 - `MarginCall` directly implementing ERC-721 ownership, approvals, mint, transfer, and burn with no separate `PositionNFT` deployment;
+- no `PositionStatus` enum or lifecycle-status storage; token existence is active status and terminal outcome is event history;
 - exactly the five opening leverage presets, including rejection of intermediate values;
+- static minimum opening-health values derived from preset leverage and the 30% maintenance ratio;
 - cost-aware post-swap leverage checks for each financed preset;
 - finite CreditPool capacity and zero-credit `1.0x` opening;
-- lazy simple interest at the immutable 10% APR and interest-first ordinary repayment;
+- lazy simple interest at the immutable 10% APR and interest-first ordinary repayment, with no `InterestAccrued` event requirement;
 - absence of any APR setter/rate-admin path or global outstanding-principal counter;
 - `repay(tokenId, amount)` with `amount > currentDebt`, proving only current debt is transferred and no residual/refund balance is created;
 - exact Risk Model math for NAV, current debt, equity, equity ratio, and health factor using the 30% maintenance ratio;
@@ -684,14 +698,14 @@ At minimum, tests must cover:
 
 ### Open
 
-Show the five fixed leverage presets only:
+Show the five fixed leverage presets with their static minimum opening-health reference:
 
 ```text
-1.0x
-1.1x
-1.25x
-1.4x
-1.5x
+1.0x   Spot only       No debt
+1.1x   Conservative   HF >= 3.03
+1.25x  Balanced       HF >= 2.67
+1.4x   Aggressive     HF >= 2.38
+1.5x   Max            HF >= 2.22
 ```
 
 Also show:
@@ -703,8 +717,9 @@ Available credit
 Borrow APR (fixed 10%)
 Estimated principal
 Estimated gross exposure
-Estimated health
 ```
+
+Do not compute a separate dynamic “Estimated health” field on the open screen. The preset itself determines the minimum opening health under the V1 maintenance ratio; actual post-open health remains available on the position page from live state.
 
 When a financed preset above `1.0x` is selected, disclose the V1 hold constraint: reducing exposure requires `LIVE` pricing, so during `HELD`/`INVALID` pricing an owner without external USDC cannot repay from the position itself and therefore cannot close until a qualifying live observation returns. NFT transfer remains available.
 
@@ -765,12 +780,14 @@ When the oracle is held/invalid, preserve the last known visual state and label 
 ## Security principles
 
 - `MarginCall` is the sole ERC-721 Position NFT contract; there is no cross-contract ownership/accounting synchronization.
+- ERC-721 token existence is the active-position status; V1 stores no separate `PositionStatus` enum.
 - Borrowed USDC is never freely withdrawable.
 - Opening is the only action that creates new principal.
 - Opening accepts only the five fixed leverage presets.
 - Borrowed USDC can only buy NVDAc.
 - No position may consume another position's recorded NVDAc.
 - Borrow APR is an immutable V1 constant at 10%; there is no rate setter or APR admin surface.
+- Lazy interest is derived from position debt state and time; there is no `InterestAccrued` event surface.
 - `repay` transfers at most current debt; an over-sized requested amount never becomes position USDC.
 - Financed opening and liquidation require `LIVE` solvency pricing.
 - `repay`, transfer, executor updates, and debt-free close are oracle-independent.
