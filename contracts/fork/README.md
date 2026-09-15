@@ -1,10 +1,11 @@
 # Pinned Base mainnet assumptions
 
-Issue #420 verification. The first commit pins deployed token and oracle reads plus a
-native NVDAc transfer. The second commit pins the test-only `LIVE` / `HELD` /
-`INVALID` classifier and `MAX_LIVE_AGE`. The third commit pins raw NVDAc valuation
-against the total-return feed. There is still no production `OracleAdapter` or
-valuation implementation.
+Issue #420 verification for Margin Call's Base-mainnet dependencies and risk
+assumptions. The suite verifies deployed NVDAc, token, and oracle dependencies;
+oracle-state and feed-cadence assumptions; and raw NVDAc valuation against the
+Coinbase/Chainlink total-return feed. These are verification fixtures only; no
+production `OracleAdapter`, valuation module, or execution adapter is implemented
+here.
 
 ## Run from the repository root
 
@@ -63,8 +64,8 @@ Exact `latestRoundData()` tuples are asserted in the test:
 | `updatedAt`       | `1789483945`           | `1789491993`           |
 | `answeredInRound` | `36893488147419103594` | `18446744073709551636` |
 
-These first-commit values are historical observations. Freshness and state policy
-are pinned below, not in the raw aggregator snapshot test.
+These snapshot values are historical observations. Freshness and state policy are
+pinned below, not in the raw aggregator snapshot test.
 
 ## Registry ABI provenance
 
@@ -192,7 +193,8 @@ The reference classifier is stateless. The eventual production `OracleAdapter` m
 retain enough state to enforce the post-`HELD` fresh-round rule: persist
 `heldRoundId` / `heldUpdatedAt` (or an equivalent frozen-round identity) while the
 registry is paused, and after unpause require a strictly newer qualifying Chainlink
-round before returning `LIVE`. This commit does not implement `OracleAdapter`.
+round before returning `LIVE`. This verification suite does not implement
+`OracleAdapter`.
 
 ### Sequencer grace period
 
@@ -288,6 +290,6 @@ BASE_MAINNET_RPC_URL='https://mainnet.base.org' pnpm test:contracts:fork
 Use an archive-capable URL through the same environment variable for historical
 `getRoundData` / extra-block checks. Never commit a credential-bearing URL.
 
-Fork profile expected result: `BaseMainnetTest` **6 passed** and
+Fork profile expected result: `BaseMainnetTest` **9 passed** and
 `NvdaOracleCadenceTest` **5 passed**. RPC-free policy and cadence-helper tests run
 in the normal suite.
