@@ -4,6 +4,7 @@ pragma solidity 0.8.29;
 import {Test} from "forge-std/Test.sol";
 import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
+import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
 import {NvdaValuation} from "../test/valuation/NvdaValuation.sol";
 
 interface IAggregatorV3Read {
@@ -30,20 +31,20 @@ interface IB20AssetRead is IERC20Metadata {
 
 /// @dev Snapshot verification only. All writes are local to the fork.
 contract BaseMainnetTest is Test {
-    uint256 internal constant BASE_BLOCK = 51_356_323;
-    uint256 internal constant BASE_TIMESTAMP = 1_789_501_993;
-    address internal constant NVDAC = 0xb20000000000000000000078ee7ce2fE4908108C;
-    address internal constant NVDA_FEED = 0x04689a41629776563E6822F76f2e57D148d28513;
-    address internal constant REGISTRY = 0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD;
-    address internal constant SEQUENCER = 0xBCF85224fc0756B9Fa45aA7892530B47e10b6433;
-    address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
+    uint256 internal constant BASE_BLOCK = BaseV1Constants.PINNED_BLOCK;
+    uint256 internal constant BASE_TIMESTAMP = BaseV1Constants.PINNED_TIMESTAMP;
+    address internal constant NVDAC = BaseV1Constants.NVDAC;
+    address internal constant NVDA_FEED = BaseV1Constants.NVDA_FEED;
+    address internal constant REGISTRY = BaseV1Constants.COINBASE_ORACLE_REGISTRY;
+    address internal constant SEQUENCER = BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED;
+    address internal constant USDC = BaseV1Constants.USDC;
 
     function setUp() public {
         vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), BASE_BLOCK);
     }
 
     function test_pinnedBaseMainnet() public view {
-        assertEq(block.chainid, 8453);
+        assertEq(block.chainid, BaseV1Constants.CHAIN_ID);
         assertEq(block.number, BASE_BLOCK);
         assertEq(block.timestamp, BASE_TIMESTAMP);
         assertEq(blockhash(BASE_BLOCK - 1), 0xac0ed6b214824779a5b8f953a450dba91bdbebc261b760ccb81784570646b6a4);
@@ -53,18 +54,18 @@ contract BaseMainnetTest is Test {
         // Native B20 marker: execution is provided by Base, not Solidity bytecode.
         assertEq(NVDAC.code, hex"ef");
         assertEq(IERC20Metadata(NVDAC).symbol(), "NVDAc");
-        assertEq(IERC20Metadata(NVDAC).decimals(), 8);
+        assertEq(IERC20Metadata(NVDAC).decimals(), BaseV1Constants.NVDAC_DECIMALS);
     }
 
     function test_usdcIdentityAndDecimals() public view {
         assertGt(USDC.code.length, 0);
         assertEq(IERC20Metadata(USDC).symbol(), "USDC");
-        assertEq(IERC20Metadata(USDC).decimals(), 6);
+        assertEq(IERC20Metadata(USDC).decimals(), BaseV1Constants.USDC_DECIMALS);
     }
 
     function test_b20RawAndPresentationReadsAtCurrentMultiplier() public view {
         IB20AssetRead token = IB20AssetRead(NVDAC);
-        address holder = 0xf8191D98ae98d2f7aBDFB63A9b0b812b93C873AA;
+        address holder = BaseV1Constants.PINNED_NVDAC_HOLDER;
         uint256 rawBalance = token.balanceOf(holder);
 
         assertEq(rawBalance, 79_781_200_000);
@@ -78,7 +79,7 @@ contract BaseMainnetTest is Test {
         IERC20Metadata token = IERC20Metadata(NVDAC);
         // Existing holder, discovered via Blockscout and verified at BASE_BLOCK.
         // Impersonation affects only this local fork; no key or funding is needed.
-        address sender = 0xf8191D98ae98d2f7aBDFB63A9b0b812b93C873AA;
+        address sender = BaseV1Constants.PINNED_NVDAC_HOLDER;
         address recipient = makeAddr("nvda-fork-recipient");
         uint256 amount = 12_345_678;
         uint256 supply = token.totalSupply();
@@ -97,7 +98,7 @@ contract BaseMainnetTest is Test {
     function test_nvdaFeedRound() public view {
         assertGt(NVDA_FEED.code.length, 0);
         IAggregatorV3Read feed = IAggregatorV3Read(NVDA_FEED);
-        assertEq(feed.decimals(), 8);
+        assertEq(feed.decimals(), BaseV1Constants.NVDA_FEED_DECIMALS);
         assertEq(feed.description(), "Coinbase NVDA");
         (uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound) =
             feed.latestRoundData();

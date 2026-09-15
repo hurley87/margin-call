@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
+import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
+
 /// @title OracleStatePolicy
 /// @notice Test-only reference for issue #420 `LIVE` / `HELD` / `INVALID` classification.
 /// @dev Not `OracleAdapter`. Not deployed. Do not import from `contracts/src`.
 library OracleStatePolicy {
     /// @dev 8 hours. See `contracts/fork/README.md` for the Base-mainnet cadence evidence.
-    uint256 internal constant MAX_LIVE_AGE = 8 hours;
+    uint256 internal constant MAX_LIVE_AGE = BaseV1Constants.MAX_LIVE_AGE;
 
     /// @dev Chainlink's published Base sequencer example uses 3600 seconds and `<=` to fail closed.
     /// https://docs.chain.link/data-feeds/l2-sequencer-feeds
-    uint256 internal constant SEQUENCER_GRACE_PERIOD = 3600;
+    uint256 internal constant SEQUENCER_GRACE_PERIOD = BaseV1Constants.SEQUENCER_GRACE_PERIOD;
 
     enum State {
         LIVE,

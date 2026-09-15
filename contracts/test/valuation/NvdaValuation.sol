@@ -3,13 +3,15 @@ pragma solidity 0.8.29;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
+
 /// @title NvdaValuation
 /// @notice Test-only reference for raw NVDAc valuation against its total-return feed.
 /// @dev Not production code. The feed answer is assumed to have passed the oracle policy's positive-answer checks.
 library NvdaValuation {
-    uint8 internal constant STOCK_DECIMALS = 8;
-    uint8 internal constant FEED_DECIMALS = 8;
-    uint8 internal constant USDC_DECIMALS = 6;
+    uint8 internal constant STOCK_DECIMALS = BaseV1Constants.NVDAC_DECIMALS;
+    uint8 internal constant FEED_DECIMALS = BaseV1Constants.NVDA_FEED_DECIMALS;
+    uint8 internal constant USDC_DECIMALS = BaseV1Constants.USDC_DECIMALS;
 
     // stockAmountRaw * feedAnswer * 10^6 / 10^8 / 10^8
     // = stockAmountRaw * feedAnswer / 10^10.

@@ -4,6 +4,8 @@ pragma solidity 0.8.29;
 import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
+import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
+import {ExecutionFixtures} from "../test/fixtures/ExecutionFixtures.sol";
 import {OracleStatePolicy} from "../test/oracle/OracleStatePolicy.sol";
 import {NvdaValuation} from "../test/valuation/NvdaValuation.sol";
 
@@ -134,14 +136,14 @@ interface ICoinbaseOracleRegistry {
 contract NvdaExecutionRoutesTest is Test {
     using OracleStatePolicy for OracleStatePolicy.Input;
 
-    uint256 internal constant BASE_BLOCK = 51_356_323;
+    uint256 internal constant BASE_BLOCK = BaseV1Constants.PINNED_BLOCK;
 
-    address internal constant USDC = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
-    address internal constant NVDAC = 0xb20000000000000000000078ee7ce2fE4908108C;
-    address internal constant NVDA_HOLDER = 0xf8191D98ae98d2f7aBDFB63A9b0b812b93C873AA;
-    address internal constant NVDA_FEED = 0x04689a41629776563E6822F76f2e57D148d28513;
-    address internal constant ORACLE_REGISTRY = 0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD;
-    address internal constant SEQUENCER_FEED = 0xBCF85224fc0756B9Fa45aA7892530B47e10b6433;
+    address internal constant USDC = BaseV1Constants.USDC;
+    address internal constant NVDAC = BaseV1Constants.NVDAC;
+    address internal constant NVDA_HOLDER = BaseV1Constants.PINNED_NVDAC_HOLDER;
+    address internal constant NVDA_FEED = BaseV1Constants.NVDA_FEED;
+    address internal constant ORACLE_REGISTRY = BaseV1Constants.COINBASE_ORACLE_REGISTRY;
+    address internal constant SEQUENCER_FEED = BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED;
 
     address internal constant AERODROME_FACTORY = 0xf8f2eB4940CFE7d13603DDDD87f123820Fc061Ef;
     address internal constant AERODROME_POOL = 0x853F5f1B92b16714Fe6CDA67CAad0856B83C7ab9;
@@ -150,14 +152,15 @@ contract NvdaExecutionRoutesTest is Test {
     int24 internal constant AERODROME_TICK_SPACING = 10;
     uint24 internal constant AERODROME_FEE = 500;
 
-    address internal constant UNISWAP_FACTORY = 0x33128a8fC17869897dcE68Ed026d694621f6FDfD;
-    address internal constant UNISWAP_POOL = 0x60661b315553EB81872deEA9a66d567Cf0CCd33B;
-    address internal constant UNISWAP_QUOTER = 0x3d4e44Eb1374240CE5F1B871ab261CD16335B76a;
-    address internal constant UNISWAP_ROUTER = 0x2626664c2603336E57B271c5C0b26F421741e481;
-    uint24 internal constant UNISWAP_FEE = 3000;
+    address internal constant UNISWAP_FACTORY = BaseV1Constants.UNISWAP_V3_FACTORY;
+    address internal constant UNISWAP_POOL = BaseV1Constants.UNISWAP_USDC_NVDAC_POOL;
+    address internal constant UNISWAP_QUOTER = BaseV1Constants.UNISWAP_QUOTER_V2;
+    address internal constant UNISWAP_ROUTER = BaseV1Constants.UNISWAP_SWAP_ROUTER_02;
+    uint24 internal constant UNISWAP_FEE = BaseV1Constants.UNISWAP_FEE;
 
-    uint256 internal constant PINNED_FEED_ANSWER = 21_178_500_000;
-    int256 internal constant MAX_V1_ORACLE_DEVIATION_BPS_X100 = 10_000;
+    uint256 internal constant PINNED_FEED_ANSWER = BaseV1Constants.PINNED_FEED_ANSWER;
+    int256 internal constant MAX_V1_ORACLE_DEVIATION_BPS_X100 =
+        int256(BaseV1Constants.MAX_ORACLE_DEVIATION_BPS * 100);
     int256 internal constant MIN_BUY_DEVIATION_BPS_X100 = 2_100;
     int256 internal constant MAX_BUY_DEVIATION_BPS_X100 = 2_200;
     int256 internal constant MIN_SELL_DEVIATION_BPS_X100 = -1_200;
@@ -408,6 +411,7 @@ contract NvdaExecutionRoutesTest is Test {
         int256 deviation = _deviationBpsX100(amountIn, actualExecutionValue);
         assertGe(deviation, 0);
         assertLe(deviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
+        assertGe(amountOut, ExecutionFixtures.protocolMinNvdaOutForBuy(amountIn, PINNED_FEED_ANSWER));
 
         emit log_named_uint("Uniswap buy input USDC raw", amountIn);
         emit log_named_uint("Uniswap buy quote and actual NVDAc raw", amountOut);
@@ -435,6 +439,7 @@ contract NvdaExecutionRoutesTest is Test {
         int256 deviation = _deviationBpsX100(oracleFairValue, amountOut);
         assertGe(deviation, 0);
         assertLe(deviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
+        assertGe(amountOut, ExecutionFixtures.protocolMinUsdcOutForSell(amountIn, PINNED_FEED_ANSWER));
 
         emit log_named_uint("Uniswap sell input NVDAc raw", amountIn);
         emit log_named_uint("Uniswap sell input oracle value USDC raw", oracleFairValue);
@@ -471,6 +476,12 @@ contract NvdaExecutionRoutesTest is Test {
         assertLe(buyDeviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
         assertGe(sellDeviation, 0);
         assertLe(sellDeviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
+        assertGe(
+            buyOutput, ExecutionFixtures.protocolMinNvdaOutForBuy(buyInput, uint256(observation.price.answer))
+        );
+        assertGe(
+            sellOutput, ExecutionFixtures.protocolMinUsdcOutForSell(sellInput, uint256(observation.price.answer))
+        );
 
         emit log_named_uint("Historical Base block", forkBlock);
         emit log_named_uint("Historical block timestamp", block.timestamp);

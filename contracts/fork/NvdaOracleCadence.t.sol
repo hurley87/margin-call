@@ -3,6 +3,7 @@ pragma solidity 0.8.29;
 
 import {Test} from "forge-std/Test.sol";
 
+import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
 import {NvdaFeedCadence} from "../test/oracle/NvdaFeedCadence.sol";
 import {OracleStatePolicy} from "../test/oracle/OracleStatePolicy.sol";
 
@@ -26,11 +27,11 @@ interface ICoinbaseOracleRegistryRead {
 contract NvdaOracleCadenceTest is Test {
     using OracleStatePolicy for OracleStatePolicy.Input;
 
-    uint256 internal constant BASE_BLOCK = 51_356_323;
-    address internal constant NVDAC = 0xb20000000000000000000078ee7ce2fE4908108C;
-    address internal constant NVDA_FEED = 0x04689a41629776563E6822F76f2e57D148d28513;
-    address internal constant REGISTRY = 0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD;
-    address internal constant SEQUENCER = 0xBCF85224fc0756B9Fa45aA7892530B47e10b6433;
+    uint256 internal constant BASE_BLOCK = BaseV1Constants.PINNED_BLOCK;
+    address internal constant NVDAC = BaseV1Constants.NVDAC;
+    address internal constant NVDA_FEED = BaseV1Constants.NVDA_FEED;
+    address internal constant REGISTRY = BaseV1Constants.COINBASE_ORACLE_REGISTRY;
+    address internal constant SEQUENCER = BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED;
 
     uint80 internal constant PHASE_BASE = uint80(uint256(2) << 64);
 

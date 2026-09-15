@@ -322,6 +322,38 @@ recalibrate it before larger trades, liquidity changes, or meaningful capital.
 Current `NvdaExecutionRoutesTest` expected result:
 **25 passed, 0 failed, 0 skipped**.
 
+## Reusable V1 test fixtures
+
+`contracts/test/fixtures/BaseV1Constants.sol` is the test-support source of truth
+for the verified Base chain ID, NVDAc/USDC/oracle/sequencer addresses, selected
+Uniswap factory/router/quoter/pool and fee, decimal configuration, 8-hour live
+age, 3600-second sequencer grace period, and 100 bps execution bound. Fork tests,
+oracle policy, and valuation references consume those constants rather than
+copying the values.
+
+`OracleFixtures.sol` builds representative RPC-free `LIVE`, explicit `HELD`,
+stale `INVALID`, sequencer-down, sequencer-recovery-grace, and both post-hold
+recovery observations. Each observation is classified by `OracleStatePolicy`;
+the fixture does not duplicate or replace the policy.
+
+`ExecutionFixtures.sol` pins the approved bidirectional USDC/NVDAc pair and fee
+and provides test-only reference calculations for the protocol oracle floor:
+
+```text
+effectiveMinOut = max(callerMinOut, protocolOracleMinOut)
+
+buy min NVDAc =
+    ceil(usdcInRaw * 10^10 * 9900 / (liveFeedAnswer * 10000))
+
+sell min USDC =
+    ceil(nvdaInRaw * liveFeedAnswer * 9900 / (10^10 * 10000))
+```
+
+Both minimum outputs round up. This is conservative for execution enforcement:
+integer truncation cannot permit a realized output fractionally worse than the
+maximum 100 bps adverse oracle-relative deviation. This differs intentionally
+from collateral valuation, which rounds NAV down to avoid overstating collateral.
+
 ## Oracle-state policy
 
 Test-only reference: `contracts/test/oracle/OracleStatePolicy.sol`. RPC-free tests
