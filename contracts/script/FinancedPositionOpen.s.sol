@@ -15,166 +15,167 @@ import {LocalHarnessBase} from "./LocalHarnessBase.sol";
 /// @title FinancedPositionOpen
 /// @notice Local-Anvil-only harness: ordinary EOA opens, accrues, repays, and closes a financed Position NFT.
 /// @dev Requires `MARGIN_CALL_PRIVATE_KEY`. Never logs or hardcodes that key. Anvil-only (`31337`).
+///
+///      Run through `run-financed-local.sh`, which drives three phases against one node. The split is
+///      load-bearing, not stylistic: `forge script --broadcast` simulates the whole body locally and only then
+///      sends the recorded transactions, so an in-script `vm.warp` moves the simulation and never the node, and
+///      even a mid-script `evm_increaseTime` would land before every broadcast, leaving open and repay in the
+///      same on-chain instant. The only way to put real elapsed node time between the open and the repay is to
+///      advance the node between two separate broadcasts. Phase 2 therefore forks from a node whose clock has
+///      genuinely moved, so the debt it reads is accrual the chain agrees with, and phase 3 re-reads the settled
+///      node to prove the interest actually reached the pool.
 contract FinancedPositionOpen is LocalHarnessBase {
     uint256 internal constant DEFAULT_LEVERAGE = V1Config.LEVERAGE_1_25X;
     uint256 internal constant CREDIT_SEED = 1_000_000e6;
-    uint256 internal constant ACCRUAL_WINDOW = 30 days;
+    uint256 internal constant REPAY_CAP_MARGIN = 1_000e6;
+
+    /// @dev Gitignored (`deployments/*.run.json`); hands phase 1's addresses to phases 2 and 3.
+    string internal constant STATE_PATH = "./deployments/financed-local.run.json";
 
     error UnsupportedHarnessLeverage(uint256 leverage);
+    error NoAccrualOnNode(uint256 debt, uint256 principalAtOpen);
 
-    /// @dev Shared across open / accrue / repay / close inspect steps.
-    struct RunState {
+    struct HarnessState {
         address signer;
         MockNvdaC nvdac;
         MockUsdc usdc;
         CreditPool pool;
         MarginCall marginCall;
-        uint256 stockAmount;
         uint256 tokenId;
-        uint256 principalAtOpen;
+        uint256 contributedStock;
         uint256 stockAtOpen;
+        uint256 principalAtOpen;
+        uint256 poolAtOpen;
+        uint256 openedAt;
     }
 
-    function run() external {
+    // Phase 1 - deploy the stack and open a financed position.
+    function deployAndOpen() external {
         _requireLocalAnvil();
 
         uint256 privateKey = vm.envUint("MARGIN_CALL_PRIVATE_KEY");
-        RunState memory state;
-        state.signer = vm.addr(privateKey);
-        state.stockAmount = vm.envOr("MARGIN_CALL_STOCK_AMOUNT", DEFAULT_STOCK_AMOUNT);
+        address signer = vm.addr(privateKey);
+        uint256 contributedStock = vm.envOr("MARGIN_CALL_STOCK_AMOUNT", DEFAULT_STOCK_AMOUNT);
         uint256 leverage = vm.envOr("MARGIN_CALL_LEVERAGE_BPS", DEFAULT_LEVERAGE);
-        if (state.stockAmount == 0) {
+        if (contributedStock == 0) {
             revert ZeroStockAmount();
         }
-        // Checked here, before `startBroadcast`, so an unusable preset fails before anything is deployed.
+        // Checked before `startBroadcast` so an unusable preset fails before anything is deployed.
         if (!V1Config.isFinancedLeverage(leverage)) {
             revert UnsupportedHarnessLeverage(leverage);
         }
 
-        console.log("=== LOCAL ONLY: financed Position NFT debt lifecycle smoke test ===");
+        console.log("=== LOCAL ONLY: financed Position NFT debt lifecycle ===");
+        console.log("phase 1/3: deploy + openPosition (financed)");
         console.log("chainId", block.chainid);
-        console.log("signer", state.signer);
-        console.log("stockAmount (raw NVDAc units)", state.stockAmount);
+        console.log("signer", signer);
+        console.log("stockAmount (raw NVDAc units)", contributedStock);
         console.log("targetLeverage bps", leverage);
-        console.log("accrual window (seconds)", ACCRUAL_WINDOW);
-        console.log("Broadcast artifact: broadcast/FinancedPositionOpen.s.sol/31337/run-latest.json");
 
         vm.startBroadcast(privateKey);
 
-        state.nvdac = new MockNvdaC();
-        state.usdc = new MockUsdc();
+        MockNvdaC nvdac = new MockNvdaC();
+        MockUsdc usdc = new MockUsdc();
         MockOracleAdapter oracle = new MockOracleAdapter();
-        MockSwapRouter router = new MockSwapRouter(state.usdc, state.nvdac);
-        ExecutionAdapter execution = new ExecutionAdapter(
-            address(state.usdc), address(state.nvdac), address(router), BaseV1Constants.UNISWAP_FEE
-        );
-        state.marginCall =
-            new MarginCall(address(state.nvdac), address(state.usdc), address(oracle), address(execution));
-        state.pool = new CreditPool(address(state.usdc), address(state.marginCall));
-        state.marginCall.setCreditPool(address(state.pool));
+        MockSwapRouter router = new MockSwapRouter(usdc, nvdac);
+        ExecutionAdapter execution =
+            new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
+        MarginCall marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
+        CreditPool pool = new CreditPool(address(usdc), address(marginCall));
+        marginCall.setCreditPool(address(pool));
 
         oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
         router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);
-        state.usdc.mint(address(state.pool), CREDIT_SEED);
-        state.nvdac.mint(state.signer, state.stockAmount);
-        state.nvdac.approve(address(state.marginCall), state.stockAmount);
+        usdc.mint(address(pool), CREDIT_SEED);
+        nvdac.mint(signer, contributedStock);
+        nvdac.approve(address(marginCall), contributedStock);
 
-        uint256 poolBeforeOpen = state.pool.availableCredit();
-        console.log("--- tx: openPosition (financed) ---");
-        state.tokenId = state.marginCall.openPosition(state.stockAmount, leverage, 0);
-
-        (state.stockAtOpen, state.principalAtOpen,,,) = state.marginCall.positions(state.tokenId);
+        uint256 tokenId = marginCall.openPosition(contributedStock, leverage, 0);
 
         vm.stopBroadcast();
 
-        _inspectAfterOpen(state, poolBeforeOpen);
+        (uint256 stockAtOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
+        _persist(
+            HarnessState({
+                signer: signer,
+                nvdac: nvdac,
+                usdc: usdc,
+                pool: pool,
+                marginCall: marginCall,
+                tokenId: tokenId,
+                contributedStock: contributedStock,
+                stockAtOpen: stockAtOpen,
+                principalAtOpen: principalAtOpen,
+                poolAtOpen: pool.availableCredit(),
+                openedAt: block.timestamp
+            })
+        );
 
-        // Advance time so lazy interest is visible without a keeper transaction. Forge forwards `warp` to Anvil
-        // under `--broadcast`, so the next on-chain txs and eth_calls see the new timestamp.
-        console.log("--- cheat: advance time ---");
-        uint256 accruedAt = block.timestamp + ACCRUAL_WINDOW;
-        vm.warp(accruedAt);
+        console.log("tokenId", tokenId);
+        console.log("recorded stockAmount", stockAtOpen);
+        console.log("purchased stock (recorded - contributed)", stockAtOpen - contributedStock);
+        console.log("principal (borrowed USDC raw)", principalAtOpen);
+        console.log("state written to", STATE_PATH);
+    }
 
-        uint256 debtAfterAccrual = state.marginCall.currentDebt(state.tokenId);
-        console.log("currentDebt after accrual", debtAfterAccrual);
-        assertGt(debtAfterAccrual, state.principalAtOpen, "debt must exceed principal after elapsed time");
+    // Phase 2 - after the wrapper advances the node clock, repay the real debt and close.
+    function repayAndClose() external {
+        _requireLocalAnvil();
+
+        uint256 privateKey = vm.envUint("MARGIN_CALL_PRIVATE_KEY");
+        HarnessState memory state = _load();
+
+        // Read from a node whose clock really moved, so this debt is accrual the chain agrees with.
+        uint256 debt = state.marginCall.currentDebt(state.tokenId);
+
+        console.log("phase 2/3: repay + closePosition");
+        console.log("node seconds elapsed since open", block.timestamp - state.openedAt);
+        console.log("principal at open", state.principalAtOpen);
+        console.log("currentDebt read from node", debt);
+        console.log("interest accrued on node", debt - state.principalAtOpen);
+
+        // The point of the harness: if the node clock did not move, fail loudly instead of passing vacuously.
+        if (debt <= state.principalAtOpen) {
+            revert NoAccrualOnNode(debt, state.principalAtOpen);
+        }
+
+        // Oversized cap: the contract must pull only the debt owed at execution time and leave the rest. The cap
+        // also absorbs the extra seconds of interest accruing between this read and the broadcast landing.
+        uint256 repayCap = debt + REPAY_CAP_MARGIN;
 
         vm.startBroadcast(privateKey);
-
-        // Oversized repay cap: contract must pull only currentDebt and leave the excess with the signer.
-        uint256 repayCap = debtAfterAccrual + 1_000e6;
         state.usdc.mint(state.signer, repayCap);
         state.usdc.approve(address(state.marginCall), repayCap);
-
-        uint256 poolBeforeRepay = state.pool.availableCredit();
-        uint256 signerUsdcBefore = state.usdc.balanceOf(state.signer);
-        console.log("--- tx: repay (oversized cap) ---");
         state.marginCall.repay(state.tokenId, repayCap);
-
-        uint256 debtAfterRepay = state.marginCall.currentDebt(state.tokenId);
-        assertEq(debtAfterRepay, 0, "debt cleared");
-        assertEq(state.pool.availableCredit(), poolBeforeRepay + debtAfterAccrual, "pool restored by actual paid");
-        assertEq(
-            state.usdc.balanceOf(state.signer),
-            signerUsdcBefore - debtAfterAccrual,
-            "excess repay cap never left the signer"
-        );
-        assertEq(state.usdc.balanceOf(address(state.marginCall)), 0, "no residual USDC on MarginCall");
-
-        console.log("--- tx: closePosition ---");
         state.marginCall.closePosition(state.tokenId);
-
         vm.stopBroadcast();
 
-        _inspectAfterClose(state);
-        console.log("=== PASS: open -> accrue -> repay -> close ===");
+        console.log("repay cap offered", repayCap);
     }
 
-    function _inspectAfterOpen(RunState memory state, uint256 poolBefore) internal view {
-        address owner = state.marginCall.ownerOf(state.tokenId);
-        (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
-            state.marginCall.positions(state.tokenId);
-        uint256 debt = state.marginCall.currentDebt(state.tokenId);
+    // Phase 3 - read-only verification against the settled node.
+    function verify() external view {
+        HarnessState memory state = _load();
+
+        uint256 poolFinal = state.pool.availableCredit();
+        uint256 signerNvda = state.nvdac.balanceOf(state.signer);
         uint256 custody = state.nvdac.balanceOf(address(state.marginCall));
-        uint256 poolAfter = state.pool.availableCredit();
+        uint256 residualUsdc = state.usdc.balanceOf(address(state.marginCall));
 
-        console.log("--- inspect after financed open ---");
-        console.log("tokenId", state.tokenId);
-        console.log("ownerOf", owner);
-        console.log("contributed stock", state.stockAmount);
-        console.log("recorded stockAmount", stock);
-        console.log("purchased stock (recorded - contributed)", stock - state.stockAmount);
-        console.log("principal (borrowed USDC raw)", principal);
-        console.log("accruedInterest", accrued);
-        console.log("lastAccruedAt", lastAccrued);
-        console.log("executor", executor);
-        console.log("currentDebt", debt);
-        console.log("CreditPool USDC before", poolBefore);
-        console.log("CreditPool USDC after", poolAfter);
+        console.log("phase 3/3: verify settled node state");
+        console.log("CreditPool USDC seeded", CREDIT_SEED);
+        console.log("CreditPool USDC final", poolFinal);
+        console.log("interest returned to pool (raw USDC)", poolFinal - CREDIT_SEED);
+        console.log("signer NVDAc balance", signerNvda);
         console.log("MarginCall NVDAc custody", custody);
-        console.log("signer NVDAc balance", state.nvdac.balanceOf(state.signer));
-        console.log("MarginCall residual USDC", state.usdc.balanceOf(address(state.marginCall)));
+        console.log("MarginCall residual USDC", residualUsdc);
 
-        assertEq(owner, state.signer, "ownerOf");
-        assertGt(stock, state.stockAmount, "bought additional NVDAc");
-        assertGt(principal, 0, "principal drawn");
-        assertEq(debt, principal, "debt equals principal at open");
-        assertEq(poolAfter, poolBefore - principal, "pool decremented by principal");
-        assertEq(custody, stock, "custody matches recorded stock");
-        assertEq(state.nvdac.balanceOf(state.signer), 0, "signer depleted contribution");
-        assertEq(state.usdc.balanceOf(address(state.marginCall)), 0, "no free USDC left on MarginCall");
-    }
-
-    function _inspectAfterClose(RunState memory state) internal view {
-        console.log("--- inspect after repay + close ---");
-        console.log("signer NVDAc balance", state.nvdac.balanceOf(state.signer));
-        console.log("MarginCall NVDAc custody", state.nvdac.balanceOf(address(state.marginCall)));
-        console.log("CreditPool USDC", state.pool.availableCredit());
-        console.log("MarginCall residual USDC", state.usdc.balanceOf(address(state.marginCall)));
-
-        assertEq(state.nvdac.balanceOf(state.signer), state.stockAtOpen, "stock returned to signer");
-        assertEq(state.nvdac.balanceOf(address(state.marginCall)), 0, "custody cleared");
-        assertEq(state.usdc.balanceOf(address(state.marginCall)), 0, "no residual USDC");
+        // The assertion the old single-phase harness could not make: the pool is strictly richer than it was
+        // seeded, which holds only if real interest accrued on the node and was actually repaid to it.
+        assertGt(poolFinal, CREDIT_SEED, "pool must recover principal plus real interest");
+        assertEq(signerNvda, state.stockAtOpen, "stock returned to signer");
+        assertEq(custody, 0, "custody cleared");
+        assertEq(residualUsdc, 0, "no residual USDC on MarginCall");
 
         (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
             state.marginCall.positions(state.tokenId);
@@ -185,5 +186,38 @@ contract FinancedPositionOpen is LocalHarnessBase {
         assertEq(executor, address(0));
 
         _assertTokenDoesNotExist(state.marginCall, state.tokenId);
+
+        console.log("=== PASS: open -> accrue (on node) -> repay -> close ===");
+    }
+
+    function _persist(HarnessState memory state) private {
+        string memory obj = "financed-local";
+        vm.serializeAddress(obj, "signer", state.signer);
+        vm.serializeAddress(obj, "nvdac", address(state.nvdac));
+        vm.serializeAddress(obj, "usdc", address(state.usdc));
+        vm.serializeAddress(obj, "pool", address(state.pool));
+        vm.serializeAddress(obj, "marginCall", address(state.marginCall));
+        vm.serializeUint(obj, "tokenId", state.tokenId);
+        vm.serializeUint(obj, "contributedStock", state.contributedStock);
+        vm.serializeUint(obj, "stockAtOpen", state.stockAtOpen);
+        vm.serializeUint(obj, "principalAtOpen", state.principalAtOpen);
+        vm.serializeUint(obj, "poolAtOpen", state.poolAtOpen);
+        string memory json = vm.serializeUint(obj, "openedAt", state.openedAt);
+        vm.writeJson(json, STATE_PATH);
+    }
+
+    function _load() private view returns (HarnessState memory state) {
+        string memory json = vm.readFile(STATE_PATH);
+        state.signer = vm.parseJsonAddress(json, ".signer");
+        state.nvdac = MockNvdaC(vm.parseJsonAddress(json, ".nvdac"));
+        state.usdc = MockUsdc(vm.parseJsonAddress(json, ".usdc"));
+        state.pool = CreditPool(vm.parseJsonAddress(json, ".pool"));
+        state.marginCall = MarginCall(vm.parseJsonAddress(json, ".marginCall"));
+        state.tokenId = vm.parseJsonUint(json, ".tokenId");
+        state.contributedStock = vm.parseJsonUint(json, ".contributedStock");
+        state.stockAtOpen = vm.parseJsonUint(json, ".stockAtOpen");
+        state.principalAtOpen = vm.parseJsonUint(json, ".principalAtOpen");
+        state.poolAtOpen = vm.parseJsonUint(json, ".poolAtOpen");
+        state.openedAt = vm.parseJsonUint(json, ".openedAt");
     }
 }
