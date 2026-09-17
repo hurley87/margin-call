@@ -357,12 +357,16 @@ from collateral valuation, which rounds NAV down to avoid overstating collateral
 
 ## Oracle-state policy
 
-Test-only reference: `contracts/test/oracle/OracleStatePolicy.sol`. RPC-free tests
-live in `contracts/test/oracle/` and run with `pnpm test:contracts`. Fork cadence
-evidence is `contracts/fork/NvdaOracleCadence.t.sol`, which scans all phase-2 rounds
-through `NvdaFeedCadence`.
+The classifier is `contracts/src/OracleStatePolicy.sol`. It was verified here as a
+test-only reference and has since been promoted into `src/`, so `OracleAdapter`
+delegates to the same code these tests exercise and the shipped and tested policies
+cannot diverge. RPC-free tests live in `contracts/test/oracle/` and run with
+`pnpm test:contracts`. Fork cadence evidence is
+`contracts/fork/NvdaOracleCadence.t.sol`, which scans all phase-2 rounds through
+`NvdaFeedCadence`.
 
-This is not `OracleAdapter`, `MarginCall`, or any production contract.
+The policy is stateless. `OracleAdapter` supplies the fetched rounds and any prior
+hold; `MarginCall` consumes the classification.
 
 ### Proven semantics
 
@@ -376,12 +380,24 @@ Pause is classified before sequencer and freshness checks: an explicit issuer pa
 `HELD` even if the last mark is stale. A failed registry read cannot prove that pause
 and is `INVALID`.
 
-The reference classifier is stateless. The eventual production `OracleAdapter` must
-retain enough state to enforce the post-`HELD` fresh-round rule: persist
-`heldRoundId` / `heldUpdatedAt` (or an equivalent frozen-round identity) while the
-registry is paused, and after unpause require a strictly newer qualifying Chainlink
-round before returning `LIVE`. This verification suite does not implement
-`OracleAdapter`.
+The policy is stateless, so `OracleAdapter` holds the state the post-`HELD`
+fresh-round rule needs: it persists `heldRoundId` / `heldUpdatedAt` when a hold is
+observed, and after unpause requires a strictly newer qualifying Chainlink round
+before returning `LIVE`.
+
+**Recording a hold requires a committing call.** `latestObservation()` is a pure
+view. A caller that rejects a non-`LIVE` observation reverts, and a revert would roll
+back any write made on its behalf, so the rejecting open cannot record what it saw.
+`OracleAdapter.refresh()` is the permissionless committing call that records the hold,
+and an operator must call it across a registry pause for the post-hold rule to bind.
+
+**Residual exposure.** The registry exposes only a current `paused` bool with no pause
+history, so a halt that begins and ends with no committed observation in between is
+invisible to the adapter, and the frozen pre-halt round is served as `LIVE` until it
+ages past `MAX_LIVE_AGE`. The stateless backstop is that age bound; closing the gap
+fully needs either a refresh across every halt or a recency bound tighter than
+`MAX_LIVE_AGE` for the financed path. Both behaviours are pinned in
+`contracts/test/margincall/FinancedOpenOraclePolicy.t.sol`.
 
 ### Sequencer grace period
 

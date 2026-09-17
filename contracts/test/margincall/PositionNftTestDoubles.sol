@@ -57,7 +57,17 @@ contract MockOracleAdapter is IOracleAdapter {
         state = state_;
     }
 
+    uint256 public refreshCount;
+
     function latestObservation() external view override returns (Observation memory observation) {
+        observation.state = state;
+        observation.price = price;
+        observation.roundId = roundId;
+        observation.updatedAt = updatedAt;
+    }
+
+    function refresh() external override returns (Observation memory observation) {
+        ++refreshCount;
         observation.state = state;
         observation.price = price;
         observation.roundId = roundId;

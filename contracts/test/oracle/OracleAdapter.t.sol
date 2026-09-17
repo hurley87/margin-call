@@ -87,7 +87,8 @@ contract OracleAdapterTest is Test {
 
     function test_heldPersistsFrozenRoundAndBlocksUntilFresh() public {
         registry.setPaused(true);
-        IOracleAdapter.Observation memory held = oracle.latestObservation();
+        // A committing call is what records the hold; a plain read classifies without persisting.
+        IOracleAdapter.Observation memory held = oracle.refresh();
         assertEq(uint256(held.state), uint256(IOracleAdapter.State.HELD));
         assertTrue(oracle.hasObservedHold());
         assertEq(oracle.heldRoundId(), OracleFixtures.NVDA_ROUND_ID);
@@ -107,6 +108,62 @@ contract OracleAdapterTest is Test {
         IOracleAdapter.Observation memory live = oracle.latestObservation();
         assertEq(uint256(live.state), uint256(IOracleAdapter.State.LIVE));
         assertEq(live.roundId, OracleFixtures.NVDA_ROUND_ID + 1);
+    }
+
+    function test_latestObservationNeverPersistsTheHold() public {
+        registry.setPaused(true);
+        IOracleAdapter.Observation memory held = oracle.latestObservation();
+        assertEq(uint256(held.state), uint256(IOracleAdapter.State.HELD), "read still classifies the hold");
+
+        // The read is a view, so nothing was recorded and `lastRefreshedAt` did not move.
+        assertFalse(oracle.hasObservedHold(), "read must not persist");
+        assertEq(oracle.heldRoundId(), 0);
+        assertEq(oracle.heldUpdatedAt(), 0);
+        assertEq(oracle.lastRefreshedAt(), 0);
+    }
+
+    function test_refreshRecordsTheHoldAndAdvancesOnlyForwards() public {
+        registry.setPaused(true);
+        vm.expectEmit(false, false, false, true, address(oracle));
+        emit OracleAdapter.HoldObserved(OracleFixtures.NVDA_ROUND_ID, OracleFixtures.NVDA_UPDATED_AT);
+        oracle.refresh();
+        assertEq(oracle.lastRefreshedAt(), block.timestamp);
+
+        // A second refresh on the same frozen round keeps the existing checkpoint.
+        oracle.refresh();
+        assertEq(oracle.heldRoundId(), OracleFixtures.NVDA_ROUND_ID);
+        assertEq(oracle.heldUpdatedAt(), OracleFixtures.NVDA_UPDATED_AT);
+
+        // A newer round observed while still paused moves the checkpoint forward.
+        feed.set(
+            OracleFixtures.NVDA_ROUND_ID + 5,
+            int256(BaseV1Constants.PINNED_FEED_ANSWER),
+            OracleFixtures.NVDA_STARTED_AT + 120,
+            OracleFixtures.NVDA_UPDATED_AT + 120,
+            OracleFixtures.NVDA_ROUND_ID + 5
+        );
+        oracle.refresh();
+        assertEq(oracle.heldRoundId(), OracleFixtures.NVDA_ROUND_ID + 5);
+        assertEq(oracle.heldUpdatedAt(), OracleFixtures.NVDA_UPDATED_AT + 120);
+    }
+
+    function test_refreshOnLiveLeavesTheHoldStateAlone() public {
+        oracle.refresh();
+        assertEq(oracle.lastRefreshedAt(), block.timestamp);
+        assertFalse(oracle.hasObservedHold(), "a LIVE refresh records no hold");
+        assertEq(oracle.heldRoundId(), 0);
+    }
+
+    function test_refreshDuringDeadFeedHoldRecordsNoJunkCheckpoint() public {
+        registry.setPaused(true);
+        feed.setShouldRevert(true);
+        IOracleAdapter.Observation memory held = oracle.refresh();
+        assertEq(uint256(held.state), uint256(IOracleAdapter.State.HELD));
+
+        // The round was never read, so there is nothing trustworthy to checkpoint.
+        assertFalse(oracle.hasObservedHold(), "unread round must not become the checkpoint");
+        assertEq(oracle.heldRoundId(), 0);
+        assertEq(oracle.heldUpdatedAt(), 0);
     }
 
     function test_staleIsInvalid() public {

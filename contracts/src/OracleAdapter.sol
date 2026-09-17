@@ -6,12 +6,19 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IAggregatorV3} from "./interfaces/IAggregatorV3.sol";
 import {ICoinbaseOracleRegistry} from "./interfaces/ICoinbaseOracleRegistry.sol";
 import {IOracleAdapter} from "./interfaces/IOracleAdapter.sol";
+import {OracleStatePolicy} from "./OracleStatePolicy.sol";
 import {V1Config} from "./V1Config.sol";
 
 /// @title OracleAdapter
 /// @notice Stateful Coinbase/Chainlink NVDAc total-return adapter with fail-closed Base sequencer checks.
+/// @dev Classification itself lives in `OracleStatePolicy`; this contract only fetches rounds and persists the
+///      observed hold. Reading (`latestObservation`) is a pure view and never writes, because a caller that
+///      rejects a non-`LIVE` observation reverts — which would roll back any write made on its behalf. Recording
+///      a hold is therefore a separate, permissionless, committing call (`refresh`).
 contract OracleAdapter is IOracleAdapter {
     error ZeroAddress();
+
+    event HoldObserved(uint80 heldRoundId, uint256 heldUpdatedAt);
 
     address public immutable NVDAC;
     IAggregatorV3 public immutable NVDA_FEED;
@@ -21,6 +28,9 @@ contract OracleAdapter is IOracleAdapter {
     bool public hasObservedHold;
     uint80 public heldRoundId;
     uint256 public heldUpdatedAt;
+
+    /// @notice When `refresh` last committed an observation. Zero until the first one.
+    uint256 public lastRefreshedAt;
 
     constructor(address nvdac_, address nvdaFeed_, address registry_, address sequencerFeed_) {
         if (nvdac_ == address(0) || nvdaFeed_ == address(0) || registry_ == address(0) || sequencerFeed_ == address(0))
@@ -34,82 +44,31 @@ contract OracleAdapter is IOracleAdapter {
     }
 
     /// @inheritdoc IOracleAdapter
-    function latestObservation() external override returns (Observation memory observation) {
-        bool registryPaused;
-        try REGISTRY.getOracleParams(NVDAC) returns (uint256, bool paused) {
-            registryPaused = paused;
-        } catch {
-            observation.state = State.INVALID;
+    function latestObservation() external view override returns (Observation memory observation) {
+        (OracleStatePolicy.Input memory input,) = _fetch();
+        return _observe(input);
+    }
+
+    /// @inheritdoc IOracleAdapter
+    /// @dev Permissionless: any actor may commit an observation, and a hold must be committed by some transaction
+    ///      that succeeds for the post-hold freshness rule to bind. A rejected open cannot do it.
+    function refresh() external override returns (Observation memory observation) {
+        (OracleStatePolicy.Input memory input, bool feedRead) = _fetch();
+        observation = _observe(input);
+        lastRefreshedAt = block.timestamp;
+
+        if (observation.state != State.HELD || !feedRead) {
             return observation;
         }
 
-        // `feedOk` must survive: the `HELD` branch below legitimately runs with a dead price feed.
-        bool feedOk = true;
-        uint80 roundId;
-        int256 answer;
-        uint256 startedAt;
-        uint256 updatedAt;
-        uint80 answeredInRound;
-        try NVDA_FEED.latestRoundData() returns (
-            uint80 roundId_, int256 answer_, uint256 startedAt_, uint256 updatedAt_, uint80 answeredInRound_
-        ) {
-            roundId = roundId_;
-            answer = answer_;
-            startedAt = startedAt_;
-            updatedAt = updatedAt_;
-            answeredInRound = answeredInRound_;
-        } catch {
-            feedOk = false;
+        uint80 roundId = input.price.roundId;
+        uint256 updatedAt = input.price.updatedAt;
+        if (!hasObservedHold || roundId > heldRoundId || updatedAt > heldUpdatedAt) {
+            hasObservedHold = true;
+            heldRoundId = roundId;
+            heldUpdatedAt = updatedAt;
+            emit HoldObserved(roundId, updatedAt);
         }
-
-        if (registryPaused) {
-            if (feedOk && answer > 0) {
-                observation.price = uint256(answer);
-                observation.roundId = roundId;
-                observation.updatedAt = updatedAt;
-            }
-            if (!hasObservedHold || roundId > heldRoundId || updatedAt > heldUpdatedAt) {
-                hasObservedHold = true;
-                heldRoundId = roundId;
-                heldUpdatedAt = updatedAt;
-            }
-            observation.state = State.HELD;
-            return observation;
-        }
-
-        int256 sequencerAnswer;
-        uint256 sequencerStartedAt;
-        try SEQUENCER_FEED.latestRoundData() returns (uint80, int256 answer_, uint256 startedAt_, uint256, uint80) {
-            sequencerAnswer = answer_;
-            sequencerStartedAt = startedAt_;
-        } catch {
-            observation.state = State.INVALID;
-            return observation;
-        }
-
-        if (!feedOk) {
-            observation.state = State.INVALID;
-            return observation;
-        }
-
-        observation.price = answer > 0 ? uint256(answer) : 0;
-        observation.roundId = roundId;
-        observation.updatedAt = updatedAt;
-
-        if (!_sequencerAllowsLive(sequencerAnswer, sequencerStartedAt, block.timestamp)) {
-            observation.state = State.INVALID;
-            return observation;
-        }
-        if (!_priceRoundAllowsLive(roundId, answer, startedAt, updatedAt, answeredInRound, block.timestamp)) {
-            observation.state = State.INVALID;
-            return observation;
-        }
-        if (hasObservedHold && (roundId <= heldRoundId || updatedAt <= heldUpdatedAt)) {
-            observation.state = State.INVALID;
-            return observation;
-        }
-
-        observation.state = State.LIVE;
     }
 
     /// @inheritdoc IOracleAdapter
@@ -117,39 +76,54 @@ contract OracleAdapter is IOracleAdapter {
         return Math.mulDiv(stockAmountRaw, feedAnswer, V1Config.VALUATION_DENOMINATOR, Math.Rounding.Floor);
     }
 
-    function _sequencerAllowsLive(int256 answer, uint256 startedAt, uint256 nowTs) private pure returns (bool) {
-        if (answer != 0) {
-            return false;
-        }
-        if (startedAt == 0 || nowTs < startedAt) {
-            return false;
-        }
-        if (nowTs - startedAt <= V1Config.SEQUENCER_GRACE_PERIOD) {
-            return false;
-        }
-        return true;
+    /// @dev Classify, and surface the fetched round on every state so callers can log or inspect a rejection.
+    function _observe(OracleStatePolicy.Input memory input) private pure returns (Observation memory observation) {
+        observation.state = OracleStatePolicy.classify(input);
+        observation.price = input.price.answer > 0 ? uint256(input.price.answer) : 0;
+        observation.roundId = input.price.roundId;
+        observation.updatedAt = input.price.updatedAt;
     }
 
-    function _priceRoundAllowsLive(
-        uint80 roundId,
-        int256 answer,
-        uint256 startedAt,
-        uint256 updatedAt,
-        uint80 answeredInRound,
-        uint256 nowTs
-    ) private pure returns (bool) {
-        if (roundId == 0 || answeredInRound < roundId) {
-            return false;
+    /// @dev Read the registry, price feed, and sequencer feed, failing closed on any revert. `feedRead` reports
+    ///      whether the price round is real data rather than the zero-value default.
+    function _fetch() private view returns (OracleStatePolicy.Input memory input, bool feedRead) {
+        input.nowTs = block.timestamp;
+        input.hasPriorHold = hasObservedHold;
+        input.heldRoundId = heldRoundId;
+        input.heldUpdatedAt = heldUpdatedAt;
+
+        try REGISTRY.getOracleParams(NVDAC) returns (uint256, bool paused) {
+            input.registryOk = true;
+            input.registryPaused = paused;
+        } catch {
+            return (input, false);
         }
-        if (startedAt == 0 || updatedAt == 0 || updatedAt < startedAt) {
-            return false;
-        }
-        if (updatedAt > nowTs || answer <= 0) {
-            return false;
-        }
-        if (nowTs - updatedAt > V1Config.MAX_LIVE_AGE) {
-            return false;
-        }
-        return true;
+
+        try NVDA_FEED.latestRoundData() returns (
+            uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound
+        ) {
+            input.feedOk = true;
+            feedRead = true;
+            input.price = OracleStatePolicy.RoundData({
+                roundId: roundId,
+                answer: answer,
+                startedAt: startedAt,
+                updatedAt: updatedAt,
+                answeredInRound: answeredInRound
+            });
+        } catch {}
+
+        try SEQUENCER_FEED.latestRoundData() returns (
+            uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound
+        ) {
+            input.sequencerOk = true;
+            input.sequencer = OracleStatePolicy.RoundData({
+                roundId: roundId,
+                answer: answer,
+                startedAt: startedAt,
+                updatedAt: updatedAt,
+                answeredInRound: answeredInRound
+            });
+        } catch {}
     }
 }
