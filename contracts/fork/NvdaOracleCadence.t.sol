@@ -5,7 +5,8 @@ import {Test} from "forge-std/Test.sol";
 
 import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
 import {NvdaFeedCadence} from "../test/oracle/NvdaFeedCadence.sol";
-import {OracleStatePolicy} from "../test/oracle/OracleStatePolicy.sol";
+import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
+import {OracleStatePolicy} from "../src/OracleStatePolicy.sol";
 
 interface IAggregatorV3Read {
     function latestRoundData()
@@ -44,7 +45,7 @@ contract NvdaOracleCadenceTest is Test {
         assertFalse(input.registryPaused);
         assertEq(input.nowTs - input.price.updatedAt, 18_048);
         assertLt(input.nowTs - input.price.updatedAt, OracleStatePolicy.MAX_LIVE_AGE);
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.LIVE));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.LIVE));
     }
 
     function test_phase2ScanReproducesMaxLiveAgeEvidence() public view {
@@ -113,7 +114,7 @@ contract NvdaOracleCadenceTest is Test {
         });
         input.nowTs = 1_789_315_201;
         assertFalse(input.registryPaused);
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_sampledRoundValues() public view {

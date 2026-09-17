@@ -20,6 +20,7 @@
     "test:contracts:ci": "cd contracts && FOUNDRY_PROFILE=ci forge test",
     "test:contracts:fork": "bash scripts/test-base-mainnet-fork.sh",
     "test:contracts:smoke": "bash contracts/script/run-local.sh",
+    "test:contracts:smoke:financed": "bash contracts/script/run-financed-local.sh",
     "install:forge-deps": "bash scripts/install-forge-deps.sh",
     "audit:prod": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",

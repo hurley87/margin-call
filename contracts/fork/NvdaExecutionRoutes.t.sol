@@ -6,7 +6,8 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
 import {ExecutionFixtures} from "../test/fixtures/ExecutionFixtures.sol";
-import {OracleStatePolicy} from "../test/oracle/OracleStatePolicy.sol";
+import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
+import {OracleStatePolicy} from "../src/OracleStatePolicy.sol";
 import {NvdaValuation} from "../test/valuation/NvdaValuation.sol";
 
 interface IAerodromePoolFactory {
@@ -458,7 +459,7 @@ contract NvdaExecutionRoutesTest is Test {
         assertEq(IUniswapV3Factory(UNISWAP_FACTORY).getPool(USDC, NVDAC, UNISWAP_FEE), UNISWAP_POOL);
 
         OracleStatePolicy.Input memory observation = _oracleObservation();
-        assertEq(uint256(observation.classify()), uint256(OracleStatePolicy.State.LIVE));
+        assertEq(uint256(observation.classify()), uint256(IOracleAdapter.State.LIVE));
 
         uint256 buyInput = 250e6;
         uint256 buyOutput = _uniswapQuote(USDC, NVDAC, buyInput);

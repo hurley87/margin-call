@@ -1,24 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
-import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
+import {IOracleAdapter} from "./interfaces/IOracleAdapter.sol";
+import {V1Config} from "./V1Config.sol";
 
 /// @title OracleStatePolicy
-/// @notice Test-only reference for issue #420 `LIVE` / `HELD` / `INVALID` classification.
-/// @dev Not `OracleAdapter`. Not deployed. Do not import from `contracts/src`.
+/// @notice The issue #420 `LIVE` / `HELD` / `INVALID` classification rule.
+/// @dev Stateless and pure: callers fetch the rounds and supply any prior hold. `OracleAdapter` is the production
+///      caller; `OracleStatePolicy.t.sol` exercises this same code against `OracleFixtures`, so the shipped and
+///      tested classifiers cannot diverge.
 library OracleStatePolicy {
     /// @dev 8 hours. See `contracts/fork/README.md` for the Base-mainnet cadence evidence.
-    uint256 internal constant MAX_LIVE_AGE = BaseV1Constants.MAX_LIVE_AGE;
+    uint256 internal constant MAX_LIVE_AGE = V1Config.MAX_LIVE_AGE;
 
     /// @dev Chainlink's published Base sequencer example uses 3600 seconds and `<=` to fail closed.
     /// https://docs.chain.link/data-feeds/l2-sequencer-feeds
-    uint256 internal constant SEQUENCER_GRACE_PERIOD = BaseV1Constants.SEQUENCER_GRACE_PERIOD;
-
-    enum State {
-        LIVE,
-        HELD,
-        INVALID
-    }
+    uint256 internal constant SEQUENCER_GRACE_PERIOD = V1Config.SEQUENCER_GRACE_PERIOD;
 
     struct RoundData {
         uint80 roundId;
@@ -36,38 +33,37 @@ library OracleStatePolicy {
         bool registryPaused;
         RoundData sequencer;
         uint256 nowTs;
-        // Production OracleAdapter must persist an equivalent held round across
-        // calls. This reference classifier is stateless and receives the prior
-        // hold from the caller; it is not OracleAdapter.
+        // A hold observed by an earlier committed observation. This classifier is stateless and receives it from
+        // the caller; `OracleAdapter` is what persists it.
         bool hasPriorHold;
         uint80 heldRoundId;
         uint256 heldUpdatedAt;
     }
 
     /// @notice Classify an already-fetched observation. Failed reads must set the `*Ok` flags.
-    function classify(Input memory input) internal pure returns (State) {
+    function classify(Input memory input) internal pure returns (IOracleAdapter.State) {
         if (!input.registryOk) {
-            return State.INVALID;
+            return IOracleAdapter.State.INVALID;
         }
         if (input.registryPaused) {
-            return State.HELD;
+            return IOracleAdapter.State.HELD;
         }
         if (!input.feedOk || !input.sequencerOk) {
-            return State.INVALID;
+            return IOracleAdapter.State.INVALID;
         }
 
         if (!_sequencerAllowsLive(input.sequencer, input.nowTs)) {
-            return State.INVALID;
+            return IOracleAdapter.State.INVALID;
         }
         if (!_priceRoundAllowsLive(input.price, input.nowTs)) {
-            return State.INVALID;
+            return IOracleAdapter.State.INVALID;
         }
         if (input.hasPriorHold) {
             if (input.price.roundId <= input.heldRoundId || input.price.updatedAt <= input.heldUpdatedAt) {
-                return State.INVALID;
+                return IOracleAdapter.State.INVALID;
             }
         }
-        return State.LIVE;
+        return IOracleAdapter.State.LIVE;
     }
 
     function _sequencerAllowsLive(RoundData memory sequencer, uint256 nowTs) private pure returns (bool) {

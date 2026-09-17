@@ -2,7 +2,7 @@
 pragma solidity 0.8.29;
 
 import {BaseV1Constants} from "./BaseV1Constants.sol";
-import {OracleStatePolicy} from "../oracle/OracleStatePolicy.sol";
+import {OracleStatePolicy} from "../../src/OracleStatePolicy.sol";
 
 /// @title OracleFixtures
 /// @notice RPC-free representative observations for the verified issue #420 oracle policy.

@@ -5,7 +5,8 @@ import {Test} from "forge-std/Test.sol";
 
 import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
 import {OracleFixtures} from "../fixtures/OracleFixtures.sol";
-import {OracleStatePolicy} from "./OracleStatePolicy.sol";
+import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
+import {OracleStatePolicy} from "../../src/OracleStatePolicy.sol";
 
 /// @dev RPC-free fixtures for the test-only classifier. Not production oracle code.
 contract OracleStatePolicyTest is Test {
@@ -20,29 +21,29 @@ contract OracleStatePolicyTest is Test {
     uint256 internal constant MONDAY_LATE_ET_TS = 1_789_459_199;
 
     function test_goodCurrentRoundIsLive() public pure {
-        assertEq(uint256(OracleFixtures.live().classify()), uint256(OracleStatePolicy.State.LIVE));
+        assertEq(uint256(OracleFixtures.live().classify()), uint256(IOracleAdapter.State.LIVE));
     }
 
     function test_explicitRegistryPauseIsHeld() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.held();
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.HELD));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.HELD));
     }
 
     function test_pauseBeatsStalePrice() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.held();
         input.nowTs = OracleFixtures.NVDA_UPDATED_AT + OracleStatePolicy.MAX_LIVE_AGE + 1;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.HELD));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.HELD));
     }
 
     function test_staleUnpausedRoundIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.staleInvalid();
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_ageEqualToMaxLiveAgeIsLive() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.nowTs = OracleFixtures.NVDA_UPDATED_AT + OracleStatePolicy.MAX_LIVE_AGE;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.LIVE));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.LIVE));
     }
 
     function test_weekendStaleUnpausedIsInvalid() public pure {
@@ -52,7 +53,7 @@ contract OracleStatePolicyTest is Test {
         input.price.startedAt = FRIDAY_UPDATED_AT - 14;
         input.price.updatedAt = FRIDAY_UPDATED_AT;
         input.nowTs = SUNDAY_NOON_ET_TS;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
         assertGt(SUNDAY_NOON_ET_TS - FRIDAY_UPDATED_AT, OracleStatePolicy.MAX_LIVE_AGE);
     }
 
@@ -63,103 +64,103 @@ contract OracleStatePolicyTest is Test {
         input.price.startedAt = MONDAY_POST_UPDATED_AT - 14;
         input.price.updatedAt = MONDAY_POST_UPDATED_AT;
         input.nowTs = MONDAY_LATE_ET_TS;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
         assertGt(MONDAY_LATE_ET_TS - MONDAY_POST_UPDATED_AT, OracleStatePolicy.MAX_LIVE_AGE);
     }
 
     function test_zeroAnswerIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.price.answer = 0;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_negativeAnswerIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.price.answer = -1;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_futureTimestampIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.price.updatedAt = BaseV1Constants.PINNED_TIMESTAMP + 1;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_incompleteRoundIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.price.answeredInRound = OracleFixtures.NVDA_ROUND_ID - 1;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_zeroStartedAtIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.price.startedAt = 0;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_sequencerDownIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.sequencerDown();
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_sequencerInsideRecoveryGraceIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.sequencerRecoveryGrace();
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_sequencerJustStartedIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.sequencer.answer = 0;
         input.sequencer.startedAt = BaseV1Constants.PINNED_TIMESTAMP;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_sequencerBeyondRecoveryGraceCanBeLive() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.sequencer.answer = 0;
         input.sequencer.startedAt = BaseV1Constants.PINNED_TIMESTAMP - OracleStatePolicy.SEQUENCER_GRACE_PERIOD - 1;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.LIVE));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.LIVE));
     }
 
     function test_unpausedWithoutNewerPostHoldRoundIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.unpausedWithoutFreshPostHoldRound();
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_unpausedWithNewerQualifyingRoundIsLive() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.unpausedWithFreshPostHoldRound();
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.LIVE));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.LIVE));
     }
 
     function test_unpausedWithNewerButStaleRoundIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.unpausedWithFreshPostHoldRound();
         input.nowTs = OracleFixtures.NVDA_UPDATED_AT + OracleStatePolicy.MAX_LIVE_AGE + 1;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_failedRegistryReadIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.registryOk = false;
         input.registryPaused = true;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_failedFeedReadIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.feedOk = false;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_failedSequencerReadIsInvalid() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.live();
         input.sequencerOk = false;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 
     function test_failedSequencerReadDoesNotOverrideExplicitHold() public pure {
         OracleStatePolicy.Input memory input = OracleFixtures.held();
         input.sequencerOk = false;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.HELD));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.HELD));
     }
 
     function test_maxLiveAgeIsEightHours() public pure {
@@ -175,8 +176,8 @@ contract OracleStatePolicyTest is Test {
         input.price.startedAt = FRIDAY_UPDATED_AT - 14;
         input.price.updatedAt = FRIDAY_UPDATED_AT;
         input.nowTs = FRIDAY_UPDATED_AT + OracleStatePolicy.MAX_LIVE_AGE;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.LIVE));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.LIVE));
         input.nowTs = FRIDAY_UPDATED_AT + OracleStatePolicy.MAX_LIVE_AGE + 1;
-        assertEq(uint256(input.classify()), uint256(OracleStatePolicy.State.INVALID));
+        assertEq(uint256(input.classify()), uint256(IOracleAdapter.State.INVALID));
     }
 }

@@ -20,6 +20,14 @@
 
 #
 
-# Local Anvil-only signer smoke test (spot Position NFT):
+# Local Anvil-only signer smoke tests:
 
-# see script/README.md
+# spot: see script/README.md / pnpm test:contracts:smoke
+
+# financed: see script/README.md / pnpm test:contracts:smoke:financed
+
+#
+
+# Production contracts in src/:
+
+# MarginCall, CreditPool, OracleAdapter, ExecutionAdapter

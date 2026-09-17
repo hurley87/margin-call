@@ -5,15 +5,16 @@ import {Script, console} from "forge-std/Script.sol";
 import {StdAssertions} from "forge-std/StdAssertions.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
+import {CreditPool} from "../src/CreditPool.sol";
+import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
+import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../src/MarginCall.sol";
-import {LocalNvdaC} from "./LocalNvdaC.sol";
+import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
+import {MockNvdaC, MockOracleAdapter, MockSwapRouter, MockUsdc} from "../test/margincall/PositionNftTestDoubles.sol";
 
 /// @title SpotPositionLifecycle
 /// @notice Local-Anvil-only smoke harness: an ordinary EOA opens, inspects, and closes a spot Position NFT.
 /// @dev Requires `MARGIN_CALL_PRIVATE_KEY` at runtime. Never logs, persists, or hardcodes that key.
-///      Refuses every chain other than Anvil (`31337`). Base mainnet signer flow is owned by #429.
-///      Scope is the signer/broadcast rail only: per-field position invariants are owned by
-///      `contracts/test/margincall/`, so this asserts the custody round-trip and the burn, not the struct.
 contract SpotPositionLifecycle is Script, StdAssertions {
     uint256 internal constant ANVIL_CHAIN_ID = 31337;
     uint256 internal constant DEFAULT_STOCK_AMOUNT = 1e8;
@@ -23,9 +24,10 @@ contract SpotPositionLifecycle is Script, StdAssertions {
     error NftStillExists(uint256 tokenId, address owner);
     error UnexpectedOwnerOfRevert(uint256 tokenId, bytes data);
 
+    /// @dev Only what the `_inspect*` steps read. Everything else stays a `run()` local.
     struct RunState {
         address signer;
-        LocalNvdaC nvdac;
+        MockNvdaC nvdac;
         MarginCall marginCall;
         uint256 stockAmount;
         uint256 tokenId;
@@ -52,12 +54,22 @@ contract SpotPositionLifecycle is Script, StdAssertions {
 
         vm.startBroadcast(privateKey);
 
-        console.log("--- tx: deploy LocalNvdaC (dev/test-only) ---");
-        state.nvdac = new LocalNvdaC();
+        console.log("--- tx: deploy dev/test-only NVDAc ---");
+        state.nvdac = new MockNvdaC();
         console.log("nvdac", address(state.nvdac));
 
-        console.log("--- tx: deploy MarginCall ---");
-        state.marginCall = new MarginCall(address(state.nvdac));
+        console.log("--- tx: deploy USDC + oracle + fail-closed router + adapters ---");
+        MockUsdc usdc = new MockUsdc();
+        MockOracleAdapter oracle = new MockOracleAdapter();
+        // Spot opens never call the router, so any swap attempt must fail closed.
+        MockSwapRouter router = new MockSwapRouter(usdc, state.nvdac);
+        router.setShouldRevert(true);
+        ExecutionAdapter execution =
+            new ExecutionAdapter(address(usdc), address(state.nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
+        state.marginCall = new MarginCall(address(state.nvdac), address(usdc), address(oracle), address(execution));
+        CreditPool pool = new CreditPool(address(usdc), address(state.marginCall));
+        state.marginCall.setCreditPool(address(pool));
+        oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
         console.log("marginCall", address(state.marginCall));
 
         console.log("--- tx: mint local NVDAc to signer ---");
@@ -78,7 +90,6 @@ contract SpotPositionLifecycle is Script, StdAssertions {
         vm.stopBroadcast();
 
         _inspectClose(state);
-
         console.log("=== PASS: approve -> open -> inspect -> close -> burn + returned NVDAc ===");
     }
 
