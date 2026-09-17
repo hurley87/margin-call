@@ -3,6 +3,7 @@ pragma solidity 0.8.29;
 
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
+import {MaintenanceFixtures} from "../fixtures/MaintenanceFixtures.sol";
 import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 import {ExecutorRepayCaller, TransferCallbackExecutorGuard} from "./PositionNftTestDoubles.sol";
 
@@ -71,7 +72,8 @@ contract FinancedTransferTest is MarginCallTestBase {
 
         // Crash price so equity is still positive but health factor < 1.0
         // (equity / nav < maintenance 30%  <=>  debt / nav > 70%).
-        uint256 liquidatablePrice = _priceForDebtShare(stock, debt, 7_500);
+        uint256 liquidatablePrice =
+            MaintenanceFixtures.priceForDebtShare(stock, debt, MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS);
         oracle.setObservation(IOracleAdapter.State.LIVE, liquidatablePrice, 2, block.timestamp);
         uint256 nav = oracle.valueUsdc(stock, liquidatablePrice);
         assertTrue(_isLiquidatable(nav, debt), "fixture should be liquidatable");
@@ -92,7 +94,8 @@ contract FinancedTransferTest is MarginCallTestBase {
         (uint256 stock,,,,) = _position(tokenId);
         uint256 debt = marginCall.currentDebt(tokenId);
 
-        uint256 underwaterPrice = _priceForDebtShare(stock, debt, 11_000);
+        uint256 underwaterPrice =
+            MaintenanceFixtures.priceForDebtShare(stock, debt, MaintenanceFixtures.UNDERWATER_DEBT_SHARE_BPS);
         oracle.setObservation(IOracleAdapter.State.LIVE, underwaterPrice, 3, block.timestamp);
         uint256 nav = oracle.valueUsdc(stock, underwaterPrice);
         assertTrue(debt >= nav, "fixture should be underwater");
@@ -357,5 +360,4 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.prank(eve);
         marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
     }
-
 }

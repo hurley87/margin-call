@@ -20,6 +20,7 @@ import {V1Config} from "./V1Config.sol";
 ///      permissionlessly unwinds unhealthy financed positions under LIVE pricing. Borrowed USDC can only buy
 ///      NVDAc through the fixed Uniswap execution path. Debt accrues lazily at the immutable V1 10% APR;
 ///      `repay` restores USDC to the pool. Real ownership transfers clear the stored executor in `_update`.
+///      The public risk/read API and the living NFT presentation are later slices.
 contract MarginCall is ERC721 {
     using SafeERC20 for IERC20;
 
@@ -204,9 +205,10 @@ contract MarginCall is ERC721 {
 
     /// @notice Sell exact `stockAmount` of this position's NVDAc for USDC and apply proceeds to debt.
     /// @dev Accrues first, requires `LIVE` pricing, then sells through the fixed execution adapter. Enforces caller
-    ///      `minOut` and the protocol oracle floor inside the adapter. Realized USDC pays interest then principal to
-    ///      `CreditPool`; any surplus goes immediately to the current NFT owner (never residual position USDC).
-    ///      Owner or executor may call; ERC-721 approval does not grant authority.
+    ///      `minOut` and the protocol oracle floor inside the adapter. Realized USDC settles through the same
+    ///      `_settleProceeds` waterfall `liquidate` uses: interest then principal to `CreditPool`, any surplus
+    ///      immediately to the current NFT owner (never residual position USDC). Unlike `liquidate`, a remaining
+    ///      balance is simply left outstanding. Owner or executor may call; ERC-721 approval does not grant authority.
     function reduceExposure(uint256 tokenId, uint256 stockAmount, uint256 minOut) external {
         (address owner, Position storage position) = _requirePositionManager(tokenId);
         if (stockAmount == 0) {
@@ -225,31 +227,20 @@ contract MarginCall is ERC721 {
         // A failed swap reverts the whole transaction and restores accounting.
         position.stockAmount = available - stockAmount;
 
-        NVDAC.forceApprove(address(EXECUTION), stockAmount);
-        uint256 usdcOut = EXECUTION.sellNvda(stockAmount, minOut, observation.price);
-        NVDAC.forceApprove(address(EXECUTION), 0);
-
-        // Re-read debt after the swap: the legs are deliberately not cached across the external call.
-        uint256 repayAmount = Math.min(usdcOut, position.principal + position.accruedInterest);
-        if (repayAmount != 0) {
-            _applyDebtPayment(position, repayAmount);
-            USDC.safeTransfer(address(creditPool), repayAmount);
-            emit DebtRepaid(tokenId, repayAmount);
-        }
-
-        if (usdcOut > repayAmount) {
-            USDC.safeTransfer(owner, usdcOut - repayAmount);
-        }
+        uint256 usdcOut = _sellStock(stockAmount, minOut, observation.price);
+        // A partial reduction may leave debt outstanding; that is the point of the path, not a shortfall.
+        _settleProceeds(tokenId, position, owner, usdcOut);
 
         emit ExposureReduced(tokenId, stockAmount, usdcOut);
     }
 
     /// @notice Permissionless full unwind of an unhealthy financed position under LIVE pricing.
-    /// @dev Accrues first, requires LIVE, then liquidates only when equity is strictly below the 30% maintenance
-    ///      ratio (equality is safe). Sells the entire recorded NVDAc bag through the fixed execution path with
-    ///      the protocol oracle floor as the only minOut. Sufficient proceeds repay exact current debt to
-    ///      `CreditPool` and surplus to the snapshotted NFT owner; shortfall sends all proceeds to the pool and
-    ///      emits `BadDebtRealized`. Always deletes accounting and burns the NFT. No liquidator reward or fee.
+    /// @dev Accrues first, requires LIVE, then liquidates only when `V1Config.isLiquidatable` holds — equity
+    ///      strictly below the 30% maintenance ratio, equality being safe. Sells the entire recorded NVDAc bag
+    ///      through the fixed execution path with the protocol oracle floor as the only minOut, then settles
+    ///      through the shared `_settleProceeds` waterfall: debt to `CreditPool`, surplus to the snapshotted
+    ///      NFT owner, and any unpaid remainder finalized as `BadDebtRealized`. Always deletes accounting and
+    ///      burns the NFT. No liquidator reward or fee.
     function liquidate(uint256 tokenId) external {
         address owner = _requireOwned(tokenId);
         Position storage position = positions[tokenId];
@@ -258,10 +249,9 @@ contract MarginCall is ERC721 {
 
         IOracleAdapter.Observation memory observation = _requireLivePrice();
 
-        uint256 debt = position.principal + position.accruedInterest;
         uint256 stockAmount = position.stockAmount;
         uint256 nav = ORACLE.valueUsdc(stockAmount, observation.price);
-        if (!_isLiquidatable(nav, debt)) {
+        if (!V1Config.isLiquidatable(nav, position.principal + position.accruedInterest)) {
             revert NotLiquidatable(tokenId);
         }
 
@@ -269,32 +259,13 @@ contract MarginCall is ERC721 {
         // A failed swap reverts the whole transaction and restores accounting.
         position.stockAmount = 0;
 
-        uint256 usdcOut;
-        if (stockAmount != 0) {
-            NVDAC.forceApprove(address(EXECUTION), stockAmount);
-            usdcOut = EXECUTION.sellNvda(stockAmount, 0, observation.price);
-            NVDAC.forceApprove(address(EXECUTION), 0);
-        }
+        // A position can be liquidatable with an empty bag: `reduceExposure` may have sold everything and
+        // left residual debt. Skip the swap rather than sending a zero-amount sell into the adapter.
+        uint256 usdcOut = stockAmount == 0 ? 0 : _sellStock(stockAmount, 0, observation.price);
 
-        // Re-read debt after the swap: the legs are deliberately not cached across the external call.
-        debt = position.principal + position.accruedInterest;
-
-        if (usdcOut >= debt) {
-            if (debt != 0) {
-                _applyDebtPayment(position, debt);
-                USDC.safeTransfer(address(creditPool), debt);
-                emit DebtRepaid(tokenId, debt);
-            }
-            if (usdcOut > debt) {
-                USDC.safeTransfer(owner, usdcOut - debt);
-            }
-        } else {
-            if (usdcOut != 0) {
-                _applyDebtPayment(position, usdcOut);
-                USDC.safeTransfer(address(creditPool), usdcOut);
-                emit DebtRepaid(tokenId, usdcOut);
-            }
-            emit BadDebtRealized(tokenId, debt - usdcOut);
+        uint256 shortfall = _settleProceeds(tokenId, position, owner, usdcOut);
+        if (shortfall != 0) {
+            emit BadDebtRealized(tokenId, shortfall);
         }
 
         delete positions[tokenId];
@@ -387,17 +358,37 @@ contract MarginCall is ERC721 {
         }
     }
 
-    /// @dev LIVE maintenance predicate: liquidatable iff `debt > 0` and equity is strictly below 30% of NAV.
-    ///      Equality at the threshold is healthy. Handles `NAV == 0` and `debt >= NAV` without underflow.
-    function _isLiquidatable(uint256 nav, uint256 debt) private pure returns (bool) {
-        if (debt == 0) {
-            return false;
+    /// @dev Approve exactly `stockAmount` to the fixed execution path, sell, then drop the allowance back to
+    ///      zero. Single definition of sell-side approval hygiene, shared by `reduceExposure` and `liquidate`
+    ///      so neither can leave a standing allowance the other does not.
+    function _sellStock(uint256 stockAmount, uint256 minOut, uint256 price) private returns (uint256 usdcOut) {
+        NVDAC.forceApprove(address(EXECUTION), stockAmount);
+        usdcOut = EXECUTION.sellNvda(stockAmount, minOut, price);
+        NVDAC.forceApprove(address(EXECUTION), 0);
+    }
+
+    /// @dev Settle realized `usdcOut` against this position's current debt: interest then principal to
+    ///      `CreditPool`, then any surplus straight to `owner` (never residual position USDC). Returns the
+    ///      unpaid remainder, which `liquidate` finalizes as bad debt and `reduceExposure` simply leaves
+    ///      outstanding. Single definition of the settlement waterfall, and the reason neither unwind path
+    ///      can cache the debt legs across its swap: this reads them itself, after the external call.
+    function _settleProceeds(uint256 tokenId, Position storage position, address owner, uint256 usdcOut)
+        private
+        returns (uint256 shortfall)
+    {
+        uint256 debt = position.principal + position.accruedInterest;
+        uint256 repayAmount = Math.min(usdcOut, debt);
+        if (repayAmount != 0) {
+            _applyDebtPayment(position, repayAmount);
+            USDC.safeTransfer(address(creditPool), repayAmount);
+            emit DebtRepaid(tokenId, repayAmount);
         }
-        if (nav == 0 || debt >= nav) {
-            return true;
+
+        if (usdcOut > repayAmount) {
+            USDC.safeTransfer(owner, usdcOut - repayAmount);
         }
-        uint256 equity = nav - debt;
-        return equity * V1Config.BPS_DENOMINATOR < nav * V1Config.MAINTENANCE_EQUITY_RATIO_BPS;
+
+        shortfall = debt - repayAmount;
     }
 
     /// @dev Apply already-accrued `payAmount` interest-first, then principal. Caller must ensure `payAmount > 0`

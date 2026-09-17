@@ -8,6 +8,7 @@ import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {V1Config} from "../src/V1Config.sol";
 import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
+import {MaintenanceFixtures} from "../test/fixtures/MaintenanceFixtures.sol";
 import {MarginCallForkBase} from "./MarginCallForkBase.sol";
 
 /// @dev Pinned Base-mainnet proof that `liquidate` sells the full NVDAc bag on the approved Uniswap V3 route.
@@ -30,8 +31,10 @@ contract LiquidateForkTest is MarginCallForkBase {
 
         // Mock a LIVE-but-liquidatable mark for eligibility. Real Uniswap still fills near the pinned market,
         // so proceeds cover debt and surplus routes to the owner (shortfall stays in the RPC-free suite).
-        uint256 liquidatablePrice = (debt * V1Config.VALUATION_DENOMINATOR * V1Config.BPS_DENOMINATOR) / (stock * 7_500);
-        assertTrue(debt > 0 && !_isHealthy(oracle.valueUsdc(stock, liquidatablePrice), debt), "fixture must be liquidatable");
+        uint256 liquidatablePrice = MaintenanceFixtures.priceForDebtShare(stock, debt, MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS);
+        assertTrue(
+            V1Config.isLiquidatable(oracle.valueUsdc(stock, liquidatablePrice), debt), "fixture must be liquidatable"
+        );
 
         _mockLiveObservation(liquidatablePrice, live.roundId, block.timestamp);
 
@@ -87,7 +90,7 @@ contract LiquidateForkTest is MarginCallForkBase {
         uint256 debt = marginCall.currentDebt(tokenId);
 
         IOracleAdapter.Observation memory live = oracle.latestObservation();
-        uint256 liquidatablePrice = (debt * V1Config.VALUATION_DENOMINATOR * V1Config.BPS_DENOMINATOR) / (stock * 7_500);
+        uint256 liquidatablePrice = MaintenanceFixtures.priceForDebtShare(stock, debt, MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS);
         _mockLiveObservation(liquidatablePrice, live.roundId, block.timestamp);
 
         // Force the execution path to revert after eligibility passes; position must remain active.
@@ -135,15 +138,4 @@ contract LiquidateForkTest is MarginCallForkBase {
         assertEq(executor, address(0));
     }
 
-    /// @dev Mirror of the RPC-free health helper: equityRatio >= 30% <=> debt / nav <= 70%.
-    function _isHealthy(uint256 nav, uint256 debt) internal pure returns (bool) {
-        if (nav == 0) {
-            return debt == 0;
-        }
-        if (debt >= nav) {
-            return false;
-        }
-        uint256 equity = nav - debt;
-        return equity * V1Config.BPS_DENOMINATOR >= nav * V1Config.MAINTENANCE_EQUITY_RATIO_BPS;
-    }
 }
