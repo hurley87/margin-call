@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
-import {stdStorage, StdStorage} from "forge-std/StdStorage.sol";
-
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
 import {V1Config} from "../../src/V1Config.sol";
@@ -10,8 +8,6 @@ import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 
 /// @dev RPC-free financed debt accrual, repayment, and zero-debt close.
 contract FinancedDebtTest is MarginCallTestBase {
-    using stdStorage for StdStorage;
-
     function test_currentDebtGrowsOverTimeWithoutKeeper() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
@@ -309,20 +305,12 @@ contract FinancedDebtTest is MarginCallTestBase {
         vm.warp(OPENED_AT + 5 days);
         uint256 debt = marginCall.currentDebt(tokenId);
 
-        // Slice 4 owns setExecutor; plant the field so repay's manager check is covered here.
-        _setExecutor(tokenId, bob);
+        vm.prank(alice);
+        marginCall.setExecutor(tokenId, bob);
 
         _fundUsdc(bob, debt);
         vm.prank(bob);
         marginCall.repay(tokenId, debt);
         assertEq(marginCall.currentDebt(tokenId), 0);
-    }
-
-    /// @dev Write `positions[tokenId].executor` without a public setter (Slice 4).
-    function _setExecutor(uint256 tokenId, address executor) internal {
-        stdstore.target(address(marginCall)).sig("positions(uint256)").with_key(tokenId).depth(4)
-            .checked_write(executor);
-        (,,,, address stored) = _position(tokenId);
-        assertEq(stored, executor, "executor plant failed");
     }
 }

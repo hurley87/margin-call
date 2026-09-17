@@ -15,7 +15,7 @@ if [[ $# -gt 0 ]]; then
   exit 1
 fi
 
-RPC_URL="http://127.0.0.1:8545"
+RPC_URL="${MARGIN_CALL_RPC_URL:-http://127.0.0.1:8545}"
 SCRIPT_TARGET="script/FinancedPositionOpen.s.sol:FinancedPositionOpen"
 
 # Seconds of real node time to put between the open and the repay. 30 days by default.

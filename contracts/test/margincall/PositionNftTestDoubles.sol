@@ -217,6 +217,61 @@ contract InspectingReceiver is SpotOpener, IERC721Receiver {
     }
 }
 
+/// @dev Calls `repay` as itself so a transfer-callback receiver can invoke it as the stale executor.
+contract ExecutorRepayCaller {
+    MarginCall public immutable marginCall;
+    MockUsdc public immutable usdc;
+
+    bool public repayReverted;
+    bytes public repayRevertData;
+
+    constructor(MarginCall marginCall_, MockUsdc usdc_) {
+        marginCall = marginCall_;
+        usdc = usdc_;
+    }
+
+    function attemptRepay(uint256 tokenId, uint256 amount) external {
+        usdc.approve(address(marginCall), amount);
+        try marginCall.repay(tokenId, amount) {
+            repayReverted = false;
+        } catch (bytes memory reason) {
+            repayReverted = true;
+            repayRevertData = reason;
+        }
+    }
+}
+
+/// @dev Safe-transfer receiver that records cleared executor state and has the stale executor attempt repay.
+contract TransferCallbackExecutorGuard is IERC721Receiver {
+    MarginCall public immutable marginCall;
+    ExecutorRepayCaller public immutable staleExecutor;
+
+    address public observedOwner;
+    address public observedExecutor;
+    bool public sawClearedExecutor;
+    bool public sawStaleRepayRevert;
+    bytes public staleRepayRevertData;
+
+    constructor(MarginCall marginCall_, ExecutorRepayCaller staleExecutor_) {
+        marginCall = marginCall_;
+        staleExecutor = staleExecutor_;
+    }
+
+    function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
+        observedOwner = marginCall.ownerOf(tokenId);
+        (,,,, observedExecutor) = marginCall.positions(tokenId);
+        sawClearedExecutor = observedExecutor == address(0);
+
+        uint256 debt = marginCall.currentDebt(tokenId);
+        if (debt > 0) {
+            staleExecutor.attemptRepay(tokenId, debt);
+            sawStaleRepayRevert = staleExecutor.repayReverted();
+            staleRepayRevertData = staleExecutor.repayRevertData();
+        }
+        return IERC721Receiver.onERC721Received.selector;
+    }
+}
+
 /// @dev Closes the minted token during the safe-mint receiver callback.
 contract CallbackCloser is SpotOpener, IERC721Receiver {
     bool public didClose;

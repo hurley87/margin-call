@@ -21,19 +21,21 @@ a silent prompt.
    anvil
    ```
 
-2. Copy **one disposable Anvil development key** from Anvil's startup output.
-   Do not use a live wallet.
+2. Copy **disposable Anvil development keys** from Anvil's startup output.
+   Do not use a live wallet. Spot and financed debt harnesses need one key;
+   the executor-transfer harness needs three (Alice, executor, Bob).
 
-3. In a second terminal, prompt silently for the key:
+3. In a second terminal, prompt silently for the key(s):
 
    ```sh
-   read -rsp "Disposable Anvil private key: " MARGIN_CALL_PRIVATE_KEY
+   read -rsp "Disposable Anvil private key (Alice): " MARGIN_CALL_PRIVATE_KEY
    echo
    export MARGIN_CALL_PRIVATE_KEY
    ```
 
    If `MARGIN_CALL_PRIVATE_KEY` is already set (non-interactive use), skip the
-   prompt.
+   prompt. For the executor-transfer harness, also export
+   `MARGIN_CALL_EXECUTOR_KEY` and `MARGIN_CALL_RECIPIENT_KEY` the same way.
 
 ## Spot open → close
 
@@ -105,13 +107,67 @@ contracts/broadcast/FinancedPositionOpen.s.sol/31337/deployAndOpen-latest.json
 contracts/broadcast/FinancedPositionOpen.s.sol/31337/repayAndClose-latest.json
 ```
 
+## Financed A → E → B executor transfer
+
+From `contracts/`: `./script/run-executor-transfer-local.sh`  
+From repo root: `pnpm test:contracts:smoke:executor-transfer`
+
+Requires three disposable Anvil keys:
+
+```sh
+read -rsp "Alice Anvil key: " MARGIN_CALL_PRIVATE_KEY
+echo
+export MARGIN_CALL_PRIVATE_KEY
+read -rsp "Executor Anvil key: " MARGIN_CALL_EXECUTOR_KEY
+echo
+export MARGIN_CALL_EXECUTOR_KEY
+read -rsp "Bob Anvil key: " MARGIN_CALL_RECIPIENT_KEY
+echo
+export MARGIN_CALL_RECIPIENT_KEY
+```
+
+Deploys the same mock stack as the financed debt harness, then:
+
+`openPosition(financed)` → advance node clock → A `setExecutor(E)` → E partial
+`repay` → A `safeTransferFrom` to B → prove A/E lose authority → B repays
+
+Phases:
+
+1. `deployAndOpen()` — Alice deploys, seeds the pool, opens financed, records
+   state to `deployments/executor-transfer-local.run.json`.
+2. Wrapper advances Anvil clock (`evm_increaseTime` + `evm_mine`).
+3. `appointAndRepay()` — Alice appoints E; E partially repays.
+4. `transferToBob()` — reads settled post-repay accounting from the node, Alice
+   transfers the NFT to Bob, asserts stock/debt fields survive and executor clears.
+5. `proveAuthorityLost()` — simulation-only: Alice and E `repay` /
+   `setExecutor` must revert.
+6. `bobRepayAndVerify()` — Bob repays remaining debt on the node and verifies
+   ownership/accounting.
+
+Optional env vars match the financed harness (`MARGIN_CALL_STOCK_AMOUNT`,
+`MARGIN_CALL_LEVERAGE_BPS`, `MARGIN_CALL_ACCRUAL_WINDOW`).
+`MARGIN_CALL_RPC_URL` overrides the default `http://127.0.0.1:8545`.
+
+Broadcast artifacts:
+
+```text
+contracts/broadcast/FinancedExecutorTransfer.s.sol/31337/deployAndOpen-latest.json
+contracts/broadcast/FinancedExecutorTransfer.s.sol/31337/appointAndRepay-latest.json
+contracts/broadcast/FinancedExecutorTransfer.s.sol/31337/transferToBob-latest.json
+contracts/broadcast/FinancedExecutorTransfer.s.sol/31337/bobRepayAndVerify-latest.json
+```
+
 ## Environment
 
-| Variable                   | Required | Purpose                                                                        |
-| -------------------------- | -------- | ------------------------------------------------------------------------------ |
-| `MARGIN_CALL_PRIVATE_KEY`  | yes      | Disposable Anvil account private key. Never a live key.                        |
-| `MARGIN_CALL_STOCK_AMOUNT` | no       | Raw NVDAc units to open. Default `100000000`.                                  |
-| `MARGIN_CALL_LEVERAGE_BPS` | no       | Financed harness only. `11000` / `12500` / `14000` / `15000`. Default `12500`. |
+| Variable                     | Required               | Purpose                                                                     |
+| ---------------------------- | ---------------------- | --------------------------------------------------------------------------- |
+| `MARGIN_CALL_PRIVATE_KEY`    | yes                    | Alice / primary disposable Anvil account private key. Never a live key.     |
+| `MARGIN_CALL_EXECUTOR_KEY`   | executor-transfer only | Executor disposable Anvil key.                                              |
+| `MARGIN_CALL_RECIPIENT_KEY`  | executor-transfer only | Bob (recipient) disposable Anvil key.                                       |
+| `MARGIN_CALL_RPC_URL`        | no                     | Anvil RPC URL. Default `http://127.0.0.1:8545`.                             |
+| `MARGIN_CALL_STOCK_AMOUNT`   | no                     | Raw NVDAc units to open. Default `100000000`.                               |
+| `MARGIN_CALL_LEVERAGE_BPS`   | no                     | Financed harnesses. `11000` / `12500` / `14000` / `15000`. Default `12500`. |
+| `MARGIN_CALL_ACCRUAL_WINDOW` | no                     | Seconds to advance the Anvil clock. Default `2592000` (30 days).            |
 
 `broadcast/` is gitignored. Do not commit these files. Stop Anvil with Ctrl+C
 when finished and discard the local key/session.
