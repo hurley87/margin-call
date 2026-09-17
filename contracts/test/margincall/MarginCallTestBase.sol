@@ -31,6 +31,9 @@ abstract contract MarginCallTestBase is Test {
     uint256 internal constant OPENED_AT = 1_700_000_000;
     uint256 internal constant ONE_NVDAC = 10 ** uint256(BaseV1Constants.NVDAC_DECIMALS);
 
+    uint256 internal constant LIQUIDATABLE_DEBT_SHARE_BPS = MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS;
+    uint256 internal constant UNDERWATER_DEBT_SHARE_BPS = MaintenanceFixtures.UNDERWATER_DEBT_SHARE_BPS;
+
     /// @dev Default `reduceExposure` sale size: small enough to leave residual stock on a 1 NVDAc open.
     uint256 internal constant REDUCE_SALE = ONE_NVDAC / 20;
     uint256 internal constant DEFAULT_CREDIT = 1_000_000e6;
@@ -183,6 +186,16 @@ abstract contract MarginCallTestBase is Test {
         uint256 contributionValue = oracle.valueUsdc(stockAmount, BaseV1Constants.PINNED_FEED_ANSWER);
         uint256 ideal = Math.mulDiv(contributionValue, leverage - SPOT_LEVERAGE, V1Config.BPS_DENOMINATOR);
         return Math.mulDiv(ideal, V1Config.ADVERSE_BOUND_BPS, V1Config.BPS_DENOMINATOR);
+    }
+
+    /// @dev The standard financed fixture: one 1.25x open by alice, plus the stock and debt every threshold
+    ///      fixture derives its target mark from. Shared by the `liquidate` and read-surface suites so both
+    ///      suites cannot disagree about what "the standard financed position" is.
+    function _openFinancedFixture() internal returns (uint256 tokenId, uint256 stock, uint256 debt) {
+        _fund(alice, ONE_NVDAC);
+        tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
+        (stock,,,,) = _position(tokenId);
+        debt = marginCall.currentDebt(tokenId);
     }
 
     /// @dev Deliberately *not* a mirror: the maintenance rule is shared with the contract via `V1Config` so the

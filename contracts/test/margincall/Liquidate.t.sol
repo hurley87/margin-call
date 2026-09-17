@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
@@ -12,15 +13,11 @@ import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 
 /// @dev RPC-free permissionless liquidation: LIVE maintenance predicate, surplus/shortfall settlement, burn.
 contract LiquidateTest is MarginCallTestBase {
-    uint256 internal constant LIQUIDATABLE_DEBT_SHARE_BPS = MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS;
-    uint256 internal constant UNDERWATER_DEBT_SHARE_BPS = MaintenanceFixtures.UNDERWATER_DEBT_SHARE_BPS;
-
     function test_equalityAtMaintenanceIsNotLiquidatable() public {
-        (uint256 tokenId, uint256 stock, uint256 debt) = _openFixture();
+        (uint256 tokenId, uint256 stock, uint256 debt) = _openFinancedFixture();
 
-        // Smallest LIVE mark where equity * 10_000 >= NAV * 3_000 (equality is safe).
-        uint256 minHealthyNav = Math.ceilDiv(debt * V1Config.BPS_DENOMINATOR, 7_000);
-        uint256 price = Math.ceilDiv(minHealthyNav * V1Config.VALUATION_DENOMINATOR, stock);
+        // Smallest LIVE mark that is still healthy: equality at the 30% maintenance ratio is safe.
+        uint256 price = MaintenanceFixtures.minHealthyPrice(stock, debt);
         _setLivePrice(price);
 
         uint256 nav = oracle.valueUsdc(stock, price);
@@ -40,7 +37,7 @@ contract LiquidateTest is MarginCallTestBase {
     }
 
     function test_belowMaintenanceSurplusGoesToSnapshottedOwner() public {
-        (uint256 tokenId, uint256 stock, uint256 debt) = _openFixture();
+        (uint256 tokenId, uint256 stock, uint256 debt) = _openFinancedFixture();
 
         uint256 price = _setLiveDebtSharePrice(stock, debt, LIQUIDATABLE_DEBT_SHARE_BPS);
         uint256 nav = oracle.valueUsdc(stock, price);
@@ -74,7 +71,7 @@ contract LiquidateTest is MarginCallTestBase {
     }
 
     function test_underwaterShortfallEmitsBadDebtAndFinalizes() public {
-        (uint256 tokenId, uint256 stock, uint256 debt) = _openFixture();
+        (uint256 tokenId, uint256 stock, uint256 debt) = _openFinancedFixture();
 
         uint256 price = _setLiveDebtSharePrice(stock, debt, UNDERWATER_DEBT_SHARE_BPS);
         uint256 nav = oracle.valueUsdc(stock, price);
@@ -92,6 +89,8 @@ contract LiquidateTest is MarginCallTestBase {
         emit MarginCall.DebtRepaid(tokenId, usdcOut);
         vm.expectEmit(true, false, false, true, address(marginCall));
         emit MarginCall.BadDebtRealized(tokenId, shortfall);
+        vm.expectEmit(true, true, true, true, address(marginCall));
+        emit IERC721.Transfer(alice, address(0), tokenId);
         vm.expectEmit(true, true, false, true, address(marginCall));
         emit MarginCall.PositionLiquidated(tokenId, alice, stock, usdcOut);
 
@@ -106,7 +105,7 @@ contract LiquidateTest is MarginCallTestBase {
     }
 
     function test_zeroStockWithDebtIsLiquidatableAtZeroProceeds() public {
-        (uint256 tokenId, uint256 stock, uint256 debt) = _openFixture();
+        (uint256 tokenId, uint256 stock, uint256 debt) = _openFinancedFixture();
 
         // Crash mark underwater, then sell the entire bag via reduceExposure so residual debt remains with zero stock.
         uint256 price = _setLiveDebtSharePrice(stock, debt, UNDERWATER_DEBT_SHARE_BPS);
@@ -136,7 +135,7 @@ contract LiquidateTest is MarginCallTestBase {
     }
 
     function test_dustPriceNavZeroIsLiquidatable() public {
-        (uint256 tokenId, uint256 stock, uint256 debt) = _openFixture();
+        (uint256 tokenId, uint256 stock, uint256 debt) = _openFinancedFixture();
         assertGt(debt, 0);
 
         // Price 1 floors NAV to 0 for typical stock sizes (stock * 1 / 10^10 == 0 when stock < 10^10).
@@ -181,7 +180,7 @@ contract LiquidateTest is MarginCallTestBase {
     }
 
     function test_surplusAfterTransferGoesToNewOwner() public {
-        (uint256 tokenId, uint256 stock, uint256 debt) = _openFixture();
+        (uint256 tokenId, uint256 stock, uint256 debt) = _openFinancedFixture();
 
         vm.prank(alice);
         marginCall.transferFrom(alice, carol, tokenId);
@@ -207,7 +206,7 @@ contract LiquidateTest is MarginCallTestBase {
     }
 
     function test_heldInvalidAndRevertingOracleBlockLiquidation() public {
-        (uint256 tokenId,,) = _openFixture();
+        (uint256 tokenId,,) = _openFinancedFixture();
         _crashLiquidatable(tokenId);
 
         Snapshot memory before_ = _snapshot(tokenId);
@@ -261,7 +260,7 @@ contract LiquidateTest is MarginCallTestBase {
     }
 
     function test_routerRevertRollsBackAtomically() public {
-        (uint256 tokenId,,) = _openFixture();
+        (uint256 tokenId,,) = _openFinancedFixture();
         _crashLiquidatable(tokenId);
 
         Snapshot memory before_ = _snapshot(tokenId);
@@ -336,15 +335,6 @@ contract LiquidateTest is MarginCallTestBase {
         vm.expectRevert();
         vm.prank(bob);
         marginCall.liquidate(1);
-    }
-
-    /// @dev The standard fixture for this suite: one financed 1.25x open by alice, plus the two figures every
-    ///      test derives its target mark from.
-    function _openFixture() internal returns (uint256 tokenId, uint256 stock, uint256 debt) {
-        _fund(alice, ONE_NVDAC);
-        tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (stock,,,,) = _position(tokenId);
-        debt = marginCall.currentDebt(tokenId);
     }
 
     /// @dev Crash the mark to the standard liquidatable share for tests that only need eligibility, not the
