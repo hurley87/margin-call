@@ -16,10 +16,10 @@ import {V1Config} from "./V1Config.sol";
 /// @title MarginCall
 /// @notice Position NFT coordinator: custody NVDAc, open spot or financed positions, and mint ERC-721 ownership.
 /// @dev `MarginCall` is the ERC-721. Token existence is the active-position status. The owner may appoint one
-///      executor per position via `setExecutor`. `reduceExposure` sells exact NVDAc to repay debt; liquidation is
-///      a later slice. Borrowed USDC can only buy NVDAc through the fixed Uniswap execution path. Debt accrues
-///      lazily at the immutable V1 10% APR; `repay` restores USDC to the pool. Real ownership transfers clear the
-///      stored executor in `_update`.
+///      executor per position via `setExecutor`. `reduceExposure` sells exact NVDAc to repay debt; `liquidate`
+///      permissionlessly unwinds unhealthy financed positions under LIVE pricing. Borrowed USDC can only buy
+///      NVDAc through the fixed Uniswap execution path. Debt accrues lazily at the immutable V1 10% APR;
+///      `repay` restores USDC to the pool. Real ownership transfers clear the stored executor in `_update`.
 contract MarginCall is ERC721 {
     using SafeERC20 for IERC20;
 
@@ -46,6 +46,7 @@ contract MarginCall is ERC721 {
     error OracleNotLive(IOracleAdapter.State state);
     error ContributionTooSmall(uint256 contributionValue);
     error LeverageExceeded(uint256 targetLeverage, uint256 nav, uint256 debt);
+    error NotLiquidatable(uint256 tokenId);
 
     event PositionOpened(uint256 indexed tokenId, address indexed owner, uint256 stockAmount);
     event CreditDrawn(uint256 indexed tokenId, uint256 usdcAmount);
@@ -53,6 +54,8 @@ contract MarginCall is ERC721 {
     event ExposureReduced(uint256 indexed tokenId, uint256 stockAmount, uint256 usdcOut);
     event ExecutorUpdated(uint256 indexed tokenId, address indexed previousExecutor, address indexed newExecutor);
     event PositionClosed(uint256 indexed tokenId, address indexed owner, uint256 stockAmount);
+    event PositionLiquidated(uint256 indexed tokenId, address indexed owner, uint256 stockAmount, uint256 usdcOut);
+    event BadDebtRealized(uint256 indexed tokenId, uint256 shortfall);
     event CreditPoolSet(address indexed creditPool);
 
     /// @notice 1.0x opening leverage in basis points (`10_000` = 1x).
@@ -241,6 +244,65 @@ contract MarginCall is ERC721 {
         emit ExposureReduced(tokenId, stockAmount, usdcOut);
     }
 
+    /// @notice Permissionless full unwind of an unhealthy financed position under LIVE pricing.
+    /// @dev Accrues first, requires LIVE, then liquidates only when equity is strictly below the 30% maintenance
+    ///      ratio (equality is safe). Sells the entire recorded NVDAc bag through the fixed execution path with
+    ///      the protocol oracle floor as the only minOut. Sufficient proceeds repay exact current debt to
+    ///      `CreditPool` and surplus to the snapshotted NFT owner; shortfall sends all proceeds to the pool and
+    ///      emits `BadDebtRealized`. Always deletes accounting and burns the NFT. No liquidator reward or fee.
+    function liquidate(uint256 tokenId) external {
+        address owner = _requireOwned(tokenId);
+        Position storage position = positions[tokenId];
+
+        _accrue(position);
+
+        IOracleAdapter.Observation memory observation = _requireLivePrice();
+
+        uint256 debt = position.principal + position.accruedInterest;
+        uint256 stockAmount = position.stockAmount;
+        uint256 nav = ORACLE.valueUsdc(stockAmount, observation.price);
+        if (!_isLiquidatable(nav, debt)) {
+            revert NotLiquidatable(tokenId);
+        }
+
+        // Zero recorded stock before the swap so a reentrant callback cannot sell the same units twice.
+        // A failed swap reverts the whole transaction and restores accounting.
+        position.stockAmount = 0;
+
+        uint256 usdcOut;
+        if (stockAmount != 0) {
+            NVDAC.forceApprove(address(EXECUTION), stockAmount);
+            usdcOut = EXECUTION.sellNvda(stockAmount, 0, observation.price);
+            NVDAC.forceApprove(address(EXECUTION), 0);
+        }
+
+        // Re-read debt after the swap: the legs are deliberately not cached across the external call.
+        debt = position.principal + position.accruedInterest;
+
+        if (usdcOut >= debt) {
+            if (debt != 0) {
+                _applyDebtPayment(position, debt);
+                USDC.safeTransfer(address(creditPool), debt);
+                emit DebtRepaid(tokenId, debt);
+            }
+            if (usdcOut > debt) {
+                USDC.safeTransfer(owner, usdcOut - debt);
+            }
+        } else {
+            if (usdcOut != 0) {
+                _applyDebtPayment(position, usdcOut);
+                USDC.safeTransfer(address(creditPool), usdcOut);
+                emit DebtRepaid(tokenId, usdcOut);
+            }
+            emit BadDebtRealized(tokenId, debt - usdcOut);
+        }
+
+        delete positions[tokenId];
+        _burn(tokenId);
+
+        emit PositionLiquidated(tokenId, owner, stockAmount, usdcOut);
+    }
+
     /// @notice Principal plus accrued-interest checkpoint plus unaccrued simple interest through now.
     /// @dev Oracle-free and keeper-free. Interest is charged only while principal is outstanding, at the immutable
     ///      V1 10% APR. Spot opens stay at zero debt.
@@ -317,12 +379,25 @@ contract MarginCall is ERC721 {
     }
 
     /// @dev Fetch the current observation and admit only `LIVE` pricing. Single definition of the pricing-admission
-    ///      rule, shared by financed opening and `reduceExposure` so neither can drift from the other.
+    ///      rule, shared by financed opening, `reduceExposure`, and `liquidate` so none can drift from the others.
     function _requireLivePrice() private view returns (IOracleAdapter.Observation memory observation) {
         observation = ORACLE.latestObservation();
         if (observation.state != IOracleAdapter.State.LIVE) {
             revert OracleNotLive(observation.state);
         }
+    }
+
+    /// @dev LIVE maintenance predicate: liquidatable iff `debt > 0` and equity is strictly below 30% of NAV.
+    ///      Equality at the threshold is healthy. Handles `NAV == 0` and `debt >= NAV` without underflow.
+    function _isLiquidatable(uint256 nav, uint256 debt) private pure returns (bool) {
+        if (debt == 0) {
+            return false;
+        }
+        if (nav == 0 || debt >= nav) {
+            return true;
+        }
+        uint256 equity = nav - debt;
+        return equity * V1Config.BPS_DENOMINATOR < nav * V1Config.MAINTENANCE_EQUITY_RATIO_BPS;
     }
 
     /// @dev Apply already-accrued `payAmount` interest-first, then principal. Caller must ensure `payAmount > 0`

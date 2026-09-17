@@ -3,7 +3,6 @@ pragma solidity 0.8.29;
 
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
-import {V1Config} from "../../src/V1Config.sol";
 import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 import {ExecutorRepayCaller, TransferCallbackExecutorGuard} from "./PositionNftTestDoubles.sol";
 
@@ -359,25 +358,4 @@ contract FinancedTransferTest is MarginCallTestBase {
         marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
     }
 
-    /// @dev equityRatio >= 30% maintenance  <=>  debt / nav <= 70%.
-    function _isHealthy(uint256 nav, uint256 debt) internal pure returns (bool) {
-        if (nav == 0) {
-            return debt == 0;
-        }
-        if (debt >= nav) {
-            return false;
-        }
-        uint256 equity = nav - debt;
-        return equity * V1Config.BPS_DENOMINATOR >= nav * V1Config.MAINTENANCE_EQUITY_RATIO_BPS;
-    }
-
-    function _isLiquidatable(uint256 nav, uint256 debt) internal pure returns (bool) {
-        return !_isHealthy(nav, debt) && debt > 0;
-    }
-
-    /// @dev Choose a feed price so that `debt / NAV ≈ debtShareBps / 10_000`.
-    ///      NAV = stock * price / 10^10, so price = debt * 10^10 * 10_000 / (stock * debtShareBps).
-    function _priceForDebtShare(uint256 stock, uint256 debt, uint256 debtShareBps) internal pure returns (uint256) {
-        return (debt * V1Config.VALUATION_DENOMINATOR * V1Config.BPS_DENOMINATOR) / (stock * debtShareBps);
-    }
 }
