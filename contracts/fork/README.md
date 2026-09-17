@@ -4,8 +4,9 @@ Issue #420 verification for Margin Call's Base-mainnet dependencies and risk
 assumptions. The suite verifies deployed NVDAc, token, oracle, and execution
 dependencies; oracle-state and feed-cadence assumptions; raw NVDAc valuation
 against the Coinbase/Chainlink total-return feed; and demo-sized USDC/NVDAc swaps.
-These are verification fixtures only; no production `OracleAdapter`, valuation
-module, or execution adapter is implemented here.
+Issue #422 adds production `OracleAdapter`, `ExecutionAdapter`, `CreditPool`, and
+financed `MarginCall.openPosition` coverage in `FinancedOpen.t.sol`. The remaining
+files in this directory are still verification fixtures for the pinned rails.
 
 ## Run from the repository root
 

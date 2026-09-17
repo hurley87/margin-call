@@ -1,10 +1,10 @@
-# Local signer smoke test (Anvil only)
+# Local signer smoke tests (Anvil only)
 
-This harness proves the spot Position NFT lifecycle from an ordinary private-key
-EOA. It does **not** use a frontend, Privy, Dynamic, Convex, impersonation, or
-any live chain.
+These harnesses prove Position NFT flows from an ordinary private-key EOA. They
+do **not** use a frontend, Privy, Dynamic, Convex, impersonation, or any live
+chain.
 
-**Local Anvil only.** The Solidity script reverts unless `block.chainid == 31337`.
+**Local Anvil only.** Each Solidity script reverts unless `block.chainid == 31337`.
 Issue #429 owns any later Base-mainnet signer/deployment flow.
 
 Never commit, hardcode, log, or paste a private key into source. Supply it only
@@ -13,7 +13,7 @@ command-line argument, and do not put it inline in `export ...=<key>` (both ente
 shell history). For local use, paste a **disposable Anvil development key** into
 a silent prompt.
 
-## Run locally
+## Shared setup
 
 1. Start Anvil (leave it running):
 
@@ -24,8 +24,7 @@ a silent prompt.
 2. Copy **one disposable Anvil development key** from Anvil's startup output.
    Do not use a live wallet.
 
-3. In a second terminal, prompt silently for the key. Never pass it as a flag or
-   an argument:
+3. In a second terminal, prompt silently for the key:
 
    ```sh
    read -rsp "Disposable Anvil private key: " MARGIN_CALL_PRIVATE_KEY
@@ -33,54 +32,64 @@ a silent prompt.
    export MARGIN_CALL_PRIVATE_KEY
    ```
 
-   Then run the harness either way:
+   If `MARGIN_CALL_PRIVATE_KEY` is already set (non-interactive use), skip the
+   prompt.
 
-   - from this `contracts/` directory: `./script/run-local.sh`
-   - from the repository root: `pnpm test:contracts:smoke`
+## Spot open → close
 
-   Both run the same thing; `run-local.sh` owns the chain guards and the `forge
-script` flags, so it is the one definition of the command.
+From `contracts/`: `./script/run-local.sh`  
+From repo root: `pnpm test:contracts:smoke`
 
-   If `MARGIN_CALL_PRIVATE_KEY` is already set in the environment (non-interactive
-   use), skip the prompt entirely.
+Deploys local tokens + production `MarginCall` / adapters, then:
 
-4. Optional stock amount (raw 8-decimal units; default `1e8` = 1.0 local NVDAc):
+`mint` → `approve` → `openPosition(1.0x)` → `closePosition`
 
-   ```sh
-   export MARGIN_CALL_STOCK_AMOUNT=100000000
-   ```
+Optional:
 
-5. Stop Anvil with Ctrl+C when finished. Discard the local key/session.
+```sh
+export MARGIN_CALL_STOCK_AMOUNT=100000000
+```
 
-The harness deploys a **dev/test-only** `LocalNvdaC` token and a fresh production
-`MarginCall`, mints a small balance to the signer, then broadcasts:
-
-`deploy LocalNvdaC` → `deploy MarginCall` → `mint` → `approve` → `openPosition` → `closePosition`
-
-## Broadcast artifacts
-
-Foundry writes transaction hashes under:
+Broadcast artifact:
 
 ```text
 contracts/broadcast/SpotPositionLifecycle.s.sol/31337/run-latest.json
 ```
 
-In that JSON, match `transactions[]` by `transactionType` / `contractName` / `function`:
+## Financed open
 
-| Step               | What to look for         |
-| ------------------ | ------------------------ |
-| Deploy local NVDAc | `CREATE` / `LocalNvdaC`  |
-| Deploy MarginCall  | `CREATE` / `MarginCall`  |
-| Mint               | `CALL` / `mint`          |
-| Approve            | `CALL` / `approve`       |
-| Open               | `CALL` / `openPosition`  |
-| Close              | `CALL` / `closePosition` |
+From `contracts/`: `./script/run-financed-local.sh`  
+From repo root: `pnpm test:contracts:smoke:financed`
 
-`broadcast/` is gitignored. Do not commit these files.
+Deploys mock NVDAc/USDC, a controllable oracle/router, production
+`OracleAdapter`-compatible mock, `ExecutionAdapter`, `CreditPool`, and
+`MarginCall`, funds the pool, then:
+
+`approve` → `openPosition(financed preset)`
+
+Optional:
+
+```sh
+export MARGIN_CALL_STOCK_AMOUNT=100000000
+export MARGIN_CALL_LEVERAGE_BPS=12500   # 11000 | 12500 | 14000 | 15000
+```
+
+The harness prints token id, owner, contributed/purchased NVDAc, borrowed USDC,
+pool balances, debt, and custody. Default leverage is `1.25x` (`12500`).
+
+Broadcast artifact:
+
+```text
+contracts/broadcast/FinancedPositionOpen.s.sol/31337/run-latest.json
+```
 
 ## Environment
 
-| Variable                   | Required | Purpose                                                 |
-| -------------------------- | -------- | ------------------------------------------------------- |
-| `MARGIN_CALL_PRIVATE_KEY`  | yes      | Disposable Anvil account private key. Never a live key. |
-| `MARGIN_CALL_STOCK_AMOUNT` | no       | Raw NVDAc units to open. Default `100000000`.           |
+| Variable                   | Required | Purpose                                                                        |
+| -------------------------- | -------- | ------------------------------------------------------------------------------ |
+| `MARGIN_CALL_PRIVATE_KEY`  | yes      | Disposable Anvil account private key. Never a live key.                        |
+| `MARGIN_CALL_STOCK_AMOUNT` | no       | Raw NVDAc units to open. Default `100000000`.                                  |
+| `MARGIN_CALL_LEVERAGE_BPS` | no       | Financed harness only. `11000` / `12500` / `14000` / `15000`. Default `12500`. |
+
+`broadcast/` is gitignored. Do not commit these files. Stop Anvil with Ctrl+C
+when finished and discard the local key/session.
