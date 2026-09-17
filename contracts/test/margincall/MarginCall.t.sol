@@ -6,6 +6,7 @@ import {IERC20Errors, IERC721Errors} from "@openzeppelin/contracts/interfaces/dr
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 import {MarginCall} from "../../src/MarginCall.sol";
+import {V1Config} from "../../src/V1Config.sol";
 import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 import {FalseReturningNvdaC, RevertingNvdaC} from "./PositionNftTestDoubles.sol";
 
@@ -112,6 +113,17 @@ contract MarginCallTest is MarginCallTestBase {
         marginCall.openPosition(ONE_NVDAC, SPOT_LEVERAGE, 1);
     }
 
+    /// @dev `_requireLeverageWithinCeiling` checks only `targetLeverage`, which is sound because the preset set is
+    ///      bounded by the advertised ceiling. Pin that here so adding a higher preset fails loudly.
+    function test_everySupportedPresetIsWithinTheAdvertisedCeiling() public view {
+        uint256[5] memory presets = [SPOT_LEVERAGE, LEVERAGE_1_1X, LEVERAGE_1_25X, LEVERAGE_1_4X, LEVERAGE_1_5X];
+        for (uint256 i = 0; i < presets.length; ++i) {
+            assertTrue(V1Config.isSupportedOpeningLeverage(presets[i]), "preset dropped out of the supported set");
+            assertLe(presets[i], marginCall.MAX_OPENING_LEVERAGE(), "preset exceeds MAX_OPENING_LEVERAGE");
+        }
+        assertEq(marginCall.MAX_OPENING_LEVERAGE(), LEVERAGE_1_5X, "advertised ceiling drifted");
+    }
+
     function test_validSpotPresetAndZeroMinNvdaOutSucceeds() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _open(alice, ONE_NVDAC);
@@ -120,10 +132,7 @@ contract MarginCallTest is MarginCallTestBase {
     }
 
     function testFuzz_unsupportedLeverageReverts(uint256 leverage) public {
-        vm.assume(
-            leverage != SPOT_LEVERAGE && leverage != LEVERAGE_1_1X && leverage != LEVERAGE_1_25X
-                && leverage != LEVERAGE_1_4X && leverage != LEVERAGE_1_5X
-        );
+        vm.assume(!V1Config.isSupportedOpeningLeverage(leverage));
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, leverage));
@@ -386,7 +395,7 @@ contract MarginCallTest is MarginCallTestBase {
 
     function test_openRevertsWhenFalseReturningTransferFrom() public {
         FalseReturningNvdaC token = new FalseReturningNvdaC();
-        (MarginCall isolated,,,) = _deployStackWithNvda(address(token));
+        MarginCall isolated = _deployStackWithNvda(address(token));
         vm.prank(alice);
         token.approve(address(isolated), ONE_NVDAC);
 
@@ -401,7 +410,7 @@ contract MarginCallTest is MarginCallTestBase {
 
     function test_openRevertsWhenTransferFromReverts() public {
         RevertingNvdaC token = new RevertingNvdaC();
-        (MarginCall isolated,,,) = _deployStackWithNvda(address(token));
+        MarginCall isolated = _deployStackWithNvda(address(token));
         vm.prank(alice);
         token.approve(address(isolated), ONE_NVDAC);
 

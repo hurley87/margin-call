@@ -25,17 +25,14 @@ contract FinancedPositionOpen is Script, StdAssertions {
     error ZeroStockAmount();
     error UnsupportedHarnessLeverage(uint256 leverage);
 
+    /// @dev Only what `_inspect` reads. Everything else stays a `run()` local.
     struct RunState {
         address signer;
         MockNvdaC nvdac;
         MockUsdc usdc;
-        MockOracleAdapter oracle;
-        MockSwapRouter router;
-        ExecutionAdapter execution;
         CreditPool pool;
         MarginCall marginCall;
         uint256 stockAmount;
-        uint256 leverage;
         uint256 tokenId;
     }
 
@@ -48,47 +45,45 @@ contract FinancedPositionOpen is Script, StdAssertions {
         RunState memory state;
         state.signer = vm.addr(privateKey);
         state.stockAmount = vm.envOr("MARGIN_CALL_STOCK_AMOUNT", DEFAULT_STOCK_AMOUNT);
-        state.leverage = vm.envOr("MARGIN_CALL_LEVERAGE_BPS", DEFAULT_LEVERAGE);
+        uint256 leverage = vm.envOr("MARGIN_CALL_LEVERAGE_BPS", DEFAULT_LEVERAGE);
         if (state.stockAmount == 0) {
             revert ZeroStockAmount();
         }
-        if (
-            state.leverage != V1Config.LEVERAGE_1_1X && state.leverage != V1Config.LEVERAGE_1_25X
-                && state.leverage != V1Config.LEVERAGE_1_4X && state.leverage != V1Config.LEVERAGE_1_5X
-        ) {
-            revert UnsupportedHarnessLeverage(state.leverage);
+        // Checked here, before `startBroadcast`, so an unusable preset fails before anything is deployed.
+        if (!V1Config.isFinancedLeverage(leverage)) {
+            revert UnsupportedHarnessLeverage(leverage);
         }
 
         console.log("=== LOCAL ONLY: financed Position NFT signer smoke test ===");
         console.log("chainId", block.chainid);
         console.log("signer", state.signer);
         console.log("stockAmount (raw NVDAc units)", state.stockAmount);
-        console.log("targetLeverage bps", state.leverage);
+        console.log("targetLeverage bps", leverage);
         console.log("Broadcast artifact: broadcast/FinancedPositionOpen.s.sol/31337/run-latest.json");
 
         vm.startBroadcast(privateKey);
 
         state.nvdac = new MockNvdaC();
         state.usdc = new MockUsdc();
-        state.oracle = new MockOracleAdapter();
-        state.router = new MockSwapRouter(state.usdc, state.nvdac);
-        state.execution = new ExecutionAdapter(
-            address(state.usdc), address(state.nvdac), address(state.router), BaseV1Constants.UNISWAP_FEE
+        MockOracleAdapter oracle = new MockOracleAdapter();
+        MockSwapRouter router = new MockSwapRouter(state.usdc, state.nvdac);
+        ExecutionAdapter execution = new ExecutionAdapter(
+            address(state.usdc), address(state.nvdac), address(router), BaseV1Constants.UNISWAP_FEE
         );
         state.marginCall =
-            new MarginCall(address(state.nvdac), address(state.usdc), address(state.oracle), address(state.execution));
+            new MarginCall(address(state.nvdac), address(state.usdc), address(oracle), address(execution));
         state.pool = new CreditPool(address(state.usdc), address(state.marginCall));
         state.marginCall.setCreditPool(address(state.pool));
 
-        state.oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
-        state.router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);
+        oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
+        router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);
         state.usdc.mint(address(state.pool), CREDIT_SEED);
         state.nvdac.mint(state.signer, state.stockAmount);
         state.nvdac.approve(address(state.marginCall), state.stockAmount);
 
         uint256 poolBefore = state.pool.availableCredit();
         console.log("--- tx: openPosition (financed) ---");
-        state.tokenId = state.marginCall.openPosition(state.stockAmount, state.leverage, 0);
+        state.tokenId = state.marginCall.openPosition(state.stockAmount, leverage, 0);
 
         vm.stopBroadcast();
 

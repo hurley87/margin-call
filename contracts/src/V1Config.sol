@@ -27,6 +27,10 @@ library V1Config {
     uint256 internal constant MAX_ORACLE_DEVIATION_BPS = 100;
     uint256 internal constant BPS_DENOMINATOR = 10_000;
 
+    /// @dev The adverse execution bound as a fraction of fair value in bps. Shared by the execution floor and the
+    ///      opening-principal haircut so a swap that fills at the bound cannot breach the leverage preset.
+    uint256 internal constant ADVERSE_BOUND_BPS = BPS_DENOMINATOR - MAX_ORACLE_DEVIATION_BPS;
+
     uint256 internal constant SPOT_LEVERAGE = 10_000;
     uint256 internal constant LEVERAGE_1_1X = 11_000;
     uint256 internal constant LEVERAGE_1_25X = 12_500;
@@ -40,4 +44,16 @@ library V1Config {
     /// @dev stockAmountRaw * feedAnswer * 10^6 / 10^8 / 10^8 = stockAmountRaw * feedAnswer / 10^10.
     uint256 internal constant VALUATION_DENOMINATOR =
         10 ** (uint256(NVDAC_DECIMALS) + uint256(NVDA_FEED_DECIMALS) - uint256(USDC_DECIMALS));
+
+    /// @notice The five V1 opening presets. The set lives here with the constants so the contract, the smoke
+    ///         scripts, and the tests cannot enumerate it differently.
+    function isSupportedOpeningLeverage(uint256 targetLeverage) internal pure returns (bool) {
+        return targetLeverage == SPOT_LEVERAGE || isFinancedLeverage(targetLeverage);
+    }
+
+    /// @notice The financed subset: every supported preset above 1.0x.
+    function isFinancedLeverage(uint256 targetLeverage) internal pure returns (bool) {
+        return targetLeverage == LEVERAGE_1_1X || targetLeverage == LEVERAGE_1_25X || targetLeverage == LEVERAGE_1_4X
+            || targetLeverage == LEVERAGE_1_5X;
+    }
 }

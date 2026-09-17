@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-
 import {CreditPool} from "../../src/CreditPool.sol";
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
@@ -97,9 +95,7 @@ contract FinancedOpenTest is MarginCallTestBase {
 
     function test_financedOpenEmitsCreditDrawn() public {
         _fund(alice, ONE_NVDAC);
-        uint256 contributionValue = oracle.valueUsdc(ONE_NVDAC, BaseV1Constants.PINNED_FEED_ANSWER);
-        uint256 ideal = Math.mulDiv(contributionValue, LEVERAGE_1_25X - SPOT_LEVERAGE, SPOT_LEVERAGE);
-        uint256 expectedPrincipal = Math.mulDiv(ideal, 9_900, 10_000);
+        uint256 expectedPrincipal = _expectedPrincipal(ONE_NVDAC, LEVERAGE_1_25X);
 
         vm.expectEmit(true, true, false, false, address(marginCall));
         emit MarginCall.PositionOpened(1, alice, 0);
@@ -163,9 +159,7 @@ contract FinancedOpenTest is MarginCallTestBase {
 
     function test_callerMinOutAboveFillRevertsAtomically() public {
         _fund(alice, ONE_NVDAC);
-        uint256 contributionValue = oracle.valueUsdc(ONE_NVDAC, BaseV1Constants.PINNED_FEED_ANSWER);
-        uint256 ideal = Math.mulDiv(contributionValue, LEVERAGE_1_25X - SPOT_LEVERAGE, SPOT_LEVERAGE);
-        uint256 principal = Math.mulDiv(ideal, 9_900, 10_000);
+        uint256 principal = _expectedPrincipal(ONE_NVDAC, LEVERAGE_1_25X);
         uint256 protocolMin = execution.protocolMinNvdaOutForBuy(principal, BaseV1Constants.PINNED_FEED_ANSWER);
 
         uint256 aliceBefore = nvdac.balanceOf(alice);
@@ -199,7 +193,7 @@ contract FinancedOpenTest is MarginCallTestBase {
 
     function test_worseThanBoundFillStillRespectsLeverageWhenWithinProtocolMin() public {
         // Fill exactly at the 100 bps adverse bound.
-        router.setFillBps(9_900);
+        router.setFillBps(V1Config.ADVERSE_BOUND_BPS);
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_5X, 0);
         (uint256 stock, uint256 principal,,,) = _position(tokenId);

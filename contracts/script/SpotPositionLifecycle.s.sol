@@ -8,21 +8,9 @@ import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.s
 import {CreditPool} from "../src/CreditPool.sol";
 import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
 import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
-import {IUniswapV3SwapRouter} from "../src/interfaces/IUniswapV3SwapRouter.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
-import {MockOracleAdapter} from "../test/margincall/PositionNftTestDoubles.sol";
-import {LocalNvdaC} from "./LocalNvdaC.sol";
-import {LocalUsdc} from "./LocalUsdc.sol";
-
-/// @dev Spot opens never call the router; any swap attempt fails closed.
-contract RevertingSwapRouter is IUniswapV3SwapRouter {
-    error RouterUnusedOnSpotPath();
-
-    function exactInputSingle(ExactInputSingleParams calldata) external payable returns (uint256) {
-        revert RouterUnusedOnSpotPath();
-    }
-}
+import {MockNvdaC, MockOracleAdapter, MockSwapRouter, MockUsdc} from "../test/margincall/PositionNftTestDoubles.sol";
 
 /// @title SpotPositionLifecycle
 /// @notice Local-Anvil-only smoke harness: an ordinary EOA opens, inspects, and closes a spot Position NFT.
@@ -36,13 +24,10 @@ contract SpotPositionLifecycle is Script, StdAssertions {
     error NftStillExists(uint256 tokenId, address owner);
     error UnexpectedOwnerOfRevert(uint256 tokenId, bytes data);
 
+    /// @dev Only what the `_inspect*` steps read. Everything else stays a `run()` local.
     struct RunState {
         address signer;
-        LocalNvdaC nvdac;
-        LocalUsdc usdc;
-        MockOracleAdapter oracle;
-        ExecutionAdapter execution;
-        CreditPool pool;
+        MockNvdaC nvdac;
         MarginCall marginCall;
         uint256 stockAmount;
         uint256 tokenId;
@@ -69,22 +54,22 @@ contract SpotPositionLifecycle is Script, StdAssertions {
 
         vm.startBroadcast(privateKey);
 
-        console.log("--- tx: deploy LocalNvdaC (dev/test-only) ---");
-        state.nvdac = new LocalNvdaC();
+        console.log("--- tx: deploy dev/test-only NVDAc ---");
+        state.nvdac = new MockNvdaC();
         console.log("nvdac", address(state.nvdac));
 
-        console.log("--- tx: deploy LocalUsdc + oracle + unused router + adapters ---");
-        state.usdc = new LocalUsdc();
-        state.oracle = new MockOracleAdapter();
-        RevertingSwapRouter router = new RevertingSwapRouter();
-        state.execution = new ExecutionAdapter(
-            address(state.usdc), address(state.nvdac), address(router), BaseV1Constants.UNISWAP_FEE
-        );
-        state.marginCall =
-            new MarginCall(address(state.nvdac), address(state.usdc), address(state.oracle), address(state.execution));
-        state.pool = new CreditPool(address(state.usdc), address(state.marginCall));
-        state.marginCall.setCreditPool(address(state.pool));
-        state.oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
+        console.log("--- tx: deploy USDC + oracle + fail-closed router + adapters ---");
+        MockUsdc usdc = new MockUsdc();
+        MockOracleAdapter oracle = new MockOracleAdapter();
+        // Spot opens never call the router, so any swap attempt must fail closed.
+        MockSwapRouter router = new MockSwapRouter(usdc, state.nvdac);
+        router.setShouldRevert(true);
+        ExecutionAdapter execution =
+            new ExecutionAdapter(address(usdc), address(state.nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
+        state.marginCall = new MarginCall(address(state.nvdac), address(usdc), address(oracle), address(execution));
+        CreditPool pool = new CreditPool(address(usdc), address(state.marginCall));
+        state.marginCall.setCreditPool(address(pool));
+        oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
         console.log("marginCall", address(state.marginCall));
 
         console.log("--- tx: mint local NVDAc to signer ---");

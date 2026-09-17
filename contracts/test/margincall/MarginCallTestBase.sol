@@ -4,6 +4,7 @@ pragma solidity 0.8.29;
 import {Test} from "forge-std/Test.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
@@ -146,15 +147,20 @@ abstract contract MarginCallTestBase is Test {
         return string.concat(TOKEN_URI_PREFIX, Base64.encode(bytes(_expectedTokenJson(tokenId))));
     }
 
-    function _deployStackWithNvda(address nvdac_)
-        internal
-        returns (MarginCall mc, MockUsdc usdc_, MockOracleAdapter oracle_, ExecutionAdapter execution_)
-    {
-        usdc_ = new MockUsdc();
-        oracle_ = new MockOracleAdapter();
+    function _deployStackWithNvda(address nvdac_) internal returns (MarginCall mc) {
+        MockUsdc usdc_ = new MockUsdc();
+        MockOracleAdapter oracle_ = new MockOracleAdapter();
         MockNvdaC inventory = new MockNvdaC();
         MockSwapRouter router_ = new MockSwapRouter(usdc_, inventory);
-        execution_ = new ExecutionAdapter(address(usdc_), nvdac_, address(router_), BaseV1Constants.UNISWAP_FEE);
+        ExecutionAdapter execution_ =
+            new ExecutionAdapter(address(usdc_), nvdac_, address(router_), BaseV1Constants.UNISWAP_FEE);
         mc = new MarginCall(nvdac_, address(usdc_), address(oracle_), address(execution_));
+    }
+
+    /// @dev Mirror of `MarginCall._sizePrincipal`: the ideal borrow for the preset, haircut by the adverse bound.
+    function _expectedPrincipal(uint256 stockAmount, uint256 leverage) internal view returns (uint256) {
+        uint256 contributionValue = oracle.valueUsdc(stockAmount, BaseV1Constants.PINNED_FEED_ANSWER);
+        uint256 ideal = Math.mulDiv(contributionValue, leverage - SPOT_LEVERAGE, V1Config.BPS_DENOMINATOR);
+        return Math.mulDiv(ideal, V1Config.ADVERSE_BOUND_BPS, V1Config.BPS_DENOMINATOR);
     }
 }

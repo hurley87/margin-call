@@ -2,7 +2,6 @@
 pragma solidity 0.8.29;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -11,6 +10,7 @@ import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
 import {IUniswapV3SwapRouter} from "../../src/interfaces/IUniswapV3SwapRouter.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
+import {NvdaValuation} from "../valuation/NvdaValuation.sol";
 import {V1Config} from "../../src/V1Config.sol";
 
 /// @dev Standard raw-unit ERC-20 with NVDAc's 8 decimals. Not production NVDAc.
@@ -57,10 +57,6 @@ contract MockOracleAdapter is IOracleAdapter {
         state = state_;
     }
 
-    function setPrice(uint256 price_) external {
-        price = price_;
-    }
-
     function latestObservation() external view override returns (Observation memory observation) {
         observation.state = state;
         observation.price = price;
@@ -69,25 +65,23 @@ contract MockOracleAdapter is IOracleAdapter {
     }
 
     function valueUsdc(uint256 stockAmountRaw, uint256 feedAnswer) external pure override returns (uint256) {
-        return Math.mulDiv(stockAmountRaw, feedAnswer, V1Config.VALUATION_DENOMINATOR, Math.Rounding.Floor);
+        return NvdaValuation.toUsdcRawFloor(stockAmountRaw, feedAnswer);
     }
 }
 
 /// @dev Exact-input Uniswap stand-in with configurable fill rate versus the oracle-fair amount.
 contract MockSwapRouter is IUniswapV3SwapRouter {
-    IERC20 public immutable USDC;
+    MockUsdc public immutable USDC;
     MockNvdaC public immutable NVDAC;
-    MockUsdc public immutable USDC_MINTABLE;
-    /// @dev Fill as a fraction of oracle-fair output in bps. `9900` = 100 bps adverse.
-    uint256 public fillBps = 9_900;
+    /// @dev Fill as a fraction of oracle-fair output in bps. Defaults to exactly the 100 bps adverse bound.
+    uint256 public fillBps = V1Config.ADVERSE_BOUND_BPS;
     bool public shouldRevert;
     uint256 public livePrice = BaseV1Constants.PINNED_FEED_ANSWER;
 
     error MockRouterRevert();
 
     constructor(MockUsdc usdc_, MockNvdaC nvdac_) {
-        USDC = IERC20(address(usdc_));
-        USDC_MINTABLE = usdc_;
+        USDC = usdc_;
         NVDAC = nvdac_;
     }
 
@@ -129,7 +123,7 @@ contract MockSwapRouter is IUniswapV3SwapRouter {
                 Math.Rounding.Ceil
             );
             require(amountOut >= params.amountOutMinimum, "Too little received");
-            USDC_MINTABLE.mint(params.recipient, amountOut);
+            USDC.mint(params.recipient, amountOut);
             return amountOut;
         }
         revert("unsupported pair");

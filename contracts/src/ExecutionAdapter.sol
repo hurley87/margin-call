@@ -26,8 +26,6 @@ contract ExecutionAdapter is IExecutionAdapter {
     IUniswapV3SwapRouter public immutable ROUTER;
     uint24 public immutable FEE;
 
-    uint256 private constant ADVERSE_BOUND_BPS = V1Config.BPS_DENOMINATOR - V1Config.MAX_ORACLE_DEVIATION_BPS;
-
     constructor(address usdc_, address nvdac_, address router_, uint24 fee_) {
         if (usdc_ == address(0) || nvdac_ == address(0) || router_ == address(0)) {
             revert ZeroAddress();
@@ -99,7 +97,7 @@ contract ExecutionAdapter is IExecutionAdapter {
         _validateLivePrice(livePrice);
         return Math.mulDiv(
             usdcAmountIn,
-            V1Config.VALUATION_DENOMINATOR * ADVERSE_BOUND_BPS,
+            V1Config.VALUATION_DENOMINATOR * V1Config.ADVERSE_BOUND_BPS,
             livePrice * V1Config.BPS_DENOMINATOR,
             Math.Rounding.Ceil
         );
@@ -110,7 +108,7 @@ contract ExecutionAdapter is IExecutionAdapter {
         _validateLivePrice(livePrice);
         return Math.mulDiv(
             nvdaAmountIn,
-            livePrice * ADVERSE_BOUND_BPS,
+            livePrice * V1Config.ADVERSE_BOUND_BPS,
             V1Config.VALUATION_DENOMINATOR * V1Config.BPS_DENOMINATOR,
             Math.Rounding.Ceil
         );

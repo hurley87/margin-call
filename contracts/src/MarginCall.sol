@@ -37,7 +37,6 @@ contract MarginCall is ERC721 {
     error CreditPoolAlreadySet();
     error InvalidCreditPool();
     error OracleNotLive(IOracleAdapter.State state);
-    error InsufficientCredit(uint256 requested, uint256 available);
     error ContributionTooSmall(uint256 contributionValue);
     error LeverageExceeded(uint256 targetLeverage, uint256 nav, uint256 debt);
 
@@ -101,7 +100,7 @@ contract MarginCall is ERC721 {
         if (stockAmount == 0) {
             revert ZeroStockAmount();
         }
-        if (!_isSupportedLeverage(targetLeverage)) {
+        if (!V1Config.isSupportedOpeningLeverage(targetLeverage)) {
             revert UnsupportedLeverage(targetLeverage);
         }
 
@@ -121,11 +120,11 @@ contract MarginCall is ERC721 {
         tokenId = ++_nextTokenId;
         Position storage position = positions[tokenId];
         position.stockAmount = finalStock;
-        position.principal = principal;
         position.lastAccruedAt = block.timestamp;
 
         emit PositionOpened(tokenId, msg.sender, finalStock);
         if (principal != 0) {
+            position.principal = principal;
             emit CreditDrawn(tokenId, principal);
         }
         _safeMint(msg.sender, tokenId);
@@ -194,18 +193,13 @@ contract MarginCall is ERC721 {
             revert ContributionTooSmall(contributionValue);
         }
 
-        uint256 available = pool.availableCredit();
-        if (principal > available) {
-            revert InsufficientCredit(principal, available);
-        }
-
+        // Capacity is the pool's invariant: `draw` re-checks and reverts, so a pre-read here would only
+        // duplicate the rule and pay a second `balanceOf`.
         pool.draw(principal);
 
-        uint256 stockBefore = NVDAC.balanceOf(address(this));
         USDC.forceApprove(address(EXECUTION), principal);
-        EXECUTION.buyNvda(principal, minNvdaOut, observation.price);
+        uint256 bought = EXECUTION.buyNvda(principal, minNvdaOut, observation.price);
         USDC.forceApprove(address(EXECUTION), 0);
-        uint256 bought = NVDAC.balanceOf(address(this)) - stockBefore;
 
         finalStock = contributedStock + bought;
         uint256 nav = ORACLE.valueUsdc(finalStock, observation.price);
@@ -216,29 +210,18 @@ contract MarginCall is ERC721 {
     function _sizePrincipal(uint256 contributionValue, uint256 targetLeverage) private pure returns (uint256) {
         uint256 ideal =
             Math.mulDiv(contributionValue, targetLeverage - BPS_DENOMINATOR, BPS_DENOMINATOR, Math.Rounding.Floor);
-        return Math.mulDiv(
-            ideal,
-            V1Config.BPS_DENOMINATOR - V1Config.MAX_ORACLE_DEVIATION_BPS,
-            V1Config.BPS_DENOMINATOR,
-            Math.Rounding.Floor
-        );
+        return Math.mulDiv(ideal, V1Config.ADVERSE_BOUND_BPS, V1Config.BPS_DENOMINATOR, Math.Rounding.Floor);
     }
 
-    /// @dev Enforce `nav / (nav - debt) <= targetLeverage` and `<= 1.5x` without division by zero.
+    /// @dev Enforce `nav / (nav - debt) <= targetLeverage` without division by zero. `targetLeverage` is already
+    ///      restricted to the V1 presets, which top out at `MAX_OPENING_LEVERAGE`.
     function _requireLeverageWithinCeiling(uint256 nav, uint256 debt, uint256 targetLeverage) private pure {
-        if (nav == 0 || debt >= nav) {
+        if (debt >= nav) {
             revert LeverageExceeded(targetLeverage, nav, debt);
         }
         // nav / (nav - debt) <= L  <=>  nav * BPS <= (nav - debt) * L
-        uint256 ceiling = targetLeverage < MAX_OPENING_LEVERAGE ? targetLeverage : MAX_OPENING_LEVERAGE;
-        if (nav * BPS_DENOMINATOR > (nav - debt) * ceiling) {
-            revert LeverageExceeded(ceiling, nav, debt);
+        if (nav * BPS_DENOMINATOR > (nav - debt) * targetLeverage) {
+            revert LeverageExceeded(targetLeverage, nav, debt);
         }
-    }
-
-    function _isSupportedLeverage(uint256 targetLeverage) private pure returns (bool) {
-        return targetLeverage == V1Config.SPOT_LEVERAGE || targetLeverage == V1Config.LEVERAGE_1_1X
-            || targetLeverage == V1Config.LEVERAGE_1_25X || targetLeverage == V1Config.LEVERAGE_1_4X
-            || targetLeverage == V1Config.LEVERAGE_1_5X;
     }
 }

@@ -35,19 +35,15 @@ contract OracleAdapter is IOracleAdapter {
 
     /// @inheritdoc IOracleAdapter
     function latestObservation() external override returns (Observation memory observation) {
-        bool registryOk = true;
         bool registryPaused;
         try REGISTRY.getOracleParams(NVDAC) returns (uint256, bool paused) {
             registryPaused = paused;
         } catch {
-            registryOk = false;
-        }
-
-        if (!registryOk) {
             observation.state = State.INVALID;
             return observation;
         }
 
+        // `feedOk` must survive: the `HELD` branch below legitimately runs with a dead price feed.
         bool feedOk = true;
         uint80 roundId;
         int256 answer;
@@ -81,17 +77,17 @@ contract OracleAdapter is IOracleAdapter {
             return observation;
         }
 
-        bool sequencerOk = true;
         int256 sequencerAnswer;
         uint256 sequencerStartedAt;
         try SEQUENCER_FEED.latestRoundData() returns (uint80, int256 answer_, uint256 startedAt_, uint256, uint80) {
             sequencerAnswer = answer_;
             sequencerStartedAt = startedAt_;
         } catch {
-            sequencerOk = false;
+            observation.state = State.INVALID;
+            return observation;
         }
 
-        if (!feedOk || !sequencerOk) {
+        if (!feedOk) {
             observation.state = State.INVALID;
             return observation;
         }
@@ -108,11 +104,9 @@ contract OracleAdapter is IOracleAdapter {
             observation.state = State.INVALID;
             return observation;
         }
-        if (hasObservedHold) {
-            if (roundId <= heldRoundId || updatedAt <= heldUpdatedAt) {
-                observation.state = State.INVALID;
-                return observation;
-            }
+        if (hasObservedHold && (roundId <= heldRoundId || updatedAt <= heldUpdatedAt)) {
+            observation.state = State.INVALID;
+            return observation;
         }
 
         observation.state = State.LIVE;
