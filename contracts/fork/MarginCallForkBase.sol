@@ -29,6 +29,7 @@ abstract contract MarginCallForkBase is Test {
     CreditPool internal pool;
 
     address internal alice;
+    address internal treasury;
 
     /// @dev Distinct per suite so funded balances never collide across fork tests.
     function _forkActorLabel() internal pure virtual returns (string memory);
@@ -36,6 +37,7 @@ abstract contract MarginCallForkBase is Test {
     function setUp() public virtual {
         vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), BASE_BLOCK);
         alice = makeAddr(_forkActorLabel());
+        treasury = makeAddr("treasury");
         // Ensure the opener is a pure EOA on the forked chain (safeMint rejects contract recipients
         // that lack IERC721Receiver).
         vm.etch(alice, "");
@@ -53,7 +55,7 @@ abstract contract MarginCallForkBase is Test {
             BaseV1Constants.UNISWAP_FEE
         );
         marginCall = new MarginCall(BaseV1Constants.NVDAC, BaseV1Constants.USDC, address(oracle), address(execution));
-        pool = new CreditPool(BaseV1Constants.USDC, address(marginCall), makeAddr("treasury"));
+        pool = new CreditPool(BaseV1Constants.USDC, address(marginCall), treasury);
         marginCall.setCreditPool(address(pool));
 
         deal(BaseV1Constants.USDC, address(pool), CREDIT_SEED);

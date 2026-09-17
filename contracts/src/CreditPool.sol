@@ -34,7 +34,8 @@ contract CreditPool is ICreditPool {
     }
 
     /// @notice Liquid USDC available for financed openings.
-    function availableCredit() external view override returns (uint256) {
+    /// @dev `public`, not `external`: `draw` and `withdraw` call it internally so "idle" has one definition here.
+    function availableCredit() public view override returns (uint256) {
         return USDC.balanceOf(address(this));
     }
 
@@ -43,7 +44,7 @@ contract CreditPool is ICreditPool {
         if (msg.sender != borrower) {
             revert UnauthorizedBorrower(msg.sender);
         }
-        uint256 available = USDC.balanceOf(address(this));
+        uint256 available = availableCredit();
         if (amount > available) {
             revert InsufficientCredit(amount, available);
         }
@@ -56,7 +57,7 @@ contract CreditPool is ICreditPool {
         if (msg.sender != treasury) {
             revert UnauthorizedTreasury(msg.sender);
         }
-        uint256 available = USDC.balanceOf(address(this));
+        uint256 available = availableCredit();
         if (amount > available) {
             revert InsufficientCredit(amount, available);
         }
