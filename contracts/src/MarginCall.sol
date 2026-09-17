@@ -15,9 +15,10 @@ import {V1Config} from "./V1Config.sol";
 
 /// @title MarginCall
 /// @notice Position NFT coordinator: custody NVDAc, open spot or financed positions, and mint ERC-721 ownership.
-/// @dev `MarginCall` is the ERC-721. Token existence is the active-position status. Executor appointment,
-///      reduceExposure, and liquidation are later slices. Borrowed USDC can only buy NVDAc through the fixed
-///      Uniswap execution path. Debt accrues lazily at the immutable V1 10% APR; `repay` restores USDC to the pool.
+/// @dev `MarginCall` is the ERC-721. Token existence is the active-position status. The owner may appoint one
+///      executor per position via `setExecutor`; reduceExposure and liquidation are later slices. Borrowed USDC
+///      can only buy NVDAc through the fixed Uniswap execution path. Debt accrues lazily at the immutable V1 10%
+///      APR; `repay` restores USDC to the pool. Real ownership transfers clear the stored executor in `_update`.
 contract MarginCall is ERC721 {
     using SafeERC20 for IERC20;
 
@@ -47,6 +48,7 @@ contract MarginCall is ERC721 {
     event PositionOpened(uint256 indexed tokenId, address indexed owner, uint256 stockAmount);
     event CreditDrawn(uint256 indexed tokenId, uint256 usdcAmount);
     event DebtRepaid(uint256 indexed tokenId, uint256 usdcAmount);
+    event ExecutorUpdated(uint256 indexed tokenId, address indexed previousExecutor, address indexed newExecutor);
     event PositionClosed(uint256 indexed tokenId, address indexed owner, uint256 stockAmount);
     event CreditPoolSet(address indexed creditPool);
 
@@ -164,6 +166,20 @@ contract MarginCall is ERC721 {
         NVDAC.safeTransfer(owner, stockAmount);
 
         emit PositionClosed(tokenId, owner, stockAmount);
+    }
+
+    /// @notice Owner-only appointment of the single optional executor for `tokenId`.
+    /// @dev Supports setting, replacing, and clearing (`address(0)`). Oracle-free. ERC-721 approvals and the
+    ///      current executor cannot call this. Transfer clears the stored executor via `_update`.
+    function setExecutor(uint256 tokenId, address executor) external {
+        address owner = _requireOwned(tokenId);
+        if (msg.sender != owner) {
+            revert NotPositionOwner(msg.sender, owner);
+        }
+        Position storage position = positions[tokenId];
+        address previous = position.executor;
+        position.executor = executor;
+        emit ExecutorUpdated(tokenId, previous, executor);
     }
 
     /// @notice Accrue interest, then repay up to `amount` of current debt with external USDC.

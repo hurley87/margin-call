@@ -26,6 +26,8 @@
 
 # financed: see script/README.md / pnpm test:contracts:smoke:financed
 
+# executor transfer: see script/README.md / pnpm test:contracts:smoke:executor-transfer
+
 #
 
 # Production contracts in src/:
