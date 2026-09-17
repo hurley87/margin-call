@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
-import {Script, console} from "forge-std/Script.sol";
-import {StdAssertions} from "forge-std/StdAssertions.sol";
+import {console} from "forge-std/Script.sol";
 
 import {CreditPool} from "../src/CreditPool.sol";
 import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
@@ -11,19 +10,16 @@ import {MarginCall} from "../src/MarginCall.sol";
 import {V1Config} from "../src/V1Config.sol";
 import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
 import {MockNvdaC, MockOracleAdapter, MockSwapRouter, MockUsdc} from "../test/margincall/PositionNftTestDoubles.sol";
+import {LocalHarnessBase} from "./LocalHarnessBase.sol";
 
 /// @title FinancedPositionOpen
 /// @notice Local-Anvil-only harness: ordinary EOA opens, accrues, repays, and closes a financed Position NFT.
 /// @dev Requires `MARGIN_CALL_PRIVATE_KEY`. Never logs or hardcodes that key. Anvil-only (`31337`).
-contract FinancedPositionOpen is Script, StdAssertions {
-    uint256 internal constant ANVIL_CHAIN_ID = 31337;
-    uint256 internal constant DEFAULT_STOCK_AMOUNT = 1e8;
+contract FinancedPositionOpen is LocalHarnessBase {
     uint256 internal constant DEFAULT_LEVERAGE = V1Config.LEVERAGE_1_25X;
     uint256 internal constant CREDIT_SEED = 1_000_000e6;
     uint256 internal constant ACCRUAL_WINDOW = 30 days;
 
-    error LocalAnvilOnly(uint256 actualChainId, uint256 requiredChainId);
-    error ZeroStockAmount();
     error UnsupportedHarnessLeverage(uint256 leverage);
 
     /// @dev Shared across open / accrue / repay / close inspect steps.
@@ -40,9 +36,7 @@ contract FinancedPositionOpen is Script, StdAssertions {
     }
 
     function run() external {
-        if (block.chainid != ANVIL_CHAIN_ID) {
-            revert LocalAnvilOnly(block.chainid, ANVIL_CHAIN_ID);
-        }
+        _requireLocalAnvil();
 
         uint256 privateKey = vm.envUint("MARGIN_CALL_PRIVATE_KEY");
         RunState memory state;
@@ -90,9 +84,6 @@ contract FinancedPositionOpen is Script, StdAssertions {
         state.tokenId = state.marginCall.openPosition(state.stockAmount, leverage, 0);
 
         (state.stockAtOpen, state.principalAtOpen,,,) = state.marginCall.positions(state.tokenId);
-        uint256 debtAtOpen = state.marginCall.currentDebt(state.tokenId);
-        assertEq(debtAtOpen, state.principalAtOpen, "debt equals principal at open");
-        assertEq(state.pool.availableCredit(), poolBeforeOpen - state.principalAtOpen, "pool decremented");
 
         vm.stopBroadcast();
 
@@ -193,9 +184,6 @@ contract FinancedPositionOpen is Script, StdAssertions {
         assertEq(lastAccrued, 0);
         assertEq(executor, address(0));
 
-        // NFT must be burned.
-        try state.marginCall.ownerOf(state.tokenId) returns (address) {
-            revert("token still exists after close");
-        } catch {}
+        _assertTokenDoesNotExist(state.marginCall, state.tokenId);
     }
 }

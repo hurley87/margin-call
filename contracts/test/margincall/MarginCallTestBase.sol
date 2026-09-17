@@ -70,6 +70,12 @@ abstract contract MarginCallTestBase is Test {
         nvdac.approve(address(marginCall), type(uint256).max);
     }
 
+    function _fundUsdc(address user, uint256 amount) internal {
+        usdc.mint(user, amount);
+        vm.prank(user);
+        usdc.approve(address(marginCall), type(uint256).max);
+    }
+
     function _open(address user, uint256 amount) internal returns (uint256 tokenId) {
         // Use the pinned constant, not `marginCall.SPOT_LEVERAGE()`: `vm.prank` covers only the next call, so a
         // getter call here would consume the prank and `openPosition` would run as the test contract.
@@ -155,6 +161,16 @@ abstract contract MarginCallTestBase is Test {
         ExecutionAdapter execution_ =
             new ExecutionAdapter(address(usdc_), nvdac_, address(router_), BaseV1Constants.UNISWAP_FEE);
         mc = new MarginCall(nvdac_, address(usdc_), address(oracle_), address(execution_));
+    }
+
+    /// @dev Mirror of `MarginCall._unaccruedInterest`: simple interest at the immutable V1 APR, floored.
+    function _expectedUnaccrued(uint256 principal, uint256 elapsed) internal pure returns (uint256) {
+        return Math.mulDiv(
+            principal,
+            V1Config.BORROW_APR_BPS * elapsed,
+            V1Config.BPS_DENOMINATOR * V1Config.SECONDS_PER_YEAR,
+            Math.Rounding.Floor
+        );
     }
 
     /// @dev Mirror of `MarginCall._sizePrincipal`: the ideal borrow for the preset, haircut by the adverse bound.

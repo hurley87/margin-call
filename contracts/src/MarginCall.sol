@@ -180,22 +180,18 @@ contract MarginCall is ERC721 {
 
         _accrue(position);
 
-        uint256 debtBefore = position.principal + position.accruedInterest;
-        uint256 payAmount = amount < debtBefore ? amount : debtBefore;
+        uint256 principal = position.principal;
+        uint256 accrued = position.accruedInterest;
+        uint256 payAmount = Math.min(amount, principal + accrued);
         if (payAmount == 0) {
             revert ZeroRepayment();
         }
 
-        USDC.safeTransferFrom(msg.sender, address(this), payAmount);
+        uint256 interestPay = Math.min(payAmount, accrued);
+        position.accruedInterest = accrued - interestPay;
+        position.principal = principal - (payAmount - interestPay);
 
-        uint256 interestPay = payAmount;
-        if (interestPay > position.accruedInterest) {
-            interestPay = position.accruedInterest;
-        }
-        position.accruedInterest -= interestPay;
-        position.principal -= payAmount - interestPay;
-
-        USDC.safeTransfer(address(creditPool), payAmount);
+        USDC.safeTransferFrom(msg.sender, address(creditPool), payAmount);
 
         emit DebtRepaid(tokenId, payAmount);
     }
@@ -205,16 +201,7 @@ contract MarginCall is ERC721 {
     ///      V1 10% APR. Spot opens stay at zero debt.
     function currentDebt(uint256 tokenId) public view returns (uint256) {
         Position storage position = positions[tokenId];
-        uint256 principal = position.principal;
-        uint256 accrued = position.accruedInterest;
-        if (principal == 0) {
-            return accrued;
-        }
-        uint256 lastAccruedAt = position.lastAccruedAt;
-        if (block.timestamp <= lastAccruedAt) {
-            return principal + accrued;
-        }
-        return principal + accrued + _unaccruedInterest(principal, block.timestamp - lastAccruedAt);
+        return position.principal + position.accruedInterest + _pendingInterest(position);
     }
 
     /// @notice Minimal identity metadata for a live Position NFT. Full living presentation is owned by a later slice.
@@ -267,17 +254,23 @@ contract MarginCall is ERC721 {
         _requireLeverageWithinCeiling(nav, principal, targetLeverage);
     }
 
-    /// @dev Fold view-time unaccrued interest into the checkpoint and bump `lastAccruedAt`. No-op when principal is
-    ///      zero (interest is not charged without outstanding principal) or when no time has elapsed.
-    function _accrue(Position storage position) private {
+    /// @dev Interest owed since the checkpoint, shared by the `currentDebt` view and the `_accrue` write so the two
+    ///      can never disagree. Zero when principal is zero (interest is not charged without outstanding principal)
+    ///      or when no time has elapsed.
+    function _pendingInterest(Position storage position) private view returns (uint256) {
         uint256 principal = position.principal;
-        if (principal == 0) {
-            position.lastAccruedAt = block.timestamp;
-            return;
-        }
         uint256 lastAccruedAt = position.lastAccruedAt;
-        if (block.timestamp > lastAccruedAt) {
-            position.accruedInterest += _unaccruedInterest(principal, block.timestamp - lastAccruedAt);
+        if (principal == 0 || block.timestamp <= lastAccruedAt) {
+            return 0;
+        }
+        return _unaccruedInterest(principal, block.timestamp - lastAccruedAt);
+    }
+
+    /// @dev Fold pending interest into the checkpoint and bump `lastAccruedAt`.
+    function _accrue(Position storage position) private {
+        uint256 pending = _pendingInterest(position);
+        if (pending != 0) {
+            position.accruedInterest += pending;
         }
         position.lastAccruedAt = block.timestamp;
     }

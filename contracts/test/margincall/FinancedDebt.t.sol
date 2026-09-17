@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
-import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {stdStorage, StdStorage} from "forge-std/StdStorage.sol";
 
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
@@ -35,7 +34,7 @@ contract FinancedDebtTest is MarginCallTestBase {
         uint256 tokenId = _open(alice, ONE_NVDAC);
         assertEq(marginCall.currentDebt(tokenId), 0);
 
-        vm.warp(OPENED_AT + 365 days);
+        vm.warp(OPENED_AT + V1Config.SECONDS_PER_YEAR);
         assertEq(marginCall.currentDebt(tokenId), 0);
         (, uint256 principal, uint256 accrued,,) = _position(tokenId);
         assertEq(principal, 0);
@@ -47,8 +46,8 @@ contract FinancedDebtTest is MarginCallTestBase {
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
         (, uint256 principal,,,) = _position(tokenId);
 
-        vm.warp(OPENED_AT + 365 days);
-        uint256 interest = _expectedUnaccrued(principal, 365 days);
+        vm.warp(OPENED_AT + V1Config.SECONDS_PER_YEAR);
+        uint256 interest = _expectedUnaccrued(principal, V1Config.SECONDS_PER_YEAR);
         assertEq(interest, principal / 10, "one year at 10% floors to exactly 10% of principal");
         assertEq(marginCall.currentDebt(tokenId), principal + interest);
 
@@ -67,7 +66,7 @@ contract FinancedDebtTest is MarginCallTestBase {
         (, uint256 principalAfter, uint256 accruedAfter, uint256 lastAccruedAfter,) = _position(tokenId);
         assertEq(principalAfter, principal, "interest-first leaves principal untouched");
         assertEq(accruedAfter, interest - payAmount);
-        assertEq(lastAccruedAfter, OPENED_AT + 365 days);
+        assertEq(lastAccruedAfter, OPENED_AT + V1Config.SECONDS_PER_YEAR);
         assertEq(marginCall.currentDebt(tokenId), principal + accruedAfter);
         assertEq(pool.availableCredit(), poolBefore + payAmount);
         assertEq(usdc.balanceOf(alice), aliceUsdcBefore - payAmount);
@@ -201,27 +200,17 @@ contract FinancedDebtTest is MarginCallTestBase {
         uint256 oneSecondInterest = _expectedUnaccrued(principal, 1);
         assertEq(marginCall.currentDebt(tokenId), principal + oneSecondInterest);
 
-        vm.warp(OPENED_AT + 365 days);
+        vm.warp(OPENED_AT + V1Config.SECONDS_PER_YEAR);
         assertEq(marginCall.currentDebt(tokenId), principal + principal / 10);
 
-        // Checkpoint via a dust repay equal to one unit of interest (or 1 wei if year interest is large).
-        uint256 yearInterest = principal / 10;
-        uint256 dust = yearInterest > 0 ? 1 : 0;
-        if (dust == 0) {
-            // Pathological tiny principal: still prove checkpoint does not invent debt.
-            _fundUsdc(alice, 1);
-            vm.prank(alice);
-            marginCall.repay(tokenId, type(uint256).max);
-            assertEq(marginCall.currentDebt(tokenId), 0);
-            return;
-        }
-
-        _fundUsdc(alice, dust);
+        // Checkpoint via a one-unit dust repay. The fixture is deterministic, so year interest is always nonzero.
+        assertGt(principal / 10, 0, "fixture must produce nonzero year interest");
+        _fundUsdc(alice, 1);
         vm.prank(alice);
-        marginCall.repay(tokenId, dust);
+        marginCall.repay(tokenId, 1);
 
         (, uint256 principalAfter, uint256 accruedAfter, uint256 lastAccruedAfter,) = _position(tokenId);
-        assertEq(lastAccruedAfter, OPENED_AT + 365 days);
+        assertEq(lastAccruedAfter, OPENED_AT + V1Config.SECONDS_PER_YEAR);
         assertEq(marginCall.currentDebt(tokenId), principalAfter + accruedAfter, "checkpoint matches view");
 
         // Immediate second repay at the same timestamp must not invent or erase unexpected dust.
@@ -282,22 +271,6 @@ contract FinancedDebtTest is MarginCallTestBase {
         vm.prank(bob);
         marginCall.repay(tokenId, debt);
         assertEq(marginCall.currentDebt(tokenId), 0);
-    }
-
-    /// @dev Mirror of `MarginCall._unaccruedInterest`.
-    function _expectedUnaccrued(uint256 principal, uint256 elapsed) internal pure returns (uint256) {
-        return Math.mulDiv(
-            principal,
-            V1Config.BORROW_APR_BPS * elapsed,
-            V1Config.BPS_DENOMINATOR * V1Config.SECONDS_PER_YEAR,
-            Math.Rounding.Floor
-        );
-    }
-
-    function _fundUsdc(address user, uint256 amount) internal {
-        usdc.mint(user, amount);
-        vm.prank(user);
-        usdc.approve(address(marginCall), type(uint256).max);
     }
 
     /// @dev Write `positions[tokenId].executor` without a public setter (Slice 4).
