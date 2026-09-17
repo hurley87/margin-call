@@ -267,6 +267,12 @@ contract MarginCall is ERC721 {
     }
 
     /// @dev Fold pending interest into the checkpoint and bump `lastAccruedAt`.
+    ///      Checkpointing over an interval too short to accrue a whole raw USDC unit floors that remainder away
+    ///      rather than carrying it forward. The loss is bounded and not worth exploiting: `repay` rejects zero
+    ///      payments, so each checkpoint must retire at least one raw unit of real debt in order to discard
+    ///      strictly less than one raw unit of interest — a whole transaction per micro-USDC, and the position
+    ///      pays itself off long before the leak is material. Carrying the remainder exactly would need a
+    ///      per-position accumulator. Pinned by `test_repeatedDustCheckpointsCannotEraseDebtBeyondPayment`.
     function _accrue(Position storage position) private {
         uint256 pending = _pendingInterest(position);
         if (pending != 0) {
@@ -276,6 +282,8 @@ contract MarginCall is ERC721 {
     }
 
     /// @dev `principal * 10% * elapsed / 365 days`, floored. Single mulDiv avoids intermediate rounding drift.
+    ///      Flooring is deliberate and always resolves in the borrower's favour: a position can be undercharged by
+    ///      less than one raw USDC unit per accrual, but is never overcharged and never has principal invented.
     function _unaccruedInterest(uint256 principal, uint256 elapsed) private pure returns (uint256) {
         return Math.mulDiv(
             principal,

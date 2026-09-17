@@ -224,6 +224,51 @@ contract FinancedDebtTest is MarginCallTestBase {
         assertEq(aFinal, 0);
     }
 
+    /// @dev Repeated checkpointing over intervals too short to accrue a whole raw USDC unit floors that remainder
+    ///      away instead of carrying it. This pins the behaviour on both sides: no principal is ever erased beyond
+    ///      what was actually paid, flooring can only favour the borrower, and the interest that escapes is capped
+    ///      at one raw unit per checkpoint — each of which costs a whole `repay` transaction and retires a whole
+    ///      raw unit of real debt, because `repay` rejects zero payments.
+    function test_repeatedDustCheckpointsCannotEraseDebtBeyondPayment() public {
+        _fund(alice, ONE_NVDAC);
+        _fund(bob, ONE_NVDAC);
+        uint256 idle = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
+        uint256 churned = _openFinanced(bob, ONE_NVDAC, LEVERAGE_1_25X, 0);
+
+        (, uint256 principal,,,) = _position(idle);
+        // Short enough that this principal accrues strictly less than one raw USDC unit per step.
+        uint256 dustInterval = 5;
+        assertEq(_expectedUnaccrued(principal, dustInterval), 0, "interval must floor to zero interest");
+
+        uint256 checkpoints = 200;
+        _fundUsdc(bob, checkpoints);
+        for (uint256 i = 0; i < checkpoints; ++i) {
+            vm.warp(block.timestamp + dustInterval);
+            vm.prank(bob);
+            marginCall.repay(churned, 1);
+        }
+
+        (, uint256 churnedPrincipal, uint256 churnedAccrued,,) = _position(churned);
+        assertEq(churnedPrincipal, principal - checkpoints, "principal falls by exactly what was paid, no more");
+        assertEq(churnedAccrued, 0, "every dust interval floored to zero interest");
+
+        uint256 idleDebt = marginCall.currentDebt(idle);
+        uint256 churnedSettled = marginCall.currentDebt(churned) + checkpoints;
+        assertGt(idleDebt, principal, "the untouched twin really did accrue over the same window");
+        assertLe(churnedSettled, idleDebt, "checkpointing must never invent debt against the borrower");
+        assertLe(idleDebt - churnedSettled, checkpoints, "escaped interest is capped at one raw unit per checkpoint");
+    }
+
+    /// @dev The dust window closes as positions grow. Base produces a block every 2s, so 2s is the tightest interval
+    ///      a caller can actually checkpoint at, and above roughly 157 USDC of principal even one block accrues a
+    ///      whole raw unit — leaving nothing to floor away.
+    function test_dustWindowClosesOncePrincipalIsMeaningful() public pure {
+        uint256 baseBlockTime = 2;
+        uint256 threshold = 157_680_000;
+        assertEq(_expectedUnaccrued(threshold - 1, baseBlockTime), 0, "just below, a block still floors to nothing");
+        assertEq(_expectedUnaccrued(threshold, baseBlockTime), 1, "at the threshold, one block accrues a raw unit");
+    }
+
     function test_repayAndCloseUnderHeldInvalidAndRevertingOracle() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
