@@ -47,8 +47,8 @@ capability only through separately scoped work.
     Curated addresses and tx evidence: `contracts/deployments/base.json`.
     Scripts/runbook: `script/BASE_MAINNET.md`. Dry-run wrappers remain available;
     live wrappers stay gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`.
-    Source verification was skipped on first live run (`ETHERSCAN_API_KEY` unset);
-    re-verify with Basescan when a key is available. No frontend yet.
+    All four contracts are source-verified on Basescan (solc 0.8.29, 1M optimizer runs).
+    No frontend yet.
 
   Still future work: the living NFT presentation (`tokenURI` is minimal identity metadata only).
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.

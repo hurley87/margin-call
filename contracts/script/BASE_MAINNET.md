@@ -107,4 +107,6 @@ Curated manifest: [`../deployments/base.json`](../deployments/base.json).
 | MarginCall       | `0xe00D890a03eefE847Ef73f4f8c98311ef3E1d35d` |
 | CreditPool       | `0x700FEAA4dEcb6430d50c573AE572674433d206E7` |
 
-Acceptance: tokenId `1`, A→E→B financed flow completed (seed, treasury withdraw, open, setExecutor, reduceExposure, transfer, repay, close). Source verify pending `ETHERSCAN_API_KEY`.
+Acceptance: tokenId `1`, A→E→B financed flow completed (seed, treasury withdraw, open, setExecutor, reduceExposure, transfer, repay, close).
+
+Source verification: all four contracts are verified on Basescan (solc `v0.8.29+commit.ab55807c`, 1,000,000 optimizer runs). Verification was done after the fact with `forge verify-contract --chain-id 8453 --watch`, passing each constructor's ABI-encoded arguments; `src/` was unchanged from the deployed `sourceCommit`, and `bytecode_hash = "none"` keeps the build reproducible. Re-running verification is idempotent.

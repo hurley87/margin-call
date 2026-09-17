@@ -53,6 +53,18 @@
       "bobRepay": "0x91f4850a0c785e4da8d23fa17e6d0e221c1dd1a2663afc717712c17db025b287",
       "bobClose": "0x5726d20d8d5a905c8c5045c8e2e262d445d3c7c852dd35e363537fa4ec3eac75"
     },
-    "notes": "Live A→E→B acceptance on 2026-09-17. Source verify was skipped (ETHERSCAN_API_KEY unset). No private keys stored."
+    "notes": "Live A→E→B acceptance on 2026-09-17. No private keys stored."
+  },
+  "sourceVerification": {
+    "explorer": "basescan.org",
+    "verifiedOn": "2026-09-17",
+    "compiler": "v0.8.29+commit.ab55807c",
+    "optimizerRuns": 1000000,
+    "contracts": {
+      "oracleAdapter": "verified",
+      "executionAdapter": "verified",
+      "marginCall": "verified",
+      "creditPool": "verified"
+    }
   }
 }
