@@ -154,10 +154,7 @@ contract MarginCall is ERC721 {
     /// @notice Owner-only close of a debt-free position. Returns this token's recorded NVDAc and burns the NFT.
     /// @dev Oracle-free. Financed positions must reach zero debt via `repay` or `reduceExposure` first.
     function closePosition(uint256 tokenId) external {
-        address owner = _requireOwned(tokenId);
-        if (msg.sender != owner) {
-            revert NotPositionOwner(msg.sender, owner);
-        }
+        address owner = _requirePositionOwner(tokenId);
         if (currentDebt(tokenId) != 0) {
             revert DebtOutstanding(tokenId);
         }
@@ -175,10 +172,7 @@ contract MarginCall is ERC721 {
     /// @dev Supports setting, replacing, and clearing (`address(0)`). Oracle-free. ERC-721 approvals and the
     ///      current executor cannot call this. Transfer clears the stored executor via `_update`.
     function setExecutor(uint256 tokenId, address executor) external {
-        address owner = _requireOwned(tokenId);
-        if (msg.sender != owner) {
-            revert NotPositionOwner(msg.sender, owner);
-        }
+        _requirePositionOwner(tokenId);
         Position storage position = positions[tokenId];
         address previous = position.executor;
         position.executor = executor;
@@ -190,12 +184,7 @@ contract MarginCall is ERC721 {
     ///      Applies payment interest-first, then principal, and restores the paid USDC to `CreditPool`.
     ///      Owner or executor may call; ERC-721 approval does not grant repay authority.
     function repay(uint256 tokenId, uint256 amount) external {
-        address owner = _requireOwned(tokenId);
-        Position storage position = positions[tokenId];
-        address executor = position.executor;
-        if (msg.sender != owner && msg.sender != executor) {
-            revert NotPositionManager(msg.sender, owner, executor);
-        }
+        (, Position storage position) = _requirePositionManager(tokenId);
 
         _accrue(position);
 
@@ -216,12 +205,7 @@ contract MarginCall is ERC721 {
     ///      `CreditPool`; any surplus goes immediately to the current NFT owner (never residual position USDC).
     ///      Owner or executor may call; ERC-721 approval does not grant authority.
     function reduceExposure(uint256 tokenId, uint256 stockAmount, uint256 minOut) external {
-        address owner = _requireOwned(tokenId);
-        Position storage position = positions[tokenId];
-        address executor = position.executor;
-        if (msg.sender != owner && msg.sender != executor) {
-            revert NotPositionManager(msg.sender, owner, executor);
-        }
+        (address owner, Position storage position) = _requirePositionManager(tokenId);
         if (stockAmount == 0) {
             revert ZeroStockAmount();
         }
@@ -232,10 +216,7 @@ contract MarginCall is ERC721 {
 
         _accrue(position);
 
-        IOracleAdapter.Observation memory observation = ORACLE.latestObservation();
-        if (observation.state != IOracleAdapter.State.LIVE) {
-            revert OracleNotLive(observation.state);
-        }
+        IOracleAdapter.Observation memory observation = _requireLivePrice();
 
         // Deduct recorded stock before the swap so a reentrant callback cannot sell the same units twice.
         // A failed swap reverts the whole transaction and restores accounting.
@@ -245,17 +226,16 @@ contract MarginCall is ERC721 {
         uint256 usdcOut = EXECUTION.sellNvda(stockAmount, minOut, observation.price);
         NVDAC.forceApprove(address(EXECUTION), 0);
 
-        uint256 debt = position.principal + position.accruedInterest;
-        uint256 repayAmount = Math.min(usdcOut, debt);
+        // Re-read debt after the swap: the legs are deliberately not cached across the external call.
+        uint256 repayAmount = Math.min(usdcOut, position.principal + position.accruedInterest);
         if (repayAmount != 0) {
             _applyDebtPayment(position, repayAmount);
             USDC.safeTransfer(address(creditPool), repayAmount);
             emit DebtRepaid(tokenId, repayAmount);
         }
 
-        uint256 surplus = usdcOut - repayAmount;
-        if (surplus != 0) {
-            USDC.safeTransfer(owner, surplus);
+        if (usdcOut > repayAmount) {
+            USDC.safeTransfer(owner, usdcOut - repayAmount);
         }
 
         emit ExposureReduced(tokenId, stockAmount, usdcOut);
@@ -295,10 +275,7 @@ contract MarginCall is ERC721 {
             revert InvalidCreditPool();
         }
 
-        IOracleAdapter.Observation memory observation = ORACLE.latestObservation();
-        if (observation.state != IOracleAdapter.State.LIVE) {
-            revert OracleNotLive(observation.state);
-        }
+        IOracleAdapter.Observation memory observation = _requireLivePrice();
 
         uint256 contributionValue = ORACLE.valueUsdc(contributedStock, observation.price);
         principal = _sizePrincipal(contributionValue, targetLeverage);
@@ -317,6 +294,35 @@ contract MarginCall is ERC721 {
         finalStock = contributedStock + bought;
         uint256 nav = ORACLE.valueUsdc(finalStock, observation.price);
         _requireLeverageWithinCeiling(nav, principal, targetLeverage);
+    }
+
+    /// @dev Resolve `tokenId` and require the caller owns it. Single definition of the owner-only rule.
+    function _requirePositionOwner(uint256 tokenId) private view returns (address owner) {
+        owner = _requireOwned(tokenId);
+        if (msg.sender != owner) {
+            revert NotPositionOwner(msg.sender, owner);
+        }
+    }
+
+    /// @dev Resolve `tokenId` and require the caller is its owner or appointed executor, returning both the owner
+    ///      and the position pointer the management paths need. Single definition of the owner-or-executor rule:
+    ///      ERC-721 approvals never grant management authority.
+    function _requirePositionManager(uint256 tokenId) private view returns (address owner, Position storage position) {
+        owner = _requireOwned(tokenId);
+        position = positions[tokenId];
+        address executor = position.executor;
+        if (msg.sender != owner && msg.sender != executor) {
+            revert NotPositionManager(msg.sender, owner, executor);
+        }
+    }
+
+    /// @dev Fetch the current observation and admit only `LIVE` pricing. Single definition of the pricing-admission
+    ///      rule, shared by financed opening and `reduceExposure` so neither can drift from the other.
+    function _requireLivePrice() private view returns (IOracleAdapter.Observation memory observation) {
+        observation = ORACLE.latestObservation();
+        if (observation.state != IOracleAdapter.State.LIVE) {
+            revert OracleNotLive(observation.state);
+        }
     }
 
     /// @dev Apply already-accrued `payAmount` interest-first, then principal. Caller must ensure `payAmount > 0`

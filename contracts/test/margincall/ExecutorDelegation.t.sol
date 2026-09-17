@@ -73,11 +73,10 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         marginCall.repay(tokenId, half);
         assertEq(marginCall.currentDebt(tokenId), debt - half);
 
-        uint256 sale = ONE_NVDAC / 20;
         vm.prank(bob);
-        marginCall.reduceExposure(tokenId, sale, 0);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
         (uint256 stockAfter,,,,) = _position(tokenId);
-        assertEq(stockAfter, stockBefore - sale);
+        assertEq(stockAfter, stockBefore - REDUCE_SALE);
 
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InsufficientApproval.selector, bob, tokenId));
         vm.prank(bob);
@@ -134,7 +133,7 @@ contract ExecutorDelegationTest is MarginCallTestBase {
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
         vm.prank(bob);
-        marginCall.reduceExposure(tokenId, ONE_NVDAC / 20, 0);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
     }
 
     function test_executorOpenPositionMintsSeparateTokenNotPrincipalOnExisting() public {
@@ -184,7 +183,7 @@ contract ExecutorDelegationTest is MarginCallTestBase {
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
         vm.prank(bob);
-        marginCall.reduceExposure(tokenId, ONE_NVDAC / 20, 0);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, bob, alice));
         vm.prank(bob);

@@ -1,60 +1,17 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
-import {Test} from "forge-std/Test.sol";
-import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-
-import {CreditPool} from "../src/CreditPool.sol";
-import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
 import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../src/MarginCall.sol";
-import {OracleAdapter} from "../src/OracleAdapter.sol";
 import {V1Config} from "../src/V1Config.sol";
 import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
+import {MarginCallForkBase} from "./MarginCallForkBase.sol";
 
 /// @dev Pinned Base-mainnet proof that production adapters open every financed preset via Uniswap V3.
-contract FinancedOpenForkTest is Test {
-    uint256 internal constant BASE_BLOCK = BaseV1Constants.PINNED_BLOCK;
-    uint256 internal constant ONE_NVDAC = 1e8;
-    uint256 internal constant CREDIT_SEED = 500_000e6;
+contract FinancedOpenForkTest is MarginCallForkBase {
 
-    IERC20 internal nvdac = IERC20(BaseV1Constants.NVDAC);
-    IERC20 internal usdc = IERC20(BaseV1Constants.USDC);
-
-    OracleAdapter internal oracle;
-    ExecutionAdapter internal execution;
-    MarginCall internal marginCall;
-    CreditPool internal pool;
-
-    address internal alice;
-
-    function setUp() public {
-        vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), BASE_BLOCK);
-        alice = makeAddr("financed-fork-alice-422");
-        // Ensure the opener is a pure EOA on the forked chain (safeMint rejects contract recipients
-        // that lack IERC721Receiver).
-        vm.etch(alice, "");
-
-        oracle = new OracleAdapter(
-            BaseV1Constants.NVDAC,
-            BaseV1Constants.NVDA_FEED,
-            BaseV1Constants.COINBASE_ORACLE_REGISTRY,
-            BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED
-        );
-        execution = new ExecutionAdapter(
-            BaseV1Constants.USDC,
-            BaseV1Constants.NVDAC,
-            BaseV1Constants.UNISWAP_SWAP_ROUTER_02,
-            BaseV1Constants.UNISWAP_FEE
-        );
-        marginCall = new MarginCall(BaseV1Constants.NVDAC, BaseV1Constants.USDC, address(oracle), address(execution));
-        pool = new CreditPool(BaseV1Constants.USDC, address(marginCall));
-        marginCall.setCreditPool(address(pool));
-
-        deal(BaseV1Constants.USDC, address(pool), CREDIT_SEED);
-        _fundNvda(alice, 10 * ONE_NVDAC);
-        vm.prank(alice);
-        nvdac.approve(address(marginCall), type(uint256).max);
+    function _forkActorLabel() internal pure override returns (string memory) {
+        return "financed-fork-alice-422";
     }
 
     function test_oracleIsLiveAtPinnedBlock() public {
@@ -168,8 +125,4 @@ contract FinancedOpenForkTest is Test {
         assertEq(nvdac.balanceOf(address(this)) - before, amountOut);
     }
 
-    function _fundNvda(address to, uint256 amount) private {
-        vm.prank(BaseV1Constants.PINNED_NVDAC_HOLDER);
-        assertTrue(nvdac.transfer(to, amount));
-    }
 }

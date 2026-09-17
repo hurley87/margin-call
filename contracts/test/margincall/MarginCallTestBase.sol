@@ -28,6 +28,9 @@ abstract contract MarginCallTestBase is Test {
     ///      re-pinning that snapshot must not silently rewrite what these RPC-free assertions mean.
     uint256 internal constant OPENED_AT = 1_700_000_000;
     uint256 internal constant ONE_NVDAC = 10 ** uint256(BaseV1Constants.NVDAC_DECIMALS);
+
+    /// @dev Default `reduceExposure` sale size: small enough to leave residual stock on a 1 NVDAc open.
+    uint256 internal constant REDUCE_SALE = ONE_NVDAC / 20;
     uint256 internal constant DEFAULT_CREDIT = 1_000_000e6;
     string internal constant TOKEN_URI_PREFIX = "data:application/json;base64,";
 

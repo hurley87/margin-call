@@ -296,7 +296,6 @@ contract FinancedTransferTest is MarginCallTestBase {
 
     function _assertAliceAndBobLoseManagement(uint256 tokenId, address newOwner) internal {
         uint256 debt = marginCall.currentDebt(tokenId);
-        uint256 sale = ONE_NVDAC / 20;
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, alice, newOwner, address(0)));
         vm.prank(alice);
@@ -308,11 +307,11 @@ contract FinancedTransferTest is MarginCallTestBase {
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, alice, newOwner, address(0)));
         vm.prank(alice);
-        marginCall.reduceExposure(tokenId, sale, 0);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, newOwner, address(0)));
         vm.prank(bob);
-        marginCall.reduceExposure(tokenId, sale, 0);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, alice, newOwner));
         vm.prank(alice);
@@ -355,10 +354,9 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.prank(eve);
         marginCall.repay(tokenId, remaining);
 
-        uint256 sale = ONE_NVDAC / 20;
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, eve, carol, dave));
         vm.prank(eve);
-        marginCall.reduceExposure(tokenId, sale, 0);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
     }
 
     /// @dev equityRatio >= 30% maintenance  <=>  debt / nav <= 70%.

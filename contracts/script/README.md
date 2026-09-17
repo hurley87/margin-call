@@ -132,19 +132,21 @@ Deploys the same mock stack as the financed debt harness, then:
 `repay` → E small `reduceExposure` → A `safeTransferFrom` to B → prove A/E lose
 authority → B repays
 
-Phases:
+Phases — numbered to match the script's own `phase N/6` log lines:
 
 1. `deployAndOpen()` — Alice deploys, seeds the pool, opens financed, records
    state to `deployments/executor-transfer-local.run.json`.
-2. Wrapper advances Anvil clock (`evm_increaseTime` + `evm_mine`).
-3. `appointAndRepay()` — Alice appoints E; E partially repays.
-4. `executorReduceExposure()` — E sells a small fraction of recorded NVDAc
+   - Between phases 1 and 2 the wrapper advances the Anvil clock
+     (`evm_increaseTime` + `evm_mine`). It is not a script phase and carries no
+     phase number.
+2. `appointAndRepay()` — Alice appoints E; E partially repays.
+3. `executorReduceExposure()` — E sells a small fraction of recorded NVDAc
    (`minOut = 0`, protocol floor binds); surplus (if any) goes to Alice.
-5. `transferToBob()` — reads settled post-reduce accounting from the node, Alice
+4. `transferToBob()` — reads settled post-reduce accounting from the node, Alice
    transfers the NFT to Bob, asserts stock/debt fields survive and executor clears.
-6. `proveAuthorityLost()` — simulation-only: Alice and E `repay` /
+5. `proveAuthorityLost()` — simulation-only: Alice and E `repay` /
    `reduceExposure` / `setExecutor` must revert.
-7. `bobRepayAndVerify()` — Bob repays remaining debt on the node and verifies
+6. `bobRepayAndVerify()` — Bob repays remaining debt on the node and verifies
    ownership/accounting.
 
 Optional env vars match the financed harness (`MARGIN_CALL_STOCK_AMOUNT`,

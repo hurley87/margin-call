@@ -23,6 +23,8 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
     uint256 internal constant CREDIT_SEED = 1_000_000e6;
     /// @dev Partial repay size as a fraction of current debt (bps). 2500 = 25%.
     uint256 internal constant PARTIAL_REPAY_BPS = 2_500;
+    /// @dev Phases in this harness. Lives here so inserting a phase is one edit, not one per log line.
+    uint256 internal constant TOTAL_PHASES = 6;
     /// @dev Small reduceExposure size as a fraction of recorded stock (bps). 500 = 5%.
     uint256 internal constant REDUCE_SALE_BPS = 500;
     /// @dev Overestimate applied to B's final repay (bps) so interest accruing between the debt read and the
@@ -72,7 +74,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         address executor = vm.addr(vm.envUint("MARGIN_CALL_EXECUTOR_KEY"));
         address bob = vm.addr(vm.envUint("MARGIN_CALL_RECIPIENT_KEY"));
         console.log("=== LOCAL ONLY: financed A -> E -> B executor transfer ===");
-        console.log("phase 1/6: deploy + openPosition (financed)");
+        _logPhase(1, "deploy + openPosition (financed)");
         console.log("chainId", block.chainid);
         console.log("alice", alice);
         console.log("executor", executor);
@@ -146,7 +148,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         HarnessState memory state = _load();
 
         uint256 debt = state.marginCall.currentDebt(state.tokenId);
-        console.log("phase 2/6: setExecutor + E partial repay");
+        _logPhase(2, "setExecutor + E partial repay");
         console.log("node seconds elapsed since open", block.timestamp - state.openedAt);
         console.log("principal at open", state.principalAtOpen);
         console.log("currentDebt read from node", debt);
@@ -181,7 +183,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         uint256 executorKey = vm.envUint("MARGIN_CALL_EXECUTOR_KEY");
         HarnessState memory state = _load();
 
-        console.log("phase 3/6: E reduceExposure");
+        _logPhase(3, "E reduceExposure");
 
         (uint256 stockBefore,,,, address executorBefore) = state.marginCall.positions(state.tokenId);
         assertEq(executorBefore, state.executor, "executor must still be set");
@@ -204,13 +206,14 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         if (stockAfter != stockBefore - sale) {
             revert ReduceDidNotCutStock(stockBefore, stockAfter);
         }
-        assertLe(state.marginCall.currentDebt(state.tokenId), debtBefore, "debt must not increase");
+        uint256 debtAfter = state.marginCall.currentDebt(state.tokenId);
+        assertLe(debtAfter, debtBefore, "debt must not increase");
         assertEq(state.usdc.balanceOf(state.executor), executorUsdcBefore, "executor gets no surplus");
         assertGe(state.usdc.balanceOf(state.alice), aliceUsdcBefore, "any surplus goes to owner A");
 
         console.log("stock sold (raw NVDAc)", sale);
         console.log("stock remaining", stockAfter);
-        console.log("debt after reduce", state.marginCall.currentDebt(state.tokenId));
+        console.log("debt after reduce", debtAfter);
     }
 
     // Phase 4 - separate broadcast: snapshot live post-reduce accounting, then A transfers to B.
@@ -222,7 +225,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         uint256 aliceKey = vm.envUint("MARGIN_CALL_PRIVATE_KEY");
         HarnessState memory state = _load();
 
-        console.log("phase 4/6: snapshot live accounting and transfer to B");
+        _logPhase(4, "snapshot live accounting and transfer to B");
 
         (
             uint256 stockBefore,
@@ -275,18 +278,17 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         _requireLocalAnvil();
         HarnessState memory state = _load();
 
-        console.log("phase 5/6: prove A and E lost management authority");
+        _logPhase(5, "prove A and E lost management authority");
 
         assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B must still own");
-        (,,,, address executor) = state.marginCall.positions(state.tokenId);
+        (uint256 stock,,,, address executor) = state.marginCall.positions(state.tokenId);
         assertEq(executor, address(0), "executor must stay cleared");
+        assertGt(stock, 0, "position must still hold stock");
 
         uint256 probe = state.marginCall.currentDebt(state.tokenId);
-        (uint256 stock,,,,) = state.marginCall.positions(state.tokenId);
-        uint256 saleProbe = stock / 20;
-        if (saleProbe == 0) {
-            saleProbe = 1;
-        }
+        // 1 raw unit: `reduceExposure` checks authority before it validates the amount, and 1 is always
+        // within recorded stock, so the revert can only be the authority failure this phase is proving.
+        uint256 saleProbe = 1;
 
         // Fund approvals in simulation only; these writes are not broadcast.
         state.usdc.mint(state.alice, probe);
@@ -315,9 +317,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         } catch {}
     }
 
-    function _assertReduceReverts(HarnessState memory state, address caller, uint256 sale, string memory role)
-        private
-    {
+    function _assertReduceReverts(HarnessState memory state, address caller, uint256 sale, string memory role) private {
         vm.prank(caller);
         try state.marginCall.reduceExposure(state.tokenId, sale, 0) {
             revert AuthorityStillHeld(role);
@@ -338,7 +338,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         uint256 bobKey = vm.envUint("MARGIN_CALL_RECIPIENT_KEY");
         HarnessState memory state = _load();
 
-        console.log("phase 6/6: B repays remaining debt and verify");
+        _logPhase(6, "B repays remaining debt and verify");
 
         assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B must own before repay");
 
@@ -376,6 +376,11 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         console.log("debt read before repay", remaining);
         console.log("repay ceiling submitted", payment);
         console.log("=== PASS: A open -> E repay -> E reduce -> A transfer B -> A/E lose authority -> B repays ===");
+    }
+
+    /// @dev `phase N/TOTAL_PHASES: label`, so the denominator has one definition.
+    function _logPhase(uint256 phase, string memory label) private pure {
+        console.log(string.concat("phase ", vm.toString(phase), "/", vm.toString(TOTAL_PHASES), ": ", label));
     }
 
     function _persist(HarnessState memory state) private {

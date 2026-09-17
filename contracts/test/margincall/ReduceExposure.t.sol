@@ -7,6 +7,7 @@ import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
 import {V1Config} from "../../src/V1Config.sol";
 import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
+import {ExecutionFixtures} from "../fixtures/ExecutionFixtures.sol";
 import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 
 /// @dev RPC-free exact-input deleveraging: sell NVDAc, repay interest then principal, surplus to owner.
@@ -25,7 +26,7 @@ contract ReduceExposureTest is MarginCallTestBase {
         uint256 poolBefore = pool.availableCredit();
         uint256 custodyBefore = nvdac.balanceOf(address(marginCall));
         uint256 expectedUsdcOut = _expectedSellOut(SMALL_SALE);
-        uint256 repayAmount = expectedUsdcOut < principalBefore ? expectedUsdcOut : principalBefore;
+        uint256 repayAmount = Math.min(expectedUsdcOut, principalBefore);
 
         vm.expectEmit(true, false, false, true, address(marginCall));
         emit MarginCall.DebtRepaid(tokenId, repayAmount);
@@ -206,10 +207,8 @@ contract ReduceExposureTest is MarginCallTestBase {
         // Sell enough remaining stock to clear all debt (with surplus possible).
         (uint256 stockLeft,,,,) = _position(tokenId);
         uint256 debtLeft = marginCall.currentDebt(tokenId);
-        uint256 saleToClear = _stockForUsdcOut(debtLeft + debtLeft / 10); // buffer for ceil fill
-        if (saleToClear > stockLeft) {
-            saleToClear = stockLeft;
-        }
+        // Buffer for the ceil fill, capped at the stock actually left.
+        uint256 saleToClear = Math.min(_stockForUsdcOut(debtLeft + debtLeft / 10), stockLeft);
         uint256 aliceUsdcBefore = usdc.balanceOf(alice);
         uint256 poolBefore = pool.availableCredit();
 
@@ -231,10 +230,7 @@ contract ReduceExposureTest is MarginCallTestBase {
         marginCall.setExecutor(tokenId, bob);
 
         // Sell enough to exceed principal (no accrual yet).
-        uint256 sale = _stockForUsdcOut(principal + 1e6);
-        if (sale > stock) {
-            sale = stock;
-        }
+        uint256 sale = Math.min(_stockForUsdcOut(principal + 1e6), stock);
         uint256 usdcOut = _expectedSellOut(sale);
         assertGt(usdcOut, principal);
 
@@ -332,22 +328,18 @@ contract ReduceExposureTest is MarginCallTestBase {
         assertEq(usdc.balanceOf(address(marginCall)), 0);
     }
 
-    /// @dev Mirror MockSwapRouter sell fill at default ADVERSE_BOUND_BPS (ceil).
+    /// @dev `MockSwapRouter` fills sells at the protocol floor by default, so the shared fixture already is the
+    ///      expectation. Delegating keeps one definition of the sell-bound formula.
     function _expectedSellOut(uint256 nvdaAmountIn) internal pure returns (uint256) {
-        return Math.mulDiv(
-            nvdaAmountIn,
-            BaseV1Constants.PINNED_FEED_ANSWER * V1Config.ADVERSE_BOUND_BPS,
-            V1Config.VALUATION_DENOMINATOR * BaseV1Constants.BPS_DENOMINATOR,
-            Math.Rounding.Ceil
-        );
+        return ExecutionFixtures.protocolMinUsdcOutForSell(nvdaAmountIn, BaseV1Constants.PINNED_FEED_ANSWER);
     }
 
-    /// @dev Invert the ceil sell fill approximately: stock such that fill >= targetUsdc.
+    /// @dev Invert `_expectedSellOut`: smallest stock whose fill covers `targetUsdc`.
     function _stockForUsdcOut(uint256 targetUsdc) internal pure returns (uint256) {
         if (targetUsdc == 0) {
             return 0;
         }
-        // Floor inversion of ceil fill: stock = ceil(target * denom * bps / (price * fillBps)).
+        // Ceil inversion of a ceil fill, so the result may overshoot the target by one raw unit.
         return Math.mulDiv(
             targetUsdc,
             V1Config.VALUATION_DENOMINATOR * BaseV1Constants.BPS_DENOMINATOR,
