@@ -305,6 +305,14 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.prank(bob);
         marginCall.repay(tokenId, debt);
 
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, alice, newOwner, address(0)));
+        vm.prank(alice);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
+
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, newOwner, address(0)));
+        vm.prank(bob);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
+
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, alice, newOwner));
         vm.prank(alice);
         marginCall.setExecutor(tokenId, alice);
@@ -335,7 +343,8 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.prank(carol);
         marginCall.repay(tokenId, slice);
 
-        // Carol's ERC-721 approval is transfer-only: approve can move the NFT but not repay.
+        // Carol's ERC-721 approval is transfer-only: approve can move the NFT but not repay or reduce.
+        // Auth reverts before any oracle call, so this stays safe under `_expectNoOracleCalls`.
         address eve = makeAddr("eve");
         vm.prank(carol);
         marginCall.approve(eve, tokenId);
@@ -344,6 +353,10 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, eve, carol, dave));
         vm.prank(eve);
         marginCall.repay(tokenId, remaining);
+
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, eve, carol, dave));
+        vm.prank(eve);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
     }
 
     /// @dev equityRatio >= 30% maintenance  <=>  debt / nav <= 70%.

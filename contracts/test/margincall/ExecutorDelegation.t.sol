@@ -60,8 +60,9 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         assertEq(executor, bob);
     }
 
-    function test_executorCanRepayButCannotTransferCloseOrSetExecutor() public {
+    function test_executorCanRepayAndReduceButCannotTransferCloseOrSetExecutor() public {
         (uint256 tokenId, uint256 debt) = _openFinancedWithAccrual();
+        (uint256 stockBefore,,,,) = _position(tokenId);
 
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
@@ -71,6 +72,11 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         vm.prank(bob);
         marginCall.repay(tokenId, half);
         assertEq(marginCall.currentDebt(tokenId), debt - half);
+
+        vm.prank(bob);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
+        (uint256 stockAfter,,,,) = _position(tokenId);
+        assertEq(stockAfter, stockBefore - REDUCE_SALE);
 
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InsufficientApproval.selector, bob, tokenId));
         vm.prank(bob);
@@ -111,7 +117,7 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         _assertTransferAuthorityCannotManage(tokenId, debt);
     }
 
-    function test_clearingExecutorRevokesRepayImmediately() public {
+    function test_clearingExecutorRevokesRepayAndReduceImmediately() public {
         (uint256 tokenId, uint256 debt) = _openFinancedWithAccrual();
 
         vm.prank(alice);
@@ -124,6 +130,10 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
         vm.prank(bob);
         marginCall.repay(tokenId, debt);
+
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
+        vm.prank(bob);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
     }
 
     function test_executorOpenPositionMintsSeparateTokenNotPrincipalOnExisting() public {
@@ -170,6 +180,10 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
         vm.prank(bob);
         marginCall.repay(tokenId, debt);
+
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
+        vm.prank(bob);
+        marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, bob, alice));
         vm.prank(bob);

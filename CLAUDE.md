@@ -28,9 +28,20 @@ capability only through separately scoped work.
 - `src/` — neutral Next.js shell, styling, authentication helpers, and UI primitives
 - `convex/` — Convex auth and HTTP infrastructure
 - `packages/shared/` — framework-neutral validation helpers
-- `contracts/` — Foundry workspace. `src/MarginCall.sol` is the first landed product contract: the spot-only
-  Position NFT (NVDAc custody + ERC-721 ownership). Financed opening, oracle, credit, and execution are still
-  future work. RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.
+- `contracts/` — Foundry workspace. `src/MarginCall.sol` is the Position NFT coordinator (NVDAc custody +
+  ERC-721 ownership), supported by `CreditPool.sol`, `OracleAdapter.sol`, `OracleStatePolicy.sol`,
+  `ExecutionAdapter.sol`, and the immutable `V1Config.sol` presets. Landed slices, in order:
+  - spot-only open and close (`openPosition` at 1.0x, `closePosition`)
+  - financed open against protocol credit (Uniswap-only execution, `LIVE` pricing required)
+  - lazy debt accrual at the immutable V1 10% APR, `repay`, and debt-free close
+  - single-executor delegation (`setExecutor`), cleared on real ownership transfer
+  - one-way `reduceExposure` — sells exact NVDAc, pays interest then principal, surplus to the owner
+
+  Still future work: liquidation, and the living NFT presentation (`tokenURI` is minimal identity metadata
+  only). RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.
+
+  Keep this list in step with the `MarginCall` contract docstring — it is the same statement of landed vs.
+  future capability, so the two drifting apart is a review signal.
 
 ## Conventions
 
