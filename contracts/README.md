@@ -2,7 +2,7 @@
 
 #
 
-# Foundry scaffolding only — product contracts are future work.
+# Foundry workspace for Margin Call protocol contracts, tests, fork verification, and local signer smoke flows.
 
 #
 
@@ -17,3 +17,9 @@
 # pnpm test:contracts
 
 # pnpm test:contracts:ci
+
+#
+
+# Local Anvil-only signer smoke test (spot Position NFT):
+
+# see script/README.md
