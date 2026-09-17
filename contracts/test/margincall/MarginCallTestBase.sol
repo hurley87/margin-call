@@ -8,6 +8,8 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
+import {ExecutionFixtures} from "../fixtures/ExecutionFixtures.sol";
+import {MaintenanceFixtures} from "../fixtures/MaintenanceFixtures.sol";
 import {CreditPool} from "../../src/CreditPool.sol";
 import {ExecutionAdapter} from "../../src/ExecutionAdapter.sol";
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
@@ -181,5 +183,79 @@ abstract contract MarginCallTestBase is Test {
         uint256 contributionValue = oracle.valueUsdc(stockAmount, BaseV1Constants.PINNED_FEED_ANSWER);
         uint256 ideal = Math.mulDiv(contributionValue, leverage - SPOT_LEVERAGE, V1Config.BPS_DENOMINATOR);
         return Math.mulDiv(ideal, V1Config.ADVERSE_BOUND_BPS, V1Config.BPS_DENOMINATOR);
+    }
+
+    /// @dev Deliberately *not* a mirror: the maintenance rule is shared with the contract via `V1Config` so the
+    ///      RPC-free suite, the fork suite, and `MarginCall` cannot encode the 30% threshold differently. These
+    ///      only assert that a fixture sits in the intended regime; the contract's verdict is proven by
+    ///      `expectRevert(NotLiquidatable)` and by successful liquidation.
+    function _isHealthy(uint256 nav, uint256 debt) internal pure returns (bool) {
+        return V1Config.isHealthy(nav, debt);
+    }
+
+    function _isLiquidatable(uint256 nav, uint256 debt) internal pure returns (bool) {
+        return V1Config.isLiquidatable(nav, debt);
+    }
+
+    /// @dev Point the mock oracle and the mock router at the same LIVE mark. Sync is the invariant: a mark the
+    ///      router does not share would fill sells at a price the protocol floor never admitted.
+    function _setLivePrice(uint256 price) internal {
+        oracle.setObservation(IOracleAdapter.State.LIVE, price, 2, block.timestamp);
+        router.setLivePrice(price);
+    }
+
+    /// @dev Crash the LIVE mark so `debt / NAV ≈ debtShareBps / 10_000` and sync the mock router's fill price.
+    function _setLiveDebtSharePrice(uint256 stock, uint256 debt, uint256 debtShareBps)
+        internal
+        returns (uint256 price)
+    {
+        price = MaintenanceFixtures.priceForDebtShare(stock, debt, debtShareBps);
+        _setLivePrice(price);
+    }
+
+    /// @dev `MockSwapRouter` fills sells at the protocol floor by default, so the shared fixture already is the
+    ///      expectation. Delegating keeps one definition of the sell-bound formula.
+    function _expectedSellOut(uint256 nvdaAmountIn, uint256 livePrice) internal pure returns (uint256) {
+        return ExecutionFixtures.protocolMinUsdcOutForSell(nvdaAmountIn, livePrice);
+    }
+
+    function _expectedSellOut(uint256 nvdaAmountIn) internal pure returns (uint256) {
+        return _expectedSellOut(nvdaAmountIn, BaseV1Constants.PINNED_FEED_ANSWER);
+    }
+
+    /// @dev The "nothing moved" fixture for paths that must revert atomically: position legs, derived debt, pool
+    ///      credit, custody, and the owner's USDC. Shared by the `reduceExposure` and `liquidate` suites.
+    struct Snapshot {
+        uint256 stock;
+        uint256 principal;
+        uint256 accrued;
+        uint256 lastAccrued;
+        address executor;
+        uint256 debt;
+        uint256 poolCredit;
+        uint256 custody;
+        uint256 aliceUsdc;
+    }
+
+    function _snapshot(uint256 tokenId) internal view returns (Snapshot memory s) {
+        (s.stock, s.principal, s.accrued, s.lastAccrued, s.executor) = _position(tokenId);
+        s.debt = marginCall.currentDebt(tokenId);
+        s.poolCredit = pool.availableCredit();
+        s.custody = nvdac.balanceOf(address(marginCall));
+        s.aliceUsdc = usdc.balanceOf(alice);
+    }
+
+    function _assertSnapshot(uint256 tokenId, Snapshot memory expected) internal view {
+        (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) = _position(tokenId);
+        assertEq(stock, expected.stock);
+        assertEq(principal, expected.principal);
+        assertEq(accrued, expected.accrued);
+        assertEq(lastAccrued, expected.lastAccrued);
+        assertEq(executor, expected.executor);
+        assertEq(marginCall.currentDebt(tokenId), expected.debt);
+        assertEq(pool.availableCredit(), expected.poolCredit);
+        assertEq(nvdac.balanceOf(address(marginCall)), expected.custody);
+        assertEq(usdc.balanceOf(alice), expected.aliceUsdc);
+        assertEq(usdc.balanceOf(address(marginCall)), 0);
     }
 }

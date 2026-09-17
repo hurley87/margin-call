@@ -7,7 +7,6 @@ import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
 import {V1Config} from "../../src/V1Config.sol";
 import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
-import {ExecutionFixtures} from "../fixtures/ExecutionFixtures.sol";
 import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 
 /// @dev RPC-free exact-input deleveraging: sell NVDAc, repay interest then principal, surplus to owner.
@@ -292,46 +291,6 @@ contract ReduceExposureTest is MarginCallTestBase {
         marginCall.reduceExposure(tokenId, SMALL_SALE, 0);
         oracle.setShouldRevert(false);
         _assertSnapshot(tokenId, before_);
-    }
-
-    struct Snapshot {
-        uint256 stock;
-        uint256 principal;
-        uint256 accrued;
-        uint256 lastAccrued;
-        address executor;
-        uint256 debt;
-        uint256 poolCredit;
-        uint256 custody;
-        uint256 aliceUsdc;
-    }
-
-    function _snapshot(uint256 tokenId) internal view returns (Snapshot memory s) {
-        (s.stock, s.principal, s.accrued, s.lastAccrued, s.executor) = _position(tokenId);
-        s.debt = marginCall.currentDebt(tokenId);
-        s.poolCredit = pool.availableCredit();
-        s.custody = nvdac.balanceOf(address(marginCall));
-        s.aliceUsdc = usdc.balanceOf(alice);
-    }
-
-    function _assertSnapshot(uint256 tokenId, Snapshot memory expected) internal view {
-        (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) = _position(tokenId);
-        assertEq(stock, expected.stock);
-        assertEq(principal, expected.principal);
-        assertEq(accrued, expected.accrued);
-        assertEq(lastAccrued, expected.lastAccrued);
-        assertEq(executor, expected.executor);
-        assertEq(marginCall.currentDebt(tokenId), expected.debt);
-        assertEq(pool.availableCredit(), expected.poolCredit);
-        assertEq(nvdac.balanceOf(address(marginCall)), expected.custody);
-        assertEq(usdc.balanceOf(alice), expected.aliceUsdc);
-        assertEq(usdc.balanceOf(address(marginCall)), 0);
-    }
-
-    /// @dev `MockSwapRouter` fills sells at the protocol floor by default, so the shared fixture already is the
-    ///      expectation. Delegating keeps one definition of the sell-bound formula.
-    function _expectedSellOut(uint256 nvdaAmountIn) internal pure returns (uint256) {
-        return ExecutionFixtures.protocolMinUsdcOutForSell(nvdaAmountIn, BaseV1Constants.PINNED_FEED_ANSWER);
     }
 
     /// @dev Invert `_expectedSellOut`: smallest stock whose fill covers `targetUsdc`.

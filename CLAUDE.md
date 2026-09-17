@@ -36,9 +36,12 @@ capability only through separately scoped work.
   - lazy debt accrual at the immutable V1 10% APR, `repay`, and debt-free close
   - single-executor delegation (`setExecutor`), cleared on real ownership transfer
   - one-way `reduceExposure` — sells exact NVDAc, pays interest then principal, surplus to the owner
+  - permissionless `liquidate` — LIVE + equity strictly below 30% maintenance; surplus to owner or
+    `BadDebtRealized` on shortfall; burns the Position NFT
 
-  Still future work: liquidation, and the living NFT presentation (`tokenURI` is minimal identity metadata
-  only). RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.
+  Still future work: the public risk/read API (#427), and the living NFT presentation (`tokenURI` is
+  minimal identity metadata only). RPC-dependent tests stay in `contracts/fork/` under the
+  `base-mainnet` profile.
 
   Keep this list in step with the `MarginCall` contract docstring — it is the same statement of landed vs.
   future capability, so the two drifting apart is a review signal.

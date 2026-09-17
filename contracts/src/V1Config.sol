@@ -56,4 +56,25 @@ library V1Config {
         return targetLeverage == LEVERAGE_1_1X || targetLeverage == LEVERAGE_1_25X || targetLeverage == LEVERAGE_1_4X
             || targetLeverage == LEVERAGE_1_5X;
     }
+
+    /// @notice The V1 maintenance rule: healthy while equity is at least `MAINTENANCE_EQUITY_RATIO_BPS` of NAV.
+    ///         Equality at the threshold is healthy. A debt-free position is healthy at any mark, including
+    ///         `nav == 0`. The rule lives here with the constant, like the leverage presets above, so the
+    ///         contract, the fork suite, and the RPC-free suite cannot encode the 30% threshold differently.
+    /// @dev Both `nav == 0` and `debt >= nav` resolve before the subtraction, so equity never underflows.
+    function isHealthy(uint256 nav, uint256 debt) internal pure returns (bool) {
+        if (debt == 0) {
+            return true;
+        }
+        if (nav == 0 || debt >= nav) {
+            return false;
+        }
+        return (nav - debt) * BPS_DENOMINATOR >= nav * MAINTENANCE_EQUITY_RATIO_BPS;
+    }
+
+    /// @notice Exactly the negation of `isHealthy`. Stated separately because liquidation reads in this
+    ///         direction and a reader should not have to invert the maintenance rule at the call site.
+    function isLiquidatable(uint256 nav, uint256 debt) internal pure returns (bool) {
+        return !isHealthy(nav, debt);
+    }
 }
