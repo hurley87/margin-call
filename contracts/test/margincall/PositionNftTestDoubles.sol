@@ -1,0 +1,186 @@
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.29;
+
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
+import {IERC721Receiver} from "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+
+import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
+import {MarginCall} from "../../src/MarginCall.sol";
+
+/// @dev Standard raw-unit ERC-20 with NVDAc's 8 decimals. Not production NVDAc.
+contract MockNvdaC is ERC20 {
+    constructor() ERC20("NVDAc", "NVDAc") {}
+
+    function decimals() public pure override returns (uint8) {
+        return BaseV1Constants.NVDAC_DECIMALS;
+    }
+
+    function mint(address to, uint256 amount) external {
+        _mint(to, amount);
+    }
+}
+
+/// @dev `transferFrom` returns `false` without mutating balances.
+contract FalseReturningNvdaC {
+    error TransferFailed();
+
+    mapping(address owner => mapping(address spender => uint256)) public allowance;
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transfer(address, uint256) external pure returns (bool) {
+        return false;
+    }
+
+    function transferFrom(address, address, uint256) external pure returns (bool) {
+        return false;
+    }
+}
+
+/// @dev `transferFrom` reverts. Used to prove `openPosition` rolls back on a throwing token.
+contract RevertingNvdaC {
+    error TransferFailed();
+
+    mapping(address owner => mapping(address spender => uint256)) public allowance;
+
+    function approve(address spender, uint256 amount) external returns (bool) {
+        allowance[msg.sender][spender] = amount;
+        return true;
+    }
+
+    function transferFrom(address, address, uint256) external pure returns (bool) {
+        revert TransferFailed();
+    }
+}
+
+/// @dev Records MarginCall state observed inside `onERC721Received` during `_safeMint`.
+contract InspectingReceiver is IERC721Receiver {
+    MarginCall public immutable marginCall;
+    MockNvdaC public immutable nvdac;
+
+    address public observedOwner;
+    uint256 public observedStockAmount;
+    uint256 public observedPrincipal;
+    uint256 public observedAccruedInterest;
+    uint256 public observedLastAccruedAt;
+    address public observedExecutor;
+    uint256 public observedCustody;
+    uint256 public observedDebt;
+
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
+        marginCall = marginCall_;
+        nvdac = nvdac_;
+    }
+
+    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
+        nvdac.approve(address(marginCall), stockAmount);
+        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+    }
+
+    function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
+        observedOwner = marginCall.ownerOf(tokenId);
+        (observedStockAmount, observedPrincipal, observedAccruedInterest, observedLastAccruedAt, observedExecutor) =
+            marginCall.positions(tokenId);
+        observedDebt = marginCall.currentDebt(tokenId);
+        observedCustody = nvdac.balanceOf(address(marginCall));
+        return IERC721Receiver.onERC721Received.selector;
+    }
+}
+
+/// @dev Closes the minted token during the safe-mint receiver callback.
+contract CallbackCloser is IERC721Receiver {
+    MarginCall public immutable marginCall;
+    MockNvdaC public immutable nvdac;
+    bool public didClose;
+
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
+        marginCall = marginCall_;
+        nvdac = nvdac_;
+    }
+
+    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
+        nvdac.approve(address(marginCall), stockAmount);
+        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+    }
+
+    function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
+        marginCall.closePosition(tokenId);
+        didClose = true;
+        return IERC721Receiver.onERC721Received.selector;
+    }
+}
+
+/// @dev Transfers the minted token during the safe-mint receiver callback.
+contract CallbackTransferrer is IERC721Receiver {
+    MarginCall public immutable marginCall;
+    MockNvdaC public immutable nvdac;
+    address public immutable recipient;
+
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, address recipient_) {
+        marginCall = marginCall_;
+        nvdac = nvdac_;
+        recipient = recipient_;
+    }
+
+    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
+        nvdac.approve(address(marginCall), stockAmount);
+        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+    }
+
+    function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
+        IERC721(msg.sender).transferFrom(address(this), recipient, tokenId);
+        return IERC721Receiver.onERC721Received.selector;
+    }
+}
+
+contract RevertingReceiver is IERC721Receiver {
+    error Rejected();
+
+    MarginCall public immutable marginCall;
+    MockNvdaC public immutable nvdac;
+
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
+        marginCall = marginCall_;
+        nvdac = nvdac_;
+    }
+
+    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
+        nvdac.approve(address(marginCall), stockAmount);
+        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+    }
+
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        revert Rejected();
+    }
+}
+
+contract InvalidSelectorReceiver is IERC721Receiver {
+    MarginCall public immutable marginCall;
+    MockNvdaC public immutable nvdac;
+
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
+        marginCall = marginCall_;
+        nvdac = nvdac_;
+    }
+
+    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
+        nvdac.approve(address(marginCall), stockAmount);
+        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+    }
+
+    function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
+        return bytes4(0xdeadbeef);
+    }
+}
+
+/// @dev Has code but does not implement `IERC721Receiver`.
+contract NonReceiver {
+    function openSpot(MarginCall marginCall, MockNvdaC nvdac, uint256 stockAmount) external returns (uint256 tokenId) {
+        nvdac.approve(address(marginCall), stockAmount);
+        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+    }
+}
