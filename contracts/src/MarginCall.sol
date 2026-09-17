@@ -35,6 +35,7 @@ contract MarginCall is ERC721 {
     error NotPositionOwner(address caller, address owner);
     error DebtOutstanding(uint256 tokenId);
     error CreditPoolAlreadySet();
+    error NotInitializer(address caller);
     error InvalidCreditPool();
     error OracleNotLive(IOracleAdapter.State state);
     error ContributionTooSmall(uint256 contributionValue);
@@ -55,6 +56,10 @@ contract MarginCall is ERC721 {
     IOracleAdapter public immutable ORACLE;
     IExecutionAdapter public immutable EXECUTION;
 
+    /// @notice The deployer, and the only address permitted to wire the credit pool. Holds no other authority:
+    ///         it cannot rewire the pool afterwards, move custody, or touch a position.
+    address public immutable INITIALIZER;
+
     ICreditPool public creditPool;
 
     mapping(uint256 tokenId => Position) public positions;
@@ -71,10 +76,17 @@ contract MarginCall is ERC721 {
         USDC = IERC20(usdc_);
         ORACLE = IOracleAdapter(oracle_);
         EXECUTION = IExecutionAdapter(execution_);
+        INITIALIZER = msg.sender;
     }
 
     /// @notice One-time wire of the protocol USDC pool. Validates immutable borrower and USDC match.
+    /// @dev Restricted to `INITIALIZER`. The value checks below are on caller-supplied view functions, so without
+    ///      this guard any address could front-run deployment with a conforming contract and, because
+    ///      `CreditPoolAlreadySet` makes the pointer permanent, brick financed opening until redeploy.
     function setCreditPool(address creditPool_) external {
+        if (msg.sender != INITIALIZER) {
+            revert NotInitializer(msg.sender);
+        }
         if (address(creditPool) != address(0)) {
             revert CreditPoolAlreadySet();
         }

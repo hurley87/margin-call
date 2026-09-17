@@ -1,12 +1,32 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
+import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+
 import {CreditPool} from "../../src/CreditPool.sol";
 import {IOracleAdapter} from "../../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
 import {V1Config} from "../../src/V1Config.sol";
 import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
 import {MarginCallTestBase} from "./MarginCallTestBase.sol";
+
+/// @dev Reports the values `setCreditPool` validates while `draw` supplies no USDC. Only reachable if an
+///      unauthorized address can wire it.
+contract ConformingHostilePool {
+    IERC20 public immutable USDC;
+    address public immutable borrower;
+
+    constructor(address usdc_, address borrower_) {
+        USDC = IERC20(usdc_);
+        borrower = borrower_;
+    }
+
+    function availableCredit() external pure returns (uint256) {
+        return type(uint256).max;
+    }
+
+    function draw(uint256) external {}
+}
 
 /// @dev RPC-free financed opening, credit capacity, oracle gates, and execution-bound coverage.
 contract FinancedOpenTest is MarginCallTestBase {
@@ -49,6 +69,46 @@ contract FinancedOpenTest is MarginCallTestBase {
         MarginCall other = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
         vm.expectRevert(MarginCall.InvalidCreditPool.selector);
         other.setCreditPool(address(wrongBorrower));
+    }
+
+    /// @dev A conforming-but-hostile pool passes every value check in `setCreditPool`, so the only thing standing
+    ///      between deployment and permanently bricked financed opening is the `INITIALIZER` guard.
+    function test_nonInitializerCannotWireTheCreditPool() public {
+        MarginCall fresh = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
+        assertEq(fresh.INITIALIZER(), address(this), "deployer is the initializer");
+
+        ConformingHostilePool hostile = new ConformingHostilePool(address(usdc), address(fresh));
+        assertEq(address(hostile.USDC()), address(usdc), "hostile pool reports the real USDC");
+        assertEq(hostile.borrower(), address(fresh), "hostile pool reports the real borrower");
+
+        address[3] memory outsiders = [alice, bob, carol];
+        for (uint256 i = 0; i < outsiders.length; ++i) {
+            vm.prank(outsiders[i]);
+            vm.expectRevert(abi.encodeWithSelector(MarginCall.NotInitializer.selector, outsiders[i]));
+            fresh.setCreditPool(address(hostile));
+        }
+        assertEq(address(fresh.creditPool()), address(0), "pool stayed unwired");
+
+        // The deployer can still wire the real pool, and only once.
+        CreditPool real = new CreditPool(address(usdc), address(fresh));
+        fresh.setCreditPool(address(real));
+        assertEq(address(fresh.creditPool()), address(real));
+        vm.expectRevert(MarginCall.CreditPoolAlreadySet.selector);
+        fresh.setCreditPool(address(hostile));
+    }
+
+    function test_initializerIsTheDeployerNotTheCaller() public {
+        vm.prank(alice);
+        MarginCall aliceDeployed = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
+        assertEq(aliceDeployed.INITIALIZER(), alice);
+
+        CreditPool poolForAlice = new CreditPool(address(usdc), address(aliceDeployed));
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotInitializer.selector, address(this)));
+        aliceDeployed.setCreditPool(address(poolForAlice));
+
+        vm.prank(alice);
+        aliceDeployed.setCreditPool(address(poolForAlice));
+        assertEq(address(aliceDeployed.creditPool()), address(poolForAlice));
     }
 
     function test_creditPoolDrawOnlyBorrower() public {
