@@ -1,21 +1,12 @@
-// Set on the Convex backend via: npx convex env set PRIVY_APP_ID <value> --prod
-// (Distinct from NEXT_PUBLIC_PRIVY_APP_ID, which is read by the Next.js client.)
-const privyAppId = process.env.PRIVY_APP_ID ?? "";
-
-// Privy access tokens use the bare string `privy.io` as the `iss` claim and
-// publish JWKS at a non-standard path, so we use Convex's customJwt provider
-// to specify the issuer and JWKS URL explicitly. The default OIDC provider
-// would 404 on `https://auth.privy.io/.well-known/jwks.json`.
+// No JWT providers yet. Product code does not require authenticated Convex
+// identity (empty schema, empty HTTP router). When the first authed Convex
+// table or function lands, add Dynamic customJwt here:
+//   issuer: `https://app.dynamicauth.com/${DYNAMIC_ENVIRONMENT_ID}`
+//   jwks: `https://app.dynamicauth.com/api/v0/sdk/${DYNAMIC_ENVIRONMENT_ID}/.well-known/jwks`
+//   algorithm: "RS256"
+//   applicationID: exact `aud` from a live Dynamic access token
 const authConfig = {
-  providers: [
-    {
-      type: "customJwt",
-      issuer: "privy.io",
-      jwks: `https://auth.privy.io/api/v1/apps/${privyAppId}/jwks.json`,
-      algorithm: "ES256",
-      applicationID: privyAppId,
-    },
-  ],
+  providers: [],
 };
 
 export default authConfig;

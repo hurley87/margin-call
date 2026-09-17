@@ -1,3 +1,5 @@
+import { WalletConnectControl } from "@/components/wallet/wallet-connect-control";
+
 export default function Home() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-[var(--t-bg)] px-6 font-mono text-[var(--t-text)]">
@@ -11,6 +13,7 @@ export default function Home() {
         <p className="mt-5 text-sm leading-6 text-[var(--t-muted)]">
           The next version of Margin Call is being built. Check back soon.
         </p>
+        <WalletConnectControl />
       </div>
     </main>
   );
