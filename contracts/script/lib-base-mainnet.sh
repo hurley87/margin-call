@@ -75,14 +75,42 @@ base_mainnet_assert_chain_id() {
   echo "$chain_id"
 }
 
+base_mainnet_prompt_key() {
+  # Usage: base_mainnet_prompt_key VAR_NAME "role description"
+  # If the key is already exported (contracts/.env, or the parent shell) it is left alone. Otherwise it is
+  # read from the terminal with echo off, so a real mainnet key never enters shell history, a file, or argv.
+  # Exported for this shell only. Never echoed.
+  local var_name="$1"
+  local role="$2"
+  local value
+  if [[ -n "${!var_name:-}" ]]; then
+    base_mainnet_normalize_key "$var_name"
+    return 0
+  fi
+  if [[ ! -t 0 ]]; then
+    echo "error: ${var_name} is unset (${role}) and there is no terminal to prompt on." >&2
+    echo "Export it for this shell, or run interactively. See script/BASE_MAINNET.md" >&2
+    exit 1
+  fi
+  read -r -s -p "${var_name} (${role}), input hidden: " value < /dev/tty
+  printf '\n' >&2
+  if [[ -z "$value" ]]; then
+    echo "error: ${var_name} cannot be empty" >&2
+    exit 1
+  fi
+  printf -v "$var_name" '%s' "$value"
+  export "${var_name?}"
+  base_mainnet_normalize_key "$var_name"
+}
+
 base_mainnet_require_operator_keys() {
-  : "${OPERATOR_PRIVATE_KEY:?Set OPERATOR_PRIVATE_KEY (Alice / deployer / treasury). See script/BASE_MAINNET.md}"
+  base_mainnet_prompt_key OPERATOR_PRIVATE_KEY "Alice / deployer / treasury"
 }
 
 base_mainnet_require_accept_keys() {
   base_mainnet_require_operator_keys
-  : "${EXECUTOR_PRIVATE_KEY:?Set EXECUTOR_PRIVATE_KEY (executor E). See script/BASE_MAINNET.md}"
-  : "${RECIPIENT_PRIVATE_KEY:?Set RECIPIENT_PRIVATE_KEY (Bob B). See script/BASE_MAINNET.md}"
+  base_mainnet_prompt_key EXECUTOR_PRIVATE_KEY "executor E"
+  base_mainnet_prompt_key RECIPIENT_PRIVATE_KEY "Bob B"
 }
 
 base_mainnet_require_live_confirm() {
@@ -111,33 +139,14 @@ base_mainnet_normalize_key() {
   fi
 }
 
-base_mainnet_normalize_keys() {
-  # Usage: base_mainnet_normalize_keys VAR_NAME...
-  local var_name
-  for var_name in "$@"; do
-    base_mainnet_normalize_key "$var_name"
-  done
-}
-
-base_mainnet_addr_from_key() {
-  # Prints address only; never the key. Accepts with or without 0x.
-  local key="$1"
-  if [[ "$key" != 0x* && "$key" != 0X* ]]; then
-    key="0x${key}"
-  fi
-  cast wallet address --private-key "$key"
-}
-
 base_mainnet_bootstrap() {
-  # Usage: base_mainnet_bootstrap "${BASH_SOURCE[0]}" [--no-cd]
+  # Usage: base_mainnet_bootstrap "${BASH_SOURCE[0]}"
   # Sets CONTRACTS_DIR and RPC_URL, loads contracts/.env, and checks the toolchain.
   local script_path="$1"
   local script_dir
   script_dir="$(cd "$(dirname "$script_path")" && pwd)"
   CONTRACTS_DIR="$(cd "${script_dir}/.." && pwd)"
-  if [[ "${2:-}" != "--no-cd" ]]; then
-    cd "$CONTRACTS_DIR"
-  fi
+  cd "$CONTRACTS_DIR"
   base_mainnet_load_env "$CONTRACTS_DIR"
   base_mainnet_require_foundry
   base_mainnet_require_rpc
@@ -152,17 +161,30 @@ base_mainnet_no_arguments() {
 }
 
 base_mainnet_resolve_wallets() {
-  # Sets alice/executor/bob from the three accept keys and enforces the distinctness the
-  # executor-clearing and lost-authority proofs depend on. Prints addresses only, never keys.
+  # Sets alice/executor/bob from the three accept keys. Derivation runs inside forge, which reads the keys
+  # via vm.envUint from the environment — deliberately NOT `cast wallet address --private-key`, which would
+  # expose the raw key in the child process arguments. script/Actors.s.sol also enforces distinctness, so
+  # that rule has one home. Addresses only ever leave this function; keys never do.
   base_mainnet_require_accept_keys
-  base_mainnet_normalize_keys OPERATOR_PRIVATE_KEY EXECUTOR_PRIVATE_KEY RECIPIENT_PRIVATE_KEY
-  alice="$(base_mainnet_addr_from_key "$OPERATOR_PRIVATE_KEY")"
-  executor="$(base_mainnet_addr_from_key "$EXECUTOR_PRIVATE_KEY")"
-  bob="$(base_mainnet_addr_from_key "$RECIPIENT_PRIVATE_KEY")"
-  if [[ "$alice" == "$executor" || "$alice" == "$bob" || "$executor" == "$bob" ]]; then
-    echo "error: OPERATOR, EXECUTOR, and RECIPIENT must resolve to three different addresses" >&2
+  local out
+  if ! out="$(cd "$CONTRACTS_DIR" && forge script script/Actors.s.sol:Actors --sig 'printActors()' 2>&1)"; then
+    echo "error: could not derive acceptance addresses from the configured keys." >&2
+    echo "Check OPERATOR/EXECUTOR/RECIPIENT_PRIVATE_KEY. See script/BASE_MAINNET.md" >&2
+    # Scrub any line carrying a 64-hex run so a bad key value cannot reach the terminal.
+    printf '%s\n' "$out" | grep -viE '[0-9a-fA-F]{64}' | tail -15 >&2 || true
     exit 1
   fi
+  alice="$(base_mainnet_parse_actor "$out" alice)"
+  executor="$(base_mainnet_parse_actor "$out" executor)"
+  bob="$(base_mainnet_parse_actor "$out" bob)"
+  if [[ -z "$alice" || -z "$executor" || -z "$bob" ]]; then
+    echo "error: could not parse acceptance addresses from forge output" >&2
+    exit 1
+  fi
+}
+
+base_mainnet_parse_actor() {
+  printf '%s\n' "$1" | sed -n "s/^[[:space:]]*ACTOR $2 \(0x[0-9a-fA-F]\{40\}\).*/\1/p" | head -1
 }
 
 base_mainnet_git_commit() {

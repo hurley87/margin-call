@@ -7,7 +7,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "${SCRIPT_DIR}/lib-base-mainnet.sh"
 
 base_mainnet_no_arguments $#
-base_mainnet_bootstrap "${BASH_SOURCE[0]}" --no-cd
+base_mainnet_bootstrap "${BASH_SOURCE[0]}"
 base_mainnet_resolve_wallets
 
 chain_id="$(base_mainnet_assert_chain_id "$RPC_URL")"

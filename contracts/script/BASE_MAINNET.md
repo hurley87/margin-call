@@ -18,7 +18,21 @@ Liquidation / shortfall / `HELD` / shared-custody / empty-pool / interest-timing
 
 A, E, and B **must be three different addresses**. Deployer and treasury are the same wallet as Alice.
 
-Put keys in gitignored `contracts/.env` (or export them). Hex with or without `0x` is fine — wrappers normalize for forge. **Never commit keys. Never pass keys as CLI args. Wrappers never print keys.**
+**How keys enter the run.** Preferred for real mainnet keys: leave them unset and let the wrapper prompt.
+Each wrapper reads any missing key from the terminal with echo off and exports it **for that shell only**, so
+the key never lands in shell history, a file, or a command line:
+
+```
+OPERATOR_PRIVATE_KEY (Alice / deployer / treasury), input hidden:
+```
+
+A gitignored `contracts/.env` is still read first and is fine for throwaway or test wallets, but a key stored
+there persists on disk — prefer the prompt for wallets holding real funds. Hex with or without `0x` is fine;
+wrappers normalize for forge.
+
+**Never commit keys. Never pass keys as CLI args. Wrappers never print keys.** Addresses are derived inside
+forge via `vm.envUint` (see [`Actors.s.sol`](./Actors.s.sol)) rather than `cast wallet address --private-key`,
+because an argv value is readable by any process inspecting the process table.
 
 | Env var                 | Role                                                         | Needs gas ETH?          | Also needs                   |
 | ----------------------- | ------------------------------------------------------------ | ----------------------- | ---------------------------- |

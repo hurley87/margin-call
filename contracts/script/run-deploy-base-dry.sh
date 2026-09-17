@@ -9,7 +9,6 @@ source "${SCRIPT_DIR}/lib-base-mainnet.sh"
 base_mainnet_no_arguments $#
 base_mainnet_bootstrap "${BASH_SOURCE[0]}"
 base_mainnet_require_operator_keys
-base_mainnet_normalize_keys OPERATOR_PRIVATE_KEY
 
 chain_id="$(base_mainnet_assert_chain_id "$RPC_URL")"
 

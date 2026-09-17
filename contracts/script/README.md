@@ -16,6 +16,11 @@ command-line argument, and do not put it inline in `export ...=<key>` (both ente
 shell history). For local use, paste a **disposable Anvil development key** into
 a silent prompt.
 
+The same rule holds on the Base mainnet path, where the wrappers prompt for any
+missing key with echo off and derive addresses inside forge via `vm.envUint` —
+never by handing a key to a child process as an argument. See
+[BASE_MAINNET.md](./BASE_MAINNET.md).
+
 ## Shared setup
 
 1. Start Anvil (leave it running):
