@@ -83,7 +83,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         console.log("targetLeverage bps", leverage);
 
         vm.startBroadcast(aliceKey);
-        (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool) = _deployStack();
+        (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool) = _deployStack(alice);
         usdc.mint(address(pool), CREDIT_SEED);
         nvdac.mint(alice, contributedStock);
         nvdac.approve(address(marginCall), contributedStock);
@@ -95,7 +95,11 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         console.log("state written to", STATE_PATH);
     }
 
-    function _deployStack() private returns (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool) {
+    /// @dev `treasury_` is the broadcasting signer, so the treasury withdrawal path stays reachable by a held key.
+    function _deployStack(address treasury_)
+        private
+        returns (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool)
+    {
         nvdac = new MockNvdaC();
         usdc = new MockUsdc();
         MockOracleAdapter oracle = new MockOracleAdapter();
@@ -103,7 +107,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         ExecutionAdapter execution =
             new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
         marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
-        pool = new CreditPool(address(usdc), address(marginCall));
+        pool = new CreditPool(address(usdc), address(marginCall), treasury_);
         marginCall.setCreditPool(address(pool));
         oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
         router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);

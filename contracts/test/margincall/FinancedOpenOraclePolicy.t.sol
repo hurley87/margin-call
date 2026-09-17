@@ -82,7 +82,7 @@ contract FinancedOpenOraclePolicyTest is Test {
         ExecutionAdapter execution =
             new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
         marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
-        pool = new CreditPool(address(usdc), address(marginCall));
+        pool = new CreditPool(address(usdc), address(marginCall), makeAddr("treasury"));
         marginCall.setCreditPool(address(pool));
 
         usdc.mint(address(pool), 1_000_000e6);

@@ -81,7 +81,7 @@ contract FinancedPositionOpen is LocalHarnessBase {
         ExecutionAdapter execution =
             new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
         MarginCall marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
-        CreditPool pool = new CreditPool(address(usdc), address(marginCall));
+        CreditPool pool = new CreditPool(address(usdc), address(marginCall), signer);
         marginCall.setCreditPool(address(pool));
 
         oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);

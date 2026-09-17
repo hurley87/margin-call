@@ -49,11 +49,13 @@ abstract contract MarginCallTestBase is Test {
     address internal alice;
     address internal bob;
     address internal carol;
+    address internal treasury;
 
     function setUp() public virtual {
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         carol = makeAddr("carol");
+        treasury = makeAddr("treasury");
 
         nvdac = new MockNvdaC();
         usdc = new MockUsdc();
@@ -61,7 +63,7 @@ abstract contract MarginCallTestBase is Test {
         router = new MockSwapRouter(usdc, nvdac);
         execution = new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
         marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
-        pool = new CreditPool(address(usdc), address(marginCall));
+        pool = new CreditPool(address(usdc), address(marginCall), treasury);
         marginCall.setCreditPool(address(pool));
 
         usdc.mint(address(pool), DEFAULT_CREDIT);
