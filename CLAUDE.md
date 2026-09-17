@@ -41,6 +41,8 @@ capability only through separately scoped work.
   - minimal public risk/read surface — `riskSnapshot(tokenId)` returns LIVE-only `nav`, `currentDebt`,
     and `liquidatable` using the same predicate as `liquidate`; ownership, `positions`, `currentDebt`,
     and `CreditPool.availableCredit()` remain the authoritative oracle-independent reads
+  - treasury idle withdrawal on `CreditPool` — immutable `treasury` may withdraw idle USDC only; does
+    not touch borrowed capital, Position NFT state, or user debt
 
   Still future work: the living NFT presentation (`tokenURI` is minimal identity metadata only).
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.

@@ -120,7 +120,7 @@ Responsibilities:
 
 ### `CreditPool`
 
-Simple protocol-owned USDC pool. It holds capital, lends only to `MarginCall`, receives repayments, and exposes available liquid credit.
+Simple protocol-owned USDC pool. It holds capital, lends only to `MarginCall`, receives repayments, and exposes available liquid credit. The immutable treasury may withdraw idle `availableCredit` without touching borrowed capital or Position NFT state.
 
 ### `OracleAdapter`
 

@@ -56,7 +56,7 @@ contract SpotPositionLifecycle is LocalHarnessBase {
         ExecutionAdapter execution =
             new ExecutionAdapter(address(usdc), address(state.nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
         state.marginCall = new MarginCall(address(state.nvdac), address(usdc), address(oracle), address(execution));
-        CreditPool pool = new CreditPool(address(usdc), address(state.marginCall));
+        CreditPool pool = new CreditPool(address(usdc), address(state.marginCall), state.signer);
         state.marginCall.setCreditPool(address(pool));
         oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
         console.log("marginCall", address(state.marginCall));

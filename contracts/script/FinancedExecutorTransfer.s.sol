@@ -103,7 +103,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         ExecutionAdapter execution =
             new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
         marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
-        pool = new CreditPool(address(usdc), address(marginCall));
+        pool = new CreditPool(address(usdc), address(marginCall), makeAddr("treasury"));
         marginCall.setCreditPool(address(pool));
         oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
         router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);

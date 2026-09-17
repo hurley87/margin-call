@@ -53,7 +53,7 @@ abstract contract MarginCallForkBase is Test {
             BaseV1Constants.UNISWAP_FEE
         );
         marginCall = new MarginCall(BaseV1Constants.NVDAC, BaseV1Constants.USDC, address(oracle), address(execution));
-        pool = new CreditPool(BaseV1Constants.USDC, address(marginCall));
+        pool = new CreditPool(BaseV1Constants.USDC, address(marginCall), makeAddr("treasury"));
         marginCall.setCreditPool(address(pool));
 
         deal(BaseV1Constants.USDC, address(pool), CREDIT_SEED);

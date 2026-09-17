@@ -58,14 +58,14 @@ contract FinancedOpenTest is MarginCallTestBase {
 
     function test_setCreditPoolOnceAndValidatesBorrower() public {
         MarginCall fresh = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
-        CreditPool good = new CreditPool(address(usdc), address(fresh));
+        CreditPool good = new CreditPool(address(usdc), address(fresh), treasury);
         fresh.setCreditPool(address(good));
         assertEq(address(fresh.creditPool()), address(good));
 
         vm.expectRevert(MarginCall.CreditPoolAlreadySet.selector);
         fresh.setCreditPool(address(good));
 
-        CreditPool wrongBorrower = new CreditPool(address(usdc), address(this));
+        CreditPool wrongBorrower = new CreditPool(address(usdc), address(this), treasury);
         MarginCall other = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
         vm.expectRevert(MarginCall.InvalidCreditPool.selector);
         other.setCreditPool(address(wrongBorrower));
@@ -90,7 +90,7 @@ contract FinancedOpenTest is MarginCallTestBase {
         assertEq(address(fresh.creditPool()), address(0), "pool stayed unwired");
 
         // The deployer can still wire the real pool, and only once.
-        CreditPool real = new CreditPool(address(usdc), address(fresh));
+        CreditPool real = new CreditPool(address(usdc), address(fresh), treasury);
         fresh.setCreditPool(address(real));
         assertEq(address(fresh.creditPool()), address(real));
         vm.expectRevert(MarginCall.CreditPoolAlreadySet.selector);
@@ -102,7 +102,7 @@ contract FinancedOpenTest is MarginCallTestBase {
         MarginCall aliceDeployed = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
         assertEq(aliceDeployed.INITIALIZER(), alice);
 
-        CreditPool poolForAlice = new CreditPool(address(usdc), address(aliceDeployed));
+        CreditPool poolForAlice = new CreditPool(address(usdc), address(aliceDeployed), treasury);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotInitializer.selector, address(this)));
         aliceDeployed.setCreditPool(address(poolForAlice));
 
