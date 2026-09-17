@@ -9,7 +9,6 @@ import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 
 /// @dev Stateful fuzz handler for shared NVDAc custody vs recorded Position stock.
 contract MarginCallHandler is Test {
-    uint256 internal constant SPOT_LEVERAGE = 10_000;
     uint256 internal constant MAX_LIVE = 16;
     uint256 internal constant MAX_AMOUNT = 50e8;
 
@@ -24,7 +23,6 @@ contract MarginCallHandler is Test {
     uint256[] public liveIds;
     mapping(uint256 tokenId => uint256) public recordedStock;
     mapping(uint256 tokenId => address) public recordedOwner;
-    mapping(uint256 tokenId => bool) public seenTokenId;
 
     constructor(MockNvdaC nvdac_, MarginCall marginCall_, address[] memory actors_) {
         nvdac = nvdac_;
@@ -46,12 +44,10 @@ contract MarginCallHandler is Test {
         nvdac.mint(actor, amount);
         vm.startPrank(actor);
         nvdac.approve(address(marginCall), amount);
-        uint256 tokenId = marginCall.openPosition(amount, SPOT_LEVERAGE, 0);
+        uint256 tokenId = marginCall.openPosition(amount, marginCall.SPOT_LEVERAGE(), 0);
         vm.stopPrank();
 
-        assertFalse(seenTokenId[tokenId], "token id reused");
-        seenTokenId[tokenId] = true;
-        assertEq(tokenId, nextExpectedTokenId);
+        assertEq(tokenId, nextExpectedTokenId, "token id reused or skipped");
         nextExpectedTokenId += 1;
 
         recordedStock[tokenId] = amount;
@@ -72,7 +68,6 @@ contract MarginCallHandler is Test {
         assertEq(marginCall.ownerOf(tokenId), owner);
         uint256 ownerBefore = nvdac.balanceOf(owner);
         uint256 custodyBefore = nvdac.balanceOf(address(marginCall));
-        uint256 othersBefore = liveStock - stock;
 
         vm.prank(owner);
         marginCall.closePosition(tokenId);
@@ -80,7 +75,6 @@ contract MarginCallHandler is Test {
         assertEq(nvdac.balanceOf(owner), ownerBefore + stock, "close returned another position's stock");
         assertEq(nvdac.balanceOf(address(marginCall)), custodyBefore - stock);
         liveStock -= stock;
-        assertEq(liveStock, othersBefore);
         recordedStock[tokenId] = 0;
         recordedOwner[tokenId] = address(0);
         _removeAt(idx);
@@ -133,6 +127,12 @@ contract MarginCallHandler is Test {
     }
 }
 
+/// @dev `fail-on-revert` is required: the handler asserts inside its actions, and with the default `false` the
+///      runner would discard a reverting action and report a vacuous PASS. Every action early-returns (never
+///      reverts) when it has nothing valid to do, so a revert here is always a genuine failure.
+/// forge-config: default.invariant.fail-on-revert = true
+/// forge-config: ci.invariant.fail-on-revert = true
+/// forge-config: ci_fuzz.invariant.fail-on-revert = true
 contract MarginCallInvariantTest is MarginCallTestBase {
     MarginCallHandler internal handler;
 

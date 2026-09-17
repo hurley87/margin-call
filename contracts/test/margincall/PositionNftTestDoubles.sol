@@ -23,17 +23,8 @@ contract MockNvdaC is ERC20 {
 
 /// @dev `transferFrom` returns `false` without mutating balances.
 contract FalseReturningNvdaC {
-    error TransferFailed();
-
-    mapping(address owner => mapping(address spender => uint256)) public allowance;
-
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
+    function approve(address, uint256) external pure returns (bool) {
         return true;
-    }
-
-    function transfer(address, uint256) external pure returns (bool) {
-        return false;
     }
 
     function transferFrom(address, address, uint256) external pure returns (bool) {
@@ -45,10 +36,7 @@ contract FalseReturningNvdaC {
 contract RevertingNvdaC {
     error TransferFailed();
 
-    mapping(address owner => mapping(address spender => uint256)) public allowance;
-
-    function approve(address spender, uint256 amount) external returns (bool) {
-        allowance[msg.sender][spender] = amount;
+    function approve(address, uint256) external pure returns (bool) {
         return true;
     }
 
@@ -57,19 +45,11 @@ contract RevertingNvdaC {
     }
 }
 
-/// @dev Records MarginCall state observed inside `onERC721Received` during `_safeMint`.
-contract InspectingReceiver is IERC721Receiver {
+/// @dev Shared rig for the receiver doubles. Only `onERC721Received` legitimately varies between them, so the
+///      custody state, the constructor, and the open flow live here once.
+abstract contract SpotOpener {
     MarginCall public immutable marginCall;
     MockNvdaC public immutable nvdac;
-
-    address public observedOwner;
-    uint256 public observedStockAmount;
-    uint256 public observedPrincipal;
-    uint256 public observedAccruedInterest;
-    uint256 public observedLastAccruedAt;
-    address public observedExecutor;
-    uint256 public observedCustody;
-    uint256 public observedDebt;
 
     constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
         marginCall = marginCall_;
@@ -80,6 +60,20 @@ contract InspectingReceiver is IERC721Receiver {
         nvdac.approve(address(marginCall), stockAmount);
         return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
     }
+}
+
+/// @dev Records MarginCall state observed inside `onERC721Received` during `_safeMint`.
+contract InspectingReceiver is SpotOpener, IERC721Receiver {
+    address public observedOwner;
+    uint256 public observedStockAmount;
+    uint256 public observedPrincipal;
+    uint256 public observedAccruedInterest;
+    uint256 public observedLastAccruedAt;
+    address public observedExecutor;
+    uint256 public observedCustody;
+    uint256 public observedDebt;
+
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_) SpotOpener(marginCall_, nvdac_) {}
 
     function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
         observedOwner = marginCall.ownerOf(tokenId);
@@ -92,20 +86,10 @@ contract InspectingReceiver is IERC721Receiver {
 }
 
 /// @dev Closes the minted token during the safe-mint receiver callback.
-contract CallbackCloser is IERC721Receiver {
-    MarginCall public immutable marginCall;
-    MockNvdaC public immutable nvdac;
+contract CallbackCloser is SpotOpener, IERC721Receiver {
     bool public didClose;
 
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
-        marginCall = marginCall_;
-        nvdac = nvdac_;
-    }
-
-    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
-        nvdac.approve(address(marginCall), stockAmount);
-        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
-    }
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_) SpotOpener(marginCall_, nvdac_) {}
 
     function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
         marginCall.closePosition(tokenId);
@@ -115,20 +99,11 @@ contract CallbackCloser is IERC721Receiver {
 }
 
 /// @dev Transfers the minted token during the safe-mint receiver callback.
-contract CallbackTransferrer is IERC721Receiver {
-    MarginCall public immutable marginCall;
-    MockNvdaC public immutable nvdac;
+contract CallbackTransferrer is SpotOpener, IERC721Receiver {
     address public immutable recipient;
 
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_, address recipient_) {
-        marginCall = marginCall_;
-        nvdac = nvdac_;
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, address recipient_) SpotOpener(marginCall_, nvdac_) {
         recipient = recipient_;
-    }
-
-    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
-        nvdac.approve(address(marginCall), stockAmount);
-        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
     }
 
     function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
@@ -137,40 +112,18 @@ contract CallbackTransferrer is IERC721Receiver {
     }
 }
 
-contract RevertingReceiver is IERC721Receiver {
+contract RevertingReceiver is SpotOpener, IERC721Receiver {
     error Rejected();
 
-    MarginCall public immutable marginCall;
-    MockNvdaC public immutable nvdac;
-
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
-        marginCall = marginCall_;
-        nvdac = nvdac_;
-    }
-
-    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
-        nvdac.approve(address(marginCall), stockAmount);
-        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
-    }
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_) SpotOpener(marginCall_, nvdac_) {}
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         revert Rejected();
     }
 }
 
-contract InvalidSelectorReceiver is IERC721Receiver {
-    MarginCall public immutable marginCall;
-    MockNvdaC public immutable nvdac;
-
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
-        marginCall = marginCall_;
-        nvdac = nvdac_;
-    }
-
-    function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
-        nvdac.approve(address(marginCall), stockAmount);
-        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
-    }
+contract InvalidSelectorReceiver is SpotOpener, IERC721Receiver {
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_) SpotOpener(marginCall_, nvdac_) {}
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         return bytes4(0xdeadbeef);

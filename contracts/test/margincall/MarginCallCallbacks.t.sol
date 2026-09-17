@@ -5,7 +5,6 @@ import {Vm} from "forge-std/Vm.sol";
 import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
-import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
 import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 import {
@@ -31,11 +30,11 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
         assertEq(receiver.observedStockAmount(), deposit);
         assertEq(receiver.observedPrincipal(), 0);
         assertEq(receiver.observedAccruedInterest(), 0);
-        assertEq(receiver.observedLastAccruedAt(), BaseV1Constants.PINNED_TIMESTAMP);
+        assertEq(receiver.observedLastAccruedAt(), OPENED_AT);
         assertEq(receiver.observedExecutor(), address(0));
         assertEq(receiver.observedDebt(), 0);
         assertEq(receiver.observedCustody(), deposit);
-        _assertLiveSpotPosition(tokenId, address(receiver), deposit, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, address(receiver), deposit, OPENED_AT);
         assertEq(nvdac.balanceOf(address(marginCall)), deposit);
         assertEq(nvdac.balanceOf(address(receiver)), 0);
     }
@@ -51,7 +50,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
 
         assertEq(tokenId, 1);
         assertTrue(closer.didClose());
-        _assertOpenedBeforeLaterLifecycle(logs, address(marginCall), address(closer));
+        _assertMarginCallEvents(logs, address(closer), _openThenTransferOrder(true));
         _assertTokenDoesNotExist(tokenId);
         _assertPositionDeleted(tokenId);
         assertEq(nvdac.balanceOf(address(closer)), deposit);
@@ -68,9 +67,9 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
         Vm.Log[] memory logs = vm.getRecordedLogs();
 
         assertEq(tokenId, 1);
-        _assertOpenedBeforeLaterLifecycle(logs, address(marginCall), address(transferrer));
+        _assertMarginCallEvents(logs, address(transferrer), _openThenTransferOrder(false));
         assertEq(marginCall.ownerOf(tokenId), bob);
-        _assertLiveSpotPosition(tokenId, bob, deposit, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, bob, deposit, OPENED_AT);
         assertEq(nvdac.balanceOf(address(marginCall)), deposit);
 
         vm.prank(address(transferrer));
@@ -133,15 +132,15 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
 
         uint256 second = _open(alice, ONE_NVDAC);
         assertEq(second, 2);
-        _assertLiveSpotPosition(first, alice, ONE_NVDAC, BaseV1Constants.PINNED_TIMESTAMP);
-        _assertLiveSpotPosition(second, alice, ONE_NVDAC, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(first, alice, ONE_NVDAC, OPENED_AT);
+        _assertLiveSpotPosition(second, alice, ONE_NVDAC, OPENED_AT);
         assertEq(nvdac.balanceOf(address(receiver)), ONE_NVDAC);
     }
 
     function _openAfterRollback(uint256 deposit) private returns (uint256 tokenId) {
         _fund(alice, deposit);
         tokenId = _open(alice, deposit);
-        _assertLiveSpotPosition(tokenId, alice, deposit, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, alice, deposit, OPENED_AT);
     }
 
     function _assertOpenFullyRolledBack(address opener, uint256 deposit) private {
@@ -153,48 +152,52 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
         assertEq(nvdac.balanceOf(opener), deposit);
     }
 
-    function _assertOpenedBeforeLaterLifecycle(Vm.Log[] memory logs, address mc, address opener) private pure {
-        bytes32 openedTopic = MarginCall.PositionOpened.selector;
-        bytes32 closedTopic = MarginCall.PositionClosed.selector;
-        bytes32 transferTopic = IERC721.Transfer.selector;
+    /// @dev Asserts the exact topic0 sequence `marginCall` emitted, plus the opener facts carried in the first
+    ///      two events. Sequence-based rather than index-comparison-based so every check is unconditional: the
+    ///      previous form skipped its close/transfer ordering asserts when the event was absent entirely.
+    function _assertMarginCallEvents(Vm.Log[] memory logs, address opener, bytes32[] memory expectedOrder)
+        private
+        view
+    {
+        Vm.Log[] memory emitted = _marginCallLogs(logs);
+        assertEq(emitted.length, expectedOrder.length, "unexpected MarginCall event count");
+        for (uint256 i = 0; i < expectedOrder.length; ++i) {
+            assertEq(emitted[i].topics[0], expectedOrder[i], "unexpected MarginCall event order");
+        }
 
-        int256 openedIndex = -1;
-        int256 mintIndex = -1;
-        int256 laterTransferIndex = -1;
-        int256 closedIndex = -1;
+        // PositionOpened(tokenId, owner, stockAmount) then the mint Transfer(address(0), opener, tokenId).
+        assertEq(_topicAddress(emitted[0].topics[2]), opener, "PositionOpened owner");
+        assertEq(_topicAddress(emitted[1].topics[1]), address(0), "mint Transfer from");
+        assertEq(_topicAddress(emitted[1].topics[2]), opener, "mint Transfer to");
+    }
 
+    function _marginCallLogs(Vm.Log[] memory logs) private view returns (Vm.Log[] memory emitted) {
+        uint256 count;
         for (uint256 i = 0; i < logs.length; ++i) {
-            if (logs[i].emitter != mc || logs[i].topics.length == 0) {
-                continue;
-            }
-            bytes32 topic0 = logs[i].topics[0];
-            if (topic0 == openedTopic && openedIndex < 0) {
-                openedIndex = int256(i);
-                address openedOwner = address(uint160(uint256(logs[i].topics[2])));
-                require(openedOwner == opener, "PositionOpened owner mismatch");
-            } else if (topic0 == closedTopic && closedIndex < 0) {
-                closedIndex = int256(i);
-            } else if (topic0 == transferTopic) {
-                address from = address(uint160(uint256(logs[i].topics[1])));
-                if (from == address(0) && mintIndex < 0) {
-                    mintIndex = int256(i);
-                    address to = address(uint160(uint256(logs[i].topics[2])));
-                    require(to == opener, "minted to unexpected owner");
-                } else if (from != address(0) && laterTransferIndex < 0) {
-                    laterTransferIndex = int256(i);
-                }
+            if (logs[i].emitter == address(marginCall) && logs[i].topics.length != 0) {
+                ++count;
             }
         }
+        emitted = new Vm.Log[](count);
+        uint256 next;
+        for (uint256 i = 0; i < logs.length; ++i) {
+            if (logs[i].emitter == address(marginCall) && logs[i].topics.length != 0) {
+                emitted[next++] = logs[i];
+            }
+        }
+    }
 
-        require(openedIndex >= 0, "missing PositionOpened");
-        require(mintIndex > openedIndex, "mint Transfer before PositionOpened");
-        if (closedIndex >= 0) {
-            require(closedIndex > openedIndex, "PositionClosed before PositionOpened");
-            require(closedIndex > mintIndex, "PositionClosed before mint Transfer");
-        }
-        if (laterTransferIndex >= 0) {
-            require(laterTransferIndex > openedIndex, "transfer before PositionOpened");
-            require(laterTransferIndex > mintIndex, "ownership transfer before mint Transfer");
+    function _topicAddress(bytes32 topic) private pure returns (address) {
+        return address(uint160(uint256(topic)));
+    }
+
+    function _openThenTransferOrder(bool closed) private pure returns (bytes32[] memory order) {
+        order = new bytes32[](closed ? 4 : 3);
+        order[0] = MarginCall.PositionOpened.selector;
+        order[1] = IERC721.Transfer.selector;
+        order[2] = IERC721.Transfer.selector;
+        if (closed) {
+            order[3] = MarginCall.PositionClosed.selector;
         }
     }
 }

@@ -5,7 +5,6 @@ import {IERC721} from "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import {IERC20Errors, IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
-import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
 import {MarginCall} from "../../src/MarginCall.sol";
 import {MarginCallTestBase} from "./MarginCallTestBase.sol";
 import {FalseReturningNvdaC, RevertingNvdaC} from "./PositionNftTestDoubles.sol";
@@ -33,7 +32,7 @@ contract MarginCallTest is MarginCallTestBase {
 
         assertEq(tokenId, 1);
         assertEq(marginCall.balanceOf(alice), 1);
-        _assertLiveSpotPosition(tokenId, alice, deposit, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, alice, deposit, OPENED_AT);
         assertEq(nvdac.balanceOf(address(marginCall)), custodyBefore + deposit);
         assertEq(nvdac.balanceOf(alice), aliceBefore - deposit);
 
@@ -102,7 +101,7 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _open(alice, ONE_NVDAC);
         assertEq(tokenId, 1);
-        _assertLiveSpotPosition(tokenId, alice, ONE_NVDAC, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, alice, ONE_NVDAC, OPENED_AT);
     }
 
     function testFuzz_nonSpotLeverageReverts(uint256 leverage) public {
@@ -131,7 +130,7 @@ contract MarginCallTest is MarginCallTestBase {
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, bob, alice));
         marginCall.closePosition(tokenId);
 
-        _assertLiveSpotPosition(tokenId, alice, deposit, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, alice, deposit, OPENED_AT);
         assertEq(nvdac.balanceOf(address(marginCall)), custody);
         assertEq(nvdac.balanceOf(alice), 0);
     }
@@ -157,7 +156,7 @@ contract MarginCallTest is MarginCallTestBase {
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, bob, alice));
         marginCall.closePosition(tokenId);
 
-        _assertLiveSpotPosition(tokenId, alice, deposit, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, alice, deposit, OPENED_AT);
         assertEq(nvdac.balanceOf(address(marginCall)), deposit);
     }
 
@@ -184,7 +183,7 @@ contract MarginCallTest is MarginCallTestBase {
 
         _assertTokenDoesNotExist(tokenA);
         _assertPositionDeleted(tokenA);
-        _assertLiveSpotPosition(tokenB, bob, bobAmount, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenB, bob, bobAmount, OPENED_AT);
         assertEq(nvdac.balanceOf(alice), aliceAmount);
         assertEq(nvdac.balanceOf(bob), bobNvdacBefore);
         assertEq(nvdac.balanceOf(address(marginCall)), bobAmount);
@@ -212,14 +211,13 @@ contract MarginCallTest is MarginCallTestBase {
         uint256 custody = nvdac.balanceOf(address(marginCall));
         (uint256 stockA,,,,) = _position(tokenA);
         (uint256 stockB,,,,) = _position(tokenB);
-        assertLe(stockA + stockB, custody);
         assertEq(stockA + stockB + extra, custody);
 
         vm.prank(alice);
         marginCall.closePosition(tokenA);
 
         assertEq(nvdac.balanceOf(alice), aliceAmount);
-        _assertLiveSpotPosition(tokenB, bob, bobAmount, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenB, bob, bobAmount, OPENED_AT);
         assertEq(nvdac.balanceOf(address(marginCall)), bobAmount + extra);
 
         vm.prank(bob);
@@ -237,15 +235,15 @@ contract MarginCallTest is MarginCallTestBase {
         assertEq(first, 1);
         assertEq(second, 2);
         assertEq(marginCall.balanceOf(alice), 2);
-        _assertLiveSpotPosition(first, alice, 3 * ONE_NVDAC, BaseV1Constants.PINNED_TIMESTAMP);
-        _assertLiveSpotPosition(second, alice, 7 * ONE_NVDAC, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(first, alice, 3 * ONE_NVDAC, OPENED_AT);
+        _assertLiveSpotPosition(second, alice, 7 * ONE_NVDAC, OPENED_AT);
         assertEq(nvdac.balanceOf(address(marginCall)), 10 * ONE_NVDAC);
 
         vm.prank(alice);
         marginCall.closePosition(first);
 
         _assertTokenDoesNotExist(first);
-        _assertLiveSpotPosition(second, alice, 7 * ONE_NVDAC, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(second, alice, 7 * ONE_NVDAC, OPENED_AT);
         assertEq(marginCall.balanceOf(alice), 1);
         assertEq(nvdac.balanceOf(alice), 3 * ONE_NVDAC);
         assertEq(nvdac.balanceOf(address(marginCall)), 7 * ONE_NVDAC);
@@ -263,10 +261,9 @@ contract MarginCallTest is MarginCallTestBase {
         assertEq(first, 1);
         assertEq(second, 2);
         assertEq(third, 3);
-        assertTrue(first != second && second != third && first != third);
         _assertTokenDoesNotExist(first);
-        _assertLiveSpotPosition(second, alice, ONE_NVDAC, BaseV1Constants.PINNED_TIMESTAMP);
-        _assertLiveSpotPosition(third, alice, ONE_NVDAC, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(second, alice, ONE_NVDAC, OPENED_AT);
+        _assertLiveSpotPosition(third, alice, ONE_NVDAC, OPENED_AT);
     }
 
     function test_closeNonexistentTokenReverts() public {
@@ -300,7 +297,7 @@ contract MarginCallTest is MarginCallTestBase {
         assertEq(marginCall.ownerOf(tokenId), bob);
         assertEq(marginCall.balanceOf(alice), 0);
         assertEq(marginCall.balanceOf(bob), 1);
-        _assertLiveSpotPosition(tokenId, bob, deposit, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, bob, deposit, OPENED_AT);
         assertEq(nvdac.balanceOf(address(marginCall)), deposit);
         assertEq(nvdac.balanceOf(alice), 0);
 
@@ -330,7 +327,7 @@ contract MarginCallTest is MarginCallTestBase {
         marginCall.transferFrom(alice, carol, tokenId);
 
         assertEq(marginCall.ownerOf(tokenId), carol);
-        _assertLiveSpotPosition(tokenId, carol, deposit, BaseV1Constants.PINNED_TIMESTAMP);
+        _assertLiveSpotPosition(tokenId, carol, deposit, OPENED_AT);
 
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, bob, carol));
@@ -349,13 +346,11 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _open(alice, ONE_NVDAC);
 
-        string memory uri = marginCall.tokenURI(tokenId);
-        assertTrue(bytes(uri).length > bytes(TOKEN_URI_PREFIX).length);
-        assertEq(_prefix(uri, bytes(TOKEN_URI_PREFIX).length), TOKEN_URI_PREFIX);
-        assertEq(uri, _expectedTokenURI(tokenId));
+        // `_expectedTokenURI` is `TOKEN_URI_PREFIX + Base64.encode(_expectedTokenJson)`, so this single
+        // equality pins the prefix, the encoding, and the payload; the JSON shape is asserted on the payload.
+        assertEq(marginCall.tokenURI(tokenId), _expectedTokenURI(tokenId));
 
-        string memory json = _jsonFromTokenURI(uri);
-        assertEq(json, _expectedTokenJson(tokenId));
+        string memory json = _expectedTokenJson(tokenId);
         assertEq(vm.parseJsonString(json, ".name"), "Margin Call Position 1");
         assertEq(vm.parseJsonString(json, ".description"), "Spot-only NVDAc Position NFT");
         vm.parseJson(json);
@@ -450,7 +445,6 @@ contract MarginCallTest is MarginCallTestBase {
 
         (uint256 stockA,,,,) = _position(tokenA);
         (uint256 stockB,,,,) = _position(tokenB);
-        assertLe(stockA + stockB, nvdac.balanceOf(address(marginCall)));
         assertEq(stockA + stockB + extra, nvdac.balanceOf(address(marginCall)));
 
         vm.prank(alice);
@@ -485,7 +479,6 @@ contract MarginCallTest is MarginCallTestBase {
         (uint256 stockC,,,,) = _position(tokenC);
         uint256 recorded = stockA + stockB + stockC;
         assertEq(recorded, nvdac.balanceOf(address(marginCall)));
-        assertLe(recorded, nvdac.balanceOf(address(marginCall)));
 
         vm.prank(bob);
         marginCall.closePosition(tokenB);
@@ -493,32 +486,7 @@ contract MarginCallTest is MarginCallTestBase {
         (stockC,,,,) = _position(tokenC);
         recorded = stockA + stockC;
         assertEq(recorded, nvdac.balanceOf(address(marginCall)));
-        _assertLiveSpotPosition(tokenA, alice, aAmount, BaseV1Constants.PINNED_TIMESTAMP);
-        _assertLiveSpotPosition(tokenC, carol, cAmount, BaseV1Constants.PINNED_TIMESTAMP);
-    }
-
-    function _prefix(string memory value, uint256 length) internal pure returns (string memory) {
-        bytes memory raw = bytes(value);
-        bytes memory out = new bytes(length);
-        for (uint256 i = 0; i < length; ++i) {
-            out[i] = raw[i];
-        }
-        return string(out);
-    }
-
-    function _assertTokenDoesNotExistOn(MarginCall target, uint256 tokenId) internal {
-        vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, tokenId));
-        target.ownerOf(tokenId);
-    }
-
-    function _assertPositionDeletedOn(MarginCall target, uint256 tokenId) internal view {
-        (uint256 stockAmount, uint256 principal, uint256 accruedInterest, uint256 lastAccruedAt, address executor) =
-            target.positions(tokenId);
-        assertEq(stockAmount, 0);
-        assertEq(principal, 0);
-        assertEq(accruedInterest, 0);
-        assertEq(lastAccruedAt, 0);
-        assertEq(executor, address(0));
-        assertEq(target.currentDebt(tokenId), 0);
+        _assertLiveSpotPosition(tokenA, alice, aAmount, OPENED_AT);
+        _assertLiveSpotPosition(tokenC, carol, cAmount, OPENED_AT);
     }
 }

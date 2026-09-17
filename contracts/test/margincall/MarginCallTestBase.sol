@@ -13,7 +13,11 @@ import {MockNvdaC} from "./PositionNftTestDoubles.sol";
 abstract contract MarginCallTestBase is Test {
     using Strings for uint256;
 
+    /// @dev Asserted against `marginCall.SPOT_LEVERAGE()` in `setUp` so the literal cannot drift from the contract.
     uint256 internal constant SPOT_LEVERAGE = 10_000;
+    /// @dev A deterministic nonzero open time owned by this suite. Deliberately not the fork suite's pinned block:
+    ///      re-pinning that snapshot must not silently rewrite what these RPC-free assertions mean.
+    uint256 internal constant OPENED_AT = 1_700_000_000;
     uint256 internal constant ONE_NVDAC = 10 ** uint256(BaseV1Constants.NVDAC_DECIMALS);
     string internal constant TOKEN_URI_PREFIX = "data:application/json;base64,";
 
@@ -29,7 +33,8 @@ abstract contract MarginCallTestBase is Test {
         carol = makeAddr("carol");
         nvdac = new MockNvdaC();
         marginCall = new MarginCall(address(nvdac));
-        vm.warp(BaseV1Constants.PINNED_TIMESTAMP);
+        vm.warp(OPENED_AT);
+        assertEq(marginCall.SPOT_LEVERAGE(), SPOT_LEVERAGE, "SPOT_LEVERAGE drifted from the contract");
     }
 
     function _fund(address user, uint256 amount) internal {
@@ -39,6 +44,8 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _open(address user, uint256 amount) internal returns (uint256 tokenId) {
+        // Use the pinned constant, not `marginCall.SPOT_LEVERAGE()`: `vm.prank` covers only the next call, so a
+        // getter call here would consume the prank and `openPosition` would run as the test contract.
         vm.prank(user);
         tokenId = marginCall.openPosition(amount, SPOT_LEVERAGE, 0);
     }
@@ -73,19 +80,27 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _assertPositionDeleted(uint256 tokenId) internal view {
+        _assertPositionDeletedOn(marginCall, tokenId);
+    }
+
+    function _assertPositionDeletedOn(MarginCall target, uint256 tokenId) internal view {
         (uint256 stockAmount, uint256 principal, uint256 accruedInterest, uint256 lastAccruedAt, address executor) =
-            _position(tokenId);
+            target.positions(tokenId);
         assertEq(stockAmount, 0);
         assertEq(principal, 0);
         assertEq(accruedInterest, 0);
         assertEq(lastAccruedAt, 0);
         assertEq(executor, address(0));
-        assertEq(marginCall.currentDebt(tokenId), 0);
+        assertEq(target.currentDebt(tokenId), 0);
     }
 
     function _assertTokenDoesNotExist(uint256 tokenId) internal {
+        _assertTokenDoesNotExistOn(marginCall, tokenId);
+    }
+
+    function _assertTokenDoesNotExistOn(MarginCall target, uint256 tokenId) internal {
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, tokenId));
-        marginCall.ownerOf(tokenId);
+        target.ownerOf(tokenId);
     }
 
     function _expectedTokenJson(uint256 tokenId) internal pure returns (string memory) {
@@ -96,54 +111,5 @@ abstract contract MarginCallTestBase is Test {
 
     function _expectedTokenURI(uint256 tokenId) internal pure returns (string memory) {
         return string.concat(TOKEN_URI_PREFIX, Base64.encode(bytes(_expectedTokenJson(tokenId))));
-    }
-
-    function _jsonFromTokenURI(string memory uri) internal pure returns (string memory) {
-        bytes memory raw = bytes(uri);
-        bytes memory prefix = bytes(TOKEN_URI_PREFIX);
-        require(raw.length > prefix.length, "uri too short");
-        bytes memory encoded = new bytes(raw.length - prefix.length);
-        for (uint256 i = 0; i < encoded.length; ++i) {
-            encoded[i] = raw[prefix.length + i];
-        }
-        return string(_decodeBase64(encoded));
-    }
-
-    function _decodeBase64(bytes memory src) internal pure returns (bytes memory result) {
-        uint256 len = src.length;
-        require(len % 4 == 0, "invalid base64 length");
-
-        uint256 pad = 0;
-        if (len != 0) {
-            if (src[len - 1] == bytes1("=")) pad++;
-            if (len > 1 && src[len - 2] == bytes1("=")) pad++;
-        }
-
-        result = new bytes((len / 4) * 3 - pad);
-        uint256 outIndex;
-        for (uint256 i = 0; i < len; i += 4) {
-            uint256 v = (_base64Value(src[i]) << 18) | (_base64Value(src[i + 1]) << 12)
-                | (_base64Value(src[i + 2]) << 6) | _base64Value(src[i + 3]);
-            if (outIndex < result.length) {
-                result[outIndex++] = bytes1(uint8(v >> 16));
-            }
-            if (outIndex < result.length) {
-                result[outIndex++] = bytes1(uint8(v >> 8));
-            }
-            if (outIndex < result.length) {
-                result[outIndex++] = bytes1(uint8(v));
-            }
-        }
-    }
-
-    function _base64Value(bytes1 char) private pure returns (uint256) {
-        uint8 c = uint8(char);
-        if (c == uint8(bytes1("="))) return 0;
-        if (c >= uint8(bytes1("A")) && c <= uint8(bytes1("Z"))) return c - 65;
-        if (c >= uint8(bytes1("a")) && c <= uint8(bytes1("z"))) return c - 71;
-        if (c >= uint8(bytes1("0")) && c <= uint8(bytes1("9"))) return c + 4;
-        if (c == uint8(bytes1("+"))) return 62;
-        if (c == uint8(bytes1("/"))) return 63;
-        revert("invalid base64 char");
     }
 }

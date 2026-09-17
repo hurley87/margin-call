@@ -24,39 +24,25 @@ a silent prompt.
 2. Copy **one disposable Anvil development key** from Anvil's startup output.
    Do not use a live wallet.
 
-3. In a second terminal, from this `contracts/` directory, prompt silently then
-   run the harness:
+3. In a second terminal, prompt silently for the key. Never pass it as a flag or
+   an argument:
 
    ```sh
    read -rsp "Disposable Anvil private key: " MARGIN_CALL_PRIVATE_KEY
    echo
    export MARGIN_CALL_PRIVATE_KEY
-   ./script/run-local.sh
    ```
 
-   From the repository root:
+   Then run the harness either way:
 
-   ```sh
-   read -rsp "Disposable Anvil private key: " MARGIN_CALL_PRIVATE_KEY
-   echo
-   export MARGIN_CALL_PRIVATE_KEY
-   pnpm test:contracts:smoke
-   ```
+   - from this `contracts/` directory: `./script/run-local.sh`
+   - from the repository root: `pnpm test:contracts:smoke`
 
-   Equivalent Foundry command (still no `--private-key` flag):
-
-   ```sh
-   read -rsp "Disposable Anvil private key: " MARGIN_CALL_PRIVATE_KEY
-   echo
-   export MARGIN_CALL_PRIVATE_KEY
-   forge script script/SpotPositionLifecycle.s.sol:SpotPositionLifecycle \
-     --rpc-url http://127.0.0.1:8545 \
-     --broadcast \
-     -vv
-   ```
+   Both run the same thing; `run-local.sh` owns the chain guards and the `forge
+script` flags, so it is the one definition of the command.
 
    If `MARGIN_CALL_PRIVATE_KEY` is already set in the environment (non-interactive
-   use), skip the prompt and run `pnpm test:contracts:smoke` or `./script/run-local.sh`.
+   use), skip the prompt entirely.
 
 4. Optional stock amount (raw 8-decimal units; default `1e8` = 1.0 local NVDAc):
 

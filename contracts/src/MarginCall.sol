@@ -69,13 +69,12 @@ contract MarginCall is ERC721 {
         NVDAC.safeTransferFrom(msg.sender, address(this), stockAmount);
 
         tokenId = ++_nextTokenId;
-        positions[tokenId] = Position({
-            stockAmount: stockAmount,
-            principal: 0,
-            accruedInterest: 0,
-            lastAccruedAt: block.timestamp,
-            executor: address(0)
-        });
+        // `_nextTokenId` only ever increments and `closePosition` deletes the slot it burns, so `tokenId` is
+        // always fresh and `principal`, `accruedInterest`, and `executor` are already zero. Write only the two
+        // fields this slice owns; the financed slice adds its writes here.
+        Position storage position = positions[tokenId];
+        position.stockAmount = stockAmount;
+        position.lastAccruedAt = block.timestamp;
         emit PositionOpened(tokenId, msg.sender, stockAmount);
         _safeMint(msg.sender, tokenId);
     }
@@ -100,6 +99,9 @@ contract MarginCall is ERC721 {
     }
 
     /// @notice Stored principal plus accrued interest. Spot-only positions are opened at zero debt.
+    /// @dev Inert in this slice: nothing writes `principal` or `accruedInterest`, so this returns `0` for every
+    ///      live token and the `DebtOutstanding` guard in `closePosition` is unreachable. The financed-opening
+    ///      slice is the first to make both meaningful.
     function currentDebt(uint256 tokenId) public view returns (uint256) {
         Position storage position = positions[tokenId];
         return position.principal + position.accruedInterest;
@@ -117,6 +119,8 @@ contract MarginCall is ERC721 {
     }
 
     /// @dev Clear the executor on a real ownership transfer before any `safeTransferFrom` receiver callback.
+    ///      Inert in this slice: nothing assigns `executor`, so this write is always zero-to-zero. It is kept so
+    ///      the ordering guarantee ships with the field rather than trailing it.
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
         from = super._update(to, tokenId, auth);
         if (from != address(0) && to != address(0) && from != to) {
