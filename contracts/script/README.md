@@ -5,7 +5,10 @@ do **not** use a frontend, Privy, Dynamic, Convex, impersonation, or any live
 chain.
 
 **Local Anvil only.** Each Solidity script reverts unless `block.chainid == 31337`.
-Issue #429 owns any later Base-mainnet signer/deployment flow.
+Do not weaken this guard for mainnet work.
+
+Base mainnet deploy + acceptance (issue #429) lives in [BASE_MAINNET.md](./BASE_MAINNET.md)
+and hard-requires `block.chainid == 8453`.
 
 Never commit, hardcode, log, or paste a private key into source. Supply it only
 at runtime through `MARGIN_CALL_PRIVATE_KEY`. Do not pass the key as a
@@ -177,3 +180,6 @@ contracts/broadcast/FinancedExecutorTransfer.s.sol/31337/bobRepayAndVerify-lates
 
 `broadcast/` is gitignored. Do not commit these files. Stop Anvil with Ctrl+C
 when finished and discard the local key/session.
+
+For Base mainnet deploy + acceptance, see [BASE_MAINNET.md](./BASE_MAINNET.md)
+(`OPERATOR_PRIVATE_KEY` / `EXECUTOR_PRIVATE_KEY` / `RECIPIENT_PRIVATE_KEY`).

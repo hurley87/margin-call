@@ -43,6 +43,12 @@ capability only through separately scoped work.
     and `CreditPool.availableCredit()` remain the authoritative oracle-independent reads
   - treasury idle withdrawal on `CreditPool` — immutable `treasury` may withdraw idle USDC only; does
     not touch borrowed capital, Position NFT state, or user debt
+  - Base mainnet deploy + acceptance (issue #429) — V1 is live on Base (`chainid` 8453).
+    Curated addresses and tx evidence: `contracts/deployments/base.json`.
+    Scripts/runbook: `script/BASE_MAINNET.md`. Dry-run wrappers remain available;
+    live wrappers stay gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`.
+    Source verification was skipped on first live run (`ETHERSCAN_API_KEY` unset);
+    re-verify with Basescan when a key is available. No frontend yet.
 
   Still future work: the living NFT presentation (`tokenURI` is minimal identity metadata only).
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.

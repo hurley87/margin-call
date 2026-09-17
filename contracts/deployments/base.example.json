@@ -1,0 +1,52 @@
+{
+  "network": "base",
+  "chainId": 8453,
+  "sourceCommit": "REPLACE_WITH_GIT_SHA",
+  "deployer": "0xREPLACE_OPERATOR",
+  "treasury": "0xREPLACE_OPERATOR",
+  "contracts": {
+    "oracleAdapter": "0xREPLACE",
+    "executionAdapter": "0xREPLACE",
+    "marginCall": "0xREPLACE",
+    "creditPool": "0xREPLACE"
+  },
+  "config": {
+    "nvdac": "0xb20000000000000000000078ee7ce2fE4908108C",
+    "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "nvdaFeed": "0x04689a41629776563E6822F76f2e57D148d28513",
+    "coinbaseOracleRegistry": "0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD",
+    "baseSequencerUptimeFeed": "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433",
+    "uniswapSwapRouter02": "0x2626664c2603336E57B271c5C0b26F421741e481",
+    "uniswapFee": 3000,
+    "borrowAprBps": 1000,
+    "maintenanceEquityRatioBps": 3000
+  },
+  "deploymentTxHashes": {
+    "oracleAdapter": "0xREPLACE",
+    "executionAdapter": "0xREPLACE",
+    "marginCall": "0xREPLACE",
+    "creditPool": "0xREPLACE",
+    "setCreditPool": "0xREPLACE"
+  },
+  "acceptance": {
+    "creditSeedUsdcRaw": 20000000,
+    "treasuryWithdrawUsdcRaw": 1000000,
+    "stockAmountRaw": 1000000,
+    "leverageBps": 12500,
+    "tokenId": null,
+    "alice": "0xREPLACE_OPERATOR",
+    "executor": "0xREPLACE_EXECUTOR",
+    "bob": "0xREPLACE_RECIPIENT",
+    "txHashes": {
+      "seed": "0xREPLACE",
+      "treasuryWithdraw": "0xREPLACE",
+      "openFinanced": "0xREPLACE",
+      "setExecutor": "0xREPLACE",
+      "reduceExposure": "0xREPLACE",
+      "transferToBob": "0xREPLACE",
+      "bobRepay": "0xREPLACE",
+      "bobClose": "0xREPLACE"
+    },
+    "notes": "Fill after live AcceptV1. Do not store private keys."
+  }
+}

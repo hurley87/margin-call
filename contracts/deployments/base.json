@@ -1,0 +1,58 @@
+{
+  "network": "base",
+  "chainId": 8453,
+  "sourceCommit": "2cbb8eb36d0c67e509f429c5f5a62ab25721fc41",
+  "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "treasury": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "contracts": {
+    "oracleAdapter": "0x250C91ffAc5ed9E71d4efDe84261971324f8EbD9",
+    "executionAdapter": "0xc85f9E75a693D9186924Bd3afB17F432c38fEe73",
+    "marginCall": "0xe00D890a03eefE847Ef73f4f8c98311ef3E1d35d",
+    "creditPool": "0x700FEAA4dEcb6430d50c573AE572674433d206E7"
+  },
+  "config": {
+    "nvdac": "0xb20000000000000000000078ee7ce2fE4908108C",
+    "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "nvdaFeed": "0x04689a41629776563E6822F76f2e57D148d28513",
+    "coinbaseOracleRegistry": "0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD",
+    "baseSequencerUptimeFeed": "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433",
+    "uniswapSwapRouter02": "0x2626664c2603336E57B271c5C0b26F421741e481",
+    "uniswapFee": 3000,
+    "borrowAprBps": 1000,
+    "maintenanceEquityRatioBps": 3000
+  },
+  "deploymentTxHashes": {
+    "oracleAdapter": "0xbd3cd1692d1f1dc11888864eb4ca009540d24f8c37b46dc2551c380cb8295878",
+    "executionAdapter": "0xba7921124ffa1b88a4562421fbdfca67674e314628000d09a3da442ea268b718",
+    "marginCall": "0xb65dc80e644367046153cba35ceff17957cd9f4bf6adb1118cb20bdbb1c33e04",
+    "creditPool": "0x96446cf6c0ba5c0cba0a34a5d64fa8ced7b243d2db90fa806a36b506d30ee437",
+    "setCreditPool": "0xf2e3f2184450e9a247a4ded38465861941a13bf92b05a3cdedba7a525df07b0b"
+  },
+  "acceptance": {
+    "creditSeedUsdcRaw": 20000000,
+    "treasuryWithdrawUsdcRaw": 1000000,
+    "stockAmountRaw": 1000000,
+    "leverageBps": 12500,
+    "tokenId": 1,
+    "principalAtOpen": 544168,
+    "stockAtOpen": 1247481,
+    "stockBeforeTransfer": 1185107,
+    "debtBeforeTransfer": 407843,
+    "alice": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+    "executor": "0xd13Ba7998158829de492a556ad0a18652F81bfF8",
+    "bob": "0x6Fb99CD939c4ecbC19277c9e3cD55E2C28FE7E04",
+    "txHashes": {
+      "seed": "0xcbdd15b24c4f4a89e8917932b1cb004b6ea3090b05e3e44179984aeb91cf2e71",
+      "treasuryWithdraw": "0x92e2ded0b477c8ad77e37ad7daedcc83f82d7bda548e78c78d1ae98255892788",
+      "approveNvda": "0x7fd7d6cd7bb3e2ddbf17df97ce27c393d497061063b115330a5ef76d6a0af2e6",
+      "openFinanced": "0x5dfe6189e8530e78dcc7eb41b0b80cea3fd2f371f8504a635637bac06767395c",
+      "setExecutor": "0x353f7479be58e4852cf5a1d1fde11588afe5cd62bf520fc79805450582117c87",
+      "reduceExposure": "0x6853af8631f1d5af00867b7acf74015d2276a1cbd435ce495da9cda5b794931c",
+      "transferToBob": "0xb01f11bb71d19c7ce939334a6dcc111f77b3e52d6c4123779ed844ddd0445463",
+      "bobApproveUsdc": "0x21022665d1f8b10a6c1ca7bda2dce431d431611774606a9ce4d614228842dc61",
+      "bobRepay": "0x91f4850a0c785e4da8d23fa17e6d0e221c1dd1a2663afc717712c17db025b287",
+      "bobClose": "0x5726d20d8d5a905c8c5045c8e2e262d445d3c7c852dd35e363537fa4ec3eac75"
+    },
+    "notes": "Live A→E→B acceptance on 2026-09-17. Source verify was skipped (ETHERSCAN_API_KEY unset). No private keys stored."
+  }
+}
