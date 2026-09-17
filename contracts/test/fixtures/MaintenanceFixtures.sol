@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import {V1Config} from "../../src/V1Config.sol";
 
 /// @title MaintenanceFixtures
@@ -19,5 +21,15 @@ library MaintenanceFixtures {
     /// @dev NAV = stock * price / 10^10, so price = debt * 10^10 * 10_000 / (stock * debtShareBps).
     function priceForDebtShare(uint256 stock, uint256 debt, uint256 debtShareBps) internal pure returns (uint256) {
         return (debt * V1Config.VALUATION_DENOMINATOR * V1Config.BPS_DENOMINATOR) / (stock * debtShareBps);
+    }
+
+    /// @notice The smallest feed price at which `stock` against `debt` is still healthy; equality is safe.
+    /// @dev Derived from `V1Config` rather than a literal so a change to the maintenance ratio cannot leave a
+    ///      fixture sitting off the threshold it claims to pin.
+    function minHealthyPrice(uint256 stock, uint256 debt) internal pure returns (uint256) {
+        uint256 minHealthyNav = Math.ceilDiv(
+            debt * V1Config.BPS_DENOMINATOR, V1Config.BPS_DENOMINATOR - V1Config.MAINTENANCE_EQUITY_RATIO_BPS
+        );
+        return Math.ceilDiv(minHealthyNav * V1Config.VALUATION_DENOMINATOR, stock);
     }
 }

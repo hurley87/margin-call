@@ -243,10 +243,10 @@ contract MarginCall is ERC721 {
     }
 
     /// @notice Permissionless full unwind of an unhealthy financed position under LIVE pricing.
-    /// @dev Accrues first, then uses the same LIVE risk snapshot as `riskSnapshot` so the write-path verdict
-    ///      cannot drift from the public read. Equity must be strictly below the 30% maintenance ratio;
-    ///      equality is safe. Sells the entire recorded NVDAc bag through the fixed execution path with the
-    ///      protocol oracle floor as the only minOut, then settles through the shared `_settleProceeds`
+    /// @dev Accrues first, requires LIVE, then gates on the same shared risk predicate as `riskSnapshot` so the
+    ///      write-path verdict cannot drift from the public read. Equity must be strictly below the 30%
+    ///      maintenance ratio; equality is safe. Sells the entire recorded NVDAc bag through the fixed execution
+    ///      path with the protocol oracle floor as the only minOut, then settles through the shared `_settleProceeds`
     ///      waterfall: debt to `CreditPool`, surplus to the snapshotted NFT owner, and any unpaid remainder
     ///      finalized as `BadDebtRealized`. Always deletes accounting and burns the NFT. No liquidator reward
     ///      or fee.
@@ -256,14 +256,16 @@ contract MarginCall is ERC721 {
 
         _accrue(position);
 
-        // After `_accrue`, checkpoint debt equals `currentDebt`, so the shared helper's verdict matches the view.
-        (RiskSnapshot memory snap, IOracleAdapter.Observation memory observation) = _liveRiskSnapshot(tokenId);
-        if (!snap.liquidatable) {
+        IOracleAdapter.Observation memory observation = _requireLivePrice();
+
+        // Gate on the same checkpoint debt `_settleProceeds` will actually repay; `_accrue` above leaves nothing
+        // pending, so this is the position's current debt.
+        uint256 checkpointDebt = position.principal + position.accruedInterest;
+        if (!_riskSnapshot(position, observation.price, checkpointDebt).liquidatable) {
             revert NotLiquidatable(tokenId);
         }
 
         uint256 stockAmount = position.stockAmount;
-
         // Zero recorded stock before the swap so a reentrant callback cannot sell the same units twice.
         // A failed swap reverts the whole transaction and restores accounting.
         position.stockAmount = 0;
@@ -287,18 +289,18 @@ contract MarginCall is ERC721 {
     /// @dev Oracle-free and keeper-free. Interest is charged only while principal is outstanding, at the immutable
     ///      V1 10% APR. Spot opens stay at zero debt.
     function currentDebt(uint256 tokenId) public view returns (uint256) {
-        Position storage position = positions[tokenId];
-        return position.principal + position.accruedInterest + _pendingInterest(position);
+        return _currentDebt(positions[tokenId]);
     }
 
     /// @notice LIVE-only risk view: oracle NAV, current debt, and the liquidation verdict.
-    /// @dev Requires a live token and `LIVE` pricing. Uses the same valuation and `V1Config.isLiquidatable`
-    ///      predicate as `liquidate`. Reverts `OracleNotLive` under `HELD` / `INVALID` rather than reporting
+    /// @dev Requires a live token and `LIVE` pricing. Shares the valuation and `V1Config.isLiquidatable`
+    ///      predicate with `liquidate`. Reverts `OracleNotLive` under `HELD` / `INVALID` rather than reporting
     ///      current solvency from a non-live mark. Ownership, `positions`, and `currentDebt` remain readable
     ///      without this view.
-    function riskSnapshot(uint256 tokenId) public view returns (RiskSnapshot memory snap) {
+    function riskSnapshot(uint256 tokenId) external view returns (RiskSnapshot memory) {
         _requireOwned(tokenId);
-        (snap,) = _liveRiskSnapshot(tokenId);
+        Position storage position = positions[tokenId];
+        return _riskSnapshot(position, _requireLivePrice().price, _currentDebt(position));
     }
 
     /// @notice Minimal identity metadata for a live Position NFT. Full living presentation is owned by a later slice.
@@ -378,19 +380,24 @@ contract MarginCall is ERC721 {
         }
     }
 
-    /// @dev LIVE risk snapshot for an already-owned token. Single definition of NAV + debt + liquidation verdict,
-    ///      shared by `riskSnapshot` and `liquidate` so the public read and the write-path gate cannot disagree.
-    ///      Caller must ensure the token exists; this does not re-check ownership.
-    function _liveRiskSnapshot(uint256 tokenId)
+    /// @dev Principal plus accrued-interest checkpoint plus unaccrued interest through now, from a resolved
+    ///      pointer. Single definition of the debt formula, shared by `currentDebt` and `riskSnapshot`.
+    function _currentDebt(Position storage position) private view returns (uint256) {
+        return position.principal + position.accruedInterest + _pendingInterest(position);
+    }
+
+    /// @dev The risk triple at `price` for `debt`. Single definition of the NAV valuation and the
+    ///      `V1Config.isLiquidatable` verdict, shared by `riskSnapshot` and `liquidate` so the public read and the
+    ///      write-path gate cannot disagree. Callers supply the debt figure each already holds and the LIVE price
+    ///      from `_requireLivePrice`, so this stays free of both pricing admission and token resolution.
+    function _riskSnapshot(Position storage position, uint256 price, uint256 debt)
         private
         view
-        returns (RiskSnapshot memory snap, IOracleAdapter.Observation memory observation)
+        returns (RiskSnapshot memory snap)
     {
-        observation = _requireLivePrice();
-        Position storage position = positions[tokenId];
-        snap.nav = ORACLE.valueUsdc(position.stockAmount, observation.price);
-        snap.currentDebt = currentDebt(tokenId);
-        snap.liquidatable = V1Config.isLiquidatable(snap.nav, snap.currentDebt);
+        snap.nav = ORACLE.valueUsdc(position.stockAmount, price);
+        snap.currentDebt = debt;
+        snap.liquidatable = V1Config.isLiquidatable(snap.nav, debt);
     }
 
     /// @dev Approve exactly `stockAmount` to the fixed execution path, sell, then drop the allowance back to
