@@ -246,8 +246,8 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
         _assertRepayReverts(state, state.alice, probe, "alice-repay");
         _assertRepayReverts(state, state.executor, probe, "executor-repay");
-        _assertSetExecutorReverts(state, state.alice, state.alice, "alice-setExecutor");
-        _assertSetExecutorReverts(state, state.executor, state.executor, "executor-setExecutor");
+        _assertSetExecutorReverts(state, state.alice, "alice-setExecutor");
+        _assertSetExecutorReverts(state, state.executor, "executor-setExecutor");
 
         console.log("A and E management calls revert as required");
     }
@@ -261,11 +261,9 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         } catch {}
     }
 
-    function _assertSetExecutorReverts(HarnessState memory state, address caller, address candidate, string memory role)
-        private
-    {
+    function _assertSetExecutorReverts(HarnessState memory state, address caller, string memory role) private {
         vm.prank(caller);
-        try state.marginCall.setExecutor(state.tokenId, candidate) {
+        try state.marginCall.setExecutor(state.tokenId, caller) {
             revert AuthorityStillHeld(role);
         } catch {}
     }
