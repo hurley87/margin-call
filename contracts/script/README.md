@@ -56,7 +56,7 @@ Broadcast artifact:
 contracts/broadcast/SpotPositionLifecycle.s.sol/31337/run-latest.json
 ```
 
-## Financed open
+## Financed open → accrue → repay → close
 
 From `contracts/`: `./script/run-financed-local.sh`  
 From repo root: `pnpm test:contracts:smoke:financed`
@@ -65,22 +65,44 @@ Deploys mock NVDAc/USDC, a controllable oracle/router, production
 `OracleAdapter`-compatible mock, `ExecutionAdapter`, `CreditPool`, and
 `MarginCall`, funds the pool, then:
 
-`approve` → `openPosition(financed preset)`
+`approve` → `openPosition(financed preset)` → advance node clock → `repay` →
+`closePosition` → verify
+
+This runs as three phases against one node, and the split is load-bearing.
+`forge script --broadcast` simulates the whole script body locally and only
+then sends the recorded transactions, so an in-script `vm.warp` moves the
+simulation and never the node — a single-phase harness would broadcast the open
+and the repay into the same on-chain instant, accrue nothing, and still print a
+pass. Instead the wrapper advances Anvil itself between broadcasts:
+
+1. `deployAndOpen()` — deploys the stack, seeds the pool, opens the financed
+   position, and records addresses to `deployments/financed-local.run.json`.
+2. `cast rpc evm_increaseTime` + `evm_mine` — moves the real node clock, and the
+   wrapper aborts if the timestamp did not actually advance.
+3. `repayAndClose()` — forks a node whose clock genuinely moved, reads the real
+   `currentDebt`, reverts with `NoAccrualOnNode` if no interest accrued, then
+   repays with an oversized USDC cap and closes.
+4. `verify()` — read-only pass over the settled node. Asserts the pool is
+   strictly richer than it was seeded, which holds only if real interest
+   accrued on-chain and was actually repaid.
 
 Optional:
 
 ```sh
 export MARGIN_CALL_STOCK_AMOUNT=100000000
-export MARGIN_CALL_LEVERAGE_BPS=12500   # 11000 | 12500 | 14000 | 15000
+export MARGIN_CALL_LEVERAGE_BPS=12500     # 11000 | 12500 | 14000 | 15000
+export MARGIN_CALL_ACCRUAL_WINDOW=2592000 # seconds of node time to advance (default 30 days)
 ```
 
-The harness prints token id, owner, contributed/purchased NVDAc, borrowed USDC,
-pool balances, debt, and custody. Default leverage is `1.25x` (`12500`).
+The harness prints token id, contributed/purchased NVDAc, borrowed USDC, the
+node timestamp jump, debt read from the node, interest returned to the pool,
+and post-close custody. Default leverage is `1.25x` (`12500`).
 
-Broadcast artifact:
+Broadcast artifacts:
 
 ```text
-contracts/broadcast/FinancedPositionOpen.s.sol/31337/run-latest.json
+contracts/broadcast/FinancedPositionOpen.s.sol/31337/deployAndOpen-latest.json
+contracts/broadcast/FinancedPositionOpen.s.sol/31337/repayAndClose-latest.json
 ```
 
 ## Environment

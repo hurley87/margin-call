@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
-import {Script, console} from "forge-std/Script.sol";
-import {StdAssertions} from "forge-std/StdAssertions.sol";
-import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {console} from "forge-std/Script.sol";
 
 import {CreditPool} from "../src/CreditPool.sol";
 import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
@@ -11,19 +9,12 @@ import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
 import {MockNvdaC, MockOracleAdapter, MockSwapRouter, MockUsdc} from "../test/margincall/PositionNftTestDoubles.sol";
+import {LocalHarnessBase} from "./LocalHarnessBase.sol";
 
 /// @title SpotPositionLifecycle
 /// @notice Local-Anvil-only smoke harness: an ordinary EOA opens, inspects, and closes a spot Position NFT.
 /// @dev Requires `MARGIN_CALL_PRIVATE_KEY` at runtime. Never logs, persists, or hardcodes that key.
-contract SpotPositionLifecycle is Script, StdAssertions {
-    uint256 internal constant ANVIL_CHAIN_ID = 31337;
-    uint256 internal constant DEFAULT_STOCK_AMOUNT = 1e8;
-
-    error LocalAnvilOnly(uint256 actualChainId, uint256 requiredChainId);
-    error ZeroStockAmount();
-    error NftStillExists(uint256 tokenId, address owner);
-    error UnexpectedOwnerOfRevert(uint256 tokenId, bytes data);
-
+contract SpotPositionLifecycle is LocalHarnessBase {
     /// @dev Only what the `_inspect*` steps read. Everything else stays a `run()` local.
     struct RunState {
         address signer;
@@ -34,9 +25,7 @@ contract SpotPositionLifecycle is Script, StdAssertions {
     }
 
     function run() external {
-        if (block.chainid != ANVIL_CHAIN_ID) {
-            revert LocalAnvilOnly(block.chainid, ANVIL_CHAIN_ID);
-        }
+        _requireLocalAnvil();
 
         uint256 privateKey = vm.envUint("MARGIN_CALL_PRIVATE_KEY");
         RunState memory state;
@@ -131,17 +120,5 @@ contract SpotPositionLifecycle is Script, StdAssertions {
 
         assertEq(custody, 0, "final custody");
         assertEq(signerNvda, state.stockAmount, "signer received the deposit back");
-    }
-
-    function _assertTokenDoesNotExist(MarginCall marginCall, uint256 tokenId) internal view {
-        bytes memory expected = abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, tokenId);
-        (bool success, bytes memory data) =
-            address(marginCall).staticcall(abi.encodeCall(marginCall.ownerOf, (tokenId)));
-        if (success) {
-            revert NftStillExists(tokenId, abi.decode(data, (address)));
-        }
-        if (keccak256(data) != keccak256(expected)) {
-            revert UnexpectedOwnerOfRevert(tokenId, data);
-        }
     }
 }
