@@ -13,7 +13,7 @@ import {MockNvdaC, MockOracleAdapter, MockSwapRouter, MockUsdc} from "../test/ma
 import {LocalHarnessBase} from "./LocalHarnessBase.sol";
 
 /// @title FinancedExecutorTransfer
-/// @notice Local-Anvil-only A → E → B harness: open financed, appoint executor, E repays, A transfers to B.
+/// @notice Local-Anvil-only A → E → B harness: open financed, appoint executor, E repays and reduces, A transfers to B.
 /// @dev Requires three disposable Anvil keys. Never logs or hardcodes them. Anvil-only (`31337`).
 ///
 ///      Run through `run-executor-transfer-local.sh`, which advances the node clock between open and the
@@ -23,6 +23,8 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
     uint256 internal constant CREDIT_SEED = 1_000_000e6;
     /// @dev Partial repay size as a fraction of current debt (bps). 2500 = 25%.
     uint256 internal constant PARTIAL_REPAY_BPS = 2_500;
+    /// @dev Small reduceExposure size as a fraction of recorded stock (bps). 500 = 5%.
+    uint256 internal constant REDUCE_SALE_BPS = 500;
     /// @dev Overestimate applied to B's final repay (bps) so interest accruing between the debt read and the
     ///      repay transaction landing cannot leave a dust remainder. `repay` caps at min(amount, currentDebt).
     uint256 internal constant REPAY_BUFFER_BPS = 100;
@@ -33,6 +35,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
     error NoAccrualOnNode(uint256 debt, uint256 principalAtOpen);
     error AuthorityStillHeld(string role);
     error DebtNotCleared(uint256 remaining);
+    error ReduceDidNotCutStock(uint256 beforeStock, uint256 afterStock);
 
     struct HarnessState {
         address alice;
@@ -69,7 +72,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         address executor = vm.addr(vm.envUint("MARGIN_CALL_EXECUTOR_KEY"));
         address bob = vm.addr(vm.envUint("MARGIN_CALL_RECIPIENT_KEY"));
         console.log("=== LOCAL ONLY: financed A -> E -> B executor transfer ===");
-        console.log("phase 1/5: deploy + openPosition (financed)");
+        console.log("phase 1/6: deploy + openPosition (financed)");
         console.log("chainId", block.chainid);
         console.log("alice", alice);
         console.log("executor", executor);
@@ -143,7 +146,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         HarnessState memory state = _load();
 
         uint256 debt = state.marginCall.currentDebt(state.tokenId);
-        console.log("phase 2/5: setExecutor + E partial repay");
+        console.log("phase 2/6: setExecutor + E partial repay");
         console.log("node seconds elapsed since open", block.timestamp - state.openedAt);
         console.log("principal at open", state.principalAtOpen);
         console.log("currentDebt read from node", debt);
@@ -171,16 +174,55 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         console.log("executor set to", state.executor);
     }
 
-    // Phase 3 - separate broadcast: snapshot live post-repay accounting, then A transfers to B.
+    // Phase 3 - E performs a small reduceExposure while pricing is LIVE (mock oracle stays LIVE).
+    function executorReduceExposure() external {
+        _requireLocalAnvil();
+
+        uint256 executorKey = vm.envUint("MARGIN_CALL_EXECUTOR_KEY");
+        HarnessState memory state = _load();
+
+        console.log("phase 3/6: E reduceExposure");
+
+        (uint256 stockBefore,,,, address executorBefore) = state.marginCall.positions(state.tokenId);
+        assertEq(executorBefore, state.executor, "executor must still be set");
+        assertEq(state.marginCall.ownerOf(state.tokenId), state.alice, "A must still own");
+
+        uint256 sale = (stockBefore * REDUCE_SALE_BPS) / V1Config.BPS_DENOMINATOR;
+        assertGt(sale, 0, "sale must be nonzero");
+        assertLt(sale, stockBefore, "sale must leave residual stock");
+
+        uint256 debtBefore = state.marginCall.currentDebt(state.tokenId);
+        uint256 aliceUsdcBefore = state.usdc.balanceOf(state.alice);
+        uint256 executorUsdcBefore = state.usdc.balanceOf(state.executor);
+
+        vm.startBroadcast(executorKey);
+        // minOut = 0 so the protocol oracle floor binds inside ExecutionAdapter.
+        state.marginCall.reduceExposure(state.tokenId, sale, 0);
+        vm.stopBroadcast();
+
+        (uint256 stockAfter,,,,) = state.marginCall.positions(state.tokenId);
+        if (stockAfter != stockBefore - sale) {
+            revert ReduceDidNotCutStock(stockBefore, stockAfter);
+        }
+        assertLe(state.marginCall.currentDebt(state.tokenId), debtBefore, "debt must not increase");
+        assertEq(state.usdc.balanceOf(state.executor), executorUsdcBefore, "executor gets no surplus");
+        assertGe(state.usdc.balanceOf(state.alice), aliceUsdcBefore, "any surplus goes to owner A");
+
+        console.log("stock sold (raw NVDAc)", sale);
+        console.log("stock remaining", stockAfter);
+        console.log("debt after reduce", state.marginCall.currentDebt(state.tokenId));
+    }
+
+    // Phase 4 - separate broadcast: snapshot live post-reduce accounting, then A transfers to B.
     // Must be its own forge-script invocation so the snapshot reads settled chain state, not the
-    // prior script's local simulation of the repay.
+    // prior script's local simulation of the reduce.
     function transferToBob() external {
         _requireLocalAnvil();
 
         uint256 aliceKey = vm.envUint("MARGIN_CALL_PRIVATE_KEY");
         HarnessState memory state = _load();
 
-        console.log("phase 3/5: snapshot live accounting and transfer to B");
+        console.log("phase 4/6: snapshot live accounting and transfer to B");
 
         (
             uint256 stockBefore,
@@ -228,18 +270,23 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         console.log("executor after transfer", executorAfter);
     }
 
-    // Phase 4 - simulation-only: prove A and E lose repay / setExecutor authority after the transfer.
+    // Phase 5 - simulation-only: prove A and E lose repay / reduceExposure / setExecutor authority after transfer.
     function proveAuthorityLost() external {
         _requireLocalAnvil();
         HarnessState memory state = _load();
 
-        console.log("phase 4/5: prove A and E lost management authority");
+        console.log("phase 5/6: prove A and E lost management authority");
 
         assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B must still own");
         (,,,, address executor) = state.marginCall.positions(state.tokenId);
         assertEq(executor, address(0), "executor must stay cleared");
 
         uint256 probe = state.marginCall.currentDebt(state.tokenId);
+        (uint256 stock,,,,) = state.marginCall.positions(state.tokenId);
+        uint256 saleProbe = stock / 20;
+        if (saleProbe == 0) {
+            saleProbe = 1;
+        }
 
         // Fund approvals in simulation only; these writes are not broadcast.
         state.usdc.mint(state.alice, probe);
@@ -251,6 +298,8 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
         _assertRepayReverts(state, state.alice, probe, "alice-repay");
         _assertRepayReverts(state, state.executor, probe, "executor-repay");
+        _assertReduceReverts(state, state.alice, saleProbe, "alice-reduceExposure");
+        _assertReduceReverts(state, state.executor, saleProbe, "executor-reduceExposure");
         _assertSetExecutorReverts(state, state.alice, "alice-setExecutor");
         _assertSetExecutorReverts(state, state.executor, "executor-setExecutor");
 
@@ -266,6 +315,15 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         } catch {}
     }
 
+    function _assertReduceReverts(HarnessState memory state, address caller, uint256 sale, string memory role)
+        private
+    {
+        vm.prank(caller);
+        try state.marginCall.reduceExposure(state.tokenId, sale, 0) {
+            revert AuthorityStillHeld(role);
+        } catch {}
+    }
+
     function _assertSetExecutorReverts(HarnessState memory state, address caller, string memory role) private {
         vm.prank(caller);
         try state.marginCall.setExecutor(state.tokenId, caller) {
@@ -273,14 +331,14 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         } catch {}
     }
 
-    // Phase 5 - B repays remaining debt on the live node, then read-only settle checks.
+    // Phase 6 - B repays remaining debt on the live node, then read-only settle checks.
     function bobRepayAndVerify() external {
         _requireLocalAnvil();
 
         uint256 bobKey = vm.envUint("MARGIN_CALL_RECIPIENT_KEY");
         HarnessState memory state = _load();
 
-        console.log("phase 5/5: B repays remaining debt and verify");
+        console.log("phase 6/6: B repays remaining debt and verify");
 
         assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B must own before repay");
 
@@ -317,7 +375,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
         console.log("debt read before repay", remaining);
         console.log("repay ceiling submitted", payment);
-        console.log("=== PASS: A open -> E repay -> A transfer B -> A/E lose authority -> B repays ===");
+        console.log("=== PASS: A open -> E repay -> E reduce -> A transfer B -> A/E lose authority -> B repays ===");
     }
 
     function _persist(HarnessState memory state) private {

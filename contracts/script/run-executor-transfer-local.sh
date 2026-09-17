@@ -45,6 +45,7 @@ fi
 echo "Running financed A -> E -> B executor-transfer smoke test against local Anvil (${RPC_URL}, chain ${chain_id})"
 echo "Private keys are read from the environment and are never printed."
 echo "Broadcast artifacts: broadcast/FinancedExecutorTransfer.s.sol/31337/"
+echo "Flow: open -> accrue -> setExecutor/repay -> reduceExposure -> transfer -> authority check -> B repay"
 
 forge script "$SCRIPT_TARGET" --sig "deployAndOpen()" --rpc-url "$RPC_URL" --broadcast -vv
 
@@ -61,6 +62,7 @@ if (( ts_after - ts_before < ACCRUAL_WINDOW )); then
 fi
 
 forge script "$SCRIPT_TARGET" --sig "appointAndRepay()" --rpc-url "$RPC_URL" --broadcast -vv
+forge script "$SCRIPT_TARGET" --sig "executorReduceExposure()" --rpc-url "$RPC_URL" --broadcast -vv
 forge script "$SCRIPT_TARGET" --sig "transferToBob()" --rpc-url "$RPC_URL" --broadcast -vv
 
 # Simulation-only authority proof (no --broadcast): A and E management calls must revert.

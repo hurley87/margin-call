@@ -16,9 +16,10 @@ import {V1Config} from "./V1Config.sol";
 /// @title MarginCall
 /// @notice Position NFT coordinator: custody NVDAc, open spot or financed positions, and mint ERC-721 ownership.
 /// @dev `MarginCall` is the ERC-721. Token existence is the active-position status. The owner may appoint one
-///      executor per position via `setExecutor`; reduceExposure and liquidation are later slices. Borrowed USDC
-///      can only buy NVDAc through the fixed Uniswap execution path. Debt accrues lazily at the immutable V1 10%
-///      APR; `repay` restores USDC to the pool. Real ownership transfers clear the stored executor in `_update`.
+///      executor per position via `setExecutor`. `reduceExposure` sells exact NVDAc to repay debt; liquidation is
+///      a later slice. Borrowed USDC can only buy NVDAc through the fixed Uniswap execution path. Debt accrues
+///      lazily at the immutable V1 10% APR; `repay` restores USDC to the pool. Real ownership transfers clear the
+///      stored executor in `_update`.
 contract MarginCall is ERC721 {
     using SafeERC20 for IERC20;
 
@@ -32,6 +33,7 @@ contract MarginCall is ERC721 {
 
     error ZeroAddress();
     error ZeroStockAmount();
+    error ExcessStockAmount(uint256 requested, uint256 available);
     error UnsupportedLeverage(uint256 targetLeverage);
     error InvalidMinNvdaOut(uint256 minNvdaOut);
     error NotPositionOwner(address caller, address owner);
@@ -48,6 +50,7 @@ contract MarginCall is ERC721 {
     event PositionOpened(uint256 indexed tokenId, address indexed owner, uint256 stockAmount);
     event CreditDrawn(uint256 indexed tokenId, uint256 usdcAmount);
     event DebtRepaid(uint256 indexed tokenId, uint256 usdcAmount);
+    event ExposureReduced(uint256 indexed tokenId, uint256 stockAmount, uint256 usdcOut);
     event ExecutorUpdated(uint256 indexed tokenId, address indexed previousExecutor, address indexed newExecutor);
     event PositionClosed(uint256 indexed tokenId, address indexed owner, uint256 stockAmount);
     event CreditPoolSet(address indexed creditPool);
@@ -149,7 +152,7 @@ contract MarginCall is ERC721 {
     }
 
     /// @notice Owner-only close of a debt-free position. Returns this token's recorded NVDAc and burns the NFT.
-    /// @dev Oracle-free. Financed positions must reach zero debt via `repay` (or a later deleveraging path) first.
+    /// @dev Oracle-free. Financed positions must reach zero debt via `repay` or `reduceExposure` first.
     function closePosition(uint256 tokenId) external {
         address owner = _requireOwned(tokenId);
         if (msg.sender != owner) {
@@ -196,20 +199,66 @@ contract MarginCall is ERC721 {
 
         _accrue(position);
 
-        uint256 principal = position.principal;
-        uint256 accrued = position.accruedInterest;
-        uint256 payAmount = Math.min(amount, principal + accrued);
+        uint256 payAmount = Math.min(amount, position.principal + position.accruedInterest);
         if (payAmount == 0) {
             revert ZeroRepayment();
         }
 
-        uint256 interestPay = Math.min(payAmount, accrued);
-        position.accruedInterest = accrued - interestPay;
-        position.principal = principal - (payAmount - interestPay);
-
+        _applyDebtPayment(position, payAmount);
         USDC.safeTransferFrom(msg.sender, address(creditPool), payAmount);
 
         emit DebtRepaid(tokenId, payAmount);
+    }
+
+    /// @notice Sell exact `stockAmount` of this position's NVDAc for USDC and apply proceeds to debt.
+    /// @dev Accrues first, requires `LIVE` pricing, then sells through the fixed execution adapter. Enforces caller
+    ///      `minOut` and the protocol oracle floor inside the adapter. Realized USDC pays interest then principal to
+    ///      `CreditPool`; any surplus goes immediately to the current NFT owner (never residual position USDC).
+    ///      Owner or executor may call; ERC-721 approval does not grant authority.
+    function reduceExposure(uint256 tokenId, uint256 stockAmount, uint256 minOut) external {
+        address owner = _requireOwned(tokenId);
+        Position storage position = positions[tokenId];
+        address executor = position.executor;
+        if (msg.sender != owner && msg.sender != executor) {
+            revert NotPositionManager(msg.sender, owner, executor);
+        }
+        if (stockAmount == 0) {
+            revert ZeroStockAmount();
+        }
+        uint256 available = position.stockAmount;
+        if (stockAmount > available) {
+            revert ExcessStockAmount(stockAmount, available);
+        }
+
+        _accrue(position);
+
+        IOracleAdapter.Observation memory observation = ORACLE.latestObservation();
+        if (observation.state != IOracleAdapter.State.LIVE) {
+            revert OracleNotLive(observation.state);
+        }
+
+        // Deduct recorded stock before the swap so a reentrant callback cannot sell the same units twice.
+        // A failed swap reverts the whole transaction and restores accounting.
+        position.stockAmount = available - stockAmount;
+
+        NVDAC.forceApprove(address(EXECUTION), stockAmount);
+        uint256 usdcOut = EXECUTION.sellNvda(stockAmount, minOut, observation.price);
+        NVDAC.forceApprove(address(EXECUTION), 0);
+
+        uint256 debt = position.principal + position.accruedInterest;
+        uint256 repayAmount = Math.min(usdcOut, debt);
+        if (repayAmount != 0) {
+            _applyDebtPayment(position, repayAmount);
+            USDC.safeTransfer(address(creditPool), repayAmount);
+            emit DebtRepaid(tokenId, repayAmount);
+        }
+
+        uint256 surplus = usdcOut - repayAmount;
+        if (surplus != 0) {
+            USDC.safeTransfer(owner, surplus);
+        }
+
+        emit ExposureReduced(tokenId, stockAmount, usdcOut);
     }
 
     /// @notice Principal plus accrued-interest checkpoint plus unaccrued simple interest through now.
@@ -268,6 +317,15 @@ contract MarginCall is ERC721 {
         finalStock = contributedStock + bought;
         uint256 nav = ORACLE.valueUsdc(finalStock, observation.price);
         _requireLeverageWithinCeiling(nav, principal, targetLeverage);
+    }
+
+    /// @dev Apply already-accrued `payAmount` interest-first, then principal. Caller must ensure `payAmount > 0`
+    ///      and `payAmount <= principal + accruedInterest`.
+    function _applyDebtPayment(Position storage position, uint256 payAmount) private {
+        uint256 accrued = position.accruedInterest;
+        uint256 interestPay = Math.min(payAmount, accrued);
+        position.accruedInterest = accrued - interestPay;
+        position.principal -= payAmount - interestPay;
     }
 
     /// @dev Interest owed since the checkpoint, shared by the `currentDebt` view and the `_accrue` write so the two
