@@ -61,10 +61,7 @@ contract ExecutorDelegationTest is MarginCallTestBase {
     }
 
     function test_executorCanRepayButCannotTransferCloseOrSetExecutor() public {
-        _fund(alice, ONE_NVDAC);
-        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        vm.warp(OPENED_AT + 5 days);
-        uint256 debt = marginCall.currentDebt(tokenId);
+        (uint256 tokenId, uint256 debt) = _openFinancedWithAccrual();
 
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
@@ -97,58 +94,25 @@ contract ExecutorDelegationTest is MarginCallTestBase {
     }
 
     function test_erc721ApprovalCannotRepayOrSetExecutorButCanTransfer() public {
-        _fund(alice, ONE_NVDAC);
-        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        vm.warp(OPENED_AT + 5 days);
-        uint256 debt = marginCall.currentDebt(tokenId);
+        (uint256 tokenId, uint256 debt) = _openFinancedWithAccrual();
 
         vm.prank(alice);
         marginCall.approve(bob, tokenId);
 
-        _fundUsdc(bob, debt);
-        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
-        vm.prank(bob);
-        marginCall.repay(tokenId, debt);
-
-        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, bob, alice));
-        vm.prank(bob);
-        marginCall.setExecutor(tokenId, bob);
-
-        vm.prank(bob);
-        marginCall.transferFrom(alice, carol, tokenId);
-        assertEq(marginCall.ownerOf(tokenId), carol);
-        (,,,, address executor) = _position(tokenId);
-        assertEq(executor, address(0));
+        _assertTransferAuthorityCannotManage(tokenId, debt);
     }
 
     function test_operatorCannotRepayOrSetExecutorButCanTransfer() public {
-        _fund(alice, ONE_NVDAC);
-        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        vm.warp(OPENED_AT + 5 days);
-        uint256 debt = marginCall.currentDebt(tokenId);
+        (uint256 tokenId, uint256 debt) = _openFinancedWithAccrual();
 
         vm.prank(alice);
         marginCall.setApprovalForAll(bob, true);
 
-        _fundUsdc(bob, debt);
-        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
-        vm.prank(bob);
-        marginCall.repay(tokenId, debt);
-
-        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, bob, alice));
-        vm.prank(bob);
-        marginCall.setExecutor(tokenId, bob);
-
-        vm.prank(bob);
-        marginCall.transferFrom(alice, carol, tokenId);
-        assertEq(marginCall.ownerOf(tokenId), carol);
+        _assertTransferAuthorityCannotManage(tokenId, debt);
     }
 
     function test_clearingExecutorRevokesRepayImmediately() public {
-        _fund(alice, ONE_NVDAC);
-        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        vm.warp(OPENED_AT + 5 days);
-        uint256 debt = marginCall.currentDebt(tokenId);
+        (uint256 tokenId, uint256 debt) = _openFinancedWithAccrual();
 
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
@@ -185,5 +149,36 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721NonexistentToken.selector, 1));
         vm.prank(alice);
         marginCall.setExecutor(1, bob);
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /// @dev Open a financed position for alice and let 5 days of interest accrue.
+    function _openFinancedWithAccrual() internal returns (uint256 tokenId, uint256 debt) {
+        _fund(alice, ONE_NVDAC);
+        tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
+        vm.warp(OPENED_AT + 5 days);
+        debt = marginCall.currentDebt(tokenId);
+    }
+
+    /// @dev ERC-721 transfer authority (single approval or operator) may move the token but never manage
+    ///      the position. Caller grants bob the authority under test first.
+    function _assertTransferAuthorityCannotManage(uint256 tokenId, uint256 debt) internal {
+        _fundUsdc(bob, debt);
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionManager.selector, bob, alice, address(0)));
+        vm.prank(bob);
+        marginCall.repay(tokenId, debt);
+
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.NotPositionOwner.selector, bob, alice));
+        vm.prank(bob);
+        marginCall.setExecutor(tokenId, bob);
+
+        vm.prank(bob);
+        marginCall.transferFrom(alice, carol, tokenId);
+        assertEq(marginCall.ownerOf(tokenId), carol);
+        (,,,, address executor) = _position(tokenId);
+        assertEq(executor, address(0));
     }
 }

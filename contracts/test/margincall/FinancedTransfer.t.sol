@@ -151,14 +151,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         uint256 debt = marginCall.currentDebt(tokenId);
         oracle.setState(IOracleAdapter.State.HELD);
 
-        _expectNoOracleCalls();
-        vm.prank(alice);
-        marginCall.transferFrom(alice, carol, tokenId);
-
-        assertEq(marginCall.ownerOf(tokenId), carol);
-        assertEq(marginCall.currentDebt(tokenId), debt);
-        (,,,, address executor) = _position(tokenId);
-        assertEq(executor, address(0));
+        _assertTransferIgnoresOracle(tokenId, debt);
     }
 
     function test_transferUnderInvalidOracleMakesNoOracleCall() public {
@@ -166,14 +159,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         uint256 debt = marginCall.currentDebt(tokenId);
         oracle.setState(IOracleAdapter.State.INVALID);
 
-        _expectNoOracleCalls();
-        vm.prank(alice);
-        marginCall.transferFrom(alice, carol, tokenId);
-
-        assertEq(marginCall.ownerOf(tokenId), carol);
-        assertEq(marginCall.currentDebt(tokenId), debt);
-        (,,,, address executor) = _position(tokenId);
-        assertEq(executor, address(0));
+        _assertTransferIgnoresOracle(tokenId, debt);
     }
 
     function test_transferUnderRevertingOracleMakesNoOracleCall() public {
@@ -181,14 +167,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         uint256 debt = marginCall.currentDebt(tokenId);
         oracle.setShouldRevert(true);
 
-        _expectNoOracleCalls();
-        vm.prank(alice);
-        marginCall.transferFrom(alice, carol, tokenId);
-
-        assertEq(marginCall.ownerOf(tokenId), carol);
-        assertEq(marginCall.currentDebt(tokenId), debt);
-        (,,,, address executor) = _position(tokenId);
-        assertEq(executor, address(0));
+        _assertTransferIgnoresOracle(tokenId, debt);
     }
 
     function test_safeTransferClearsExecutorBeforeReceiverCallback() public {
@@ -286,6 +265,19 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.expectCall(address(oracle), abi.encodeWithSelector(IOracleAdapter.valueUsdc.selector), 0);
     }
 
+    /// @dev Shared body for the single-hop "transfer never consults the oracle" cases. The caller puts the
+    ///      oracle into the state under test after reading `debt`, so the read itself stays oracle-independent.
+    function _assertTransferIgnoresOracle(uint256 tokenId, uint256 debt) internal {
+        _expectNoOracleCalls();
+        vm.prank(alice);
+        marginCall.transferFrom(alice, carol, tokenId);
+
+        assertEq(marginCall.ownerOf(tokenId), carol);
+        assertEq(marginCall.currentDebt(tokenId), debt);
+        (,,,, address executor) = _position(tokenId);
+        assertEq(executor, address(0));
+    }
+
     function _assertAccountingUnchanged(
         uint256 tokenId,
         uint256 stock,
@@ -339,9 +331,6 @@ contract FinancedTransferTest is MarginCallTestBase {
 
         uint256 debt = marginCall.currentDebt(tokenId);
         uint256 slice = debt / 10;
-        if (slice == 0) {
-            slice = debt;
-        }
         _fundUsdc(carol, slice);
         vm.prank(carol);
         marginCall.repay(tokenId, slice);

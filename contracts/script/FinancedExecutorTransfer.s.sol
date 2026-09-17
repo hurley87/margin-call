@@ -28,8 +28,6 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
     error UnsupportedHarnessLeverage(uint256 leverage);
     error NoAccrualOnNode(uint256 debt, uint256 principalAtOpen);
-    error UnexpectedExecutor(address actual, address expected);
-    error UnexpectedOwner(address actual, address expected);
     error AuthorityStillHeld(string role);
     error DebtNotCleared(uint256 remaining);
 
@@ -37,13 +35,9 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         address alice;
         address executor;
         address bob;
-        MockNvdaC nvdac;
         MockUsdc usdc;
-        CreditPool pool;
         MarginCall marginCall;
         uint256 tokenId;
-        uint256 contributedStock;
-        uint256 stockAtOpen;
         uint256 principalAtOpen;
         uint256 openedAt;
         // Snapshot after E's partial repay and before the A→B transfer.
@@ -69,12 +63,14 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         }
 
         address alice = vm.addr(aliceKey);
+        address executor = vm.addr(vm.envUint("MARGIN_CALL_EXECUTOR_KEY"));
+        address bob = vm.addr(vm.envUint("MARGIN_CALL_RECIPIENT_KEY"));
         console.log("=== LOCAL ONLY: financed A -> E -> B executor transfer ===");
         console.log("phase 1/5: deploy + openPosition (financed)");
         console.log("chainId", block.chainid);
         console.log("alice", alice);
-        console.log("executor", vm.addr(vm.envUint("MARGIN_CALL_EXECUTOR_KEY")));
-        console.log("bob", vm.addr(vm.envUint("MARGIN_CALL_RECIPIENT_KEY")));
+        console.log("executor", executor);
+        console.log("bob", bob);
         console.log("stockAmount (raw NVDAc units)", contributedStock);
         console.log("targetLeverage bps", leverage);
 
@@ -86,7 +82,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         uint256 tokenId = marginCall.openPosition(contributedStock, leverage, 0);
         vm.stopBroadcast();
 
-        _persistOpen(alice, nvdac, usdc, pool, marginCall, tokenId, contributedStock);
+        _persistOpen(alice, executor, bob, usdc, marginCall, tokenId);
         console.log("tokenId", tokenId);
         console.log("state written to", STATE_PATH);
     }
@@ -107,12 +103,11 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
     function _persistOpen(
         address alice,
-        MockNvdaC nvdac,
+        address executor,
+        address bob,
         MockUsdc usdc,
-        CreditPool pool,
         MarginCall marginCall,
-        uint256 tokenId,
-        uint256 contributedStock
+        uint256 tokenId
     ) private {
         (uint256 stockAtOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
         console.log("recorded stockAmount", stockAtOpen);
@@ -120,15 +115,11 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         _persist(
             HarnessState({
                 alice: alice,
-                executor: vm.addr(vm.envUint("MARGIN_CALL_EXECUTOR_KEY")),
-                bob: vm.addr(vm.envUint("MARGIN_CALL_RECIPIENT_KEY")),
-                nvdac: nvdac,
+                executor: executor,
+                bob: bob,
                 usdc: usdc,
-                pool: pool,
                 marginCall: marginCall,
                 tokenId: tokenId,
-                contributedStock: contributedStock,
-                stockAtOpen: stockAtOpen,
                 principalAtOpen: principalAtOpen,
                 openedAt: block.timestamp,
                 stockBeforeTransfer: 0,
@@ -163,14 +154,9 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         vm.stopBroadcast();
 
         (,,,, address executorAfterSet) = state.marginCall.positions(state.tokenId);
-        if (executorAfterSet != state.executor) {
-            revert UnexpectedExecutor(executorAfterSet, state.executor);
-        }
+        assertEq(executorAfterSet, state.executor, "executor must be set");
 
         uint256 partialPay = (debt * PARTIAL_REPAY_BPS) / V1Config.BPS_DENOMINATOR;
-        if (partialPay == 0) {
-            partialPay = 1;
-        }
 
         vm.startBroadcast(executorKey);
         state.usdc.mint(state.executor, partialPay);
@@ -200,9 +186,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
             uint256 lastAccruedBefore,
             address executorBefore
         ) = state.marginCall.positions(state.tokenId);
-        if (executorBefore != state.executor) {
-            revert UnexpectedExecutor(executorBefore, state.executor);
-        }
+        assertEq(executorBefore, state.executor, "executor must be set before transfer");
         uint256 debtBefore = state.marginCall.currentDebt(state.tokenId);
 
         state.stockBeforeTransfer = stockBefore;
@@ -219,9 +203,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         vm.stopBroadcast();
 
         address ownerAfter = state.marginCall.ownerOf(state.tokenId);
-        if (ownerAfter != state.bob) {
-            revert UnexpectedOwner(ownerAfter, state.bob);
-        }
+        assertEq(ownerAfter, state.bob, "B must own after transfer");
         (
             uint256 stockAfter,
             uint256 principalAfter,
@@ -229,9 +211,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
             uint256 lastAccruedAfter,
             address executorAfter
         ) = state.marginCall.positions(state.tokenId);
-        if (executorAfter != address(0)) {
-            revert UnexpectedExecutor(executorAfter, address(0));
-        }
+        assertEq(executorAfter, address(0), "transfer must clear executor");
         assertEq(stockAfter, stockBefore, "stock must survive transfer");
         assertEq(principalAfter, principalBefore, "principal must survive transfer");
         assertEq(accruedAfter, accruedBefore, "accrued must survive transfer");
@@ -250,19 +230,11 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
         console.log("phase 4/5: prove A and E lost management authority");
 
-        address owner = state.marginCall.ownerOf(state.tokenId);
-        if (owner != state.bob) {
-            revert UnexpectedOwner(owner, state.bob);
-        }
+        assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B must still own");
         (,,,, address executor) = state.marginCall.positions(state.tokenId);
-        if (executor != address(0)) {
-            revert UnexpectedExecutor(executor, address(0));
-        }
+        assertEq(executor, address(0), "executor must stay cleared");
 
         uint256 probe = state.marginCall.currentDebt(state.tokenId);
-        if (probe == 0) {
-            probe = 1;
-        }
 
         // Fund approvals in simulation only; these writes are not broadcast.
         state.usdc.mint(state.alice, probe);
@@ -272,27 +244,30 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         vm.prank(state.executor);
         state.usdc.approve(address(state.marginCall), probe);
 
-        vm.prank(state.alice);
-        try state.marginCall.repay(state.tokenId, probe) {
-            revert AuthorityStillHeld("alice-repay");
-        } catch {}
-
-        vm.prank(state.executor);
-        try state.marginCall.repay(state.tokenId, probe) {
-            revert AuthorityStillHeld("executor-repay");
-        } catch {}
-
-        vm.prank(state.alice);
-        try state.marginCall.setExecutor(state.tokenId, state.alice) {
-            revert AuthorityStillHeld("alice-setExecutor");
-        } catch {}
-
-        vm.prank(state.executor);
-        try state.marginCall.setExecutor(state.tokenId, state.executor) {
-            revert AuthorityStillHeld("executor-setExecutor");
-        } catch {}
+        _assertRepayReverts(state, state.alice, probe, "alice-repay");
+        _assertRepayReverts(state, state.executor, probe, "executor-repay");
+        _assertSetExecutorReverts(state, state.alice, state.alice, "alice-setExecutor");
+        _assertSetExecutorReverts(state, state.executor, state.executor, "executor-setExecutor");
 
         console.log("A and E management calls revert as required");
+    }
+
+    function _assertRepayReverts(HarnessState memory state, address caller, uint256 amount, string memory role)
+        private
+    {
+        vm.prank(caller);
+        try state.marginCall.repay(state.tokenId, amount) {
+            revert AuthorityStillHeld(role);
+        } catch {}
+    }
+
+    function _assertSetExecutorReverts(HarnessState memory state, address caller, address candidate, string memory role)
+        private
+    {
+        vm.prank(caller);
+        try state.marginCall.setExecutor(state.tokenId, candidate) {
+            revert AuthorityStillHeld(role);
+        } catch {}
     }
 
     // Phase 5 - B repays remaining debt on the live node, then read-only settle checks.
@@ -304,10 +279,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
         console.log("phase 5/5: B repays remaining debt and verify");
 
-        address owner = state.marginCall.ownerOf(state.tokenId);
-        if (owner != state.bob) {
-            revert UnexpectedOwner(owner, state.bob);
-        }
+        assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B must own before repay");
 
         (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
             state.marginCall.positions(state.tokenId);
@@ -316,9 +288,10 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         assertEq(accrued, state.accruedBeforeTransfer, "accrued must still match pre-transfer");
         assertEq(lastAccrued, state.lastAccruedBeforeTransfer, "lastAccruedAt must still match pre-transfer");
         assertEq(executor, address(0), "executor must remain cleared");
-        assertEq(state.marginCall.currentDebt(state.tokenId), state.debtBeforeTransfer, "debt unchanged until B repays");
 
         uint256 remaining = state.marginCall.currentDebt(state.tokenId);
+        assertEq(remaining, state.debtBeforeTransfer, "debt unchanged until B repays");
+
         vm.startBroadcast(bobKey);
         state.usdc.mint(state.bob, remaining);
         state.usdc.approve(address(state.marginCall), remaining);
@@ -342,13 +315,9 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         vm.serializeAddress(obj, "alice", state.alice);
         vm.serializeAddress(obj, "executor", state.executor);
         vm.serializeAddress(obj, "bob", state.bob);
-        vm.serializeAddress(obj, "nvdac", address(state.nvdac));
         vm.serializeAddress(obj, "usdc", address(state.usdc));
-        vm.serializeAddress(obj, "pool", address(state.pool));
         vm.serializeAddress(obj, "marginCall", address(state.marginCall));
         vm.serializeUint(obj, "tokenId", state.tokenId);
-        vm.serializeUint(obj, "contributedStock", state.contributedStock);
-        vm.serializeUint(obj, "stockAtOpen", state.stockAtOpen);
         vm.serializeUint(obj, "principalAtOpen", state.principalAtOpen);
         vm.serializeUint(obj, "openedAt", state.openedAt);
         vm.serializeUint(obj, "stockBeforeTransfer", state.stockBeforeTransfer);
@@ -364,13 +333,9 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         state.alice = vm.parseJsonAddress(json, ".alice");
         state.executor = vm.parseJsonAddress(json, ".executor");
         state.bob = vm.parseJsonAddress(json, ".bob");
-        state.nvdac = MockNvdaC(vm.parseJsonAddress(json, ".nvdac"));
         state.usdc = MockUsdc(vm.parseJsonAddress(json, ".usdc"));
-        state.pool = CreditPool(vm.parseJsonAddress(json, ".pool"));
         state.marginCall = MarginCall(vm.parseJsonAddress(json, ".marginCall"));
         state.tokenId = vm.parseJsonUint(json, ".tokenId");
-        state.contributedStock = vm.parseJsonUint(json, ".contributedStock");
-        state.stockAtOpen = vm.parseJsonUint(json, ".stockAtOpen");
         state.principalAtOpen = vm.parseJsonUint(json, ".principalAtOpen");
         state.openedAt = vm.parseJsonUint(json, ".openedAt");
         state.stockBeforeTransfer = vm.parseJsonUint(json, ".stockBeforeTransfer");

@@ -10,7 +10,7 @@ if [[ $# -gt 0 ]]; then
   exit 1
 fi
 
-RPC_URL="http://127.0.0.1:8545"
+RPC_URL="${MARGIN_CALL_RPC_URL:-http://127.0.0.1:8545}"
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 

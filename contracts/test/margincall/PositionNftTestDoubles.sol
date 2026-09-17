@@ -222,7 +222,6 @@ contract ExecutorRepayCaller {
     MarginCall public immutable marginCall;
     MockUsdc public immutable usdc;
 
-    bool public repayAttempted;
     bool public repayReverted;
     bytes public repayRevertData;
 
@@ -232,7 +231,6 @@ contract ExecutorRepayCaller {
     }
 
     function attemptRepay(uint256 tokenId, uint256 amount) external {
-        repayAttempted = true;
         usdc.approve(address(marginCall), amount);
         try marginCall.repay(tokenId, amount) {
             repayReverted = false;
