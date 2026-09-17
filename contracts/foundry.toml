@@ -51,6 +51,11 @@ optimizer_runs = 1_000_000
 [profile.base-mainnet]
 test = "fork"
 
+# Basescan / Etherscan verification. API key comes from env at runtime — never commit it.
+# forge script --verify uses ETHERSCAN_API_KEY (Basescan accepts the same key family on chain 8453).
+[etherscan]
+base = { key = "${ETHERSCAN_API_KEY}", url = "https://api.basescan.org/api", chain = 8453 }
+
 [fmt]
 line_length = 120
 tab_width = 4

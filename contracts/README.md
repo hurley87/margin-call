@@ -30,6 +30,16 @@
 
 #
 
+# Base mainnet deploy + acceptance (issue #429):
+
+# see script/BASE_MAINNET.md
+
+# pnpm contracts:deploy:base:dry / pnpm contracts:accept:base:dry
+
+# Live broadcast is gated (CONFIRM_BASE_MAINNET=I_UNDERSTAND); not an ungated pnpm script.
+
+#
+
 # Production contracts in src/:
 
 # MarginCall, CreditPool, OracleAdapter, ExecutionAdapter
