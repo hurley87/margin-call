@@ -45,6 +45,9 @@ contract MockOracleAdapter is IOracleAdapter {
     uint256 public price = BaseV1Constants.PINNED_FEED_ANSWER;
     uint80 public roundId = 1;
     uint256 public updatedAt = 1_700_000_000;
+    bool public shouldRevert;
+
+    error MockOracleRevert();
 
     function setObservation(State state_, uint256 price_, uint80 roundId_, uint256 updatedAt_) external {
         state = state_;
@@ -57,9 +60,16 @@ contract MockOracleAdapter is IOracleAdapter {
         state = state_;
     }
 
+    function setShouldRevert(bool shouldRevert_) external {
+        shouldRevert = shouldRevert_;
+    }
+
     uint256 public refreshCount;
 
     function latestObservation() external view override returns (Observation memory observation) {
+        if (shouldRevert) {
+            revert MockOracleRevert();
+        }
         observation.state = state;
         observation.price = price;
         observation.roundId = roundId;
@@ -67,6 +77,9 @@ contract MockOracleAdapter is IOracleAdapter {
     }
 
     function refresh() external override returns (Observation memory observation) {
+        if (shouldRevert) {
+            revert MockOracleRevert();
+        }
         ++refreshCount;
         observation.state = state;
         observation.price = price;

@@ -56,7 +56,7 @@ Broadcast artifact:
 contracts/broadcast/SpotPositionLifecycle.s.sol/31337/run-latest.json
 ```
 
-## Financed open
+## Financed open → accrue → repay → close
 
 From `contracts/`: `./script/run-financed-local.sh`  
 From repo root: `pnpm test:contracts:smoke:financed`
@@ -65,7 +65,12 @@ Deploys mock NVDAc/USDC, a controllable oracle/router, production
 `OracleAdapter`-compatible mock, `ExecutionAdapter`, `CreditPool`, and
 `MarginCall`, funds the pool, then:
 
-`approve` → `openPosition(financed preset)`
+`approve` → `openPosition(financed preset)` → advance time → `repay` → `closePosition`
+
+The harness advances time via Foundry `vm.warp` (forwarded to Anvil under
+`--broadcast`) so `currentDebt > principal`, repays with an oversized USDC cap
+(only current debt is pulled), restores the pool, and closes the debt-free
+position.
 
 Optional:
 
@@ -75,7 +80,8 @@ export MARGIN_CALL_LEVERAGE_BPS=12500   # 11000 | 12500 | 14000 | 15000
 ```
 
 The harness prints token id, owner, contributed/purchased NVDAc, borrowed USDC,
-pool balances, debt, and custody. Default leverage is `1.25x` (`12500`).
+pool balances, debt before/after accrual and repayment, and post-close custody.
+Default leverage is `1.25x` (`12500`).
 
 Broadcast artifact:
 

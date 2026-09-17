@@ -15,8 +15,9 @@ import {V1Config} from "./V1Config.sol";
 
 /// @title MarginCall
 /// @notice Position NFT coordinator: custody NVDAc, open spot or financed positions, and mint ERC-721 ownership.
-/// @dev `MarginCall` is the ERC-721. Token existence is the active-position status. Repay, reduceExposure, executor,
-///      and liquidation are later slices. Borrowed USDC can only buy NVDAc through the fixed Uniswap execution path.
+/// @dev `MarginCall` is the ERC-721. Token existence is the active-position status. Executor appointment,
+///      reduceExposure, and liquidation are later slices. Borrowed USDC can only buy NVDAc through the fixed
+///      Uniswap execution path. Debt accrues lazily at the immutable V1 10% APR; `repay` restores USDC to the pool.
 contract MarginCall is ERC721 {
     using SafeERC20 for IERC20;
 
@@ -33,7 +34,9 @@ contract MarginCall is ERC721 {
     error UnsupportedLeverage(uint256 targetLeverage);
     error InvalidMinNvdaOut(uint256 minNvdaOut);
     error NotPositionOwner(address caller, address owner);
+    error NotPositionManager(address caller, address owner, address executor);
     error DebtOutstanding(uint256 tokenId);
+    error ZeroRepayment();
     error CreditPoolAlreadySet();
     error NotInitializer(address caller);
     error InvalidCreditPool();
@@ -43,6 +46,7 @@ contract MarginCall is ERC721 {
 
     event PositionOpened(uint256 indexed tokenId, address indexed owner, uint256 stockAmount);
     event CreditDrawn(uint256 indexed tokenId, uint256 usdcAmount);
+    event DebtRepaid(uint256 indexed tokenId, uint256 usdcAmount);
     event PositionClosed(uint256 indexed tokenId, address indexed owner, uint256 stockAmount);
     event CreditPoolSet(address indexed creditPool);
 
@@ -143,6 +147,7 @@ contract MarginCall is ERC721 {
     }
 
     /// @notice Owner-only close of a debt-free position. Returns this token's recorded NVDAc and burns the NFT.
+    /// @dev Oracle-free. Financed positions must reach zero debt via `repay` (or a later deleveraging path) first.
     function closePosition(uint256 tokenId) external {
         address owner = _requireOwned(tokenId);
         if (msg.sender != owner) {
@@ -161,11 +166,55 @@ contract MarginCall is ERC721 {
         emit PositionClosed(tokenId, owner, stockAmount);
     }
 
-    /// @notice Stored principal plus accrued interest checkpoint. Spot opens at zero debt; financed opens set principal.
-    /// @dev Full lazy 10% APR accrual is a later slice. This slice stores opening principal with zero accrued interest.
+    /// @notice Accrue interest, then repay up to `amount` of current debt with external USDC.
+    /// @dev Oracle-free. Transfers only `min(amount, currentDebt)` from the caller; excess never leaves the wallet.
+    ///      Applies payment interest-first, then principal, and restores the paid USDC to `CreditPool`.
+    ///      Owner or executor may call; ERC-721 approval does not grant repay authority.
+    function repay(uint256 tokenId, uint256 amount) external {
+        address owner = _requireOwned(tokenId);
+        Position storage position = positions[tokenId];
+        address executor = position.executor;
+        if (msg.sender != owner && msg.sender != executor) {
+            revert NotPositionManager(msg.sender, owner, executor);
+        }
+
+        _accrue(position);
+
+        uint256 debtBefore = position.principal + position.accruedInterest;
+        uint256 payAmount = amount < debtBefore ? amount : debtBefore;
+        if (payAmount == 0) {
+            revert ZeroRepayment();
+        }
+
+        USDC.safeTransferFrom(msg.sender, address(this), payAmount);
+
+        uint256 interestPay = payAmount;
+        if (interestPay > position.accruedInterest) {
+            interestPay = position.accruedInterest;
+        }
+        position.accruedInterest -= interestPay;
+        position.principal -= payAmount - interestPay;
+
+        USDC.safeTransfer(address(creditPool), payAmount);
+
+        emit DebtRepaid(tokenId, payAmount);
+    }
+
+    /// @notice Principal plus accrued-interest checkpoint plus unaccrued simple interest through now.
+    /// @dev Oracle-free and keeper-free. Interest is charged only while principal is outstanding, at the immutable
+    ///      V1 10% APR. Spot opens stay at zero debt.
     function currentDebt(uint256 tokenId) public view returns (uint256) {
         Position storage position = positions[tokenId];
-        return position.principal + position.accruedInterest;
+        uint256 principal = position.principal;
+        uint256 accrued = position.accruedInterest;
+        if (principal == 0) {
+            return accrued;
+        }
+        uint256 lastAccruedAt = position.lastAccruedAt;
+        if (block.timestamp <= lastAccruedAt) {
+            return principal + accrued;
+        }
+        return principal + accrued + _unaccruedInterest(principal, block.timestamp - lastAccruedAt);
     }
 
     /// @notice Minimal identity metadata for a live Position NFT. Full living presentation is owned by a later slice.
@@ -216,6 +265,31 @@ contract MarginCall is ERC721 {
         finalStock = contributedStock + bought;
         uint256 nav = ORACLE.valueUsdc(finalStock, observation.price);
         _requireLeverageWithinCeiling(nav, principal, targetLeverage);
+    }
+
+    /// @dev Fold view-time unaccrued interest into the checkpoint and bump `lastAccruedAt`. No-op when principal is
+    ///      zero (interest is not charged without outstanding principal) or when no time has elapsed.
+    function _accrue(Position storage position) private {
+        uint256 principal = position.principal;
+        if (principal == 0) {
+            position.lastAccruedAt = block.timestamp;
+            return;
+        }
+        uint256 lastAccruedAt = position.lastAccruedAt;
+        if (block.timestamp > lastAccruedAt) {
+            position.accruedInterest += _unaccruedInterest(principal, block.timestamp - lastAccruedAt);
+        }
+        position.lastAccruedAt = block.timestamp;
+    }
+
+    /// @dev `principal * 10% * elapsed / 365 days`, floored. Single mulDiv avoids intermediate rounding drift.
+    function _unaccruedInterest(uint256 principal, uint256 elapsed) private pure returns (uint256) {
+        return Math.mulDiv(
+            principal,
+            V1Config.BORROW_APR_BPS * elapsed,
+            V1Config.BPS_DENOMINATOR * V1Config.SECONDS_PER_YEAR,
+            Math.Rounding.Floor
+        );
     }
 
     /// @dev Haircut ideal principal by the 100 bps adverse execution bound so post-swap leverage stays under the preset.

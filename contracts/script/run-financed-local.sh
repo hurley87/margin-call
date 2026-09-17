@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Local Anvil-only smoke harness for financed Position NFT opening.
+# Local Anvil-only smoke harness for financed Position NFT open -> accrue -> repay -> close.
 # Supply MARGIN_CALL_PRIVATE_KEY in the environment (see README.md silent prompt).
 # Never pass the key as an argument.
 set -euo pipefail
@@ -32,7 +32,7 @@ fi
 
 : "${MARGIN_CALL_PRIVATE_KEY:?Set MARGIN_CALL_PRIVATE_KEY to a disposable Anvil development key. See contracts/script/README.md}"
 
-echo "Running financed Position NFT signer smoke test against local Anvil (${RPC_URL}, chain ${chain_id})"
+echo "Running financed Position NFT debt-lifecycle smoke test against local Anvil (${RPC_URL}, chain ${chain_id})"
 echo "Private key is read from MARGIN_CALL_PRIVATE_KEY and is never printed."
 echo "Broadcast artifact: broadcast/FinancedPositionOpen.s.sol/31337/run-latest.json"
 
