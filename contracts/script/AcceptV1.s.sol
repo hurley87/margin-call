@@ -4,7 +4,6 @@ pragma solidity 0.8.29;
 import {console} from "forge-std/console.sol";
 
 import {CreditPool} from "../src/CreditPool.sol";
-import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
 import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {OracleAdapter} from "../src/OracleAdapter.sol";
@@ -29,6 +28,16 @@ contract AcceptV1 is BaseMainnetHarnessBase {
     error DebtNotCleared(uint256 remaining);
     error ReduceDidNotCutStock(uint256 beforeStock, uint256 afterStock);
     error MissingDeployState();
+
+    /// @dev Every broadcasting phase must pin the chain and refuse to run under the dry-run flag. Applying this
+    ///      by construction means a phase added later cannot silently omit the guard.
+    modifier liveBroadcastPhase() {
+        _requireBaseMainnet();
+        if (_isDryRun()) {
+            revert LiveBroadcastForbiddenInDryRun();
+        }
+        _;
+    }
 
     struct AcceptState {
         address alice;
@@ -79,11 +88,11 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         _fundDryRunActor(executor, 1 ether, 0, 0);
         _fundDryRunActor(bob, 1 ether, 5e6, 0);
 
-        (OracleAdapter oracle, MarginCall marginCall, CreditPool pool) = _deployStack(alice);
+        (OracleAdapter oracle,, MarginCall marginCall, CreditPool pool) = _deployV1Stack(alice);
         _requireLive(oracle);
-        _dryRunSeedAndOpen(alice, executor, marginCall, pool, params);
-        uint256 tokenId = params.tokenId;
-        uint256 stockAfter = _dryRunReduceAndTransfer(alice, executor, bob, marginCall, tokenId);
+        uint256 tokenId = _dryRunSeedAndOpen(alice, executor, marginCall, pool, params);
+        _dryRunReduce(executor, marginCall, tokenId);
+        uint256 stockAfter = _dryRunTransfer(alice, executor, bob, marginCall, tokenId);
         _proveAuthorityLost(marginCall, tokenId, alice, executor);
         _dryRunBobSettle(bob, marginCall, tokenId, stockAfter);
 
@@ -96,7 +105,6 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         uint256 leverage;
         uint256 creditSeed;
         uint256 treasuryWithdraw;
-        uint256 tokenId;
     }
 
     function _dryRunParams() private view returns (DryRunParams memory params) {
@@ -115,31 +123,13 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         }
     }
 
-    function _deployStack(address treasury)
-        private
-        returns (OracleAdapter oracle, MarginCall marginCall, CreditPool pool)
-    {
-        oracle = new OracleAdapter(
-            V1Config.NVDAC,
-            V1Config.NVDA_FEED,
-            V1Config.COINBASE_ORACLE_REGISTRY,
-            V1Config.BASE_SEQUENCER_UPTIME_FEED
-        );
-        ExecutionAdapter execution = new ExecutionAdapter(
-            V1Config.USDC, V1Config.NVDAC, V1Config.UNISWAP_SWAP_ROUTER_02, V1Config.UNISWAP_FEE
-        );
-        marginCall = new MarginCall(V1Config.NVDAC, V1Config.USDC, address(oracle), address(execution));
-        pool = new CreditPool(V1Config.USDC, address(marginCall), treasury);
-        marginCall.setCreditPool(address(pool));
-    }
-
     function _dryRunSeedAndOpen(
         address alice,
         address executor,
         MarginCall marginCall,
         CreditPool pool,
         DryRunParams memory params
-    ) private {
+    ) private returns (uint256 tokenId) {
         vm.startPrank(alice);
         _usdc().transfer(address(pool), params.creditSeed);
         assertEq(pool.availableCredit(), params.creditSeed, "availableCredit after seed");
@@ -149,37 +139,23 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         assertEq(pool.availableCredit(), params.creditSeed - params.treasuryWithdraw, "pool after withdraw");
 
         _nvdac().approve(address(marginCall), params.stockAmount);
-        params.tokenId = marginCall.openPosition(params.stockAmount, params.leverage, 0);
-        marginCall.setExecutor(params.tokenId, executor);
+        tokenId = marginCall.openPosition(params.stockAmount, params.leverage, 0);
+        marginCall.setExecutor(tokenId, executor);
         vm.stopPrank();
 
-        (uint256 stockAfterOpen, uint256 principalAtOpen,,,) = marginCall.positions(params.tokenId);
-        assertEq(marginCall.ownerOf(params.tokenId), alice, "A owns after open");
+        (uint256 stockAfterOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
+        assertEq(marginCall.ownerOf(tokenId), alice, "A owns after open");
         assertGt(stockAfterOpen, params.stockAmount, "financed open buys additional NVDAc");
         assertGt(principalAtOpen, 0, "financed open borrows");
         console.log("principalAtOpen", principalAtOpen);
         console.log("stockAfterOpen", stockAfterOpen);
     }
 
-    function _dryRunReduceAndTransfer(
-        address alice,
-        address executor,
-        address bob,
-        MarginCall marginCall,
-        uint256 tokenId
-    ) private returns (uint256 stockAfterTransfer) {
-        _dryRunReduce(executor, marginCall, tokenId);
-        return _dryRunTransfer(alice, executor, bob, marginCall, tokenId);
-    }
-
     function _dryRunReduce(address executor, MarginCall marginCall, uint256 tokenId) private {
         (uint256 stockBefore,,,, address executorBefore) = marginCall.positions(tokenId);
         assertEq(executorBefore, executor, "executor set before reduce");
 
-        uint256 sale = (stockBefore * REDUCE_SALE_BPS) / V1Config.BPS_DENOMINATOR;
-        if (sale == 0) {
-            sale = 1;
-        }
+        uint256 sale = _reduceSale(stockBefore);
         assertLt(sale, stockBefore, "sale leaves residual");
 
         uint256 debtBeforeReduce = marginCall.currentDebt(tokenId);
@@ -193,16 +169,12 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         console.log("stock sold", sale);
     }
 
-    function _dryRunTransfer(
-        address alice,
-        address executor,
-        address bob,
-        MarginCall marginCall,
-        uint256 tokenId
-    ) private returns (uint256 stockAfter) {
-        (uint256 stockSnap, uint256 principalSnap,,,) = marginCall.positions(tokenId);
-        (,,, uint256 lastAccruedSnap, address executorSnap) = marginCall.positions(tokenId);
-        (, , uint256 accruedSnap,,) = marginCall.positions(tokenId);
+    function _dryRunTransfer(address alice, address executor, address bob, MarginCall marginCall, uint256 tokenId)
+        private
+        returns (uint256 stockAfter)
+    {
+        (uint256 stockSnap, uint256 principalSnap, uint256 accruedSnap, uint256 lastAccruedSnap, address executorSnap) =
+            marginCall.positions(tokenId);
         assertEq(executorSnap, executor, "executor set before transfer");
         uint256 debtBefore = marginCall.currentDebt(tokenId);
 
@@ -221,18 +193,17 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         stockAfter = stockOut;
     }
 
-    function _dryRunBobSettle(address bob, MarginCall marginCall, uint256 tokenId, uint256 expectedStock)
-        private
-    {
+    function _dryRunBobSettle(address bob, MarginCall marginCall, uint256 tokenId, uint256 expectedStock) private {
         uint256 remaining = marginCall.currentDebt(tokenId);
-        uint256 payment = remaining + (remaining * REPAY_BUFFER_BPS) / V1Config.BPS_DENOMINATOR + 1;
+        uint256 payment = _repayCeiling(remaining);
         uint256 bobNvdacBefore = _nvdac().balanceOf(bob);
 
         vm.startPrank(bob);
         _usdc().approve(address(marginCall), payment);
         marginCall.repay(tokenId, payment);
-        if (marginCall.currentDebt(tokenId) != 0) {
-            revert DebtNotCleared(marginCall.currentDebt(tokenId));
+        uint256 debtAfterRepay = marginCall.currentDebt(tokenId);
+        if (debtAfterRepay != 0) {
+            revert DebtNotCleared(debtAfterRepay);
         }
         marginCall.closePosition(tokenId);
         vm.stopPrank();
@@ -246,12 +217,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
     // -------------------------------------------------------------------------
 
     /// @notice Phase 1: require LIVE oracle, seed CreditPool, treasury idle withdraw.
-    function seedAndTreasurySmoke() external {
-        _requireBaseMainnet();
-        if (_isDryRun()) {
-            revert LiveBroadcastForbiddenInDryRun();
-        }
-
+    function seedAndTreasurySmoke() external liveBroadcastPhase {
         uint256 operatorKey = vm.envUint("OPERATOR_PRIVATE_KEY");
         address alice = vm.addr(operatorKey);
         address executor = vm.addr(vm.envUint("EXECUTOR_PRIVATE_KEY"));
@@ -294,21 +260,17 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         if (aliceUsdcAfter != aliceUsdcBefore - creditSeed + treasuryWithdraw) {
             revert TreasuryDidNotReceive(aliceUsdcBefore, aliceUsdcAfter, treasuryWithdraw);
         }
-        assertEq(pool.availableCredit(), expected - treasuryWithdraw, "idle reduced by withdraw");
+        uint256 idleAfterWithdraw = pool.availableCredit();
+        assertEq(idleAfterWithdraw, expected - treasuryWithdraw, "idle reduced by withdraw");
 
         _persist(state);
         console.log("creditSeed", creditSeed);
         console.log("treasuryWithdraw", treasuryWithdraw);
-        console.log("availableCredit", pool.availableCredit());
+        console.log("availableCredit", idleAfterWithdraw);
     }
 
     /// @notice Phase 2: A opens a tiny financed position.
-    function openFinanced() external {
-        _requireBaseMainnet();
-        if (_isDryRun()) {
-            revert LiveBroadcastForbiddenInDryRun();
-        }
-
+    function openFinanced() external liveBroadcastPhase {
         uint256 operatorKey = vm.envUint("OPERATOR_PRIVATE_KEY");
         AcceptState memory state = _load();
         uint256 stockAmount = vm.envOr("MARGIN_CALL_STOCK_AMOUNT", DEFAULT_STOCK_AMOUNT);
@@ -348,12 +310,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
     }
 
     /// @notice Phase 3: A appoints executor E.
-    function setExecutor() external {
-        _requireBaseMainnet();
-        if (_isDryRun()) {
-            revert LiveBroadcastForbiddenInDryRun();
-        }
-
+    function setExecutor() external liveBroadcastPhase {
         uint256 operatorKey = vm.envUint("OPERATOR_PRIVATE_KEY");
         AcceptState memory state = _load();
         _logPhase(3, "A setExecutor(E)");
@@ -369,12 +326,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
     }
 
     /// @notice Phase 4: E performs a small reduceExposure while LIVE.
-    function executorReduceExposure() external {
-        _requireBaseMainnet();
-        if (_isDryRun()) {
-            revert LiveBroadcastForbiddenInDryRun();
-        }
-
+    function executorReduceExposure() external liveBroadcastPhase {
         uint256 executorKey = vm.envUint("EXECUTOR_PRIVATE_KEY");
         AcceptState memory state = _load();
         _logPhase(4, "E reduceExposure");
@@ -385,10 +337,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         assertEq(executorBefore, state.executor, "executor still set");
         assertEq(marginCall.ownerOf(state.tokenId), state.alice, "A still owns");
 
-        uint256 sale = (stockBefore * REDUCE_SALE_BPS) / V1Config.BPS_DENOMINATOR;
-        if (sale == 0) {
-            sale = 1;
-        }
+        uint256 sale = _reduceSale(stockBefore);
         assertLt(sale, stockBefore, "sale leaves residual");
 
         uint256 debtBefore = marginCall.currentDebt(state.tokenId);
@@ -403,22 +352,18 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         if (stockAfter != stockBefore - sale) {
             revert ReduceDidNotCutStock(stockBefore, stockAfter);
         }
-        assertLe(marginCall.currentDebt(state.tokenId), debtBefore, "debt must not rise");
+        uint256 debtAfterReduce = marginCall.currentDebt(state.tokenId);
+        assertLe(debtAfterReduce, debtBefore, "debt must not rise");
         assertEq(_usdc().balanceOf(state.executor), executorUsdcBefore, "executor gets no surplus");
         assertGe(_usdc().balanceOf(state.alice), aliceUsdcBefore, "surplus to owner");
 
         console.log("stock sold", sale);
         console.log("stock remaining", stockAfter);
-        console.log("debt after reduce", marginCall.currentDebt(state.tokenId));
+        console.log("debt after reduce", debtAfterReduce);
     }
 
     /// @notice Phase 5: snapshot accounting, A transfers NFT to B.
-    function transferToBob() external {
-        _requireBaseMainnet();
-        if (_isDryRun()) {
-            revert LiveBroadcastForbiddenInDryRun();
-        }
-
+    function transferToBob() external liveBroadcastPhase {
         uint256 operatorKey = vm.envUint("OPERATOR_PRIVATE_KEY");
         AcceptState memory state = _load();
         _logPhase(5, "snapshot + A transfer to B");
@@ -477,12 +422,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
     }
 
     /// @notice Phase 7: B repays remaining debt to zero.
-    function bobRepay() external {
-        _requireBaseMainnet();
-        if (_isDryRun()) {
-            revert LiveBroadcastForbiddenInDryRun();
-        }
-
+    function bobRepay() external liveBroadcastPhase {
         uint256 bobKey = vm.envUint("RECIPIENT_PRIVATE_KEY");
         AcceptState memory state = _load();
         _logPhase(7, "B repay remaining debt");
@@ -500,27 +440,23 @@ contract AcceptV1 is BaseMainnetHarnessBase {
 
         uint256 remaining = marginCall.currentDebt(state.tokenId);
         assertGe(remaining, state.debtBeforeTransfer, "debt kept accruing");
-        uint256 payment = remaining + (remaining * REPAY_BUFFER_BPS) / V1Config.BPS_DENOMINATOR + 1;
+        uint256 payment = _repayCeiling(remaining);
 
         vm.startBroadcast(bobKey);
         _usdc().approve(address(marginCall), payment);
         marginCall.repay(state.tokenId, payment);
         vm.stopBroadcast();
 
-        if (marginCall.currentDebt(state.tokenId) != 0) {
-            revert DebtNotCleared(marginCall.currentDebt(state.tokenId));
+        uint256 debtAfterRepay = marginCall.currentDebt(state.tokenId);
+        if (debtAfterRepay != 0) {
+            revert DebtNotCleared(debtAfterRepay);
         }
         console.log("debt repaid from", remaining);
         console.log("repay ceiling", payment);
     }
 
     /// @notice Phase 8: B closes; NFT burns; B receives remaining NVDAc.
-    function bobClose() external {
-        _requireBaseMainnet();
-        if (_isDryRun()) {
-            revert LiveBroadcastForbiddenInDryRun();
-        }
-
+    function bobClose() external liveBroadcastPhase {
         uint256 bobKey = vm.envUint("RECIPIENT_PRIVATE_KEY");
         AcceptState memory state = _load();
         _logPhase(8, "B closePosition");

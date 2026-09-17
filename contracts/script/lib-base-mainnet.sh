@@ -7,6 +7,11 @@ set -euo pipefail
 BASE_CHAIN_ID="8453"
 CONFIRM_VALUE="I_UNDERSTAND"
 
+# Shell cannot import Solidity, so these mirror contracts/src/V1Config.sol, which stays the source of
+# truth. Keep this the only shell copy: read them from here rather than re-typing literals in a wrapper.
+BASE_NVDAC="0xb20000000000000000000078ee7ce2fE4908108C"
+BASE_USDC="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+
 base_mainnet_load_env() {
   local contracts_dir="$1"
   if [[ -f "${contracts_dir}/.env" ]]; then
@@ -23,15 +28,14 @@ base_mainnet_require_rpc() {
   : "${BASE_MAINNET_RPC_URL:?Set BASE_MAINNET_RPC_URL to a Base mainnet RPC URL}"
 }
 
-base_mainnet_require_cast() {
-  if ! command -v cast >/dev/null 2>&1; then
-    echo "error: Foundry (cast) is required. Install with foundryup -i v1.4.3" >&2
-    exit 1
-  fi
-  if ! command -v forge >/dev/null 2>&1; then
-    echo "error: Foundry (forge) is required. Install with foundryup -i v1.4.3" >&2
-    exit 1
-  fi
+base_mainnet_require_foundry() {
+  local bin
+  for bin in cast forge; do
+    if ! command -v "$bin" >/dev/null 2>&1; then
+      echo "error: Foundry (${bin}) is required. Install with foundryup -i v1.4.3" >&2
+      exit 1
+    fi
+  done
 }
 
 base_mainnet_require_base_forge() {
@@ -50,15 +54,9 @@ base_mainnet_require_base_forge() {
 }
 
 base_mainnet_forge_bin() {
-  # Prefer base-forge when available for B20; Accept scripts require it.
-  if [[ "${1:-}" == "require-base" ]]; then
-    base_mainnet_require_base_forge
-    echo "base-forge"
-  elif command -v base-forge >/dev/null 2>&1; then
-    echo "base-forge"
-  else
-    echo "forge"
-  fi
+  # B20 (NVDAc) execution needs the pinned Base Foundry build; stock forge cannot simulate it.
+  base_mainnet_require_base_forge
+  echo "base-forge"
 }
 
 
@@ -113,14 +111,12 @@ base_mainnet_normalize_key() {
   fi
 }
 
-base_mainnet_normalize_operator_key() {
-  base_mainnet_normalize_key OPERATOR_PRIVATE_KEY
-}
-
-base_mainnet_normalize_accept_keys() {
-  base_mainnet_normalize_key OPERATOR_PRIVATE_KEY
-  base_mainnet_normalize_key EXECUTOR_PRIVATE_KEY
-  base_mainnet_normalize_key RECIPIENT_PRIVATE_KEY
+base_mainnet_normalize_keys() {
+  # Usage: base_mainnet_normalize_keys VAR_NAME...
+  local var_name
+  for var_name in "$@"; do
+    base_mainnet_normalize_key "$var_name"
+  done
 }
 
 base_mainnet_addr_from_key() {
@@ -130,6 +126,43 @@ base_mainnet_addr_from_key() {
     key="0x${key}"
   fi
   cast wallet address --private-key "$key"
+}
+
+base_mainnet_bootstrap() {
+  # Usage: base_mainnet_bootstrap "${BASH_SOURCE[0]}" [--no-cd]
+  # Sets CONTRACTS_DIR and RPC_URL, loads contracts/.env, and checks the toolchain.
+  local script_path="$1"
+  local script_dir
+  script_dir="$(cd "$(dirname "$script_path")" && pwd)"
+  CONTRACTS_DIR="$(cd "${script_dir}/.." && pwd)"
+  if [[ "${2:-}" != "--no-cd" ]]; then
+    cd "$CONTRACTS_DIR"
+  fi
+  base_mainnet_load_env "$CONTRACTS_DIR"
+  base_mainnet_require_foundry
+  base_mainnet_require_rpc
+  RPC_URL="$BASE_MAINNET_RPC_URL"
+}
+
+base_mainnet_no_arguments() {
+  if [[ "$1" -gt 0 ]]; then
+    echo "error: do not pass arguments. See script/BASE_MAINNET.md" >&2
+    exit 1
+  fi
+}
+
+base_mainnet_resolve_wallets() {
+  # Sets alice/executor/bob from the three accept keys and enforces the distinctness the
+  # executor-clearing and lost-authority proofs depend on. Prints addresses only, never keys.
+  base_mainnet_require_accept_keys
+  base_mainnet_normalize_keys OPERATOR_PRIVATE_KEY EXECUTOR_PRIVATE_KEY RECIPIENT_PRIVATE_KEY
+  alice="$(base_mainnet_addr_from_key "$OPERATOR_PRIVATE_KEY")"
+  executor="$(base_mainnet_addr_from_key "$EXECUTOR_PRIVATE_KEY")"
+  bob="$(base_mainnet_addr_from_key "$RECIPIENT_PRIVATE_KEY")"
+  if [[ "$alice" == "$executor" || "$alice" == "$bob" || "$executor" == "$bob" ]]; then
+    echo "error: OPERATOR, EXECUTOR, and RECIPIENT must resolve to three different addresses" >&2
+    exit 1
+  fi
 }
 
 base_mainnet_git_commit() {

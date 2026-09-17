@@ -18,9 +18,10 @@ import {BaseMainnetHarnessBase} from "./BaseMainnetHarnessBase.sol";
 contract DeployV1 is BaseMainnetHarnessBase {
     string internal constant STATE_PATH = "./deployments/base-deploy.run.json";
 
+    /// @dev No `treasury` field: the operator is always deployer and treasury, and `pool.treasury()` is
+    ///      asserted below. The JSON record still spells it out for readers.
     struct DeployState {
         address deployer;
-        address treasury;
         address oracle;
         address execution;
         address marginCall;
@@ -54,20 +55,8 @@ contract DeployV1 is BaseMainnetHarnessBase {
         }
 
         vm.startBroadcast(operatorKey);
-
-        OracleAdapter oracle = new OracleAdapter(
-            V1Config.NVDAC,
-            V1Config.NVDA_FEED,
-            V1Config.COINBASE_ORACLE_REGISTRY,
-            V1Config.BASE_SEQUENCER_UPTIME_FEED
-        );
-        ExecutionAdapter execution = new ExecutionAdapter(
-            V1Config.USDC, V1Config.NVDAC, V1Config.UNISWAP_SWAP_ROUTER_02, V1Config.UNISWAP_FEE
-        );
-        MarginCall marginCall = new MarginCall(V1Config.NVDAC, V1Config.USDC, address(oracle), address(execution));
-        CreditPool pool = new CreditPool(V1Config.USDC, address(marginCall), operator);
-        marginCall.setCreditPool(address(pool));
-
+        (OracleAdapter oracle, ExecutionAdapter execution, MarginCall marginCall, CreditPool pool) =
+            _deployV1Stack(operator);
         vm.stopBroadcast();
 
         // Immutable / config relationship checks (oracle-independent).
@@ -88,7 +77,6 @@ contract DeployV1 is BaseMainnetHarnessBase {
 
         state = DeployState({
             deployer: operator,
-            treasury: operator,
             oracle: address(oracle),
             execution: address(execution),
             marginCall: address(marginCall),
@@ -109,7 +97,7 @@ contract DeployV1 is BaseMainnetHarnessBase {
     function _persist(DeployState memory state) private {
         string memory obj = "base-deploy";
         vm.serializeAddress(obj, "deployer", state.deployer);
-        vm.serializeAddress(obj, "treasury", state.treasury);
+        vm.serializeAddress(obj, "treasury", state.deployer);
         vm.serializeAddress(obj, "oracle", state.oracle);
         vm.serializeAddress(obj, "execution", state.execution);
         vm.serializeAddress(obj, "marginCall", state.marginCall);
