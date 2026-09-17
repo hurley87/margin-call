@@ -23,6 +23,9 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
     uint256 internal constant CREDIT_SEED = 1_000_000e6;
     /// @dev Partial repay size as a fraction of current debt (bps). 2500 = 25%.
     uint256 internal constant PARTIAL_REPAY_BPS = 2_500;
+    /// @dev Overestimate applied to B's final repay (bps) so interest accruing between the debt read and the
+    ///      repay transaction landing cannot leave a dust remainder. `repay` caps at min(amount, currentDebt).
+    uint256 internal constant REPAY_BUFFER_BPS = 100;
 
     string internal constant STATE_PATH = "./deployments/executor-transfer-local.run.json";
 
@@ -216,7 +219,9 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         assertEq(principalAfter, principalBefore, "principal must survive transfer");
         assertEq(accruedAfter, accruedBefore, "accrued must survive transfer");
         assertEq(lastAccruedAfter, lastAccruedBefore, "lastAccruedAt must survive transfer");
-        assertEq(state.marginCall.currentDebt(state.tokenId), debtBefore, "debt timing unchanged");
+        // Transfer does not call `_accrue`, so the checkpoint fields above are frozen. `currentDebt` is a live
+        // function of `block.timestamp` and keeps climbing, so it may only be greater or equal.
+        assertGe(state.marginCall.currentDebt(state.tokenId), debtBefore, "debt must keep accruing across transfer");
 
         console.log("debt before transfer", debtBefore);
         console.log("owner after transfer", ownerAfter);
@@ -288,12 +293,16 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         assertEq(executor, address(0), "executor must remain cleared");
 
         uint256 remaining = state.marginCall.currentDebt(state.tokenId);
-        assertEq(remaining, state.debtBeforeTransfer, "debt unchanged until B repays");
+        assertGe(remaining, state.debtBeforeTransfer, "debt must keep accruing while B holds the position");
+
+        // Interest accrues between this read and the repay transaction landing on the node, so submit a small
+        // overestimate. `repay` transfers only min(amount, currentDebt), so the excess never leaves B's wallet.
+        uint256 payment = remaining + (remaining * REPAY_BUFFER_BPS) / V1Config.BPS_DENOMINATOR + 1;
 
         vm.startBroadcast(bobKey);
-        state.usdc.mint(state.bob, remaining);
-        state.usdc.approve(address(state.marginCall), remaining);
-        state.marginCall.repay(state.tokenId, remaining);
+        state.usdc.mint(state.bob, payment);
+        state.usdc.approve(address(state.marginCall), payment);
+        state.marginCall.repay(state.tokenId, payment);
         vm.stopBroadcast();
 
         uint256 debtAfter = state.marginCall.currentDebt(state.tokenId);
@@ -304,7 +313,10 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         assertEq(stockFinal, state.stockBeforeTransfer, "repay must not change stock");
         assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B remains owner");
 
-        console.log("bob repaid remaining debt", remaining);
+        assertGt(state.usdc.balanceOf(state.bob), 0, "unused repay buffer must stay in B's wallet");
+
+        console.log("debt read before repay", remaining);
+        console.log("repay ceiling submitted", payment);
         console.log("=== PASS: A open -> E repay -> A transfer B -> A/E lose authority -> B repays ===");
     }
 
