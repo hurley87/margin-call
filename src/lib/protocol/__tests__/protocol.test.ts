@@ -7,13 +7,14 @@ import {
   LEVERAGE_1_25X,
   ORACLE_STATE,
   SPOT_LEVERAGE,
+  isFinancedLeverage,
+  parseOracleState,
 } from "@/lib/protocol/constants";
-import { decodePositionOpenedTokenId } from "@/lib/protocol/decode";
 import {
-  assetIdForName,
-  baseDeployment,
-  getAssetByName,
-} from "@/lib/protocol/deployment";
+  decodePositionClosedTokenId,
+  decodePositionOpenedTokenId,
+} from "@/lib/protocol/decode";
+import { baseDeployment, getAssetByName } from "@/lib/protocol/deployment";
 import { encodeOpenPosition } from "@/lib/protocol/encode";
 import {
   assertBaseChain,
@@ -24,14 +25,31 @@ import { repayCeiling, sizePrincipal } from "@/lib/protocol/repay";
 
 describe("base deployment assets", () => {
   it("maps selected launch assets to the correct on-chain assetId", () => {
-    expect(assetIdForName("NVDAc")).toBe(1);
-    expect(assetIdForName("AAPLc")).toBe(2);
-    expect(assetIdForName("METAc")).toBe(3);
-    expect(assetIdForName("GOOGLc")).toBe(4);
-
     expect(getAssetByName("NVDAc").assetId).toBe(1);
+    expect(getAssetByName("AAPLc").assetId).toBe(2);
+    expect(getAssetByName("METAc").assetId).toBe(3);
+    expect(getAssetByName("GOOGLc").assetId).toBe(4);
+
     expect(baseDeployment.chainId).toBe(BASE_CHAIN_ID);
     expect(baseDeployment.assets).toHaveLength(4);
+  });
+});
+
+describe("parseOracleState", () => {
+  it("accepts LIVE/HELD/INVALID and rejects out-of-range", () => {
+    expect(parseOracleState(0)).toBe(ORACLE_STATE.LIVE);
+    expect(parseOracleState(1)).toBe(ORACLE_STATE.HELD);
+    expect(parseOracleState(2)).toBe(ORACLE_STATE.INVALID);
+    expect(parseOracleState(3)).toBeNull();
+    expect(parseOracleState(-1)).toBeNull();
+  });
+});
+
+describe("isFinancedLeverage", () => {
+  it("is derived from opening presets minus spot", () => {
+    expect(isFinancedLeverage(SPOT_LEVERAGE)).toBe(false);
+    expect(isFinancedLeverage(LEVERAGE_1_25X)).toBe(true);
+    expect(isFinancedLeverage(9_999)).toBe(false);
   });
 });
 
@@ -100,6 +118,43 @@ describe("decodePositionOpenedTokenId", () => {
   });
 });
 
+describe("decodePositionClosedTokenId", () => {
+  it("captures the token ID from a PositionClosed receipt log", () => {
+    const tokenId = 7n;
+    const owner = "0x1234567890abcdef1234567890abcdef12345678" as const;
+    const stockAmount = 1_000_000n;
+
+    const topics = encodeEventTopics({
+      abi: marginCallAbi,
+      eventName: "PositionClosed",
+      args: {
+        tokenId,
+        owner,
+      },
+    }) as [`0x${string}`, ...`0x${string}`[]];
+
+    const log = {
+      address: baseDeployment.marginCall,
+      topics,
+      data: toHex(stockAmount, { size: 32 }),
+      blockHash: "0x" as `0x${string}`,
+      blockNumber: 1n,
+      logIndex: 0,
+      transactionHash: "0x" as `0x${string}`,
+      transactionIndex: 0,
+      removed: false,
+    };
+
+    expect(decodePositionClosedTokenId([log])).toBe(tokenId);
+  });
+
+  it("throws when PositionClosed is missing", () => {
+    expect(() => decodePositionClosedTokenId([])).toThrow(
+      /PositionClosed event not found/
+    );
+  });
+});
+
 describe("repayCeiling", () => {
   it("adds the 1% buffer plus 1 raw USDC unit", () => {
     // remaining = 546900 → ceiling = 546900 + 5469 + 1 = 552370
@@ -130,6 +185,13 @@ describe("openReadiness", () => {
 
   it("disables financed open on the wrong chain", () => {
     expect(openReadiness({ ...base, chainId: 1 }).ok).toBe(false);
+  });
+
+  it("treats unread balance as not ready", () => {
+    expect(openReadiness({ ...base, stockBalance: null })).toEqual({
+      ok: false,
+      reason: "Balance unread.",
+    });
   });
 
   it("allows spot open without LIVE/credit gates", () => {

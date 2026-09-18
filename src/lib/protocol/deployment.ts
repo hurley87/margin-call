@@ -93,8 +93,3 @@ export function getAssetByName(name: LaunchAssetName): LaunchAsset {
   }
   return asset;
 }
-
-/** Map a selected launch asset name to its on-chain assetId. */
-export function assetIdForName(name: LaunchAssetName): number {
-  return getAssetByName(name).assetId;
-}

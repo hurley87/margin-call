@@ -8,8 +8,6 @@ import {
 } from "@/lib/dynamic/wallet-client";
 import { BASE_CHAIN_ID } from "@/lib/protocol/constants";
 
-const BASE_CHAIN_HEX = "0x2105";
-
 /**
  * Resolve a Base-pinned viem WalletClient from the connected Dynamic EVM account.
  * Returns null when there is no EVM account or EIP-1193 provider.
@@ -39,10 +37,8 @@ export async function assertWalletOnBase(
   walletClient: BaseWalletClient
 ): Promise<void> {
   const chainId = await walletClient.request({ method: "eth_chainId" });
-  if (
-    chainId !== BASE_CHAIN_HEX &&
-    Number.parseInt(String(chainId), 16) !== BASE_CHAIN_ID
-  ) {
+  const parsed = parseNetworkIdToChainId(String(chainId));
+  if (parsed !== BASE_CHAIN_ID) {
     throw new Error(
       `Wrong network. Expected Base (${BASE_CHAIN_ID}), got ${String(chainId)}.`
     );

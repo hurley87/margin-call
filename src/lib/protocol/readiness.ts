@@ -2,7 +2,6 @@ import {
   BASE_CHAIN_ID,
   ORACLE_STATE,
   SPOT_LEVERAGE,
-  isFinancedLeverage,
   isSupportedOpeningLeverage,
   type OracleState,
 } from "@/lib/protocol/constants";
@@ -29,7 +28,7 @@ export function assertBaseChain(chainId: number | null | undefined): WriteGate {
 export type OpenReadinessInput = {
   chainId: number | null | undefined;
   stockAmount: bigint;
-  stockBalance: bigint;
+  stockBalance: bigint | null;
   targetLeverage: number;
   oracleState: OracleState | null;
   availableCredit: bigint | null;
@@ -52,16 +51,16 @@ export function openReadiness(input: OpenReadinessInput): WriteGate {
     return { ok: false, reason: "Unsupported leverage preset." };
   }
 
+  if (input.stockBalance == null) {
+    return { ok: false, reason: "Balance unread." };
+  }
+
   if (input.stockBalance < input.stockAmount) {
     return { ok: false, reason: "Insufficient selected-stock balance." };
   }
 
   if (input.targetLeverage === SPOT_LEVERAGE) {
     return { ok: true };
-  }
-
-  if (!isFinancedLeverage(input.targetLeverage)) {
-    return { ok: false, reason: "Unsupported leverage preset." };
   }
 
   if (input.oracleState == null) {

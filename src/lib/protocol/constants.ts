@@ -34,6 +34,18 @@ export const ORACLE_STATE = {
 
 export type OracleState = (typeof ORACLE_STATE)[keyof typeof ORACLE_STATE];
 
+/** Narrow a raw on-chain oracle state byte. Returns null when out of range. */
+export function parseOracleState(value: number): OracleState | null {
+  if (
+    value === ORACLE_STATE.LIVE ||
+    value === ORACLE_STATE.HELD ||
+    value === ORACLE_STATE.INVALID
+  ) {
+    return value;
+  }
+  return null;
+}
+
 export function isSupportedOpeningLeverage(targetLeverage: number): boolean {
   return OPENING_LEVERAGE_PRESETS.some(
     (preset) => preset.bps === targetLeverage
@@ -42,9 +54,7 @@ export function isSupportedOpeningLeverage(targetLeverage: number): boolean {
 
 export function isFinancedLeverage(targetLeverage: number): boolean {
   return (
-    targetLeverage === LEVERAGE_1_1X ||
-    targetLeverage === LEVERAGE_1_25X ||
-    targetLeverage === LEVERAGE_1_4X ||
-    targetLeverage === LEVERAGE_1_5X
+    isSupportedOpeningLeverage(targetLeverage) &&
+    targetLeverage !== SPOT_LEVERAGE
   );
 }
