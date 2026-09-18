@@ -28,7 +28,10 @@ export type OpenPosition = {
   tokenId: bigint;
   assetId: number;
   stockAmount: bigint;
+  principal: bigint;
   currentDebt: bigint;
+  owner: `0x${string}`;
+  executor: `0x${string}`;
   nav: bigint | null;
   liquidatable: boolean | null;
 };
@@ -126,12 +129,16 @@ export async function loadOpenSnapshot(
   };
 }
 
-/** Load an open position. NAV/liquidatable stay optional (LIVE-only riskSnapshot). */
+/**
+ * Load an open Position NFT from Base.
+ * `ownerOf` is required so a burned token is not treated as a zero-debt live position.
+ * NAV/liquidatable stay optional (LIVE-only riskSnapshot).
+ */
 export async function loadPosition(
   client: BasePublicClient,
   tokenId: bigint
 ): Promise<OpenPosition> {
-  const [pos, debt] = await Promise.all([
+  const [pos, debt, owner] = await Promise.all([
     client.readContract({
       address: baseDeployment.marginCall,
       abi: marginCallAbi,
@@ -142,6 +149,12 @@ export async function loadPosition(
       address: baseDeployment.marginCall,
       abi: marginCallAbi,
       functionName: "currentDebt",
+      args: [tokenId],
+    }),
+    client.readContract({
+      address: baseDeployment.marginCall,
+      abi: marginCallAbi,
+      functionName: "ownerOf",
       args: [tokenId],
     }),
   ]);
@@ -166,7 +179,10 @@ export async function loadPosition(
     tokenId,
     assetId: Number(pos.assetId),
     stockAmount: pos.stockAmount,
+    principal: pos.principal,
     currentDebt: debt,
+    owner,
+    executor: pos.executor,
     nav,
     liquidatable,
   };

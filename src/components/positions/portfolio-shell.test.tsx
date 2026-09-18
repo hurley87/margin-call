@@ -99,6 +99,18 @@ vi.mock("@/lib/protocol/reads", async (importOriginal) => {
       oracleState: 0,
       estimatedPrincipal: 100_000n,
     }),
+    loadPosition: vi.fn().mockResolvedValue({
+      status: "open",
+      tokenId: 42n,
+      assetId: 3,
+      stockAmount: 100_000_000n,
+      principal: 0n,
+      currentDebt: 0n,
+      owner: "0x1234567890abcdef1234567890abcdef12345678",
+      executor: "0x0000000000000000000000000000000000000000",
+      nav: null,
+      liquidatable: null,
+    }),
   };
 });
 
@@ -112,7 +124,7 @@ vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
 
 import { AllPositionsPage } from "@/components/positions/all-positions-page";
 import { MyPositionsPage } from "@/components/positions/my-positions-page";
-import { PositionDetailStub } from "@/components/positions/position-detail-stub";
+import { PositionDetailPage } from "@/components/positions/position-detail-page";
 import { AppShell } from "@/components/shell/app-shell";
 import CreatePositionPage from "@/app/create/page";
 
@@ -361,25 +373,25 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
   });
 
-  it("detail stub shows indexed identity and not-found without actions", () => {
+  it("detail page shows indexed identity without inventing a missing token", () => {
     useQueryMock.mockReturnValue({
       tokenId: "42",
       assetId: 3,
       owner: CONNECTED_ADDRESS,
-      status: "active",
+      status: "closed",
     });
 
-    const { rerender } = render(<PositionDetailStub tokenId="42" />);
+    const { rerender } = render(<PositionDetailPage tokenId="42" />);
 
     expect(screen.getByText("METAc")).not.toBeNull();
     expect(screen.getByText("Token #42")).not.toBeNull();
-    expect(screen.getByText("Active")).not.toBeNull();
+    expect(screen.getByText("Closed")).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
 
     useQueryMock.mockReturnValue(null);
-    rerender(<PositionDetailStub tokenId="999" />);
-    expect(screen.getByText("Position not found")).not.toBeNull();
+    rerender(<PositionDetailPage tokenId="999" />);
+    expect(screen.getByText(/not in the index yet/i)).not.toBeNull();
   });
 
   it("shows an indexing state when opened=42 is not yet in Convex results", () => {
