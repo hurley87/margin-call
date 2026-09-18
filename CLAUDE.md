@@ -5,7 +5,7 @@
 Margin Call is between product versions. The Crash game has been retired from this repository. The site is a coming-soon landing page with Dynamic wallet connect. Stack scaffolding remains for the next build:
 
 - `CONTEXT.md` — product glossary
-- Dynamic wallet foundation mounted on the landing page; Convex remains empty schema/HTTP with no JWT auth yet
+- Dynamic wallet foundation mounted on the landing page (connect + Base viem `WalletClient` helper in `src/lib/dynamic/`); Convex remains empty schema/HTTP with no JWT auth yet
 - `contracts/` has started landing product contracts, one scoped slice at a time
 
 Do not infer that the frontend is already implemented, or that a contract slice covers more than it says. Add

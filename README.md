@@ -37,6 +37,8 @@ For local wallet connect:
 
 `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is read at build time. Without it, the coming-soon page still renders and the Connect control chunk is omitted from the build.
 
+For future user-approved Base transactions, `src/lib/dynamic/wallet-client.ts` exposes a Base (8453) viem `WalletClient` from a connected Dynamic EVM wallet and its EIP-1193 provider.
+
 ## Commands
 
 | Command                   | Description                                  |
