@@ -869,7 +869,7 @@ liquidate
 
 ## NFT/social layer
 
-**Partly built (issue #461), pending the coordinator redeploy.** `tokenURI` points at
+**Partly built (issue #461), live on Base since the 2026-09-18 coordinator redeploy.** `tokenURI` points at
 `https://margincall.fun/api/nft/{tokenId}`, which serves the opener's optional on-chain thesis and a
 pre-drawn stage image (healthy / warning / danger / liquidated, else the neutral ticker logo). The
 richer presentation below — composited or generated art, and health on portfolio cards — is not shipped.

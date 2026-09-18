@@ -38,7 +38,9 @@ describe("base deployment assets", () => {
 
     expect(baseDeployment.chainId).toBe(BASE_CHAIN_ID);
     expect(baseDeployment.assets).toHaveLength(4);
-    expect(baseDeployment.marginCallDeployedAtBlock).toBe(51470656);
+    // Living-NFT coordinator redeploy (issue #461). The indexer backfills from
+    // here, so a stale block would replay the retired coordinator's events.
+    expect(baseDeployment.marginCallDeployedAtBlock).toBe(51492280);
   });
 });
 
