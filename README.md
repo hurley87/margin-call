@@ -57,15 +57,9 @@ The 2026-09-17 NVDA-only Base deployment (issue #429) is a frozen legacy milesto
 
 ## Runtime positioning
 
-Strongest fit:
+Margin Call is a financing primitive for tokenized stocks. It uses protocol capital to increase real spot exposure, and represents the resulting stock + debt position as a transferable Position NFT.
 
-1. **Tokenized Stocks & 24/7 Markets** — programmable real equities on Base.
-2. **Borrowing, Yield & Leverage** — protocol financing that increases real spot exposure and packages stock + debt into a transferable position.
-3. **Autonomous Financial Agents** — constrained external agents are a natural operating layer on top of the financial primitive.
-
-**Margin Call is a new financial primitive for tokenized stocks first; agent tooling is a control layer on top of it.**
-
-It is not an AI trading bot or sponsor-API demo.
+Agent tooling can operate on top of the protocol, but it is not the product definition. Margin Call is not an AI trading bot.
 
 ## App and agent status
 
