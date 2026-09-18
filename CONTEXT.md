@@ -5,7 +5,7 @@ Margin Call is the proposed product for transferable financed spot positions. Th
 ## Positions and ownership
 
 **Margin Call**:
-The product that finances additional exposure in a supported tokenized stock and makes each stock-plus-debt position transferable. `MarginCall` itself inherits OpenZeppelin ERC-721 and is the Position NFT contract; there is no separate `PositionNFT` contract. Launch contracts are a curated multi-stock registry (NVDAc, AAPLc, METAc, GOOGLc). The 2026-09-17 Base deployment is a legacy NVDA-only milestone, not the launch target.
+The product that finances additional exposure in a supported tokenized stock and makes each stock-plus-debt position transferable. `MarginCall` itself inherits OpenZeppelin ERC-721 and is the Position NFT contract; there is no separate `PositionNFT` contract. Launch contracts are a curated multi-stock registry (NVDAc, AAPLc, METAc, GOOGLc) live on Base at `contracts/deployments/base.json`. The 2026-09-17 NVDA-only Base deployment is a legacy milestone, not the launch target.
 _Avoid_: Stock Gacha, shared inventory protocol
 
 **Position**:

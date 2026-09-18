@@ -15,7 +15,8 @@ This is **not** the Anvil smoke harness (see [README.md](./README.md)).
 This is **not** a redeploy of the historical NVDA-only stack
 ([BASE_NVDA_ONLY.md](./BASE_NVDA_ONLY.md), `deployments/base-nvda-only.legacy.json`).
 
-Do **not** broadcast from this runbook in the architecture PR. Live wrappers stay gated.
+Live wrappers stay gated. Canonical addresses from the 2026-09-18 broadcast are in
+[`../deployments/base.json`](../deployments/base.json).
 
 ## What this deploys
 
@@ -107,13 +108,13 @@ If the oracle is `HELD` / `INVALID` during live acceptance, **wait** for a quali
 | `deployments/base-launch-deploy.run.json` | ignored (`*.run.json`) | Raw deploy addresses from `DeployLaunch`                                |
 | `deployments/base-launch-accept.run.json` | ignored                | Acceptance phase state / tokenId                                        |
 | `deployments/base.example.json`           | committed              | Schema for the canonical launch manifest                                |
-| `deployments/base.json`                   | committed after live   | Canonical launch addresses, rails, commit, tx hashes — **no keys**      |
+| `deployments/base.json`                   | committed              | Canonical launch addresses, rails, commit, tx hashes — **no keys**      |
 | `deployments/base-nvda-only.legacy.json`  | committed (historical) | Issue #429 NVDA-only evidence. Do not overwrite. Frontend must not use. |
 
-After a successful live run, merge run records + broadcast tx hashes into `deployments/base.json`
-by hand from `base.example.json`. **Never** merge into `base-nvda-only.legacy.json`.
+The 2026-09-18 live run is recorded in `deployments/base.json` (merged from run records +
+broadcast tx hashes). **Never** merge into `base-nvda-only.legacy.json`.
 
-The frontend should target only `deployments/base.json` for new positions once that file exists.
+The frontend should target only `deployments/base.json` for new positions.
 
 ## Live acceptance phases
 
@@ -129,4 +130,4 @@ Executor-transfer coverage stays in the local Anvil harness and unit tests.
 The 2026-09-17 NVDA-only Base deployment is preserved at
 [`../deployments/base-nvda-only.legacy.json`](../deployments/base-nvda-only.legacy.json)
 and documented in [BASE_NVDA_ONLY.md](./BASE_NVDA_ONLY.md). Current HEAD cannot reproduce it.
-Do not point the product frontend at those addresses after launch.
+Do not point the product frontend at those addresses.

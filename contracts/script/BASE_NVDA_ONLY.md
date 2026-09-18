@@ -10,7 +10,8 @@ supported launch path while compiling the launch contracts.
 
 Evidence is frozen at
 [`../deployments/base-nvda-only.legacy.json`](../deployments/base-nvda-only.legacy.json).
-Do not overwrite it. Do not point the product frontend at these addresses after launch.
+Do not overwrite it. Do not point the product frontend at these addresses. Canonical launch
+addresses are in [`../deployments/base.json`](../deployments/base.json).
 
 ## What was deployed
 

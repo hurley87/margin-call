@@ -32,7 +32,7 @@
 
 # Canonical Base launch deploy + acceptance:
 
-# see script/BASE_LAUNCH.md
+# see script/BASE_LAUNCH.md / deployments/base.json
 
 # pnpm contracts:deploy:base:dry / pnpm contracts:accept:base:dry
 

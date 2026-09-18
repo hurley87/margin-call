@@ -54,18 +54,18 @@ capability only through separately scoped work.
     (`chainid` 8453). Historical evidence: `contracts/deployments/base-nvda-only.legacy.json`.
     All four contracts are source-verified on Basescan (solc 0.8.29, 1M optimizer runs).
     Do not redeploy from current HEAD. Do not point the frontend at these addresses after launch.
-  - Multi-stock launch architecture (issue #446) — append-only curated asset registry on
-    `MarginCall` with immutable `ASSET_ADMIN`; each Position permanently records one `assetId`;
-    launch rails NVDAc + AAPLc + METAc + GOOGLc (TSLAc excluded for zero Uniswap liquidity;
-    METAc replaced it). Shared 100 bps execution bound reused. Future curated assets can be
-    appended without redeploying `MarginCall` or `CreditPool`. **This is the canonical launch
-    stack.** Deployment tooling: `script/BASE_LAUNCH.md`. Dry-run wrappers:
-    `pnpm contracts:deploy:base:dry` / `pnpm contracts:accept:base:dry`. Live wrappers stay
-    gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`. Not yet broadcast — after live deploy,
-    record the curated manifest at `contracts/deployments/base.json` for the frontend.
+  - Multi-stock launch architecture (issue #446) — **live on Base** (`chainid` 8453).
+    Append-only curated asset registry on `MarginCall` with immutable `ASSET_ADMIN`; each
+    Position permanently records one `assetId`; launch rails NVDAc + AAPLc + METAc + GOOGLc
+    (TSLAc excluded for zero Uniswap liquidity; METAc replaced it). Shared 100 bps execution
+    bound reused. Future curated assets can be appended without redeploying `MarginCall` or
+    `CreditPool`. Curated addresses and tx evidence: `contracts/deployments/base.json`.
+    Scripts/runbook: `script/BASE_LAUNCH.md`. Dry-run wrappers remain available; live wrappers
+    stay gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`. All ten contracts are source-verified
+    on Basescan (solc 0.8.29, 1M optimizer runs). No frontend consume yet.
 
   Still future work: living NFT presentation (`tokenURI` is minimal identity metadata only);
-  Base launch broadcast + tiny live acceptance (human-controlled; do not run from this PR).
+  frontend targeting `contracts/deployments/base.json` for new positions.
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.
 
   Keep each slice in step with the docstring of the contract that owns it (`MarginCall.sol` for the
