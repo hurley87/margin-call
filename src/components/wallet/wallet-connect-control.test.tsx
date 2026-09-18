@@ -11,6 +11,8 @@ const {
   useLogoutMock,
   connectMutateMock,
   logoutMutateMock,
+  connectResetMock,
+  logoutResetMock,
 } = vi.hoisted(() => ({
   useInitStatusMock: vi.fn(),
   useGetWalletAccountsMock: vi.fn(),
@@ -19,6 +21,8 @@ const {
   useLogoutMock: vi.fn(),
   connectMutateMock: vi.fn(),
   logoutMutateMock: vi.fn(),
+  connectResetMock: vi.fn(),
+  logoutResetMock: vi.fn(),
 }));
 
 vi.mock("@dynamic-labs-sdk/react-hooks", () => ({
@@ -57,6 +61,8 @@ describe("WalletConnectUi", () => {
         {
           key: "metamaskevm",
           chain: "EVM",
+          groupKey: "metamask",
+          walletProviderType: "browserExtension",
           metadata: { displayName: "MetaMask", icon: "" },
         },
       ],
@@ -64,10 +70,14 @@ describe("WalletConnectUi", () => {
     useConnectAndVerifyWithWalletProviderMock.mockReturnValue({
       mutate: connectMutateMock,
       isPending: false,
+      error: null,
+      reset: connectResetMock,
     });
     useLogoutMock.mockReturnValue({
       mutate: logoutMutateMock,
       isPending: false,
+      error: null,
+      reset: logoutResetMock,
     });
   });
 
@@ -75,6 +85,8 @@ describe("WalletConnectUi", () => {
     cleanup();
     connectMutateMock.mockReset();
     logoutMutateMock.mockReset();
+    connectResetMock.mockReset();
+    logoutResetMock.mockReset();
   });
 
   it("shows Connect when disconnected", () => {
@@ -87,8 +99,12 @@ describe("WalletConnectUi", () => {
     useGetWalletAccountsMock.mockReturnValue({
       data: [
         {
+          id: "account-1",
           chain: "EVM",
           address: "0x1234567890abcdef1234567890abcdef12345678",
+          lastSelectedAt: null,
+          verifiedCredentialId: null,
+          walletProviderKey: "metamaskevm",
         },
       ],
     });
@@ -103,8 +119,12 @@ describe("WalletConnectUi", () => {
     useGetWalletAccountsMock.mockReturnValue({
       data: [
         {
+          id: "account-1",
           chain: "EVM",
           address: "0x1234567890abcdef1234567890abcdef12345678",
+          lastSelectedAt: null,
+          verifiedCredentialId: null,
+          walletProviderKey: "metamaskevm",
         },
       ],
     });
@@ -112,6 +132,7 @@ describe("WalletConnectUi", () => {
     render(<WalletConnectUi />);
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 
+    expect(logoutResetMock).toHaveBeenCalled();
     expect(logoutMutateMock).toHaveBeenCalled();
   });
 

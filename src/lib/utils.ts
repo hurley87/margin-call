@@ -97,7 +97,7 @@ export function formatShortAddress(
 ): string {
   if (!value) return fallback;
   if (value.length <= 12) return value;
-  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+  return `${value.slice(0, 6)}…${value.slice(-4)}`;
 }
 
 export function relativeTime(
