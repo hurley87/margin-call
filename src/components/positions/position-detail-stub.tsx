@@ -48,11 +48,10 @@ function PositionDetailBody({ tokenId }: { tokenId: string }) {
     return (
       <div className="space-y-2">
         <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-tight text-[var(--t-accent)]">
-          Position #{tokenId}
+          Position not found
         </h1>
         <p className="text-sm leading-6 text-[var(--t-muted)]">
-          Not in the index yet — a just-minted Position will appear here
-          shortly.
+          No indexed Position NFT for token #{tokenId}.
         </p>
       </div>
     );

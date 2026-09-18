@@ -2,23 +2,31 @@ import Link from "next/link";
 import type { PositionListItem } from "@/lib/positions/types";
 import { STATUS_LABEL } from "@/lib/positions/types";
 import { assetLabel } from "@/lib/protocol/deployment";
-import { formatShortAddress } from "@/lib/utils";
+import { cn, formatShortAddress } from "@/lib/utils";
 
 export type PositionCardProps = {
   position: PositionListItem;
   /** When true, show truncated owner (All Positions). */
   showOwner?: boolean;
+  /** Temporary post-open accent from `?opened=` — UX hint only. */
+  highlighted?: boolean;
 };
 
 /** Browseable Position NFT row — identity only, no live financial state. */
 export function PositionCard(props: PositionCardProps) {
-  const { position, showOwner = false } = props;
+  const { position, showOwner = false, highlighted = false } = props;
   const { tokenId, assetId, status, owner } = position;
 
   return (
     <Link
       href={`/position/${tokenId}`}
-      className="block border border-[var(--t-border)] px-4 py-3 transition-colors hover:border-[var(--t-accent)]"
+      data-highlighted={highlighted ? "true" : undefined}
+      className={cn(
+        "block border px-4 py-3 transition-colors hover:border-[var(--t-accent)]",
+        highlighted
+          ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)]"
+          : "border-[var(--t-border)]"
+      )}
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">

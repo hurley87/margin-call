@@ -296,8 +296,8 @@ function CreatePositionForm(props: {
       });
 
       // Best-effort index — Base success is independent of Convex sync.
-      void syncPositionTx(opened.hash);
-      router.push(`/position/${opened.tokenId.toString()}`);
+      void syncPositionTx(opened.hash).catch(() => undefined);
+      router.push(`/?opened=${opened.tokenId.toString()}`);
     } catch (error) {
       const hash =
         error instanceof ProtocolTxError ? error.hash : submittedHash;

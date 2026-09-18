@@ -139,7 +139,7 @@ describe("CreatePositionPage", () => {
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
   });
 
-  it("redirects to /position/tokenId and syncs hash after a successful open", async () => {
+  it("redirects to /?opened=tokenId and syncs hash after a successful open", async () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
@@ -156,11 +156,11 @@ describe("CreatePositionPage", () => {
     });
 
     expect(syncPositionTxMock).toHaveBeenCalledWith(OPEN_HASH);
-    expect(useRouterPushMock).toHaveBeenCalledWith("/position/42");
+    expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
   });
 
-  it("still redirects when Convex sync is pending or skipped", async () => {
-    syncPositionTxMock.mockResolvedValue("pending");
+  it("still redirects when Convex sync is pending", async () => {
+    syncPositionTxMock.mockReturnValue(new Promise(() => undefined));
     render(<CreatePositionPage />);
 
     await waitFor(() => {
@@ -173,9 +173,46 @@ describe("CreatePositionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     await waitFor(() => {
-      expect(useRouterPushMock).toHaveBeenCalledWith("/position/42");
+      expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
     });
 
     expect(syncPositionTxMock).toHaveBeenCalledWith(OPEN_HASH);
+  });
+
+  it("still redirects when Convex sync is skipped or fails", async () => {
+    syncPositionTxMock.mockResolvedValueOnce("skipped");
+    render(<CreatePositionPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
+        "disabled",
+        false
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+    await waitFor(() => {
+      expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
+    });
+
+    cleanup();
+    useRouterPushMock.mockReset();
+    syncPositionTxMock.mockRejectedValueOnce(new Error("index unavailable"));
+
+    render(<CreatePositionPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
+        "disabled",
+        false
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+    await waitFor(() => {
+      expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
+    });
   });
 });

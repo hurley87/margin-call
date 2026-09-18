@@ -361,7 +361,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
   });
 
-  it("detail stub shows indexed identity and indexing empty state without actions", () => {
+  it("detail stub shows indexed identity and not-found without actions", () => {
     useQueryMock.mockReturnValue({
       tokenId: "42",
       assetId: 3,
@@ -379,9 +379,57 @@ describe("portfolio-first app shell", () => {
 
     useQueryMock.mockReturnValue(null);
     rerender(<PositionDetailStub tokenId="999" />);
-    expect(screen.getByText("Position #999")).not.toBeNull();
+    expect(screen.getByText("Position not found")).not.toBeNull();
+  });
+
+  it("shows an indexing state when opened=42 is not yet in Convex results", () => {
+    mockConnectedSession();
+    usePaginatedQueryMock.mockReturnValue({
+      results: [],
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+
+    render(<MyPositionsPage openedTokenId="42" />);
+
+    expect(screen.getByText("Indexing Position #42…")).not.toBeNull();
+    expect(screen.queryByText("You don't have any positions yet.")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Token #42/ })).toBeNull();
+  });
+
+  it("highlights Position #42 when it appears in Convex results", () => {
+    mockConnectedSession();
+    usePaginatedQueryMock.mockReturnValue({
+      results: [
+        {
+          tokenId: "42",
+          assetId: 1,
+          owner: CONNECTED_ADDRESS,
+          status: "active",
+        },
+        {
+          tokenId: "1",
+          assetId: 2,
+          owner: CONNECTED_ADDRESS,
+          status: "active",
+        },
+      ],
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+
+    render(<MyPositionsPage openedTokenId="42" />);
+
+    expect(screen.queryByText(/Indexing Position #42/)).toBeNull();
     expect(
-      screen.getByText(/Not in the index yet — a just-minted Position/)
-    ).not.toBeNull();
+      screen
+        .getByRole("link", { name: /Token #42/ })
+        .getAttribute("data-highlighted")
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("link", { name: /Token #1/ })
+        .getAttribute("data-highlighted")
+    ).toBeNull();
   });
 });

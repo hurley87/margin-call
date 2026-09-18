@@ -2,7 +2,7 @@
 
 import { usePaginatedQuery } from "convex/react";
 import Link from "next/link";
-import { type ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   IndexUnavailable,
   PAGE_SIZE,
@@ -15,8 +15,19 @@ import { useWalletSession } from "@/components/wallet/wallet-providers";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 
+type MyPositionsPageProps = {
+  /** `?opened=` UX hint from a successful create — not authoritative state. */
+  openedTokenId?: string;
+};
+
+/** Digits-only token ids; anything else is ignored. */
+function parseOpenedTokenId(value: string | undefined): string | null {
+  if (value == null || !/^\d+$/.test(value)) return null;
+  return value;
+}
+
 /** Homepage: positions owned by the connected wallet. */
-export function MyPositionsPage() {
+export function MyPositionsPage({ openedTokenId }: MyPositionsPageProps) {
   const session = useWalletSession();
 
   switch (session.kind) {
@@ -54,7 +65,12 @@ export function MyPositionsPage() {
         </PageFrame>
       );
     case "connected":
-      return <MyPositionsList owner={session.address} />;
+      return (
+        <MyPositionsList
+          owner={session.address}
+          openedTokenId={openedTokenId}
+        />
+      );
     default: {
       const _exhaustive: never = session;
       return _exhaustive;
@@ -62,7 +78,13 @@ export function MyPositionsPage() {
   }
 }
 
-function MyPositionsList({ owner }: { owner: `0x${string}` }) {
+function MyPositionsList({
+  owner,
+  openedTokenId,
+}: {
+  owner: `0x${string}`;
+  openedTokenId?: string;
+}) {
   const convex = useOptionalConvexClient();
 
   if (!convex) {
@@ -76,26 +98,63 @@ function MyPositionsList({ owner }: { owner: `0x${string}` }) {
   return (
     <PageFrame>
       <PositionQueryBoundary>
-        <MyPositionsQuery owner={owner} />
+        <MyPositionsQuery owner={owner} openedTokenId={openedTokenId} />
       </PositionQueryBoundary>
     </PageFrame>
   );
 }
 
-function MyPositionsQuery({ owner }: { owner: `0x${string}` }) {
+function MyPositionsQuery({
+  owner,
+  openedTokenId: openedRaw,
+}: {
+  owner: `0x${string}`;
+  openedTokenId?: string;
+}) {
+  const openedTokenId = parseOpenedTokenId(openedRaw);
   const { results, status, loadMore } = usePaginatedQuery(
     api.positions.positionsByOwner,
     { owner, status: "active" },
     { initialNumItems: PAGE_SIZE }
   );
 
-  return (
+  const openedIsPresent =
+    openedTokenId != null &&
+    results.some((position) => position.tokenId === openedTokenId);
+  const isIndexing =
+    openedTokenId != null && status !== "LoadingFirstPage" && !openedIsPresent;
+
+  const list = (
     <PositionList
       results={results}
       status={status}
       loadMore={loadMore}
       emptyMessage="You don't have any positions yet."
+      highlightedTokenId={
+        openedIsPresent && openedTokenId ? openedTokenId : undefined
+      }
     />
+  );
+
+  if (!isIndexing) {
+    return list;
+  }
+
+  const indexingNote = (
+    <p className="text-sm leading-6 text-[var(--t-muted)]">
+      Indexing Position #{openedTokenId}…
+    </p>
+  );
+
+  if (results.length === 0) {
+    return indexingNote;
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      {indexingNote}
+      {list}
+    </div>
   );
 }
 
