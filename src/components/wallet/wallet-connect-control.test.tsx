@@ -30,8 +30,8 @@ vi.mock("@dynamic-labs-sdk/react-hooks", () => ({
   useLogout: useLogoutMock,
 }));
 
-import { ConfiguredWalletConnectControl } from "@/components/wallet/configured-wallet-connect-control";
 import { WalletConnectControl } from "@/components/wallet/wallet-connect-control";
+import { WalletConnectUi } from "@/components/wallet/wallet-connect-ui";
 
 describe("WalletConnectControl", () => {
   afterEach(() => {
@@ -48,9 +48,9 @@ describe("WalletConnectControl", () => {
   });
 });
 
-describe("ConfiguredWalletConnectControl", () => {
+describe("WalletConnectUi", () => {
   beforeEach(() => {
-    useInitStatusMock.mockReturnValue({ data: "finished" });
+    useInitStatusMock.mockReturnValue({ data: "finished", error: null });
     useGetWalletAccountsMock.mockReturnValue({ data: [] });
     useGetAvailableWalletProvidersDataMock.mockReturnValue({
       data: [
@@ -78,7 +78,7 @@ describe("ConfiguredWalletConnectControl", () => {
   });
 
   it("shows Connect when disconnected", () => {
-    render(<ConfiguredWalletConnectControl />);
+    render(<WalletConnectUi />);
 
     expect(screen.getByRole("button", { name: "Connect" })).not.toBeNull();
   });
@@ -93,7 +93,7 @@ describe("ConfiguredWalletConnectControl", () => {
       ],
     });
 
-    render(<ConfiguredWalletConnectControl />);
+    render(<WalletConnectUi />);
 
     expect(screen.getByText("0x1234…5678")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Disconnect" })).not.toBeNull();
@@ -109,9 +109,21 @@ describe("ConfiguredWalletConnectControl", () => {
       ],
     });
 
-    render(<ConfiguredWalletConnectControl />);
+    render(<WalletConnectUi />);
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 
     expect(logoutMutateMock).toHaveBeenCalled();
+  });
+
+  it("surfaces an init failure instead of hanging on Preparing wallet", () => {
+    useInitStatusMock.mockReturnValue({
+      data: "failed",
+      error: new Error("Project settings unavailable"),
+    });
+
+    render(<WalletConnectUi />);
+
+    expect(screen.getByText("Project settings unavailable")).not.toBeNull();
+    expect(screen.queryByText("Preparing wallet…")).toBeNull();
   });
 });

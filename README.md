@@ -35,7 +35,7 @@ For local wallet connect:
 3. Allowlist `http://localhost:3000` (and production origin).
 4. Prefer **in-app** auth token storage (needed later for any Convex JWT bridge).
 
-Without the environment ID, the coming-soon page still renders and the Connect control stays hidden.
+`NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is read at build time. Without it, the coming-soon page still renders and the Connect control chunk is omitted from the build.
 
 ## Commands
 

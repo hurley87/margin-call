@@ -1,6 +1,5 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans_Condensed } from "next/font/google";
-import { MarginCallDynamicProvider } from "@/components/providers/dynamic-provider";
 import "./globals.css";
 
 const plexMono = IBM_Plex_Mono({
@@ -47,7 +46,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${plexMono.variable} ${plexSans.variable} antialiased`}>
-        <MarginCallDynamicProvider>{children}</MarginCallDynamicProvider>
+        {children}
       </body>
     </html>
   );

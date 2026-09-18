@@ -12,8 +12,8 @@ import { Button } from "@/components/ui/button";
 import { getEvmWalletAddress, truncateAddress } from "@/lib/dynamic/wallet";
 
 /** Wallet UI that assumes Dynamic hooks are available in the tree. */
-export function ConfiguredWalletConnectControl() {
-  const { data: initStatus } = useInitStatus();
+export function WalletConnectUi() {
+  const { data: initStatus, error: initError } = useInitStatus();
   const { data: accounts = [] } = useGetWalletAccounts();
   const { data: providers = [] } = useGetAvailableWalletProvidersData();
   const { mutate: connectAndVerify, isPending: isConnecting } =
@@ -21,6 +21,14 @@ export function ConfiguredWalletConnectControl() {
   const { mutate: logout, isPending: isLoggingOut } = useLogout();
   const [isPickerOpen, setIsPickerOpen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  if (initStatus === "failed") {
+    return (
+      <p className="mt-8 max-w-xs text-center text-xs leading-5 text-[var(--t-muted)]">
+        {initError?.message ?? "Wallet failed to initialize."}
+      </p>
+    );
+  }
 
   if (initStatus !== "finished") {
     return (

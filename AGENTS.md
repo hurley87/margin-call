@@ -4,7 +4,7 @@
 
 Margin Call is a Next.js 16 application between product versions. The Crash game has been retired. The site shows a coming-soon landing page with a Dynamic wallet connect control. Use this repository as scaffolding for the next product:
 
-- Dynamic (external EVM wallets on Base; mounted when `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is set)
+- Dynamic (external EVM wallets on Base; wallet island included at build time when `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is set)
 - Convex (empty HTTP router + empty schema; no JWT auth until a product query needs identity)
 - Foundry (reproducible workspace pins; product contracts live under `contracts/`)
 
