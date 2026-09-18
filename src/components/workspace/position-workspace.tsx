@@ -580,6 +580,7 @@ function ConnectedWorkspace(props: {
                           onSubmitted,
                         });
                         setPosition({ status: "closed", tokenId });
+                        await refreshSnapshot();
                       }
                     )
                   }
