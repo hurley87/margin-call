@@ -24,10 +24,11 @@ import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-trans
 import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
 import {
   STAGE_LABEL,
-  indexedArtworkPath,
-  neutralArtworkPath,
-  positionArtworkPath,
+  artworkPath,
+  faceFromStage,
+  faceFromStatus,
   resolvePositionStage,
+  type PositionStage,
 } from "@/lib/positions/artwork";
 import { STATUS_LABEL, type PositionListItem } from "@/lib/positions/types";
 import { formatStockAmount, formatUsdcRaw } from "@/lib/protocol/amounts";
@@ -149,6 +150,21 @@ function NftSlot(props: { src: string | null; alt: string }) {
   );
 }
 
+/**
+ * The one artwork answer for a live Position: a stage the page has not read
+ * yet is neutral, and only a named stage earns a stage-suffixed label.
+ */
+function liveArtwork(assetId: number, stage: PositionStage | null) {
+  const label = assetLabel(assetId);
+  return {
+    src: artworkPath(assetId, faceFromStage(stage)),
+    alt:
+      stage === null
+        ? `${label} Position NFT`
+        : `${label} Position NFT — ${STAGE_LABEL[stage]}`,
+  };
+}
+
 /** The owner's immutable opening note — the same text the NFT description shows. */
 function Thesis({ thesis }: { thesis: string }) {
   if (thesis.trim().length === 0) return null;
@@ -174,7 +190,7 @@ function TerminalPosition({ position }: { position: PositionListItem }) {
         statusLabel={STATUS_LABEL[position.status]}
       />
       <NftSlot
-        src={indexedArtworkPath(position.assetId, position.status)}
+        src={artworkPath(position.assetId, faceFromStatus(position.status))}
         alt={`${assetLabel(position.assetId)} Position NFT — ${STATUS_LABEL[position.status]}`}
       />
       <dl className="grid gap-3 border-t border-[var(--t-border)] pt-4 text-sm">
@@ -221,7 +237,7 @@ function PendingTerminalPosition(props: { assetId: number; tokenId: string }) {
       />
       {/* Burned, but the reason is not indexed yet, so do not claim liquidated art. */}
       <NftSlot
-        src={neutralArtworkPath(props.assetId)}
+        src={artworkPath(props.assetId, "neutral")}
         alt={`${assetLabel(props.assetId)} Position NFT`}
       />
       <p className="text-sm leading-6 text-[var(--t-muted)]">
@@ -309,18 +325,7 @@ function ActivePosition({ indexed }: { indexed: PositionListItem }) {
         tokenId={indexed.tokenId}
         statusLabel={STATUS_LABEL.active}
       />
-      <NftSlot
-        src={
-          stage === null
-            ? neutralArtworkPath(assetId)
-            : positionArtworkPath(assetId, stage)
-        }
-        alt={
-          stage === null
-            ? `${assetLabel(assetId)} Position NFT`
-            : `${assetLabel(assetId)} Position NFT — ${STAGE_LABEL[stage]}`
-        }
-      />
+      <NftSlot {...liveArtwork(assetId, stage)} />
       {live ? <Thesis thesis={live.thesis} /> : null}
       {live ? (
         <LiveFacts position={live} />

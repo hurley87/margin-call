@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PositionArtwork } from "@/components/positions/position-artwork";
-import { indexedArtworkPath } from "@/lib/positions/artwork";
+import { artworkPath, faceFromStatus } from "@/lib/positions/artwork";
 import type { PositionListItem } from "@/lib/positions/types";
 import { STATUS_LABEL } from "@/lib/positions/types";
 import { assetLabel } from "@/lib/protocol/deployment";
@@ -38,7 +38,7 @@ export function PositionCard(props: PositionCardProps) {
     >
       <div className="flex items-start justify-between gap-3">
         <PositionArtwork
-          src={indexedArtworkPath(assetId, status)}
+          src={artworkPath(assetId, faceFromStatus(status))}
           alt=""
           className="w-12 shrink-0"
           sizes="48px"

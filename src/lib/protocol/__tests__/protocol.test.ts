@@ -92,11 +92,12 @@ describe("encodeOpenPosition", () => {
     ]);
   });
 
-  it("sends an empty thesis when none is supplied", () => {
+  it("encodes an empty thesis as the empty string the contract accepts", () => {
     const data = encodeOpenPosition({
       assetId: 1n,
       stockAmount: 1_000_000n,
       targetLeverage: BigInt(DEFAULT_LEVERAGE),
+      thesis: "",
     });
 
     const decoded = decodeFunctionData({ abi: marginCallAbi, data });

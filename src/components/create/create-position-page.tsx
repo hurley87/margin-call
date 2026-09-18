@@ -19,7 +19,7 @@ import { PositionArtwork } from "@/components/positions/position-artwork";
 import { runManagedTx } from "@/components/protocol/run-managed-tx";
 import { TxStatus } from "@/components/protocol/tx-status";
 import { Button } from "@/components/ui/button";
-import { positionArtworkPath } from "@/lib/positions/artwork";
+import { artworkPath } from "@/lib/positions/artwork";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
 import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
 import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
@@ -325,7 +325,7 @@ function CreatePositionForm(props: {
 
         {/* Every open mints healthy by construction: leverage checks pass first. */}
         <PositionArtwork
-          src={positionArtworkPath(asset.assetId, "healthy")}
+          src={artworkPath(asset.assetId, "healthy")}
           alt={`${assetName} Position NFT preview`}
           className="max-w-[180px]"
           sizes="180px"

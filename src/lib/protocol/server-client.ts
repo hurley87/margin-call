@@ -1,7 +1,9 @@
 import "server-only";
-import { createPublicClient, http } from "viem";
-import { base } from "viem/chains";
-import { getBaseRpcUrl } from "@/lib/protocol/public-client";
+import {
+  createBasePublicClient,
+  getBaseRpcUrl,
+  type BasePublicClient,
+} from "@/lib/protocol/public-client";
 
 /**
  * Public Base client for server-side reads (NFT metadata).
@@ -10,7 +12,8 @@ import { getBaseRpcUrl } from "@/lib/protocol/public-client";
  * provisioned endpoint without exposing it in the client bundle, and falls back
  * to the same public RPC the browser uses.
  */
-export function createBaseServerClient() {
-  const rpcUrl = process.env.BASE_RPC_URL?.trim() || getBaseRpcUrl();
-  return createPublicClient({ chain: base, transport: http(rpcUrl) });
+export function createBaseServerClient(): BasePublicClient {
+  return createBasePublicClient(
+    process.env.BASE_RPC_URL?.trim() || getBaseRpcUrl()
+  );
 }

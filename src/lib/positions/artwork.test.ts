@@ -3,13 +3,13 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   STAGE_LABEL,
-  type PositionStage,
-  indexedArtworkPath,
-  neutralArtworkPath,
-  positionArtworkPath,
+  type ArtworkFace,
+  artworkPath,
+  faceFromStage,
+  faceFromStatus,
   resolvePositionStage,
+  stockSymbol,
 } from "@/lib/positions/artwork";
-import type { PositionStatus } from "@/lib/positions/types";
 import { baseDeployment } from "@/lib/protocol/deployment";
 
 const NVDA = 1;
@@ -90,63 +90,76 @@ describe("resolvePositionStage", () => {
   });
 });
 
-describe("positionArtworkPath", () => {
-  it("maps each launch asset to its own stage artwork", () => {
-    expect(positionArtworkPath(NVDA, "healthy")).toBe("/nvda/healthy.png");
-    expect(positionArtworkPath(AAPL, "warning")).toBe("/aapl/warning.png");
-    expect(positionArtworkPath(META, "danger")).toBe("/meta/danger.png");
-    expect(positionArtworkPath(GOOGL, "healthy")).toBe("/googl/healthy.png");
+describe("faceFromStage", () => {
+  it("passes a named health stage straight through to its artwork", () => {
+    expect(faceFromStage("healthy")).toBe("healthy");
+    expect(faceFromStage("warning")).toBe("warning");
+    expect(faceFromStage("danger")).toBe("danger");
   });
 
-  it("uses the neutral ticker logo when pricing is unavailable", () => {
-    expect(positionArtworkPath(NVDA, "pricing_unavailable")).toBe(
-      "/logos/nvda.png"
-    );
-  });
-
-  it("has no artwork for an asset outside the launch set", () => {
-    expect(positionArtworkPath(99, "healthy")).toBeNull();
+  it("is neutral when there is no honest stage to show", () => {
+    expect(faceFromStage("pricing_unavailable")).toBe("neutral");
+    expect(faceFromStage(null)).toBe("neutral");
   });
 });
 
-describe("indexedArtworkPath", () => {
-  it("shows liquidated artwork only for the indexed liquidated status", () => {
-    expect(indexedArtworkPath(NVDA, "liquidated")).toBe("/nvda/liquidated.png");
+describe("faceFromStatus", () => {
+  it("shows the liquidated face only for the indexed liquidated status", () => {
+    expect(faceFromStatus("liquidated")).toBe("liquidated");
   });
 
   it("stays neutral for active and closed, which carry no live risk read", () => {
-    expect(indexedArtworkPath(NVDA, "active")).toBe("/logos/nvda.png");
-    expect(indexedArtworkPath(AAPL, "closed")).toBe("/logos/aapl.png");
+    expect(faceFromStatus("active")).toBe("neutral");
+    expect(faceFromStatus("closed")).toBe("neutral");
+  });
+});
+
+describe("artworkPath", () => {
+  it("maps each launch asset to its own stage artwork", () => {
+    expect(artworkPath(NVDA, "healthy")).toBe("/nvda/healthy.png");
+    expect(artworkPath(AAPL, "warning")).toBe("/aapl/warning.png");
+    expect(artworkPath(META, "danger")).toBe("/meta/danger.png");
+    expect(artworkPath(GOOGL, "liquidated")).toBe("/googl/liquidated.png");
+  });
+
+  it("uses the ticker logo for the neutral face", () => {
+    expect(artworkPath(NVDA, "neutral")).toBe("/logos/nvda.png");
   });
 
   it("has no artwork for an asset outside the launch set", () => {
-    expect(indexedArtworkPath(99, "active")).toBeNull();
+    expect(artworkPath(99, "healthy")).toBeNull();
+    expect(artworkPath(99, "neutral")).toBeNull();
+  });
+});
+
+describe("stockSymbol", () => {
+  it("names the underlying stock, not the curated token", () => {
+    expect(stockSymbol(NVDA)).toBe("NVDA");
+    expect(stockSymbol(GOOGL)).toBe("GOOGL");
+  });
+
+  it("has no symbol for an asset outside the launch set", () => {
+    expect(stockSymbol(99)).toBeNull();
   });
 });
 
 describe("committed artwork", () => {
-  it("has a file behind every path the resolvers can emit", () => {
-    const stages: PositionStage[] = [
+  it("has a file behind every path the resolver can emit", () => {
+    const faces: ArtworkFace[] = [
       "healthy",
       "warning",
       "danger",
-      "pricing_unavailable",
+      "liquidated",
+      "neutral",
     ];
-    const statuses: PositionStatus[] = ["active", "closed", "liquidated"];
     const paths = new Set<string>();
-    const expectPath = (path: string | null): string => {
-      expect(path).not.toBeNull();
-      return path!;
-    };
 
     for (const asset of baseDeployment.assets) {
-      for (const stage of stages) {
-        paths.add(expectPath(positionArtworkPath(asset.assetId, stage)));
+      for (const face of faces) {
+        const path = artworkPath(asset.assetId, face);
+        expect(path, `no path for ${asset.name} ${face}`).not.toBeNull();
+        paths.add(path!);
       }
-      for (const status of statuses) {
-        paths.add(expectPath(indexedArtworkPath(asset.assetId, status)));
-      }
-      paths.add(expectPath(neutralArtworkPath(asset.assetId)));
     }
 
     // A missing PNG is invisible to every other test here — they assert the

@@ -75,6 +75,14 @@ describe("buildNftMetadata", () => {
     });
   });
 
+  it("fails loudly for an asset the deployment manifest does not curate", () => {
+    // Degrading to partial metadata would hide a manifest that has drifted
+    // from the coordinator's asset registry.
+    expect(() => buildNftMetadata(input({ assetId: 99 }))).toThrow(
+      /No curated launch asset/
+    );
+  });
+
   it("never publishes debt or NAV as marketplace traits", () => {
     const traits = buildNftMetadata(
       input({ currentDebt: 550_000n, nav: 1_000_000n, liquidatable: false })

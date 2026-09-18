@@ -10,7 +10,7 @@ export function encodeOpenPosition(args: {
   assetId: bigint;
   stockAmount: bigint;
   targetLeverage: bigint;
-  thesis?: string;
+  thesis: string;
 }): `0x${string}` {
   return encodeFunctionData({
     abi: marginCallAbi,
@@ -20,7 +20,7 @@ export function encodeOpenPosition(args: {
       args.stockAmount,
       args.targetLeverage,
       0n,
-      args.thesis ?? "",
+      args.thesis,
     ],
   });
 }

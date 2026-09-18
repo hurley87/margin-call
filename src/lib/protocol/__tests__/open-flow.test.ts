@@ -89,6 +89,7 @@ describe("runOpenPositionFlow", () => {
       asset,
       stockAmount: 1_000_000n,
       targetLeverage: LEVERAGE_1_25X,
+      thesis: "",
       chainId: 8453,
       onSubmitted,
     });
@@ -101,9 +102,29 @@ describe("runOpenPositionFlow", () => {
         assetId: BigInt(asset.assetId),
         stockAmount: 1_000_000n,
         targetLeverage: BigInt(LEVERAGE_1_25X),
+        thesis: "",
       })
     );
     expect(result).toEqual({ tokenId: 42n, hash: OPEN_HASH });
+  });
+
+  it("forwards the caller's thesis to the open write", async () => {
+    const { walletClient, publicClient } = stubClients();
+
+    await runOpenPositionFlow({
+      walletClient,
+      publicClient,
+      address: ADDRESS,
+      asset,
+      stockAmount: 1_000_000n,
+      targetLeverage: LEVERAGE_1_25X,
+      thesis: "AI capex stays underpriced.",
+      chainId: 8453,
+    });
+
+    expect(openPositionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ thesis: "AI capex stays underpriced." })
+    );
   });
 
   it("approves then re-reads before open when allowance is short", async () => {
@@ -127,6 +148,7 @@ describe("runOpenPositionFlow", () => {
       asset,
       stockAmount: 1_000_000n,
       targetLeverage: LEVERAGE_1_25X,
+      thesis: "",
       chainId: 8453,
       onSubmitted,
     });
@@ -156,6 +178,7 @@ describe("runOpenPositionFlow", () => {
         asset,
         stockAmount: 1_000_000n,
         targetLeverage: LEVERAGE_1_25X,
+        thesis: "",
         chainId: 8453,
       })
     ).rejects.toThrow(/Insufficient selected-stock balance/);
@@ -182,6 +205,7 @@ describe("runOpenPositionFlow", () => {
       asset,
       stockAmount: 1_000_000n,
       targetLeverage: SPOT_LEVERAGE,
+      thesis: "",
       chainId: 8453,
     });
 
@@ -208,6 +232,7 @@ describe("runOpenPositionFlow", () => {
       asset,
       stockAmount: 1_000_000n,
       targetLeverage: LEVERAGE_1_25X,
+      thesis: "",
       chainId: 8453,
     });
 
@@ -230,6 +255,7 @@ describe("runOpenPositionFlow", () => {
         asset,
         stockAmount: 1_000_000n,
         targetLeverage: LEVERAGE_1_25X,
+        thesis: "",
         chainId: 1,
       })
     ).rejects.toThrow(/Wrong network/);

@@ -90,7 +90,7 @@ export async function openPosition(args: {
   assetId: bigint;
   stockAmount: bigint;
   targetLeverage: bigint;
-  thesis?: string;
+  thesis: string;
   onSubmitted?: (hash: `0x${string}`) => void;
 }): Promise<{ receipt: TransactionReceipt; tokenId: bigint }> {
   const receipt = await sendAndWait({

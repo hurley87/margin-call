@@ -18,8 +18,8 @@ export type OpenPositionFlowArgs = {
   asset: LaunchAsset;
   stockAmount: bigint;
   targetLeverage: number;
-  /** Optional immutable NFT description. Rejected onchain past `MAX_THESIS_BYTES`. */
-  thesis?: string;
+  /** Immutable NFT description; empty means none. Rejected onchain past `MAX_THESIS_BYTES`. */
+  thesis: string;
   /** UI-reported chain id for readiness (EIP-1193 still re-checked). */
   chainId: number | null | undefined;
   onSubmitted?: (hash: `0x${string}`, label: string) => void;
