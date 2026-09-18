@@ -6,16 +6,16 @@ Margin Call is between versions. The Crash game has been retired from this repos
 
 ## What's in the repo today
 
-| Area               | State                                                                                 |
-| ------------------ | ------------------------------------------------------------------------------------- |
-| `src/`             | Neutral Next.js 16 shell (coming-soon landing), authentication helpers, UI primitives |
-| `convex/`          | Convex auth and HTTP infrastructure                                                   |
-| `packages/shared/` | Framework-neutral validation helpers                                                  |
-| `contracts/`       | Foundry scaffolding only — product contracts are future work                          |
+| Area               | State                                                                            |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `src/`             | Next.js 16 shell (coming-soon landing + Dynamic wallet connect), UI primitives   |
+| `convex/`          | Empty HTTP router and schema; no JWT auth until a product feature needs identity |
+| `packages/shared/` | Framework-neutral validation helpers                                             |
+| `contracts/`       | Foundry workspace with landed V1 Position NFT slices — see `CLAUDE.md`           |
 
 ## Tech stack
 
-Next.js 16 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v4 · Convex · Privy · Foundry
+Next.js 16 (App Router) · React 19 · TypeScript (strict) · Tailwind CSS v4 · Convex · Dynamic · Foundry · viem
 
 ## Getting started
 
@@ -25,6 +25,19 @@ pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000). Copy `.env.example` to `.env.local` for the required environment variables.
+
+### Dynamic dashboard
+
+For local wallet connect:
+
+1. Create an environment in the [Dynamic console](https://console.dynamic.xyz/dashboard/developer/api) and set `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID`.
+2. Enable **external EVM wallets** and **Base (8453)**.
+3. Allowlist `http://localhost:3000` (and production origin).
+4. Prefer **in-app** auth token storage (needed later for any Convex JWT bridge).
+
+`NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is read at build time. Without it, the coming-soon page still renders and the Connect control chunk is omitted from the build.
+
+For future user-approved Base transactions, `src/lib/dynamic/wallet-client.ts` exposes a Base (8453) viem `WalletClient` from a connected Dynamic EVM wallet and its EIP-1193 provider.
 
 ## Commands
 

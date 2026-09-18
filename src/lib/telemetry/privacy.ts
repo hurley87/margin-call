@@ -28,20 +28,14 @@ function isSensitiveKey(key: string) {
   const normalized = key.replace(/[^a-z0-9]/gi, "").toLowerCase();
   const isSessionMetric =
     (normalized.startsWith("session") ||
-      normalized.startsWith("privysession")) &&
+      normalized.startsWith("dynamicsession")) &&
     /(duration|elapsed|time|age|count|timeout|ttl|started|expires)/.test(
       normalized
     );
-  const isPrivyCredential =
-    normalized.startsWith("privyauth") ||
-    normalized.startsWith("privyauthorization") ||
-    normalized.startsWith("privyidentity") ||
-    normalized.startsWith("privytoken") ||
-    normalized.startsWith("privycookie") ||
-    (normalized.startsWith("privysession") && !isSessionMetric) ||
-    /(?:^|[-_])privy[-_](?:auth|authorization|session|identity|token|cookie)/i.test(
-      key
-    );
+  const isDynamicCredential =
+    normalized.startsWith("dynamicauth") ||
+    normalized.startsWith("dynamicidentity") ||
+    (normalized.startsWith("dynamicsession") && !isSessionMetric);
 
   return (
     normalized.includes("authorization") ||
@@ -58,7 +52,7 @@ function isSensitiveKey(key: string) {
     normalized.startsWith("auth") ||
     (!isSessionMetric && normalized.startsWith("session")) ||
     normalized.startsWith("identity") ||
-    isPrivyCredential
+    isDynamicCredential
   );
 }
 

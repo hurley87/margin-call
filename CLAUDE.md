@@ -2,10 +2,10 @@
 
 ## Project overview
 
-Margin Call is between product versions. The Crash game has been retired from this repository. The site is a coming-soon landing page with no login. Stack scaffolding remains for the next build:
+Margin Call is between product versions. The Crash game has been retired from this repository. The site is a coming-soon landing page with Dynamic wallet connect. Stack scaffolding remains for the next build:
 
 - `CONTEXT.md` — product glossary
-- Privy and Convex scaffolding only — no frontend product yet
+- Dynamic wallet foundation mounted on the landing page (connect + Base viem `WalletClient` helper in `src/lib/dynamic/`); Convex remains empty schema/HTTP with no JWT auth yet
 - `contracts/` has started landing product contracts, one scoped slice at a time
 
 Do not infer that the frontend is already implemented, or that a contract slice covers more than it says. Add
@@ -25,8 +25,14 @@ capability only through separately scoped work.
 
 ## Retained architecture
 
-- `src/` — neutral Next.js shell, styling, authentication helpers, and UI primitives
-- `convex/` — Convex auth and HTTP infrastructure
+- `src/` — Next.js shell, Dynamic wallet foundation, styling, and UI primitives
+- `convex/` — Convex HTTP infrastructure (empty schema; no JWT providers yet).
+  When the first authed Convex table or function lands, add Dynamic `customJwt` in
+  `convex/auth.config.ts`:
+  - issuer: `https://app.dynamicauth.com/${DYNAMIC_ENVIRONMENT_ID}`
+  - jwks: `https://app.dynamicauth.com/api/v0/sdk/${DYNAMIC_ENVIRONMENT_ID}/.well-known/jwks`
+  - algorithm: `RS256`
+  - applicationID: exact `aud` from a live Dynamic access token
 - `packages/shared/` — framework-neutral validation helpers
 - `contracts/` — Foundry workspace. `src/MarginCall.sol` is the Position NFT coordinator (NVDAc custody +
   ERC-721 ownership), supported by `CreditPool.sol`, `OracleAdapter.sol`, `OracleStatePolicy.sol`,

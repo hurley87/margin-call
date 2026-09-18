@@ -36,6 +36,13 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # A prerender is the only honest test of the ssr:false wallet boundary;
+      # the configured build is the case that regressed.
+      - name: Build
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID: env_ci_prerender_probe
+
   vitest:
     name: Vitest
     runs-on: ubuntu-latest
