@@ -50,20 +50,22 @@ capability only through separately scoped work.
     and `CreditPool.availableCredit()` remain the authoritative oracle-independent reads
   - treasury idle withdrawal on `CreditPool` — immutable `treasury` may withdraw idle USDC only; does
     not touch borrowed capital, Position NFT state, or user debt
-  - Base mainnet deploy + acceptance (issue #429) — **NVDA-only V1** is live on Base (`chainid` 8453).
-    Curated addresses and tx evidence: `contracts/deployments/base.json`.
-    Scripts/runbook: `script/BASE_MAINNET.md`. Dry-run wrappers remain available;
-    live wrappers stay gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`.
+  - Base mainnet deploy + acceptance (issue #429) — **legacy NVDA-only deployment** on Base
+    (`chainid` 8453). Historical evidence: `contracts/deployments/base-nvda-only.legacy.json`.
     All four contracts are source-verified on Basescan (solc 0.8.29, 1M optimizer runs).
-    No frontend yet.
-  - multi-stock architecture (issue #446) — append-only curated asset registry on `MarginCall` with
-    immutable `ASSET_ADMIN`; each Position permanently records one `assetId`; launch rails
-    NVDAc + AAPLc + METAc + GOOGLc qualified on a pinned Base fork (TSLAc excluded for zero Uniswap
-    liquidity). Shared 100 bps execution bound reused. **Not deployed** — existing V1 remains the
-    live NVDA-only stack until a follow-up deployment issue.
+    Do not redeploy from current HEAD. Do not point the frontend at these addresses after launch.
+  - Multi-stock launch architecture (issue #446) — append-only curated asset registry on
+    `MarginCall` with immutable `ASSET_ADMIN`; each Position permanently records one `assetId`;
+    launch rails NVDAc + AAPLc + METAc + GOOGLc (TSLAc excluded for zero Uniswap liquidity;
+    METAc replaced it). Shared 100 bps execution bound reused. Future curated assets can be
+    appended without redeploying `MarginCall` or `CreditPool`. **This is the canonical launch
+    stack.** Deployment tooling: `script/BASE_LAUNCH.md`. Dry-run wrappers:
+    `pnpm contracts:deploy:base:dry` / `pnpm contracts:accept:base:dry`. Live wrappers stay
+    gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`. Not yet broadcast — after live deploy,
+    record the curated manifest at `contracts/deployments/base.json` for the frontend.
 
   Still future work: living NFT presentation (`tokenURI` is minimal identity metadata only);
-  multi-stock Base mainnet deploy + tiny live acceptance.
+  Base launch broadcast + tiny live acceptance (human-controlled; do not run from this PR).
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.
 
   Keep each slice in step with the docstring of the contract that owns it (`MarginCall.sol` for the

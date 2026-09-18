@@ -1,52 +1,120 @@
 {
+  "status": "canonical-launch",
+  "canonical": true,
+  "notes": "Fill after live DeployLaunch + AcceptLaunch. This is the only Base deployment the frontend should consume for new positions. Do not store private keys. Do not overwrite deployments/base-nvda-only.legacy.json.",
   "network": "base",
   "chainId": 8453,
   "sourceCommit": "REPLACE_WITH_GIT_SHA",
   "deployer": "0xREPLACE_OPERATOR",
+  "assetAdmin": "0xREPLACE_OPERATOR",
   "treasury": "0xREPLACE_OPERATOR",
   "contracts": {
-    "oracleAdapter": "0xREPLACE",
-    "executionAdapter": "0xREPLACE",
     "marginCall": "0xREPLACE",
     "creditPool": "0xREPLACE"
   },
-  "config": {
-    "nvdac": "0xb20000000000000000000078ee7ce2fE4908108C",
+  "shared": {
     "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-    "nvdaFeed": "0x04689a41629776563E6822F76f2e57D148d28513",
     "coinbaseOracleRegistry": "0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD",
     "baseSequencerUptimeFeed": "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433",
     "uniswapSwapRouter02": "0x2626664c2603336E57B271c5C0b26F421741e481",
-    "uniswapFee": 3000,
     "borrowAprBps": 1000,
     "maintenanceEquityRatioBps": 3000
   },
+  "assets": [
+    {
+      "name": "NVDAc",
+      "assetId": 1,
+      "stock": "0xb20000000000000000000078ee7ce2fE4908108C",
+      "oracleAdapter": "0xREPLACE",
+      "executionAdapter": "0xREPLACE",
+      "feed": "0x04689a41629776563E6822F76f2e57D148d28513",
+      "uniswapPool": "0x60661b315553EB81872deEA9a66d567Cf0CCd33B",
+      "uniswapFee": 3000
+    },
+    {
+      "name": "AAPLc",
+      "assetId": 2,
+      "stock": "0xb200000000000000000000C2e324d24d7eEcd1fb",
+      "oracleAdapter": "0xREPLACE",
+      "executionAdapter": "0xREPLACE",
+      "feed": "0x787f13dEa48Db0897CbCDD985de77809D837F988",
+      "uniswapPool": "0x97F35d1E92795327614BE000cd18cba1Be2c1931",
+      "uniswapFee": 3000
+    },
+    {
+      "name": "METAc",
+      "assetId": 3,
+      "stock": "0xb2000000000000000000008bC8786B856E61707C",
+      "oracleAdapter": "0xREPLACE",
+      "executionAdapter": "0xREPLACE",
+      "feed": "0x6526aE6797A76123638b863AeE4dD27Ba4E4b27D",
+      "uniswapPool": "0x583919ec1975a1238C50e1940911894ee6912476",
+      "uniswapFee": 3000
+    },
+    {
+      "name": "GOOGLc",
+      "assetId": 4,
+      "stock": "0xb2000000000000000000002D0BA3164cc74f58B7",
+      "oracleAdapter": "0xREPLACE",
+      "executionAdapter": "0xREPLACE",
+      "feed": "0x5bF49E0ffA937CE2FfF033c739aD7C634c4D34F2",
+      "uniswapPool": "0x8634EE4145A63E40E44e12A6Bb1B905Fcb8856a6",
+      "uniswapFee": 3000
+    }
+  ],
   "deploymentTxHashes": {
-    "oracleAdapter": "0xREPLACE",
-    "executionAdapter": "0xREPLACE",
     "marginCall": "0xREPLACE",
     "creditPool": "0xREPLACE",
-    "setCreditPool": "0xREPLACE"
+    "setCreditPool": "0xREPLACE",
+    "assets": {
+      "NVDAc": {
+        "oracleAdapter": "0xREPLACE",
+        "executionAdapter": "0xREPLACE",
+        "addAsset": "0xREPLACE"
+      },
+      "AAPLc": {
+        "oracleAdapter": "0xREPLACE",
+        "executionAdapter": "0xREPLACE",
+        "addAsset": "0xREPLACE"
+      },
+      "METAc": {
+        "oracleAdapter": "0xREPLACE",
+        "executionAdapter": "0xREPLACE",
+        "addAsset": "0xREPLACE"
+      },
+      "GOOGLc": {
+        "oracleAdapter": "0xREPLACE",
+        "executionAdapter": "0xREPLACE",
+        "addAsset": "0xREPLACE"
+      }
+    }
   },
   "acceptance": {
     "creditSeedUsdcRaw": 20000000,
     "treasuryWithdrawUsdcRaw": 1000000,
     "stockAmountRaw": 1000000,
     "leverageBps": 12500,
+    "smokeAsset": "NVDAc",
     "tokenId": null,
-    "alice": "0xREPLACE_OPERATOR",
-    "executor": "0xREPLACE_EXECUTOR",
-    "bob": "0xREPLACE_RECIPIENT",
+    "operator": "0xREPLACE_OPERATOR",
     "txHashes": {
       "seed": "0xREPLACE",
       "treasuryWithdraw": "0xREPLACE",
       "openFinanced": "0xREPLACE",
-      "setExecutor": "0xREPLACE",
-      "reduceExposure": "0xREPLACE",
-      "transferToBob": "0xREPLACE",
-      "bobRepay": "0xREPLACE",
-      "bobClose": "0xREPLACE"
+      "repayAndClose": "0xREPLACE"
     },
-    "notes": "Fill after live AcceptV1. Do not store private keys."
+    "notes": "Fill after live AcceptLaunch. Compact financed open -> repay -> close against the first launch rail. Do not store private keys."
+  },
+  "sourceVerification": {
+    "explorer": "basescan.org",
+    "verifiedOn": null,
+    "compiler": "v0.8.29+commit.ab55807c",
+    "optimizerRuns": 1000000,
+    "contracts": {
+      "marginCall": "pending",
+      "creditPool": "pending",
+      "oracleAdapters": "pending",
+      "executionAdapters": "pending"
+    }
   }
 }

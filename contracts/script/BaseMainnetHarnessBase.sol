@@ -6,33 +6,44 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {CreditPool} from "../src/CreditPool.sol";
 import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
+import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
 import {LaunchAssets} from "../src/LaunchAssets.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {OracleAdapter} from "../src/OracleAdapter.sol";
 import {V1Config} from "../src/V1Config.sol";
-import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
 import {HarnessBase} from "./HarnessBase.sol";
 
 /// @title BaseMainnetHarnessBase
-/// @notice Shared scaffolding for Base-mainnet deploy and acceptance scripts (issue #429).
+/// @notice Shared scaffolding for the canonical Base launch deploy and acceptance scripts.
 /// @dev Hard-requires `block.chainid == 8453`. Never weakens Anvil-only local harnesses.
 ///      Inherits `StdCheats` (not only `StdCheatsSafe`) so dry-run can `deal` ERC-20 balances on a fork.
-///      Owns `_deployV1Stack` so the live deploy and the dry-run acceptance build the same stack.
+///      Owns `_deployLaunchStack` so live deploy and dry-run acceptance build the same stack.
 abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
-    /// @dev Tiny live defaults (overridable via env). 0.01 NVDAc = 1e6 raw (8 decimals).
+    /// @dev Tiny live defaults (overridable via env). 0.01 stock = 1e6 raw (8 decimals).
     uint256 internal constant DEFAULT_STOCK_AMOUNT = 1_000_000;
     uint256 internal constant DEFAULT_CREDIT_SEED = 20e6;
     uint256 internal constant DEFAULT_TREASURY_WITHDRAW = 1e6;
     uint256 internal constant DEFAULT_LEVERAGE = V1Config.LEVERAGE_1_25X;
-    /// @dev Small reduceExposure size as a fraction of recorded stock (bps). 500 = 5%.
-    uint256 internal constant REDUCE_SALE_BPS = 500;
-    /// @dev Overestimate applied to B's final repay (bps). `repay` caps at min(amount, currentDebt).
+    /// @dev Overestimate applied to the final repay (bps). `repay` caps at min(amount, currentDebt).
     uint256 internal constant REPAY_BUFFER_BPS = 100;
+    /// @dev Current qualified launch-set size. `LaunchAssets.launchSet()` is the rail source of truth;
+    ///      this constant only fails the deploy closed if the table and this pin drift.
+    uint256 internal constant LAUNCH_ASSET_COUNT = 4;
 
     error BaseMainnetOnly(uint256 actualChainId, uint256 requiredChainId);
     error DuplicateWalletRoles(address a, address b);
     error DryRunRequired();
     error LiveBroadcastForbiddenInDryRun();
+    error LaunchSetSizeMismatch(uint256 actual, uint256 expected);
+    error OracleNotLive(uint8 state);
+
+    struct LaunchStack {
+        MarginCall marginCall;
+        CreditPool pool;
+        address[] oracles;
+        address[] executions;
+        uint256[] assetIds;
+    }
 
     /// @dev Refuse every chain except Base mainnet. Blocks Anvil (31337) and Base Sepolia (84532).
     function _requireBaseMainnet() internal view {
@@ -41,7 +52,7 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
         }
     }
 
-    /// @dev A, E, and B must be three distinct addresses so executor-clearing and lost-authority proofs are real.
+    /// @dev Kept for the optional three-wallet derivation helper. Compact launch acceptance is operator-only.
     function _requireDistinctWallets(address operator, address executor, address recipient) internal pure {
         if (operator == executor) {
             revert DuplicateWalletRoles(operator, executor);
@@ -58,40 +69,78 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
         return vm.envOr("MARGIN_CALL_DRY_RUN", uint256(0)) != 0;
     }
 
-    /// @dev The one definition of the multi-stock stack with a single NVDAc registration. `DeployV1` broadcasts
-    ///      it; `AcceptV1.dryRunFull` simulates it, so the dry run always rehearses the stack the script ships.
-    ///      Live V1 on Base (`deployments/base.json`) remains the prior NVDA-only deploy and is not rewritten here.
-    ///      `ASSET_ADMIN` is `msg.sender` so registration works both under broadcast (operator) and dry-run (script).
-    function _deployV1Stack(address treasury)
-        internal
-        returns (
-            OracleAdapter oracle,
-            ExecutionAdapter execution,
-            MarginCall marginCall,
-            CreditPool pool,
-            uint256 nvdaAssetId
-        )
-    {
-        oracle = new OracleAdapter(
-            LaunchAssets.NVDAC,
-            LaunchAssets.NVDA_FEED,
-            V1Config.COINBASE_ORACLE_REGISTRY,
-            V1Config.BASE_SEQUENCER_UPTIME_FEED
-        );
-        execution = new ExecutionAdapter(
-            V1Config.USDC, LaunchAssets.NVDAC, V1Config.UNISWAP_SWAP_ROUTER_02, LaunchAssets.NVDA_UNISWAP_FEE
-        );
-        marginCall = new MarginCall(V1Config.USDC, msg.sender);
-        pool = new CreditPool(V1Config.USDC, address(marginCall), treasury);
-        marginCall.setCreditPool(address(pool));
-        nvdaAssetId = marginCall.addAsset(LaunchAssets.NVDAC, address(oracle), address(execution));
+    /// @dev The one definition of the canonical launch stack: one `MarginCall`, one `CreditPool`, and one
+    ///      oracle/execution adapter pair per `LaunchAssets.launchSet()` rail. `DeployLaunch` broadcasts it;
+    ///      `AcceptLaunch.dryRunFull` simulates it. `ASSET_ADMIN` is the explicit `treasury` argument (the
+    ///      operator), not the script's `msg.sender` — during `startBroadcast` those differ, and using
+    ///      `msg.sender` would brick `addAsset`. This does **not** reproduce the historical NVDA-only
+    ///      deployment in `deployments/base-nvda-only.legacy.json`.
+    function _deployLaunchStack(address treasury) internal returns (LaunchStack memory stack) {
+        LaunchAssets.Asset[] memory rails = LaunchAssets.launchSet();
+        uint256 n = rails.length;
+        if (n != LAUNCH_ASSET_COUNT) {
+            revert LaunchSetSizeMismatch(n, LAUNCH_ASSET_COUNT);
+        }
+
+        stack.marginCall = new MarginCall(V1Config.USDC, treasury);
+        stack.pool = new CreditPool(V1Config.USDC, address(stack.marginCall), treasury);
+        stack.marginCall.setCreditPool(address(stack.pool));
+
+        stack.oracles = new address[](n);
+        stack.executions = new address[](n);
+        stack.assetIds = new uint256[](n);
+
+        for (uint256 i; i < n; ++i) {
+            OracleAdapter oracle = new OracleAdapter(
+                rails[i].stock, rails[i].feed, V1Config.COINBASE_ORACLE_REGISTRY, V1Config.BASE_SEQUENCER_UPTIME_FEED
+            );
+            ExecutionAdapter execution =
+                new ExecutionAdapter(V1Config.USDC, rails[i].stock, V1Config.UNISWAP_SWAP_ROUTER_02, rails[i].fee);
+            stack.oracles[i] = address(oracle);
+            stack.executions[i] = address(execution);
+            stack.assetIds[i] = stack.marginCall.addAsset(rails[i].stock, address(oracle), address(execution));
+        }
     }
 
-    /// @dev The reduceExposure sale size. Shared so the dry run sells the same fraction as the live phase.
-    function _reduceSale(uint256 stock) internal pure returns (uint256 sale) {
-        sale = (stock * REDUCE_SALE_BPS) / V1Config.BPS_DENOMINATOR;
-        if (sale == 0) {
-            sale = 1;
+    /// @dev Shared relationship + rail checks. Deploy and dry-run acceptance cannot assert a different registry.
+    function _assertLaunchStack(LaunchStack memory stack, address initializer, address treasury) internal view {
+        LaunchAssets.Asset[] memory rails = LaunchAssets.launchSet();
+        uint256 n = rails.length;
+        if (n != LAUNCH_ASSET_COUNT) {
+            revert LaunchSetSizeMismatch(n, LAUNCH_ASSET_COUNT);
+        }
+
+        assertEq(address(stack.marginCall.USDC()), V1Config.USDC, "MarginCall.USDC");
+        assertEq(stack.marginCall.INITIALIZER(), initializer, "MarginCall.INITIALIZER");
+        assertEq(stack.marginCall.ASSET_ADMIN(), initializer, "MarginCall.ASSET_ADMIN");
+        assertEq(address(stack.marginCall.creditPool()), address(stack.pool), "MarginCall.creditPool");
+        assertEq(stack.marginCall.assetCount(), n, "assetCount");
+        assertEq(address(stack.pool.USDC()), V1Config.USDC, "CreditPool.USDC");
+        assertEq(stack.pool.borrower(), address(stack.marginCall), "CreditPool.borrower");
+        assertEq(stack.pool.treasury(), treasury, "CreditPool.treasury");
+
+        for (uint256 i; i < n; ++i) {
+            uint256 assetId = stack.marginCall.assetAt(i);
+            assertEq(assetId, i + 1, "assetAt order");
+            assertEq(stack.assetIds[i], assetId, "recorded assetId");
+            assertEq(stack.marginCall.assetIdOf(rails[i].stock), assetId, "assetIdOf");
+
+            MarginCall.AssetConfig memory cfg = stack.marginCall.assetConfig(assetId);
+            assertEq(cfg.stock, rails[i].stock, "assetConfig.stock");
+            assertEq(address(cfg.oracle), stack.oracles[i], "assetConfig.oracle");
+            assertEq(address(cfg.execution), stack.executions[i], "assetConfig.execution");
+            assertTrue(cfg.openingEnabled, "assetConfig.openingEnabled");
+
+            OracleAdapter oracle = OracleAdapter(stack.oracles[i]);
+            ExecutionAdapter execution = ExecutionAdapter(stack.executions[i]);
+            assertEq(address(oracle.STOCK()), rails[i].stock, "oracle.STOCK");
+            assertEq(address(oracle.FEED()), rails[i].feed, "oracle.FEED");
+            assertEq(address(oracle.REGISTRY()), V1Config.COINBASE_ORACLE_REGISTRY, "oracle.REGISTRY");
+            assertEq(address(oracle.SEQUENCER_FEED()), V1Config.BASE_SEQUENCER_UPTIME_FEED, "oracle.SEQUENCER");
+            assertEq(address(execution.USDC()), V1Config.USDC, "execution.USDC");
+            assertEq(address(execution.STOCK()), rails[i].stock, "execution.STOCK");
+            assertEq(address(execution.ROUTER()), V1Config.UNISWAP_SWAP_ROUTER_02, "execution.ROUTER");
+            assertEq(uint256(execution.FEE()), uint256(rails[i].fee), "execution.FEE");
         }
     }
 
@@ -101,9 +150,8 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
         return remaining + (remaining * REPAY_BUFFER_BPS) / V1Config.BPS_DENOMINATOR + 1;
     }
 
-    /// @dev Dry-run fork funding only. USDC via `deal`; NVDAc via transfer from the pinned holder
-    ///      (B20 `deal`/balance probes fail under stock forge — see fork harness).
-    function _fundDryRunActor(address actor, uint256 ethWei, uint256 usdcAmount, uint256 nvdacAmount) internal {
+    /// @dev Dry-run fork funding only. ETH via `vm.deal`; USDC via `deal`. Never used on a live broadcast.
+    function _fundDryRunActor(address actor, uint256 ethWei, uint256 usdcAmount) internal {
         if (!_isDryRun()) {
             revert DryRunRequired();
         }
@@ -111,18 +159,25 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
         if (usdcAmount > 0) {
             deal(V1Config.USDC, actor, usdcAmount);
         }
-        if (nvdacAmount > 0) {
-            address holder = BaseV1Constants.PINNED_NVDAC_HOLDER;
-            vm.prank(holder);
-            require(IERC20(LaunchAssets.NVDAC).transfer(actor, nvdacAmount), "nvdac fund transfer");
+    }
+
+    /// @dev Pull demo-size stock from the Uniswap pool on this local fork only. Does not touch production.
+    function _fundDryRunStock(address actor, LaunchAssets.Asset memory rail, uint256 amount) internal {
+        if (!_isDryRun()) {
+            revert DryRunRequired();
         }
+        vm.prank(rail.pool);
+        require(IERC20(rail.stock).transfer(actor, amount), "stock fund transfer");
     }
 
     function _usdc() internal pure returns (IERC20) {
         return IERC20(V1Config.USDC);
     }
 
-    function _nvdac() internal pure returns (IERC20) {
-        return IERC20(LaunchAssets.NVDAC);
+    function _requireLive(OracleAdapter oracle) internal view {
+        IOracleAdapter.Observation memory obs = oracle.latestObservation();
+        if (obs.state != IOracleAdapter.State.LIVE) {
+            revert OracleNotLive(uint8(obs.state));
+        }
     }
 }

@@ -1,11 +1,11 @@
 # Margin Call
 
-Margin Call is the proposed product for transferable financed spot positions. This glossary describes the V1 product; implementation requirements live in the PRD.
+Margin Call is the proposed product for transferable financed spot positions. This glossary describes the launch product; implementation requirements live in the PRD.
 
 ## Positions and ownership
 
 **Margin Call**:
-The product that finances additional exposure in a supported tokenized stock and makes each stock-plus-debt position transferable. `MarginCall` itself inherits OpenZeppelin ERC-721 and is the Position NFT contract; there is no separate `PositionNFT` contract. The live Base deployment (issue #429) is still NVDA-only V1; source now supports a curated multi-stock registry (issue #446) that is not yet redeployed.
+The product that finances additional exposure in a supported tokenized stock and makes each stock-plus-debt position transferable. `MarginCall` itself inherits OpenZeppelin ERC-721 and is the Position NFT contract; there is no separate `PositionNFT` contract. Launch contracts are a curated multi-stock registry (NVDAc, AAPLc, METAc, GOOGLc). The 2026-09-17 Base deployment is a legacy NVDA-only milestone, not the launch target.
 _Avoid_: Stock Gacha, shared inventory protocol
 
 **Position**:
@@ -31,7 +31,7 @@ An address approved under ERC-721 rules to transfer an owner's NFTs. Transfer au
 A Coinbase tokenized equity (B20) registered in the curated append-only asset registry, with a fixed oracle adapter and Uniswap execution adapter. Launch rails in source (issue #446): NVDAc, AAPLc, METAc, GOOGLc. TSLAc was excluded after qualification found no usable Uniswap liquidity.
 
 **NVDAc**:
-The Coinbase tokenized NVIDIA equity asset. Raw token units are valued against the Coinbase/Chainlink total-return feed; the B20 multiplier is not applied a second time. The live V1 deployment supports only NVDAc.
+The Coinbase tokenized NVIDIA equity asset. Raw token units are valued against the Coinbase/Chainlink total-return feed; the B20 multiplier is not applied a second time. One of four launch rails; the historical Base deployment supported only NVDAc.
 
 **Credit Pool**:
 Protocol-owned USDC capital available only for financed position opening.

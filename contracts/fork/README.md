@@ -522,8 +522,9 @@ core token/oracle/execution config is immutable after registration.
 
 Pins live only in `contracts/src/LaunchAssets.sol` (`Asset` + `launchSet()`, tests/scripts only).
 `V1Config` owns chain infrastructure, risk pins, and the shared 8/8/6 valuation invariant — not
-per-stock rails. The live Base deployment in `deployments/base.json` remains the **NVDA-only V1**
-stack from issue #429; this issue does not broadcast a multi-stock redeploy.
+per-stock rails. The historical Base deployment in `deployments/base-nvda-only.legacy.json` is the
+**legacy NVDA-only** stack from issue #429; do not redeploy it from current HEAD. Canonical launch
+tooling is `script/BASE_LAUNCH.md`. After live deploy, the frontend consumes `deployments/base.json`.
 
 Compact fork coverage:
 

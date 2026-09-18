@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Shared helpers for Base-mainnet deploy / acceptance wrappers (issue #429).
+# Shared helpers for Base launch deploy / acceptance wrappers.
 # Never print private keys. Never pass keys as CLI arguments.
 
 set -euo pipefail
@@ -7,8 +7,8 @@ set -euo pipefail
 BASE_CHAIN_ID="8453"
 CONFIRM_VALUE="I_UNDERSTAND"
 
-# Shell cannot import Solidity, so these mirror contracts/src/V1Config.sol, which stays the source of
-# truth. Keep this the only shell copy: read them from here rather than re-typing literals in a wrapper.
+# Shell cannot import Solidity, so these mirror contracts/src/V1Config.sol and LaunchAssets.sol,
+# which stay the source of truth. Keep this the only shell copy.
 BASE_NVDAC="0xb20000000000000000000078ee7ce2fE4908108C"
 BASE_USDC="0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
 
@@ -89,7 +89,7 @@ base_mainnet_prompt_key() {
   fi
   if [[ ! -t 0 ]]; then
     echo "error: ${var_name} is unset (${role}) and there is no terminal to prompt on." >&2
-    echo "Export it for this shell, or run interactively. See script/BASE_MAINNET.md" >&2
+    echo "Export it for this shell, or run interactively. See script/BASE_LAUNCH.md" >&2
     exit 1
   fi
   read -r -s -p "${var_name} (${role}), input hidden: " value < /dev/tty
@@ -104,19 +104,13 @@ base_mainnet_prompt_key() {
 }
 
 base_mainnet_require_operator_keys() {
-  base_mainnet_prompt_key OPERATOR_PRIVATE_KEY "Alice / deployer / treasury"
-}
-
-base_mainnet_require_accept_keys() {
-  base_mainnet_require_operator_keys
-  base_mainnet_prompt_key EXECUTOR_PRIVATE_KEY "executor E"
-  base_mainnet_prompt_key RECIPIENT_PRIVATE_KEY "Bob B"
+  base_mainnet_prompt_key OPERATOR_PRIVATE_KEY "deployer / asset admin / treasury"
 }
 
 base_mainnet_require_live_confirm() {
   if [[ "${CONFIRM_BASE_MAINNET:-}" != "$CONFIRM_VALUE" ]]; then
     echo "error: live Base mainnet broadcast requires CONFIRM_BASE_MAINNET=${CONFIRM_VALUE}" >&2
-    echo "Dry-run first. See script/BASE_MAINNET.md" >&2
+    echo "Dry-run first. See script/BASE_LAUNCH.md" >&2
     exit 1
   fi
   if [[ "${MARGIN_CALL_DRY_RUN:-0}" != "0" ]]; then
@@ -155,30 +149,25 @@ base_mainnet_bootstrap() {
 
 base_mainnet_no_arguments() {
   if [[ "$1" -gt 0 ]]; then
-    echo "error: do not pass arguments. See script/BASE_MAINNET.md" >&2
+    echo "error: do not pass arguments. See script/BASE_LAUNCH.md" >&2
     exit 1
   fi
 }
 
-base_mainnet_resolve_wallets() {
-  # Sets alice/executor/bob from the three accept keys. Derivation runs inside forge, which reads the keys
-  # via vm.envUint from the environment — deliberately NOT `cast wallet address --private-key`, which would
-  # expose the raw key in the child process arguments. script/Actors.s.sol also enforces distinctness, so
-  # that rule has one home. Addresses only ever leave this function; keys never do.
-  base_mainnet_require_accept_keys
+base_mainnet_resolve_operator() {
+  # Sets operator from OPERATOR_PRIVATE_KEY. Derivation runs inside forge, which reads the key
+  # via vm.envUint — deliberately NOT `cast wallet address --private-key`.
+  base_mainnet_require_operator_keys
   local out
-  if ! out="$(cd "$CONTRACTS_DIR" && forge script script/Actors.s.sol:Actors --sig 'printActors()' 2>&1)"; then
-    echo "error: could not derive acceptance addresses from the configured keys." >&2
-    echo "Check OPERATOR/EXECUTOR/RECIPIENT_PRIVATE_KEY. See script/BASE_MAINNET.md" >&2
-    # Scrub any line carrying a 64-hex run so a bad key value cannot reach the terminal.
+  if ! out="$(cd "$CONTRACTS_DIR" && forge script script/Actors.s.sol:Actors --sig 'printOperator()' 2>&1)"; then
+    echo "error: could not derive operator address from OPERATOR_PRIVATE_KEY." >&2
+    echo "See script/BASE_LAUNCH.md" >&2
     printf '%s\n' "$out" | grep -viE '[0-9a-fA-F]{64}' | tail -15 >&2 || true
     exit 1
   fi
-  alice="$(base_mainnet_parse_actor "$out" alice)"
-  executor="$(base_mainnet_parse_actor "$out" executor)"
-  bob="$(base_mainnet_parse_actor "$out" bob)"
-  if [[ -z "$alice" || -z "$executor" || -z "$bob" ]]; then
-    echo "error: could not parse acceptance addresses from forge output" >&2
+  operator="$(base_mainnet_parse_actor "$out" operator)"
+  if [[ -z "$operator" ]]; then
+    echo "error: could not parse operator address from forge output" >&2
     exit 1
   fi
 }

@@ -1,4 +1,7 @@
 {
+  "status": "legacy-nvda-only",
+  "canonical": false,
+  "notes": "Historical NVDA-only Base deployment from issue #429 (2026-09-17). Not the Margin Call launch stack. Do not redeploy from current HEAD — current contracts are the multi-stock launch architecture and are ABI-incompatible with this deployment. Frontend must not target these addresses after launch. sourceCommit and tx hashes remain the historical reproducibility record. Canonical launch addresses will be recorded at deployments/base.json after the launch deploy.",
   "network": "base",
   "chainId": 8453,
   "sourceCommit": "2cbb8eb36d0c67e509f429c5f5a62ab25721fc41",

@@ -6,15 +6,19 @@ import {console} from "forge-std/console.sol";
 import {BaseMainnetHarnessBase} from "./BaseMainnetHarnessBase.sol";
 
 /// @title Actors
-/// @notice Derive the three Base-mainnet acceptance addresses (A, E, B) from the env keys (issue #429).
-/// @dev Exists so shell wrappers never place a private key on a child process command line.
-///      `cast wallet address` can only take a key as an argv value (world-readable via `ps`) or from an
+/// @notice Derive Base launch wallet addresses from env keys without putting a key on a child argv.
+/// @dev `cast wallet address` can only take a key as an argv value (world-readable via `ps`) or from an
 ///      interactive TTY, so the wrappers read addresses from here instead: forge reads the keys through
-///      `vm.envUint`, which keeps them in the process environment rather than in the process arguments.
-///      Prints addresses only — never a key. Chain-independent: derivation needs no RPC.
+///      `vm.envUint`. Prints addresses only — never a key. Chain-independent: derivation needs no RPC.
 contract Actors is BaseMainnetHarnessBase {
-    /// @notice Print A, E, and B as `ACTOR <role> <address>` lines for the wrappers to parse.
-    /// @dev Also enforces the three-distinct-wallets rule here, so the shell does not need its own copy.
+    /// @notice Print the operator (deployer / asset admin / treasury) as `ACTOR operator <address>`.
+    function printOperator() external view {
+        address operator = vm.addr(vm.envUint("OPERATOR_PRIVATE_KEY"));
+        console.log(string.concat("ACTOR operator ", vm.toString(operator)));
+    }
+
+    /// @notice Print A, E, and B as `ACTOR <role> <address>` lines. Unused by compact launch acceptance;
+    ///         retained so a later three-wallet live flow can derive addresses the same safe way.
     function printActors() external view {
         address alice = vm.addr(vm.envUint("OPERATOR_PRIVATE_KEY"));
         address executor = vm.addr(vm.envUint("EXECUTOR_PRIVATE_KEY"));

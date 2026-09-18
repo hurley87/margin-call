@@ -9,9 +9,10 @@ Margin Call is a Next.js 16 application between product versions. The Crash game
 - Foundry (reproducible workspace pins; product contracts live under `contracts/`)
 
 Do not treat future product contracts, UI, keeper, or indexing as implemented.
-The live Base deployment (`contracts/deployments/base.json`) is NVDA-only V1.
-Source contracts now include a curated multi-stock registry (issue #446) that is
-not yet deployed; do not assume mainnet addresses match the multi-stock ABI.
+The historical Base deployment (`contracts/deployments/base-nvda-only.legacy.json`) is the
+legacy NVDA-only stack from issue #429. Source contracts are the canonical multi-stock
+launch architecture (issue #446: NVDAc + AAPLc + METAc + GOOGLc). That launch stack is not
+yet deployed; after it is, the frontend consumes `contracts/deployments/base.json`.
 
 ## Commands
 
