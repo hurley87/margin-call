@@ -1,20 +1,16 @@
 "use client";
 
-import { useCallback, useMemo } from "react";
-import { ConvexReactClient } from "convex/react";
+import { useCallback } from "react";
+import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import { api } from "../../../convex/_generated/api";
 
 /**
  * Best-effort receipt sync into the Convex Position read model.
  * Never throws — Base tx success is independent of indexing.
- * Uses a dedicated client so it works with or without ConvexProvider.
+ * Uses the shared ConvexClientProvider client (or skips when unset).
  */
 export function useSyncPositionTransaction() {
-  const client = useMemo(() => {
-    const url = process.env.NEXT_PUBLIC_CONVEX_URL?.trim();
-    if (!url) return null;
-    return new ConvexReactClient(url);
-  }, []);
+  const client = useOptionalConvexClient();
 
   return useCallback(
     async (

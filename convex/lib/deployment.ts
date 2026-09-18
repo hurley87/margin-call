@@ -1,14 +1,16 @@
 /**
  * Canonical Base MarginCall pins for the Convex indexer.
- * Must stay in lockstep with contracts/deployments/base.json
- * (asserted by tests/convex/deployment-pin.test.ts).
+ * Derived from contracts/deployments/base.json — do not hardcode separately.
  */
-export const BASE_CHAIN_ID = 8453;
+import baseDeploymentJson from "../../contracts/deployments/base.json";
+
+export const BASE_CHAIN_ID = baseDeploymentJson.chainId;
 
 export const MARGIN_CALL_ADDRESS =
-  "0x54bdd9b5544ac1c378b1c7c863ee8ce92dcd4158" as const;
+  baseDeploymentJson.contracts.marginCall.toLowerCase() as `0x${string}`;
 
-export const MARGIN_CALL_DEPLOYED_AT_BLOCK = 51470656;
+export const MARGIN_CALL_DEPLOYED_AT_BLOCK =
+  baseDeploymentJson.marginCallDeployedAtBlock;
 
 /** Inclusive last safe head is latest − this buffer. */
 export const CONFIRMATION_BUFFER_BLOCKS = 8;

@@ -1,24 +1,21 @@
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import {
-  MARGIN_CALL_DEPLOYED_AT_BLOCK,
-  SYNC_STATE_KEY,
-} from "./lib/deployment";
+import { SYNC_STATE_KEY } from "./lib/deployment";
 import {
   type PositionEffect,
-  type VerifiedLog,
+  type WireLog,
   decodeEffectsFromLogs,
 } from "./lib/events";
 
-const verifiedLogValidator = v.object({
+const wireLogValidator = v.object({
   address: v.string(),
   topics: v.array(v.string()),
   data: v.string(),
   blockNumber: v.number(),
   transactionHash: v.string(),
   logIndex: v.number(),
-  blockTimestamp: v.optional(v.number()),
 });
 
 /**
@@ -27,13 +24,13 @@ const verifiedLogValidator = v.object({
  */
 export const applyVerifiedLogs = internalMutation({
   args: {
-    logs: v.array(verifiedLogValidator),
+    logs: v.array(wireLogValidator),
   },
   returns: v.object({
     applied: v.number(),
   }),
   handler: async (ctx, args) => {
-    const logs = args.logs as VerifiedLog[];
+    const logs: WireLog[] = args.logs;
     const effects = decodeEffectsFromLogs(logs);
     for (const effect of effects) {
       await applyEffect(ctx, effect);
@@ -41,6 +38,15 @@ export const applyVerifiedLogs = internalMutation({
     return { applied: effects.length };
   },
 });
+
+function touchBlock(
+  existing: Doc<"positions">,
+  blockNumber: number
+): { latestIndexedBlock: number } {
+  return {
+    latestIndexedBlock: Math.max(existing.latestIndexedBlock, blockNumber),
+  };
+}
 
 async function applyEffect(ctx: MutationCtx, effect: PositionEffect) {
   const existing = await ctx.db
@@ -50,92 +56,50 @@ async function applyEffect(ctx: MutationCtx, effect: PositionEffect) {
 
   switch (effect.kind) {
     case "opened": {
-      if (existing) {
-        // Idempotent replay: do not reopen a terminal position.
-        if (existing.status !== "active") {
-          await ctx.db.patch(existing._id, {
-            latestIndexedBlock: Math.max(
-              existing.latestIndexedBlock,
-              effect.blockNumber
-            ),
-          });
-          return;
-        }
-        await ctx.db.patch(existing._id, {
+      if (!existing) {
+        await ctx.db.insert("positions", {
+          tokenId: effect.tokenId,
           assetId: effect.assetId,
           owner: effect.owner,
           status: "active",
           openedBlock: effect.blockNumber,
           openedTxHash: effect.txHash,
-          openedAt: effect.openedAt ?? existing.openedAt,
-          latestIndexedBlock: Math.max(
-            existing.latestIndexedBlock,
-            effect.blockNumber
-          ),
+          latestIndexedBlock: effect.blockNumber,
         });
         return;
       }
-      await ctx.db.insert("positions", {
-        tokenId: effect.tokenId,
+      // Always backfill identity; never reopen a terminal row.
+      await ctx.db.patch(existing._id, {
         assetId: effect.assetId,
-        owner: effect.owner,
-        status: "active",
         openedBlock: effect.blockNumber,
         openedTxHash: effect.txHash,
-        openedAt: effect.openedAt,
-        latestIndexedBlock: effect.blockNumber,
+        ...(existing.status === "active" ? { owner: effect.owner } : {}),
+        ...touchBlock(existing, effect.blockNumber),
       });
       return;
     }
     case "transfer": {
-      if (!existing) {
-        // Transfer without a prior open — ignore until Opened arrives.
-        return;
-      }
-      if (existing.status !== "active") {
-        await ctx.db.patch(existing._id, {
-          latestIndexedBlock: Math.max(
-            existing.latestIndexedBlock,
-            effect.blockNumber
-          ),
-        });
+      if (!existing || existing.status !== "active") {
         return;
       }
       await ctx.db.patch(existing._id, {
         owner: effect.owner,
-        latestIndexedBlock: Math.max(
-          existing.latestIndexedBlock,
-          effect.blockNumber
-        ),
+        ...touchBlock(existing, effect.blockNumber),
       });
       return;
     }
     case "closed":
     case "liquidated": {
-      const status = effect.kind;
       if (!existing) {
-        await ctx.db.insert("positions", {
-          tokenId: effect.tokenId,
-          assetId: 0,
-          owner: effect.owner,
-          status,
-          openedBlock: effect.blockNumber,
-          openedTxHash: effect.txHash,
-          latestIndexedBlock: effect.blockNumber,
-          terminalBlock: effect.blockNumber,
-          terminalTxHash: effect.txHash,
-        });
+        // Terminal before open — skip; reconcile will apply Opened then terminal.
         return;
       }
       await ctx.db.patch(existing._id, {
         owner: effect.owner,
-        status,
-        latestIndexedBlock: Math.max(
-          existing.latestIndexedBlock,
-          effect.blockNumber
-        ),
+        status: effect.kind,
         terminalBlock: effect.blockNumber,
         terminalTxHash: effect.txHash,
+        ...touchBlock(existing, effect.blockNumber),
       });
       return;
     }
@@ -189,14 +153,5 @@ export const setSyncCursor = internalMutation({
       });
     }
     return null;
-  },
-});
-
-/** Initial scan start when no cursor exists. */
-export const deploymentStartBlock = internalQuery({
-  args: {},
-  returns: v.number(),
-  handler: async () => {
-    return MARGIN_CALL_DEPLOYED_AT_BLOCK;
   },
 });

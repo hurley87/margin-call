@@ -1,7 +1,15 @@
 /**
  * Minimal ABI fragments for the Base happy-path workspace.
  * Handwritten on purpose — do not commit Foundry `out/` or scatter fragments in UI.
+ * Lifecycle events live in @margin-call/shared/margin-call-events (shared with Convex).
  */
+
+import {
+  positionClosedEvent,
+  positionLiquidatedEvent,
+  positionOpenedEvent,
+  transferEvent,
+} from "@margin-call/shared/margin-call-events";
 
 export const erc20Abi = [
   {
@@ -40,7 +48,7 @@ export const erc20Abi = [
   },
 ] as const;
 
-export const marginCallAbi = [
+const marginCallFunctions = [
   {
     type: "function",
     name: "openPosition",
@@ -121,44 +129,14 @@ export const marginCallAbi = [
     inputs: [{ name: "tokenId", type: "uint256" }],
     outputs: [{ name: "", type: "address" }],
   },
-  {
-    type: "event",
-    name: "PositionOpened",
-    inputs: [
-      { name: "tokenId", type: "uint256", indexed: true },
-      { name: "owner", type: "address", indexed: true },
-      { name: "assetId", type: "uint256", indexed: true },
-      { name: "stockAmount", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "PositionClosed",
-    inputs: [
-      { name: "tokenId", type: "uint256", indexed: true },
-      { name: "owner", type: "address", indexed: true },
-      { name: "stockAmount", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "PositionLiquidated",
-    inputs: [
-      { name: "tokenId", type: "uint256", indexed: true },
-      { name: "owner", type: "address", indexed: true },
-      { name: "stockAmount", type: "uint256", indexed: false },
-      { name: "usdcOut", type: "uint256", indexed: false },
-    ],
-  },
-  {
-    type: "event",
-    name: "Transfer",
-    inputs: [
-      { name: "from", type: "address", indexed: true },
-      { name: "to", type: "address", indexed: true },
-      { name: "tokenId", type: "uint256", indexed: true },
-    ],
-  },
+] as const;
+
+export const marginCallAbi = [
+  ...marginCallFunctions,
+  positionOpenedEvent,
+  positionClosedEvent,
+  positionLiquidatedEvent,
+  transferEvent,
 ] as const;
 
 export const creditPoolAbi = [

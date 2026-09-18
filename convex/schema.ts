@@ -19,7 +19,6 @@ export default defineSchema({
     status: positionStatusValidator,
     openedBlock: v.number(),
     openedTxHash: v.string(),
-    openedAt: v.optional(v.number()),
     latestIndexedBlock: v.number(),
     terminalBlock: v.optional(v.number()),
     terminalTxHash: v.optional(v.string()),

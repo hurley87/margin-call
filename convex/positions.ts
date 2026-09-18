@@ -16,7 +16,6 @@ const positionDocValidator = v.object({
   status: positionStatusValidator,
   openedBlock: v.number(),
   openedTxHash: v.string(),
-  openedAt: v.optional(v.number()),
   latestIndexedBlock: v.number(),
   terminalBlock: v.optional(v.number()),
   terminalTxHash: v.optional(v.string()),
@@ -45,10 +44,11 @@ export const positionsByOwner = query({
   handler: async (ctx, args) => {
     const owner = normalizeWalletAddress(args.owner);
     if (args.status !== undefined) {
+      const status = args.status;
       return await ctx.db
         .query("positions")
         .withIndex("by_owner_and_status", (q) =>
-          q.eq("owner", owner).eq("status", args.status!)
+          q.eq("owner", owner).eq("status", status)
         )
         .order("desc")
         .paginate(args.paginationOpts);
@@ -63,29 +63,33 @@ export const positionsByOwner = query({
 
 export const allPositions = query({
   args: {
+    paginationOpts: paginationOptsValidator,
     status: v.optional(positionStatusValidator),
     assetId: v.optional(v.number()),
-    paginationOpts: paginationOptsValidator,
   },
   returns: paginationResultValidator(positionDocValidator),
   handler: async (ctx, args) => {
+    if (args.assetId !== undefined && args.status === undefined) {
+      throw new Error("assetId requires status");
+    }
     if (args.assetId !== undefined && args.status !== undefined) {
+      const { assetId, status } = args;
       return await ctx.db
         .query("positions")
         .withIndex("by_assetId_and_status", (q) =>
-          q.eq("assetId", args.assetId!).eq("status", args.status!)
+          q.eq("assetId", assetId).eq("status", status)
         )
         .order("desc")
         .paginate(args.paginationOpts);
     }
     if (args.status !== undefined) {
+      const { status } = args;
       return await ctx.db
         .query("positions")
-        .withIndex("by_status", (q) => q.eq("status", args.status!))
+        .withIndex("by_status", (q) => q.eq("status", status))
         .order("desc")
         .paginate(args.paginationOpts);
     }
-    // Global list ordered by openedBlock for deterministic pagination.
     return await ctx.db
       .query("positions")
       .withIndex("by_openedBlock")

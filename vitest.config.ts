@@ -7,6 +7,13 @@ const sharedAlias = [
     replacement: path.resolve(__dirname, "./packages/shared/src/address.ts"),
   },
   {
+    find: "@margin-call/shared/margin-call-events",
+    replacement: path.resolve(
+      __dirname,
+      "./packages/shared/src/margin-call-events.ts"
+    ),
+  },
+  {
     find: "@margin-call/shared/parse-private-key",
     replacement: path.resolve(
       __dirname,

@@ -265,6 +265,14 @@ function ConnectedWorkspace(props: {
         }
         return prev;
       });
+      if (submittedHash) {
+        const syncStatus = await syncPositionTx(submittedHash);
+        setIndexNote(
+          syncStatus === "pending"
+            ? "Position indexed pending — reconciliation will catch up shortly."
+            : null
+        );
+      }
     } catch (error) {
       const hash =
         error instanceof ProtocolTxError ? error.hash : submittedHash;
@@ -437,7 +445,7 @@ function ConnectedWorkspace(props: {
                     throw new Error("Stock approval required before open.");
                   }
 
-                  const { tokenId, receipt } = await openPosition({
+                  const { tokenId } = await openPosition({
                     walletClient,
                     publicClient,
                     assetId: BigInt(asset.assetId),
@@ -447,14 +455,6 @@ function ConnectedWorkspace(props: {
                   });
                   setPosition(await loadPosition(publicClient, tokenId));
                   await refreshSnapshot();
-                  const syncStatus = await syncPositionTx(
-                    receipt.transactionHash
-                  );
-                  setIndexNote(
-                    syncStatus === "pending"
-                      ? "Position indexed pending — reconciliation will catch up shortly."
-                      : null
-                  );
                 }
               )
             }
@@ -540,7 +540,7 @@ function ConnectedWorkspace(props: {
                     void runTx(
                       "Close position",
                       async ({ walletClient, onSubmitted }) => {
-                        const { tokenId, receipt } = await closePosition({
+                        const { tokenId } = await closePosition({
                           walletClient,
                           publicClient,
                           tokenId: position.tokenId,
@@ -548,14 +548,6 @@ function ConnectedWorkspace(props: {
                         });
                         setPosition({ status: "closed", tokenId });
                         await refreshSnapshot();
-                        const syncStatus = await syncPositionTx(
-                          receipt.transactionHash
-                        );
-                        setIndexNote(
-                          syncStatus === "pending"
-                            ? "Close indexed pending — reconciliation will catch up shortly."
-                            : null
-                        );
                       }
                     )
                   }

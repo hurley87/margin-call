@@ -1,5 +1,4 @@
 import { v } from "convex/values";
-import type { Hex } from "viem";
 import { internal } from "./_generated/api";
 import { action, internalAction, type ActionCtx } from "./_generated/server";
 import {
@@ -10,57 +9,32 @@ import {
   RECONCILE_BLOCK_BATCH,
   RECONCILE_OVERLAP_BLOCKS,
 } from "./lib/deployment";
-import { RELEVANT_EVENT_TOPICS, type VerifiedLog } from "./lib/events";
+import { RELEVANT_EVENT_TOPICS, type WireLog } from "./lib/events";
 import {
   ethBlockNumber,
+  ethChainId,
   ethGetLogs,
   ethGetTransactionReceipt,
   hexToNumber,
   type JsonRpcFetch,
   type RpcLog,
-  type RpcReceiptLog,
 } from "./lib/rpc";
 
 const TX_HASH_RE = /^0x[a-fA-F0-9]{64}$/;
 
-function receiptLogToVerified(log: RpcReceiptLog): VerifiedLog | null {
+function rpcLogToWire(log: RpcLog): WireLog | null {
   if (log.removed) return null;
   if (!log.blockNumber || !log.transactionHash || log.logIndex === null) {
     return null;
   }
   return {
     address: log.address.toLowerCase(),
-    topics: log.topics,
+    topics: [...log.topics],
     data: log.data,
     blockNumber: hexToNumber(log.blockNumber),
-    transactionHash: log.transactionHash.toLowerCase() as Hex,
+    transactionHash: log.transactionHash.toLowerCase(),
     logIndex: hexToNumber(log.logIndex),
   };
-}
-
-function rpcLogToVerified(log: RpcLog): VerifiedLog | null {
-  if (log.removed) return null;
-  return {
-    address: log.address.toLowerCase(),
-    topics: log.topics,
-    data: log.data,
-    blockNumber: hexToNumber(log.blockNumber),
-    transactionHash: log.transactionHash.toLowerCase() as Hex,
-    logIndex: hexToNumber(log.logIndex),
-  };
-}
-
-/** Convex validators need mutable string[] topics, not readonly Hex[]. */
-function toIngestLogs(logs: VerifiedLog[]) {
-  return logs.map((log) => ({
-    address: log.address,
-    topics: [...log.topics] as string[],
-    data: log.data as string,
-    blockNumber: log.blockNumber,
-    transactionHash: log.transactionHash as string,
-    logIndex: log.logIndex,
-    blockTimestamp: log.blockTimestamp,
-  }));
 }
 
 type SyncResult = {
@@ -88,6 +62,11 @@ export const syncTransaction = action({
       return { ok: false, applied: 0, reason: "invalid_tx_hash" };
     }
 
+    const chainId = await ethChainId();
+    if (chainId !== BASE_CHAIN_ID) {
+      return { ok: false, applied: 0, reason: "wrong_chain" };
+    }
+
     const receipt = await ethGetTransactionReceipt(txHash);
     if (!receipt) {
       return { ok: false, applied: 0, reason: "receipt_not_found" };
@@ -96,14 +75,14 @@ export const syncTransaction = action({
       return { ok: false, applied: 0, reason: "receipt_failed" };
     }
 
-    const logs: VerifiedLog[] = [];
+    const logs: WireLog[] = [];
     for (const raw of receipt.logs) {
       if (raw.address.toLowerCase() !== MARGIN_CALL_ADDRESS) {
         continue;
       }
-      const verified = receiptLogToVerified(raw);
-      if (verified) {
-        logs.push(verified);
+      const wire = rpcLogToWire(raw);
+      if (wire) {
+        logs.push(wire);
       }
     }
 
@@ -113,7 +92,7 @@ export const syncTransaction = action({
 
     const result: { applied: number } = await ctx.runMutation(
       internal.ingest.applyVerifiedLogs,
-      { logs: toIngestLogs(logs) }
+      { logs }
     );
     return { ok: true, applied: result.applied };
   },
@@ -134,6 +113,13 @@ export async function runReconcile(
   ctx: ActionCtx,
   fetchImpl: JsonRpcFetch = fetch
 ): Promise<ReconcileResult> {
+  const chainId = await ethChainId(fetchImpl);
+  if (chainId !== BASE_CHAIN_ID) {
+    throw new Error(
+      `Base RPC chainId ${chainId} !== expected ${BASE_CHAIN_ID}`
+    );
+  }
+
   const cursor = await ctx.runQuery(internal.ingest.getSyncCursor, {});
 
   const latest = await ethBlockNumber(fetchImpl);
@@ -174,17 +160,17 @@ export async function runReconcile(
     fetchImpl
   );
 
-  const logs: VerifiedLog[] = [];
+  const logs: WireLog[] = [];
   for (const raw of rpcLogs) {
-    const verified = rpcLogToVerified(raw);
-    if (verified) {
-      logs.push(verified);
+    const wire = rpcLogToWire(raw);
+    if (wire) {
+      logs.push(wire);
     }
   }
 
   const result: { applied: number } = await ctx.runMutation(
     internal.ingest.applyVerifiedLogs,
-    { logs: toIngestLogs(logs) }
+    { logs }
   );
 
   await ctx.runMutation(internal.ingest.setSyncCursor, {
@@ -214,7 +200,6 @@ export const reconcile = internalAction({
     caughtUp: v.boolean(),
   }),
   handler: async (ctx): Promise<ReconcileResult> => {
-    void BASE_CHAIN_ID;
     return await runReconcile(ctx);
   },
 });

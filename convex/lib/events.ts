@@ -1,64 +1,20 @@
+import { type Hex, decodeEventLog, encodeEventTopics, getAddress } from "viem";
 import {
-  type AbiEvent,
-  type Hex,
-  decodeEventLog,
-  encodeAbiParameters,
-  encodeEventTopics,
-  getAddress,
-  parseAbiParameters,
-} from "viem";
+  positionClosedEvent,
+  positionLiquidatedEvent,
+  positionOpenedEvent,
+  transferEvent,
+} from "@margin-call/shared/margin-call-events";
 import { MARGIN_CALL_ADDRESS } from "./deployment";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
-export const positionOpenedEvent = {
-  type: "event",
-  name: "PositionOpened",
-  inputs: [
-    { name: "tokenId", type: "uint256", indexed: true },
-    { name: "owner", type: "address", indexed: true },
-    { name: "assetId", type: "uint256", indexed: true },
-    { name: "stockAmount", type: "uint256", indexed: false },
-  ],
-} as const satisfies AbiEvent;
-
-export const positionClosedEvent = {
-  type: "event",
-  name: "PositionClosed",
-  inputs: [
-    { name: "tokenId", type: "uint256", indexed: true },
-    { name: "owner", type: "address", indexed: true },
-    { name: "stockAmount", type: "uint256", indexed: false },
-  ],
-} as const satisfies AbiEvent;
-
-export const positionLiquidatedEvent = {
-  type: "event",
-  name: "PositionLiquidated",
-  inputs: [
-    { name: "tokenId", type: "uint256", indexed: true },
-    { name: "owner", type: "address", indexed: true },
-    { name: "stockAmount", type: "uint256", indexed: false },
-    { name: "usdcOut", type: "uint256", indexed: false },
-  ],
-} as const satisfies AbiEvent;
-
-export const transferEvent = {
-  type: "event",
-  name: "Transfer",
-  inputs: [
-    { name: "from", type: "address", indexed: true },
-    { name: "to", type: "address", indexed: true },
-    { name: "tokenId", type: "uint256", indexed: true },
-  ],
-} as const satisfies AbiEvent;
-
-export const MARGIN_CALL_EVENT_ABI = [
-  positionOpenedEvent,
+export {
   positionClosedEvent,
   positionLiquidatedEvent,
+  positionOpenedEvent,
   transferEvent,
-] as const;
+};
 
 export const POSITION_OPENED_TOPIC = encodeEventTopics({
   abi: [positionOpenedEvent],
@@ -89,15 +45,14 @@ export const RELEVANT_EVENT_TOPICS = [
 
 export type PositionStatus = "active" | "closed" | "liquidated";
 
-export type VerifiedLog = {
+/** Wire log shape accepted by ingest (Convex validators use string, not Hex). */
+export type WireLog = {
   address: string;
-  topics: readonly Hex[];
-  data: Hex;
+  topics: string[];
+  data: string;
   blockNumber: number;
-  transactionHash: Hex;
+  transactionHash: string;
   logIndex: number;
-  /** Unix seconds when available (from block header). */
-  blockTimestamp?: number;
 };
 
 export type PositionOpenedEffect = {
@@ -107,7 +62,6 @@ export type PositionOpenedEffect = {
   assetId: number;
   blockNumber: number;
   txHash: string;
-  openedAt?: number;
 };
 
 export type PositionTransferEffect = {
@@ -142,7 +96,7 @@ function isCanonicalMarginCall(address: string): boolean {
 }
 
 /** Decode a single MarginCall log into a lifecycle effect, or null if irrelevant. */
-export function decodePositionEffect(log: VerifiedLog): PositionEffect | null {
+export function decodePositionEffect(log: WireLog): PositionEffect | null {
   if (!isCanonicalMarginCall(log.address)) {
     return null;
   }
@@ -151,12 +105,15 @@ export function decodePositionEffect(log: VerifiedLog): PositionEffect | null {
   }
 
   const topic0 = log.topics[0];
+  const topics = log.topics as [Hex, ...Hex[]];
+  const data = log.data as Hex;
+
   try {
     if (topic0 === POSITION_OPENED_TOPIC) {
       const decoded = decodeEventLog({
         abi: [positionOpenedEvent],
-        data: log.data,
-        topics: log.topics as [Hex, ...Hex[]],
+        data,
+        topics,
       });
       if (decoded.eventName !== "PositionOpened") return null;
       const { tokenId, owner, assetId } = decoded.args;
@@ -167,15 +124,14 @@ export function decodePositionEffect(log: VerifiedLog): PositionEffect | null {
         assetId: Number(assetId),
         blockNumber: log.blockNumber,
         txHash: log.transactionHash.toLowerCase(),
-        openedAt: log.blockTimestamp,
       };
     }
 
     if (topic0 === POSITION_CLOSED_TOPIC) {
       const decoded = decodeEventLog({
         abi: [positionClosedEvent],
-        data: log.data,
-        topics: log.topics as [Hex, ...Hex[]],
+        data,
+        topics,
       });
       if (decoded.eventName !== "PositionClosed") return null;
       return {
@@ -190,8 +146,8 @@ export function decodePositionEffect(log: VerifiedLog): PositionEffect | null {
     if (topic0 === POSITION_LIQUIDATED_TOPIC) {
       const decoded = decodeEventLog({
         abi: [positionLiquidatedEvent],
-        data: log.data,
-        topics: log.topics as [Hex, ...Hex[]],
+        data,
+        topics,
       });
       if (decoded.eventName !== "PositionLiquidated") return null;
       return {
@@ -206,8 +162,8 @@ export function decodePositionEffect(log: VerifiedLog): PositionEffect | null {
     if (topic0 === TRANSFER_TOPIC) {
       const decoded = decodeEventLog({
         abi: [transferEvent],
-        data: log.data,
-        topics: log.topics as [Hex, ...Hex[]],
+        data,
+        topics,
       });
       if (decoded.eventName !== "Transfer") return null;
       const { from, to, tokenId } = decoded.args;
@@ -231,7 +187,7 @@ export function decodePositionEffect(log: VerifiedLog): PositionEffect | null {
 }
 
 /** Sort logs by block then logIndex for deterministic apply order. */
-export function sortLogs(logs: readonly VerifiedLog[]): VerifiedLog[] {
+export function sortLogs(logs: readonly WireLog[]): WireLog[] {
   return [...logs].sort((a, b) => {
     if (a.blockNumber !== b.blockNumber) {
       return a.blockNumber - b.blockNumber;
@@ -241,7 +197,7 @@ export function sortLogs(logs: readonly VerifiedLog[]): VerifiedLog[] {
 }
 
 export function decodeEffectsFromLogs(
-  logs: readonly VerifiedLog[]
+  logs: readonly WireLog[]
 ): PositionEffect[] {
   const effects: PositionEffect[] = [];
   for (const log of sortLogs(logs)) {
@@ -251,51 +207,4 @@ export function decodeEffectsFromLogs(
     }
   }
   return effects;
-}
-
-/** Build a synthetic log for tests (topic encoding via viem). */
-export function encodeTestLog(args: {
-  event:
-    | typeof positionOpenedEvent
-    | typeof positionClosedEvent
-    | typeof positionLiquidatedEvent
-    | typeof transferEvent;
-  args: Record<string, unknown>;
-  blockNumber: number;
-  transactionHash: Hex;
-  logIndex: number;
-  address?: string;
-  blockTimestamp?: number;
-}): VerifiedLog {
-  const topics = encodeEventTopics({
-    abi: [args.event],
-    eventName: args.event.name,
-    args: args.args as never,
-  }) as Hex[];
-
-  let data: Hex = "0x";
-  if (args.event.name === "PositionOpened") {
-    data = encodeAbiParameters(parseAbiParameters("uint256"), [
-      args.args.stockAmount as bigint,
-    ]);
-  } else if (args.event.name === "PositionClosed") {
-    data = encodeAbiParameters(parseAbiParameters("uint256"), [
-      args.args.stockAmount as bigint,
-    ]);
-  } else if (args.event.name === "PositionLiquidated") {
-    data = encodeAbiParameters(parseAbiParameters("uint256, uint256"), [
-      args.args.stockAmount as bigint,
-      args.args.usdcOut as bigint,
-    ]);
-  }
-
-  return {
-    address: (args.address ?? MARGIN_CALL_ADDRESS).toLowerCase(),
-    topics,
-    data,
-    blockNumber: args.blockNumber,
-    transactionHash: args.transactionHash,
-    logIndex: args.logIndex,
-    blockTimestamp: args.blockTimestamp,
-  };
 }

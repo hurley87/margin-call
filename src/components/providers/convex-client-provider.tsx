@@ -1,7 +1,14 @@
 "use client";
 
 import { ConvexProvider, ConvexReactClient } from "convex/react";
-import { useMemo, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
+
+const ConvexClientContext = createContext<ConvexReactClient | null>(null);
+
+/** Optional Convex client from the nearest ConvexClientProvider (null when unset). */
+export function useOptionalConvexClient(): ConvexReactClient | null {
+  return useContext(ConvexClientContext);
+}
 
 /**
  * Optional Convex provider for the public Position read model.
@@ -15,8 +22,16 @@ export function ConvexClientProvider({ children }: { children: ReactNode }) {
   }, []);
 
   if (!client) {
-    return <>{children}</>;
+    return (
+      <ConvexClientContext.Provider value={null}>
+        {children}
+      </ConvexClientContext.Provider>
+    );
   }
 
-  return <ConvexProvider client={client}>{children}</ConvexProvider>;
+  return (
+    <ConvexClientContext.Provider value={client}>
+      <ConvexProvider client={client}>{children}</ConvexProvider>
+    </ConvexClientContext.Provider>
+  );
 }

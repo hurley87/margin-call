@@ -5,18 +5,19 @@ import type { Hex } from "viem";
 import { api, internal } from "../../convex/_generated/api";
 import schema from "../../convex/schema";
 import {
+  BASE_CHAIN_ID,
   MARGIN_CALL_ADDRESS,
   MARGIN_CALL_DEPLOYED_AT_BLOCK,
 } from "../../convex/lib/deployment";
 import {
-  encodeTestLog,
   positionClosedEvent,
   positionLiquidatedEvent,
   positionOpenedEvent,
   transferEvent,
-  type VerifiedLog,
+  type WireLog,
 } from "../../convex/lib/events";
 import { runReconcile } from "../../convex/sync";
+import { encodeTestLog } from "./encode-test-log";
 
 const modules = import.meta.glob("../../convex/**/*.ts");
 
@@ -32,11 +33,7 @@ const TX_CLOSE =
 const TX_LIQ =
   "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" as Hex;
 
-function openLogs(
-  tokenId: bigint,
-  owner: string,
-  assetId: bigint
-): VerifiedLog[] {
+function openLogs(tokenId: bigint, owner: string, assetId: bigint): WireLog[] {
   return [
     encodeTestLog({
       event: positionOpenedEvent,
@@ -49,7 +46,6 @@ function openLogs(
       blockNumber: 51_470_700,
       transactionHash: TX_OPEN,
       logIndex: 0,
-      blockTimestamp: 1_700_000_000,
     }),
     encodeTestLog({
       event: transferEvent,
@@ -59,6 +55,39 @@ function openLogs(
       logIndex: 1,
     }),
   ];
+}
+
+function mockRpc(
+  handlers: Record<string, (params: unknown[]) => unknown>
+): typeof fetch {
+  return vi.fn(async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as {
+      method: string;
+      params: unknown[];
+    };
+    if (body.method === "eth_chainId") {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: `0x${BASE_CHAIN_ID.toString(16)}`,
+        }),
+        { status: 200 }
+      );
+    }
+    const handler = handlers[body.method];
+    if (!handler) {
+      throw new Error(`unexpected RPC ${body.method}`);
+    }
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: handler(body.params),
+      }),
+      { status: 200 }
+    );
+  }) as typeof fetch;
 }
 
 describe("Convex Position read model", () => {
@@ -84,8 +113,7 @@ describe("Convex Position read model", () => {
     expect(row!.assetId).toBe(1);
     expect(row!.status).toBe("active");
     expect(row!.openedTxHash).toBe(TX_OPEN);
-    expect(row!.openedAt).toBe(1_700_000_000);
-    // No financial fields on the document.
+    expect(row).not.toHaveProperty("openedAt");
     expect(row).not.toHaveProperty("currentDebt");
     expect(row).not.toHaveProperty("nav");
     expect(row).not.toHaveProperty("stockAmount");
@@ -221,6 +249,80 @@ describe("Convex Position read model", () => {
     expect(liq!.owner).toBe(OWNER_A.toLowerCase());
   });
 
+  it("skips close-only apply (no ghost row) and backfills identity after Opened", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 9n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_471_200,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+    expect(
+      await t.query(api.positions.positionByTokenId, { tokenId: "9" })
+    ).toBeNull();
+
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(9n, OWNER_A, 2n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 9n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_471_250,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "9",
+    });
+    expect(row!.assetId).toBe(2);
+    expect(row!.status).toBe("closed");
+    expect(row!.openedTxHash).toBe(TX_OPEN);
+  });
+
+  it("same-batch Opened then Closed folds to closed with real identity", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionOpenedEvent,
+          args: {
+            tokenId: 10n,
+            owner: OWNER_A,
+            assetId: 1n,
+            stockAmount: 1n,
+          },
+          blockNumber: 51_471_300,
+          transactionHash: TX_OPEN,
+          logIndex: 0,
+        }),
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 10n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_471_300,
+          transactionHash: TX_CLOSE,
+          logIndex: 1,
+        }),
+      ],
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "10",
+    });
+    expect(row!.assetId).toBe(1);
+    expect(row!.status).toBe("closed");
+    expect(row!.openedTxHash).toBe(TX_OPEN);
+    expect(row!.terminalTxHash).toBe(TX_CLOSE);
+  });
+
   it("replaying the same logs is idempotent", async () => {
     const t = convexTest(schema, modules);
     const logs = openLogs(5n, OWNER_A, 1n);
@@ -234,7 +336,7 @@ describe("Convex Position read model", () => {
     expect(matches).toHaveLength(1);
   });
 
-  it("does not reopen a closed position on replayed Opened", async () => {
+  it("does not reopen a closed position on replayed Opened; identity unchanged", async () => {
     const t = convexTest(schema, modules);
     await t.mutation(internal.ingest.applyVerifiedLogs, {
       logs: openLogs(6n, OWNER_A, 1n),
@@ -257,6 +359,8 @@ describe("Convex Position read model", () => {
       tokenId: "6",
     });
     expect(row!.status).toBe("closed");
+    expect(row!.assetId).toBe(1);
+    expect(row!.openedTxHash).toBe(TX_OPEN);
   });
 
   it("paginates and filters allPositions / positionsByOwner deterministically", async () => {
@@ -315,50 +419,37 @@ describe("Convex Position read model", () => {
       paginationOpts: { numItems: 2, cursor: page1.continueCursor },
     });
     expect(page2.page.length).toBeGreaterThanOrEqual(1);
+
+    await expect(
+      t.query(api.positions.allPositions, {
+        assetId: 2,
+        paginationOpts: { numItems: 10, cursor: null },
+      })
+    ).rejects.toThrow(/assetId requires status/);
   });
 
   it("starts reconcile from deployment block when cursor is missing", async () => {
     const t = convexTest(schema, modules);
     const openLog = openLogs(7n, OWNER_A, 1n)[0]!;
 
-    const fetchImpl = vi.fn(async (_url: string, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body)) as {
-        method: string;
-        params: unknown[];
-      };
-      if (body.method === "eth_blockNumber") {
-        return new Response(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            result: `0x${(MARGIN_CALL_DEPLOYED_AT_BLOCK + 20).toString(16)}`,
-          }),
-          { status: 200 }
-        );
-      }
-      if (body.method === "eth_getLogs") {
-        const filter = body.params[0] as { fromBlock: string; toBlock: string };
+    const fetchImpl = mockRpc({
+      eth_blockNumber: () =>
+        `0x${(MARGIN_CALL_DEPLOYED_AT_BLOCK + 20).toString(16)}`,
+      eth_getLogs: (params) => {
+        const filter = params[0] as { fromBlock: string; toBlock: string };
         const from = Number(BigInt(filter.fromBlock));
         expect(from).toBe(MARGIN_CALL_DEPLOYED_AT_BLOCK);
-        return new Response(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            result: [
-              {
-                address: MARGIN_CALL_ADDRESS,
-                topics: openLog.topics,
-                data: openLog.data,
-                blockNumber: `0x${openLog.blockNumber.toString(16)}`,
-                transactionHash: openLog.transactionHash,
-                logIndex: `0x${openLog.logIndex.toString(16)}`,
-              },
-            ],
-          }),
-          { status: 200 }
-        );
-      }
-      throw new Error(`unexpected RPC ${body.method}`);
+        return [
+          {
+            address: MARGIN_CALL_ADDRESS,
+            topics: openLog.topics,
+            data: openLog.data,
+            blockNumber: `0x${openLog.blockNumber.toString(16)}`,
+            transactionHash: openLog.transactionHash,
+            logIndex: `0x${openLog.logIndex.toString(16)}`,
+          },
+        ];
+      },
     });
 
     await t.run(async (ctx) => {
@@ -371,7 +462,7 @@ describe("Convex Position read model", () => {
       };
       const result = await runReconcile(
         actionCtx as Parameters<typeof runReconcile>[0],
-        fetchImpl as typeof fetch
+        fetchImpl
       );
       expect(result.fromBlock).toBe(MARGIN_CALL_DEPLOYED_AT_BLOCK);
       expect(result.applied).toBeGreaterThanOrEqual(1);
@@ -396,35 +487,23 @@ describe("Convex Position read model", () => {
 
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body)) as {
-          method: string;
-          params: string[];
-        };
-        if (body.method === "eth_getTransactionReceipt") {
-          expect(body.params[0]).toBe(TX_OPEN);
-          return new Response(
-            JSON.stringify({
-              jsonrpc: "2.0",
-              id: 1,
-              result: {
-                status: "0x1",
-                blockNumber: `0x${logs[0]!.blockNumber.toString(16)}`,
-                transactionHash: TX_OPEN,
-                logs: logs.map((l) => ({
-                  address: l.address,
-                  topics: l.topics,
-                  data: l.data,
-                  blockNumber: `0x${l.blockNumber.toString(16)}`,
-                  transactionHash: l.transactionHash,
-                  logIndex: `0x${l.logIndex.toString(16)}`,
-                })),
-              },
-            }),
-            { status: 200 }
-          );
-        }
-        throw new Error(`unexpected ${body.method}`);
+      mockRpc({
+        eth_getTransactionReceipt: (params) => {
+          expect(params[0]).toBe(TX_OPEN);
+          return {
+            status: "0x1",
+            blockNumber: `0x${logs[0]!.blockNumber.toString(16)}`,
+            transactionHash: TX_OPEN,
+            logs: logs.map((l) => ({
+              address: l.address,
+              topics: l.topics,
+              data: l.data,
+              blockNumber: `0x${l.blockNumber.toString(16)}`,
+              transactionHash: l.transactionHash,
+              logIndex: `0x${l.logIndex.toString(16)}`,
+            })),
+          };
+        },
       })
     );
 
@@ -444,20 +523,13 @@ describe("Convex Position read model", () => {
     const t = convexTest(schema, modules);
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => {
-        return new Response(
-          JSON.stringify({
-            jsonrpc: "2.0",
-            id: 1,
-            result: {
-              status: "0x0",
-              blockNumber: "0x1",
-              transactionHash: TX_OPEN,
-              logs: [],
-            },
-          }),
-          { status: 200 }
-        );
+      mockRpc({
+        eth_getTransactionReceipt: () => ({
+          status: "0x0",
+          blockNumber: "0x1",
+          transactionHash: TX_OPEN,
+          logs: [],
+        }),
       })
     );
 
@@ -480,5 +552,32 @@ describe("Convex Position read model", () => {
     });
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("invalid_tx_hash");
+  });
+
+  it("syncTransaction rejects wrong chainId", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body)) as { method: string };
+        if (body.method === "eth_chainId") {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              result: "0x1",
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`unexpected ${body.method}`);
+      })
+    );
+
+    const result = await t.action(api.sync.syncTransaction, {
+      txHash: TX_OPEN,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("wrong_chain");
   });
 });

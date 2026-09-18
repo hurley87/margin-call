@@ -45,7 +45,7 @@ async function jsonRpc<T>(
   return body.result;
 }
 
-export type RpcReceiptLog = {
+export type RpcLog = {
   address: string;
   topics: Hex[];
   data: Hex;
@@ -59,21 +59,19 @@ export type RpcTransactionReceipt = {
   status: Hex;
   blockNumber: Hex;
   transactionHash: Hex;
-  logs: RpcReceiptLog[];
+  logs: RpcLog[];
 } | null;
-
-export type RpcLog = {
-  address: string;
-  topics: Hex[];
-  data: Hex;
-  blockNumber: Hex;
-  transactionHash: Hex;
-  logIndex: Hex;
-  removed?: boolean;
-};
 
 export function hexToNumber(hex: string): number {
   return Number(BigInt(hex));
+}
+
+export async function ethChainId(
+  fetchImpl?: JsonRpcFetch,
+  rpcUrl?: string
+): Promise<number> {
+  const hex = await jsonRpc<Hex>("eth_chainId", [], fetchImpl, rpcUrl);
+  return hexToNumber(hex);
 }
 
 export async function ethGetTransactionReceipt(
@@ -120,19 +118,4 @@ export async function ethGetLogs(
     fetchImpl,
     rpcUrl
   );
-}
-
-export async function ethGetBlockTimestamp(
-  blockNumber: number,
-  fetchImpl?: JsonRpcFetch,
-  rpcUrl?: string
-): Promise<number | undefined> {
-  const block = await jsonRpc<{ timestamp: Hex } | null>(
-    "eth_getBlockByNumber",
-    [`0x${blockNumber.toString(16)}`, false],
-    fetchImpl,
-    rpcUrl
-  );
-  if (!block?.timestamp) return undefined;
-  return hexToNumber(block.timestamp);
 }
