@@ -8,17 +8,23 @@ export type PositionCardProps = {
   position: PositionListItem;
   /** When true, show truncated owner (All Positions). */
   showOwner?: boolean;
+  /** Accent the card after a successful create redirect. */
+  highlighted?: boolean;
 };
 
 /** Browseable Position NFT row — identity only, no live financial state. */
 export function PositionCard(props: PositionCardProps) {
-  const { position, showOwner = false } = props;
+  const { position, showOwner = false, highlighted = false } = props;
   const { tokenId, assetId, status, owner } = position;
 
   return (
     <Link
       href={`/position/${tokenId}`}
-      className="block border border-[var(--t-border)] px-4 py-3 transition-colors hover:border-[var(--t-accent)]"
+      className={
+        highlighted
+          ? "block border border-[var(--t-accent)] px-4 py-3 transition-colors ring-1 ring-[var(--t-accent)]"
+          : "block border border-[var(--t-border)] px-4 py-3 transition-colors hover:border-[var(--t-accent)]"
+      }
     >
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">

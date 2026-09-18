@@ -10,13 +10,21 @@ import {
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const usePathnameMock = vi.hoisted(() => vi.fn(() => "/"));
+const useSearchParamsMock = vi.hoisted(() =>
+  vi.fn(() => new URLSearchParams())
+);
 const usePaginatedQueryMock = vi.hoisted(() => vi.fn());
 const useQueryMock = vi.hoisted(() => vi.fn());
 const useOptionalConvexClientMock = vi.hoisted(() => vi.fn());
 const useWalletSessionMock = vi.hoisted(() => vi.fn());
+const useGetWalletAccountsMock = vi.hoisted(() =>
+  vi.fn(() => ({ data: [] as Array<{ chain: string; key: string }> }))
+);
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
+  useSearchParams: useSearchParamsMock,
+  useRouter: () => ({ push: vi.fn() }),
 }));
 
 vi.mock("next/link", () => ({
@@ -55,7 +63,7 @@ vi.mock("@/components/wallet/wallet-providers", () => ({
 
 vi.mock("@dynamic-labs-sdk/react-hooks", () => ({
   useInitStatus: () => ({ data: "finished", error: null }),
-  useGetWalletAccounts: () => ({ data: [] }),
+  useGetWalletAccounts: useGetWalletAccountsMock,
   useGetAvailableWalletProvidersData: () => ({ data: [] }),
   useConnectAndVerifyWithWalletProvider: () => ({
     mutate: vi.fn(),
@@ -80,6 +88,28 @@ vi.mock("@dynamic-labs-sdk/client", () => ({
   isProgrammaticNetworkSwitchAvailable: () => false,
 }));
 
+vi.mock("@/lib/protocol/reads", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/protocol/reads")>();
+  return {
+    ...actual,
+    loadOpenSnapshot: vi.fn().mockResolvedValue({
+      stockBalance: 1_000_000_00n,
+      stockAllowance: 1_000_000_00n,
+      availableCredit: 10_000_000_000n,
+      oracleState: 0,
+      estimatedPrincipal: 100_000n,
+    }),
+  };
+});
+
+vi.mock("@/lib/protocol/public-client", () => ({
+  createBasePublicClient: () => ({}),
+}));
+
+vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
+  useSyncPositionTransaction: () => vi.fn().mockResolvedValue("skipped"),
+}));
+
 import { AllPositionsPage } from "@/components/positions/all-positions-page";
 import { MyPositionsPage } from "@/components/positions/my-positions-page";
 import { PositionDetailStub } from "@/components/positions/position-detail-stub";
@@ -102,7 +132,9 @@ function mockConnectedSession() {
 describe("portfolio-first app shell", () => {
   beforeEach(() => {
     usePathnameMock.mockReturnValue("/");
+    useSearchParamsMock.mockReturnValue(new URLSearchParams());
     useOptionalConvexClientMock.mockReturnValue({});
+    useGetWalletAccountsMock.mockReturnValue({ data: [] });
     mockDisconnectedSession();
     usePaginatedQueryMock.mockReturnValue({
       results: [],
@@ -118,6 +150,8 @@ describe("portfolio-first app shell", () => {
     useQueryMock.mockReset();
     useOptionalConvexClientMock.mockReset();
     useWalletSessionMock.mockReset();
+    useSearchParamsMock.mockReset();
+    useGetWalletAccountsMock.mockReset();
   });
 
   it("exposes My Positions, All Positions, Open Position, and wallet state", () => {
@@ -311,15 +345,67 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByText(/circuit breaker/i)).toBeNull();
   });
 
-  it("create placeholder has no repay or close controls", () => {
+  it("create page has Approve/Open without repay or close", () => {
+    mockConnectedSession();
+    useGetWalletAccountsMock.mockReturnValue({
+      data: [{ chain: "EVM", key: "test-account" }],
+    });
     render(<CreatePositionPage />);
 
     expect(
       screen.getByRole("heading", { name: "Open Position" })
     ).not.toBeNull();
+    expect(screen.getByRole("button", { name: /Approve/i })).not.toBeNull();
+    expect(screen.getByRole("button", { name: /^Open$/i })).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Approve/i })).toBeNull();
+  });
+
+  it("highlights the opened token and shows indexing when missing from Convex", () => {
+    mockConnectedSession();
+    useSearchParamsMock.mockReturnValue(new URLSearchParams("opened=99"));
+    usePaginatedQueryMock.mockReturnValue({
+      results: [
+        {
+          tokenId: "1",
+          assetId: 1,
+          owner: CONNECTED_ADDRESS,
+          status: "active",
+        },
+      ],
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+
+    render(<MyPositionsPage />);
+
+    expect(
+      screen.getByText(/Indexing Position #99 — it will appear here shortly/)
+    ).not.toBeNull();
+    expect(screen.getByText("Token #1")).not.toBeNull();
+  });
+
+  it("highlights the opened card when Convex already has the token", () => {
+    mockConnectedSession();
+    useSearchParamsMock.mockReturnValue(new URLSearchParams("opened=42"));
+    usePaginatedQueryMock.mockReturnValue({
+      results: [
+        {
+          tokenId: "42",
+          assetId: 3,
+          owner: CONNECTED_ADDRESS,
+          status: "active",
+        },
+      ],
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+
+    render(<MyPositionsPage />);
+
+    expect(screen.queryByText(/Indexing Position #42/)).toBeNull();
+    const card = screen.getByRole("link", { name: /Token #42/ });
+    expect(card.className).toMatch(/ring-\[var\(--t-accent\)\]/);
   });
 
   it("detail stub shows indexed identity and not-found without actions", () => {
