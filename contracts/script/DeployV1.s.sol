@@ -5,6 +5,7 @@ import {console} from "forge-std/console.sol";
 
 import {CreditPool} from "../src/CreditPool.sol";
 import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
+import {LaunchAssets} from "../src/LaunchAssets.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {OracleAdapter} from "../src/OracleAdapter.sol";
 import {V1Config} from "../src/V1Config.sol";
@@ -12,9 +13,10 @@ import {BaseMainnetHarnessBase} from "./BaseMainnetHarnessBase.sol";
 
 /// @title DeployV1
 /// @notice Base-mainnet-only deploy of OracleAdapter, ExecutionAdapter, MarginCall, and CreditPool.
-/// @dev Uses pinned #420 / V1Config addresses. Operator is deployer (`INITIALIZER`) and `CreditPool.treasury`.
-///      Private keys are read from env and never logged. Dry-run: `MARGIN_CALL_DRY_RUN=1` + `--fork-url` without
-///      `--broadcast`. Live: require shell gate `CONFIRM_BASE_MAINNET=I_UNDERSTAND` before `--broadcast`.
+/// @dev Uses pinned #420 / LaunchAssets (NVDA rails) + V1Config (infra) addresses. Operator is deployer
+///      (`INITIALIZER`) and `CreditPool.treasury`. Private keys are read from env and never logged.
+///      Dry-run: `MARGIN_CALL_DRY_RUN=1` + `--fork-url` without `--broadcast`. Live: require shell gate
+///      `CONFIRM_BASE_MAINNET=I_UNDERSTAND` before `--broadcast`.
 contract DeployV1 is BaseMainnetHarnessBase {
     string internal constant STATE_PATH = "./deployments/base-deploy.run.json";
 
@@ -42,13 +44,13 @@ contract DeployV1 is BaseMainnetHarnessBase {
         console.log("dryRun", _isDryRun());
         console.log("chainId", block.chainid);
         console.log("deployer/treasury", operator);
-        console.log("NVDAC", V1Config.NVDAC);
+        console.log("NVDAC", LaunchAssets.NVDAC);
         console.log("USDC", V1Config.USDC);
-        console.log("NVDA_FEED", V1Config.NVDA_FEED);
+        console.log("NVDA_FEED", LaunchAssets.NVDA_FEED);
         console.log("REGISTRY", V1Config.COINBASE_ORACLE_REGISTRY);
         console.log("SEQUENCER_FEED", V1Config.BASE_SEQUENCER_UPTIME_FEED);
         console.log("SWAP_ROUTER_02", V1Config.UNISWAP_SWAP_ROUTER_02);
-        console.log("UNISWAP_FEE", uint256(V1Config.UNISWAP_FEE));
+        console.log("UNISWAP_FEE", uint256(LaunchAssets.NVDA_UNISWAP_FEE));
 
         if (_isDryRun()) {
             _fundDryRunActor(operator, 10 ether, 0, 0);
@@ -70,21 +72,21 @@ contract DeployV1 is BaseMainnetHarnessBase {
         assertEq(marginCall.ASSET_ADMIN(), operator, "MarginCall.ASSET_ADMIN");
         assertEq(address(marginCall.creditPool()), address(pool), "MarginCall.creditPool");
         assertEq(nvdaAssetId, 1, "nvdaAssetId");
-        assertEq(marginCall.assetIdOf(V1Config.NVDAC), nvdaAssetId, "assetIdOf(NVDAC)");
+        assertEq(marginCall.assetIdOf(LaunchAssets.NVDAC), nvdaAssetId, "assetIdOf(NVDAC)");
         MarginCall.AssetConfig memory nvda = marginCall.assetConfig(nvdaAssetId);
-        assertEq(nvda.stock, V1Config.NVDAC, "assetConfig.stock");
+        assertEq(nvda.stock, LaunchAssets.NVDAC, "assetConfig.stock");
         assertEq(address(nvda.oracle), address(oracle), "assetConfig.oracle");
         assertEq(address(nvda.execution), address(execution), "assetConfig.execution");
         assertTrue(nvda.openingEnabled, "assetConfig.openingEnabled");
         assertEq(address(pool.USDC()), V1Config.USDC, "CreditPool.USDC");
         assertEq(pool.borrower(), address(marginCall), "CreditPool.borrower");
         assertEq(pool.treasury(), operator, "CreditPool.treasury");
-        assertEq(address(oracle.STOCK()), V1Config.NVDAC, "OracleAdapter.STOCK");
-        assertEq(address(oracle.FEED()), V1Config.NVDA_FEED, "OracleAdapter.FEED");
+        assertEq(address(oracle.STOCK()), LaunchAssets.NVDAC, "OracleAdapter.STOCK");
+        assertEq(address(oracle.FEED()), LaunchAssets.NVDA_FEED, "OracleAdapter.FEED");
         assertEq(address(execution.USDC()), V1Config.USDC, "ExecutionAdapter.USDC");
-        assertEq(address(execution.STOCK()), V1Config.NVDAC, "ExecutionAdapter.STOCK");
+        assertEq(address(execution.STOCK()), LaunchAssets.NVDAC, "ExecutionAdapter.STOCK");
         assertEq(address(execution.ROUTER()), V1Config.UNISWAP_SWAP_ROUTER_02, "ExecutionAdapter.ROUTER");
-        assertEq(uint256(execution.FEE()), uint256(V1Config.UNISWAP_FEE), "ExecutionAdapter.FEE");
+        assertEq(uint256(execution.FEE()), uint256(LaunchAssets.NVDA_UNISWAP_FEE), "ExecutionAdapter.FEE");
 
         state = DeployState({
             deployer: operator,
@@ -115,13 +117,13 @@ contract DeployV1 is BaseMainnetHarnessBase {
         vm.serializeAddress(obj, "creditPool", state.creditPool);
         vm.serializeUint(obj, "chainId", state.chainId);
         vm.serializeString(obj, "gitCommit", state.gitCommit);
-        vm.serializeAddress(obj, "nvdac", V1Config.NVDAC);
+        vm.serializeAddress(obj, "nvdac", LaunchAssets.NVDAC);
         vm.serializeAddress(obj, "usdc", V1Config.USDC);
-        vm.serializeAddress(obj, "nvdaFeed", V1Config.NVDA_FEED);
+        vm.serializeAddress(obj, "nvdaFeed", LaunchAssets.NVDA_FEED);
         vm.serializeAddress(obj, "registry", V1Config.COINBASE_ORACLE_REGISTRY);
         vm.serializeAddress(obj, "sequencerFeed", V1Config.BASE_SEQUENCER_UPTIME_FEED);
         vm.serializeAddress(obj, "swapRouter02", V1Config.UNISWAP_SWAP_ROUTER_02);
-        string memory json = vm.serializeUint(obj, "uniswapFee", uint256(V1Config.UNISWAP_FEE));
+        string memory json = vm.serializeUint(obj, "uniswapFee", uint256(LaunchAssets.NVDA_UNISWAP_FEE));
         vm.writeJson(json, STATE_PATH);
     }
 }

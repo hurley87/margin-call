@@ -186,8 +186,8 @@ contract MarginCallTest is MarginCallTestBase {
         uint256 tokenA = _open(alice, aliceAmount);
         uint256 tokenB = _open(bob, bobAmount);
 
-        (, uint256 stockA,,,,) = _position(tokenA);
-        (, uint256 stockB,,,,) = _position(tokenB);
+        uint256 stockA = _position(tokenA).stockAmount;
+        uint256 stockB = _position(tokenB).stockAmount;
         assertEq(stockA, aliceAmount);
         assertEq(stockB, bobAmount);
         assertEq(stockA + stockB, nvdac.balanceOf(address(marginCall)));
@@ -226,8 +226,8 @@ contract MarginCallTest is MarginCallTestBase {
         nvdac.mint(address(marginCall), extra);
 
         uint256 custody = nvdac.balanceOf(address(marginCall));
-        (, uint256 stockA,,,,) = _position(tokenA);
-        (, uint256 stockB,,,,) = _position(tokenB);
+        uint256 stockA = _position(tokenA).stockAmount;
+        uint256 stockB = _position(tokenB).stockAmount;
         assertEq(stockA + stockB + extra, custody);
 
         vm.prank(alice);
@@ -432,7 +432,7 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, deposit);
 
         uint256 tokenId = _open(alice, deposit);
-        (, uint256 recordedStock,,,,) = _position(tokenId);
+        uint256 recordedStock = _position(tokenId).stockAmount;
         assertEq(recordedStock, deposit);
         assertEq(nvdac.balanceOf(address(marginCall)), deposit);
 
@@ -460,15 +460,15 @@ contract MarginCallTest is MarginCallTestBase {
             nvdac.mint(address(marginCall), extra);
         }
 
-        (, uint256 stockA,,,,) = _position(tokenA);
-        (, uint256 stockB,,,,) = _position(tokenB);
+        uint256 stockA = _position(tokenA).stockAmount;
+        uint256 stockB = _position(tokenB).stockAmount;
         assertEq(stockA + stockB + extra, nvdac.balanceOf(address(marginCall)));
 
         vm.prank(alice);
         marginCall.closePosition(tokenA);
 
         assertEq(nvdac.balanceOf(alice), aliceAmount);
-        (, uint256 remainingB,,,,) = _position(tokenB);
+        uint256 remainingB = _position(tokenB).stockAmount;
         assertEq(remainingB, bobAmount);
         assertEq(marginCall.ownerOf(tokenB), bob);
         assertEq(nvdac.balanceOf(address(marginCall)), bobAmount + extra);
@@ -491,16 +491,16 @@ contract MarginCallTest is MarginCallTestBase {
         uint256 tokenB = _open(bob, bAmount);
         uint256 tokenC = _open(carol, cAmount);
 
-        (, uint256 stockA,,,,) = _position(tokenA);
-        (, uint256 stockB,,,,) = _position(tokenB);
-        (, uint256 stockC,,,,) = _position(tokenC);
+        uint256 stockA = _position(tokenA).stockAmount;
+        uint256 stockB = _position(tokenB).stockAmount;
+        uint256 stockC = _position(tokenC).stockAmount;
         uint256 recorded = stockA + stockB + stockC;
         assertEq(recorded, nvdac.balanceOf(address(marginCall)));
 
         vm.prank(bob);
         marginCall.closePosition(tokenB);
-        (, stockA,,,,) = _position(tokenA);
-        (, stockC,,,,) = _position(tokenC);
+        stockA = _position(tokenA).stockAmount;
+        stockC = _position(tokenC).stockAmount;
         recorded = stockA + stockC;
         assertEq(recorded, nvdac.balanceOf(address(marginCall)));
         _assertLiveSpotPosition(tokenA, alice, aAmount, OPENED_AT);

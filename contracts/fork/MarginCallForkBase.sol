@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {CreditPool} from "../src/CreditPool.sol";
 import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
+import {LaunchAssets} from "../src/LaunchAssets.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {OracleAdapter} from "../src/OracleAdapter.sol";
 import {V1Config} from "../src/V1Config.sol";
@@ -13,10 +14,10 @@ import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
 
 /// @dev Shared pinned-fork fixture for the RPC-dependent `MarginCall` suites: selects the pinned Base block,
 ///      deploys the production adapter stack against the real token and feed addresses, registers NVDAc as
-///      asset id 1, wires and seeds `CreditPool`, and funds one actor with NVDAc. Mirrors the role
+///      asset id 1 by default, wires and seeds `CreditPool`, and funds one actor with NVDAc. Mirrors the role
 ///      `MarginCallTestBase` plays for the RPC-free suites so a constructor change to any of the four
 ///      contracts is a single edit here. Subclasses supply their own actor label via `_forkActorLabel()`
-///      and add only their assertions.
+///      and add only their assertions. Multi-stock suites override `setUp` to register `LaunchAssets.launchSet()`.
 abstract contract MarginCallForkBase is Test {
     uint256 internal constant BASE_BLOCK = BaseV1Constants.PINNED_BLOCK;
     uint256 internal constant ONE_NVDAC = 10 ** uint256(BaseV1Constants.NVDAC_DECIMALS);
@@ -41,13 +42,9 @@ abstract contract MarginCallForkBase is Test {
     function _forkActorLabel() internal pure virtual returns (string memory);
 
     function setUp() public virtual {
-        vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), BASE_BLOCK);
-        alice = makeAddr(_forkActorLabel());
-        treasury = makeAddr("treasury");
-        assetAdmin = makeAddr("assetAdmin");
-        // Ensure the opener is a pure EOA on the forked chain (safeMint rejects contract recipients
-        // that lack IERC721Receiver).
-        vm.etch(alice, "");
+        _selectFork();
+        _initActors(_forkActorLabel());
+        _deployForkStack();
 
         oracle = new OracleAdapter(
             BaseV1Constants.NVDAC,
@@ -61,17 +58,47 @@ abstract contract MarginCallForkBase is Test {
             BaseV1Constants.UNISWAP_SWAP_ROUTER_02,
             BaseV1Constants.UNISWAP_FEE
         );
-        marginCall = new MarginCall(BaseV1Constants.USDC, assetAdmin);
-        pool = new CreditPool(BaseV1Constants.USDC, address(marginCall), treasury);
-        marginCall.setCreditPool(address(pool));
-
         vm.prank(assetAdmin);
         nvdaAssetId = marginCall.addAsset(BaseV1Constants.NVDAC, address(oracle), address(execution));
 
-        deal(BaseV1Constants.USDC, address(pool), CREDIT_SEED);
         _fundNvda(alice, 10 * ONE_NVDAC);
         vm.prank(alice);
         nvdac.approve(address(marginCall), type(uint256).max);
+    }
+
+    function _selectFork() internal {
+        vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), BASE_BLOCK);
+    }
+
+    function _initActors(string memory label) internal {
+        alice = makeAddr(label);
+        treasury = makeAddr("treasury");
+        assetAdmin = makeAddr("assetAdmin");
+        // Ensure the opener is a pure EOA on the forked chain (safeMint rejects contract recipients
+        // that lack IERC721Receiver).
+        vm.etch(alice, "");
+    }
+
+    /// @dev Deploy MarginCall + CreditPool and seed pool USDC. No assets registered yet.
+    function _deployForkStack() internal {
+        marginCall = new MarginCall(BaseV1Constants.USDC, assetAdmin);
+        pool = new CreditPool(BaseV1Constants.USDC, address(marginCall), treasury);
+        marginCall.setCreditPool(address(pool));
+        deal(BaseV1Constants.USDC, address(pool), CREDIT_SEED);
+    }
+
+    /// @dev Register one launch-set rail: oracle + execution adapters, then `addAsset`.
+    function _registerAsset(LaunchAssets.Asset memory rail)
+        internal
+        returns (OracleAdapter registeredOracle, uint256 assetId)
+    {
+        registeredOracle = new OracleAdapter(
+            rail.stock, rail.feed, BaseV1Constants.COINBASE_ORACLE_REGISTRY, BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED
+        );
+        ExecutionAdapter registeredExecution =
+            new ExecutionAdapter(BaseV1Constants.USDC, rail.stock, BaseV1Constants.UNISWAP_SWAP_ROUTER_02, rail.fee);
+        vm.prank(assetAdmin);
+        assetId = marginCall.addAsset(rail.stock, address(registeredOracle), address(registeredExecution));
     }
 
     function _fundNvda(address to, uint256 amount) internal {

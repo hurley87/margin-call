@@ -1,30 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.29;
 
-import {Test} from "forge-std/Test.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
-import {CreditPool} from "../src/CreditPool.sol";
-import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
 import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
 import {LaunchAssets} from "../src/LaunchAssets.sol";
-import {MarginCall} from "../src/MarginCall.sol";
 import {OracleAdapter} from "../src/OracleAdapter.sol";
 import {V1Config} from "../src/V1Config.sol";
 import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
+import {MarginCallForkBase} from "./MarginCallForkBase.sol";
 
 /// @dev Compact open → reduce → repay → close smoke for each launch rail, plus mixed-asset isolation.
-contract MultiStockForkSmokeTest is Test {
-    uint256 internal constant BASE_BLOCK = BaseV1Constants.PINNED_BLOCK;
+contract MultiStockForkSmokeTest is MarginCallForkBase {
     uint256 internal constant ONE_SHARE = 10 ** uint256(LaunchAssets.STOCK_DECIMALS);
     uint256 internal constant CONTRIBUTION = ONE_SHARE / 20; // 0.05 share
-    uint256 internal constant CREDIT_SEED = 500_000e6;
-
-    MarginCall internal marginCall;
-    CreditPool internal pool;
-    address internal alice;
-    address internal assetAdmin;
-    address internal treasury;
 
     uint256 internal nvdaId;
     uint256 internal aaplId;
@@ -36,81 +25,63 @@ contract MultiStockForkSmokeTest is Test {
     OracleAdapter internal metaOracle;
     OracleAdapter internal googlOracle;
 
-    function setUp() public {
-        vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), BASE_BLOCK);
-        alice = makeAddr("multi-stock-alice");
+    function _forkActorLabel() internal pure override returns (string memory) {
+        return "multi-stock-alice";
+    }
+
+    function setUp() public override {
+        _selectFork();
+        _initActors(_forkActorLabel());
+        // Distinct admin/treasury labels for this suite.
         assetAdmin = makeAddr("multi-stock-admin");
         treasury = makeAddr("multi-stock-treasury");
-        vm.etch(alice, "");
+        _deployForkStack();
 
-        marginCall = new MarginCall(BaseV1Constants.USDC, assetAdmin);
-        pool = new CreditPool(BaseV1Constants.USDC, address(marginCall), treasury);
-        marginCall.setCreditPool(address(pool));
-        deal(BaseV1Constants.USDC, address(pool), CREDIT_SEED);
-
-        (nvdaOracle, nvdaId) = _register(
-            LaunchAssets.NVDAC,
-            LaunchAssets.NVDA_FEED,
-            LaunchAssets.NVDA_UNISWAP_FEE,
-            LaunchAssets.UNISWAP_USDC_NVDAC_POOL
-        );
-        (aaplOracle, aaplId) = _register(
-            LaunchAssets.AAPLC,
-            LaunchAssets.AAPL_FEED,
-            LaunchAssets.AAPL_UNISWAP_FEE,
-            LaunchAssets.UNISWAP_USDC_AAPLC_POOL
-        );
-        (metaOracle, metaId) = _register(
-            LaunchAssets.METAC,
-            LaunchAssets.META_FEED,
-            LaunchAssets.META_UNISWAP_FEE,
-            LaunchAssets.UNISWAP_USDC_METAC_POOL
-        );
-        (googlOracle, googlId) = _register(
-            LaunchAssets.GOOGLC,
-            LaunchAssets.GOOGL_FEED,
-            LaunchAssets.GOOGL_UNISWAP_FEE,
-            LaunchAssets.UNISWAP_USDC_GOOGLC_POOL
-        );
+        LaunchAssets.Asset[] memory rails = LaunchAssets.launchSet();
+        (nvdaOracle, nvdaId) = _registerAsset(rails[0]);
+        (aaplOracle, aaplId) = _registerAsset(rails[1]);
+        (metaOracle, metaId) = _registerAsset(rails[2]);
+        (googlOracle, googlId) = _registerAsset(rails[3]);
     }
 
     function test_nvdaCompactLifecycle() public {
-        _compactLifecycle(nvdaId, LaunchAssets.NVDAC, LaunchAssets.UNISWAP_USDC_NVDAC_POOL, nvdaOracle);
+        _compactLifecycle(LaunchAssets.launchSet()[0], nvdaId, nvdaOracle);
     }
 
     function test_aaplCompactLifecycle() public {
-        _compactLifecycle(aaplId, LaunchAssets.AAPLC, LaunchAssets.UNISWAP_USDC_AAPLC_POOL, aaplOracle);
+        _compactLifecycle(LaunchAssets.launchSet()[1], aaplId, aaplOracle);
     }
 
     function test_metaCompactLifecycle() public {
-        _compactLifecycle(metaId, LaunchAssets.METAC, LaunchAssets.UNISWAP_USDC_METAC_POOL, metaOracle);
+        _compactLifecycle(LaunchAssets.launchSet()[2], metaId, metaOracle);
     }
 
     function test_googlCompactLifecycle() public {
-        _compactLifecycle(googlId, LaunchAssets.GOOGLC, LaunchAssets.UNISWAP_USDC_GOOGLC_POOL, googlOracle);
+        _compactLifecycle(LaunchAssets.launchSet()[3], googlId, googlOracle);
     }
 
     function test_mixedAssetIsolation() public {
-        _fundFromPool(LaunchAssets.NVDAC, LaunchAssets.UNISWAP_USDC_NVDAC_POOL, CONTRIBUTION);
-        _fundFromPool(LaunchAssets.AAPLC, LaunchAssets.UNISWAP_USDC_AAPLC_POOL, CONTRIBUTION);
-        _fundFromPool(LaunchAssets.METAC, LaunchAssets.UNISWAP_USDC_METAC_POOL, CONTRIBUTION);
+        LaunchAssets.Asset[] memory rails = LaunchAssets.launchSet();
+        _fundFromPool(rails[0].stock, rails[0].pool, CONTRIBUTION);
+        _fundFromPool(rails[1].stock, rails[1].pool, CONTRIBUTION);
+        _fundFromPool(rails[2].stock, rails[2].pool, CONTRIBUTION);
 
         vm.startPrank(alice);
-        IERC20(LaunchAssets.NVDAC).approve(address(marginCall), type(uint256).max);
-        IERC20(LaunchAssets.AAPLC).approve(address(marginCall), type(uint256).max);
-        IERC20(LaunchAssets.METAC).approve(address(marginCall), type(uint256).max);
+        IERC20(rails[0].stock).approve(address(marginCall), type(uint256).max);
+        IERC20(rails[1].stock).approve(address(marginCall), type(uint256).max);
+        IERC20(rails[2].stock).approve(address(marginCall), type(uint256).max);
 
         uint256 nvdaPos = marginCall.openPosition(nvdaId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0);
         uint256 aaplPos = marginCall.openPosition(aaplId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0);
         uint256 metaPos = marginCall.openPosition(metaId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0);
         vm.stopPrank();
 
-        (, uint256 nvdaStock,,,,) = marginCall.positions(nvdaPos);
-        (, uint256 aaplStock,,,,) = marginCall.positions(aaplPos);
-        (, uint256 metaStock,,,,) = marginCall.positions(metaPos);
-        uint256 nvdaCustodyBefore = IERC20(LaunchAssets.NVDAC).balanceOf(address(marginCall));
-        uint256 aaplCustodyBefore = IERC20(LaunchAssets.AAPLC).balanceOf(address(marginCall));
-        uint256 metaCustodyBefore = IERC20(LaunchAssets.METAC).balanceOf(address(marginCall));
+        uint256 nvdaStock = marginCall.positions(nvdaPos).stockAmount;
+        uint256 aaplStock = marginCall.positions(aaplPos).stockAmount;
+        uint256 metaStock = marginCall.positions(metaPos).stockAmount;
+        uint256 nvdaCustodyBefore = IERC20(rails[0].stock).balanceOf(address(marginCall));
+        uint256 aaplCustodyBefore = IERC20(rails[1].stock).balanceOf(address(marginCall));
+        uint256 metaCustodyBefore = IERC20(rails[2].stock).balanceOf(address(marginCall));
 
         assertEq(nvdaCustodyBefore, nvdaStock);
         assertEq(aaplCustodyBefore, aaplStock);
@@ -125,53 +96,33 @@ contract MultiStockForkSmokeTest is Test {
         marginCall.closePosition(aaplPos);
         vm.stopPrank();
 
-        (, uint256 nvdaStockAfter,,,,) = marginCall.positions(nvdaPos);
-        (, uint256 metaStockAfter,,,,) = marginCall.positions(metaPos);
-        assertEq(nvdaStockAfter, nvdaStock, "NVDA stock mutated");
-        assertEq(metaStockAfter, metaStock, "META stock mutated");
-        assertEq(IERC20(LaunchAssets.NVDAC).balanceOf(address(marginCall)), nvdaCustodyBefore, "NVDA custody");
-        assertEq(IERC20(LaunchAssets.METAC).balanceOf(address(marginCall)), metaCustodyBefore, "META custody");
-        assertEq(IERC20(LaunchAssets.AAPLC).balanceOf(address(marginCall)), 0, "AAPL residual custody");
+        assertEq(marginCall.positions(nvdaPos).stockAmount, nvdaStock, "NVDA stock mutated");
+        assertEq(marginCall.positions(metaPos).stockAmount, metaStock, "META stock mutated");
+        assertEq(IERC20(rails[0].stock).balanceOf(address(marginCall)), nvdaCustodyBefore, "NVDA custody");
+        assertEq(IERC20(rails[2].stock).balanceOf(address(marginCall)), metaCustodyBefore, "META custody");
+        assertEq(IERC20(rails[1].stock).balanceOf(address(marginCall)), 0, "AAPL residual custody");
     }
 
-    function _register(
-        address stock,
-        address feed,
-        uint24 fee,
-        address /* pool */
-    )
-        private
-        returns (OracleAdapter oracle, uint256 assetId)
-    {
-        oracle = new OracleAdapter(
-            stock, feed, BaseV1Constants.COINBASE_ORACLE_REGISTRY, BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED
-        );
-        ExecutionAdapter execution =
-            new ExecutionAdapter(BaseV1Constants.USDC, stock, BaseV1Constants.UNISWAP_SWAP_ROUTER_02, fee);
-        vm.prank(assetAdmin);
-        assetId = marginCall.addAsset(stock, address(oracle), address(execution));
-    }
-
-    function _compactLifecycle(uint256 assetId, address stock, address poolAddr, OracleAdapter oracle) private {
-        IOracleAdapter.Observation memory obs = oracle.latestObservation();
+    function _compactLifecycle(LaunchAssets.Asset memory rail, uint256 assetId, OracleAdapter railOracle) private {
+        IOracleAdapter.Observation memory obs = railOracle.latestObservation();
         assertEq(uint8(obs.state), uint8(IOracleAdapter.State.LIVE));
 
-        uint256 fair = oracle.valueUsdc(CONTRIBUTION, obs.price);
+        uint256 fair = railOracle.valueUsdc(CONTRIBUTION, obs.price);
         assertGt(fair, 0);
 
-        _fundFromPool(stock, poolAddr, CONTRIBUTION);
+        _fundFromPool(rail.stock, rail.pool, CONTRIBUTION);
         deal(BaseV1Constants.USDC, alice, 50_000e6);
 
         vm.startPrank(alice);
-        IERC20(stock).approve(address(marginCall), type(uint256).max);
+        IERC20(rail.stock).approve(address(marginCall), type(uint256).max);
         IERC20(BaseV1Constants.USDC).approve(address(marginCall), type(uint256).max);
 
         uint256 tokenId = marginCall.openPosition(assetId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0);
-        (uint256 recordedAsset, uint256 stockAmount, uint256 principal,,,) = marginCall.positions(tokenId);
-        assertEq(recordedAsset, assetId);
-        assertGt(stockAmount, CONTRIBUTION, "financed buy did not increase stock");
-        assertGt(principal, 0);
+        assertEq(marginCall.positions(tokenId).assetId, assetId);
+        assertGt(marginCall.positions(tokenId).stockAmount, CONTRIBUTION, "financed buy did not increase stock");
+        assertGt(marginCall.positions(tokenId).principal, 0);
 
+        uint256 stockAmount = marginCall.positions(tokenId).stockAmount;
         uint256 reduceSize = stockAmount / 10;
         if (reduceSize == 0) {
             reduceSize = 1;
@@ -192,13 +143,13 @@ contract MultiStockForkSmokeTest is Test {
         }
         assertEq(marginCall.currentDebt(tokenId), 0);
 
-        uint256 ownerBefore = IERC20(stock).balanceOf(alice);
-        (, uint256 remaining,,,,) = marginCall.positions(tokenId);
+        uint256 ownerBefore = IERC20(rail.stock).balanceOf(alice);
+        uint256 remaining = marginCall.positions(tokenId).stockAmount;
         marginCall.closePosition(tokenId);
         vm.stopPrank();
 
-        assertEq(IERC20(stock).balanceOf(alice), ownerBefore + remaining);
-        assertEq(IERC20(stock).balanceOf(address(marginCall)), 0);
+        assertEq(IERC20(rail.stock).balanceOf(alice), ownerBefore + remaining);
+        assertEq(IERC20(rail.stock).balanceOf(address(marginCall)), 0);
     }
 
     /// @dev Pull raw stock from the Uniswap pool address on this local fork only. Does not touch production.

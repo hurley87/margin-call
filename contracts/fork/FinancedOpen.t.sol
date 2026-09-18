@@ -29,7 +29,9 @@ contract FinancedOpenForkTest is MarginCallForkBase {
 
             uint256 tokenId = _openFinanced(alice, ONE_NVDAC, presets[i], 0);
 
-            (, uint256 stock, uint256 principal,,,) = marginCall.positions(tokenId);
+            MarginCall.Position memory pos = marginCall.positions(tokenId);
+            uint256 stock = pos.stockAmount;
+            uint256 principal = pos.principal;
             assertEq(marginCall.ownerOf(tokenId), alice);
             assertGt(stock, ONE_NVDAC);
             assertGt(principal, 0);
@@ -74,7 +76,9 @@ contract FinancedOpenForkTest is MarginCallForkBase {
         pool.draw(available);
 
         uint256 tokenId = _open(alice, ONE_NVDAC);
-        (, uint256 stock, uint256 principal,,,) = marginCall.positions(tokenId);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principal = pos.principal;
         assertEq(stock, ONE_NVDAC);
         assertEq(principal, 0);
     }

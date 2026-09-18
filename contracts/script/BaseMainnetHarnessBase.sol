@@ -6,6 +6,7 @@ import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 import {CreditPool} from "../src/CreditPool.sol";
 import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
+import {LaunchAssets} from "../src/LaunchAssets.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {OracleAdapter} from "../src/OracleAdapter.sol";
 import {V1Config} from "../src/V1Config.sol";
@@ -72,14 +73,18 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
         )
     {
         oracle = new OracleAdapter(
-            V1Config.NVDAC, V1Config.NVDA_FEED, V1Config.COINBASE_ORACLE_REGISTRY, V1Config.BASE_SEQUENCER_UPTIME_FEED
+            LaunchAssets.NVDAC,
+            LaunchAssets.NVDA_FEED,
+            V1Config.COINBASE_ORACLE_REGISTRY,
+            V1Config.BASE_SEQUENCER_UPTIME_FEED
         );
-        execution =
-            new ExecutionAdapter(V1Config.USDC, V1Config.NVDAC, V1Config.UNISWAP_SWAP_ROUTER_02, V1Config.UNISWAP_FEE);
+        execution = new ExecutionAdapter(
+            V1Config.USDC, LaunchAssets.NVDAC, V1Config.UNISWAP_SWAP_ROUTER_02, LaunchAssets.NVDA_UNISWAP_FEE
+        );
         marginCall = new MarginCall(V1Config.USDC, msg.sender);
         pool = new CreditPool(V1Config.USDC, address(marginCall), treasury);
         marginCall.setCreditPool(address(pool));
-        nvdaAssetId = marginCall.addAsset(V1Config.NVDAC, address(oracle), address(execution));
+        nvdaAssetId = marginCall.addAsset(LaunchAssets.NVDAC, address(oracle), address(execution));
     }
 
     /// @dev The reduceExposure sale size. Shared so the dry run sells the same fraction as the live phase.
@@ -109,7 +114,7 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
         if (nvdacAmount > 0) {
             address holder = BaseV1Constants.PINNED_NVDAC_HOLDER;
             vm.prank(holder);
-            require(IERC20(V1Config.NVDAC).transfer(actor, nvdacAmount), "nvdac fund transfer");
+            require(IERC20(LaunchAssets.NVDAC).transfer(actor, nvdacAmount), "nvdac fund transfer");
         }
     }
 
@@ -118,6 +123,6 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
     }
 
     function _nvdac() internal pure returns (IERC20) {
-        return IERC20(V1Config.NVDAC);
+        return IERC20(LaunchAssets.NVDAC);
     }
 }

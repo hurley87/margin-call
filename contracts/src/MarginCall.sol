@@ -104,7 +104,7 @@ contract MarginCall is ERC721 {
 
     ICreditPool public creditPool;
 
-    mapping(uint256 tokenId => Position) public positions;
+    mapping(uint256 tokenId => Position) private _positions;
     mapping(uint256 assetId => AssetConfig) private _assets;
     mapping(address stock => uint256 assetId) public assetIdOf;
     mapping(address adapter => bool) private _registeredAdapters;
@@ -157,8 +157,11 @@ contract MarginCall is ERC721 {
         if (assetIdOf[stock] != 0) {
             revert AssetAlreadyRegistered(stock);
         }
-        if (_registeredAdapters[oracle] || _registeredAdapters[execution]) {
-            revert AdapterAlreadyRegistered(_registeredAdapters[oracle] ? oracle : execution);
+        if (_registeredAdapters[oracle]) {
+            revert AdapterAlreadyRegistered(oracle);
+        }
+        if (_registeredAdapters[execution]) {
+            revert AdapterAlreadyRegistered(execution);
         }
         if (oracle == execution) {
             revert InvalidAssetConfig();
@@ -247,7 +250,7 @@ contract MarginCall is ERC721 {
         }
 
         tokenId = ++_nextTokenId;
-        Position storage position = positions[tokenId];
+        Position storage position = _positions[tokenId];
         position.assetId = assetId;
         position.stockAmount = finalStock;
         position.lastAccruedAt = block.timestamp;
@@ -268,10 +271,10 @@ contract MarginCall is ERC721 {
             revert DebtOutstanding(tokenId);
         }
 
-        Position storage position = positions[tokenId];
+        Position storage position = _positions[tokenId];
         uint256 stockAmount = position.stockAmount;
         IERC20 stock = IERC20(_requireAsset(position.assetId).stock);
-        delete positions[tokenId];
+        delete _positions[tokenId];
         _burn(tokenId);
 
         stock.safeTransfer(owner, stockAmount);
@@ -284,7 +287,7 @@ contract MarginCall is ERC721 {
     ///      current executor cannot call this. Transfer clears the stored executor via `_update`.
     function setExecutor(uint256 tokenId, address executor) external {
         _requirePositionOwner(tokenId);
-        Position storage position = positions[tokenId];
+        Position storage position = _positions[tokenId];
         address previous = position.executor;
         position.executor = executor;
         emit ExecutorUpdated(tokenId, previous, executor);
@@ -344,7 +347,7 @@ contract MarginCall is ERC721 {
     ///      to `CreditPool`, surplus to the owner, and any unpaid remainder as `BadDebtRealized`. Always burns.
     function liquidate(uint256 tokenId) external {
         address owner = _requireOwned(tokenId);
-        Position storage position = positions[tokenId];
+        Position storage position = _positions[tokenId];
         AssetConfig storage asset = _requireAsset(position.assetId);
 
         _accrue(position);
@@ -366,7 +369,7 @@ contract MarginCall is ERC721 {
             emit BadDebtRealized(tokenId, shortfall);
         }
 
-        delete positions[tokenId];
+        delete _positions[tokenId];
         _burn(tokenId);
 
         emit PositionLiquidated(tokenId, owner, stockAmount, usdcOut);
@@ -376,14 +379,19 @@ contract MarginCall is ERC721 {
     /// @dev Oracle-free and keeper-free. Interest is charged only while principal is outstanding, at the immutable
     ///      V1 10% APR. Spot opens stay at zero debt.
     function currentDebt(uint256 tokenId) public view returns (uint256) {
-        return _currentDebt(positions[tokenId]);
+        return _currentDebt(_positions[tokenId]);
+    }
+
+    /// @notice Full position record for a token id. Returns the zero struct when the token does not exist.
+    function positions(uint256 tokenId) external view returns (Position memory) {
+        return _positions[tokenId];
     }
 
     /// @notice LIVE-only risk view: oracle NAV, current debt, and the liquidation verdict.
     /// @dev Requires a live token and `LIVE` pricing on the position's asset oracle.
     function riskSnapshot(uint256 tokenId) external view returns (RiskSnapshot memory) {
         _requireOwned(tokenId);
-        Position storage position = positions[tokenId];
+        Position storage position = _positions[tokenId];
         AssetConfig storage asset = _requireAsset(position.assetId);
         return _riskSnapshot(position, asset.oracle, _requireLivePrice(asset.oracle).price, _currentDebt(position));
     }
@@ -401,7 +409,7 @@ contract MarginCall is ERC721 {
     function _update(address to, uint256 tokenId, address auth) internal override returns (address from) {
         from = super._update(to, tokenId, auth);
         if (from != address(0) && to != address(0) && from != to) {
-            positions[tokenId].executor = address(0);
+            _positions[tokenId].executor = address(0);
         }
     }
 
@@ -453,7 +461,7 @@ contract MarginCall is ERC721 {
 
     function _requirePositionManager(uint256 tokenId) private view returns (address owner, Position storage position) {
         owner = _requireOwned(tokenId);
-        position = positions[tokenId];
+        position = _positions[tokenId];
         address executor = position.executor;
         if (msg.sender != owner && msg.sender != executor) {
             revert NotPositionManager(msg.sender, owner, executor);

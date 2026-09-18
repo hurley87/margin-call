@@ -5,6 +5,7 @@ import {console} from "forge-std/console.sol";
 
 import {CreditPool} from "../src/CreditPool.sol";
 import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
+import {LaunchAssets} from "../src/LaunchAssets.sol";
 import {MarginCall} from "../src/MarginCall.sol";
 import {OracleAdapter} from "../src/OracleAdapter.sol";
 import {V1Config} from "../src/V1Config.sol";
@@ -144,7 +145,9 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         marginCall.setExecutor(tokenId, executor);
         vm.stopPrank();
 
-        (, uint256 stockAfterOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stockAfterOpen = pos.stockAmount;
+        uint256 principalAtOpen = pos.principal;
         assertEq(marginCall.ownerOf(tokenId), alice, "A owns after open");
         assertGt(stockAfterOpen, params.stockAmount, "financed open buys additional NVDAc");
         assertGt(principalAtOpen, 0, "financed open borrows");
@@ -153,7 +156,9 @@ contract AcceptV1 is BaseMainnetHarnessBase {
     }
 
     function _dryRunReduce(address executor, MarginCall marginCall, uint256 tokenId) private {
-        (, uint256 stockBefore,,,, address executorBefore) = marginCall.positions(tokenId);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stockBefore = pos.stockAmount;
+        address executorBefore = pos.executor;
         assertEq(executorBefore, executor, "executor set before reduce");
 
         uint256 sale = _reduceSale(stockBefore);
@@ -162,7 +167,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         uint256 debtBeforeReduce = marginCall.currentDebt(tokenId);
         vm.prank(executor);
         marginCall.reduceExposure(tokenId, sale, 0);
-        (, uint256 stockAfterReduce,,,,) = marginCall.positions(tokenId);
+        uint256 stockAfterReduce = marginCall.positions(tokenId).stockAmount;
         if (stockAfterReduce != stockBefore - sale) {
             revert ReduceDidNotCutStock(stockBefore, stockAfterReduce);
         }
@@ -174,30 +179,22 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         private
         returns (uint256 stockAfter)
     {
-        (
-            ,
-            uint256 stockSnap,
-            uint256 principalSnap,
-            uint256 accruedSnap,
-            uint256 lastAccruedSnap,
-            address executorSnap
-        ) = marginCall.positions(tokenId);
-        assertEq(executorSnap, executor, "executor set before transfer");
+        MarginCall.Position memory before = marginCall.positions(tokenId);
+        assertEq(before.executor, executor, "executor set before transfer");
         uint256 debtBefore = marginCall.currentDebt(tokenId);
 
         vm.prank(alice);
         marginCall.safeTransferFrom(alice, bob, tokenId);
 
         assertEq(marginCall.ownerOf(tokenId), bob, "B owns after transfer");
-        (, uint256 stockOut, uint256 principalOut, uint256 accruedOut, uint256 lastAccruedOut, address executorOut) =
-            marginCall.positions(tokenId);
-        assertEq(executorOut, address(0), "transfer clears executor");
-        assertEq(stockOut, stockSnap, "stock survives");
-        assertEq(principalOut, principalSnap, "principal survives");
-        assertEq(accruedOut, accruedSnap, "accrued survives");
-        assertEq(lastAccruedOut, lastAccruedSnap, "lastAccrued survives");
+        MarginCall.Position memory afterPos = marginCall.positions(tokenId);
+        assertEq(afterPos.executor, address(0), "transfer clears executor");
+        assertEq(afterPos.stockAmount, before.stockAmount, "stock survives");
+        assertEq(afterPos.principal, before.principal, "principal survives");
+        assertEq(afterPos.accruedInterest, before.accruedInterest, "accrued survives");
+        assertEq(afterPos.lastAccruedAt, before.lastAccruedAt, "lastAccrued survives");
         assertGe(marginCall.currentDebt(tokenId), debtBefore, "debt keeps accruing");
-        stockAfter = stockOut;
+        stockAfter = afterPos.stockAmount;
     }
 
     function _dryRunBobSettle(address bob, MarginCall marginCall, uint256 tokenId, uint256 expectedStock) private {
@@ -297,11 +294,13 @@ contract AcceptV1 is BaseMainnetHarnessBase {
 
         vm.startBroadcast(operatorKey);
         _nvdac().approve(address(marginCall), stockAmount);
-        uint256 nvdaAssetId = marginCall.assetIdOf(V1Config.NVDAC);
+        uint256 nvdaAssetId = marginCall.assetIdOf(LaunchAssets.NVDAC);
         uint256 tokenId = marginCall.openPosition(nvdaAssetId, stockAmount, leverage, 0);
         vm.stopBroadcast();
 
-        (, uint256 stockAtOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stockAtOpen = pos.stockAmount;
+        uint256 principalAtOpen = pos.principal;
         assertEq(marginCall.ownerOf(tokenId), state.alice, "A owns");
         assertGt(stockAtOpen, stockAmount, "bought additional NVDAc");
         assertGt(principalAtOpen, 0, "borrowed");
@@ -328,7 +327,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         marginCall.setExecutor(state.tokenId, state.executor);
         vm.stopBroadcast();
 
-        (,,,,, address executorAfter) = marginCall.positions(state.tokenId);
+        address executorAfter = marginCall.positions(state.tokenId).executor;
         assertEq(executorAfter, state.executor, "executor set");
         console.log("executor", state.executor);
     }
@@ -341,7 +340,9 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         _requireLive(OracleAdapter(state.oracle));
 
         MarginCall marginCall = MarginCall(state.marginCall);
-        (, uint256 stockBefore,,,, address executorBefore) = marginCall.positions(state.tokenId);
+        MarginCall.Position memory pos = marginCall.positions(state.tokenId);
+        uint256 stockBefore = pos.stockAmount;
+        address executorBefore = pos.executor;
         assertEq(executorBefore, state.executor, "executor still set");
         assertEq(marginCall.ownerOf(state.tokenId), state.alice, "A still owns");
 
@@ -356,7 +357,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         marginCall.reduceExposure(state.tokenId, sale, 0);
         vm.stopBroadcast();
 
-        (, uint256 stockAfter,,,,) = marginCall.positions(state.tokenId);
+        uint256 stockAfter = marginCall.positions(state.tokenId).stockAmount;
         if (stockAfter != stockBefore - sale) {
             revert ReduceDidNotCutStock(stockBefore, stockAfter);
         }
@@ -377,45 +378,33 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         _logPhase(5, "snapshot + A transfer to B");
 
         MarginCall marginCall = MarginCall(state.marginCall);
-        (
-            ,
-            uint256 stockBefore,
-            uint256 principalBefore,
-            uint256 accruedBefore,
-            uint256 lastAccruedBefore,
-            address executorBefore
-        ) = marginCall.positions(state.tokenId);
-        assertEq(executorBefore, state.executor, "executor set before transfer");
-        uint256 debtBefore = marginCall.currentDebt(state.tokenId);
-
-        state.stockBeforeTransfer = stockBefore;
-        state.principalBeforeTransfer = principalBefore;
-        state.accruedBeforeTransfer = accruedBefore;
-        state.lastAccruedBeforeTransfer = lastAccruedBefore;
-        state.debtBeforeTransfer = debtBefore;
-        _persist(state);
+        {
+            MarginCall.Position memory pos = marginCall.positions(state.tokenId);
+            assertEq(pos.executor, state.executor, "executor set before transfer");
+            state.stockBeforeTransfer = pos.stockAmount;
+            state.principalBeforeTransfer = pos.principal;
+            state.accruedBeforeTransfer = pos.accruedInterest;
+            state.lastAccruedBeforeTransfer = pos.lastAccruedAt;
+            state.debtBeforeTransfer = marginCall.currentDebt(state.tokenId);
+            _persist(state);
+        }
 
         vm.startBroadcast(operatorKey);
         marginCall.safeTransferFrom(state.alice, state.bob, state.tokenId);
         vm.stopBroadcast();
 
         assertEq(marginCall.ownerOf(state.tokenId), state.bob, "B owns");
-        (
-            ,
-            uint256 stockAfter,
-            uint256 principalAfter,
-            uint256 accruedAfter,
-            uint256 lastAccruedAfter,
-            address executorAfter
-        ) = marginCall.positions(state.tokenId);
-        assertEq(executorAfter, address(0), "executor cleared");
-        assertEq(stockAfter, stockBefore, "stock survives");
-        assertEq(principalAfter, principalBefore, "principal survives");
-        assertEq(accruedAfter, accruedBefore, "accrued survives");
-        assertEq(lastAccruedAfter, lastAccruedBefore, "lastAccrued survives");
-        assertGe(marginCall.currentDebt(state.tokenId), debtBefore, "debt keeps accruing");
+        {
+            MarginCall.Position memory pos = marginCall.positions(state.tokenId);
+            assertEq(pos.executor, address(0), "executor cleared");
+            assertEq(pos.stockAmount, state.stockBeforeTransfer, "stock survives");
+            assertEq(pos.principal, state.principalBeforeTransfer, "principal survives");
+            assertEq(pos.accruedInterest, state.accruedBeforeTransfer, "accrued survives");
+            assertEq(pos.lastAccruedAt, state.lastAccruedBeforeTransfer, "lastAccrued survives");
+            assertGe(marginCall.currentDebt(state.tokenId), state.debtBeforeTransfer, "debt keeps accruing");
+        }
 
-        console.log("debt before transfer", debtBefore);
+        console.log("debt before transfer", state.debtBeforeTransfer);
         console.log("owner after", state.bob);
     }
 
@@ -440,8 +429,12 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         MarginCall marginCall = MarginCall(state.marginCall);
         assertEq(marginCall.ownerOf(state.tokenId), state.bob, "B owns");
 
-        (, uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
-            marginCall.positions(state.tokenId);
+        MarginCall.Position memory pos = marginCall.positions(state.tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principal = pos.principal;
+        uint256 accrued = pos.accruedInterest;
+        uint256 lastAccrued = pos.lastAccruedAt;
+        address executor = pos.executor;
         assertEq(stock, state.stockBeforeTransfer, "stock matches pre-transfer");
         assertEq(principal, state.principalBeforeTransfer, "principal matches");
         assertEq(accrued, state.accruedBeforeTransfer, "accrued matches");
@@ -474,7 +467,7 @@ contract AcceptV1 is BaseMainnetHarnessBase {
         MarginCall marginCall = MarginCall(state.marginCall);
         assertEq(marginCall.ownerOf(state.tokenId), state.bob, "B owns");
         assertEq(marginCall.currentDebt(state.tokenId), 0, "debt must be zero");
-        (, uint256 stock,,,,) = marginCall.positions(state.tokenId);
+        uint256 stock = marginCall.positions(state.tokenId).stockAmount;
         uint256 bobNvdacBefore = _nvdac().balanceOf(state.bob);
 
         vm.startBroadcast(bobKey);

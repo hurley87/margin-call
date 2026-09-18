@@ -51,7 +51,9 @@ contract FinancedOpenTest is MarginCallTestBase {
         vm.prank(alice);
         uint256 tokenId = unwired.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
         assertEq(unwired.ownerOf(tokenId), alice);
-        (, uint256 stock, uint256 principal,,,) = unwired.positions(tokenId);
+        MarginCall.Position memory pos = unwired.positions(tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principal = pos.principal;
         assertEq(stock, ONE_NVDAC);
         assertEq(principal, 0);
     }
@@ -132,8 +134,12 @@ contract FinancedOpenTest is MarginCallTestBase {
 
             uint256 tokenId = _openFinanced(alice, ONE_NVDAC, presets[i], 0);
 
-            (, uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
-                _position(tokenId);
+            MarginCall.Position memory pos = _position(tokenId);
+            uint256 stock = pos.stockAmount;
+            uint256 principal = pos.principal;
+            uint256 accrued = pos.accruedInterest;
+            uint256 lastAccrued = pos.lastAccruedAt;
+            address executor = pos.executor;
             assertEq(tokenId, i + 1);
             assertEq(marginCall.ownerOf(tokenId), alice);
             assertGt(stock, ONE_NVDAC);
@@ -163,7 +169,7 @@ contract FinancedOpenTest is MarginCallTestBase {
         emit MarginCall.CreditDrawn(1, expectedPrincipal);
 
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (,, uint256 principal,,,) = _position(tokenId);
+        uint256 principal = _position(tokenId).principal;
         assertEq(principal, expectedPrincipal);
     }
 
@@ -256,7 +262,9 @@ contract FinancedOpenTest is MarginCallTestBase {
         router.setFillBps(V1Config.ADVERSE_BOUND_BPS);
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_5X, 0);
-        (, uint256 stock, uint256 principal,,,) = _position(tokenId);
+        MarginCall.Position memory pos = _position(tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principal = pos.principal;
         uint256 nav = oracle.valueUsdc(stock, BaseV1Constants.PINNED_FEED_ANSWER);
         assertLe(nav * V1Config.BPS_DENOMINATOR, (nav - principal) * LEVERAGE_1_5X);
     }
@@ -268,8 +276,10 @@ contract FinancedOpenTest is MarginCallTestBase {
         uint256 spotId = _open(alice, ONE_NVDAC);
         uint256 financedId = _openFinanced(bob, ONE_NVDAC, LEVERAGE_1_1X, 0);
 
-        (, uint256 spotStock,,,,) = _position(spotId);
-        (, uint256 financedStock, uint256 principal,,,) = _position(financedId);
+        uint256 spotStock = _position(spotId).stockAmount;
+        MarginCall.Position memory pos = _position(financedId);
+        uint256 financedStock = pos.stockAmount;
+        uint256 principal = pos.principal;
         assertEq(spotStock + financedStock, nvdac.balanceOf(address(marginCall)));
         assertEq(principal, marginCall.currentDebt(financedId));
         assertEq(marginCall.currentDebt(spotId), 0);
@@ -277,7 +287,7 @@ contract FinancedOpenTest is MarginCallTestBase {
         // Spot close must not touch financed stock.
         vm.prank(alice);
         marginCall.closePosition(spotId);
-        (, uint256 remaining,,,,) = _position(financedId);
+        uint256 remaining = _position(financedId).stockAmount;
         assertEq(remaining, financedStock);
         assertEq(nvdac.balanceOf(address(marginCall)), financedStock);
     }

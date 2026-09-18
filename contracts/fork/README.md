@@ -520,14 +520,15 @@ core token/oracle/execution config is immutable after registration.
 - **MSFTc** — tried as a TSLAc replacement; demo-size Uniswap fills were worse than the shared
   100 bps oracle floor. Prefer replacement over weakening the bound.
 
-Pins live in `contracts/src/LaunchAssets.sol` (tests/scripts only). The live Base
-deployment in `deployments/base.json` remains the **NVDA-only V1** stack from issue #429;
-this issue does not broadcast a multi-stock redeploy.
+Pins live only in `contracts/src/LaunchAssets.sol` (`Asset` + `launchSet()`, tests/scripts only).
+`V1Config` owns chain infrastructure, risk pins, and the shared 8/8/6 valuation invariant — not
+per-stock rails. The live Base deployment in `deployments/base.json` remains the **NVDA-only V1**
+stack from issue #429; this issue does not broadcast a multi-stock redeploy.
 
 Compact fork coverage:
 
-- `LaunchAssetQualification.t.sol` — token/feed/registry/decimals/valuation/route/bound per rail
-- `MultiStockForkSmoke.t.sol` — per-rail open → reduce → repay → close + mixed-asset isolation
+- `LaunchAssetQualification.t.sol` — iterates `launchSet()`; token/feed/registry/decimals/valuation/route/bound per rail
+- `MultiStockForkSmoke.t.sol` — extends `MarginCallForkBase`; per-rail open → reduce → repay → close + mixed-asset isolation
 
 ```sh
 BASE_MAINNET_RPC_URL='https://mainnet.base.org' pnpm test:contracts:fork -- --match-contract 'LaunchAssetQualification|MultiStockForkSmoke'

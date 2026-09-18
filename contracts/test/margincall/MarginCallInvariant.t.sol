@@ -101,7 +101,11 @@ contract MarginCallHandler is Test {
         marginCall.transferFrom(from, to, tokenId);
 
         assertEq(marginCall.ownerOf(tokenId), to);
-        (, uint256 stock, uint256 principal, uint256 accruedInterest,, address executor) = marginCall.positions(tokenId);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principal = pos.principal;
+        uint256 accruedInterest = pos.accruedInterest;
+        address executor = pos.executor;
         assertEq(stock, stockBefore);
         assertEq(principal, 0);
         assertEq(accruedInterest, 0);
@@ -168,7 +172,7 @@ contract MarginCallInvariantTest is MarginCallTestBase {
         uint256 summed;
         for (uint256 i = 0; i < count; ++i) {
             uint256 tokenId = handler.liveIds(i);
-            (, uint256 stock,,,,) = marginCall.positions(tokenId);
+            uint256 stock = marginCall.positions(tokenId).stockAmount;
             assertEq(stock, handler.recordedStock(tokenId));
             assertEq(marginCall.ownerOf(tokenId), handler.recordedOwner(tokenId));
             summed += stock;

@@ -107,24 +107,12 @@ abstract contract MarginCallTestBase is Test {
         tokenId = marginCall.openPosition(defaultAssetId, amount, leverage, minOut);
     }
 
-    function _position(uint256 tokenId)
-        internal
-        view
-        returns (
-            uint256 assetId,
-            uint256 stockAmount,
-            uint256 principal,
-            uint256 accruedInterest,
-            uint256 lastAccruedAt,
-            address executor
-        )
-    {
+    function _position(uint256 tokenId) internal view returns (MarginCall.Position memory) {
         return marginCall.positions(tokenId);
     }
 
     function _stockAmount(uint256 tokenId) internal view returns (uint256) {
-        (, uint256 stockAmount,,,,) = _position(tokenId);
-        return stockAmount;
+        return _position(tokenId).stockAmount;
     }
 
     function _assertLiveSpotPosition(uint256 tokenId, address owner, uint256 stockAmount, uint256 openedAt)
@@ -132,20 +120,13 @@ abstract contract MarginCallTestBase is Test {
         view
     {
         assertEq(marginCall.ownerOf(tokenId), owner);
-        (
-            uint256 assetId,
-            uint256 recordedStock,
-            uint256 principal,
-            uint256 accruedInterest,
-            uint256 lastAccruedAt,
-            address executor
-        ) = _position(tokenId);
-        assertEq(assetId, defaultAssetId);
-        assertEq(recordedStock, stockAmount);
-        assertEq(principal, 0);
-        assertEq(accruedInterest, 0);
-        assertEq(lastAccruedAt, openedAt);
-        assertEq(executor, address(0));
+        MarginCall.Position memory position = _position(tokenId);
+        assertEq(position.assetId, defaultAssetId);
+        assertEq(position.stockAmount, stockAmount);
+        assertEq(position.principal, 0);
+        assertEq(position.accruedInterest, 0);
+        assertEq(position.lastAccruedAt, openedAt);
+        assertEq(position.executor, address(0));
         assertEq(marginCall.currentDebt(tokenId), 0);
     }
 
@@ -154,20 +135,13 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _assertPositionDeletedOn(MarginCall target, uint256 tokenId) internal view {
-        (
-            uint256 assetId,
-            uint256 stockAmount,
-            uint256 principal,
-            uint256 accruedInterest,
-            uint256 lastAccruedAt,
-            address executor
-        ) = target.positions(tokenId);
-        assertEq(assetId, 0);
-        assertEq(stockAmount, 0);
-        assertEq(principal, 0);
-        assertEq(accruedInterest, 0);
-        assertEq(lastAccruedAt, 0);
-        assertEq(executor, address(0));
+        MarginCall.Position memory position = target.positions(tokenId);
+        assertEq(position.assetId, 0);
+        assertEq(position.stockAmount, 0);
+        assertEq(position.principal, 0);
+        assertEq(position.accruedInterest, 0);
+        assertEq(position.lastAccruedAt, 0);
+        assertEq(position.executor, address(0));
         assertEq(target.currentDebt(tokenId), 0);
     }
 
@@ -285,7 +259,13 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _snapshot(uint256 tokenId) internal view returns (Snapshot memory s) {
-        (s.assetId, s.stock, s.principal, s.accrued, s.lastAccrued, s.executor) = _position(tokenId);
+        MarginCall.Position memory position = _position(tokenId);
+        s.assetId = position.assetId;
+        s.stock = position.stockAmount;
+        s.principal = position.principal;
+        s.accrued = position.accruedInterest;
+        s.lastAccrued = position.lastAccruedAt;
+        s.executor = position.executor;
         s.debt = marginCall.currentDebt(tokenId);
         s.poolCredit = pool.availableCredit();
         s.custody = nvdac.balanceOf(address(marginCall));
@@ -293,14 +273,13 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _assertSnapshot(uint256 tokenId, Snapshot memory expected) internal view {
-        (uint256 assetId, uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
-            _position(tokenId);
-        assertEq(assetId, expected.assetId);
-        assertEq(stock, expected.stock);
-        assertEq(principal, expected.principal);
-        assertEq(accrued, expected.accrued);
-        assertEq(lastAccrued, expected.lastAccrued);
-        assertEq(executor, expected.executor);
+        MarginCall.Position memory position = _position(tokenId);
+        assertEq(position.assetId, expected.assetId);
+        assertEq(position.stockAmount, expected.stock);
+        assertEq(position.principal, expected.principal);
+        assertEq(position.accruedInterest, expected.accrued);
+        assertEq(position.lastAccruedAt, expected.lastAccrued);
+        assertEq(position.executor, expected.executor);
         assertEq(marginCall.currentDebt(tokenId), expected.debt);
         assertEq(pool.availableCredit(), expected.poolCredit);
         assertEq(nvdac.balanceOf(address(marginCall)), expected.custody);

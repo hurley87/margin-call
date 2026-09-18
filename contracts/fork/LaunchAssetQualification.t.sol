@@ -39,63 +39,29 @@ contract LaunchAssetQualificationTest is Test {
     uint256 internal constant DEMO_USDC = 100e6;
     uint256 internal constant DEMO_STOCK = 5e6;
 
-    struct Rail {
-        string name;
-        address stock;
-        address feed;
-        address pool;
-        uint24 fee;
-    }
-
     function setUp() public {
         vm.createSelectFork(vm.envString("BASE_MAINNET_RPC_URL"), BASE_BLOCK);
     }
 
     function test_launchRailsQualify() public {
-        _qualify(
-            Rail(
-                "NVDAc",
-                LaunchAssets.NVDAC,
-                LaunchAssets.NVDA_FEED,
-                LaunchAssets.UNISWAP_USDC_NVDAC_POOL,
-                LaunchAssets.NVDA_UNISWAP_FEE
-            )
-        );
-        _qualify(
-            Rail(
-                "AAPLc",
-                LaunchAssets.AAPLC,
-                LaunchAssets.AAPL_FEED,
-                LaunchAssets.UNISWAP_USDC_AAPLC_POOL,
-                LaunchAssets.AAPL_UNISWAP_FEE
-            )
-        );
-        _qualify(
-            Rail(
-                "METAc",
-                LaunchAssets.METAC,
-                LaunchAssets.META_FEED,
-                LaunchAssets.UNISWAP_USDC_METAC_POOL,
-                LaunchAssets.META_UNISWAP_FEE
-            )
-        );
-        _qualify(
-            Rail(
-                "GOOGLc",
-                LaunchAssets.GOOGLC,
-                LaunchAssets.GOOGL_FEED,
-                LaunchAssets.UNISWAP_USDC_GOOGLC_POOL,
-                LaunchAssets.GOOGL_UNISWAP_FEE
-            )
-        );
+        LaunchAssets.Asset[] memory rails = LaunchAssets.launchSet();
+        for (uint256 i = 0; i < rails.length; ++i) {
+            _qualify(rails[i]);
+        }
     }
 
-    function _qualify(Rail memory rail) private {
-        _qualifyIdentity(rail);
-        _qualifyRouteAndBound(rail);
+    function _qualify(LaunchAssets.Asset memory rail) private {
+        OracleAdapter oracle = new OracleAdapter(
+            rail.stock, rail.feed, BaseV1Constants.COINBASE_ORACLE_REGISTRY, BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED
+        );
+        ExecutionAdapter execution =
+            new ExecutionAdapter(BaseV1Constants.USDC, rail.stock, BaseV1Constants.UNISWAP_SWAP_ROUTER_02, rail.fee);
+
+        _qualifyIdentity(rail, oracle);
+        _qualifyRouteAndBound(rail, oracle, execution);
     }
 
-    function _qualifyIdentity(Rail memory rail) private {
+    function _qualifyIdentity(LaunchAssets.Asset memory rail, OracleAdapter oracle) private {
         assertEq(rail.stock.code, hex"ef", string.concat(rail.name, " not native B20"));
         assertEq(IERC20Metadata(rail.stock).decimals(), LaunchAssets.STOCK_DECIMALS);
 
@@ -109,9 +75,6 @@ contract LaunchAssetQualificationTest is Test {
         assertGt(answer, 0);
         assertGt(updatedAt, 0);
 
-        OracleAdapter oracle = new OracleAdapter(
-            rail.stock, rail.feed, BaseV1Constants.COINBASE_ORACLE_REGISTRY, BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED
-        );
         uint256 oneShare = 10 ** uint256(LaunchAssets.STOCK_DECIMALS);
         uint256 value = oracle.valueUsdc(oneShare, uint256(answer));
         assertEq(value, Math.mulDiv(oneShare, uint256(answer), V1Config.VALUATION_DENOMINATOR, Math.Rounding.Floor));
@@ -120,18 +83,14 @@ contract LaunchAssetQualificationTest is Test {
         assertEq(value, uint256(answer) / 100, string.concat(rail.name, " no double B20"));
     }
 
-    function _qualifyRouteAndBound(Rail memory rail) private {
-        address discovered = IUniswapV3FactoryRead(BaseV1Constants.UNISWAP_V3_FACTORY)
-            .getPool(BaseV1Constants.USDC, rail.stock, rail.fee);
+    function _qualifyRouteAndBound(LaunchAssets.Asset memory rail, OracleAdapter oracle, ExecutionAdapter execution)
+        private
+    {
+        address discovered =
+            IUniswapV3FactoryRead(BaseV1Constants.UNISWAP_V3_FACTORY).getPool(BaseV1Constants.USDC, rail.stock, rail.fee);
         assertEq(discovered, rail.pool, string.concat(rail.name, " pool mismatch"));
         assertGt(IUniswapV3PoolRead(rail.pool).liquidity(), 0, string.concat(rail.name, " zero liquidity"));
         assertEq(IUniswapV3PoolRead(rail.pool).fee(), rail.fee);
-
-        OracleAdapter oracle = new OracleAdapter(
-            rail.stock, rail.feed, BaseV1Constants.COINBASE_ORACLE_REGISTRY, BaseV1Constants.BASE_SEQUENCER_UPTIME_FEED
-        );
-        ExecutionAdapter execution =
-            new ExecutionAdapter(BaseV1Constants.USDC, rail.stock, BaseV1Constants.UNISWAP_SWAP_ROUTER_02, rail.fee);
 
         IOracleAdapter.Observation memory obs = oracle.latestObservation();
         assertEq(uint8(obs.state), uint8(IOracleAdapter.State.LIVE), string.concat(rail.name, " oracle not LIVE"));

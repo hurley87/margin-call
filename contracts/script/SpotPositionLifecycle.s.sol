@@ -3,12 +3,8 @@ pragma solidity 0.8.29;
 
 import {console} from "forge-std/Script.sol";
 
-import {CreditPool} from "../src/CreditPool.sol";
-import {ExecutionAdapter} from "../src/ExecutionAdapter.sol";
-import {IOracleAdapter} from "../src/interfaces/IOracleAdapter.sol";
 import {MarginCall} from "../src/MarginCall.sol";
-import {BaseV1Constants} from "../test/fixtures/BaseV1Constants.sol";
-import {MockNvdaC, MockOracleAdapter, MockSwapRouter, MockUsdc} from "../test/margincall/PositionNftTestDoubles.sol";
+import {MockNvdaC} from "../test/margincall/PositionNftTestDoubles.sol";
 import {LocalHarnessBase} from "./LocalHarnessBase.sol";
 
 /// @title SpotPositionLifecycle
@@ -43,23 +39,12 @@ contract SpotPositionLifecycle is LocalHarnessBase {
 
         vm.startBroadcast(privateKey);
 
-        console.log("--- tx: deploy dev/test-only NVDAc ---");
-        state.nvdac = new MockNvdaC();
-        console.log("nvdac", address(state.nvdac));
-
-        console.log("--- tx: deploy USDC + oracle + fail-closed router + adapters ---");
-        MockUsdc usdc = new MockUsdc();
-        MockOracleAdapter oracle = new MockOracleAdapter(address(state.nvdac));
+        console.log("--- tx: deploy mock stack (fail-closed router) ---");
         // Spot opens never call the router, so any swap attempt must fail closed.
-        MockSwapRouter router = new MockSwapRouter(usdc, address(state.nvdac));
-        router.setShouldRevert(true);
-        ExecutionAdapter execution =
-            new ExecutionAdapter(address(usdc), address(state.nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
-        state.marginCall = new MarginCall(address(usdc), state.signer);
-        CreditPool pool = new CreditPool(address(usdc), address(state.marginCall), state.signer);
-        state.marginCall.setCreditPool(address(pool));
-        uint256 nvdaAssetId = state.marginCall.addAsset(address(state.nvdac), address(oracle), address(execution));
-        oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
+        (MockNvdaC nvdac,,,, MarginCall marginCall,, uint256 nvdaAssetId) = _deployMockStack(state.signer, true);
+        state.nvdac = nvdac;
+        state.marginCall = marginCall;
+        console.log("nvdac", address(state.nvdac));
         console.log("marginCall", address(state.marginCall));
 
         console.log("--- tx: mint local NVDAc to signer ---");
@@ -86,14 +71,7 @@ contract SpotPositionLifecycle is LocalHarnessBase {
 
     function _inspectOpen(RunState memory state) internal view {
         address nftOwner = state.marginCall.ownerOf(state.tokenId);
-        (
-            uint256 assetId,
-            uint256 recordedStock,
-            uint256 principal,
-            uint256 accruedInterest,
-            uint256 lastAccruedAt,
-            address executor
-        ) = state.marginCall.positions(state.tokenId);
+        MarginCall.Position memory pos = state.marginCall.positions(state.tokenId);
         uint256 currentDebt = state.marginCall.currentDebt(state.tokenId);
         uint256 custody = state.nvdac.balanceOf(address(state.marginCall));
         uint256 signerNvda = state.nvdac.balanceOf(state.signer);
@@ -101,19 +79,19 @@ contract SpotPositionLifecycle is LocalHarnessBase {
         console.log("--- inspect after open ---");
         console.log("tokenId", state.tokenId);
         console.log("ownerOf", nftOwner);
-        console.log("assetId", assetId);
-        console.log("recorded stockAmount", recordedStock);
-        console.log("principal", principal);
-        console.log("accruedInterest", accruedInterest);
-        console.log("lastAccruedAt", lastAccruedAt);
-        console.log("executor", executor);
+        console.log("assetId", pos.assetId);
+        console.log("recorded stockAmount", pos.stockAmount);
+        console.log("principal", pos.principal);
+        console.log("accruedInterest", pos.accruedInterest);
+        console.log("lastAccruedAt", pos.lastAccruedAt);
+        console.log("executor", pos.executor);
         console.log("currentDebt", currentDebt);
         console.log("MarginCall NVDAc custody", custody);
         console.log("signer NVDAc balance", signerNvda);
 
         assertEq(nftOwner, state.signer, "ownerOf");
-        assertEq(assetId, 1, "assetId");
-        assertEq(recordedStock, state.stockAmount, "recorded stockAmount");
+        assertEq(pos.assetId, 1, "assetId");
+        assertEq(pos.stockAmount, state.stockAmount, "recorded stockAmount");
         assertEq(custody, state.stockAmount, "custody holds the deposit");
         assertEq(signerNvda, 0, "signer debited on open");
     }
