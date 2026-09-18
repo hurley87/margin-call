@@ -49,15 +49,16 @@ contract SpotPositionLifecycle is LocalHarnessBase {
 
         console.log("--- tx: deploy USDC + oracle + fail-closed router + adapters ---");
         MockUsdc usdc = new MockUsdc();
-        MockOracleAdapter oracle = new MockOracleAdapter();
+        MockOracleAdapter oracle = new MockOracleAdapter(address(state.nvdac));
         // Spot opens never call the router, so any swap attempt must fail closed.
-        MockSwapRouter router = new MockSwapRouter(usdc, state.nvdac);
+        MockSwapRouter router = new MockSwapRouter(usdc, address(state.nvdac));
         router.setShouldRevert(true);
         ExecutionAdapter execution =
             new ExecutionAdapter(address(usdc), address(state.nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
-        state.marginCall = new MarginCall(address(state.nvdac), address(usdc), address(oracle), address(execution));
+        state.marginCall = new MarginCall(address(usdc), state.signer);
         CreditPool pool = new CreditPool(address(usdc), address(state.marginCall), state.signer);
         state.marginCall.setCreditPool(address(pool));
+        uint256 nvdaAssetId = state.marginCall.addAsset(address(state.nvdac), address(oracle), address(execution));
         oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
         console.log("marginCall", address(state.marginCall));
 
@@ -70,7 +71,8 @@ contract SpotPositionLifecycle is LocalHarnessBase {
         state.nvdac.approve(address(state.marginCall), state.stockAmount);
 
         console.log("--- tx: openPosition ---");
-        state.tokenId = state.marginCall.openPosition(state.stockAmount, state.marginCall.SPOT_LEVERAGE(), 0);
+        state.tokenId =
+            state.marginCall.openPosition(nvdaAssetId, state.stockAmount, state.marginCall.SPOT_LEVERAGE(), 0);
         _inspectOpen(state);
 
         console.log("--- tx: closePosition ---");
@@ -84,8 +86,14 @@ contract SpotPositionLifecycle is LocalHarnessBase {
 
     function _inspectOpen(RunState memory state) internal view {
         address nftOwner = state.marginCall.ownerOf(state.tokenId);
-        (uint256 recordedStock, uint256 principal, uint256 accruedInterest, uint256 lastAccruedAt, address executor) =
-            state.marginCall.positions(state.tokenId);
+        (
+            uint256 assetId,
+            uint256 recordedStock,
+            uint256 principal,
+            uint256 accruedInterest,
+            uint256 lastAccruedAt,
+            address executor
+        ) = state.marginCall.positions(state.tokenId);
         uint256 currentDebt = state.marginCall.currentDebt(state.tokenId);
         uint256 custody = state.nvdac.balanceOf(address(state.marginCall));
         uint256 signerNvda = state.nvdac.balanceOf(state.signer);
@@ -93,6 +101,7 @@ contract SpotPositionLifecycle is LocalHarnessBase {
         console.log("--- inspect after open ---");
         console.log("tokenId", state.tokenId);
         console.log("ownerOf", nftOwner);
+        console.log("assetId", assetId);
         console.log("recorded stockAmount", recordedStock);
         console.log("principal", principal);
         console.log("accruedInterest", accruedInterest);
@@ -103,6 +112,7 @@ contract SpotPositionLifecycle is LocalHarnessBase {
         console.log("signer NVDAc balance", signerNvda);
 
         assertEq(nftOwner, state.signer, "ownerOf");
+        assertEq(assetId, 1, "assetId");
         assertEq(recordedStock, state.stockAmount, "recorded stockAmount");
         assertEq(custody, state.stockAmount, "custody holds the deposit");
         assertEq(signerNvda, 0, "signer debited on open");

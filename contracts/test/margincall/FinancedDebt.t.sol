@@ -11,7 +11,7 @@ contract FinancedDebtTest is MarginCallTestBase {
     function test_currentDebtGrowsOverTimeWithoutKeeper() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (, uint256 principal, uint256 accrued,,) = _position(tokenId);
+        (,, uint256 principal, uint256 accrued,,) = _position(tokenId);
         assertGt(principal, 0);
         assertEq(accrued, 0);
         assertEq(marginCall.currentDebt(tokenId), principal);
@@ -21,7 +21,7 @@ contract FinancedDebtTest is MarginCallTestBase {
         assertGt(debt, principal);
         assertEq(debt, principal + _expectedUnaccrued(principal, 30 days));
 
-        (,, uint256 accruedAfterWarp,,) = _position(tokenId);
+        (,,, uint256 accruedAfterWarp,,) = _position(tokenId);
         assertEq(accruedAfterWarp, 0, "view accrual must not mutate checkpoint");
     }
 
@@ -32,7 +32,7 @@ contract FinancedDebtTest is MarginCallTestBase {
 
         vm.warp(OPENED_AT + V1Config.SECONDS_PER_YEAR);
         assertEq(marginCall.currentDebt(tokenId), 0);
-        (, uint256 principal, uint256 accrued,,) = _position(tokenId);
+        (,, uint256 principal, uint256 accrued,,) = _position(tokenId);
         assertEq(principal, 0);
         assertEq(accrued, 0);
     }
@@ -40,7 +40,7 @@ contract FinancedDebtTest is MarginCallTestBase {
     function test_partialRepayInterestFirst() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (, uint256 principal,,,) = _position(tokenId);
+        (,, uint256 principal,,,) = _position(tokenId);
 
         vm.warp(OPENED_AT + V1Config.SECONDS_PER_YEAR);
         uint256 interest = _expectedUnaccrued(principal, V1Config.SECONDS_PER_YEAR);
@@ -59,7 +59,7 @@ contract FinancedDebtTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.repay(tokenId, payAmount);
 
-        (, uint256 principalAfter, uint256 accruedAfter, uint256 lastAccruedAfter,) = _position(tokenId);
+        (,, uint256 principalAfter, uint256 accruedAfter, uint256 lastAccruedAfter,) = _position(tokenId);
         assertEq(principalAfter, principal, "interest-first leaves principal untouched");
         assertEq(accruedAfter, interest - payAmount);
         assertEq(lastAccruedAfter, OPENED_AT + V1Config.SECONDS_PER_YEAR);
@@ -72,7 +72,7 @@ contract FinancedDebtTest is MarginCallTestBase {
     function test_exactFullRepayZerosDebt() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (, uint256 principal,,,) = _position(tokenId);
+        (,, uint256 principal,,,) = _position(tokenId);
 
         vm.warp(OPENED_AT + 90 days);
         uint256 debt = marginCall.currentDebt(tokenId);
@@ -86,7 +86,7 @@ contract FinancedDebtTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.repay(tokenId, debt);
 
-        (, uint256 principalAfter, uint256 accruedAfter,,) = _position(tokenId);
+        (,, uint256 principalAfter, uint256 accruedAfter,,) = _position(tokenId);
         assertEq(principalAfter, 0);
         assertEq(accruedAfter, 0);
         assertEq(marginCall.currentDebt(tokenId), 0);
@@ -97,7 +97,7 @@ contract FinancedDebtTest is MarginCallTestBase {
     function test_oversizedRepayCapsAtCurrentDebt() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (, uint256 principal,,,) = _position(tokenId);
+        (,, uint256 principal,,,) = _position(tokenId);
 
         vm.warp(OPENED_AT + 10 days);
         uint256 debt = marginCall.currentDebt(tokenId);
@@ -122,7 +122,7 @@ contract FinancedDebtTest is MarginCallTestBase {
     function test_closeRevertsWhileDebtOutstandingThenSucceedsAfterRepay() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (uint256 stock,,,,) = _position(tokenId);
+        (, uint256 stock,,,,) = _position(tokenId);
 
         vm.expectRevert(abi.encodeWithSelector(MarginCall.DebtOutstanding.selector, tokenId));
         vm.prank(alice);
@@ -188,7 +188,7 @@ contract FinancedDebtTest is MarginCallTestBase {
     function test_timeBoundaryRoundingAndRepeatedCheckpoint() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (, uint256 principal,,,) = _position(tokenId);
+        (,, uint256 principal,,,) = _position(tokenId);
 
         assertEq(marginCall.currentDebt(tokenId), principal, "elapsed 0");
 
@@ -205,7 +205,7 @@ contract FinancedDebtTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.repay(tokenId, 1);
 
-        (, uint256 principalAfter, uint256 accruedAfter, uint256 lastAccruedAfter,) = _position(tokenId);
+        (,, uint256 principalAfter, uint256 accruedAfter, uint256 lastAccruedAfter,) = _position(tokenId);
         assertEq(lastAccruedAfter, OPENED_AT + V1Config.SECONDS_PER_YEAR);
         assertEq(marginCall.currentDebt(tokenId), principalAfter + accruedAfter, "checkpoint matches view");
 
@@ -215,7 +215,7 @@ contract FinancedDebtTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.repay(tokenId, debtAtCheckpoint);
         assertEq(marginCall.currentDebt(tokenId), 0);
-        (, uint256 pFinal, uint256 aFinal,,) = _position(tokenId);
+        (,, uint256 pFinal, uint256 aFinal,,) = _position(tokenId);
         assertEq(pFinal, 0);
         assertEq(aFinal, 0);
     }
@@ -231,7 +231,7 @@ contract FinancedDebtTest is MarginCallTestBase {
         uint256 idle = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
         uint256 churned = _openFinanced(bob, ONE_NVDAC, LEVERAGE_1_25X, 0);
 
-        (, uint256 principal,,,) = _position(idle);
+        (,, uint256 principal,,,) = _position(idle);
         // Short enough that this principal accrues strictly less than one raw USDC unit per step.
         uint256 dustInterval = 5;
         assertEq(_expectedUnaccrued(principal, dustInterval), 0, "interval must floor to zero interest");
@@ -244,7 +244,7 @@ contract FinancedDebtTest is MarginCallTestBase {
             marginCall.repay(churned, 1);
         }
 
-        (, uint256 churnedPrincipal, uint256 churnedAccrued,,) = _position(churned);
+        (,, uint256 churnedPrincipal, uint256 churnedAccrued,,) = _position(churned);
         assertEq(churnedPrincipal, principal - checkpoints, "principal falls by exactly what was paid, no more");
         assertEq(churnedAccrued, 0, "every dust interval floored to zero interest");
 
@@ -268,7 +268,7 @@ contract FinancedDebtTest is MarginCallTestBase {
     function test_repayAndCloseUnderHeldInvalidAndRevertingOracle() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (uint256 stock,,,,) = _position(tokenId);
+        (, uint256 stock,,,,) = _position(tokenId);
 
         vm.warp(OPENED_AT + 14 days);
         uint256 debt = marginCall.currentDebt(tokenId);

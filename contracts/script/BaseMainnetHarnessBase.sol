@@ -57,20 +57,29 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
         return vm.envOr("MARGIN_CALL_DRY_RUN", uint256(0)) != 0;
     }
 
-    /// @dev The one definition of the V1 stack and its wiring. `DeployV1` broadcasts it; `AcceptV1.dryRunFull`
-    ///      simulates it, so the dry run always rehearses the stack the live deploy ships.
+    /// @dev The one definition of the multi-stock stack with a single NVDAc registration. `DeployV1` broadcasts
+    ///      it; `AcceptV1.dryRunFull` simulates it, so the dry run always rehearses the stack the script ships.
+    ///      Live V1 on Base (`deployments/base.json`) remains the prior NVDA-only deploy and is not rewritten here.
+    ///      `ASSET_ADMIN` is `msg.sender` so registration works both under broadcast (operator) and dry-run (script).
     function _deployV1Stack(address treasury)
         internal
-        returns (OracleAdapter oracle, ExecutionAdapter execution, MarginCall marginCall, CreditPool pool)
+        returns (
+            OracleAdapter oracle,
+            ExecutionAdapter execution,
+            MarginCall marginCall,
+            CreditPool pool,
+            uint256 nvdaAssetId
+        )
     {
         oracle = new OracleAdapter(
             V1Config.NVDAC, V1Config.NVDA_FEED, V1Config.COINBASE_ORACLE_REGISTRY, V1Config.BASE_SEQUENCER_UPTIME_FEED
         );
         execution =
             new ExecutionAdapter(V1Config.USDC, V1Config.NVDAC, V1Config.UNISWAP_SWAP_ROUTER_02, V1Config.UNISWAP_FEE);
-        marginCall = new MarginCall(V1Config.NVDAC, V1Config.USDC, address(oracle), address(execution));
+        marginCall = new MarginCall(V1Config.USDC, msg.sender);
         pool = new CreditPool(V1Config.USDC, address(marginCall), treasury);
         marginCall.setCreditPool(address(pool));
+        nvdaAssetId = marginCall.addAsset(V1Config.NVDAC, address(oracle), address(execution));
     }
 
     /// @dev The reduceExposure sale size. Shared so the dry run sells the same fraction as the live phase.

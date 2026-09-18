@@ -74,27 +74,17 @@ contract FinancedPositionOpen is LocalHarnessBase {
 
         vm.startBroadcast(privateKey);
 
-        MockNvdaC nvdac = new MockNvdaC();
-        MockUsdc usdc = new MockUsdc();
-        MockOracleAdapter oracle = new MockOracleAdapter();
-        MockSwapRouter router = new MockSwapRouter(usdc, nvdac);
-        ExecutionAdapter execution =
-            new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
-        MarginCall marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
-        CreditPool pool = new CreditPool(address(usdc), address(marginCall), signer);
-        marginCall.setCreditPool(address(pool));
-
-        oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
-        router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);
+        (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool, uint256 nvdaAssetId) =
+            _deployStack(signer);
         usdc.mint(address(pool), CREDIT_SEED);
         nvdac.mint(signer, contributedStock);
         nvdac.approve(address(marginCall), contributedStock);
 
-        uint256 tokenId = marginCall.openPosition(contributedStock, leverage, 0);
+        uint256 tokenId = marginCall.openPosition(nvdaAssetId, contributedStock, leverage, 0);
 
         vm.stopBroadcast();
 
-        (uint256 stockAtOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
+        (, uint256 stockAtOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
         _persist(
             HarnessState({
                 signer: signer,
@@ -116,6 +106,25 @@ contract FinancedPositionOpen is LocalHarnessBase {
         console.log("purchased stock (recorded - contributed)", stockAtOpen - contributedStock);
         console.log("principal (borrowed USDC raw)", principalAtOpen);
         console.log("state written to", STATE_PATH);
+    }
+
+    /// @dev Separate frame so `deployAndOpen` stays under the local-variable stack limit.
+    function _deployStack(address signer)
+        private
+        returns (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool, uint256 nvdaAssetId)
+    {
+        nvdac = new MockNvdaC();
+        usdc = new MockUsdc();
+        MockOracleAdapter oracle = new MockOracleAdapter(address(nvdac));
+        MockSwapRouter router = new MockSwapRouter(usdc, address(nvdac));
+        ExecutionAdapter execution =
+            new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
+        marginCall = new MarginCall(address(usdc), signer);
+        pool = new CreditPool(address(usdc), address(marginCall), signer);
+        marginCall.setCreditPool(address(pool));
+        nvdaAssetId = marginCall.addAsset(address(nvdac), address(oracle), address(execution));
+        oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
+        router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);
     }
 
     // Phase 2 - after the wrapper advances the node clock, repay the real debt and close.
@@ -177,8 +186,9 @@ contract FinancedPositionOpen is LocalHarnessBase {
         assertEq(custody, 0, "custody cleared");
         assertEq(residualUsdc, 0, "no residual USDC on MarginCall");
 
-        (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
+        (uint256 assetId, uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
             state.marginCall.positions(state.tokenId);
+        assertEq(assetId, 0);
         assertEq(stock, 0);
         assertEq(principal, 0);
         assertEq(accrued, 0);

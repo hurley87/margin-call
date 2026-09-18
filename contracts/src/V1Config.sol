@@ -2,7 +2,9 @@
 pragma solidity 0.8.29;
 
 /// @title V1Config
-/// @notice Production Base V1 addresses and risk constants pinned by issue #420.
+/// @notice Shared Base risk constants and infrastructure pins (USDC, registry, sequencer, Uniswap router).
+/// @dev Stock-specific token/feed/pool addresses for the multi-stock launch set live in `LaunchAssets`
+///      (tests/scripts only). The live #429 deployment still used the NVDA-only constants below.
 library V1Config {
     uint256 internal constant CHAIN_ID = 8453;
 

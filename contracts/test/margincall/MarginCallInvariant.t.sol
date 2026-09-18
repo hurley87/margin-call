@@ -14,6 +14,7 @@ contract MarginCallHandler is Test {
 
     MockNvdaC public nvdac;
     MarginCall public marginCall;
+    uint256 public assetId;
     address[] public actors;
 
     uint256 public liveStock;
@@ -24,9 +25,10 @@ contract MarginCallHandler is Test {
     mapping(uint256 tokenId => uint256) public recordedStock;
     mapping(uint256 tokenId => address) public recordedOwner;
 
-    constructor(MockNvdaC nvdac_, MarginCall marginCall_, address[] memory actors_) {
+    constructor(MockNvdaC nvdac_, MarginCall marginCall_, uint256 assetId_, address[] memory actors_) {
         nvdac = nvdac_;
         marginCall = marginCall_;
+        assetId = assetId_;
         actors = actors_;
     }
 
@@ -44,7 +46,7 @@ contract MarginCallHandler is Test {
         nvdac.mint(actor, amount);
         vm.startPrank(actor);
         nvdac.approve(address(marginCall), amount);
-        uint256 tokenId = marginCall.openPosition(amount, marginCall.SPOT_LEVERAGE(), 0);
+        uint256 tokenId = marginCall.openPosition(assetId, amount, marginCall.SPOT_LEVERAGE(), 0);
         vm.stopPrank();
 
         assertEq(tokenId, nextExpectedTokenId, "token id reused or skipped");
@@ -99,7 +101,7 @@ contract MarginCallHandler is Test {
         marginCall.transferFrom(from, to, tokenId);
 
         assertEq(marginCall.ownerOf(tokenId), to);
-        (uint256 stock, uint256 principal, uint256 accruedInterest,, address executor) = marginCall.positions(tokenId);
+        (, uint256 stock, uint256 principal, uint256 accruedInterest,, address executor) = marginCall.positions(tokenId);
         assertEq(stock, stockBefore);
         assertEq(principal, 0);
         assertEq(accruedInterest, 0);
@@ -142,7 +144,7 @@ contract MarginCallInvariantTest is MarginCallTestBase {
         actors[0] = alice;
         actors[1] = bob;
         actors[2] = carol;
-        handler = new MarginCallHandler(nvdac, marginCall, actors);
+        handler = new MarginCallHandler(nvdac, marginCall, defaultAssetId, actors);
 
         bytes4[] memory selectors = new bytes4[](4);
         selectors[0] = MarginCallHandler.open.selector;
@@ -166,7 +168,7 @@ contract MarginCallInvariantTest is MarginCallTestBase {
         uint256 summed;
         for (uint256 i = 0; i < count; ++i) {
             uint256 tokenId = handler.liveIds(i);
-            (uint256 stock,,,,) = marginCall.positions(tokenId);
+            (, uint256 stock,,,,) = marginCall.positions(tokenId);
             assertEq(stock, handler.recordedStock(tokenId));
             assertEq(marginCall.ownerOf(tokenId), handler.recordedOwner(tokenId));
             summed += stock;

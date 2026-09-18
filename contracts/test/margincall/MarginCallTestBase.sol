@@ -50,21 +50,27 @@ abstract contract MarginCallTestBase is Test {
     address internal bob;
     address internal carol;
     address internal treasury;
+    address internal assetAdmin;
+    uint256 internal defaultAssetId;
 
     function setUp() public virtual {
         alice = makeAddr("alice");
         bob = makeAddr("bob");
         carol = makeAddr("carol");
         treasury = makeAddr("treasury");
+        assetAdmin = makeAddr("assetAdmin");
 
         nvdac = new MockNvdaC();
         usdc = new MockUsdc();
-        oracle = new MockOracleAdapter();
-        router = new MockSwapRouter(usdc, nvdac);
+        oracle = new MockOracleAdapter(address(nvdac));
+        router = new MockSwapRouter(usdc, address(nvdac));
         execution = new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
-        marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
+        marginCall = new MarginCall(address(usdc), assetAdmin);
         pool = new CreditPool(address(usdc), address(marginCall), treasury);
         marginCall.setCreditPool(address(pool));
+
+        vm.prank(assetAdmin);
+        defaultAssetId = marginCall.addAsset(address(nvdac), address(oracle), address(execution));
 
         usdc.mint(address(pool), DEFAULT_CREDIT);
 
@@ -90,7 +96,7 @@ abstract contract MarginCallTestBase is Test {
         // Use the pinned constant, not `marginCall.SPOT_LEVERAGE()`: `vm.prank` covers only the next call, so a
         // getter call here would consume the prank and `openPosition` would run as the test contract.
         vm.prank(user);
-        tokenId = marginCall.openPosition(amount, SPOT_LEVERAGE, 0);
+        tokenId = marginCall.openPosition(defaultAssetId, amount, SPOT_LEVERAGE, 0);
     }
 
     function _openFinanced(address user, uint256 amount, uint256 leverage, uint256 minOut)
@@ -98,13 +104,14 @@ abstract contract MarginCallTestBase is Test {
         returns (uint256 tokenId)
     {
         vm.prank(user);
-        tokenId = marginCall.openPosition(amount, leverage, minOut);
+        tokenId = marginCall.openPosition(defaultAssetId, amount, leverage, minOut);
     }
 
     function _position(uint256 tokenId)
         internal
         view
         returns (
+            uint256 assetId,
             uint256 stockAmount,
             uint256 principal,
             uint256 accruedInterest,
@@ -115,13 +122,25 @@ abstract contract MarginCallTestBase is Test {
         return marginCall.positions(tokenId);
     }
 
+    function _stockAmount(uint256 tokenId) internal view returns (uint256) {
+        (, uint256 stockAmount,,,,) = _position(tokenId);
+        return stockAmount;
+    }
+
     function _assertLiveSpotPosition(uint256 tokenId, address owner, uint256 stockAmount, uint256 openedAt)
         internal
         view
     {
         assertEq(marginCall.ownerOf(tokenId), owner);
-        (uint256 recordedStock, uint256 principal, uint256 accruedInterest, uint256 lastAccruedAt, address executor) =
-            _position(tokenId);
+        (
+            uint256 assetId,
+            uint256 recordedStock,
+            uint256 principal,
+            uint256 accruedInterest,
+            uint256 lastAccruedAt,
+            address executor
+        ) = _position(tokenId);
+        assertEq(assetId, defaultAssetId);
         assertEq(recordedStock, stockAmount);
         assertEq(principal, 0);
         assertEq(accruedInterest, 0);
@@ -135,8 +154,15 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _assertPositionDeletedOn(MarginCall target, uint256 tokenId) internal view {
-        (uint256 stockAmount, uint256 principal, uint256 accruedInterest, uint256 lastAccruedAt, address executor) =
-            target.positions(tokenId);
+        (
+            uint256 assetId,
+            uint256 stockAmount,
+            uint256 principal,
+            uint256 accruedInterest,
+            uint256 lastAccruedAt,
+            address executor
+        ) = target.positions(tokenId);
+        assertEq(assetId, 0);
         assertEq(stockAmount, 0);
         assertEq(principal, 0);
         assertEq(accruedInterest, 0);
@@ -155,22 +181,27 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _expectedTokenJson(uint256 tokenId) internal pure returns (string memory) {
-        return
-            string.concat('{"name":"Margin Call Position ', tokenId.toString(), '","description":"NVDAc Position NFT"}');
+        return string.concat(
+            '{"name":"Margin Call Position ', tokenId.toString(), '","description":"Margin Call Position NFT"}'
+        );
     }
 
     function _expectedTokenURI(uint256 tokenId) internal pure returns (string memory) {
         return string.concat(TOKEN_URI_PREFIX, Base64.encode(bytes(_expectedTokenJson(tokenId))));
     }
 
-    function _deployStackWithNvda(address nvdac_) internal returns (MarginCall mc) {
+    function _deployStackWithStock(address stock_) internal returns (MarginCall mc, uint256 assetId) {
+        address admin = makeAddr("isolatedAdmin");
         MockUsdc usdc_ = new MockUsdc();
-        MockOracleAdapter oracle_ = new MockOracleAdapter();
-        MockNvdaC inventory = new MockNvdaC();
-        MockSwapRouter router_ = new MockSwapRouter(usdc_, inventory);
+        MockOracleAdapter oracle_ = new MockOracleAdapter(stock_);
+        MockSwapRouter router_ = new MockSwapRouter(usdc_, stock_);
         ExecutionAdapter execution_ =
-            new ExecutionAdapter(address(usdc_), nvdac_, address(router_), BaseV1Constants.UNISWAP_FEE);
-        mc = new MarginCall(nvdac_, address(usdc_), address(oracle_), address(execution_));
+            new ExecutionAdapter(address(usdc_), stock_, address(router_), BaseV1Constants.UNISWAP_FEE);
+        mc = new MarginCall(address(usdc_), admin);
+        CreditPool pool_ = new CreditPool(address(usdc_), address(mc), makeAddr("isolatedTreasury"));
+        mc.setCreditPool(address(pool_));
+        vm.prank(admin);
+        assetId = mc.addAsset(stock_, address(oracle_), address(execution_));
     }
 
     /// @dev Mirror of `MarginCall._unaccruedInterest`: simple interest at the immutable V1 APR, floored.
@@ -196,7 +227,7 @@ abstract contract MarginCallTestBase is Test {
     function _openFinancedFixture() internal returns (uint256 tokenId, uint256 stock, uint256 debt) {
         _fund(alice, ONE_NVDAC);
         tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (stock,,,,) = _position(tokenId);
+        stock = _stockAmount(tokenId);
         debt = marginCall.currentDebt(tokenId);
     }
 
@@ -241,6 +272,7 @@ abstract contract MarginCallTestBase is Test {
     /// @dev The "nothing moved" fixture for paths that must revert atomically: position legs, derived debt, pool
     ///      credit, custody, and the owner's USDC. Shared by the `reduceExposure` and `liquidate` suites.
     struct Snapshot {
+        uint256 assetId;
         uint256 stock;
         uint256 principal;
         uint256 accrued;
@@ -253,7 +285,7 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _snapshot(uint256 tokenId) internal view returns (Snapshot memory s) {
-        (s.stock, s.principal, s.accrued, s.lastAccrued, s.executor) = _position(tokenId);
+        (s.assetId, s.stock, s.principal, s.accrued, s.lastAccrued, s.executor) = _position(tokenId);
         s.debt = marginCall.currentDebt(tokenId);
         s.poolCredit = pool.availableCredit();
         s.custody = nvdac.balanceOf(address(marginCall));
@@ -261,7 +293,9 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _assertSnapshot(uint256 tokenId, Snapshot memory expected) internal view {
-        (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) = _position(tokenId);
+        (uint256 assetId, uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
+            _position(tokenId);
+        assertEq(assetId, expected.assetId);
         assertEq(stock, expected.stock);
         assertEq(principal, expected.principal);
         assertEq(accrued, expected.accrued);

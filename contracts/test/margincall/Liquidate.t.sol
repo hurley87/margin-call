@@ -115,7 +115,7 @@ contract LiquidateTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.reduceExposure(tokenId, stock, 0);
 
-        (uint256 stockLeft,,,,) = _position(tokenId);
+        (, uint256 stockLeft,,,,) = _position(tokenId);
         uint256 debtLeft = marginCall.currentDebt(tokenId);
         assertEq(stockLeft, 0);
         assertGt(debtLeft, 0);
@@ -275,14 +275,14 @@ contract LiquidateTest is MarginCallTestBase {
     function test_interestAloneCanCrossMaintenance() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_5X, 0);
-        (uint256 stock,,,,) = _position(tokenId);
+        (, uint256 stock,,,,) = _position(tokenId);
 
         // Keep the pinned mark; grow debt via accrual until debt / NAV > 70%.
         uint256 price = BaseV1Constants.PINNED_FEED_ANSWER;
         uint256 nav = oracle.valueUsdc(stock, price);
         uint256 targetDebt = Math.mulDiv(nav, 7_500, V1Config.BPS_DENOMINATOR) + 1;
 
-        (, uint256 principal,,,) = _position(tokenId);
+        (,, uint256 principal,,,) = _position(tokenId);
         // debt = principal * (1 + 0.1 * tYears)  =>  tYears = (debt/principal - 1) / 0.1
         uint256 needed = Math.mulDiv(targetDebt, V1Config.BPS_DENOMINATOR, principal);
         // needed is in 1e4 scale of (1 + 0.1 t); solve t = (needed/1e4 - 1) / 0.1 * year
@@ -311,7 +311,7 @@ contract LiquidateTest is MarginCallTestBase {
 
         Snapshot memory siblingBefore = _snapshot(tokenB);
 
-        (uint256 stockA,,,,) = _position(tokenA);
+        (, uint256 stockA,,,,) = _position(tokenA);
         uint256 debtA = marginCall.currentDebt(tokenA);
         uint256 custodyBefore = nvdac.balanceOf(address(marginCall));
         _setLiveDebtSharePrice(stockA, debtA, LIQUIDATABLE_DEBT_SHARE_BPS);
@@ -319,7 +319,7 @@ contract LiquidateTest is MarginCallTestBase {
         vm.prank(carol);
         marginCall.liquidate(tokenA);
 
-        (uint256 stockB, uint256 principalB, uint256 accruedB, uint256 lastB, address execB) = _position(tokenB);
+        (, uint256 stockB, uint256 principalB, uint256 accruedB, uint256 lastB, address execB) = _position(tokenB);
         assertEq(stockB, siblingBefore.stock);
         assertEq(principalB, siblingBefore.principal);
         assertEq(accruedB, siblingBefore.accrued);
@@ -340,7 +340,7 @@ contract LiquidateTest is MarginCallTestBase {
     /// @dev Crash the mark to the standard liquidatable share for tests that only need eligibility, not the
     ///      resulting price.
     function _crashLiquidatable(uint256 tokenId) internal {
-        (uint256 stock,,,,) = _position(tokenId);
+        (, uint256 stock,,,,) = _position(tokenId);
         _setLiveDebtSharePrice(stock, marginCall.currentDebt(tokenId), LIQUIDATABLE_DEBT_SHARE_BPS);
     }
 }

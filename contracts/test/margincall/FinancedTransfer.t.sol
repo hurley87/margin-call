@@ -24,6 +24,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         marginCall.repay(tokenId, partialPay);
 
         (
+            ,
             uint256 stockBefore,
             uint256 principalBefore,
             uint256 accruedBefore,
@@ -42,7 +43,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         _assertAccountingUnchanged(
             tokenId, stockBefore, principalBefore, accruedBefore, lastAccruedBefore, debtAfterRepay
         );
-        (,,,, address executorAfter) = _position(tokenId);
+        (,,,,, address executorAfter) = _position(tokenId);
         assertEq(executorAfter, address(0));
 
         _assertAliceAndBobLoseManagement(tokenId, carol);
@@ -51,7 +52,7 @@ contract FinancedTransferTest is MarginCallTestBase {
 
     function test_transferUnderHealthyLivePricing() public {
         uint256 tokenId = _openFinancedWithExecutorAndAccrual();
-        (uint256 stock,,,,) = _position(tokenId);
+        (, uint256 stock,,,,) = _position(tokenId);
         uint256 nav = oracle.valueUsdc(stock, oracle.price());
         uint256 debt = marginCall.currentDebt(tokenId);
         assertTrue(_isHealthy(nav, debt), "fixture should be healthy at open price");
@@ -61,13 +62,13 @@ contract FinancedTransferTest is MarginCallTestBase {
         marginCall.transferFrom(alice, carol, tokenId);
 
         assertEq(marginCall.ownerOf(tokenId), carol);
-        (,,,, address executor) = _position(tokenId);
+        (,,,,, address executor) = _position(tokenId);
         assertEq(executor, address(0));
     }
 
     function test_transferUnderLiquidatableLivePricing() public {
         uint256 tokenId = _openFinancedWithExecutorAndAccrual();
-        (uint256 stock,,,,) = _position(tokenId);
+        (, uint256 stock,,,,) = _position(tokenId);
         uint256 debt = marginCall.currentDebt(tokenId);
 
         // Crash price so equity is still positive but health factor < 1.0
@@ -84,14 +85,14 @@ contract FinancedTransferTest is MarginCallTestBase {
         marginCall.transferFrom(alice, carol, tokenId);
 
         assertEq(marginCall.ownerOf(tokenId), carol);
-        (,,,, address executor) = _position(tokenId);
+        (,,,,, address executor) = _position(tokenId);
         assertEq(executor, address(0));
         assertEq(marginCall.currentDebt(tokenId), debt);
     }
 
     function test_transferUnderUnderwaterLivePricing() public {
         uint256 tokenId = _openFinancedWithExecutorAndAccrual();
-        (uint256 stock,,,,) = _position(tokenId);
+        (, uint256 stock,,,,) = _position(tokenId);
         uint256 debt = marginCall.currentDebt(tokenId);
 
         uint256 underwaterPrice =
@@ -105,14 +106,14 @@ contract FinancedTransferTest is MarginCallTestBase {
         marginCall.transferFrom(alice, carol, tokenId);
 
         assertEq(marginCall.ownerOf(tokenId), carol);
-        (,,,, address executor) = _position(tokenId);
+        (,,,,, address executor) = _position(tokenId);
         assertEq(executor, address(0));
         assertEq(marginCall.currentDebt(tokenId), debt);
     }
 
     function test_transferUnderHeldInvalidAndRevertingOracle() public {
         uint256 tokenId = _openFinancedWithExecutorAndAccrual();
-        (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued,) = _position(tokenId);
+        (, uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued,) = _position(tokenId);
         uint256 debt = marginCall.currentDebt(tokenId);
 
         // Each state proves transfer availability without a financial/oracle gate. Per-hop
@@ -132,7 +133,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.prank(bob);
         marginCall.transferFrom(bob, carol, tokenId);
         assertEq(marginCall.ownerOf(tokenId), carol);
-        (,,,, address executor) = _position(tokenId);
+        (,,,,, address executor) = _position(tokenId);
         assertEq(executor, address(0));
         _assertAccountingUnchanged(tokenId, stock, principal, accrued, lastAccrued, debt);
 
@@ -143,7 +144,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.prank(carol);
         marginCall.transferFrom(carol, alice, tokenId);
         assertEq(marginCall.ownerOf(tokenId), alice);
-        (,,,, executor) = _position(tokenId);
+        (,,,,, executor) = _position(tokenId);
         assertEq(executor, address(0));
         _assertAccountingUnchanged(tokenId, stock, principal, accrued, lastAccrued, debt);
     }
@@ -183,7 +184,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.setExecutor(tokenId, address(staleExecutor));
 
-        (uint256 stockBefore, uint256 principalBefore, uint256 accruedBefore, uint256 lastAccruedBefore,) =
+        (, uint256 stockBefore, uint256 principalBefore, uint256 accruedBefore, uint256 lastAccruedBefore,) =
             _position(tokenId);
         uint256 debt = marginCall.currentDebt(tokenId);
         assertGt(debt, 0);
@@ -204,7 +205,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         );
 
         assertEq(marginCall.ownerOf(tokenId), address(receiver));
-        (,,,, address executor) = _position(tokenId);
+        (,,,,, address executor) = _position(tokenId);
         assertEq(executor, address(0));
         _assertAccountingUnchanged(tokenId, stockBefore, principalBefore, accruedBefore, lastAccruedBefore, debt);
 
@@ -227,12 +228,12 @@ contract FinancedTransferTest is MarginCallTestBase {
     function test_mintAndBurnLeaveNoExecutorState() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (,,,, address executorAtMint) = _position(tokenId);
+        (,,,,, address executorAtMint) = _position(tokenId);
         assertEq(executorAtMint, address(0));
 
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
-        (,,,, address executorSet) = _position(tokenId);
+        (,,,,, address executorSet) = _position(tokenId);
         assertEq(executorSet, bob);
 
         uint256 debt = marginCall.currentDebt(tokenId);
@@ -240,7 +241,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.repay(tokenId, debt);
 
-        (uint256 stock,,,,) = _position(tokenId);
+        (, uint256 stock,,,,) = _position(tokenId);
         vm.prank(alice);
         marginCall.closePosition(tokenId);
         _assertTokenDoesNotExist(tokenId);
@@ -276,7 +277,7 @@ contract FinancedTransferTest is MarginCallTestBase {
 
         assertEq(marginCall.ownerOf(tokenId), carol);
         assertEq(marginCall.currentDebt(tokenId), debt);
-        (,,,, address executor) = _position(tokenId);
+        (,,,,, address executor) = _position(tokenId);
         assertEq(executor, address(0));
     }
 
@@ -288,7 +289,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         uint256 lastAccrued,
         uint256 debt
     ) internal view {
-        (uint256 s, uint256 p, uint256 a, uint256 t,) = _position(tokenId);
+        (, uint256 s, uint256 p, uint256 a, uint256 t,) = _position(tokenId);
         assertEq(s, stock);
         assertEq(p, principal);
         assertEq(a, accrued);
@@ -336,7 +337,7 @@ contract FinancedTransferTest is MarginCallTestBase {
         address dave = makeAddr("dave");
         vm.prank(carol);
         marginCall.setExecutor(tokenId, dave);
-        (,,,, address executor) = _position(tokenId);
+        (,,,,, address executor) = _position(tokenId);
         assertEq(executor, dave);
 
         uint256 debt = marginCall.currentDebt(tokenId);

@@ -19,7 +19,7 @@ import {
 /// @dev Safe-mint initialization, callback event order, and atomic rollback.
 contract MarginCallCallbacksTest is MarginCallTestBase {
     function test_safeMintCallbackSeesInitializedPosition() public {
-        InspectingReceiver receiver = new InspectingReceiver(marginCall, nvdac);
+        InspectingReceiver receiver = new InspectingReceiver(marginCall, nvdac, defaultAssetId);
         uint256 deposit = 9 * ONE_NVDAC;
         nvdac.mint(address(receiver), deposit);
 
@@ -27,6 +27,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
 
         assertEq(tokenId, 1);
         assertEq(receiver.observedOwner(), address(receiver));
+        assertEq(receiver.observedAssetId(), defaultAssetId);
         assertEq(receiver.observedStockAmount(), deposit);
         assertEq(receiver.observedPrincipal(), 0);
         assertEq(receiver.observedAccruedInterest(), 0);
@@ -40,7 +41,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
     }
 
     function test_positionOpenedEmittedBeforeCallbackClose() public {
-        CallbackCloser closer = new CallbackCloser(marginCall, nvdac);
+        CallbackCloser closer = new CallbackCloser(marginCall, nvdac, defaultAssetId);
         uint256 deposit = 4 * ONE_NVDAC;
         nvdac.mint(address(closer), deposit);
 
@@ -58,7 +59,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
     }
 
     function test_positionOpenedEmittedBeforeCallbackTransfer() public {
-        CallbackTransferrer transferrer = new CallbackTransferrer(marginCall, nvdac, bob);
+        CallbackTransferrer transferrer = new CallbackTransferrer(marginCall, nvdac, defaultAssetId, bob);
         uint256 deposit = 2 * ONE_NVDAC;
         nvdac.mint(address(transferrer), deposit);
 
@@ -82,7 +83,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
     }
 
     function test_revertingReceiverRollsBackAtomically() public {
-        RevertingReceiver receiver = new RevertingReceiver(marginCall, nvdac);
+        RevertingReceiver receiver = new RevertingReceiver(marginCall, nvdac, defaultAssetId);
         uint256 deposit = 6 * ONE_NVDAC;
         nvdac.mint(address(receiver), deposit);
 
@@ -95,7 +96,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
     }
 
     function test_invalidSelectorReceiverRollsBackAtomically() public {
-        InvalidSelectorReceiver receiver = new InvalidSelectorReceiver(marginCall, nvdac);
+        InvalidSelectorReceiver receiver = new InvalidSelectorReceiver(marginCall, nvdac, defaultAssetId);
         uint256 deposit = 3 * ONE_NVDAC;
         nvdac.mint(address(receiver), deposit);
 
@@ -113,7 +114,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
         nvdac.mint(address(receiver), deposit);
 
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InvalidReceiver.selector, address(receiver)));
-        receiver.openSpot(marginCall, nvdac, deposit);
+        receiver.openSpot(marginCall, nvdac, defaultAssetId, deposit);
 
         _assertOpenFullyRolledBack(address(receiver), deposit);
         uint256 tokenId = _openAfterRollback(deposit);
@@ -125,7 +126,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
         uint256 first = _open(alice, ONE_NVDAC);
         assertEq(first, 1);
 
-        RevertingReceiver receiver = new RevertingReceiver(marginCall, nvdac);
+        RevertingReceiver receiver = new RevertingReceiver(marginCall, nvdac, defaultAssetId);
         nvdac.mint(address(receiver), ONE_NVDAC);
         vm.expectRevert(RevertingReceiver.Rejected.selector);
         receiver.openSpot(ONE_NVDAC);
@@ -165,7 +166,7 @@ contract MarginCallCallbacksTest is MarginCallTestBase {
             assertEq(emitted[i].topics[0], expectedOrder[i], "unexpected MarginCall event order");
         }
 
-        // PositionOpened(tokenId, owner, stockAmount) then the mint Transfer(address(0), opener, tokenId).
+        // PositionOpened(tokenId, owner, assetId, stockAmount) then the mint Transfer(address(0), opener, tokenId).
         assertEq(_topicAddress(emitted[0].topics[2]), opener, "PositionOpened owner");
         assertEq(_topicAddress(emitted[1].topics[1]), address(0), "mint Transfer from");
         assertEq(_topicAddress(emitted[1].topics[2]), opener, "mint Transfer to");

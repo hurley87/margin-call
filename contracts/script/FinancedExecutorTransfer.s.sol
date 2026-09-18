@@ -83,11 +83,12 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         console.log("targetLeverage bps", leverage);
 
         vm.startBroadcast(aliceKey);
-        (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool) = _deployStack(alice);
+        (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool, uint256 nvdaAssetId) =
+            _deployStack(alice);
         usdc.mint(address(pool), CREDIT_SEED);
         nvdac.mint(alice, contributedStock);
         nvdac.approve(address(marginCall), contributedStock);
-        uint256 tokenId = marginCall.openPosition(contributedStock, leverage, 0);
+        uint256 tokenId = marginCall.openPosition(nvdaAssetId, contributedStock, leverage, 0);
         vm.stopBroadcast();
 
         _persistOpen(alice, executor, bob, usdc, marginCall, tokenId);
@@ -96,19 +97,21 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
     }
 
     /// @dev `treasury_` is the broadcasting signer, so the treasury withdrawal path stays reachable by a held key.
+    ///      The same signer is `ASSET_ADMIN` and registers the single mock stock.
     function _deployStack(address treasury_)
         private
-        returns (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool)
+        returns (MockNvdaC nvdac, MockUsdc usdc, MarginCall marginCall, CreditPool pool, uint256 nvdaAssetId)
     {
         nvdac = new MockNvdaC();
         usdc = new MockUsdc();
-        MockOracleAdapter oracle = new MockOracleAdapter();
-        MockSwapRouter router = new MockSwapRouter(usdc, nvdac);
+        MockOracleAdapter oracle = new MockOracleAdapter(address(nvdac));
+        MockSwapRouter router = new MockSwapRouter(usdc, address(nvdac));
         ExecutionAdapter execution =
             new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
-        marginCall = new MarginCall(address(nvdac), address(usdc), address(oracle), address(execution));
+        marginCall = new MarginCall(address(usdc), treasury_);
         pool = new CreditPool(address(usdc), address(marginCall), treasury_);
         marginCall.setCreditPool(address(pool));
+        nvdaAssetId = marginCall.addAsset(address(nvdac), address(oracle), address(execution));
         oracle.setObservation(IOracleAdapter.State.LIVE, BaseV1Constants.PINNED_FEED_ANSWER, 1, block.timestamp);
         router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);
     }
@@ -121,7 +124,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         MarginCall marginCall,
         uint256 tokenId
     ) private {
-        (uint256 stockAtOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
+        (, uint256 stockAtOpen, uint256 principalAtOpen,,,) = marginCall.positions(tokenId);
         console.log("recorded stockAmount", stockAtOpen);
         console.log("principal (borrowed USDC raw)", principalAtOpen);
         _persist(
@@ -165,7 +168,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         state.marginCall.setExecutor(state.tokenId, state.executor);
         vm.stopBroadcast();
 
-        (,,,, address executorAfterSet) = state.marginCall.positions(state.tokenId);
+        (,,,,, address executorAfterSet) = state.marginCall.positions(state.tokenId);
         assertEq(executorAfterSet, state.executor, "executor must be set");
 
         uint256 partialPay = (debt * PARTIAL_REPAY_BPS) / V1Config.BPS_DENOMINATOR;
@@ -189,7 +192,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
         _logPhase(3, "E reduceExposure");
 
-        (uint256 stockBefore,,,, address executorBefore) = state.marginCall.positions(state.tokenId);
+        (, uint256 stockBefore,,,, address executorBefore) = state.marginCall.positions(state.tokenId);
         assertEq(executorBefore, state.executor, "executor must still be set");
         assertEq(state.marginCall.ownerOf(state.tokenId), state.alice, "A must still own");
 
@@ -206,7 +209,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         state.marginCall.reduceExposure(state.tokenId, sale, 0);
         vm.stopBroadcast();
 
-        (uint256 stockAfter,,,,) = state.marginCall.positions(state.tokenId);
+        (, uint256 stockAfter,,,,) = state.marginCall.positions(state.tokenId);
         if (stockAfter != stockBefore - sale) {
             revert ReduceDidNotCutStock(stockBefore, stockAfter);
         }
@@ -232,6 +235,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         _logPhase(4, "snapshot live accounting and transfer to B");
 
         (
+            ,
             uint256 stockBefore,
             uint256 principalBefore,
             uint256 accruedBefore,
@@ -257,6 +261,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         address ownerAfter = state.marginCall.ownerOf(state.tokenId);
         assertEq(ownerAfter, state.bob, "B must own after transfer");
         (
+            ,
             uint256 stockAfter,
             uint256 principalAfter,
             uint256 accruedAfter,
@@ -285,7 +290,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         _logPhase(5, "prove A and E lost management authority");
 
         assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B must still own");
-        (uint256 stock,,,, address executor) = state.marginCall.positions(state.tokenId);
+        (, uint256 stock,,,, address executor) = state.marginCall.positions(state.tokenId);
         assertEq(executor, address(0), "executor must stay cleared");
         assertGt(stock, 0, "position must still hold stock");
 
@@ -346,7 +351,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
 
         assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B must own before repay");
 
-        (uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
+        (, uint256 stock, uint256 principal, uint256 accrued, uint256 lastAccrued, address executor) =
             state.marginCall.positions(state.tokenId);
         assertEq(stock, state.stockBeforeTransfer, "stock must still match pre-transfer");
         assertEq(principal, state.principalBeforeTransfer, "principal must still match pre-transfer");
@@ -371,7 +376,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         if (debtAfter != 0) {
             revert DebtNotCleared(debtAfter);
         }
-        (uint256 stockFinal,,,,) = state.marginCall.positions(state.tokenId);
+        (, uint256 stockFinal,,,,) = state.marginCall.positions(state.tokenId);
         assertEq(stockFinal, state.stockBeforeTransfer, "repay must not change stock");
         assertEq(state.marginCall.ownerOf(state.tokenId), state.bob, "B remains owner");
 

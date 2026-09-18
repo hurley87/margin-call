@@ -26,7 +26,7 @@ contract ExecutionFixturesTest is Test {
     }
 
     function test_representativeBuyProtocolMinOutRoundsUp() public pure {
-        uint256 minOut = ExecutionFixtures.protocolMinNvdaOutForBuy(
+        uint256 minOut = ExecutionFixtures.protocolMinStockOutForBuy(
             ExecutionFixtures.REPRESENTATIVE_USDC_BUY_INPUT, BaseV1Constants.PINNED_FEED_ANSWER
         );
 
@@ -54,20 +54,20 @@ contract ExecutionFixturesTest is Test {
     }
 
     function test_zeroAmountsHaveZeroMinimumOutput() public pure {
-        assertEq(ExecutionFixtures.protocolMinNvdaOutForBuy(0, BaseV1Constants.PINNED_FEED_ANSWER), 0);
+        assertEq(ExecutionFixtures.protocolMinStockOutForBuy(0, BaseV1Constants.PINNED_FEED_ANSWER), 0);
         assertEq(ExecutionFixtures.protocolMinUsdcOutForSell(0, BaseV1Constants.PINNED_FEED_ANSWER), 0);
     }
 
     function test_zeroPriceReverts() public {
         vm.expectRevert(ExecutionFixtures.InvalidLivePrice.selector);
-        this.protocolMinNvdaOutForBuy(1, 0);
+        this.protocolMinStockOutForBuy(1, 0);
 
         vm.expectRevert(ExecutionFixtures.InvalidLivePrice.selector);
         this.protocolMinUsdcOutForSell(1, 0);
     }
 
-    function protocolMinNvdaOutForBuy(uint256 amountIn, uint256 livePrice) external pure returns (uint256) {
-        return ExecutionFixtures.protocolMinNvdaOutForBuy(amountIn, livePrice);
+    function protocolMinStockOutForBuy(uint256 amountIn, uint256 livePrice) external pure returns (uint256) {
+        return ExecutionFixtures.protocolMinStockOutForBuy(amountIn, livePrice);
     }
 
     function protocolMinUsdcOutForSell(uint256 amountIn, uint256 livePrice) external pure returns (uint256) {

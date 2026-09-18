@@ -55,23 +55,34 @@ contract DeployV1 is BaseMainnetHarnessBase {
         }
 
         vm.startBroadcast(operatorKey);
-        (OracleAdapter oracle, ExecutionAdapter execution, MarginCall marginCall, CreditPool pool) =
-            _deployV1Stack(operator);
+        (
+            OracleAdapter oracle,
+            ExecutionAdapter execution,
+            MarginCall marginCall,
+            CreditPool pool,
+            uint256 nvdaAssetId
+        ) = _deployV1Stack(operator);
         vm.stopBroadcast();
 
         // Immutable / config relationship checks (oracle-independent).
-        assertEq(address(marginCall.NVDAC()), V1Config.NVDAC, "MarginCall.NVDAC");
         assertEq(address(marginCall.USDC()), V1Config.USDC, "MarginCall.USDC");
-        assertEq(address(marginCall.ORACLE()), address(oracle), "MarginCall.ORACLE");
-        assertEq(address(marginCall.EXECUTION()), address(execution), "MarginCall.EXECUTION");
         assertEq(marginCall.INITIALIZER(), operator, "MarginCall.INITIALIZER");
+        assertEq(marginCall.ASSET_ADMIN(), operator, "MarginCall.ASSET_ADMIN");
         assertEq(address(marginCall.creditPool()), address(pool), "MarginCall.creditPool");
+        assertEq(nvdaAssetId, 1, "nvdaAssetId");
+        assertEq(marginCall.assetIdOf(V1Config.NVDAC), nvdaAssetId, "assetIdOf(NVDAC)");
+        MarginCall.AssetConfig memory nvda = marginCall.assetConfig(nvdaAssetId);
+        assertEq(nvda.stock, V1Config.NVDAC, "assetConfig.stock");
+        assertEq(address(nvda.oracle), address(oracle), "assetConfig.oracle");
+        assertEq(address(nvda.execution), address(execution), "assetConfig.execution");
+        assertTrue(nvda.openingEnabled, "assetConfig.openingEnabled");
         assertEq(address(pool.USDC()), V1Config.USDC, "CreditPool.USDC");
         assertEq(pool.borrower(), address(marginCall), "CreditPool.borrower");
         assertEq(pool.treasury(), operator, "CreditPool.treasury");
-        assertEq(address(oracle.NVDAC()), V1Config.NVDAC, "OracleAdapter.NVDAC");
+        assertEq(address(oracle.STOCK()), V1Config.NVDAC, "OracleAdapter.STOCK");
+        assertEq(address(oracle.FEED()), V1Config.NVDA_FEED, "OracleAdapter.FEED");
         assertEq(address(execution.USDC()), V1Config.USDC, "ExecutionAdapter.USDC");
-        assertEq(address(execution.NVDAC()), V1Config.NVDAC, "ExecutionAdapter.NVDAC");
+        assertEq(address(execution.STOCK()), V1Config.NVDAC, "ExecutionAdapter.STOCK");
         assertEq(address(execution.ROUTER()), V1Config.UNISWAP_SWAP_ROUTER_02, "ExecutionAdapter.ROUTER");
         assertEq(uint256(execution.FEE()), uint256(V1Config.UNISWAP_FEE), "ExecutionAdapter.FEE");
 

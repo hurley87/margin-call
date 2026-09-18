@@ -12,24 +12,14 @@ import {FalseReturningNvdaC, RevertingNvdaC} from "./PositionNftTestDoubles.sol"
 
 /// @dev RPC-free coverage for the spot-only Position NFT lifecycle, custody, and ERC-721 semantics.
 contract MarginCallTest is MarginCallTestBase {
-    function test_constructorRejectsZeroNvda() public {
-        vm.expectRevert(MarginCall.ZeroAddress.selector);
-        new MarginCall(address(0), address(usdc), address(oracle), address(execution));
-    }
-
     function test_constructorRejectsZeroUsdc() public {
         vm.expectRevert(MarginCall.ZeroAddress.selector);
-        new MarginCall(address(nvdac), address(0), address(oracle), address(execution));
+        new MarginCall(address(0), assetAdmin);
     }
 
-    function test_constructorRejectsZeroOracle() public {
+    function test_constructorRejectsZeroAssetAdmin() public {
         vm.expectRevert(MarginCall.ZeroAddress.selector);
-        new MarginCall(address(nvdac), address(usdc), address(0), address(execution));
-    }
-
-    function test_constructorRejectsZeroExecution() public {
-        vm.expectRevert(MarginCall.ZeroAddress.selector);
-        new MarginCall(address(nvdac), address(usdc), address(oracle), address(0));
+        new MarginCall(address(usdc), address(0));
     }
 
     function test_openInspectCloseSpotLifecycle() public {
@@ -39,8 +29,8 @@ contract MarginCallTest is MarginCallTestBase {
         uint256 aliceBefore = nvdac.balanceOf(alice);
         uint256 custodyBefore = nvdac.balanceOf(address(marginCall));
 
-        vm.expectEmit(true, true, false, true, address(marginCall));
-        emit MarginCall.PositionOpened(1, alice, deposit);
+        vm.expectEmit(true, true, true, true, address(marginCall));
+        emit MarginCall.PositionOpened(1, alice, defaultAssetId, deposit);
         vm.expectEmit(true, true, true, true, address(marginCall));
         emit IERC721.Transfer(address(0), alice, 1);
 
@@ -71,7 +61,7 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(MarginCall.ZeroStockAmount.selector);
-        marginCall.openPosition(0, SPOT_LEVERAGE, 0);
+        marginCall.openPosition(defaultAssetId, 0, SPOT_LEVERAGE, 0);
     }
 
     function test_leverageBelowOneTimesReverts() public {
@@ -79,18 +69,18 @@ contract MarginCallTest is MarginCallTestBase {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, 0));
-        marginCall.openPosition(ONE_NVDAC, 0, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 0, 0);
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, 9_999));
-        marginCall.openPosition(ONE_NVDAC, 9_999, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 9_999, 0);
     }
 
     function test_leverageAboveMaxReverts() public {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, 15_001));
-        marginCall.openPosition(ONE_NVDAC, 15_001, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 15_001, 0);
     }
 
     function test_intermediateLeverageReverts() public {
@@ -99,18 +89,18 @@ contract MarginCallTest is MarginCallTestBase {
         for (uint256 i = 0; i < invalid.length; ++i) {
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, invalid[i]));
-            marginCall.openPosition(ONE_NVDAC, invalid[i], 0);
+            marginCall.openPosition(defaultAssetId, ONE_NVDAC, invalid[i], 0);
         }
         assertEq(nvdac.balanceOf(alice), 4 * ONE_NVDAC);
         assertEq(nvdac.balanceOf(address(marginCall)), 0);
         assertEq(marginCall.balanceOf(alice), 0);
     }
 
-    function test_nonzeroMinNvdaOutReverts() public {
+    function test_nonzeroMinStockOutReverts() public {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(MarginCall.InvalidMinNvdaOut.selector, 1));
-        marginCall.openPosition(ONE_NVDAC, SPOT_LEVERAGE, 1);
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.InvalidMinStockOut.selector, 1));
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 1);
     }
 
     /// @dev `_requireLeverageWithinCeiling` checks only `targetLeverage`, which is sound because the preset set is
@@ -124,7 +114,7 @@ contract MarginCallTest is MarginCallTestBase {
         assertEq(marginCall.MAX_OPENING_LEVERAGE(), LEVERAGE_1_5X, "advertised ceiling drifted");
     }
 
-    function test_validSpotPresetAndZeroMinNvdaOutSucceeds() public {
+    function test_validSpotPresetAndZeroMinStockOutSucceeds() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _open(alice, ONE_NVDAC);
         assertEq(tokenId, 1);
@@ -136,15 +126,15 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, leverage));
-        marginCall.openPosition(ONE_NVDAC, leverage, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, leverage, 0);
     }
 
-    function testFuzz_nonzeroMinNvdaOutReverts(uint256 minNvdaOut) public {
-        vm.assume(minNvdaOut != 0);
+    function testFuzz_nonzeroMinStockOutReverts(uint256 minStockOut) public {
+        vm.assume(minStockOut != 0);
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(MarginCall.InvalidMinNvdaOut.selector, minNvdaOut));
-        marginCall.openPosition(ONE_NVDAC, SPOT_LEVERAGE, minNvdaOut);
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.InvalidMinStockOut.selector, minStockOut));
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, minStockOut);
     }
 
     function test_unauthorizedCloseRevertsAndLeavesState() public {
@@ -196,8 +186,8 @@ contract MarginCallTest is MarginCallTestBase {
         uint256 tokenA = _open(alice, aliceAmount);
         uint256 tokenB = _open(bob, bobAmount);
 
-        (uint256 stockA,,,,) = _position(tokenA);
-        (uint256 stockB,,,,) = _position(tokenB);
+        (, uint256 stockA,,,,) = _position(tokenA);
+        (, uint256 stockB,,,,) = _position(tokenB);
         assertEq(stockA, aliceAmount);
         assertEq(stockB, bobAmount);
         assertEq(stockA + stockB, nvdac.balanceOf(address(marginCall)));
@@ -236,8 +226,8 @@ contract MarginCallTest is MarginCallTestBase {
         nvdac.mint(address(marginCall), extra);
 
         uint256 custody = nvdac.balanceOf(address(marginCall));
-        (uint256 stockA,,,,) = _position(tokenA);
-        (uint256 stockB,,,,) = _position(tokenB);
+        (, uint256 stockA,,,,) = _position(tokenA);
+        (, uint256 stockB,,,,) = _position(tokenB);
         assertEq(stockA + stockB + extra, custody);
 
         vm.prank(alice);
@@ -379,7 +369,7 @@ contract MarginCallTest is MarginCallTestBase {
 
         string memory json = _expectedTokenJson(tokenId);
         assertEq(vm.parseJsonString(json, ".name"), "Margin Call Position 1");
-        assertEq(vm.parseJsonString(json, ".description"), "NVDAc Position NFT");
+        assertEq(vm.parseJsonString(json, ".description"), "Margin Call Position NFT");
         vm.parseJson(json);
     }
 
@@ -395,13 +385,13 @@ contract MarginCallTest is MarginCallTestBase {
 
     function test_openRevertsWhenFalseReturningTransferFrom() public {
         FalseReturningNvdaC token = new FalseReturningNvdaC();
-        MarginCall isolated = _deployStackWithNvda(address(token));
+        (MarginCall isolated, uint256 assetId) = _deployStackWithStock(address(token));
         vm.prank(alice);
         token.approve(address(isolated), ONE_NVDAC);
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(token)));
-        isolated.openPosition(ONE_NVDAC, SPOT_LEVERAGE, 0);
+        isolated.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
 
         _assertTokenDoesNotExistOn(isolated, 1);
         _assertPositionDeletedOn(isolated, 1);
@@ -410,13 +400,13 @@ contract MarginCallTest is MarginCallTestBase {
 
     function test_openRevertsWhenTransferFromReverts() public {
         RevertingNvdaC token = new RevertingNvdaC();
-        MarginCall isolated = _deployStackWithNvda(address(token));
+        (MarginCall isolated, uint256 assetId) = _deployStackWithStock(address(token));
         vm.prank(alice);
         token.approve(address(isolated), ONE_NVDAC);
 
         vm.prank(alice);
         vm.expectRevert(RevertingNvdaC.TransferFailed.selector);
-        isolated.openPosition(ONE_NVDAC, SPOT_LEVERAGE, 0);
+        isolated.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
 
         _assertTokenDoesNotExistOn(isolated, 1);
         _assertPositionDeletedOn(isolated, 1);
@@ -429,7 +419,7 @@ contract MarginCallTest is MarginCallTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(marginCall), 0, ONE_NVDAC)
         );
-        marginCall.openPosition(ONE_NVDAC, SPOT_LEVERAGE, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
 
         _assertTokenDoesNotExist(1);
         _assertPositionDeleted(1);
@@ -442,7 +432,7 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, deposit);
 
         uint256 tokenId = _open(alice, deposit);
-        (uint256 recordedStock,,,,) = _position(tokenId);
+        (, uint256 recordedStock,,,,) = _position(tokenId);
         assertEq(recordedStock, deposit);
         assertEq(nvdac.balanceOf(address(marginCall)), deposit);
 
@@ -470,15 +460,15 @@ contract MarginCallTest is MarginCallTestBase {
             nvdac.mint(address(marginCall), extra);
         }
 
-        (uint256 stockA,,,,) = _position(tokenA);
-        (uint256 stockB,,,,) = _position(tokenB);
+        (, uint256 stockA,,,,) = _position(tokenA);
+        (, uint256 stockB,,,,) = _position(tokenB);
         assertEq(stockA + stockB + extra, nvdac.balanceOf(address(marginCall)));
 
         vm.prank(alice);
         marginCall.closePosition(tokenA);
 
         assertEq(nvdac.balanceOf(alice), aliceAmount);
-        (uint256 remainingB,,,,) = _position(tokenB);
+        (, uint256 remainingB,,,,) = _position(tokenB);
         assertEq(remainingB, bobAmount);
         assertEq(marginCall.ownerOf(tokenB), bob);
         assertEq(nvdac.balanceOf(address(marginCall)), bobAmount + extra);
@@ -501,16 +491,16 @@ contract MarginCallTest is MarginCallTestBase {
         uint256 tokenB = _open(bob, bAmount);
         uint256 tokenC = _open(carol, cAmount);
 
-        (uint256 stockA,,,,) = _position(tokenA);
-        (uint256 stockB,,,,) = _position(tokenB);
-        (uint256 stockC,,,,) = _position(tokenC);
+        (, uint256 stockA,,,,) = _position(tokenA);
+        (, uint256 stockB,,,,) = _position(tokenB);
+        (, uint256 stockC,,,,) = _position(tokenC);
         uint256 recorded = stockA + stockB + stockC;
         assertEq(recorded, nvdac.balanceOf(address(marginCall)));
 
         vm.prank(bob);
         marginCall.closePosition(tokenB);
-        (stockA,,,,) = _position(tokenA);
-        (stockC,,,,) = _position(tokenC);
+        (, stockA,,,,) = _position(tokenA);
+        (, stockC,,,,) = _position(tokenC);
         recorded = stockA + stockC;
         assertEq(recorded, nvdac.balanceOf(address(marginCall)));
         _assertLiveSpotPosition(tokenA, alice, aAmount, OPENED_AT);

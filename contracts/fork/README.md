@@ -494,5 +494,41 @@ Use an archive-capable URL through the same environment variable for historical
 `getRoundData` / extra-block checks. Never commit a credential-bearing URL.
 
 Fork profile expected result: `BaseMainnetTest` **9 passed**,
-`NvdaOracleCadenceTest` **5 passed**, and `NvdaExecutionRoutesTest` **25 passed**.
-RPC-free policy, cadence-helper, and valuation tests run in the normal suite.
+`NvdaOracleCadenceTest` **5 passed**, `NvdaExecutionRoutesTest` **25 passed**,
+plus multi-stock qualification/smokes from issue #446 (`LaunchAssetQualificationTest`,
+`MultiStockForkSmokeTest`). RPC-free policy, cadence-helper, and valuation tests
+run in the normal suite.
+
+## Multi-stock launch rails (issue #446)
+
+Source `MarginCall` is a curated multi-stock coordinator. Each Position permanently
+records one `assetId`. An immutable `ASSET_ADMIN` may `addAsset` / toggle opening;
+core token/oracle/execution config is immutable after registration.
+
+**Qualified launch set** (pinned block `51_356_323`, shared 100 bps bound):
+
+| Stock  | Token          | Feed          | Uniswap fee | Pool          |
+| ------ | -------------- | ------------- | ----------- | ------------- |
+| NVDAc  | `0xb200…108C`  | `0x0468…8513` | 3000        | `0x6066…d33B` |
+| AAPLc  | `0xb200…d1fb`  | `0x787f…F988` | 3000        | `0x97F3…1931` |
+| METAc  | `0xb200…1707C` | `0x6526…b27D` | 3000        | `0x5839…2476` |
+| GOOGLc | `0xb200…58B7`  | `0x5bF4…4F2`  | 3000        | `0x8634…56a6` |
+
+**Excluded / replaced:**
+
+- **TSLAc** — only USDC/TSLAc pool at fee 10000 had **zero liquidity** at the pin and at latest.
+- **MSFTc** — tried as a TSLAc replacement; demo-size Uniswap fills were worse than the shared
+  100 bps oracle floor. Prefer replacement over weakening the bound.
+
+Pins live in `contracts/src/LaunchAssets.sol` (tests/scripts only). The live Base
+deployment in `deployments/base.json` remains the **NVDA-only V1** stack from issue #429;
+this issue does not broadcast a multi-stock redeploy.
+
+Compact fork coverage:
+
+- `LaunchAssetQualification.t.sol` — token/feed/registry/decimals/valuation/route/bound per rail
+- `MultiStockForkSmoke.t.sol` — per-rail open → reduce → repay → close + mixed-asset isolation
+
+```sh
+BASE_MAINNET_RPC_URL='https://mainnet.base.org' pnpm test:contracts:fork -- --match-contract 'LaunchAssetQualification|MultiStockForkSmoke'
+```

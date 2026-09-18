@@ -37,7 +37,7 @@ library ExecutionFixtures {
 
     /// @notice Minimum raw NVDAc output for an exact-input USDC buy at the 100 bps adverse bound.
     /// @dev Rounds up so the accepted output cannot exceed the configured adverse deviation by a fractional raw unit.
-    function protocolMinNvdaOutForBuy(uint256 usdcAmountIn, uint256 livePrice) internal pure returns (uint256) {
+    function protocolMinStockOutForBuy(uint256 usdcAmountIn, uint256 livePrice) internal pure returns (uint256) {
         _validateLivePrice(livePrice);
         return Math.mulDiv(
             usdcAmountIn,
