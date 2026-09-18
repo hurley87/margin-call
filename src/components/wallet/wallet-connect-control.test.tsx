@@ -9,6 +9,7 @@ const {
   useGetAvailableWalletProvidersDataMock,
   useConnectAndVerifyWithWalletProviderMock,
   useLogoutMock,
+  useWalletSessionMock,
   connectMutateMock,
   logoutMutateMock,
   connectResetMock,
@@ -19,6 +20,7 @@ const {
   useGetAvailableWalletProvidersDataMock: vi.fn(),
   useConnectAndVerifyWithWalletProviderMock: vi.fn(),
   useLogoutMock: vi.fn(),
+  useWalletSessionMock: vi.fn(),
   connectMutateMock: vi.fn(),
   logoutMutateMock: vi.fn(),
   connectResetMock: vi.fn(),
@@ -34,29 +36,35 @@ vi.mock("@dynamic-labs-sdk/react-hooks", () => ({
   useLogout: useLogoutMock,
 }));
 
+vi.mock("@/components/wallet/wallet-providers", () => ({
+  useDynamicReady: () => true,
+  useWalletSession: useWalletSessionMock,
+}));
+
 import { WalletConnectControl } from "@/components/wallet/wallet-connect-control";
 import { WalletConnectUi } from "@/components/wallet/wallet-connect-ui";
 
 describe("WalletConnectControl", () => {
   afterEach(() => {
     cleanup();
-    vi.unstubAllEnvs();
+    useWalletSessionMock.mockReset();
   });
 
-  it("shows configure copy when Dynamic is not configured", () => {
-    vi.stubEnv("NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID", "");
+  it("shows configure copy when wallet session is unset", () => {
+    useWalletSessionMock.mockReturnValue({ kind: "unset" });
 
     render(<WalletConnectControl />);
 
     expect(
       screen.getByText("NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID")
     ).not.toBeNull();
-    expect(screen.getByText("Base workspace")).not.toBeNull();
+    expect(screen.getByText(/to enable Connect/)).not.toBeNull();
   });
 });
 
 describe("WalletConnectUi", () => {
   beforeEach(() => {
+    useWalletSessionMock.mockReturnValue({ kind: "disconnected" });
     useInitStatusMock.mockReturnValue({ data: "finished", error: null });
     useGetWalletAccountsMock.mockReturnValue({ data: [] });
     useGetAvailableWalletProvidersDataMock.mockReturnValue({
@@ -90,6 +98,7 @@ describe("WalletConnectUi", () => {
     logoutMutateMock.mockReset();
     connectResetMock.mockReset();
     logoutResetMock.mockReset();
+    useWalletSessionMock.mockReset();
   });
 
   it("shows Connect when disconnected", () => {
@@ -99,17 +108,9 @@ describe("WalletConnectUi", () => {
   });
 
   it("shows a truncated address and Disconnect when connected", () => {
-    useGetWalletAccountsMock.mockReturnValue({
-      data: [
-        {
-          id: "account-1",
-          chain: "EVM",
-          address: "0x1234567890abcdef1234567890abcdef12345678",
-          lastSelectedAt: null,
-          verifiedCredentialId: null,
-          walletProviderKey: "metamaskevm",
-        },
-      ],
+    useWalletSessionMock.mockReturnValue({
+      kind: "connected",
+      address: "0x1234567890abcdef1234567890abcdef12345678",
     });
 
     render(<WalletConnectUi />);
@@ -119,17 +120,9 @@ describe("WalletConnectUi", () => {
   });
 
   it("clears connected state through logout", () => {
-    useGetWalletAccountsMock.mockReturnValue({
-      data: [
-        {
-          id: "account-1",
-          chain: "EVM",
-          address: "0x1234567890abcdef1234567890abcdef12345678",
-          lastSelectedAt: null,
-          verifiedCredentialId: null,
-          walletProviderKey: "metamaskevm",
-        },
-      ],
+    useWalletSessionMock.mockReturnValue({
+      kind: "connected",
+      address: "0x1234567890abcdef1234567890abcdef12345678",
     });
 
     render(<WalletConnectUi />);
@@ -140,9 +133,9 @@ describe("WalletConnectUi", () => {
   });
 
   it("surfaces an init failure instead of hanging on Preparing wallet", () => {
-    useInitStatusMock.mockReturnValue({
-      data: "failed",
-      error: new Error("Project settings unavailable"),
+    useWalletSessionMock.mockReturnValue({
+      kind: "failed",
+      message: "Project settings unavailable",
     });
 
     render(<WalletConnectUi />);

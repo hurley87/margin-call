@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans_Condensed } from "next/font/google";
+import { AppProviders } from "@/components/providers/app-providers";
+import { AppShell } from "@/components/shell/app-shell";
 import "./globals.css";
 
 const plexMono = IBM_Plex_Mono({
@@ -19,16 +21,16 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   ),
   title: "MARGIN CALL",
-  description: "Margin Call — Base Position workspace.",
+  description: "Margin Call — portfolio of Position NFTs on Base.",
   openGraph: {
     title: "MARGIN CALL",
-    description: "Margin Call — Base Position workspace.",
+    description: "Margin Call — portfolio of Position NFTs on Base.",
     type: "website",
   },
   twitter: {
     card: "summary",
     title: "MARGIN CALL",
-    description: "Margin Call — Base Position workspace.",
+    description: "Margin Call — portfolio of Position NFTs on Base.",
   },
 };
 
@@ -46,7 +48,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${plexMono.variable} ${plexSans.variable} antialiased`}>
-        {children}
+        <AppProviders>
+          <AppShell>{children}</AppShell>
+        </AppProviders>
       </body>
     </html>
   );

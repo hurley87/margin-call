@@ -100,6 +100,11 @@ export function getAssetById(assetId: number): LaunchAsset | null {
   );
 }
 
+/** Display label for a curated asset id (falls back when unknown). */
+export function assetLabel(assetId: number): string {
+  return getAssetById(assetId)?.name ?? `asset ${assetId}`;
+}
+
 export function getAssetByName(name: LaunchAssetName): LaunchAsset {
   const asset = baseDeployment.assets.find((entry) => entry.name === name);
   if (!asset) {
