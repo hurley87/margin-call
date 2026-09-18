@@ -92,8 +92,7 @@ contract AcceptLaunch is BaseMainnetHarnessBase {
         assertEq(stack.pool.availableCredit(), params.creditSeed, "availableCredit after seed");
 
         IERC20(smoke.stock).approve(address(stack.marginCall), params.stockAmount);
-        uint256 tokenId =
-            stack.marginCall.openPosition(stack.assetIds[0], params.stockAmount, params.leverage, 0, "");
+        uint256 tokenId = stack.marginCall.openPosition(stack.assetIds[0], params.stockAmount, params.leverage, 0, "");
         MarginCall.Position memory pos = stack.marginCall.positions(tokenId);
         assertEq(stack.marginCall.ownerOf(tokenId), operator, "operator owns after open");
         assertEq(pos.assetId, stack.assetIds[0], "position assetId");
