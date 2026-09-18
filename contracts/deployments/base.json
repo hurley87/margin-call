@@ -1,0 +1,123 @@
+{
+  "status": "canonical-launch",
+  "canonical": true,
+  "notes": "Canonical Base launch deployment (issue #446) on 2026-09-18. Frontend should consume only this file for new positions. Do not store private keys. Do not overwrite deployments/base-nvda-only.legacy.json.",
+  "network": "base",
+  "chainId": 8453,
+  "sourceCommit": "e677df78d6fb51904b96dcff7aad90a456c21f35",
+  "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "assetAdmin": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "treasury": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+  "contracts": {
+    "marginCall": "0x54BDd9b5544AC1C378b1c7c863Ee8ce92dcD4158",
+    "creditPool": "0x8bA6B3686E13e22eDc8F07f1942004097B665c93"
+  },
+  "shared": {
+    "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    "coinbaseOracleRegistry": "0x3f3E8cf41cdd3b1D118c16471aB0113DfDDd5CaD",
+    "baseSequencerUptimeFeed": "0xBCF85224fc0756B9Fa45aA7892530B47e10b6433",
+    "uniswapSwapRouter02": "0x2626664c2603336E57B271c5C0b26F421741e481",
+    "borrowAprBps": 1000,
+    "maintenanceEquityRatioBps": 3000
+  },
+  "assets": [
+    {
+      "name": "NVDAc",
+      "assetId": 1,
+      "stock": "0xb20000000000000000000078ee7ce2fE4908108C",
+      "oracleAdapter": "0xbd3EEfD0eaC20639f3c776B1FD06A625e6F460ce",
+      "executionAdapter": "0xeeC2E50277538E7451610FEBc86442601A83809d",
+      "feed": "0x04689a41629776563E6822F76f2e57D148d28513",
+      "uniswapPool": "0x60661b315553EB81872deEA9a66d567Cf0CCd33B",
+      "uniswapFee": 3000
+    },
+    {
+      "name": "AAPLc",
+      "assetId": 2,
+      "stock": "0xb200000000000000000000C2e324d24d7eEcd1fb",
+      "oracleAdapter": "0xa14d6B9ac964b4f637A065E7A1707eb6367CceCC",
+      "executionAdapter": "0x0BcC33B523c56ddF4439BA97dbDc7D64DEb14bAd",
+      "feed": "0x787f13dEa48Db0897CbCDD985de77809D837F988",
+      "uniswapPool": "0x97F35d1E92795327614BE000cd18cba1Be2c1931",
+      "uniswapFee": 3000
+    },
+    {
+      "name": "METAc",
+      "assetId": 3,
+      "stock": "0xb2000000000000000000008bC8786B856E61707C",
+      "oracleAdapter": "0x20C3aD5B4B3c16fE3b66a20cE8e5CD4768c9A902",
+      "executionAdapter": "0xB149ACE01e848C0344BFb23C737dB3EeC9F797aF",
+      "feed": "0x6526aE6797A76123638b863AeE4dD27Ba4E4b27D",
+      "uniswapPool": "0x583919ec1975a1238C50e1940911894ee6912476",
+      "uniswapFee": 3000
+    },
+    {
+      "name": "GOOGLc",
+      "assetId": 4,
+      "stock": "0xb2000000000000000000002D0BA3164cc74f58B7",
+      "oracleAdapter": "0xc7f52A6B6F22E8c66005aecce39585AB74eaA021",
+      "executionAdapter": "0x4a5CA19DD59367BCB4C1615E4B09787BF87a078b",
+      "feed": "0x5bF49E0ffA937CE2FfF033c739aD7C634c4D34F2",
+      "uniswapPool": "0x8634EE4145A63E40E44e12A6Bb1B905Fcb8856a6",
+      "uniswapFee": 3000
+    }
+  ],
+  "deploymentTxHashes": {
+    "marginCall": "0xe1bfb02d251eeddcd20a6ca960251d7271c41fd96d5842782b1145f064023a5d",
+    "creditPool": "0x8913a123a172c7e051683b8a116df5ece4fb154adad5f161416e54df5e11a59e",
+    "setCreditPool": "0x297d46365a6c13c1faf557ad48312d436aab3a4bfeb6867ad2a37835eab1a4c8",
+    "assets": {
+      "NVDAc": {
+        "oracleAdapter": "0x8618bc2472a762e177fac325e1db83bc58b444312908658048a0af56dee7028a",
+        "executionAdapter": "0x3c42920e60f9c58a6ea36459e0c0432f88f52f610a87e277ae378a33472bdf6c",
+        "addAsset": "0x25545b7dc32cf07436944b717676370749fe557a65c9933e1762530ef0581ad0"
+      },
+      "AAPLc": {
+        "oracleAdapter": "0x09217a718132640f020046769df3da2d9fd30c5db3831ff358abe7c4cd589030",
+        "executionAdapter": "0x6db4302a168b41d0fa5a12b55f95de311a5909ebacadc470ecc032bad1e2c1be",
+        "addAsset": "0x637da37c350722084f7ceeb034971f97b2c389e53b3b9613a12009b6fbe39bf8"
+      },
+      "METAc": {
+        "oracleAdapter": "0x5df4930069cba4e92d4cb1b7e0ec53b28e46c04a7467fa84e6a86625249c3d4b",
+        "executionAdapter": "0xd7a9c144ae41b9b00a9a28df8ff44ebf80a3d1cec303d4021e9e5b7fa48fead4",
+        "addAsset": "0x0085a84e024691525ab757b0577824826927be013bd5c77b0d9848eeb498957d"
+      },
+      "GOOGLc": {
+        "oracleAdapter": "0x9ee038f846970de75b2f29735c544f9e9ba74f729a72e174d5fb20f5813aa83b",
+        "executionAdapter": "0xf18285e36ec6e2942140ce8ca3d91f5c1692e7a4ec07d6f91b1a8e18dcd6438d",
+        "addAsset": "0x8016c59650567ac3d44e8ab85d38f2b45411ab442d523dda8068286dbec151b6"
+      }
+    }
+  },
+  "acceptance": {
+    "creditSeedUsdcRaw": 20000000,
+    "treasuryWithdrawUsdcRaw": 1000000,
+    "stockAmountRaw": 1000000,
+    "leverageBps": 12500,
+    "smokeAsset": "NVDAc",
+    "tokenId": 1,
+    "principalAtOpen": 546900,
+    "stockAtOpen": 1246919,
+    "operator": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
+    "txHashes": {
+      "seed": "0xf577a052422fde9b061ebdab2150e0e0a483923115d577649d16c57288b94e01",
+      "treasuryWithdraw": "0xcf5977ca0043be012564077f434aa13a52a96b3f36e8c50f5ac98623c09f44ac",
+      "openFinanced": "0x4cf52b81b93eb0b4460876e3fb3b28e685b754cfeef3ec5cd5f7b6977129127b",
+      "repay": "0x4e327434c576468a9553ede7014ff7f9491c6163cce81b4a7b9b936c49c582dc",
+      "repayAndClose": "0x6787e7937759e3d7f2e4ec4a39804dfed9e3a4a6e89950dded1c93ad4dc9df09"
+    },
+    "notes": "Live compact acceptance on 2026-09-18: seed $20 USDC, treasury withdraw $1, financed open 0.01 NVDAc at 1.25x (tokenId 1), repay remaining debt, close. NFT burned; stock returned. No private keys stored."
+  },
+  "sourceVerification": {
+    "explorer": "basescan.org",
+    "verifiedOn": "2026-09-18",
+    "compiler": "v0.8.29+commit.ab55807c",
+    "optimizerRuns": 1000000,
+    "contracts": {
+      "marginCall": "verified",
+      "creditPool": "verified",
+      "oracleAdapters": "verified",
+      "executionAdapters": "verified"
+    }
+  }
+}

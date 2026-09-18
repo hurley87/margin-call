@@ -524,7 +524,7 @@ Pins live only in `contracts/src/LaunchAssets.sol` (`Asset` + `launchSet()`, tes
 `V1Config` owns chain infrastructure, risk pins, and the shared 8/8/6 valuation invariant — not
 per-stock rails. The historical Base deployment in `deployments/base-nvda-only.legacy.json` is the
 **legacy NVDA-only** stack from issue #429; do not redeploy it from current HEAD. Canonical launch
-tooling is `script/BASE_LAUNCH.md`. After live deploy, the frontend consumes `deployments/base.json`.
+tooling is `script/BASE_LAUNCH.md`. The frontend consumes `deployments/base.json`.
 
 Compact fork coverage:
 
