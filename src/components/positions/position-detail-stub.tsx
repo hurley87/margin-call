@@ -1,16 +1,12 @@
 "use client";
 
 import { useQuery } from "convex/react";
+import { IndexUnavailable } from "@/components/positions/position-list";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
-import { getAssetById } from "@/lib/protocol/deployment";
+import { STATUS_LABEL } from "@/lib/positions/types";
+import { assetLabel } from "@/lib/protocol/deployment";
 import { formatShortAddress } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
-
-const STATUS_LABEL = {
-  active: "Active",
-  closed: "Closed",
-  liquidated: "Liquidated",
-} as const;
 
 /** Identity stub for /position/[tokenId]. Live state + actions land in #459. */
 export function PositionDetailStub({ tokenId }: { tokenId: string }) {
@@ -22,10 +18,7 @@ export function PositionDetailStub({ tokenId }: { tokenId: string }) {
         <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-tight text-[var(--t-accent)]">
           Position
         </h1>
-        <p className="text-sm leading-6 text-[var(--t-red)]">
-          Position index unavailable. Set{" "}
-          <code className="text-[var(--t-text)]">NEXT_PUBLIC_CONVEX_URL</code>.
-        </p>
+        <IndexUnavailable purpose="to load this Position." />
       </div>
     );
   }
@@ -57,9 +50,6 @@ function PositionDetailBody({ tokenId }: { tokenId: string }) {
     );
   }
 
-  const asset = getAssetById(position.assetId);
-  const assetLabel = asset?.name ?? `asset ${position.assetId}`;
-
   return (
     <div className="flex flex-col gap-6">
       <header className="space-y-2">
@@ -67,7 +57,7 @@ function PositionDetailBody({ tokenId }: { tokenId: string }) {
           Position
         </p>
         <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-tight text-[var(--t-accent)]">
-          {assetLabel}
+          {assetLabel(position.assetId)}
         </h1>
         <p className="text-sm text-[var(--t-muted)]">
           Token #{position.tokenId}

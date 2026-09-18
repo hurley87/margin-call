@@ -1,27 +1,19 @@
 import Link from "next/link";
-import type { PositionStatus } from "@/lib/positions/types";
-import { getAssetById } from "@/lib/protocol/deployment";
+import type { PositionListItem } from "@/lib/positions/types";
+import { STATUS_LABEL } from "@/lib/positions/types";
+import { assetLabel } from "@/lib/protocol/deployment";
 import { formatShortAddress } from "@/lib/utils";
 
 export type PositionCardProps = {
-  tokenId: string;
-  assetId: number;
-  status: PositionStatus;
-  /** When set, show truncated owner (All Positions). */
-  owner?: string;
-};
-
-const STATUS_LABEL: Record<PositionStatus, string> = {
-  active: "Active",
-  closed: "Closed",
-  liquidated: "Liquidated",
+  position: PositionListItem;
+  /** When true, show truncated owner (All Positions). */
+  showOwner?: boolean;
 };
 
 /** Browseable Position NFT row — identity only, no live financial state. */
 export function PositionCard(props: PositionCardProps) {
-  const { tokenId, assetId, status, owner } = props;
-  const asset = getAssetById(assetId);
-  const assetLabel = asset?.name ?? `asset ${assetId}`;
+  const { position, showOwner = false } = props;
+  const { tokenId, assetId, status, owner } = position;
 
   return (
     <Link
@@ -31,12 +23,12 @@ export function PositionCard(props: PositionCardProps) {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 space-y-1">
           <p className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)]">
-            {assetLabel}
+            {assetLabel(assetId)}
           </p>
           <p className="truncate text-xs text-[var(--t-muted)]">
             Token #{tokenId}
           </p>
-          {owner ? (
+          {showOwner ? (
             <p className="text-xs text-[var(--t-muted)]">
               Owner {formatShortAddress(owner)}
             </p>

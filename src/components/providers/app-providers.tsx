@@ -5,14 +5,11 @@ import { ConvexClientProvider } from "@/components/providers/convex-client-provi
 import { WalletProviders } from "@/components/wallet/wallet-providers";
 
 /**
- * App-wide providers for Convex + optional Dynamic wallet.
+ * App-wide providers for Convex + wallet session.
  * Shell and pages SSR; Dynamic mounts after hydration when configured.
+ * Missing DYNAMIC env still wraps WalletProviders (publishes unset session).
  */
 export function AppProviders({ children }: { children: ReactNode }) {
-  if (!process.env.NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID) {
-    return <ConvexClientProvider>{children}</ConvexClientProvider>;
-  }
-
   return (
     <ConvexClientProvider>
       <WalletProviders>{children}</WalletProviders>

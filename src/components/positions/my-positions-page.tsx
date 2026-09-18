@@ -1,154 +1,100 @@
 "use client";
 
-import {
-  useGetWalletAccounts,
-  useInitStatus,
-} from "@dynamic-labs-sdk/react-hooks";
 import { usePaginatedQuery } from "convex/react";
 import Link from "next/link";
-import { PositionCard } from "@/components/positions/position-card";
+import type { ReactNode } from "react";
+import {
+  IndexUnavailable,
+  PAGE_SIZE,
+  PositionList,
+} from "@/components/positions/position-list";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { useDynamicReady } from "@/components/wallet/wallet-providers";
-import { getEvmWalletAddress } from "@/lib/dynamic/wallet";
+import { buttonVariants } from "@/components/ui/button";
+import { useWalletSession } from "@/components/wallet/wallet-providers";
 import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 
-const PAGE_SIZE = 20;
-
 /** Homepage: positions owned by the connected wallet. */
 export function MyPositionsPage() {
-  const hasDynamic = Boolean(process.env.NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID);
-  const convex = useOptionalConvexClient();
-  const dynamicReady = useDynamicReady();
+  const session = useWalletSession();
 
-  if (!hasDynamic) {
-    return (
-      <PageFrame>
-        <p className="text-sm leading-6 text-[var(--t-muted)]">
-          Connect a wallet to see your Position NFTs. Configure Dynamic to
-          enable Connect.
-        </p>
-      </PageFrame>
-    );
+  switch (session.kind) {
+    case "unset":
+      return (
+        <PageFrame>
+          <p className="text-sm leading-6 text-[var(--t-muted)]">
+            Connect a wallet to see your Position NFTs. Configure Dynamic to
+            enable Connect.
+          </p>
+        </PageFrame>
+      );
+    case "hydrating":
+      return (
+        <PageFrame>
+          <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
+            Connecting wallet…
+          </p>
+        </PageFrame>
+      );
+    case "failed":
+      return (
+        <PageFrame>
+          <p className="text-sm leading-6 text-[var(--t-muted)]">
+            {session.message}
+          </p>
+        </PageFrame>
+      );
+    case "disconnected":
+      return (
+        <PageFrame>
+          <p className="text-sm leading-6 text-[var(--t-muted)]">
+            Connect a wallet to see your Position NFTs.
+          </p>
+        </PageFrame>
+      );
+    case "connected":
+      return <MyPositionsList owner={session.address} />;
+    default: {
+      const _exhaustive: never = session;
+      return _exhaustive;
+    }
   }
-
-  if (!dynamicReady) {
-    return (
-      <PageFrame>
-        <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-          Connecting wallet…
-        </p>
-      </PageFrame>
-    );
-  }
-
-  return <MyPositionsConnected convexReady={convex != null} />;
-}
-
-function MyPositionsConnected({ convexReady }: { convexReady: boolean }) {
-  const { data: initStatus } = useInitStatus();
-  const { data: accounts = [] } = useGetWalletAccounts();
-  const address = getEvmWalletAddress(accounts);
-
-  if (initStatus !== "finished") {
-    return (
-      <PageFrame>
-        <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-          Connecting wallet…
-        </p>
-      </PageFrame>
-    );
-  }
-
-  if (!address) {
-    return (
-      <PageFrame>
-        <p className="text-sm leading-6 text-[var(--t-muted)]">
-          Connect a wallet to see your Position NFTs.
-        </p>
-      </PageFrame>
-    );
-  }
-
-  if (!convexReady) {
-    return (
-      <PageFrame cta>
-        <p className="text-sm leading-6 text-[var(--t-red)]">
-          Position index unavailable. Set{" "}
-          <code className="text-[var(--t-text)]">NEXT_PUBLIC_CONVEX_URL</code>{" "}
-          to load your portfolio.
-        </p>
-      </PageFrame>
-    );
-  }
-
-  return <MyPositionsList owner={address} />;
 }
 
 function MyPositionsList({ owner }: { owner: `0x${string}` }) {
+  const convex = useOptionalConvexClient();
+
+  if (!convex) {
+    return (
+      <PageFrame>
+        <IndexUnavailable purpose="to load your portfolio." />
+      </PageFrame>
+    );
+  }
+
+  return <MyPositionsQuery owner={owner} />;
+}
+
+function MyPositionsQuery({ owner }: { owner: `0x${string}` }) {
   const { results, status, loadMore } = usePaginatedQuery(
     api.positions.positionsByOwner,
     { owner, status: "active" },
     { initialNumItems: PAGE_SIZE }
   );
 
-  if (status === "LoadingFirstPage") {
-    return (
-      <PageFrame cta>
-        <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-          Loading positions…
-        </p>
-      </PageFrame>
-    );
-  }
-
-  if (results.length === 0) {
-    return (
-      <PageFrame cta>
-        <p className="text-sm leading-6 text-[var(--t-muted)]">
-          You don&apos;t have any positions yet.
-        </p>
-      </PageFrame>
-    );
-  }
-
   return (
-    <PageFrame cta>
-      <ul className="flex flex-col gap-2">
-        {results.map((position) => (
-          <li key={position.tokenId}>
-            <PositionCard
-              tokenId={position.tokenId}
-              assetId={position.assetId}
-              status={position.status}
-            />
-          </li>
-        ))}
-      </ul>
-      {status === "CanLoadMore" || status === "LoadingMore" ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-fit"
-          disabled={status === "LoadingMore"}
-          onClick={() => loadMore(PAGE_SIZE)}
-        >
-          {status === "LoadingMore" ? "Loading…" : "Load more"}
-        </Button>
-      ) : null}
+    <PageFrame>
+      <PositionList
+        results={results}
+        status={status}
+        loadMore={loadMore}
+        emptyMessage="You don't have any positions yet."
+      />
     </PageFrame>
   );
 }
 
-function PageFrame({
-  children,
-  cta = false,
-}: {
-  children: React.ReactNode;
-  cta?: boolean;
-}) {
+function PageFrame({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-col gap-6">
       <header className="space-y-2">
@@ -159,7 +105,7 @@ function PageFrame({
           Position NFTs currently owned by your connected wallet.
         </p>
       </header>
-      {cta ? <OpenPositionCta /> : null}
+      <OpenPositionCta />
       {children}
     </div>
   );

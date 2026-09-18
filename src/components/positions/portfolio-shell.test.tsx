@@ -13,8 +13,7 @@ const usePathnameMock = vi.hoisted(() => vi.fn(() => "/"));
 const usePaginatedQueryMock = vi.hoisted(() => vi.fn());
 const useQueryMock = vi.hoisted(() => vi.fn());
 const useOptionalConvexClientMock = vi.hoisted(() => vi.fn());
-const useInitStatusMock = vi.hoisted(() => vi.fn());
-const useGetWalletAccountsMock = vi.hoisted(() => vi.fn());
+const useWalletSessionMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
   usePathname: usePathnameMock,
@@ -48,14 +47,15 @@ vi.mock("@/components/providers/convex-client-provider", () => ({
 
 vi.mock("@/components/wallet/wallet-providers", () => ({
   useDynamicReady: () => true,
+  useWalletSession: useWalletSessionMock,
   WalletProviders: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
 }));
 
 vi.mock("@dynamic-labs-sdk/react-hooks", () => ({
-  useInitStatus: useInitStatusMock,
-  useGetWalletAccounts: useGetWalletAccountsMock,
+  useInitStatus: () => ({ data: "finished", error: null }),
+  useGetWalletAccounts: () => ({ data: [] }),
   useGetAvailableWalletProvidersData: () => ({ data: [] }),
   useConnectAndVerifyWithWalletProvider: () => ({
     mutate: vi.fn(),
@@ -86,47 +86,38 @@ import { PositionDetailStub } from "@/components/positions/position-detail-stub"
 import { AppShell } from "@/components/shell/app-shell";
 import CreatePositionPage from "@/app/create/page";
 
-const CONNECTED_ACCOUNT = {
-  id: "account-1",
-  chain: "EVM",
-  address: "0x1234567890abcdef1234567890abcdef12345678",
-  lastSelectedAt: null,
-  verifiedCredentialId: null,
-  walletProviderKey: "metamaskevm",
-};
+const CONNECTED_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678" as const;
 
-function mockConnectedWallet() {
-  useInitStatusMock.mockReturnValue({ data: "finished", error: null });
-  useGetWalletAccountsMock.mockReturnValue({ data: [CONNECTED_ACCOUNT] });
+function mockDisconnectedSession() {
+  useWalletSessionMock.mockReturnValue({ kind: "disconnected" });
 }
 
-function mockDisconnectedWallet() {
-  useInitStatusMock.mockReturnValue({ data: "finished", error: null });
-  useGetWalletAccountsMock.mockReturnValue({ data: [] });
+function mockConnectedSession() {
+  useWalletSessionMock.mockReturnValue({
+    kind: "connected",
+    address: CONNECTED_ADDRESS,
+  });
 }
 
 describe("portfolio-first app shell", () => {
   beforeEach(() => {
     usePathnameMock.mockReturnValue("/");
     useOptionalConvexClientMock.mockReturnValue({});
-    mockDisconnectedWallet();
+    mockDisconnectedSession();
     usePaginatedQueryMock.mockReturnValue({
       results: [],
       status: "Exhausted",
       loadMore: vi.fn(),
     });
     useQueryMock.mockReturnValue(undefined);
-    vi.stubEnv("NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID", "test-env");
   });
 
   afterEach(() => {
     cleanup();
-    vi.unstubAllEnvs();
     usePaginatedQueryMock.mockReset();
     useQueryMock.mockReset();
     useOptionalConvexClientMock.mockReset();
-    useInitStatusMock.mockReset();
-    useGetWalletAccountsMock.mockReset();
+    useWalletSessionMock.mockReset();
   });
 
   it("exposes My Positions, All Positions, Open Position, and wallet state", () => {
@@ -150,17 +141,48 @@ describe("portfolio-first app shell", () => {
   });
 
   it("does not show the empty-portfolio copy when disconnected", () => {
-    mockDisconnectedWallet();
+    mockDisconnectedSession();
     render(<MyPositionsPage />);
 
     expect(
       screen.getByText("Connect a wallet to see your Position NFTs.")
     ).not.toBeNull();
     expect(screen.queryByText("You don't have any positions yet.")).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "+ Open Position" })
+    ).not.toBeNull();
+  });
+
+  it("shows init failure instead of connecting spinner", () => {
+    useWalletSessionMock.mockReturnValue({
+      kind: "failed",
+      message: "Project settings unavailable",
+    });
+
+    render(<MyPositionsPage />);
+
+    expect(screen.getByText("Project settings unavailable")).not.toBeNull();
+    expect(screen.queryByText("Connecting wallet…")).toBeNull();
+    expect(
+      screen.getByRole("link", { name: "+ Open Position" })
+    ).not.toBeNull();
+  });
+
+  it("shows index unavailable with CTA when connected without Convex", () => {
+    mockConnectedSession();
+    useOptionalConvexClientMock.mockReturnValue(null);
+
+    render(<MyPositionsPage />);
+
+    expect(screen.getByText("NEXT_PUBLIC_CONVEX_URL")).not.toBeNull();
+    expect(screen.getByText(/to load your portfolio/)).not.toBeNull();
+    expect(
+      screen.getByRole("link", { name: "+ Open Position" })
+    ).not.toBeNull();
   });
 
   it("shows empty portfolio CTA when connected with no positions", () => {
-    mockConnectedWallet();
+    mockConnectedSession();
     usePaginatedQueryMock.mockReturnValue({
       results: [],
       status: "Exhausted",
@@ -177,19 +199,19 @@ describe("portfolio-first app shell", () => {
   });
 
   it("renders multiple position cards linking to detail", () => {
-    mockConnectedWallet();
+    mockConnectedSession();
     usePaginatedQueryMock.mockReturnValue({
       results: [
         {
           tokenId: "1",
           assetId: 1,
-          owner: CONNECTED_ACCOUNT.address,
+          owner: CONNECTED_ADDRESS,
           status: "active",
         },
         {
           tokenId: "2",
           assetId: 2,
-          owner: CONNECTED_ACCOUNT.address,
+          owner: CONNECTED_ADDRESS,
           status: "active",
         },
       ],
@@ -244,7 +266,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByText(/debt/i)).toBeNull();
   });
 
-  it("pairs asset filter with active status when lifecycle is All", () => {
+  it("selecting an asset sets Active status and selects the Active chip", () => {
     usePaginatedQueryMock.mockReturnValue({
       results: [],
       status: "Exhausted",
@@ -256,6 +278,17 @@ describe("portfolio-first app shell", () => {
 
     const lastCall = usePaginatedQueryMock.mock.calls.at(-1);
     expect(lastCall?.[1]).toEqual({ status: "active", assetId: 1 });
+
+    const statusSection = screen.getByText("Status").parentElement;
+    expect(statusSection).not.toBeNull();
+    const activeChip = within(statusSection!).getByRole("button", {
+      name: "Active",
+    });
+    expect(activeChip.className).toContain("border-[var(--t-accent)]");
+    expect(
+      within(statusSection!).queryByRole("button", { name: "All" })
+    ).toBeNull();
+    expect(screen.queryByText(/Asset filter uses Active status/)).toBeNull();
   });
 
   it("create placeholder has no repay or close controls", () => {
@@ -273,7 +306,7 @@ describe("portfolio-first app shell", () => {
     useQueryMock.mockReturnValue({
       tokenId: "42",
       assetId: 3,
-      owner: CONNECTED_ACCOUNT.address,
+      owner: CONNECTED_ADDRESS,
       status: "active",
     });
 

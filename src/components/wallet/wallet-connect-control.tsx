@@ -2,17 +2,21 @@
 
 import { isEvmWalletAccount } from "@dynamic-labs-sdk/evm";
 import { useGetWalletAccounts } from "@dynamic-labs-sdk/react-hooks";
-import { useDynamicReady } from "@/components/wallet/wallet-providers";
+import {
+  useDynamicReady,
+  useWalletSession,
+} from "@/components/wallet/wallet-providers";
 import { WalletConnectUi } from "@/components/wallet/wallet-connect-ui";
 import { WalletNetworkControls } from "@/components/wallet/wallet-network-controls";
 
 /**
  * Header wallet control.
- * When Dynamic is unset, shows configure copy.
- * When Dynamic is set, waits for browser provider before mounting hooks.
+ * Reads WalletSession for unset; waits for DynamicProvider before hooks.
  */
 export function WalletConnectControl() {
-  if (!process.env.NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID) {
+  const session = useWalletSession();
+
+  if (session.kind === "unset") {
     return (
       <div className="flex max-w-xs flex-col gap-2 text-xs leading-5 text-[var(--t-muted)]">
         <p className="font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
