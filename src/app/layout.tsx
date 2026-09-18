@@ -19,16 +19,16 @@ export const metadata: Metadata = {
     process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"
   ),
   title: "MARGIN CALL",
-  description: "Margin Call — coming soon.",
+  description: "Margin Call — Base Position workspace.",
   openGraph: {
     title: "MARGIN CALL",
-    description: "Margin Call — coming soon.",
+    description: "Margin Call — Base Position workspace.",
     type: "website",
   },
   twitter: {
     card: "summary",
     title: "MARGIN CALL",
-    description: "Margin Call — coming soon.",
+    description: "Margin Call — Base Position workspace.",
   },
 };
 

@@ -43,12 +43,15 @@ describe("WalletConnectControl", () => {
     vi.unstubAllEnvs();
   });
 
-  it("hides the control when Dynamic is not configured", () => {
+  it("shows configure copy when Dynamic is not configured", () => {
     vi.stubEnv("NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID", "");
 
-    const { container } = render(<WalletConnectControl />);
+    render(<WalletConnectControl />);
 
-    expect(container.firstChild).toBeNull();
+    expect(
+      screen.getByText("NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID")
+    ).not.toBeNull();
+    expect(screen.getByText("Base workspace")).not.toBeNull();
   });
 });
 
