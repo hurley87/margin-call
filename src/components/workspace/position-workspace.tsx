@@ -6,16 +6,15 @@ import { isEvmWalletAccount } from "@dynamic-labs-sdk/evm";
 import {
   useGetActiveNetworkId,
   useGetWalletAccounts,
-  useSwitchActiveNetwork,
 } from "@dynamic-labs-sdk/react-hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { WalletConnectUi } from "@/components/wallet/wallet-connect-ui";
 import {
-  BASE_NETWORK_ID,
   assertWalletOnBase,
   parseNetworkIdToChainId,
   resolveBaseWalletClient,
+  switchWalletToBase,
 } from "@/lib/dynamic/resolve-wallet-client";
 import { getEvmWalletAddress } from "@/lib/dynamic/wallet";
 import {
@@ -162,8 +161,6 @@ function ConnectedWorkspace(props: {
   });
 
   const chainId = parseNetworkIdToChainId(networkQuery.data?.networkId);
-  const { mutate: switchNetwork, isPending: isSwitching } =
-    useSwitchActiveNetwork();
 
   const canSwitch = isProgrammaticNetworkSwitchAvailable({
     walletAccount: evmAccount,
@@ -177,6 +174,8 @@ function ConnectedWorkspace(props: {
   const [position, setPosition] = useState<PositionView | null>(null);
   const [txPhase, setTxPhase] = useState<TxPhase>({ status: "idle" });
   const [readError, setReadError] = useState<string | null>(null);
+  const [isSwitching, setIsSwitching] = useState(false);
+  const [switchError, setSwitchError] = useState<string | null>(null);
   const snapshotGen = useRef(0);
 
   const asset = getAssetByName(assetName);
@@ -309,20 +308,34 @@ function ConnectedWorkspace(props: {
           <div className="flex flex-col gap-2">
             <p>{chainGate.reason}</p>
             {canSwitch ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isSwitching || pending}
-                onClick={() =>
-                  switchNetwork({
-                    networkId: BASE_NETWORK_ID,
-                    walletAccount: evmAccount,
-                  })
-                }
-              >
-                Switch to Base
-              </Button>
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={isSwitching || pending}
+                  onClick={() => {
+                    setSwitchError(null);
+                    setIsSwitching(true);
+                    void switchWalletToBase(evmAccount)
+                      .catch((error: unknown) => {
+                        setSwitchError(
+                          error instanceof Error
+                            ? error.message
+                            : "Failed to switch to Base."
+                        );
+                      })
+                      .finally(() => {
+                        setIsSwitching(false);
+                      });
+                  }}
+                >
+                  Switch to Base
+                </Button>
+                {switchError ? (
+                  <p className="text-[var(--t-red)]">{switchError}</p>
+                ) : null}
+              </>
             ) : (
               <p>Switch the wallet to Base mainnet (8453) to continue.</p>
             )}

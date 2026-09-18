@@ -1,9 +1,13 @@
 "use client";
 
-import { createDynamicClient } from "@dynamic-labs-sdk/client";
+import {
+  createDynamicClient,
+  initializeClient,
+} from "@dynamic-labs-sdk/client";
 import { addEvmExtension } from "@dynamic-labs-sdk/evm";
 import { DynamicProvider } from "@dynamic-labs-sdk/react-hooks";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import { PositionWorkspace } from "@/components/workspace/position-workspace";
 
 // Loaded only through the ssr:false boundary in wallet-connect-control.tsx.
@@ -14,15 +18,26 @@ if (!environmentId) {
 }
 
 const client = createDynamicClient({
+  autoInitialize: false,
   environmentId,
-  metadata: { name: "Margin Call" },
+  metadata: {
+    name: "Margin Call",
+    universalLink:
+      typeof window !== "undefined"
+        ? window.location.origin
+        : (process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"),
+  },
 });
-addEvmExtension(client);
+addEvmExtension();
 
-const queryClient = new QueryClient();
+if (typeof window !== "undefined") {
+  void initializeClient();
+}
 
 /** Browser-only Dynamic + React Query tree wrapping the Base workspace. */
 export function WalletConnectIsland() {
+  const [queryClient] = useState(() => new QueryClient());
+
   return (
     <QueryClientProvider client={queryClient}>
       <DynamicProvider client={client}>
