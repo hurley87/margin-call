@@ -92,7 +92,7 @@ describe("loadPosition", () => {
     });
   });
 
-  it("reads a burned token as closed rather than zero-debt live storage", async () => {
+  it("reads a nonexistent token as burned rather than zero-debt live storage", async () => {
     const client = mockClient((name) => {
       if (name === "ownerOf") {
         throw new Error("ERC721NonexistentToken");
@@ -113,8 +113,9 @@ describe("loadPosition", () => {
       throw new Error(`unexpected ${name}`);
     });
 
+    // Close and liquidate both burn, so the read must not name a reason.
     await expect(loadPosition(client as never, 99n)).resolves.toEqual({
-      status: "closed",
+      status: "burned",
       tokenId: 99n,
     });
   });

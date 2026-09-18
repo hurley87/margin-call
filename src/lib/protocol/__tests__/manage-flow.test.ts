@@ -127,7 +127,7 @@ describe("runRepayAllFlow", () => {
 
   it("refuses a burned token before writing", async () => {
     loadPositionMock.mockReset();
-    loadPositionMock.mockResolvedValue({ status: "closed", tokenId: 42n });
+    loadPositionMock.mockResolvedValue({ status: "burned", tokenId: 42n });
     const { walletClient, publicClient } = stubClients();
 
     await expect(
@@ -249,7 +249,7 @@ describe("runClosePositionFlow", () => {
   });
 
   it("refuses a burned token before writing", async () => {
-    loadPositionMock.mockResolvedValue({ status: "closed", tokenId: 42n });
+    loadPositionMock.mockResolvedValue({ status: "burned", tokenId: 42n });
     const { walletClient, publicClient } = stubClients();
 
     await expect(

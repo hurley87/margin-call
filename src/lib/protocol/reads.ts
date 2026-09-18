@@ -38,12 +38,17 @@ export type OpenPosition = {
   liquidatable: boolean | null;
 };
 
-export type ClosedPosition = {
-  status: "closed";
+/**
+ * Terminal on Base: the token no longer exists. `closePosition` and `liquidate`
+ * both burn the NFT, so this says nothing about *why* it ended — the terminal
+ * reason comes from indexed lifecycle events, never from an `ownerOf` failure.
+ */
+export type BurnedPosition = {
+  status: "burned";
   tokenId: bigint;
 };
 
-export type PositionView = OpenPosition | ClosedPosition;
+export type PositionView = OpenPosition | BurnedPosition;
 
 /**
  * Atomic open-form snapshot. Replaces piecemeal balance/allowance/oracle setters.
@@ -131,7 +136,7 @@ export async function loadOpenSnapshot(
   };
 }
 
-/** A burned token is closed. Any other revert is a read failure, not a lifecycle fact. */
+/** A nonexistent token is burned. Any other revert is a read failure, not a lifecycle fact. */
 function isNonexistentTokenError(error: unknown): boolean {
   if (error instanceof BaseError) {
     const reverted = error.walk(
@@ -148,8 +153,9 @@ function isNonexistentTokenError(error: unknown): boolean {
 
 /**
  * Load a Position NFT from Base.
- * `ownerOf` is required so a burned token reads as closed rather than a zero-debt live position.
- * NAV/liquidatable stay optional (LIVE-only riskSnapshot).
+ * `ownerOf` is required so a burned token reads as burned rather than a zero-debt
+ * live position. Burned is terminal but reasonless — do not infer close vs
+ * liquidation here. NAV/liquidatable stay optional (LIVE-only riskSnapshot).
  */
 export async function loadPosition(
   client: BasePublicClient,
@@ -180,7 +186,7 @@ export async function loadPosition(
   });
 
   if (core == null) {
-    return { status: "closed", tokenId };
+    return { status: "burned", tokenId };
   }
 
   const [pos, debt, owner] = core;

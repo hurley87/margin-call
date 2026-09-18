@@ -202,21 +202,28 @@ describe("PositionDetailPage", () => {
     expect(loadPositionMock).not.toHaveBeenCalled();
   });
 
-  it("treats a token burned on Base as closed while the index still says active", async () => {
+  it("names no terminal reason when Base says burned but the index lags", async () => {
     useQueryMock.mockReturnValue(indexed());
-    loadPositionMock.mockResolvedValue({ status: "closed", tokenId: 42n });
+    loadPositionMock.mockResolvedValue({ status: "burned", tokenId: 42n });
     render(<PositionDetailPage tokenId="42" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Closed")).not.toBeNull();
+      expect(screen.getByText("Position ended")).not.toBeNull();
     });
 
+    // A burn is either close or liquidation — claiming one would be a guess.
+    expect(screen.getByText(/Waiting for lifecycle indexing/i)).not.toBeNull();
+    expect(screen.queryByText("Closed")).toBeNull();
+    expect(screen.queryByText("Liquidated")).toBeNull();
+    expect(screen.queryByText(/returned to the owner/i)).toBeNull();
     expect(screen.queryByText(/Couldn't read live Base state/i)).toBeNull();
+    expect(screen.queryByText(/Current debt/i)).toBeNull();
+    expect(screen.queryByText(/NAV/i)).toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
   });
 
-  it("surfaces a failed Base read instead of inventing a lifecycle state", async () => {
+  it("surfaces a failed Base read instead of treating it as a burn", async () => {
     useQueryMock.mockReturnValue(indexed());
     loadPositionMock.mockRejectedValue(new Error("HTTP request failed"));
     render(<PositionDetailPage tokenId="42" />);
@@ -226,6 +233,7 @@ describe("PositionDetailPage", () => {
     });
 
     expect(screen.queryByText("Closed")).toBeNull();
+    expect(screen.queryByText("Position ended")).toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
   });
 

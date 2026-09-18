@@ -110,7 +110,8 @@ function PositionDetailBody({ tokenId }: { tokenId: string }) {
 function PageHeader(props: {
   assetId: number;
   tokenId: string;
-  status: PositionListItem["status"];
+  /** Free text: a burned-but-unindexed token has no `PositionStatus` yet. */
+  statusLabel: string;
 }) {
   return (
     <header className="space-y-2">
@@ -122,7 +123,7 @@ function PageHeader(props: {
       </h1>
       <p className="text-sm text-[var(--t-muted)]">Token #{props.tokenId}</p>
       <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--t-muted)]">
-        {STATUS_LABEL[props.status]}
+        {props.statusLabel}
       </p>
     </header>
   );
@@ -145,7 +146,7 @@ function TerminalPosition({ position }: { position: PositionListItem }) {
       <PageHeader
         assetId={position.assetId}
         tokenId={position.tokenId}
-        status={position.status}
+        statusLabel={STATUS_LABEL[position.status]}
       />
       <NftSlot />
       <dl className="grid gap-3 border-t border-[var(--t-border)] pt-4 text-sm">
@@ -177,15 +178,42 @@ function TerminalPosition({ position }: { position: PositionListItem }) {
   );
 }
 
-/** Owner and closing tx, known only when this session did the closing. */
-type TerminalOverride = { owner: string; hash?: `0x${string}` };
+/**
+ * Terminal on Base with no indexed reason yet. `closePosition` and `liquidate`
+ * both burn the NFT, so claiming either one here would be a guess — the reason
+ * arrives from Convex lifecycle events, and until then we only report the end.
+ */
+function PendingTerminalPosition(props: { assetId: number; tokenId: string }) {
+  return (
+    <div className="flex flex-col gap-6">
+      <PageHeader
+        assetId={props.assetId}
+        tokenId={props.tokenId}
+        statusLabel="Position ended"
+      />
+      <NftSlot />
+      <p className="text-sm leading-6 text-[var(--t-muted)]">
+        This Position no longer exists on Base. Waiting for lifecycle indexing…
+      </p>
+      <Link
+        href="/"
+        className="w-fit text-xs font-bold uppercase tracking-[0.16em] text-[var(--t-accent)]"
+      >
+        My Positions
+      </Link>
+    </div>
+  );
+}
+
+/** Owner and closing tx from this session's own close receipt. */
+type JustClosed = { owner: string; hash: `0x${string}` };
 
 function ActivePosition({ indexed }: { indexed: PositionListItem }) {
   const tokenId = parseTokenId(indexed.tokenId);
   const [publicClient] = useState(() => createBasePublicClient());
   const [view, setView] = useState<PositionView | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
-  const [justClosed, setJustClosed] = useState<TerminalOverride | null>(null);
+  const [justClosed, setJustClosed] = useState<JustClosed | null>(null);
 
   useEffect(() => {
     if (tokenId == null) return;
@@ -210,19 +238,26 @@ function ActivePosition({ indexed }: { indexed: PositionListItem }) {
     };
   }, [publicClient, tokenId]);
 
-  // Base is authoritative: a burned token is closed even while Convex says active.
-  const terminal: TerminalOverride | null =
-    justClosed ?? (view?.status === "closed" ? { owner: indexed.owner } : null);
-
-  if (terminal) {
+  // We closed it ourselves, so the reason is known from the receipt, not guessed.
+  if (justClosed) {
     return (
       <TerminalPosition
         position={{
           ...indexed,
-          owner: terminal.owner,
+          owner: justClosed.owner,
           status: "closed",
-          terminalTxHash: terminal.hash,
+          terminalTxHash: justClosed.hash,
         }}
+      />
+    );
+  }
+
+  // Burned by someone else while the index lags: terminal, but reason unknown.
+  if (view?.status === "burned") {
+    return (
+      <PendingTerminalPosition
+        assetId={indexed.assetId}
+        tokenId={indexed.tokenId}
       />
     );
   }
@@ -235,7 +270,7 @@ function ActivePosition({ indexed }: { indexed: PositionListItem }) {
       <PageHeader
         assetId={live?.assetId ?? indexed.assetId}
         tokenId={indexed.tokenId}
-        status="active"
+        statusLabel={STATUS_LABEL.active}
       />
       <NftSlot />
       {live ? (
