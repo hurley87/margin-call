@@ -8,10 +8,8 @@ import {
 
 const SYNTHETIC_PHONE = "+1 (555) 010-0200";
 const SYNTHETIC_TOKEN = "synthetic-token-do-not-use";
-const SYNTHETIC_COOKIE = "dynamic-session=synthetic-session-do-not-use";
-const SYNTHETIC_DYNAMIC_SIGNATURE = "synthetic-dynamic-signature-do-not-use";
-const SYNTHETIC_DYNAMIC_AUTHORIZATION =
-  "synthetic-dynamic-authorization-do-not-use";
+const SYNTHETIC_DYNAMIC_JWT =
+  "DYNAMIC_JWT_TOKEN=synthetic-dynamic-jwt-do-not-use";
 const SYNTHETIC_DYNAMIC_SESSION = "synthetic-dynamic-session-do-not-use";
 const SYNTHETIC_DYNAMIC_IDENTITY = "synthetic-dynamic-identity-do-not-use";
 const SYNTHETIC_API_KEY = "synthetic-api-key-do-not-use";
@@ -126,13 +124,12 @@ describe("Sentry telemetry privacy boundary", () => {
         headers: {
           Authorization: `Bearer ${SYNTHETIC_TOKEN}`,
           "Proxy-Authorization": `Basic ${SYNTHETIC_TOKEN}`,
-          "Dynamic-Authorization-Signature": SYNTHETIC_DYNAMIC_SIGNATURE,
-          "X-Dynamic-Authorization": SYNTHETIC_DYNAMIC_AUTHORIZATION,
+          Cookie: SYNTHETIC_DYNAMIC_JWT,
           "X-API-Key": SYNTHETIC_API_KEY,
           "X-Request-Id": "safe-request-id",
         },
         cookies: {
-          dynamicSession: SYNTHETIC_COOKIE,
+          DYNAMIC_JWT_TOKEN: "synthetic-dynamic-jwt-do-not-use",
         },
         data: {
           phoneNumber: SYNTHETIC_PHONE,
@@ -191,9 +188,7 @@ describe("Sentry telemetry privacy boundary", () => {
 
     expect(payload).not.toContain(SYNTHETIC_PHONE);
     expect(payload).not.toContain(SYNTHETIC_TOKEN);
-    expect(payload).not.toContain(SYNTHETIC_COOKIE);
-    expect(payload).not.toContain(SYNTHETIC_DYNAMIC_SIGNATURE);
-    expect(payload).not.toContain(SYNTHETIC_DYNAMIC_AUTHORIZATION);
+    expect(payload).not.toContain("synthetic-dynamic-jwt-do-not-use");
     expect(payload).not.toContain(SYNTHETIC_DYNAMIC_SESSION);
     expect(payload).not.toContain(SYNTHETIC_DYNAMIC_IDENTITY);
     expect(payload).not.toContain(SYNTHETIC_API_KEY);

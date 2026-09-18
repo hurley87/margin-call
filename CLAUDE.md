@@ -26,7 +26,13 @@ capability only through separately scoped work.
 ## Retained architecture
 
 - `src/` — Next.js shell, Dynamic wallet foundation, styling, and UI primitives
-- `convex/` — Convex HTTP infrastructure (empty schema; no JWT providers yet)
+- `convex/` — Convex HTTP infrastructure (empty schema; no JWT providers yet).
+  When the first authed Convex table or function lands, add Dynamic `customJwt` in
+  `convex/auth.config.ts`:
+  - issuer: `https://app.dynamicauth.com/${DYNAMIC_ENVIRONMENT_ID}`
+  - jwks: `https://app.dynamicauth.com/api/v0/sdk/${DYNAMIC_ENVIRONMENT_ID}/.well-known/jwks`
+  - algorithm: `RS256`
+  - applicationID: exact `aud` from a live Dynamic access token
 - `packages/shared/` — framework-neutral validation helpers
 - `contracts/` — Foundry workspace. `src/MarginCall.sol` is the Position NFT coordinator (NVDAc custody +
   ERC-721 ownership), supported by `CreditPool.sol`, `OracleAdapter.sol`, `OracleStatePolicy.sol`,

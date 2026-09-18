@@ -34,14 +34,8 @@ function isSensitiveKey(key: string) {
     );
   const isDynamicCredential =
     normalized.startsWith("dynamicauth") ||
-    normalized.startsWith("dynamicauthorization") ||
     normalized.startsWith("dynamicidentity") ||
-    normalized.startsWith("dynamictoken") ||
-    normalized.startsWith("dynamiccookie") ||
-    (normalized.startsWith("dynamicsession") && !isSessionMetric) ||
-    /(?:^|[-_])dynamic[-_](?:auth|authorization|session|identity|token|cookie)/i.test(
-      key
-    );
+    (normalized.startsWith("dynamicsession") && !isSessionMetric);
 
   return (
     normalized.includes("authorization") ||
