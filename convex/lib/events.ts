@@ -55,29 +55,25 @@ export type WireLog = {
   logIndex: number;
 };
 
-export type PositionOpenedEffect = {
+type EffectBase = {
+  tokenId: string;
+  owner: string;
+  blockNumber: number;
+  logIndex: number;
+  txHash: string;
+};
+
+export type PositionOpenedEffect = EffectBase & {
   kind: "opened";
-  tokenId: string;
-  owner: string;
   assetId: number;
-  blockNumber: number;
-  txHash: string;
 };
 
-export type PositionTransferEffect = {
+export type PositionTransferEffect = EffectBase & {
   kind: "transfer";
-  tokenId: string;
-  owner: string;
-  blockNumber: number;
-  txHash: string;
 };
 
-export type PositionTerminalEffect = {
+export type PositionTerminalEffect = EffectBase & {
   kind: "closed" | "liquidated";
-  tokenId: string;
-  owner: string;
-  blockNumber: number;
-  txHash: string;
 };
 
 export type PositionEffect =
@@ -123,6 +119,7 @@ export function decodePositionEffect(log: WireLog): PositionEffect | null {
         owner: normalizeAddress(owner),
         assetId: Number(assetId),
         blockNumber: log.blockNumber,
+        logIndex: log.logIndex,
         txHash: log.transactionHash.toLowerCase(),
       };
     }
@@ -139,6 +136,7 @@ export function decodePositionEffect(log: WireLog): PositionEffect | null {
         tokenId: decoded.args.tokenId.toString(),
         owner: normalizeAddress(decoded.args.owner),
         blockNumber: log.blockNumber,
+        logIndex: log.logIndex,
         txHash: log.transactionHash.toLowerCase(),
       };
     }
@@ -155,6 +153,7 @@ export function decodePositionEffect(log: WireLog): PositionEffect | null {
         tokenId: decoded.args.tokenId.toString(),
         owner: normalizeAddress(decoded.args.owner),
         blockNumber: log.blockNumber,
+        logIndex: log.logIndex,
         txHash: log.transactionHash.toLowerCase(),
       };
     }
@@ -176,6 +175,7 @@ export function decodePositionEffect(log: WireLog): PositionEffect | null {
         tokenId: tokenId.toString(),
         owner: normalizeAddress(to),
         blockNumber: log.blockNumber,
+        logIndex: log.logIndex,
         txHash: log.transactionHash.toLowerCase(),
       };
     }

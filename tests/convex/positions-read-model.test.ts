@@ -363,6 +363,163 @@ describe("Convex Position read model", () => {
     expect(row!.openedTxHash).toBe(TX_OPEN);
   });
 
+  it("replayed Opened after Transfer keeps the newer owner", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(20n, OWNER_A, 1n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: OWNER_B, tokenId: 20n },
+          blockNumber: 51_470_800,
+          transactionHash: TX_TRANSFER,
+          logIndex: 0,
+        }),
+      ],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(20n, OWNER_A, 1n),
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "20",
+    });
+    expect(row!.owner).toBe(OWNER_B.toLowerCase());
+    expect(row!.status).toBe("active");
+    expect(row!.assetId).toBe(1);
+    expect(row!.openedTxHash).toBe(TX_OPEN);
+  });
+
+  it("replayed older Transfer does not overwrite a newer owner", async () => {
+    const t = convexTest(schema, modules);
+    const OWNER_C = "0x3333333333333333333333333333333333333333";
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(21n, OWNER_A, 1n),
+    });
+    const transferAb = encodeTestLog({
+      event: transferEvent,
+      args: { from: OWNER_A, to: OWNER_B, tokenId: 21n },
+      blockNumber: 51_470_800,
+      transactionHash: TX_TRANSFER,
+      logIndex: 0,
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [transferAb],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_B, to: OWNER_C, tokenId: 21n },
+          blockNumber: 51_470_900,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [transferAb],
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "21",
+    });
+    expect(row!.owner).toBe(OWNER_C.toLowerCase());
+  });
+
+  it("same-block higher logIndex wins for ownership", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionOpenedEvent,
+          args: {
+            tokenId: 22n,
+            owner: OWNER_A,
+            assetId: 1n,
+            stockAmount: 1n,
+          },
+          blockNumber: 51_473_000,
+          transactionHash: TX_OPEN,
+          logIndex: 0,
+        }),
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: OWNER_B, tokenId: 22n },
+          blockNumber: 51_473_000,
+          transactionHash: TX_TRANSFER,
+          logIndex: 2,
+        }),
+      ],
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "22",
+    });
+    expect(row!.owner).toBe(OWNER_B.toLowerCase());
+    expect(row!.latestIndexedBlock).toBe(51_473_000);
+    expect(row!.latestIndexedLogIndex).toBe(2);
+  });
+
+  it("exact event replay is idempotent for ownership and cursor", async () => {
+    const t = convexTest(schema, modules);
+    const transfer = encodeTestLog({
+      event: transferEvent,
+      args: { from: OWNER_A, to: OWNER_B, tokenId: 23n },
+      blockNumber: 51_470_800,
+      transactionHash: TX_TRANSFER,
+      logIndex: 3,
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(23n, OWNER_A, 1n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, { logs: [transfer] });
+    const before = await t.query(api.positions.positionByTokenId, {
+      tokenId: "23",
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, { logs: [transfer] });
+    const after = await t.query(api.positions.positionByTokenId, {
+      tokenId: "23",
+    });
+    expect(after!.owner).toBe(OWNER_B.toLowerCase());
+    expect(after!.latestIndexedBlock).toBe(before!.latestIndexedBlock);
+    expect(after!.latestIndexedLogIndex).toBe(before!.latestIndexedLogIndex);
+  });
+
+  it("older close cannot regress a newer active transfer state", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(24n, OWNER_A, 1n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: OWNER_B, tokenId: 24n },
+          blockNumber: 51_471_500,
+          transactionHash: TX_TRANSFER,
+          logIndex: 0,
+        }),
+      ],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 24n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_470_750,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "24",
+    });
+    expect(row!.status).toBe("active");
+    expect(row!.owner).toBe(OWNER_B.toLowerCase());
+    expect(row!.terminalBlock).toBeUndefined();
+  });
+
   it("paginates and filters allPositions / positionsByOwner deterministically", async () => {
     const t = convexTest(schema, modules);
     for (let i = 1; i <= 3; i++) {

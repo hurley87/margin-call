@@ -10,6 +10,9 @@ export const positionStatusValidator = v.union(
 /**
  * Public Position NFT read model for discovery/lifecycle.
  * Base remains authoritative for debt, NAV, and risk.
+ *
+ * `latestIndexedBlock` + `latestIndexedLogIndex` form a per-position
+ * lexicographic cursor; mutable ownership/status only advances on newer events.
  */
 export default defineSchema({
   positions: defineTable({
@@ -20,6 +23,7 @@ export default defineSchema({
     openedBlock: v.number(),
     openedTxHash: v.string(),
     latestIndexedBlock: v.number(),
+    latestIndexedLogIndex: v.number(),
     terminalBlock: v.optional(v.number()),
     terminalTxHash: v.optional(v.string()),
   })

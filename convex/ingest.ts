@@ -39,12 +39,29 @@ export const applyVerifiedLogs = internalMutation({
   },
 });
 
-function touchBlock(
-  existing: Doc<"positions">,
-  blockNumber: number
-): { latestIndexedBlock: number } {
+/** True when (block, logIndex) is strictly after the row's applied cursor. */
+function isNewerThan(
+  effect: Pick<PositionEffect, "blockNumber" | "logIndex">,
+  existing: Doc<"positions">
+): boolean {
+  if (effect.blockNumber > existing.latestIndexedBlock) {
+    return true;
+  }
+  if (effect.blockNumber < existing.latestIndexedBlock) {
+    return false;
+  }
+  return effect.logIndex > existing.latestIndexedLogIndex;
+}
+
+function advanceCursor(
+  effect: Pick<PositionEffect, "blockNumber" | "logIndex">
+): {
+  latestIndexedBlock: number;
+  latestIndexedLogIndex: number;
+} {
   return {
-    latestIndexedBlock: Math.max(existing.latestIndexedBlock, blockNumber),
+    latestIndexedBlock: effect.blockNumber,
+    latestIndexedLogIndex: effect.logIndex,
   };
 }
 
@@ -64,27 +81,37 @@ async function applyEffect(ctx: MutationCtx, effect: PositionEffect) {
           status: "active",
           openedBlock: effect.blockNumber,
           openedTxHash: effect.txHash,
-          latestIndexedBlock: effect.blockNumber,
+          ...advanceCursor(effect),
         });
         return;
       }
-      // Always backfill identity; never reopen a terminal row.
-      await ctx.db.patch(existing._id, {
+
+      // Identity is write-from-Opened; never reopen a terminal row.
+      const patch: Partial<Doc<"positions">> = {
         assetId: effect.assetId,
         openedBlock: effect.blockNumber,
         openedTxHash: effect.txHash,
-        ...(existing.status === "active" ? { owner: effect.owner } : {}),
-        ...touchBlock(existing, effect.blockNumber),
-      });
+      };
+
+      // Owner (and cursor) only move forward on a newer event while active.
+      if (existing.status === "active" && isNewerThan(effect, existing)) {
+        patch.owner = effect.owner;
+        Object.assign(patch, advanceCursor(effect));
+      }
+
+      await ctx.db.patch(existing._id, patch);
       return;
     }
     case "transfer": {
       if (!existing || existing.status !== "active") {
         return;
       }
+      if (!isNewerThan(effect, existing)) {
+        return;
+      }
       await ctx.db.patch(existing._id, {
         owner: effect.owner,
-        ...touchBlock(existing, effect.blockNumber),
+        ...advanceCursor(effect),
       });
       return;
     }
@@ -94,12 +121,15 @@ async function applyEffect(ctx: MutationCtx, effect: PositionEffect) {
         // Terminal before open — skip; reconcile will apply Opened then terminal.
         return;
       }
+      if (!isNewerThan(effect, existing)) {
+        return;
+      }
       await ctx.db.patch(existing._id, {
         owner: effect.owner,
         status: effect.kind,
         terminalBlock: effect.blockNumber,
         terminalTxHash: effect.txHash,
-        ...touchBlock(existing, effect.blockNumber),
+        ...advanceCursor(effect),
       });
       return;
     }

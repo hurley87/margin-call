@@ -17,6 +17,7 @@ const positionDocValidator = v.object({
   openedBlock: v.number(),
   openedTxHash: v.string(),
   latestIndexedBlock: v.number(),
+  latestIndexedLogIndex: v.number(),
   terminalBlock: v.optional(v.number()),
   terminalTxHash: v.optional(v.string()),
 });

@@ -229,7 +229,8 @@ function ConnectedWorkspace(props: {
     fn: (args: {
       walletClient: NonNullable<ReturnType<typeof resolveBaseWalletClient>>;
       onSubmitted: (hash: `0x${string}`) => void;
-    }) => Promise<void>
+    }) => Promise<void>,
+    options?: { syncReceipt?: boolean }
   ) {
     const walletClient = resolveBaseWalletClient(accounts);
     if (!walletClient) {
@@ -265,7 +266,9 @@ function ConnectedWorkspace(props: {
         }
         return prev;
       });
-      if (submittedHash) {
+      // Best-effort indexer sync for lifecycle txs only (open/close).
+      // Never fail a confirmed Base tx because Convex sync failed.
+      if (options?.syncReceipt && submittedHash) {
         const syncStatus = await syncPositionTx(submittedHash);
         setIndexNote(
           syncStatus === "pending"
@@ -455,7 +458,8 @@ function ConnectedWorkspace(props: {
                   });
                   setPosition(await loadPosition(publicClient, tokenId));
                   await refreshSnapshot();
-                }
+                },
+                { syncReceipt: true }
               )
             }
           >
@@ -548,7 +552,8 @@ function ConnectedWorkspace(props: {
                         });
                         setPosition({ status: "closed", tokenId });
                         await refreshSnapshot();
-                      }
+                      },
+                      { syncReceipt: true }
                     )
                   }
                 >
