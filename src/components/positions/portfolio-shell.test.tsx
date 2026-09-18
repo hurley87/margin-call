@@ -345,7 +345,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByText(/circuit breaker/i)).toBeNull();
   });
 
-  it("create page has Approve/Open without repay or close", () => {
+  it("create page has Open without repay, close, or Approve", () => {
     mockConnectedSession();
     useGetWalletAccountsMock.mockReturnValue({
       data: [{ chain: "EVM", key: "test-account" }],
@@ -355,60 +355,13 @@ describe("portfolio-first app shell", () => {
     expect(
       screen.getByRole("heading", { name: "Open Position" })
     ).not.toBeNull();
-    expect(screen.getByRole("button", { name: /Approve/i })).not.toBeNull();
     expect(screen.getByRole("button", { name: /^Open$/i })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Approve/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
   });
 
-  it("highlights the opened token and shows indexing when missing from Convex", () => {
-    mockConnectedSession();
-    useSearchParamsMock.mockReturnValue(new URLSearchParams("opened=99"));
-    usePaginatedQueryMock.mockReturnValue({
-      results: [
-        {
-          tokenId: "1",
-          assetId: 1,
-          owner: CONNECTED_ADDRESS,
-          status: "active",
-        },
-      ],
-      status: "Exhausted",
-      loadMore: vi.fn(),
-    });
-
-    render(<MyPositionsPage />);
-
-    expect(
-      screen.getByText(/Indexing Position #99 — it will appear here shortly/)
-    ).not.toBeNull();
-    expect(screen.getByText("Token #1")).not.toBeNull();
-  });
-
-  it("highlights the opened card when Convex already has the token", () => {
-    mockConnectedSession();
-    useSearchParamsMock.mockReturnValue(new URLSearchParams("opened=42"));
-    usePaginatedQueryMock.mockReturnValue({
-      results: [
-        {
-          tokenId: "42",
-          assetId: 3,
-          owner: CONNECTED_ADDRESS,
-          status: "active",
-        },
-      ],
-      status: "Exhausted",
-      loadMore: vi.fn(),
-    });
-
-    render(<MyPositionsPage />);
-
-    expect(screen.queryByText(/Indexing Position #42/)).toBeNull();
-    const card = screen.getByRole("link", { name: /Token #42/ });
-    expect(card.className).toMatch(/ring-\[var\(--t-accent\)\]/);
-  });
-
-  it("detail stub shows indexed identity and not-found without actions", () => {
+  it("detail stub shows indexed identity and indexing empty state without actions", () => {
     useQueryMock.mockReturnValue({
       tokenId: "42",
       assetId: 3,
@@ -426,6 +379,9 @@ describe("portfolio-first app shell", () => {
 
     useQueryMock.mockReturnValue(null);
     rerender(<PositionDetailStub tokenId="999" />);
-    expect(screen.getByText("Position not found")).not.toBeNull();
+    expect(screen.getByText("Position #999")).not.toBeNull();
+    expect(
+      screen.getByText(/Not in the index yet — a just-minted Position/)
+    ).not.toBeNull();
   });
 });

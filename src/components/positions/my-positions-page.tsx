@@ -2,8 +2,7 @@
 
 import { usePaginatedQuery } from "convex/react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import { Suspense, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import {
   IndexUnavailable,
   PAGE_SIZE,
@@ -77,56 +76,26 @@ function MyPositionsList({ owner }: { owner: `0x${string}` }) {
   return (
     <PageFrame>
       <PositionQueryBoundary>
-        <Suspense fallback={<IndexingFallback />}>
-          <MyPositionsQuery owner={owner} />
-        </Suspense>
+        <MyPositionsQuery owner={owner} />
       </PositionQueryBoundary>
     </PageFrame>
   );
 }
 
-function IndexingFallback() {
-  return (
-    <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-      Loading positions…
-    </p>
-  );
-}
-
 function MyPositionsQuery({ owner }: { owner: `0x${string}` }) {
-  const searchParams = useSearchParams();
-  const openedTokenId = searchParams.get("opened");
-
   const { results, status, loadMore } = usePaginatedQuery(
     api.positions.positionsByOwner,
     { owner, status: "active" },
     { initialNumItems: PAGE_SIZE }
   );
 
-  const openedInResults =
-    openedTokenId != null &&
-    results.some((position) => position.tokenId === openedTokenId);
-
-  const showIndexingNote =
-    openedTokenId != null && !openedInResults && status !== "LoadingFirstPage";
-
   return (
-    <div className="flex flex-col gap-4">
-      {showIndexingNote ? (
-        <p className="text-sm leading-6 text-[var(--t-amber)]">
-          Indexing Position #{openedTokenId} — it will appear here shortly.
-        </p>
-      ) : null}
-      {results.length === 0 && showIndexingNote ? null : (
-        <PositionList
-          results={results}
-          status={status}
-          loadMore={loadMore}
-          emptyMessage="You don't have any positions yet."
-          highlightTokenId={openedTokenId}
-        />
-      )}
-    </div>
+    <PositionList
+      results={results}
+      status={status}
+      loadMore={loadMore}
+      emptyMessage="You don't have any positions yet."
+    />
   );
 }
 

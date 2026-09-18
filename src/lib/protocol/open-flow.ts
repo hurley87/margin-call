@@ -4,7 +4,7 @@ import type { LaunchAsset } from "@/lib/protocol/deployment";
 import { baseDeployment } from "@/lib/protocol/deployment";
 import type { BasePublicClient } from "@/lib/protocol/public-client";
 import { openReadiness } from "@/lib/protocol/readiness";
-import { loadOpenSnapshot } from "@/lib/protocol/reads";
+import { loadOpenSnapshot, type OpenSnapshot } from "@/lib/protocol/reads";
 import {
   approveUnlimited,
   openPosition,
@@ -28,6 +28,37 @@ export type OpenPositionFlowResult = {
   hash: `0x${string}`;
 };
 
+async function loadAndGate(args: {
+  publicClient: BasePublicClient;
+  address: `0x${string}`;
+  asset: LaunchAsset;
+  stockAmount: bigint;
+  targetLeverage: number;
+  chainId: number | null | undefined;
+}): Promise<OpenSnapshot> {
+  const snapshot = await loadOpenSnapshot(args.publicClient, {
+    address: args.address,
+    asset: args.asset,
+    leverage: args.targetLeverage,
+    stockAmount: args.stockAmount,
+  });
+
+  const gate = openReadiness({
+    chainId: args.chainId,
+    stockAmount: args.stockAmount,
+    stockBalance: snapshot.stockBalance,
+    targetLeverage: args.targetLeverage,
+    oracleState: snapshot.oracleState,
+    availableCredit: snapshot.availableCredit,
+    estimatedPrincipal: snapshot.estimatedPrincipal,
+  });
+  if (!gate.ok) {
+    throw new Error(gate.reason);
+  }
+
+  return snapshot;
+}
+
 /**
  * Canonical create-position write sequence.
  * Fresh Base preflight → approve when needed → openPosition → receipt tokenId.
@@ -49,25 +80,14 @@ export async function runOpenPositionFlow(
 
   await assertWalletOnBase(walletClient);
 
-  let snapshot = await loadOpenSnapshot(publicClient, {
+  let snapshot = await loadAndGate({
+    publicClient,
     address,
     asset,
-    leverage: targetLeverage,
     stockAmount,
-  });
-
-  let gate = openReadiness({
-    chainId,
-    stockAmount,
-    stockBalance: snapshot.stockBalance,
     targetLeverage,
-    oracleState: snapshot.oracleState,
-    availableCredit: snapshot.availableCredit,
-    estimatedPrincipal: snapshot.estimatedPrincipal,
+    chainId,
   });
-  if (!gate.ok) {
-    throw new Error(gate.reason);
-  }
 
   if (snapshot.stockAllowance < stockAmount) {
     await approveUnlimited({
@@ -78,25 +98,15 @@ export async function runOpenPositionFlow(
       onSubmitted: (hash) => onSubmitted?.(hash, "Approve stock"),
     });
 
-    snapshot = await loadOpenSnapshot(publicClient, {
+    snapshot = await loadAndGate({
+      publicClient,
       address,
       asset,
-      leverage: targetLeverage,
       stockAmount,
+      targetLeverage,
+      chainId,
     });
 
-    gate = openReadiness({
-      chainId,
-      stockAmount,
-      stockBalance: snapshot.stockBalance,
-      targetLeverage,
-      oracleState: snapshot.oracleState,
-      availableCredit: snapshot.availableCredit,
-      estimatedPrincipal: snapshot.estimatedPrincipal,
-    });
-    if (!gate.ok) {
-      throw new Error(gate.reason);
-    }
     if (snapshot.stockAllowance < stockAmount) {
       throw new Error("Stock approval required before open.");
     }

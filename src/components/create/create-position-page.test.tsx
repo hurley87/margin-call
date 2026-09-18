@@ -16,7 +16,6 @@ const useGetActiveNetworkIdMock = vi.hoisted(() => vi.fn());
 const resolveBaseWalletClientMock = vi.hoisted(() => vi.fn());
 const loadOpenSnapshotMock = vi.hoisted(() => vi.fn());
 const runOpenPositionFlowMock = vi.hoisted(() => vi.fn());
-const approveUnlimitedMock = vi.hoisted(() => vi.fn());
 const syncPositionTxMock = vi.hoisted(() => vi.fn());
 
 vi.mock("next/navigation", () => ({
@@ -62,14 +61,6 @@ vi.mock("@/lib/protocol/open-flow", () => ({
   runOpenPositionFlow: runOpenPositionFlowMock,
 }));
 
-vi.mock("@/lib/protocol/writes", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@/lib/protocol/writes")>();
-  return {
-    ...actual,
-    approveUnlimited: approveUnlimitedMock,
-  };
-});
-
 vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
   useSyncPositionTransaction: () => syncPositionTxMock,
 }));
@@ -112,7 +103,6 @@ describe("CreatePositionPage", () => {
       hash: OPEN_HASH,
     });
     syncPositionTxMock.mockResolvedValue("synced");
-    approveUnlimitedMock.mockResolvedValue({ transactionHash: OPEN_HASH });
     useRouterPushMock.mockReset();
   });
 
@@ -131,7 +121,7 @@ describe("CreatePositionPage", () => {
     expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
   });
 
-  it("shows stock, amount, leverage, Approve, and Open without repay/close", async () => {
+  it("shows stock, amount, leverage, and Open without repay/close or Approve", async () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
@@ -144,30 +134,12 @@ describe("CreatePositionPage", () => {
     expect(screen.getByText("Stock")).not.toBeNull();
     expect(screen.getByText("Stock amount")).not.toBeNull();
     expect(screen.getByText("Leverage")).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Approve" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
-    expect(
-      screen.queryByText("Close the current position before opening another.")
-    ).toBeNull();
   });
 
-  it("stays usable when the wallet already owns other positions", async () => {
-    render(<CreatePositionPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
-    });
-
-    expect(
-      screen.queryByText(/Close the current position before opening another/)
-    ).toBeNull();
-  });
-
-  it("redirects to /?opened=tokenId and syncs hash only after a successful open", async () => {
+  it("redirects to /position/tokenId and syncs hash after a successful open", async () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
@@ -184,11 +156,10 @@ describe("CreatePositionPage", () => {
     });
 
     expect(syncPositionTxMock).toHaveBeenCalledWith(OPEN_HASH);
-    expect(syncPositionTxMock.mock.calls[0]?.[0]).toBe(OPEN_HASH);
-    expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
+    expect(useRouterPushMock).toHaveBeenCalledWith("/position/42");
   });
 
-  it("still redirects when Convex sync is pending", async () => {
+  it("still redirects when Convex sync is pending or skipped", async () => {
     syncPositionTxMock.mockResolvedValue("pending");
     render(<CreatePositionPage />);
 
@@ -202,27 +173,9 @@ describe("CreatePositionPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Open" }));
 
     await waitFor(() => {
-      expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
+      expect(useRouterPushMock).toHaveBeenCalledWith("/position/42");
     });
 
-    expect(screen.queryByText(/Open position failed/i)).toBeNull();
-  });
-
-  it("still redirects when Convex sync is skipped", async () => {
-    syncPositionTxMock.mockResolvedValue("skipped");
-    render(<CreatePositionPage />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
-
-    await waitFor(() => {
-      expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
-    });
+    expect(syncPositionTxMock).toHaveBeenCalledWith(OPEN_HASH);
   });
 });

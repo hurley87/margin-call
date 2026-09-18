@@ -82,20 +82,11 @@ type PositionListProps = {
   loadMore: (numItems: number) => void;
   showOwner?: boolean;
   emptyMessage: string;
-  /** Token ID to briefly highlight after create redirect. */
-  highlightTokenId?: string | null;
 };
 
 /** Shared paginated Position NFT list — identity cards only. */
 export function PositionList(props: PositionListProps) {
-  const {
-    results,
-    status,
-    loadMore,
-    showOwner = false,
-    emptyMessage,
-    highlightTokenId = null,
-  } = props;
+  const { results, status, loadMore, showOwner = false, emptyMessage } = props;
 
   if (status === "LoadingFirstPage") {
     return (
@@ -116,11 +107,7 @@ export function PositionList(props: PositionListProps) {
       <ul className="flex flex-col gap-2">
         {results.map((position) => (
           <li key={position.tokenId}>
-            <PositionCard
-              position={position}
-              showOwner={showOwner}
-              highlighted={highlightTokenId === position.tokenId}
-            />
+            <PositionCard position={position} showOwner={showOwner} />
           </li>
         ))}
       </ul>

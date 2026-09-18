@@ -40,10 +40,10 @@ import {
 import { basescanTxUrl } from "@/lib/protocol/explorer";
 import { runOpenPositionFlow } from "@/lib/protocol/open-flow";
 import { createBasePublicClient } from "@/lib/protocol/public-client";
-import { assertBaseChain, openReadiness } from "@/lib/protocol/readiness";
+import { openReadiness } from "@/lib/protocol/readiness";
 import { loadOpenSnapshot, type OpenSnapshot } from "@/lib/protocol/reads";
 import { isTxPending, type TxPhase } from "@/lib/protocol/tx-phase";
-import { ProtocolTxError, approveUnlimited } from "@/lib/protocol/writes";
+import { ProtocolTxError } from "@/lib/protocol/writes";
 import { formatShortAddress } from "@/lib/utils";
 
 function TxStatus({ phase }: { phase: TxPhase }) {
@@ -244,74 +244,9 @@ function CreatePositionForm(props: {
     estimatedPrincipal: snapshot?.estimatedPrincipal ?? null,
   });
 
-  const chainGate = assertBaseChain(chainId);
-  const needsStockApproval =
-    stockAmount != null &&
-    snapshot != null &&
-    snapshot.stockAllowance < stockAmount;
-
   const leverageLabel =
     OPENING_LEVERAGE_PRESETS.find((preset) => preset.bps === leverage)?.label ??
     `${leverage / 10_000}x`;
-
-  async function runLabeledTx<T>(
-    label: string,
-    fn: (args: {
-      walletClient: NonNullable<ReturnType<typeof resolveBaseWalletClient>>;
-      onSubmitted: (hash: `0x${string}`) => void;
-    }) => Promise<T>
-  ): Promise<T | undefined> {
-    const walletClient = resolveBaseWalletClient(accounts);
-    if (!walletClient) {
-      setTxPhase({
-        status: "error",
-        label,
-        message: "No Base wallet client. Reconnect an EVM wallet.",
-      });
-      return undefined;
-    }
-
-    let submittedHash: `0x${string}` | undefined;
-    try {
-      setTxPhase({ status: "awaiting-signature", label });
-      const result = await fn({
-        walletClient,
-        onSubmitted: (hash) => {
-          submittedHash = hash;
-          setTxPhase({ status: "submitted", label, hash });
-        },
-      });
-      if (submittedHash) {
-        setTxPhase({ status: "confirmed", label, hash: submittedHash });
-      } else {
-        setTxPhase({ status: "idle" });
-      }
-      return result;
-    } catch (error) {
-      const hash =
-        error instanceof ProtocolTxError ? error.hash : submittedHash;
-      setTxPhase({
-        status: "error",
-        label,
-        message: error instanceof Error ? error.message : `${label} failed`,
-        ...(hash ? { hash } : {}),
-      });
-      return undefined;
-    }
-  }
-
-  async function handleApprove() {
-    await runLabeledTx("Approve", async ({ walletClient, onSubmitted }) => {
-      await approveUnlimited({
-        walletClient,
-        publicClient,
-        token: asset.stock,
-        spender: baseDeployment.marginCall,
-        onSubmitted,
-      });
-      await refreshSnapshot();
-    });
-  }
 
   async function handleOpen() {
     if (stockAmount == null || stockAmount <= 0n) {
@@ -323,37 +258,57 @@ function CreatePositionForm(props: {
       return;
     }
 
-    const opened = await runLabeledTx(
-      "Open",
-      async ({ walletClient, onSubmitted }) => {
-        return runOpenPositionFlow({
-          walletClient,
-          publicClient,
-          address,
-          asset,
-          stockAmount,
-          targetLeverage: leverage,
-          chainId,
-          onSubmitted: (txHash, phaseLabel) => {
-            onSubmitted(txHash);
-            setTxPhase({
-              status: "submitted",
-              label: phaseLabel,
-              hash: txHash,
-            });
-          },
-        });
-      }
-    );
-
-    if (!opened) {
-      void refreshSnapshot();
+    const walletClient = resolveBaseWalletClient(accounts);
+    if (!walletClient) {
+      setTxPhase({
+        status: "error",
+        label: "Open",
+        message: "No Base wallet client. Reconnect an EVM wallet.",
+      });
       return;
     }
 
-    // Best-effort index — Base success is independent of Convex sync.
-    await syncPositionTx(opened.hash);
-    router.push(`/?opened=${opened.tokenId.toString()}`);
+    let submittedHash: `0x${string}` | undefined;
+    try {
+      setTxPhase({ status: "awaiting-signature", label: "Open" });
+      const opened = await runOpenPositionFlow({
+        walletClient,
+        publicClient,
+        address,
+        asset,
+        stockAmount,
+        targetLeverage: leverage,
+        chainId,
+        onSubmitted: (txHash, phaseLabel) => {
+          submittedHash = txHash;
+          setTxPhase({
+            status: "submitted",
+            label: phaseLabel,
+            hash: txHash,
+          });
+        },
+      });
+
+      setTxPhase({
+        status: "confirmed",
+        label: "Open position",
+        hash: opened.hash,
+      });
+
+      // Best-effort index — Base success is independent of Convex sync.
+      void syncPositionTx(opened.hash);
+      router.push(`/position/${opened.tokenId.toString()}`);
+    } catch (error) {
+      const hash =
+        error instanceof ProtocolTxError ? error.hash : submittedHash;
+      setTxPhase({
+        status: "error",
+        label: "Open",
+        message: error instanceof Error ? error.message : "Open failed",
+        ...(hash ? { hash } : {}),
+      });
+      void refreshSnapshot();
+    }
   }
 
   return (
@@ -467,21 +422,6 @@ function CreatePositionForm(props: {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={
-              pending ||
-              !chainGate.ok ||
-              !needsStockApproval ||
-              stockAmount == null ||
-              stockAmount <= 0n
-            }
-            onClick={() => void handleApprove()}
-          >
-            Approve
-          </Button>
           <Button
             type="button"
             variant="outline"
