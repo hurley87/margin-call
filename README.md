@@ -107,7 +107,7 @@ For local wallet connect:
 3. Allowlist `http://localhost:3000` (and production origin).
 4. Prefer **in-app** auth token storage (needed later for any Convex JWT bridge).
 
-`NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is read at build time. Without it, the page still renders a configure-Dynamic message and the Connect chunk is omitted from the build.
+`NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is read at build time. Without it, the page still renders a configure-Dynamic message and the Connect chunk is omitted from the build. **Switch to Base** prompts the wallet to add Base (8453) when it is not already present.
 
 Optional: set `NEXT_PUBLIC_BASE_RPC_URL` for public Base reads (defaults to `https://mainnet.base.org`).
 

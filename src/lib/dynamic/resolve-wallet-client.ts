@@ -1,5 +1,10 @@
 import type { WalletAccount } from "@dynamic-labs-sdk/client";
-import { getDefaultClient } from "@dynamic-labs-sdk/client";
+import {
+  NetworkNotAddedError,
+  addNetwork,
+  getDefaultClient,
+  switchActiveNetwork,
+} from "@dynamic-labs-sdk/client";
 import { getWalletProviderFromWalletAccount } from "@dynamic-labs-sdk/client/core";
 import { isEvmWalletAccount } from "@dynamic-labs-sdk/evm";
 import {
@@ -47,6 +52,34 @@ export async function assertWalletOnBase(
 
 /** Dynamic networkId for Base mainnet (matches switchActiveNetwork examples). */
 export const BASE_NETWORK_ID = String(BASE_CHAIN_ID);
+
+/**
+ * Switch the wallet to Base. If Base is not yet in the wallet, add it first
+ * (SDK ≥ 0.4 no longer auto-adds on switch).
+ */
+export async function switchWalletToBase(
+  walletAccount: WalletAccount
+): Promise<void> {
+  try {
+    await switchActiveNetwork({
+      walletAccount,
+      networkId: BASE_NETWORK_ID,
+    });
+  } catch (error) {
+    if (error instanceof NetworkNotAddedError) {
+      await addNetwork({
+        walletAccount,
+        networkData: error.networkData,
+      });
+      await switchActiveNetwork({
+        walletAccount,
+        networkId: BASE_NETWORK_ID,
+      });
+      return;
+    }
+    throw error;
+  }
+}
 
 export function parseNetworkIdToChainId(
   networkId: string | null | undefined

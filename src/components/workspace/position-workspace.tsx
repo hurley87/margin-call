@@ -1,18 +1,16 @@
 "use client";
 
 import type { WalletAccount } from "@dynamic-labs-sdk/client";
-import { isProgrammaticNetworkSwitchAvailable } from "@dynamic-labs-sdk/client";
 import { isEvmWalletAccount } from "@dynamic-labs-sdk/evm";
 import {
   useGetActiveNetworkId,
   useGetWalletAccounts,
-  useSwitchActiveNetwork,
 } from "@dynamic-labs-sdk/react-hooks";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { WalletConnectUi } from "@/components/wallet/wallet-connect-ui";
+import { WalletNetworkControls } from "@/components/wallet/wallet-network-controls";
 import {
-  BASE_NETWORK_ID,
   assertWalletOnBase,
   parseNetworkIdToChainId,
   resolveBaseWalletClient,
@@ -24,7 +22,6 @@ import {
   parseStockAmount,
 } from "@/lib/protocol/amounts";
 import {
-  BASE_CHAIN_ID,
   DEFAULT_LEVERAGE,
   OPENING_LEVERAGE_PRESETS,
 } from "@/lib/protocol/constants";
@@ -138,6 +135,7 @@ export function PositionWorkspace() {
           Wallet / network
         </h2>
         <WalletConnectUi />
+        {evmAccount ? <WalletNetworkControls evmAccount={evmAccount} /> : null}
       </section>
 
       {address && evmAccount ? (
@@ -162,12 +160,6 @@ function ConnectedWorkspace(props: {
   });
 
   const chainId = parseNetworkIdToChainId(networkQuery.data?.networkId);
-  const { mutate: switchNetwork, isPending: isSwitching } =
-    useSwitchActiveNetwork();
-
-  const canSwitch = isProgrammaticNetworkSwitchAvailable({
-    walletAccount: evmAccount,
-  });
 
   const [publicClient] = useState(() => createBasePublicClient());
   const [assetName, setAssetName] = useState<LaunchAssetName>("NVDAc");
@@ -294,42 +286,6 @@ function ConnectedWorkspace(props: {
 
   return (
     <>
-      <section className="space-y-2 text-xs text-[var(--t-muted)]">
-        <p>
-          Chain:{" "}
-          {chainId === BASE_CHAIN_ID ? (
-            <span className="text-[var(--t-green)]">Base (8453)</span>
-          ) : (
-            <span className="text-[var(--t-amber)]">
-              {chainId == null ? "unknown" : `chain ${chainId}`}
-            </span>
-          )}
-        </p>
-        {!chainGate.ok ? (
-          <div className="flex flex-col gap-2">
-            <p>{chainGate.reason}</p>
-            {canSwitch ? (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isSwitching || pending}
-                onClick={() =>
-                  switchNetwork({
-                    networkId: BASE_NETWORK_ID,
-                    walletAccount: evmAccount,
-                  })
-                }
-              >
-                Switch to Base
-              </Button>
-            ) : (
-              <p>Switch the wallet to Base mainnet (8453) to continue.</p>
-            )}
-          </div>
-        ) : null}
-      </section>
-
       <section className="space-y-4 border-t border-[var(--t-border)] pt-6">
         <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]">
           Open position
