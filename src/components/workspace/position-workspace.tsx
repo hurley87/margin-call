@@ -52,6 +52,7 @@ import {
   openPosition,
   repayAll,
 } from "@/lib/protocol/writes";
+import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
 import { formatShortAddress } from "@/lib/utils";
 
 function TxStatus({ phase }: { phase: TxPhase }) {
@@ -169,7 +170,9 @@ function ConnectedWorkspace(props: {
   const [position, setPosition] = useState<PositionView | null>(null);
   const [txPhase, setTxPhase] = useState<TxPhase>({ status: "idle" });
   const [readError, setReadError] = useState<string | null>(null);
+  const [indexNote, setIndexNote] = useState<string | null>(null);
   const snapshotGen = useRef(0);
+  const syncPositionTx = useSyncPositionTransaction();
 
   const asset = getAssetByName(assetName);
   const stockAmount = parseStockAmount(amountInput);
@@ -226,7 +229,8 @@ function ConnectedWorkspace(props: {
     fn: (args: {
       walletClient: NonNullable<ReturnType<typeof resolveBaseWalletClient>>;
       onSubmitted: (hash: `0x${string}`) => void;
-    }) => Promise<void>
+    }) => Promise<void>,
+    options?: { syncReceipt?: boolean }
   ) {
     const walletClient = resolveBaseWalletClient(accounts);
     if (!walletClient) {
@@ -262,6 +266,16 @@ function ConnectedWorkspace(props: {
         }
         return prev;
       });
+      // Best-effort indexer sync for lifecycle txs only (open/close).
+      // Never fail a confirmed Base tx because Convex sync failed.
+      if (options?.syncReceipt && submittedHash) {
+        const syncStatus = await syncPositionTx(submittedHash);
+        setIndexNote(
+          syncStatus === "pending"
+            ? "Position indexed pending — reconciliation will catch up shortly."
+            : null
+        );
+      }
     } catch (error) {
       const hash =
         error instanceof ProtocolTxError ? error.hash : submittedHash;
@@ -444,7 +458,8 @@ function ConnectedWorkspace(props: {
                   });
                   setPosition(await loadPosition(publicClient, tokenId));
                   await refreshSnapshot();
-                }
+                },
+                { syncReceipt: true }
               )
             }
           >
@@ -537,7 +552,8 @@ function ConnectedWorkspace(props: {
                         });
                         setPosition({ status: "closed", tokenId });
                         await refreshSnapshot();
-                      }
+                      },
+                      { syncReceipt: true }
                     )
                   }
                 >
@@ -556,6 +572,9 @@ function ConnectedWorkspace(props: {
 
       <section className="border-t border-[var(--t-border)] pt-4">
         <TxStatus phase={txPhase} />
+        {indexNote ? (
+          <p className="mt-2 text-xs text-[var(--t-muted)]">{indexNote}</p>
+        ) : null}
       </section>
     </>
   );

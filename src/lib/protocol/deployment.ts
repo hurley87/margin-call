@@ -16,6 +16,8 @@ export type BaseDeployment = {
   marginCall: `0x${string}`;
   creditPool: `0x${string}`;
   usdc: `0x${string}`;
+  /** First Base block containing the canonical MarginCall deploy. */
+  marginCallDeployedAtBlock: number;
   assets: readonly LaunchAsset[];
 };
 
@@ -67,11 +69,23 @@ function parseDeployment(raw: typeof baseDeploymentJson): BaseDeployment {
     throw new Error(`Expected 4 launch assets, got ${assets.length}`);
   }
 
+  const marginCallDeployedAtBlock = raw.marginCallDeployedAtBlock;
+  if (
+    typeof marginCallDeployedAtBlock !== "number" ||
+    !Number.isInteger(marginCallDeployedAtBlock) ||
+    marginCallDeployedAtBlock < 0
+  ) {
+    throw new Error(
+      `Invalid marginCallDeployedAtBlock in base.json: ${String(marginCallDeployedAtBlock)}`
+    );
+  }
+
   return {
     chainId: raw.chainId,
     marginCall: asAddress(raw.contracts.marginCall, "marginCall"),
     creditPool: asAddress(raw.contracts.creditPool, "creditPool"),
     usdc: asAddress(raw.shared.usdc, "usdc"),
+    marginCallDeployedAtBlock,
     assets,
   };
 }

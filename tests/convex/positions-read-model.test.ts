@@ -1,0 +1,740 @@
+/// <reference types="vite/client" />
+import { convexTest } from "convex-test";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Hex } from "viem";
+import { api, internal } from "../../convex/_generated/api";
+import schema from "../../convex/schema";
+import {
+  BASE_CHAIN_ID,
+  MARGIN_CALL_ADDRESS,
+  MARGIN_CALL_DEPLOYED_AT_BLOCK,
+} from "../../convex/lib/deployment";
+import {
+  positionClosedEvent,
+  positionLiquidatedEvent,
+  positionOpenedEvent,
+  transferEvent,
+  type WireLog,
+} from "../../convex/lib/events";
+import { runReconcile } from "../../convex/sync";
+import { encodeTestLog } from "./encode-test-log";
+
+const modules = import.meta.glob("../../convex/**/*.ts");
+
+const OWNER_A = "0x1111111111111111111111111111111111111111";
+const OWNER_B = "0x2222222222222222222222222222222222222222";
+const ZERO = "0x0000000000000000000000000000000000000000";
+const TX_OPEN =
+  "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" as Hex;
+const TX_TRANSFER =
+  "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as Hex;
+const TX_CLOSE =
+  "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" as Hex;
+const TX_LIQ =
+  "0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd" as Hex;
+
+function openLogs(tokenId: bigint, owner: string, assetId: bigint): WireLog[] {
+  return [
+    encodeTestLog({
+      event: positionOpenedEvent,
+      args: {
+        tokenId,
+        owner,
+        assetId,
+        stockAmount: 1_000_000n,
+      },
+      blockNumber: 51_470_700,
+      transactionHash: TX_OPEN,
+      logIndex: 0,
+    }),
+    encodeTestLog({
+      event: transferEvent,
+      args: { from: ZERO, to: owner, tokenId },
+      blockNumber: 51_470_700,
+      transactionHash: TX_OPEN,
+      logIndex: 1,
+    }),
+  ];
+}
+
+function mockRpc(
+  handlers: Record<string, (params: unknown[]) => unknown>
+): typeof fetch {
+  return vi.fn(async (_url: string, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body)) as {
+      method: string;
+      params: unknown[];
+    };
+    if (body.method === "eth_chainId") {
+      return new Response(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: `0x${BASE_CHAIN_ID.toString(16)}`,
+        }),
+        { status: 200 }
+      );
+    }
+    const handler = handlers[body.method];
+    if (!handler) {
+      throw new Error(`unexpected RPC ${body.method}`);
+    }
+    return new Response(
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        result: handler(body.params),
+      }),
+      { status: 200 }
+    );
+  }) as typeof fetch;
+}
+
+describe("Convex Position read model", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("creates a position from verified PositionOpened and ignores mint Transfer", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(1n, OWNER_A, 1n),
+    });
+
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "1",
+    });
+    expect(row).not.toBeNull();
+    expect(row!.tokenId).toBe("1");
+    expect(row!.owner).toBe(OWNER_A.toLowerCase());
+    expect(row!.assetId).toBe(1);
+    expect(row!.status).toBe("active");
+    expect(row!.openedTxHash).toBe(TX_OPEN);
+    expect(row).not.toHaveProperty("openedAt");
+    expect(row).not.toHaveProperty("currentDebt");
+    expect(row).not.toHaveProperty("nav");
+    expect(row).not.toHaveProperty("stockAmount");
+
+    const owned = await t.query(api.positions.positionsByOwner, {
+      owner: OWNER_A,
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(owned.page).toHaveLength(1);
+    expect(owned.page[0]!.tokenId).toBe("1");
+  });
+
+  it("ignores logs from a non-canonical address", async () => {
+    const t = convexTest(schema, modules);
+    const spoof = encodeTestLog({
+      event: positionOpenedEvent,
+      args: {
+        tokenId: 99n,
+        owner: OWNER_A,
+        assetId: 1n,
+        stockAmount: 1n,
+      },
+      blockNumber: 1,
+      transactionHash: TX_OPEN,
+      logIndex: 0,
+      address: "0xdeaddeaddeaddeaddeaddeaddeaddeaddeaddead",
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, { logs: [spoof] });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "99",
+    });
+    expect(row).toBeNull();
+  });
+
+  it("updates owner on real Transfer and removes from previous owner query", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(2n, OWNER_A, 2n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: OWNER_B, tokenId: 2n },
+          blockNumber: 51_470_800,
+          transactionHash: TX_TRANSFER,
+          logIndex: 0,
+        }),
+      ],
+    });
+
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "2",
+    });
+    expect(row!.owner).toBe(OWNER_B.toLowerCase());
+    expect(row!.status).toBe("active");
+
+    const prev = await t.query(api.positions.positionsByOwner, {
+      owner: OWNER_A,
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(prev.page).toHaveLength(0);
+
+    const next = await t.query(api.positions.positionsByOwner, {
+      owner: OWNER_B,
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(next.page).toHaveLength(1);
+  });
+
+  it("marks closed / liquidated from terminal events; burn Transfer does not zero owner", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(3n, OWNER_A, 1n),
+    });
+
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: ZERO, tokenId: 3n },
+          blockNumber: 51_470_900,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 3n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_470_900,
+          transactionHash: TX_CLOSE,
+          logIndex: 1,
+        }),
+      ],
+    });
+
+    const closed = await t.query(api.positions.positionByTokenId, {
+      tokenId: "3",
+    });
+    expect(closed!.status).toBe("closed");
+    expect(closed!.owner).toBe(OWNER_A.toLowerCase());
+    expect(closed!.terminalTxHash).toBe(TX_CLOSE);
+
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(4n, OWNER_A, 3n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: ZERO, tokenId: 4n },
+          blockNumber: 51_471_000,
+          transactionHash: TX_LIQ,
+          logIndex: 0,
+        }),
+        encodeTestLog({
+          event: positionLiquidatedEvent,
+          args: {
+            tokenId: 4n,
+            owner: OWNER_A,
+            stockAmount: 1n,
+            usdcOut: 100n,
+          },
+          blockNumber: 51_471_000,
+          transactionHash: TX_LIQ,
+          logIndex: 1,
+        }),
+      ],
+    });
+    const liq = await t.query(api.positions.positionByTokenId, {
+      tokenId: "4",
+    });
+    expect(liq!.status).toBe("liquidated");
+    expect(liq!.owner).toBe(OWNER_A.toLowerCase());
+  });
+
+  it("skips close-only apply (no ghost row) and backfills identity after Opened", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 9n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_471_200,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+    expect(
+      await t.query(api.positions.positionByTokenId, { tokenId: "9" })
+    ).toBeNull();
+
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(9n, OWNER_A, 2n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 9n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_471_250,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "9",
+    });
+    expect(row!.assetId).toBe(2);
+    expect(row!.status).toBe("closed");
+    expect(row!.openedTxHash).toBe(TX_OPEN);
+  });
+
+  it("same-batch Opened then Closed folds to closed with real identity", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionOpenedEvent,
+          args: {
+            tokenId: 10n,
+            owner: OWNER_A,
+            assetId: 1n,
+            stockAmount: 1n,
+          },
+          blockNumber: 51_471_300,
+          transactionHash: TX_OPEN,
+          logIndex: 0,
+        }),
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 10n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_471_300,
+          transactionHash: TX_CLOSE,
+          logIndex: 1,
+        }),
+      ],
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "10",
+    });
+    expect(row!.assetId).toBe(1);
+    expect(row!.status).toBe("closed");
+    expect(row!.openedTxHash).toBe(TX_OPEN);
+    expect(row!.terminalTxHash).toBe(TX_CLOSE);
+  });
+
+  it("replaying the same logs is idempotent", async () => {
+    const t = convexTest(schema, modules);
+    const logs = openLogs(5n, OWNER_A, 1n);
+    await t.mutation(internal.ingest.applyVerifiedLogs, { logs });
+    await t.mutation(internal.ingest.applyVerifiedLogs, { logs });
+
+    const all = await t.query(api.positions.allPositions, {
+      paginationOpts: { numItems: 50, cursor: null },
+    });
+    const matches = all.page.filter((p) => p.tokenId === "5");
+    expect(matches).toHaveLength(1);
+  });
+
+  it("does not reopen a closed position on replayed Opened; identity unchanged", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(6n, OWNER_A, 1n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 6n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_471_100,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(6n, OWNER_A, 1n),
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "6",
+    });
+    expect(row!.status).toBe("closed");
+    expect(row!.assetId).toBe(1);
+    expect(row!.openedTxHash).toBe(TX_OPEN);
+  });
+
+  it("replayed Opened after Transfer keeps the newer owner", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(20n, OWNER_A, 1n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: OWNER_B, tokenId: 20n },
+          blockNumber: 51_470_800,
+          transactionHash: TX_TRANSFER,
+          logIndex: 0,
+        }),
+      ],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(20n, OWNER_A, 1n),
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "20",
+    });
+    expect(row!.owner).toBe(OWNER_B.toLowerCase());
+    expect(row!.status).toBe("active");
+    expect(row!.assetId).toBe(1);
+    expect(row!.openedTxHash).toBe(TX_OPEN);
+  });
+
+  it("replayed older Transfer does not overwrite a newer owner", async () => {
+    const t = convexTest(schema, modules);
+    const OWNER_C = "0x3333333333333333333333333333333333333333";
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(21n, OWNER_A, 1n),
+    });
+    const transferAb = encodeTestLog({
+      event: transferEvent,
+      args: { from: OWNER_A, to: OWNER_B, tokenId: 21n },
+      blockNumber: 51_470_800,
+      transactionHash: TX_TRANSFER,
+      logIndex: 0,
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [transferAb],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_B, to: OWNER_C, tokenId: 21n },
+          blockNumber: 51_470_900,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [transferAb],
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "21",
+    });
+    expect(row!.owner).toBe(OWNER_C.toLowerCase());
+  });
+
+  it("same-block higher logIndex wins for ownership", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionOpenedEvent,
+          args: {
+            tokenId: 22n,
+            owner: OWNER_A,
+            assetId: 1n,
+            stockAmount: 1n,
+          },
+          blockNumber: 51_473_000,
+          transactionHash: TX_OPEN,
+          logIndex: 0,
+        }),
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: OWNER_B, tokenId: 22n },
+          blockNumber: 51_473_000,
+          transactionHash: TX_TRANSFER,
+          logIndex: 2,
+        }),
+      ],
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "22",
+    });
+    expect(row!.owner).toBe(OWNER_B.toLowerCase());
+    expect(row!.latestIndexedBlock).toBe(51_473_000);
+    expect(row!.latestIndexedLogIndex).toBe(2);
+  });
+
+  it("exact event replay is idempotent for ownership and cursor", async () => {
+    const t = convexTest(schema, modules);
+    const transfer = encodeTestLog({
+      event: transferEvent,
+      args: { from: OWNER_A, to: OWNER_B, tokenId: 23n },
+      blockNumber: 51_470_800,
+      transactionHash: TX_TRANSFER,
+      logIndex: 3,
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(23n, OWNER_A, 1n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, { logs: [transfer] });
+    const before = await t.query(api.positions.positionByTokenId, {
+      tokenId: "23",
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, { logs: [transfer] });
+    const after = await t.query(api.positions.positionByTokenId, {
+      tokenId: "23",
+    });
+    expect(after!.owner).toBe(OWNER_B.toLowerCase());
+    expect(after!.latestIndexedBlock).toBe(before!.latestIndexedBlock);
+    expect(after!.latestIndexedLogIndex).toBe(before!.latestIndexedLogIndex);
+  });
+
+  it("older close cannot regress a newer active transfer state", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(24n, OWNER_A, 1n),
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: transferEvent,
+          args: { from: OWNER_A, to: OWNER_B, tokenId: 24n },
+          blockNumber: 51_471_500,
+          transactionHash: TX_TRANSFER,
+          logIndex: 0,
+        }),
+      ],
+    });
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 24n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_470_750,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "24",
+    });
+    expect(row!.status).toBe("active");
+    expect(row!.owner).toBe(OWNER_B.toLowerCase());
+    expect(row!.terminalBlock).toBeUndefined();
+  });
+
+  it("paginates and filters allPositions / positionsByOwner deterministically", async () => {
+    const t = convexTest(schema, modules);
+    for (let i = 1; i <= 3; i++) {
+      await t.mutation(internal.ingest.applyVerifiedLogs, {
+        logs: [
+          encodeTestLog({
+            event: positionOpenedEvent,
+            args: {
+              tokenId: BigInt(100 + i),
+              owner: OWNER_A,
+              assetId: BigInt(i === 2 ? 2 : 1),
+              stockAmount: 1n,
+            },
+            blockNumber: 51_472_000 + i,
+            transactionHash: `0x${i.toString(16).padStart(64, "e")}` as Hex,
+            logIndex: 0,
+          }),
+        ],
+      });
+    }
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: [
+        encodeTestLog({
+          event: positionClosedEvent,
+          args: { tokenId: 101n, owner: OWNER_A, stockAmount: 1n },
+          blockNumber: 51_472_010,
+          transactionHash: TX_CLOSE,
+          logIndex: 0,
+        }),
+      ],
+    });
+
+    const active = await t.query(api.positions.allPositions, {
+      status: "active",
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(active.page.every((p) => p.status === "active")).toBe(true);
+    expect(active.page.length).toBeGreaterThanOrEqual(2);
+
+    const asset2 = await t.query(api.positions.allPositions, {
+      status: "active",
+      assetId: 2,
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(asset2.page).toHaveLength(1);
+    expect(asset2.page[0]!.tokenId).toBe("102");
+
+    const page1 = await t.query(api.positions.allPositions, {
+      paginationOpts: { numItems: 2, cursor: null },
+    });
+    expect(page1.page).toHaveLength(2);
+    expect(page1.isDone).toBe(false);
+    const page2 = await t.query(api.positions.allPositions, {
+      paginationOpts: { numItems: 2, cursor: page1.continueCursor },
+    });
+    expect(page2.page.length).toBeGreaterThanOrEqual(1);
+
+    await expect(
+      t.query(api.positions.allPositions, {
+        assetId: 2,
+        paginationOpts: { numItems: 10, cursor: null },
+      })
+    ).rejects.toThrow(/assetId requires status/);
+  });
+
+  it("starts reconcile from deployment block when cursor is missing", async () => {
+    const t = convexTest(schema, modules);
+    const openLog = openLogs(7n, OWNER_A, 1n)[0]!;
+
+    const fetchImpl = mockRpc({
+      eth_blockNumber: () =>
+        `0x${(MARGIN_CALL_DEPLOYED_AT_BLOCK + 20).toString(16)}`,
+      eth_getLogs: (params) => {
+        const filter = params[0] as { fromBlock: string; toBlock: string };
+        const from = Number(BigInt(filter.fromBlock));
+        expect(from).toBe(MARGIN_CALL_DEPLOYED_AT_BLOCK);
+        return [
+          {
+            address: MARGIN_CALL_ADDRESS,
+            topics: openLog.topics,
+            data: openLog.data,
+            blockNumber: `0x${openLog.blockNumber.toString(16)}`,
+            transactionHash: openLog.transactionHash,
+            logIndex: `0x${openLog.logIndex.toString(16)}`,
+          },
+        ];
+      },
+    });
+
+    await t.run(async (ctx) => {
+      const actionCtx = {
+        runQuery: ctx.runQuery.bind(ctx),
+        runMutation: ctx.runMutation.bind(ctx),
+        scheduler: {
+          runAfter: async () => null,
+        },
+      };
+      const result = await runReconcile(
+        actionCtx as Parameters<typeof runReconcile>[0],
+        fetchImpl
+      );
+      expect(result.fromBlock).toBe(MARGIN_CALL_DEPLOYED_AT_BLOCK);
+      expect(result.applied).toBeGreaterThanOrEqual(1);
+    });
+
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "7",
+    });
+    expect(row).not.toBeNull();
+    expect(row!.status).toBe("active");
+
+    const cursor = await t.query(internal.ingest.getSyncCursor, {});
+    expect(cursor).not.toBeNull();
+    expect(cursor!.cursorBlock).toBeGreaterThanOrEqual(
+      MARGIN_CALL_DEPLOYED_AT_BLOCK
+    );
+  });
+
+  it("syncTransaction verifies receipt via RPC and applies logs", async () => {
+    const t = convexTest(schema, modules);
+    const logs = openLogs(8n, OWNER_A, 1n);
+
+    vi.stubGlobal(
+      "fetch",
+      mockRpc({
+        eth_getTransactionReceipt: (params) => {
+          expect(params[0]).toBe(TX_OPEN);
+          return {
+            status: "0x1",
+            blockNumber: `0x${logs[0]!.blockNumber.toString(16)}`,
+            transactionHash: TX_OPEN,
+            logs: logs.map((l) => ({
+              address: l.address,
+              topics: l.topics,
+              data: l.data,
+              blockNumber: `0x${l.blockNumber.toString(16)}`,
+              transactionHash: l.transactionHash,
+              logIndex: `0x${l.logIndex.toString(16)}`,
+            })),
+          };
+        },
+      })
+    );
+
+    const result = await t.action(api.sync.syncTransaction, {
+      txHash: TX_OPEN,
+    });
+    expect(result.ok).toBe(true);
+    expect(result.applied).toBeGreaterThanOrEqual(1);
+
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "8",
+    });
+    expect(row!.owner).toBe(OWNER_A.toLowerCase());
+  });
+
+  it("syncTransaction rejects failed receipts and does not create rows", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubGlobal(
+      "fetch",
+      mockRpc({
+        eth_getTransactionReceipt: () => ({
+          status: "0x0",
+          blockNumber: "0x1",
+          transactionHash: TX_OPEN,
+          logs: [],
+        }),
+      })
+    );
+
+    const result = await t.action(api.sync.syncTransaction, {
+      txHash: TX_OPEN,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("receipt_failed");
+
+    const all = await t.query(api.positions.allPositions, {
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(all.page).toHaveLength(0);
+  });
+
+  it("syncTransaction rejects invalid hash without trusting client state", async () => {
+    const t = convexTest(schema, modules);
+    const result = await t.action(api.sync.syncTransaction, {
+      txHash: "not-a-hash",
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("invalid_tx_hash");
+  });
+
+  it("syncTransaction rejects wrong chainId", async () => {
+    const t = convexTest(schema, modules);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body)) as { method: string };
+        if (body.method === "eth_chainId") {
+          return new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: 1,
+              result: "0x1",
+            }),
+            { status: 200 }
+          );
+        }
+        throw new Error(`unexpected ${body.method}`);
+      })
+    );
+
+    const result = await t.action(api.sync.syncTransaction, {
+      txHash: TX_OPEN,
+    });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toBe("wrong_chain");
+  });
+});

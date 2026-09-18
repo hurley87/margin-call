@@ -8,6 +8,7 @@ import { addEvmExtension } from "@dynamic-labs-sdk/evm";
 import { DynamicProvider } from "@dynamic-labs-sdk/react-hooks";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
+import { ConvexClientProvider } from "@/components/providers/convex-client-provider";
 import { PositionWorkspace } from "@/components/workspace/position-workspace";
 
 // Loaded only through the ssr:false boundary in wallet-connect-control.tsx.
@@ -41,7 +42,9 @@ export function WalletConnectIsland() {
   return (
     <QueryClientProvider client={queryClient}>
       <DynamicProvider client={client}>
-        <PositionWorkspace />
+        <ConvexClientProvider>
+          <PositionWorkspace />
+        </ConvexClientProvider>
       </DynamicProvider>
     </QueryClientProvider>
   );

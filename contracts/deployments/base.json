@@ -4,6 +4,7 @@
   "notes": "Canonical Base launch deployment (issue #446) on 2026-09-18. Frontend should consume only this file for new positions. Do not store private keys. Do not overwrite deployments/base-nvda-only.legacy.json.",
   "network": "base",
   "chainId": 8453,
+  "marginCallDeployedAtBlock": 51470656,
   "sourceCommit": "e677df78d6fb51904b96dcff7aad90a456c21f35",
   "deployer": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
   "assetAdmin": "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c",
