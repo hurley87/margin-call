@@ -13,6 +13,7 @@ import {
   IndexUnavailable,
   PositionQueryBoundary,
 } from "@/components/positions/position-list";
+import { PositionArtwork } from "@/components/positions/position-artwork";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import { runManagedTx } from "@/components/protocol/run-managed-tx";
 import { TxStatus } from "@/components/protocol/tx-status";
@@ -21,6 +22,14 @@ import { FlashValue } from "@/components/ui/flash-value";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
 import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
 import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
+import {
+  STAGE_LABEL,
+  artworkPath,
+  faceFromStage,
+  faceFromStatus,
+  resolvePositionStage,
+  type PositionStage,
+} from "@/lib/positions/artwork";
 import { STATUS_LABEL, type PositionListItem } from "@/lib/positions/types";
 import { formatStockAmount, formatUsdcRaw } from "@/lib/protocol/amounts";
 import {
@@ -129,12 +138,44 @@ function PageHeader(props: {
   );
 }
 
-function NftSlot() {
+/** Shared frame so every state renders the NFT at the same size. */
+function NftSlot(props: { src: string | null; alt: string }) {
   return (
-    <div
-      aria-hidden
-      className="aspect-square w-full max-w-[220px] border border-dashed border-[var(--t-border)]"
+    <PositionArtwork
+      src={props.src}
+      alt={props.alt}
+      className="max-w-[220px]"
+      sizes="220px"
     />
+  );
+}
+
+/**
+ * The one artwork answer for a live Position: a stage the page has not read
+ * yet is neutral, and only a named stage earns a stage-suffixed label.
+ */
+function liveArtwork(assetId: number, stage: PositionStage | null) {
+  const label = assetLabel(assetId);
+  return {
+    src: artworkPath(assetId, faceFromStage(stage)),
+    alt:
+      stage === null
+        ? `${label} Position NFT`
+        : `${label} Position NFT — ${STAGE_LABEL[stage]}`,
+  };
+}
+
+/** The owner's immutable opening note — the same text the NFT description shows. */
+function Thesis({ thesis }: { thesis: string }) {
+  if (thesis.trim().length === 0) return null;
+
+  return (
+    <section className="space-y-1 border-t border-[var(--t-border)] pt-4">
+      <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]">
+        Thesis
+      </h2>
+      <p className="whitespace-pre-wrap text-sm leading-6">{thesis}</p>
+    </section>
   );
 }
 
@@ -148,7 +189,10 @@ function TerminalPosition({ position }: { position: PositionListItem }) {
         tokenId={position.tokenId}
         statusLabel={STATUS_LABEL[position.status]}
       />
-      <NftSlot />
+      <NftSlot
+        src={artworkPath(position.assetId, faceFromStatus(position.status))}
+        alt={`${assetLabel(position.assetId)} Position NFT — ${STATUS_LABEL[position.status]}`}
+      />
       <dl className="grid gap-3 border-t border-[var(--t-border)] pt-4 text-sm">
         <Fact label="Owner">{formatShortAddress(position.owner)}</Fact>
       </dl>
@@ -191,7 +235,11 @@ function PendingTerminalPosition(props: { assetId: number; tokenId: string }) {
         tokenId={props.tokenId}
         statusLabel="Position ended"
       />
-      <NftSlot />
+      {/* Burned, but the reason is not indexed yet, so do not claim liquidated art. */}
+      <NftSlot
+        src={artworkPath(props.assetId, "neutral")}
+        alt={`${assetLabel(props.assetId)} Position NFT`}
+      />
       <p className="text-sm leading-6 text-[var(--t-muted)]">
         This Position no longer exists on Base. Waiting for lifecycle indexing…
       </p>
@@ -264,15 +312,21 @@ function ActivePosition({ indexed }: { indexed: PositionListItem }) {
 
   const live = view?.status === "open" ? view : null;
   const loadError = tokenId == null ? "Not a valid token id." : readError;
+  const assetId = live?.assetId ?? indexed.assetId;
+
+  // Live stage artwork needs canonical Base state, which this page already
+  // reads for repay/close. Until it arrives, stay neutral rather than guess.
+  const stage = live ? resolvePositionStage(live) : null;
 
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        assetId={live?.assetId ?? indexed.assetId}
+        assetId={assetId}
         tokenId={indexed.tokenId}
         statusLabel={STATUS_LABEL.active}
       />
-      <NftSlot />
+      <NftSlot {...liveArtwork(assetId, stage)} />
+      {live ? <Thesis thesis={live.thesis} /> : null}
       {live ? (
         <LiveFacts position={live} />
       ) : loadError ? (

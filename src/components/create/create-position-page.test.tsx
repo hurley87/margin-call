@@ -139,6 +139,85 @@ describe("CreatePositionPage", () => {
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
   });
 
+  it("previews the healthy artwork for the selected stock", async () => {
+    render(<CreatePositionPage />);
+
+    const preview = await screen.findByAltText("NVDAc Position NFT preview");
+
+    // `next/image` wraps the path in its optimizer query, so decode before asserting.
+    // Every open mints healthy, so the preview is honest without a risk read.
+    expect(decodeURIComponent(preview.getAttribute("src") ?? "")).toContain(
+      "/nvda/healthy.png"
+    );
+  });
+
+  it("opens with an empty thesis when the field is untouched", async () => {
+    render(<CreatePositionPage />);
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
+        "disabled",
+        false
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+    await waitFor(() => {
+      expect(runOpenPositionFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({ thesis: "" })
+      );
+    });
+  });
+
+  it("sends the thesis with the same open transaction", async () => {
+    render(<CreatePositionPage />);
+
+    const field = await screen.findByPlaceholderText(/Why this position/);
+    fireEvent.change(field, { target: { value: "Long the puppy." } });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
+        "disabled",
+        false
+      );
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+
+    await waitFor(() => {
+      expect(runOpenPositionFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({ thesis: "Long the puppy." })
+      );
+    });
+  });
+
+  it("counts UTF-8 bytes, not characters, and blocks an over-long thesis", async () => {
+    render(<CreatePositionPage />);
+
+    const field = await screen.findByPlaceholderText(/Why this position/);
+
+    // 70 four-byte emoji are 70 characters but 280 bytes: exactly at the limit.
+    fireEvent.change(field, { target: { value: "🐶".repeat(70) } });
+    expect(screen.getByText("280/280 bytes")).not.toBeNull();
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
+        "disabled",
+        false
+      );
+    });
+
+    fireEvent.change(field, { target: { value: "🐶".repeat(71) } });
+    expect(screen.getByText(/284\/280 bytes/)).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
+      "disabled",
+      true
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(runOpenPositionFlowMock).not.toHaveBeenCalled();
+  });
+
   it("redirects to /?opened=tokenId and syncs hash after a successful open", async () => {
     render(<CreatePositionPage />);
 

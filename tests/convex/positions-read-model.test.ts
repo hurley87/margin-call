@@ -737,4 +737,50 @@ describe("Convex Position read model", () => {
     expect(result.ok).toBe(false);
     expect(result.reason).toBe("wrong_chain");
   });
+
+  it("refuses a redeploy reset aimed at a different coordinator", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(31n, OWNER_A, 1n),
+    });
+
+    await expect(
+      t.mutation(internal.ingest.resetForRedeploy, {
+        marginCall: "0x9999999999999999999999999999999999999999",
+      })
+    ).rejects.toThrow(/Refusing reset/);
+
+    const row = await t.query(api.positions.positionByTokenId, {
+      tokenId: "31",
+    });
+    expect(row).not.toBeNull();
+  });
+
+  it("clears positions and the sync cursor for the canonical coordinator", async () => {
+    const t = convexTest(schema, modules);
+    await t.mutation(internal.ingest.applyVerifiedLogs, {
+      logs: openLogs(32n, OWNER_A, 1n),
+    });
+    await t.mutation(internal.ingest.setSyncCursor, {
+      cursorBlock: MARGIN_CALL_DEPLOYED_AT_BLOCK + 5,
+      lastRunAt: Date.now(),
+    });
+
+    const result = await t.mutation(internal.ingest.resetForRedeploy, {
+      marginCall: MARGIN_CALL_ADDRESS.toUpperCase(),
+    });
+    expect(result).toEqual({
+      deleted: 1,
+      remaining: false,
+      cursorCleared: true,
+    });
+
+    const all = await t.query(api.positions.allPositions, {
+      paginationOpts: { numItems: 10, cursor: null },
+    });
+    expect(all.page).toHaveLength(0);
+    // A null cursor is what makes the next reconcile restart from the new
+    // deployment block rather than the retired coordinator's head.
+    expect(await t.query(internal.ingest.getSyncCursor, {})).toBeNull();
+  });
 });

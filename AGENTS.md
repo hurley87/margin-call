@@ -14,6 +14,16 @@ launch stack (issue #446: NVDAc + AAPLc + METAc + GOOGLc). The historical NVDA-o
 deployment is preserved at `contracts/deployments/base-nvda-only.legacy.json`; do not
 point the frontend at those addresses. The browser workspace consumes only `base.json`.
 
+The living Position NFT slice (issue #461 — optional on-chain thesis, HTTPS `tokenURI`,
+`GET /api/nft/[tokenId]`, stage artwork under `public/`) is **live on Base**. It changed
+`MarginCall`, so it required the coordinator-only redeploy in
+`contracts/script/BASE_LAUNCH.md`; that landed on 2026-09-18 and `base.json` now points at the
+coordinator that has `thesisOf` and the five-argument `openPosition`. The retired pair is kept
+under `retiredCoordinator` in that manifest for provenance — never point the frontend at it.
+
+`GET /api/nft/[tokenId]` makes five Base reads per request, which the public RPC rate-limits.
+Production needs the server-only `BASE_RPC_URL` set, or the route returns 502 under load.
+
 ## Commands
 
 - `pnpm dev` — dev server on localhost:3000

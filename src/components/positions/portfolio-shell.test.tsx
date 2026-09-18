@@ -108,6 +108,7 @@ vi.mock("@/lib/protocol/reads", async (importOriginal) => {
       currentDebt: 0n,
       owner: "0x1234567890abcdef1234567890abcdef12345678",
       executor: "0x0000000000000000000000000000000000000000",
+      thesis: "",
       nav: null,
       liquidatable: null,
     }),
@@ -126,6 +127,7 @@ import { AllPositionsPage } from "@/components/positions/all-positions-page";
 import { MyPositionsPage } from "@/components/positions/my-positions-page";
 import { PositionDetailPage } from "@/components/positions/position-detail-page";
 import { AppShell } from "@/components/shell/app-shell";
+import { loadPosition } from "@/lib/protocol/reads";
 import CreatePositionPage from "@/app/create/page";
 
 const CONNECTED_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678" as const;
@@ -154,6 +156,7 @@ describe("portfolio-first app shell", () => {
       loadMore: vi.fn(),
     });
     useQueryMock.mockReturnValue(undefined);
+    vi.mocked(loadPosition).mockClear();
   });
 
   afterEach(() => {
@@ -282,6 +285,19 @@ describe("portfolio-first app shell", () => {
     ).toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
+
+    // Card artwork must stay lifecycle-driven: live health here would cost one
+    // Base read per card, which is exactly what this page refuses to do.
+    expect(loadPosition).not.toHaveBeenCalled();
+    // Thumbnails are decorative (the ticker and status are already text), so
+    // they are queried from the DOM rather than the accessibility tree.
+    const thumbnails = Array.from(document.querySelectorAll("img")).map((img) =>
+      decodeURIComponent(img.getAttribute("src") ?? "")
+    );
+    expect(thumbnails).toEqual([
+      expect.stringContaining("/logos/nvda.png"),
+      expect.stringContaining("/logos/aapl.png"),
+    ]);
   });
 
   it("filters All Positions by lifecycle without live RPC fields", () => {
@@ -310,6 +326,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.getByText(/Owner/)).not.toBeNull();
     expect(screen.queryByText(/NAV/i)).toBeNull();
     expect(screen.queryByText(/debt/i)).toBeNull();
+    expect(loadPosition).not.toHaveBeenCalled();
   });
 
   it("requires a status before asset chips can be selected", () => {

@@ -71,9 +71,9 @@ contract MultiStockForkSmokeTest is MarginCallForkBase {
         IERC20(rails[1].stock).approve(address(marginCall), type(uint256).max);
         IERC20(rails[2].stock).approve(address(marginCall), type(uint256).max);
 
-        uint256 nvdaPos = marginCall.openPosition(nvdaId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0);
-        uint256 aaplPos = marginCall.openPosition(aaplId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0);
-        uint256 metaPos = marginCall.openPosition(metaId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0);
+        uint256 nvdaPos = marginCall.openPosition(nvdaId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0, "");
+        uint256 aaplPos = marginCall.openPosition(aaplId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0, "");
+        uint256 metaPos = marginCall.openPosition(metaId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0, "");
         vm.stopPrank();
 
         uint256 nvdaStock = marginCall.positions(nvdaPos).stockAmount;
@@ -117,7 +117,7 @@ contract MultiStockForkSmokeTest is MarginCallForkBase {
         IERC20(rail.stock).approve(address(marginCall), type(uint256).max);
         IERC20(BaseV1Constants.USDC).approve(address(marginCall), type(uint256).max);
 
-        uint256 tokenId = marginCall.openPosition(assetId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0);
+        uint256 tokenId = marginCall.openPosition(assetId, CONTRIBUTION, V1Config.LEVERAGE_1_25X, 0, "");
         assertEq(marginCall.positions(tokenId).assetId, assetId);
         assertGt(marginCall.positions(tokenId).stockAmount, CONTRIBUTION, "financed buy did not increase stock");
         assertGt(marginCall.positions(tokenId).principal, 0);

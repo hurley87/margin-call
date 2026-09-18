@@ -90,6 +90,7 @@ export async function openPosition(args: {
   assetId: bigint;
   stockAmount: bigint;
   targetLeverage: bigint;
+  thesis: string;
   onSubmitted?: (hash: `0x${string}`) => void;
 }): Promise<{ receipt: TransactionReceipt; tokenId: bigint }> {
   const receipt = await sendAndWait({
@@ -100,6 +101,7 @@ export async function openPosition(args: {
       assetId: args.assetId,
       stockAmount: args.stockAmount,
       targetLeverage: args.targetLeverage,
+      thesis: args.thesis,
     }),
     label: "Open position",
     onSubmitted: args.onSubmitted,

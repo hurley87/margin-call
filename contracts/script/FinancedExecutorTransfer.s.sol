@@ -85,7 +85,7 @@ contract FinancedExecutorTransfer is LocalHarnessBase {
         usdc.mint(address(pool), CREDIT_SEED);
         nvdac.mint(alice, contributedStock);
         nvdac.approve(address(marginCall), contributedStock);
-        uint256 tokenId = marginCall.openPosition(nvdaAssetId, contributedStock, leverage, 0);
+        uint256 tokenId = marginCall.openPosition(nvdaAssetId, contributedStock, leverage, 0, "");
         vm.stopBroadcast();
 
         _persistOpen(alice, executor, bob, usdc, marginCall, tokenId);

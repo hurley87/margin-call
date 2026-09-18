@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { PositionArtwork } from "@/components/positions/position-artwork";
+import { artworkPath, faceFromStatus } from "@/lib/positions/artwork";
 import type { PositionListItem } from "@/lib/positions/types";
 import { STATUS_LABEL } from "@/lib/positions/types";
 import { assetLabel } from "@/lib/protocol/deployment";
@@ -12,7 +14,13 @@ export type PositionCardProps = {
   highlighted?: boolean;
 };
 
-/** Browseable Position NFT row — identity only, no live financial state. */
+/**
+ * Browseable Position NFT row — identity only, no live financial state.
+ *
+ * The thumbnail is deliberately lifecycle-driven: rendering live health here
+ * would mean one Base read per card. Live stage artwork lives on the detail
+ * page, which already reads canonical state.
+ */
 export function PositionCard(props: PositionCardProps) {
   const { position, showOwner = false, highlighted = false } = props;
   const { tokenId, assetId, status, owner } = position;
@@ -29,7 +37,13 @@ export function PositionCard(props: PositionCardProps) {
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
+        <PositionArtwork
+          src={artworkPath(assetId, faceFromStatus(status))}
+          alt=""
+          className="w-12 shrink-0"
+          sizes="48px"
+        />
+        <div className="min-w-0 flex-1 space-y-1">
           <p className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)]">
             {assetLabel(assetId)}
           </p>

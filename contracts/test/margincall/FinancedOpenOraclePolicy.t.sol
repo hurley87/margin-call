@@ -99,7 +99,7 @@ contract FinancedOpenOraclePolicyTest is Test {
 
     function test_financedOpenSucceedsOnALiveRound() public {
         vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        uint256 tokenId = marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0, "");
         assertEq(marginCall.ownerOf(tokenId), alice);
     }
 
@@ -110,7 +110,7 @@ contract FinancedOpenOraclePolicyTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.OracleNotLive.selector, IOracleAdapter.State.HELD));
-        marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0, "");
 
         // An operator commits the hold while the registry is paused.
         oracle.refresh();
@@ -121,14 +121,14 @@ contract FinancedOpenOraclePolicyTest is Test {
         // Same frozen round: still refused, now as INVALID rather than accepted as LIVE.
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.OracleNotLive.selector, IOracleAdapter.State.INVALID));
-        marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0, "");
 
         // A genuinely fresh post-hold round clears the gate.
         _setRound(
             OracleFixtures.NVDA_ROUND_ID + 1, OracleFixtures.NVDA_STARTED_AT + 60, OracleFixtures.NVDA_UPDATED_AT + 60
         );
         vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        uint256 tokenId = marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0, "");
         assertEq(marginCall.ownerOf(tokenId), alice);
     }
 
@@ -139,7 +139,7 @@ contract FinancedOpenOraclePolicyTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.OracleNotLive.selector, IOracleAdapter.State.HELD));
-        marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0, "");
 
         assertFalse(oracle.hasObservedHold(), "a reverted open records nothing");
         assertEq(oracle.lastRefreshedAt(), 0);
@@ -158,7 +158,7 @@ contract FinancedOpenOraclePolicyTest is Test {
         assertEq(uint256(obs.state), uint256(IOracleAdapter.State.LIVE), "unobserved halt is undetectable");
 
         vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        uint256 tokenId = marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0, "");
         assertEq(marginCall.ownerOf(tokenId), alice);
     }
 
@@ -171,7 +171,7 @@ contract FinancedOpenOraclePolicyTest is Test {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.OracleNotLive.selector, IOracleAdapter.State.INVALID));
-        marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        marginCall.openPosition(assetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0, "");
     }
 
     function _setRound(uint80 roundId, uint256 startedAt, uint256 updatedAt) private {

@@ -50,6 +50,7 @@ function livePosition(overrides: Partial<OpenPosition> = {}): OpenPosition {
     currentDebt: 250_000n,
     owner: OWNER,
     executor: EXECUTOR,
+    thesis: "",
     nav: 1_250_000n,
     liquidatable: false,
     ...overrides,

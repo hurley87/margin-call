@@ -61,7 +61,7 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(MarginCall.ZeroStockAmount.selector);
-        marginCall.openPosition(defaultAssetId, 0, SPOT_LEVERAGE, 0);
+        marginCall.openPosition(defaultAssetId, 0, SPOT_LEVERAGE, 0, "");
     }
 
     function test_leverageBelowOneTimesReverts() public {
@@ -69,18 +69,18 @@ contract MarginCallTest is MarginCallTestBase {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, 0));
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 0, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 0, 0, "");
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, 9_999));
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 9_999, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 9_999, 0, "");
     }
 
     function test_leverageAboveMaxReverts() public {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, 15_001));
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 15_001, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, 15_001, 0, "");
     }
 
     function test_intermediateLeverageReverts() public {
@@ -89,7 +89,7 @@ contract MarginCallTest is MarginCallTestBase {
         for (uint256 i = 0; i < invalid.length; ++i) {
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, invalid[i]));
-            marginCall.openPosition(defaultAssetId, ONE_NVDAC, invalid[i], 0);
+            marginCall.openPosition(defaultAssetId, ONE_NVDAC, invalid[i], 0, "");
         }
         assertEq(nvdac.balanceOf(alice), 4 * ONE_NVDAC);
         assertEq(nvdac.balanceOf(address(marginCall)), 0);
@@ -100,7 +100,7 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.InvalidMinStockOut.selector, 1));
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 1);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 1, "");
     }
 
     /// @dev `_requireLeverageWithinCeiling` checks only `targetLeverage`, which is sound because the preset set is
@@ -126,7 +126,7 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, leverage));
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, leverage, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, leverage, 0, "");
     }
 
     function testFuzz_nonzeroMinStockOutReverts(uint256 minStockOut) public {
@@ -134,7 +134,7 @@ contract MarginCallTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.InvalidMinStockOut.selector, minStockOut));
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, minStockOut);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, minStockOut, "");
     }
 
     function test_unauthorizedCloseRevertsAndLeavesState() public {
@@ -359,18 +359,13 @@ contract MarginCallTest is MarginCallTestBase {
         assertEq(nvdac.balanceOf(carol), deposit);
     }
 
-    function test_liveTokenURIIsValidIdentityMetadata() public {
-        _fund(alice, ONE_NVDAC);
-        uint256 tokenId = _open(alice, ONE_NVDAC);
+    function test_liveTokenURIIsTheHttpsMetadataEndpoint() public {
+        _fund(alice, 2 * ONE_NVDAC);
+        uint256 first = _open(alice, ONE_NVDAC);
+        uint256 second = _open(alice, ONE_NVDAC);
 
-        // `_expectedTokenURI` is `TOKEN_URI_PREFIX + Base64.encode(_expectedTokenJson)`, so this single
-        // equality pins the prefix, the encoding, and the payload; the JSON shape is asserted on the payload.
-        assertEq(marginCall.tokenURI(tokenId), _expectedTokenURI(tokenId));
-
-        string memory json = _expectedTokenJson(tokenId);
-        assertEq(vm.parseJsonString(json, ".name"), "Margin Call Position 1");
-        assertEq(vm.parseJsonString(json, ".description"), "Margin Call Position NFT");
-        vm.parseJson(json);
+        assertEq(marginCall.tokenURI(first), "https://margincall.fun/api/nft/1");
+        assertEq(marginCall.tokenURI(second), _expectedTokenURI(second));
     }
 
     function test_tokenURIRevertsAfterBurn() public {
@@ -383,6 +378,76 @@ contract MarginCallTest is MarginCallTestBase {
         marginCall.tokenURI(tokenId);
     }
 
+    function test_openRecordsThesisAndDefaultsToEmpty() public {
+        _fund(alice, 2 * ONE_NVDAC);
+
+        uint256 withThesis = _openWithThesis(alice, ONE_NVDAC, "AI capex remains structurally underpriced.");
+        assertEq(marginCall.thesisOf(withThesis), "AI capex remains structurally underpriced.");
+
+        uint256 withoutThesis = _open(alice, ONE_NVDAC);
+        assertEq(marginCall.thesisOf(withoutThesis), "");
+    }
+
+    /// @dev The thesis must outlive the Position struct: `closePosition` deletes `_positions` and burns the NFT.
+    function test_thesisSurvivesCloseAndIsImmutable() public {
+        _fund(alice, ONE_NVDAC);
+        uint256 tokenId = _openWithThesis(alice, ONE_NVDAC, "Long the puppy.");
+
+        vm.prank(alice);
+        marginCall.closePosition(tokenId);
+
+        _assertPositionDeleted(tokenId);
+        assertEq(marginCall.thesisOf(tokenId), "Long the puppy.");
+    }
+
+    function test_thesisAtTheByteLimitIsAcceptedAndOneOverReverts() public {
+        uint256 maxBytes = marginCall.MAX_THESIS_BYTES();
+        assertEq(maxBytes, 280, "advertised thesis limit drifted");
+
+        string memory atLimit = _repeat("a", maxBytes);
+        string memory overLimit = _repeat("a", maxBytes + 1);
+
+        _fund(alice, 2 * ONE_NVDAC);
+        uint256 tokenId = _openWithThesis(alice, ONE_NVDAC, atLimit);
+        assertEq(bytes(marginCall.thesisOf(tokenId)).length, maxBytes);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.ThesisTooLong.selector, maxBytes + 1, maxBytes));
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 0, overLimit);
+    }
+
+    /// @dev The limit is UTF-8 bytes, not characters: 94 four-byte emoji are 376 bytes and must be rejected.
+    function test_thesisLimitCountsUtf8BytesNotCharacters() public {
+        _fund(alice, ONE_NVDAC);
+        string memory emoji = _repeat(unicode"🐶", 94);
+        uint256 length = bytes(emoji).length;
+        assertEq(length, 376);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.ThesisTooLong.selector, length, 280));
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 0, emoji);
+    }
+
+    /// @dev An over-long thesis must not move stock: the check runs before `safeTransferFrom`.
+    function test_overLongThesisLeavesNoCustodyOrToken() public {
+        _fund(alice, ONE_NVDAC);
+        string memory overLimit = _repeat("a", 281);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(MarginCall.ThesisTooLong.selector, 281, 280));
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 0, overLimit);
+
+        assertEq(nvdac.balanceOf(alice), ONE_NVDAC);
+        assertEq(nvdac.balanceOf(address(marginCall)), 0);
+        _assertTokenDoesNotExist(1);
+    }
+
+    function _repeat(string memory unit, uint256 times) private pure returns (string memory out) {
+        for (uint256 i = 0; i < times; ++i) {
+            out = string.concat(out, unit);
+        }
+    }
+
     function test_openRevertsWhenFalseReturningTransferFrom() public {
         FalseReturningNvdaC token = new FalseReturningNvdaC();
         (MarginCall isolated, uint256 assetId) = _deployStackWithStock(address(token));
@@ -391,7 +456,7 @@ contract MarginCallTest is MarginCallTestBase {
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(token)));
-        isolated.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
+        isolated.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0, "");
 
         _assertTokenDoesNotExistOn(isolated, 1);
         _assertPositionDeletedOn(isolated, 1);
@@ -406,7 +471,7 @@ contract MarginCallTest is MarginCallTestBase {
 
         vm.prank(alice);
         vm.expectRevert(RevertingNvdaC.TransferFailed.selector);
-        isolated.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
+        isolated.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0, "");
 
         _assertTokenDoesNotExistOn(isolated, 1);
         _assertPositionDeletedOn(isolated, 1);
@@ -419,7 +484,7 @@ contract MarginCallTest is MarginCallTestBase {
         vm.expectRevert(
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, address(marginCall), 0, ONE_NVDAC)
         );
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 0, "");
 
         _assertTokenDoesNotExist(1);
         _assertPositionDeleted(1);

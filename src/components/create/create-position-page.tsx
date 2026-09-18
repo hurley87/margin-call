@@ -6,6 +6,7 @@ import {
   useGetActiveNetworkId,
   useGetWalletAccounts,
 } from "@dynamic-labs-sdk/react-hooks";
+import { MAX_THESIS_BYTES, thesisByteLength } from "@margin-call/shared/thesis";
 import { useRouter } from "next/navigation";
 import {
   useCallback,
@@ -14,9 +15,11 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { PositionArtwork } from "@/components/positions/position-artwork";
 import { runManagedTx } from "@/components/protocol/run-managed-tx";
 import { TxStatus } from "@/components/protocol/tx-status";
 import { Button } from "@/components/ui/button";
+import { artworkPath } from "@/lib/positions/artwork";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
 import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
 import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
@@ -142,6 +145,7 @@ function CreatePositionForm(props: {
   const [publicClient] = useState(() => createBasePublicClient());
   const [assetName, setAssetName] = useState<LaunchAssetName>("NVDAc");
   const [amountInput, setAmountInput] = useState("0.01");
+  const [thesis, setThesis] = useState("");
   const [leverage, setLeverage] = useState(DEFAULT_LEVERAGE);
   const [snapshot, setSnapshot] = useState<OpenSnapshot | null>(null);
   const [txPhase, setTxPhase] = useState<TxPhase>({ status: "idle" });
@@ -151,6 +155,10 @@ function CreatePositionForm(props: {
   const asset = getAssetByName(assetName);
   const stockAmount = parseStockAmount(amountInput);
   const pending = isTxPending(txPhase);
+
+  // The contract measures UTF-8 bytes, so emoji cost more than the count shows.
+  const thesisBytes = thesisByteLength(thesis);
+  const thesisTooLong = thesisBytes > MAX_THESIS_BYTES;
 
   const refreshSnapshot = useCallback(async () => {
     const gen = ++snapshotGen.current;
@@ -202,6 +210,16 @@ function CreatePositionForm(props: {
       return;
     }
 
+    // Guarded here too: the button is disabled, but the contract is the limit.
+    if (thesisTooLong) {
+      setTxPhase({
+        status: "error",
+        label: "Open",
+        message: `Thesis is ${thesisBytes} bytes; the limit is ${MAX_THESIS_BYTES}.`,
+      });
+      return;
+    }
+
     const opened = await runManagedTx({
       label: "Open",
       accounts,
@@ -214,6 +232,7 @@ function CreatePositionForm(props: {
           asset,
           stockAmount,
           targetLeverage: leverage,
+          thesis,
           chainId,
           onSubmitted,
         }),
@@ -266,6 +285,29 @@ function CreatePositionForm(props: {
         </label>
 
         <label className="flex flex-col gap-1 text-xs">
+          <span className="text-[var(--t-muted)]">Thesis (optional)</span>
+          <textarea
+            className="min-h-20 border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)]"
+            rows={3}
+            value={thesis}
+            disabled={pending}
+            placeholder="Why this position? Recorded on Base, forever."
+            aria-describedby="thesis-budget"
+            aria-invalid={thesisTooLong || undefined}
+            onChange={(event) => setThesis(event.target.value)}
+          />
+          <span
+            id="thesis-budget"
+            className={
+              thesisTooLong ? "text-[var(--t-red)]" : "text-[var(--t-muted)]"
+            }
+          >
+            {thesisBytes}/{MAX_THESIS_BYTES} bytes
+            {thesisTooLong ? " — too long to mint" : ""}
+          </span>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs">
           <span className="text-[var(--t-muted)]">Leverage</span>
           <select
             className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)]"
@@ -280,6 +322,14 @@ function CreatePositionForm(props: {
             ))}
           </select>
         </label>
+
+        {/* Every open mints healthy by construction: leverage checks pass first. */}
+        <PositionArtwork
+          src={artworkPath(asset.assetId, "healthy")}
+          alt={`${assetName} Position NFT preview`}
+          className="max-w-[180px]"
+          sizes="180px"
+        />
 
         <div className="space-y-1 border border-[var(--t-border)] px-3 py-3 text-xs text-[var(--t-muted)]">
           <p>
@@ -348,7 +398,8 @@ function CreatePositionForm(props: {
               pending ||
               !readiness.ok ||
               stockAmount == null ||
-              stockAmount <= 0n
+              stockAmount <= 0n ||
+              thesisTooLong
             }
             onClick={() => void handleOpen()}
           >

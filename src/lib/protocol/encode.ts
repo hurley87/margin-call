@@ -2,19 +2,26 @@ import { encodeFunctionData } from "viem";
 import { erc20Abi, marginCallAbi } from "@/lib/protocol/abi";
 
 /**
- * Encode `openPosition(assetId, stockAmount, targetLeverage, 0)`.
+ * Encode `openPosition(assetId, stockAmount, targetLeverage, 0, thesis)`.
  * For this minimal UI, `minStockOut = 0` is intentional — the execution adapter
- * still enforces its oracle-relative floor.
+ * still enforces its oracle-relative floor. The thesis is immutable once minted.
  */
 export function encodeOpenPosition(args: {
   assetId: bigint;
   stockAmount: bigint;
   targetLeverage: bigint;
+  thesis: string;
 }): `0x${string}` {
   return encodeFunctionData({
     abi: marginCallAbi,
     functionName: "openPosition",
-    args: [args.assetId, args.stockAmount, args.targetLeverage, 0n],
+    args: [
+      args.assetId,
+      args.stockAmount,
+      args.targetLeverage,
+      0n,
+      args.thesis,
+    ],
   });
 }
 

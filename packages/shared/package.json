@@ -8,7 +8,8 @@
     ".": "./src/index.ts",
     "./address": "./src/address.ts",
     "./margin-call-events": "./src/margin-call-events.ts",
-    "./parse-private-key": "./src/parse-private-key.ts"
+    "./parse-private-key": "./src/parse-private-key.ts",
+    "./thesis": "./src/thesis.ts"
   },
   "dependencies": {
     "viem": "^2.56.3"

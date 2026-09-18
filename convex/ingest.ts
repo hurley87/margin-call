@@ -2,7 +2,7 @@ import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import type { MutationCtx } from "./_generated/server";
 import { internalMutation, internalQuery } from "./_generated/server";
-import { SYNC_STATE_KEY } from "./lib/deployment";
+import { MARGIN_CALL_ADDRESS, SYNC_STATE_KEY } from "./lib/deployment";
 import {
   type PositionEffect,
   type WireLog,
@@ -139,6 +139,61 @@ async function applyEffect(ctx: MutationCtx, effect: PositionEffect) {
     }
   }
 }
+
+/** Rows deleted per call, so one reset cannot exceed a mutation's time budget. */
+const RESET_BATCH = 200;
+
+/**
+ * Drop the read model after the canonical coordinator is redeployed.
+ *
+ * Indexed positions are keyed by token id, which a new `MarginCall` restarts at
+ * 1, so keeping the old rows would mean two different positions claiming the
+ * same id. Deleting the sync cursor restarts indexing from
+ * `MARGIN_CALL_DEPLOYED_AT_BLOCK` — the one definition of the start block.
+ *
+ * `marginCall` must match the address this deployment was built against, so the
+ * reset can only run *after* `deployments/base.json` and Convex are both on the
+ * new coordinator. Running it a batch at a time keeps it safe at any table size;
+ * re-run while `remaining` is true.
+ */
+export const resetForRedeploy = internalMutation({
+  args: { marginCall: v.string() },
+  returns: v.object({
+    deleted: v.number(),
+    remaining: v.boolean(),
+    cursorCleared: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    if (args.marginCall.toLowerCase() !== MARGIN_CALL_ADDRESS) {
+      throw new Error(
+        `Refusing reset: this deployment indexes ${MARGIN_CALL_ADDRESS}, not ${args.marginCall.toLowerCase()}`
+      );
+    }
+
+    const batch = await ctx.db.query("positions").take(RESET_BATCH + 1);
+    const remaining = batch.length > RESET_BATCH;
+    const doomed = remaining ? batch.slice(0, RESET_BATCH) : batch;
+    for (const row of doomed) {
+      await ctx.db.delete(row._id);
+    }
+
+    // Keep the cursor until the table is empty: clearing it early would let a
+    // scheduled reconcile re-insert rows this reset has not reached yet.
+    let cursorCleared = false;
+    if (!remaining) {
+      const cursor = await ctx.db
+        .query("syncState")
+        .withIndex("by_key", (q) => q.eq("key", SYNC_STATE_KEY))
+        .unique();
+      if (cursor) {
+        await ctx.db.delete(cursor._id);
+        cursorCleared = true;
+      }
+    }
+
+    return { deleted: doomed.length, remaining, cursorCleared };
+  },
+});
 
 export const getSyncCursor = internalQuery({
   args: {},

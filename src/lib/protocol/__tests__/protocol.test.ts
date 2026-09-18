@@ -38,7 +38,9 @@ describe("base deployment assets", () => {
 
     expect(baseDeployment.chainId).toBe(BASE_CHAIN_ID);
     expect(baseDeployment.assets).toHaveLength(4);
-    expect(baseDeployment.marginCallDeployedAtBlock).toBe(51470656);
+    // Living-NFT coordinator redeploy (issue #461). The indexer backfills from
+    // here, so a stale block would replay the retired coordinator's events.
+    expect(baseDeployment.marginCallDeployedAtBlock).toBe(51492280);
   });
 });
 
@@ -69,11 +71,12 @@ describe("assertBaseChain", () => {
 });
 
 describe("encodeOpenPosition", () => {
-  it("encodes openPosition(assetId, amount, leverage, 0)", () => {
+  it("encodes openPosition(assetId, amount, leverage, 0, thesis)", () => {
     const data = encodeOpenPosition({
       assetId: 1n,
       stockAmount: 1_000_000n,
       targetLeverage: BigInt(DEFAULT_LEVERAGE),
+      thesis: "AI capex stays underpriced.",
     });
 
     const decoded = decodeFunctionData({
@@ -82,7 +85,26 @@ describe("encodeOpenPosition", () => {
     });
 
     expect(decoded.functionName).toBe("openPosition");
-    expect(decoded.args).toEqual([1n, 1_000_000n, BigInt(LEVERAGE_1_25X), 0n]);
+    expect(decoded.args).toEqual([
+      1n,
+      1_000_000n,
+      BigInt(LEVERAGE_1_25X),
+      0n,
+      "AI capex stays underpriced.",
+    ]);
+  });
+
+  it("encodes an empty thesis as the empty string the contract accepts", () => {
+    const data = encodeOpenPosition({
+      assetId: 1n,
+      stockAmount: 1_000_000n,
+      targetLeverage: BigInt(DEFAULT_LEVERAGE),
+      thesis: "",
+    });
+
+    const decoded = decodeFunctionData({ abi: marginCallAbi, data });
+
+    expect(decoded.args?.[4]).toBe("");
   });
 });
 

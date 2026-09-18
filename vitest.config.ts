@@ -21,6 +21,10 @@ const sharedAlias = [
     ),
   },
   {
+    find: "@margin-call/shared/thesis",
+    replacement: path.resolve(__dirname, "./packages/shared/src/thesis.ts"),
+  },
+  {
     find: "@margin-call/shared",
     replacement: path.resolve(__dirname, "./packages/shared/src/index.ts"),
   },

@@ -50,9 +50,9 @@ contract MixedAssetIsolationTest is MarginCallTestBase {
 
         uint256 tokenA = _open(alice, ONE_NVDAC);
         vm.prank(alice);
-        uint256 tokenB = marginCall.openPosition(assetB, ONE_NVDAC, SPOT_LEVERAGE, 0);
+        uint256 tokenB = marginCall.openPosition(assetB, ONE_NVDAC, SPOT_LEVERAGE, 0, "");
         vm.prank(bob);
-        uint256 tokenC = marginCall.openPosition(assetC, ONE_NVDAC, LEVERAGE_1_25X, 0);
+        uint256 tokenC = marginCall.openPosition(assetC, ONE_NVDAC, LEVERAGE_1_25X, 0, "");
 
         MarginCall.Position memory posA = _position(tokenA);
         MarginCall.Position memory posB = _position(tokenB);
@@ -87,7 +87,7 @@ contract MixedAssetIsolationTest is MarginCallTestBase {
 
         uint256 tokenA = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
         vm.prank(alice);
-        uint256 tokenB = marginCall.openPosition(assetB, ONE_NVDAC, LEVERAGE_1_25X, 0);
+        uint256 tokenB = marginCall.openPosition(assetB, ONE_NVDAC, LEVERAGE_1_25X, 0, "");
 
         uint256 stockABefore = _position(tokenA).stockAmount;
         uint256 stockBBefore = _position(tokenB).stockAmount;
@@ -109,7 +109,7 @@ contract MixedAssetIsolationTest is MarginCallTestBase {
 
         uint256 tokenA = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
         vm.prank(bob);
-        uint256 tokenB = marginCall.openPosition(assetB, ONE_NVDAC, LEVERAGE_1_25X, 0);
+        uint256 tokenB = marginCall.openPosition(assetB, ONE_NVDAC, LEVERAGE_1_25X, 0, "");
 
         uint256 stockA = _position(tokenA).stockAmount;
         MarginCall.Position memory posB = _position(tokenB);
