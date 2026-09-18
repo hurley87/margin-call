@@ -1,7 +1,10 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { IndexUnavailable } from "@/components/positions/position-list";
+import {
+  IndexUnavailable,
+  PositionQueryBoundary,
+} from "@/components/positions/position-list";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import { STATUS_LABEL } from "@/lib/positions/types";
 import { assetLabel } from "@/lib/protocol/deployment";
@@ -23,7 +26,11 @@ export function PositionDetailStub({ tokenId }: { tokenId: string }) {
     );
   }
 
-  return <PositionDetailBody tokenId={tokenId} />;
+  return (
+    <PositionQueryBoundary>
+      <PositionDetailBody tokenId={tokenId} />
+    </PositionQueryBoundary>
+  );
 }
 
 function PositionDetailBody({ tokenId }: { tokenId: string }) {

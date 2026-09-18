@@ -1,11 +1,13 @@
 "use client";
 
+import { Component, type ReactNode } from "react";
 import { PositionCard } from "@/components/positions/position-card";
 import { Button } from "@/components/ui/button";
 import type { PositionListItem } from "@/lib/positions/types";
 
 const PAGE_SIZE = 20;
 
+/** Missing NEXT_PUBLIC_CONVEX_URL — index never mounted. */
 export function IndexUnavailable({ purpose }: { purpose: string }) {
   return (
     <p className="text-sm leading-6 text-[var(--t-red)]">
@@ -14,6 +16,64 @@ export function IndexUnavailable({ purpose }: { purpose: string }) {
       {purpose}.
     </p>
   );
+}
+
+/** Runtime Convex query failure — keep chrome, offer retry. */
+export function QueryUnavailable({ onRetry }: { onRetry?: () => void }) {
+  return (
+    <div className="flex flex-col gap-3">
+      <p className="text-sm leading-6 text-[var(--t-red)]">
+        Couldn&apos;t load positions from the index. Try again in a moment.
+      </p>
+      {onRetry ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          onClick={onRetry}
+        >
+          Retry
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+type BoundaryProps = {
+  children: ReactNode;
+};
+
+type BoundaryState = {
+  error: Error | null;
+};
+
+/**
+ * Catches Convex query throws so portfolio pages stay in-shell
+ * instead of falling through to the global error boundary.
+ */
+export class PositionQueryBoundary extends Component<
+  BoundaryProps,
+  BoundaryState
+> {
+  state: BoundaryState = { error: null };
+
+  static getDerivedStateFromError(error: Error): BoundaryState {
+    return { error };
+  }
+
+  render() {
+    if (this.state.error) {
+      return (
+        <QueryUnavailable
+          onRetry={() => {
+            this.setState({ error: null });
+          }}
+        />
+      );
+    }
+    return this.props.children;
+  }
 }
 
 type PositionListProps = {

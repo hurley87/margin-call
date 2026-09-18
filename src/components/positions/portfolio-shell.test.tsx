@@ -266,7 +266,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByText(/debt/i)).toBeNull();
   });
 
-  it("selecting an asset sets Active status and selects the Active chip", () => {
+  it("requires a status before asset chips can be selected", () => {
     usePaginatedQueryMock.mockReturnValue({
       results: [],
       status: "Exhausted",
@@ -274,21 +274,41 @@ describe("portfolio-first app shell", () => {
     });
 
     render(<AllPositionsPage />);
+
+    const nvda = screen.getByRole("button", { name: "NVDAc" });
+    expect(nvda).toHaveProperty("disabled", true);
+    expect(
+      screen.getByText("Choose a status to filter by asset.")
+    ).not.toBeNull();
+
+    fireEvent.click(nvda);
+    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({});
+
+    fireEvent.click(screen.getByRole("button", { name: "Active" }));
     fireEvent.click(screen.getByRole("button", { name: "NVDAc" }));
 
     const lastCall = usePaginatedQueryMock.mock.calls.at(-1);
     expect(lastCall?.[1]).toEqual({ status: "active", assetId: 1 });
-
-    const statusSection = screen.getByText("Status").parentElement;
-    expect(statusSection).not.toBeNull();
-    const activeChip = within(statusSection!).getByRole("button", {
-      name: "Active",
-    });
-    expect(activeChip.className).toContain("border-[var(--t-accent)]");
     expect(
-      within(statusSection!).queryByRole("button", { name: "All" })
+      screen.queryByText("Choose a status to filter by asset.")
     ).toBeNull();
-    expect(screen.queryByText(/Asset filter uses Active status/)).toBeNull();
+  });
+
+  it("keeps the list in-shell when a Convex query throws", () => {
+    usePaginatedQueryMock.mockImplementation(() => {
+      throw new Error("Convex query failed");
+    });
+
+    render(<AllPositionsPage />);
+
+    expect(
+      screen.getByText(/Couldn't load positions from the index/)
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "All Positions" })
+    ).not.toBeNull();
+    expect(screen.queryByText(/circuit breaker/i)).toBeNull();
   });
 
   it("create placeholder has no repay or close controls", () => {

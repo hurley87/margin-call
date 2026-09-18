@@ -7,6 +7,7 @@ import {
   IndexUnavailable,
   PAGE_SIZE,
   PositionList,
+  PositionQueryBoundary,
 } from "@/components/positions/position-list";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import { buttonVariants } from "@/components/ui/button";
@@ -72,7 +73,13 @@ function MyPositionsList({ owner }: { owner: `0x${string}` }) {
     );
   }
 
-  return <MyPositionsQuery owner={owner} />;
+  return (
+    <PageFrame>
+      <PositionQueryBoundary>
+        <MyPositionsQuery owner={owner} />
+      </PositionQueryBoundary>
+    </PageFrame>
+  );
 }
 
 function MyPositionsQuery({ owner }: { owner: `0x${string}` }) {
@@ -83,14 +90,12 @@ function MyPositionsQuery({ owner }: { owner: `0x${string}` }) {
   );
 
   return (
-    <PageFrame>
-      <PositionList
-        results={results}
-        status={status}
-        loadMore={loadMore}
-        emptyMessage="You don't have any positions yet."
-      />
-    </PageFrame>
+    <PositionList
+      results={results}
+      status={status}
+      loadMore={loadMore}
+      emptyMessage="You don't have any positions yet."
+    />
   );
 }
 

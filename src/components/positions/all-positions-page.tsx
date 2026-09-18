@@ -6,6 +6,7 @@ import {
   IndexUnavailable,
   PAGE_SIZE,
   PositionList,
+  PositionQueryBoundary,
 } from "@/components/positions/position-list";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import type { AllPositionsFilter, PositionStatus } from "@/lib/positions/types";
@@ -31,7 +32,9 @@ export function AllPositionsPage() {
     <div className="flex flex-col gap-6">
       <PageHeader />
       <Filters filter={filter} onChange={setFilter} />
-      <AllPositionsList queryArgs={filter} />
+      <PositionQueryBoundary>
+        <AllPositionsList queryArgs={filter} />
+      </PositionQueryBoundary>
     </div>
   );
 }
@@ -80,6 +83,7 @@ function Filters(props: {
   const { filter, onChange } = props;
   const hasAsset = filter.assetId != null;
   const selectedStatus = filter.status;
+  const canFilterByAsset = selectedStatus != null;
 
   function selectStatusAll() {
     onChange({});
@@ -102,7 +106,9 @@ function Filters(props: {
   }
 
   function selectAsset(assetId: number) {
-    onChange({ status: selectedStatus ?? "active", assetId });
+    // Convex requires status with assetId — only callable when status is set.
+    if (selectedStatus == null) return;
+    onChange({ status: selectedStatus, assetId });
   }
 
   return (
@@ -140,10 +146,16 @@ function Filters(props: {
               key={asset.assetId}
               label={asset.name}
               selected={filter.assetId === asset.assetId}
+              disabled={!canFilterByAsset}
               onClick={() => selectAsset(asset.assetId)}
             />
           ))}
         </div>
+        {!canFilterByAsset ? (
+          <p className="text-xs text-[var(--t-muted)]">
+            Choose a status to filter by asset.
+          </p>
+        ) : null}
       </div>
     </div>
   );
@@ -153,17 +165,21 @@ function Chip(props: {
   label: string;
   selected: boolean;
   onClick: () => void;
+  disabled?: boolean;
 }) {
-  const { label, selected, onClick } = props;
+  const { label, selected, onClick, disabled = false } = props;
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
       className={cn(
         "px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em]",
-        selected
-          ? "border border-[var(--t-accent)] text-[var(--t-accent)]"
-          : "border border-transparent text-[var(--t-muted)] hover:text-[var(--t-text)]"
+        disabled
+          ? "cursor-not-allowed border border-transparent text-[var(--t-muted)] opacity-40"
+          : selected
+            ? "border border-[var(--t-accent)] text-[var(--t-accent)]"
+            : "border border-transparent text-[var(--t-muted)] hover:text-[var(--t-text)]"
       )}
     >
       {label}
