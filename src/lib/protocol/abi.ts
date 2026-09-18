@@ -131,8 +131,20 @@ const marginCallFunctions = [
   },
 ] as const;
 
+/** OpenZeppelin IERC721Errors — lets viem name the revert when a token is burned. */
+export const ERC721_NONEXISTENT_TOKEN = "ERC721NonexistentToken";
+
+const marginCallErrors = [
+  {
+    type: "error",
+    name: ERC721_NONEXISTENT_TOKEN,
+    inputs: [{ name: "tokenId", type: "uint256" }],
+  },
+] as const;
+
 export const marginCallAbi = [
   ...marginCallFunctions,
+  ...marginCallErrors,
   positionOpenedEvent,
   positionClosedEvent,
   positionLiquidatedEvent,

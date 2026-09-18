@@ -95,17 +95,18 @@ export function openReadiness(input: OpenReadinessInput): WriteGate {
 /**
  * Close stays disabled until a post-repay re-read reports zero debt.
  * Pass the latest `currentDebt(tokenId)` — never the pre-repay snapshot.
+ * Owner-only, matching MarginCall.closePosition.
  */
 export function closeReadiness(args: {
   chainId: number | null | undefined;
   currentDebt: bigint | null;
-  positionExists: boolean;
+  isOwner: boolean;
 }): WriteGate {
   const chain = assertBaseChain(args.chainId);
   if (!chain.ok) return chain;
 
-  if (!args.positionExists) {
-    return { ok: false, reason: "No open position." };
+  if (!args.isOwner) {
+    return { ok: false, reason: "Only the Position owner can close." };
   }
 
   if (args.currentDebt == null) {
@@ -117,6 +118,36 @@ export function closeReadiness(args: {
       ok: false,
       reason: "Close enabled only when currentDebt is zero. Repay all first.",
     };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Repay all is available to the current owner or executor while debt remains.
+ * Pass the latest `currentDebt(tokenId)` from Base — never a Convex cache.
+ */
+export function repayReadiness(args: {
+  chainId: number | null | undefined;
+  currentDebt: bigint | null;
+  isManager: boolean;
+}): WriteGate {
+  const chain = assertBaseChain(args.chainId);
+  if (!chain.ok) return chain;
+
+  if (!args.isManager) {
+    return {
+      ok: false,
+      reason: "Only the Position owner or executor can repay.",
+    };
+  }
+
+  if (args.currentDebt == null) {
+    return { ok: false, reason: "Debt unread." };
+  }
+
+  if (args.currentDebt === 0n) {
+    return { ok: false, reason: "No outstanding debt." };
   }
 
   return { ok: true };

@@ -4,7 +4,9 @@ import {
   parseOracleState,
   type OracleState,
 } from "@/lib/protocol/constants";
+import { BaseError, ContractFunctionRevertedError } from "viem";
 import {
+  ERC721_NONEXISTENT_TOKEN,
   creditPoolAbi,
   erc20Abi,
   marginCallAbi,
@@ -28,17 +30,25 @@ export type OpenPosition = {
   tokenId: bigint;
   assetId: number;
   stockAmount: bigint;
+  principal: bigint;
   currentDebt: bigint;
+  owner: `0x${string}`;
+  executor: `0x${string}`;
   nav: bigint | null;
   liquidatable: boolean | null;
 };
 
-export type ClosedPosition = {
-  status: "closed";
+/**
+ * Terminal on Base: the token no longer exists. `closePosition` and `liquidate`
+ * both burn the NFT, so this says nothing about *why* it ended — the terminal
+ * reason comes from indexed lifecycle events, never from an `ownerOf` failure.
+ */
+export type BurnedPosition = {
+  status: "burned";
   tokenId: bigint;
 };
 
-export type PositionView = OpenPosition | ClosedPosition;
+export type PositionView = OpenPosition | BurnedPosition;
 
 /**
  * Atomic open-form snapshot. Replaces piecemeal balance/allowance/oracle setters.
@@ -126,12 +136,32 @@ export async function loadOpenSnapshot(
   };
 }
 
-/** Load an open position. NAV/liquidatable stay optional (LIVE-only riskSnapshot). */
+/** A nonexistent token is burned. Any other revert is a read failure, not a lifecycle fact. */
+function isNonexistentTokenError(error: unknown): boolean {
+  if (error instanceof BaseError) {
+    const reverted = error.walk(
+      (cause) => cause instanceof ContractFunctionRevertedError
+    );
+    if (reverted instanceof ContractFunctionRevertedError) {
+      return reverted.data?.errorName === ERC721_NONEXISTENT_TOKEN;
+    }
+  }
+  return (
+    error instanceof Error && error.message.includes(ERC721_NONEXISTENT_TOKEN)
+  );
+}
+
+/**
+ * Load a Position NFT from Base.
+ * `ownerOf` is required so a burned token reads as burned rather than a zero-debt
+ * live position. Burned is terminal but reasonless — do not infer close vs
+ * liquidation here. NAV/liquidatable stay optional (LIVE-only riskSnapshot).
+ */
 export async function loadPosition(
   client: BasePublicClient,
   tokenId: bigint
-): Promise<OpenPosition> {
-  const [pos, debt] = await Promise.all([
+): Promise<PositionView> {
+  const core = await Promise.all([
     client.readContract({
       address: baseDeployment.marginCall,
       abi: marginCallAbi,
@@ -144,7 +174,22 @@ export async function loadPosition(
       functionName: "currentDebt",
       args: [tokenId],
     }),
-  ]);
+    client.readContract({
+      address: baseDeployment.marginCall,
+      abi: marginCallAbi,
+      functionName: "ownerOf",
+      args: [tokenId],
+    }),
+  ]).catch((error: unknown) => {
+    if (isNonexistentTokenError(error)) return null;
+    throw error;
+  });
+
+  if (core == null) {
+    return { status: "burned", tokenId };
+  }
+
+  const [pos, debt, owner] = core;
 
   let nav: bigint | null = null;
   let liquidatable: boolean | null = null;
@@ -166,7 +211,10 @@ export async function loadPosition(
     tokenId,
     assetId: Number(pos.assetId),
     stockAmount: pos.stockAmount,
+    principal: pos.principal,
     currentDebt: debt,
+    owner,
+    executor: pos.executor,
     nav,
     liquidatable,
   };

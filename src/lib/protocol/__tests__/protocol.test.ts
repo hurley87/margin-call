@@ -17,9 +17,15 @@ import {
 import { baseDeployment, getAssetByName } from "@/lib/protocol/deployment";
 import { encodeOpenPosition } from "@/lib/protocol/encode";
 import {
+  isPositionManager,
+  isPositionOwner,
+} from "@/lib/protocol/authorization";
+import { exposureLabel, liveExposure } from "@/lib/protocol/exposure";
+import {
   assertBaseChain,
   closeReadiness,
   openReadiness,
+  repayReadiness,
 } from "@/lib/protocol/readiness";
 import { repayCeiling, sizePrincipal } from "@/lib/protocol/repay";
 
@@ -228,7 +234,7 @@ describe("closeReadiness", () => {
       closeReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: 100n,
-        positionExists: true,
+        isOwner: true,
       }).ok
     ).toBe(false);
 
@@ -236,7 +242,7 @@ describe("closeReadiness", () => {
       closeReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: null,
-        positionExists: true,
+        isOwner: true,
       }).ok
     ).toBe(false);
 
@@ -244,8 +250,129 @@ describe("closeReadiness", () => {
       closeReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: 0n,
-        positionExists: true,
+        isOwner: true,
       })
     ).toEqual({ ok: true });
+  });
+
+  it("keeps Close disabled for a non-owner even at zero debt", () => {
+    expect(
+      closeReadiness({
+        chainId: BASE_CHAIN_ID,
+        currentDebt: 0n,
+        isOwner: false,
+      })
+    ).toEqual({
+      ok: false,
+      reason: "Only the Position owner can close.",
+    });
+  });
+});
+
+describe("repayReadiness", () => {
+  it("enables Repay all for a manager with outstanding debt", () => {
+    expect(
+      repayReadiness({
+        chainId: BASE_CHAIN_ID,
+        currentDebt: 100n,
+        isManager: true,
+      })
+    ).toEqual({ ok: true });
+  });
+
+  it("disables Repay all when debt is already zero", () => {
+    expect(
+      repayReadiness({
+        chainId: BASE_CHAIN_ID,
+        currentDebt: 0n,
+        isManager: true,
+      })
+    ).toEqual({
+      ok: false,
+      reason: "No outstanding debt.",
+    });
+  });
+
+  it("disables Repay all when the wallet is not owner or executor", () => {
+    expect(
+      repayReadiness({
+        chainId: BASE_CHAIN_ID,
+        currentDebt: 100n,
+        isManager: false,
+      })
+    ).toEqual({
+      ok: false,
+      reason: "Only the Position owner or executor can repay.",
+    });
+  });
+});
+
+const OWNER = "0x1234567890abcdef1234567890abcdef12345678" as const;
+const EXECUTOR = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" as const;
+const STRANGER = "0x1111111111111111111111111111111111111111" as const;
+
+describe("position authorization", () => {
+  it("treats owner as manager and closer regardless of executor", () => {
+    expect(isPositionOwner(OWNER, OWNER)).toBe(true);
+    expect(isPositionManager(OWNER, OWNER, EXECUTOR)).toBe(true);
+    expect(
+      isPositionOwner("0x1234567890ABCDEF1234567890ABCDEF12345678", OWNER)
+    ).toBe(true);
+  });
+
+  it("lets the appointed executor repay but not close", () => {
+    expect(isPositionOwner(EXECUTOR, OWNER)).toBe(false);
+    expect(isPositionManager(EXECUTOR, OWNER, EXECUTOR)).toBe(true);
+  });
+
+  it("ignores a zero executor and unauthorized wallets", () => {
+    expect(
+      isPositionManager(
+        STRANGER,
+        OWNER,
+        "0x0000000000000000000000000000000000000000"
+      )
+    ).toBe(false);
+    expect(isPositionManager(null, OWNER, EXECUTOR)).toBe(false);
+    expect(isPositionOwner(null, OWNER)).toBe(false);
+  });
+});
+
+describe("liveExposure", () => {
+  it("reports 1.0x when debt is zero without needing NAV", () => {
+    expect(liveExposure({ nav: null, currentDebt: 0n })).toEqual({
+      kind: "unlevered",
+      label: "1.0x",
+    });
+  });
+
+  it("does not invent leverage when pricing is unavailable", () => {
+    expect(liveExposure({ nav: null, currentDebt: 250_000n })).toEqual({
+      kind: "pricing-unavailable",
+    });
+  });
+
+  it("derives current leverage from LIVE NAV and debt", () => {
+    expect(liveExposure({ nav: 1_250_000n, currentDebt: 250_000n })).toEqual({
+      kind: "levered",
+      label: "1.25x",
+    });
+  });
+
+  it("does not invent leverage when equity is exhausted", () => {
+    expect(liveExposure({ nav: 100n, currentDebt: 100n })).toEqual({
+      kind: "equity-exhausted",
+    });
+  });
+});
+
+describe("exposureLabel", () => {
+  it("renders a leverage row only when the number is real", () => {
+    expect(exposureLabel({ kind: "unlevered", label: "1.0x" })).toBe("1.0x");
+    expect(exposureLabel({ kind: "levered", label: "1.25x" })).toBe("1.25x");
+    expect(exposureLabel({ kind: "equity-exhausted" })).toBe(
+      "Equity exhausted"
+    );
+    expect(exposureLabel({ kind: "pricing-unavailable" })).toBeNull();
   });
 });
