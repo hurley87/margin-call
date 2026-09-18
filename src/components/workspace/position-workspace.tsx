@@ -1,7 +1,6 @@
 "use client";
 
 import type { WalletAccount } from "@dynamic-labs-sdk/client";
-import { isProgrammaticNetworkSwitchAvailable } from "@dynamic-labs-sdk/client";
 import { isEvmWalletAccount } from "@dynamic-labs-sdk/evm";
 import {
   useGetActiveNetworkId,
@@ -10,11 +9,11 @@ import {
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { WalletConnectUi } from "@/components/wallet/wallet-connect-ui";
+import { WalletNetworkControls } from "@/components/wallet/wallet-network-controls";
 import {
   assertWalletOnBase,
   parseNetworkIdToChainId,
   resolveBaseWalletClient,
-  switchWalletToBase,
 } from "@/lib/dynamic/resolve-wallet-client";
 import { getEvmWalletAddress } from "@/lib/dynamic/wallet";
 import {
@@ -23,7 +22,6 @@ import {
   parseStockAmount,
 } from "@/lib/protocol/amounts";
 import {
-  BASE_CHAIN_ID,
   DEFAULT_LEVERAGE,
   OPENING_LEVERAGE_PRESETS,
 } from "@/lib/protocol/constants";
@@ -137,6 +135,7 @@ export function PositionWorkspace() {
           Wallet / network
         </h2>
         <WalletConnectUi />
+        {evmAccount ? <WalletNetworkControls evmAccount={evmAccount} /> : null}
       </section>
 
       {address && evmAccount ? (
@@ -162,10 +161,6 @@ function ConnectedWorkspace(props: {
 
   const chainId = parseNetworkIdToChainId(networkQuery.data?.networkId);
 
-  const canSwitch = isProgrammaticNetworkSwitchAvailable({
-    walletAccount: evmAccount,
-  });
-
   const [publicClient] = useState(() => createBasePublicClient());
   const [assetName, setAssetName] = useState<LaunchAssetName>("NVDAc");
   const [amountInput, setAmountInput] = useState("0.01");
@@ -174,8 +169,6 @@ function ConnectedWorkspace(props: {
   const [position, setPosition] = useState<PositionView | null>(null);
   const [txPhase, setTxPhase] = useState<TxPhase>({ status: "idle" });
   const [readError, setReadError] = useState<string | null>(null);
-  const [isSwitching, setIsSwitching] = useState(false);
-  const [switchError, setSwitchError] = useState<string | null>(null);
   const snapshotGen = useRef(0);
 
   const asset = getAssetByName(assetName);
@@ -293,56 +286,6 @@ function ConnectedWorkspace(props: {
 
   return (
     <>
-      <section className="space-y-2 text-xs text-[var(--t-muted)]">
-        <p>
-          Chain:{" "}
-          {chainId === BASE_CHAIN_ID ? (
-            <span className="text-[var(--t-green)]">Base (8453)</span>
-          ) : (
-            <span className="text-[var(--t-amber)]">
-              {chainId == null ? "unknown" : `chain ${chainId}`}
-            </span>
-          )}
-        </p>
-        {!chainGate.ok ? (
-          <div className="flex flex-col gap-2">
-            <p>{chainGate.reason}</p>
-            {canSwitch ? (
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  disabled={isSwitching || pending}
-                  onClick={() => {
-                    setSwitchError(null);
-                    setIsSwitching(true);
-                    void switchWalletToBase(evmAccount)
-                      .catch((error: unknown) => {
-                        setSwitchError(
-                          error instanceof Error
-                            ? error.message
-                            : "Failed to switch to Base."
-                        );
-                      })
-                      .finally(() => {
-                        setIsSwitching(false);
-                      });
-                  }}
-                >
-                  Switch to Base
-                </Button>
-                {switchError ? (
-                  <p className="text-[var(--t-red)]">{switchError}</p>
-                ) : null}
-              </>
-            ) : (
-              <p>Switch the wallet to Base mainnet (8453) to continue.</p>
-            )}
-          </div>
-        ) : null}
-      </section>
-
       <section className="space-y-4 border-t border-[var(--t-border)] pt-6">
         <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]">
           Open position
