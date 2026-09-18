@@ -2,23 +2,29 @@
 
 ## Status and authority
 
-This is the current proposed V1 for Margin Call. It supersedes the earlier Stock Gacha and generalized inventory-protocol directions.
+This is the V1 behavior spec for Margin Call. It supersedes the earlier Stock Gacha and generalized inventory-protocol directions.
 
-The hackathon objective is intentionally narrow: prove that a user can deposit real NVDAc, finance additional NVDAc with protocol-owned USDC, represent the live stock-plus-debt position as an ERC-721, transfer that position without unwinding it, and let the new owner settle and close it.
+The contract layer described here is **deployed and live-accepted on Base**. Canonical addresses and compact live-acceptance evidence live at [`contracts/deployments/base.json`](../contracts/deployments/base.json). The deploy / acceptance runbook is [`contracts/script/BASE_LAUNCH.md`](../contracts/script/BASE_LAUNCH.md). The 2026-09-17 NVDA-only Base deployment (issue #429) is a frozen legacy milestone at [`contracts/deployments/base-nvda-only.legacy.json`](../contracts/deployments/base-nvda-only.legacy.json); do not point the product frontend at those addresses.
 
-The contracts and application described here are requirements, not implemented features.
+This document remains the authoritative V1 behavior spec for risk, oracle, execution, custody, and transfer semantics. Exact V1 pins (10% APR, 30% maintenance, five opening presets, no financial transfer gate, no liquidator reward) are unchanged.
+
+The application layer is separate. Today's site is a **minimal Base Position workspace** (connect → open → repay → close) wired to the canonical launch contracts — not the production frontend. Human UI, agent surface, living NFT presentation, indexing, and keeper automation remain **planned application direction** except where this document explicitly marks them otherwise.
+
+The original V1 demo asset was NVDAc. The live launch registry now includes NVDAc + AAPLc + METAc + GOOGLc; per-stock oracle and execution adapters reuse these V1 semantics. This document does **not** rewrite the full technical surface as a multi-stock architecture — later architecture docs may supersede or extend it explicitly.
 
 ---
 
 ## Product statement
 
-> **Margin Call finances real NVDAc spot exposure and makes the financed position transferable.**
+> **Margin Call finances real tokenized-stock spot exposure and makes the financed position transferable.**
 
 Perpetuals already provide leveraged synthetic exposure. Margin Call instead finances ownership of the actual onchain stock token.
 
+The original V1 demo and much of this document's concrete examples use **NVDAc**. The live Base launch registry now includes **NVDAc + AAPLc + METAc + GOOGLc**; each Position permanently records one `assetId`, and per-stock adapters reuse the same V1 risk, oracle, execution, and custody semantics.
+
 A live Position NFT represents:
 
-- recorded NVDAc held by Margin Call;
+- recorded stock of one supported asset held by Margin Call;
 - remaining USDC principal;
 - accrued borrow interest;
 - current ownership and optional executor;
@@ -34,18 +40,17 @@ V1 demonstrates **transferable financed positions**, not a functioning secondary
 
 - Base only.
 - Long only.
-- NVDAc only.
-- One stock per position.
-- Margin Call directly custodies position NVDAc.
+- One stock per position (original V1 demo: NVDAc; live launch rails: NVDAc + AAPLc + METAc + GOOGLc).
+- Margin Call directly custodies the position's recorded stock.
 - `MarginCall` itself is the ERC-721 Position NFT contract; there is no separate `PositionNFT` contract.
 - Opening leverage uses one of five fixed presets: `1.0x`, `1.1x`, `1.25x`, `1.4x`, or `1.5x`.
 - `1.0x` is spot-only and draws no credit.
-- Above `1.0x`, borrowed USDC can only buy more NVDAc.
+- Above `1.0x`, borrowed USDC can only buy more of that position's same stock.
 - Borrowed USDC is never freely withdrawable.
 - Protocol-owned USDC `CreditPool`; no public LP vault.
 - Simple borrow interest at an immutable `10% APR`.
 - Chainlink total-return pricing for solvency.
-- Uniswap for NVDAc/USDC execution.
+- Uniswap V3 for stock/USDC execution.
 - Full liquidation only.
 - No liquidator reward.
 - Standard ERC-721 transfer semantics with **no financial transfer gate**.
@@ -637,7 +642,7 @@ This deliberately removes debt-covering swap logic and lifecycle-status storage 
 
 Liquidation is permissionless but **pays no liquidator reward in V1**.
 
-The protocol operates a first-party keeper to ensure eligible liquidations are actually submitted.
+Because liquidation has no protocol incentive, a first-party keeper is a natural operating role for submitting eligible liquidations. **Keeper automation is not currently shipped.** Anyone may call `liquidate`; a keeper would have no privileged bypass.
 
 ```text
 liquidate(tokenId)
@@ -712,24 +717,42 @@ There is no `ExposureIncreased`, `CollateralAdded`, `BorrowAprUpdated`, or `Inte
 
 ## Required acceptance flow
 
-The live demo must prove the actual product, not merely open/display/close.
+### Compact live acceptance (release-gated)
 
-The demo is intentionally scheduled for a `LIVE` oracle window because the executor step must exercise `reduceExposure`. Before beginning the financed opening, confirm the adapter is `LIVE` and that the expected feed window is long enough to reach step 4. If the feed becomes `HELD` or `INVALID` before that step, do not use a stale mark or weaken the rule; wait for a qualifying `LIVE` observation and resume the demo.
+Base mainnet release acceptance is the **compact** path recorded in [`contracts/deployments/base.json`](../contracts/deployments/base.json) and run via [`contracts/script/BASE_LAUNCH.md`](../contracts/script/BASE_LAUNCH.md). It does **not** require a live elapsed-interest wait or the full multi-actor transfer demo on mainnet.
 
-Required sequence:
+Compact live sequence (smoke asset: NVDAc):
+
+1. Seed the Credit Pool with protocol USDC.
+2. Treasury idle-withdraw smoke (optional but recorded).
+3. Open a financed position during a `LIVE` window (e.g. 0.01 NVDAc at `1.25x`).
+4. Repay remaining debt with external USDC.
+5. Close; remaining stock returns to the owner and `MarginCall` burns the NFT.
+
+If the oracle is `HELD` / `INVALID` during live acceptance, **wait** for a qualifying `LIVE` observation. Do not weaken policy.
+
+Transaction hashes and amounts for the recorded launch acceptance live in `base.json`. Do not duplicate them here.
+
+### Full product proof (Foundry / fork)
+
+The full A→E→B product proof remains required in Foundry and Base-fork tests. It is **not** a live mainnet release gate.
+
+Before the financed opening, confirm the adapter is `LIVE` for any step that needs `reduceExposure`. If the feed becomes `HELD` or `INVALID` before that step, wait for a qualifying `LIVE` observation; do not use a stale mark or weaken the rule.
+
+Product-proof sequence:
 
 1. **A opens a financed NVDAc position during a `LIVE` window.** Confirm contributed NVDAc, borrowed USDC, purchased NVDAc, principal, and ERC-721 ownership on `MarginCall`.
-2. **Interest accrues.** Wait or advance time and prove `currentDebt > principal` without a keeper transaction or `InterestAccrued` event.
+2. **Interest accrues.** Advance time (or wait in a controlled test environment) and prove `currentDebt > principal` without a keeper transaction or `InterestAccrued` event. This timing proof stays in Foundry/fork tests; it is not required on live mainnet acceptance.
 3. **A appoints executor E.**
-4. **E reduces exposure during `LIVE` pricing.** E performs a small `reduceExposure`, proving delegated management and the bounded NVDAc -> USDC path.
+4. **E reduces exposure during `LIVE` pricing.** E performs a small `reduceExposure`, proving delegated management and the bounded stock -> USDC path.
 5. **A transfers the Position NFT to B.** No oracle/health gate may block the transfer. Stock and debt remain in place; `MarginCall` clears the executor internally during the ERC-721 ownership update.
 6. **A and E lose authority.** Calls by A or E to `repay`, `reduceExposure`, `setExecutor`, or `closePosition` must revert where authorization is required. Standard ERC-721 ownership/approval behavior applies separately.
 7. **B manages the inherited position.** B may appoint a new executor, repay, or reduce exposure.
-8. **B settles the debt to zero.** For the simplest live path, B repays the remaining debt with external USDC.
-9. **B closes.** All remaining recorded NVDAc goes to B and `MarginCall` burns the NFT.
+8. **B settles the debt to zero.** For the simplest path, B repays the remaining debt with external USDC.
+9. **B closes.** All remaining recorded stock goes to B and `MarginCall` burns the NFT.
 10. Record transaction receipts and before/after accounting for A, E, B, the position, and `CreditPool`.
 
-If the demo later crosses a held market period, the UI must visibly report `HELD`. Transfer, repayment, executor updates, and debt-free close remain available; financed opening, reduction, and liquidation do not.
+If a demo later crosses a held market period, the UI must visibly report `HELD`. Transfer, repayment, executor updates, and debt-free close remain available; financed opening, reduction, and liquidation do not.
 
 A purchase payment is not part of this V1 acceptance test. Do not claim that the demo creates a functioning secondary market.
 
@@ -770,6 +793,8 @@ At minimum, tests must cover:
 ---
 
 ## Human and agent UI
+
+**Planned application direction.** Today's deployed site is a minimal Base Position workspace that proves connect → open → repay → close against the canonical launch contracts. It is not the production frontend. The open screen, full position page, and agent tool surface below describe the intended product UI, not what is shipped today.
 
 ### Open
 
@@ -844,9 +869,11 @@ liquidate
 
 ## NFT/social layer
 
+**Planned application direction.** Today's `tokenURI` returns minimal identity metadata only. The living NFT presentation below is not shipped.
+
 The living NFT is a presentation layer only.
 
-For V1, use pre-created NVDAc character states such as neutral, up, down, warning, critical, liquidated, and retired/closed. Financial state remains authoritative in the contracts.
+For V1, use pre-created character states such as neutral, up, down, warning, critical, liquidated, and retired/closed. Financial state remains authoritative in the contracts.
 
 When the oracle is held/invalid, preserve the last known visual state and label pricing unavailable rather than implying current health.
 
@@ -890,13 +917,22 @@ execution bound for the `$10–$250` demo range, and 30% maintenance equity rati
 documented above.
 
 Mocks and production implementations must reflect those verified semantics.
-Before running the live acceptance flow, confirm the adapter is currently
-`LIVE`; that operational check does not reopen the pinned architecture or risk
-decisions.
+Before running compact live acceptance or any financed open / reduce / liquidate
+demo, confirm the adapter is currently `LIVE`; that operational check does not
+reopen the pinned architecture or risk decisions.
+
+Canonical launch addresses and recorded compact acceptance live at
+[`contracts/deployments/base.json`](../contracts/deployments/base.json).
 
 ---
 
-## Deferred until after the hackathon
+## Deferred / later work
+
+**Landed since the original V1 draft (do not treat as remaining work):**
+
+- curated multi-stock asset registry on `MarginCall` with immutable `ASSET_ADMIN` (live launch rails: NVDAc + AAPLc + METAc + GOOGLc; issue #446).
+
+**Still deferred:**
 
 - `increaseLeverage` / post-open re-levering;
 - add collateral;
@@ -910,17 +946,20 @@ decisions.
 - reserve factor / LP revenue split;
 - global borrow index;
 - per-position smart accounts / ERC-6551;
-- multi-stock asset registry;
 - per-stock risk/APR parameters;
 - partial liquidation;
 - liquidator incentives;
 - protocol liquidation fee;
+- first-party keeper automation (liquidation remains permissionless);
 - complex executor policy engine;
 - generalized routing;
+- living NFT presentation;
 - production governance/timelocks.
 
 ---
 
 ## Final V1 thesis
 
-> **Deposit NVDAc, choose one of five opening leverage presets, finance more NVDAc with finite protocol USDC at a fixed 10% APR, and receive a transferable NFT minted directly by Margin Call representing the live stock-plus-debt position. Repay or reduce exposure, transfer the position without an oracle/health gate, and let the new owner settle and close it.**
+> **Deposit a supported tokenized stock, choose one of five opening leverage presets, finance more of that same stock with finite protocol USDC at a fixed 10% APR, and receive a transferable NFT minted directly by Margin Call representing the live stock-plus-debt position. Repay or reduce exposure, transfer the position without an oracle/health gate, and let the new owner settle and close it.**
+
+The original V1 demo asset was NVDAc; the live launch registry extends the same semantics across NVDAc + AAPLc + METAc + GOOGLc.

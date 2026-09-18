@@ -14,4 +14,4 @@ The trade-off is that a buyer can receive an immediately liquidatable position: 
 
 This decision governs the Margin Call transfer layer. Marketplace/payment availability is separate, and a burned NFT cannot be sold. Position presentations must expose debt and unavailable pricing or known liquidation risk. Liquidation itself still requires valid pricing and bounded execution.
 
-See the [PRD transfer semantics](../margin-account-prd.md#transfer-semantics). This is an accepted design decision for a product that remains unimplemented.
+See the [PRD transfer semantics](../margin-account-prd.md#transfer-semantics). This is an accepted design decision, implemented in the live `MarginCall` ERC-721 transfer path.
