@@ -18,6 +18,8 @@ export type OpenPositionFlowArgs = {
   asset: LaunchAsset;
   stockAmount: bigint;
   targetLeverage: number;
+  /** Optional immutable NFT description. Rejected onchain past `MAX_THESIS_BYTES`. */
+  thesis?: string;
   /** UI-reported chain id for readiness (EIP-1193 still re-checked). */
   chainId: number | null | undefined;
   onSubmitted?: (hash: `0x${string}`, label: string) => void;
@@ -74,6 +76,7 @@ export async function runOpenPositionFlow(
     asset,
     stockAmount,
     targetLeverage,
+    thesis,
     chainId,
     onSubmitted,
   } = args;
@@ -118,6 +121,7 @@ export async function runOpenPositionFlow(
     assetId: BigInt(asset.assetId),
     stockAmount,
     targetLeverage: BigInt(targetLeverage),
+    thesis,
     onSubmitted: (hash) => onSubmitted?.(hash, "Open position"),
   });
 

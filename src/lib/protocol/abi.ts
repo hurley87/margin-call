@@ -58,6 +58,7 @@ const marginCallFunctions = [
       { name: "stockAmount", type: "uint256" },
       { name: "targetLeverage", type: "uint256" },
       { name: "minStockOut", type: "uint256" },
+      { name: "thesis", type: "string" },
     ],
     outputs: [{ name: "tokenId", type: "uint256" }],
   },
@@ -128,6 +129,13 @@ const marginCallFunctions = [
     stateMutability: "view",
     inputs: [{ name: "tokenId", type: "uint256" }],
     outputs: [{ name: "", type: "address" }],
+  },
+  {
+    type: "function",
+    name: "thesisOf",
+    stateMutability: "view",
+    inputs: [{ name: "tokenId", type: "uint256" }],
+    outputs: [{ name: "", type: "string" }],
   },
 ] as const;
 

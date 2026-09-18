@@ -123,10 +123,16 @@ function live(overrides: Partial<OpenPosition> = {}): OpenPosition {
     currentDebt: 250_000n,
     owner: OWNER,
     executor: EXECUTOR,
+    thesis: "",
     nav: 1_250_000n,
     liquidatable: false,
     ...overrides,
   };
+}
+
+/** `next/image` wraps the path in its optimizer query, so decode before asserting. */
+function artworkSrc(alt: string | RegExp): string {
+  return decodeURIComponent(screen.getByAltText(alt).getAttribute("src") ?? "");
 }
 
 function mockConnected(address: `0x${string}` = OWNER) {
@@ -202,6 +208,68 @@ describe("PositionDetailPage", () => {
     expect(loadPositionMock).not.toHaveBeenCalled();
   });
 
+  it("shows terminal liquidated artwork from the index alone", () => {
+    useQueryMock.mockReturnValue(indexed({ status: "liquidated" }));
+    render(<PositionDetailPage tokenId="42" />);
+
+    expect(artworkSrc(/Liquidated$/)).toContain("/meta/liquidated.png");
+  });
+
+  it("stays on the neutral logo for a closed position", () => {
+    useQueryMock.mockReturnValue(indexed({ status: "closed" }));
+    render(<PositionDetailPage tokenId="42" />);
+
+    expect(artworkSrc(/Closed$/)).toContain("/logos/meta.png");
+  });
+
+  it("shows live stage artwork and the thesis for an active position", async () => {
+    useQueryMock.mockReturnValue(indexed());
+    loadPositionMock.mockResolvedValue(
+      live({ thesis: "Long the puppy.", currentDebt: 0n, principal: 0n })
+    );
+    render(<PositionDetailPage tokenId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Long the puppy.")).not.toBeNull();
+    });
+
+    expect(artworkSrc(/Healthy$/)).toContain("/meta/healthy.png");
+    expect(screen.getByRole("heading", { name: "Thesis" })).not.toBeNull();
+  });
+
+  it("tracks live risk into danger artwork", async () => {
+    useQueryMock.mockReturnValue(indexed());
+    loadPositionMock.mockResolvedValue(
+      live({ currentDebt: 700_000n, nav: 1_000_000n, liquidatable: false })
+    );
+    render(<PositionDetailPage tokenId="42" />);
+
+    await waitFor(() => {
+      expect(artworkSrc(/Danger$/)).toContain("/meta/danger.png");
+    });
+  });
+
+  it("stays neutral while the live Base read is still in flight", () => {
+    useQueryMock.mockReturnValue(indexed());
+    loadPositionMock.mockReturnValue(new Promise(() => undefined));
+    render(<PositionDetailPage tokenId="42" />);
+
+    // Claiming a stage before the read lands would be a guess.
+    expect(artworkSrc("METAc Position NFT")).toContain("/logos/meta.png");
+  });
+
+  it("omits the thesis section entirely when the owner opened without one", async () => {
+    useQueryMock.mockReturnValue(indexed());
+    loadPositionMock.mockResolvedValue(live({ thesis: "" }));
+    render(<PositionDetailPage tokenId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Current debt/i)).not.toBeNull();
+    });
+
+    expect(screen.queryByRole("heading", { name: "Thesis" })).toBeNull();
+  });
+
   it("names no terminal reason when Base says burned but the index lags", async () => {
     useQueryMock.mockReturnValue(indexed());
     loadPositionMock.mockResolvedValue({ status: "burned", tokenId: 42n });
@@ -210,6 +278,9 @@ describe("PositionDetailPage", () => {
     await waitFor(() => {
       expect(screen.getByText("Position ended")).not.toBeNull();
     });
+
+    // Burned for an unknown reason: neutral art, never the liquidated face.
+    expect(artworkSrc("METAc Position NFT")).toContain("/logos/meta.png");
 
     // A burn is either close or liquidation — claiming one would be a guess.
     expect(screen.getByText(/Waiting for lifecycle indexing/i)).not.toBeNull();

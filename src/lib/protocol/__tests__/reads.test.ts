@@ -31,6 +31,8 @@ describe("loadPosition", () => {
           return 250_000n;
         case "ownerOf":
           return OWNER;
+        case "thesisOf":
+          return "AI capex stays underpriced.";
         case "riskSnapshot":
           return {
             nav: 1_250_000n,
@@ -53,6 +55,7 @@ describe("loadPosition", () => {
       currentDebt: 250_000n,
       owner: OWNER,
       executor: EXECUTOR,
+      thesis: "AI capex stays underpriced.",
       nav: 1_250_000n,
       liquidatable: false,
     });
@@ -74,6 +77,8 @@ describe("loadPosition", () => {
           return 10n;
         case "ownerOf":
           return OWNER;
+        case "thesisOf":
+          return "";
         case "riskSnapshot":
           throw new Error("OracleNotLive");
         default:
@@ -87,6 +92,7 @@ describe("loadPosition", () => {
       status: "open",
       owner: OWNER,
       currentDebt: 10n,
+      thesis: "",
       nav: null,
       liquidatable: null,
     });

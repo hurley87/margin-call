@@ -34,6 +34,8 @@ export type OpenPosition = {
   currentDebt: bigint;
   owner: `0x${string}`;
   executor: `0x${string}`;
+  /** Immutable opening note, empty when none was supplied. */
+  thesis: string;
   nav: bigint | null;
   liquidatable: boolean | null;
 };
@@ -180,6 +182,12 @@ export async function loadPosition(
       functionName: "ownerOf",
       args: [tokenId],
     }),
+    client.readContract({
+      address: baseDeployment.marginCall,
+      abi: marginCallAbi,
+      functionName: "thesisOf",
+      args: [tokenId],
+    }),
   ]).catch((error: unknown) => {
     if (isNonexistentTokenError(error)) return null;
     throw error;
@@ -189,7 +197,7 @@ export async function loadPosition(
     return { status: "burned", tokenId };
   }
 
-  const [pos, debt, owner] = core;
+  const [pos, debt, owner, thesis] = core;
 
   let nav: bigint | null = null;
   let liquidatable: boolean | null = null;
@@ -215,6 +223,7 @@ export async function loadPosition(
     currentDebt: debt,
     owner,
     executor: pos.executor,
+    thesis,
     nav,
     liquidatable,
   };

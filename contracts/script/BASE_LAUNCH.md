@@ -66,6 +66,7 @@ Non-wallet env:
 | `MARGIN_CALL_LEVERAGE_BPS`      | Financed preset (default `12500` = 1.25x)                              |
 | `MARGIN_CALL_CREDIT_SEED`       | USDC raw seed (default `20000000` = $20)                               |
 | `MARGIN_CALL_TREASURY_WITHDRAW` | Idle USDC withdraw smoke (default `1000000` = $1)                      |
+| `MARGIN_CALL_DEPLOY_STATE`      | Deploy record acceptance reads (default `base-launch-deploy.run.json`) |
 
 ## Commands
 
@@ -103,13 +104,14 @@ If the oracle is `HELD` / `INVALID` during live acceptance, **wait** for a quali
 
 ## Artifacts
 
-| Path                                      | Git                    | Contents                                                                |
-| ----------------------------------------- | ---------------------- | ----------------------------------------------------------------------- |
-| `deployments/base-launch-deploy.run.json` | ignored (`*.run.json`) | Raw deploy addresses from `DeployLaunch`                                |
-| `deployments/base-launch-accept.run.json` | ignored                | Acceptance phase state / tokenId                                        |
-| `deployments/base.example.json`           | committed              | Schema for the canonical launch manifest                                |
-| `deployments/base.json`                   | committed              | Canonical launch addresses, rails, commit, tx hashes — **no keys**      |
-| `deployments/base-nvda-only.legacy.json`  | committed (historical) | Issue #429 NVDA-only evidence. Do not overwrite. Frontend must not use. |
+| Path                                             | Git                    | Contents                                                                |
+| ------------------------------------------------ | ---------------------- | ----------------------------------------------------------------------- |
+| `deployments/base-launch-deploy.run.json`        | ignored (`*.run.json`) | Raw deploy addresses from `DeployLaunch`                                |
+| `deployments/base-launch-accept.run.json`        | ignored                | Acceptance phase state / tokenId                                        |
+| `deployments/base-coordinator-redeploy.run.json` | ignored                | Raw addresses from a coordinator-only redeploy                          |
+| `deployments/base.example.json`                  | committed              | Schema for the canonical launch manifest                                |
+| `deployments/base.json`                          | committed              | Canonical launch addresses, rails, commit, tx hashes — **no keys**      |
+| `deployments/base-nvda-only.legacy.json`         | committed (historical) | Issue #429 NVDA-only evidence. Do not overwrite. Frontend must not use. |
 
 The 2026-09-18 live run is recorded in `deployments/base.json` (merged from run records +
 broadcast tx hashes). **Never** merge into `base-nvda-only.legacy.json`.
@@ -124,6 +126,54 @@ The frontend should target only `deployments/base.json` for new positions.
 
 Liquidation / shortfall / `HELD` / mixed-asset isolation stay in Foundry suites.
 Executor-transfer coverage stays in the local Anvil harness and unit tests.
+
+## Coordinator-only redeploy (cutover)
+
+`MarginCall` is not upgradeable, so a change to its storage or to `openPosition` — as the living
+Position NFT slice makes — needs a redeploy. `CreditPool.borrower` is immutable, so a new
+coordinator drags a new pool with it. The oracle and execution adapters hold no position state and
+are already source-verified, so [`RedeployCoordinator.s.sol`](./RedeployCoordinator.s.sol) reuses the
+four adapter addresses recorded in `deployments/base.json` and re-registers them in manifest order.
+`assetId` is baked into every Position and into the app's ticker mapping, so the script reverts on
+any ordering drift rather than silently relabelling positions.
+
+**Positions on the previous coordinator are not migrated.** They stay manageable at the old address;
+the frontend simply stops opening there. Idle USDC in the old pool is withdrawn by its treasury.
+
+```sh
+# 1. Dry-run on a current Base fork (no broadcast):
+./contracts/script/run-redeploy-coordinator-base-dry.sh
+
+# 2. Live broadcast (source-verify if ETHERSCAN_API_KEY is set):
+CONFIRM_BASE_MAINNET=I_UNDERSTAND ./contracts/script/run-redeploy-coordinator-base-live.sh
+
+# 3. Acceptance against the NEW pair, using the redeploy record:
+MARGIN_CALL_DEPLOY_STATE=./deployments/base-coordinator-redeploy.run.json \
+CONFIRM_BASE_MAINNET=I_UNDERSTAND ./contracts/script/run-accept-base-live.sh
+```
+
+Acceptance seeds the **new** `CreditPool`; credit in the retired pool is not migrated.
+
+After a successful broadcast, in one ship:
+
+1. Rewrite [`../deployments/base.json`](../deployments/base.json): `contracts.marginCall`,
+   `contracts.creditPool`, `marginCallDeployedAtBlock`, `sourceCommit`, the coordinator
+   `deploymentTxHashes`, the per-asset `addAsset` hashes, and the `acceptance` block. Leave the
+   adapter addresses and `feed` / `uniswapPool` entries alone — they did not change. Never touch
+   `base-nvda-only.legacy.json`.
+2. Source-verify `MarginCall` and `CreditPool` (solc 0.8.29, 1M optimizer runs).
+3. Deploy Convex, then reset the read model — token ids restart at 1 under the new coordinator, so
+   stale rows would collide:
+
+   ```sh
+   npx convex run ingest:resetForRedeploy '{"marginCall":"<new MarginCall from base.json>"}'
+   ```
+
+   The mutation refuses any address other than the one the deployment was built against, so it can
+   only run after step 1 ships. Re-run while it reports `remaining: true`.
+
+Frontend ABI changes must not reach production before this `base.json` update lands: the new
+`openPosition` signature and `thesisOf` do not exist on the retired coordinator.
 
 ## Historical NVDA-only deployment
 

@@ -46,7 +46,7 @@ contract MarginCallHandler is Test {
         nvdac.mint(actor, amount);
         vm.startPrank(actor);
         nvdac.approve(address(marginCall), amount);
-        uint256 tokenId = marginCall.openPosition(assetId, amount, marginCall.SPOT_LEVERAGE(), 0);
+        uint256 tokenId = marginCall.openPosition(assetId, amount, marginCall.SPOT_LEVERAGE(), 0, "");
         vm.stopPrank();
 
         assertEq(tokenId, nextExpectedTokenId, "token id reused or skipped");

@@ -222,7 +222,7 @@ abstract contract SpotOpener {
 
     function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
         nvdac.approve(address(marginCall), stockAmount);
-        return marginCall.openPosition(assetId, stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+        return marginCall.openPosition(assetId, stockAmount, marginCall.SPOT_LEVERAGE(), 0, "");
     }
 }
 
@@ -364,6 +364,6 @@ contract NonReceiver {
         returns (uint256 tokenId)
     {
         nvdac.approve(address(marginCall), stockAmount);
-        return marginCall.openPosition(assetId, stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+        return marginCall.openPosition(assetId, stockAmount, marginCall.SPOT_LEVERAGE(), 0, "");
     }
 }

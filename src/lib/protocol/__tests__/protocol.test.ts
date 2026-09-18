@@ -69,11 +69,12 @@ describe("assertBaseChain", () => {
 });
 
 describe("encodeOpenPosition", () => {
-  it("encodes openPosition(assetId, amount, leverage, 0)", () => {
+  it("encodes openPosition(assetId, amount, leverage, 0, thesis)", () => {
     const data = encodeOpenPosition({
       assetId: 1n,
       stockAmount: 1_000_000n,
       targetLeverage: BigInt(DEFAULT_LEVERAGE),
+      thesis: "AI capex stays underpriced.",
     });
 
     const decoded = decodeFunctionData({
@@ -82,7 +83,25 @@ describe("encodeOpenPosition", () => {
     });
 
     expect(decoded.functionName).toBe("openPosition");
-    expect(decoded.args).toEqual([1n, 1_000_000n, BigInt(LEVERAGE_1_25X), 0n]);
+    expect(decoded.args).toEqual([
+      1n,
+      1_000_000n,
+      BigInt(LEVERAGE_1_25X),
+      0n,
+      "AI capex stays underpriced.",
+    ]);
+  });
+
+  it("sends an empty thesis when none is supplied", () => {
+    const data = encodeOpenPosition({
+      assetId: 1n,
+      stockAmount: 1_000_000n,
+      targetLeverage: BigInt(DEFAULT_LEVERAGE),
+    });
+
+    const decoded = decodeFunctionData({ abi: marginCallAbi, data });
+
+    expect(decoded.args?.[4]).toBe("");
   });
 });
 

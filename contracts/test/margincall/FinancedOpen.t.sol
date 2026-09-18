@@ -49,7 +49,7 @@ contract FinancedOpenTest is MarginCallTestBase {
         nvdac.approve(address(unwired), ONE_NVDAC);
 
         vm.prank(alice);
-        uint256 tokenId = unwired.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
+        uint256 tokenId = unwired.openPosition(assetId, ONE_NVDAC, SPOT_LEVERAGE, 0, "");
         assertEq(unwired.ownerOf(tokenId), alice);
         MarginCall.Position memory pos = unwired.positions(tokenId);
         uint256 stock = pos.stockAmount;
@@ -186,7 +186,7 @@ contract FinancedOpenTest is MarginCallTestBase {
 
         vm.prank(alice);
         vm.expectRevert();
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, LEVERAGE_1_5X, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, LEVERAGE_1_5X, 0, "");
 
         assertEq(nvdac.balanceOf(alice), aliceBefore);
         assertEq(nvdac.balanceOf(address(marginCall)), 0);
@@ -204,7 +204,7 @@ contract FinancedOpenTest is MarginCallTestBase {
             oracle.setState(states[i]);
             vm.prank(alice);
             vm.expectRevert(abi.encodeWithSelector(MarginCall.OracleNotLive.selector, states[i]));
-            marginCall.openPosition(defaultAssetId, ONE_NVDAC, LEVERAGE_1_1X, 0);
+            marginCall.openPosition(defaultAssetId, ONE_NVDAC, LEVERAGE_1_1X, 0, "");
         }
 
         assertEq(nvdac.balanceOf(alice), 3 * ONE_NVDAC);
@@ -220,7 +220,7 @@ contract FinancedOpenTest is MarginCallTestBase {
 
         vm.prank(alice);
         vm.expectRevert(MarginCall.InvalidCreditPool.selector);
-        unwired.openPosition(assetId, ONE_NVDAC, LEVERAGE_1_1X, 0);
+        unwired.openPosition(assetId, ONE_NVDAC, LEVERAGE_1_1X, 0, "");
     }
 
     function test_callerMinOutAboveFillRevertsAtomically() public {
@@ -233,7 +233,7 @@ contract FinancedOpenTest is MarginCallTestBase {
 
         vm.prank(alice);
         vm.expectRevert(bytes("Too little received"));
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, LEVERAGE_1_25X, protocolMin + 1_000_000);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, LEVERAGE_1_25X, protocolMin + 1_000_000, "");
 
         assertEq(nvdac.balanceOf(alice), aliceBefore);
         assertEq(pool.availableCredit(), poolBefore);
@@ -249,7 +249,7 @@ contract FinancedOpenTest is MarginCallTestBase {
 
         vm.prank(alice);
         vm.expectRevert();
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, LEVERAGE_1_4X, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, LEVERAGE_1_4X, 0, "");
 
         assertEq(nvdac.balanceOf(alice), aliceBefore);
         assertEq(pool.availableCredit(), poolBefore);

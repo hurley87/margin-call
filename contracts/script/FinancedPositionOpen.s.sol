@@ -77,7 +77,7 @@ contract FinancedPositionOpen is LocalHarnessBase {
         nvdac.mint(signer, contributedStock);
         nvdac.approve(address(marginCall), contributedStock);
 
-        uint256 tokenId = marginCall.openPosition(nvdaAssetId, contributedStock, leverage, 0);
+        uint256 tokenId = marginCall.openPosition(nvdaAssetId, contributedStock, leverage, 0, "");
 
         vm.stopBroadcast();
 

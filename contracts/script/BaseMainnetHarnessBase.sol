@@ -30,12 +30,17 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
     ///      this constant only fails the deploy closed if the table and this pin drift.
     uint256 internal constant LAUNCH_ASSET_COUNT = 4;
 
+    /// @dev Curated manifest the frontend consumes. Coordinator redeploys reuse its adapters verbatim.
+    string internal constant CANONICAL_MANIFEST_PATH = "./deployments/base.json";
+
     error BaseMainnetOnly(uint256 actualChainId, uint256 requiredChainId);
     error DuplicateWalletRoles(address a, address b);
     error DryRunRequired();
     error LiveBroadcastForbiddenInDryRun();
     error LaunchSetSizeMismatch(uint256 actual, uint256 expected);
     error OracleNotLive(uint8 state);
+    error CuratedAssetIdDrift(string name, uint256 expected, uint256 actual);
+    error CuratedManifestMalformed();
 
     struct LaunchStack {
         MarginCall marginCall;
@@ -43,6 +48,15 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
         address[] oracles;
         address[] executions;
         uint256[] assetIds;
+    }
+
+    /// @dev One curated rail as already deployed and recorded in `deployments/base.json`.
+    struct CuratedAsset {
+        string name;
+        uint256 assetId;
+        address stock;
+        address oracle;
+        address execution;
     }
 
     /// @dev Refuse every chain except Base mainnet. Blocks Anvil (31337) and Base Sepolia (84532).
@@ -99,6 +113,86 @@ abstract contract BaseMainnetHarnessBase is HarnessBase, StdCheats {
             stack.oracles[i] = address(oracle);
             stack.executions[i] = address(execution);
             stack.assetIds[i] = stack.marginCall.addAsset(rails[i].stock, address(oracle), address(execution));
+        }
+    }
+
+    /// @dev The curated rails exactly as `deployments/base.json` records them.
+    ///      Read from the manifest rather than hardcoded so a coordinator redeploy cannot silently point at
+    ///      adapters the frontend does not use.
+    function _loadCuratedAssets() internal view returns (CuratedAsset[] memory curated) {
+        string memory json = vm.readFile(CANONICAL_MANIFEST_PATH);
+
+        // Entries are read by index rather than a `[*]` wildcard: the typed array cheatcodes reject
+        // multi-value paths, and indexing keeps manifest order — which is assetId order — explicit.
+        uint256 n;
+        while (vm.keyExistsJson(json, _curatedAssetPath(n, ".name"))) {
+            ++n;
+        }
+        if (n != LAUNCH_ASSET_COUNT) {
+            revert CuratedManifestMalformed();
+        }
+
+        curated = new CuratedAsset[](n);
+        for (uint256 i; i < n; ++i) {
+            curated[i] = CuratedAsset({
+                name: vm.parseJsonString(json, _curatedAssetPath(i, ".name")),
+                assetId: vm.parseJsonUint(json, _curatedAssetPath(i, ".assetId")),
+                stock: vm.parseJsonAddress(json, _curatedAssetPath(i, ".stock")),
+                oracle: vm.parseJsonAddress(json, _curatedAssetPath(i, ".oracleAdapter")),
+                execution: vm.parseJsonAddress(json, _curatedAssetPath(i, ".executionAdapter"))
+            });
+        }
+    }
+
+    function _curatedAssetPath(uint256 index, string memory field) private pure returns (string memory) {
+        return string.concat(".assets[", vm.toString(index), "]", field);
+    }
+
+    /// @dev Redeploy only the coordinator pair, reusing the curated adapters.
+    ///
+    ///      `CreditPool.borrower` is immutable, so a new `MarginCall` always needs a new pool — but the oracle
+    ///      and execution adapters hold no position state and are already source-verified, so redeploying them
+    ///      would only churn addresses the frontend and every operator runbook already trust.
+    ///
+    ///      Registration order is asserted against the manifest: `assetId` is baked into every existing
+    ///      Position and into the app's assetId-to-ticker mapping, so a reordered registry would silently
+    ///      relabel positions.
+    function _deployCoordinatorOnly(address treasury, CuratedAsset[] memory curated)
+        internal
+        returns (LaunchStack memory stack)
+    {
+        uint256 n = curated.length;
+        if (n != LAUNCH_ASSET_COUNT) {
+            revert LaunchSetSizeMismatch(n, LAUNCH_ASSET_COUNT);
+        }
+
+        stack.marginCall = new MarginCall(V1Config.USDC, treasury);
+        stack.pool = new CreditPool(V1Config.USDC, address(stack.marginCall), treasury);
+        stack.marginCall.setCreditPool(address(stack.pool));
+
+        stack.oracles = new address[](n);
+        stack.executions = new address[](n);
+        stack.assetIds = new uint256[](n);
+
+        for (uint256 i; i < n; ++i) {
+            stack.oracles[i] = curated[i].oracle;
+            stack.executions[i] = curated[i].execution;
+            uint256 assetId = stack.marginCall.addAsset(curated[i].stock, curated[i].oracle, curated[i].execution);
+            if (assetId != curated[i].assetId) {
+                revert CuratedAssetIdDrift(curated[i].name, curated[i].assetId, assetId);
+            }
+            stack.assetIds[i] = assetId;
+        }
+    }
+
+    /// @dev Pins the property that makes a coordinator redeploy a redeploy and not a fresh launch: every
+    ///      registered adapter is the address already recorded in the curated manifest.
+    function _assertCuratedAdaptersReused(LaunchStack memory stack, CuratedAsset[] memory curated) internal view {
+        for (uint256 i; i < curated.length; ++i) {
+            MarginCall.AssetConfig memory cfg = stack.marginCall.assetConfig(curated[i].assetId);
+            assertEq(cfg.stock, curated[i].stock, "curated stock");
+            assertEq(address(cfg.oracle), curated[i].oracle, "curated oracle reused");
+            assertEq(address(cfg.execution), curated[i].execution, "curated execution reused");
         }
     }
 

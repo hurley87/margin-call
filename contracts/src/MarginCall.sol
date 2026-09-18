@@ -4,9 +4,7 @@ pragma solidity 0.8.29;
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
-import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 import {ICreditPool} from "./interfaces/ICreditPool.sol";
 import {IExecutionAdapter} from "./interfaces/IExecutionAdapter.sol";
@@ -22,7 +20,8 @@ import {V1Config} from "./V1Config.sol";
 ///      financed positions under LIVE pricing. `riskSnapshot` is the LIVE-only risk view. Borrowed USDC buys more
 ///      of the same stock through that asset's fixed Uniswap execution path. Debt accrues lazily at the immutable
 ///      V1 10% APR; `repay` restores USDC to the shared pool. Real ownership transfers clear the stored executor.
-///      The living NFT presentation (`tokenURI`) remains a later slice.
+///      Opening may record an optional immutable `thesisOf` note, and `tokenURI` points at the fixed Margin Call
+///      HTTPS metadata endpoint, which composes the living presentation off-chain from these same reads.
 contract MarginCall is ERC721 {
     using SafeERC20 for IERC20;
 
@@ -72,6 +71,7 @@ contract MarginCall is ERC721 {
     error AdapterAlreadyRegistered(address adapter);
     error InvalidAssetConfig();
     error IndexOutOfBounds(uint256 index, uint256 length);
+    error ThesisTooLong(uint256 length, uint256 maxLength);
 
     event PositionOpened(uint256 indexed tokenId, address indexed owner, uint256 indexed assetId, uint256 stockAmount);
     event CreditDrawn(uint256 indexed tokenId, uint256 usdcAmount);
@@ -92,6 +92,12 @@ contract MarginCall is ERC721 {
     uint256 public constant BPS_DENOMINATOR = V1Config.BPS_DENOMINATOR;
     uint256 public constant MAX_OPENING_LEVERAGE = V1Config.LEVERAGE_1_5X;
 
+    /// @notice Longest opening thesis accepted, measured in UTF-8 bytes rather than characters.
+    uint256 public constant MAX_THESIS_BYTES = 280;
+
+    /// @notice Fixed metadata origin. V1 has no metadata admin: this base can only change by redeploying.
+    string public constant METADATA_BASE_URI = "https://margincall.fun/api/nft/";
+
     IERC20 public immutable USDC;
 
     /// @notice The deployer, and the only address permitted to wire the credit pool. Holds no other authority:
@@ -105,6 +111,12 @@ contract MarginCall is ERC721 {
     ICreditPool public creditPool;
 
     mapping(uint256 tokenId => Position) private _positions;
+
+    /// @notice The opening thesis for a token id, empty when none was supplied. Immutable once minted.
+    /// @dev Deliberately not a `Position` field: `_positions[tokenId]` is deleted on close and liquidation, and
+    ///      the thesis must stay readable after the NFT is burned.
+    mapping(uint256 tokenId => string) public thesisOf;
+
     mapping(uint256 assetId => AssetConfig) private _assets;
     mapping(address stock => uint256 assetId) public assetIdOf;
     mapping(address adapter => bool) private _registeredAdapters;
@@ -219,15 +231,22 @@ contract MarginCall is ERC721 {
     /// @dev Spot (`1.0x`) is oracle-free and requires `minStockOut == 0`. Financed presets require `LIVE` pricing,
     ///      draw USDC from `CreditPool`, buy more of the same stock through that asset's execution adapter, and
     ///      mint only after post-execution leverage checks. Position state and events commit before `_safeMint`.
-    function openPosition(uint256 assetId, uint256 stockAmount, uint256 targetLeverage, uint256 minStockOut)
-        external
-        returns (uint256 tokenId)
-    {
+    /// @param thesis Optional note recorded as the NFT description. Empty is valid; there is no later setter.
+    function openPosition(
+        uint256 assetId,
+        uint256 stockAmount,
+        uint256 targetLeverage,
+        uint256 minStockOut,
+        string calldata thesis
+    ) external returns (uint256 tokenId) {
         if (stockAmount == 0) {
             revert ZeroStockAmount();
         }
         if (!V1Config.isSupportedOpeningLeverage(targetLeverage)) {
             revert UnsupportedLeverage(targetLeverage);
+        }
+        if (bytes(thesis).length > MAX_THESIS_BYTES) {
+            revert ThesisTooLong(bytes(thesis).length, MAX_THESIS_BYTES);
         }
 
         AssetConfig storage asset = _requireAsset(assetId);
@@ -254,6 +273,9 @@ contract MarginCall is ERC721 {
         position.assetId = assetId;
         position.stockAmount = finalStock;
         position.lastAccruedAt = block.timestamp;
+        if (bytes(thesis).length != 0) {
+            thesisOf[tokenId] = thesis;
+        }
 
         emit PositionOpened(tokenId, msg.sender, assetId, finalStock);
         if (principal != 0) {
@@ -396,13 +418,11 @@ contract MarginCall is ERC721 {
         return _riskSnapshot(position, asset.oracle, _requireLivePrice(asset.oracle).price, _currentDebt(position));
     }
 
-    /// @notice Minimal identity metadata for a live Position NFT. Full living presentation is owned by a later slice.
-    function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        _requireOwned(tokenId);
-        string memory json = string.concat(
-            '{"name":"Margin Call Position ', Strings.toString(tokenId), '","description":"Margin Call Position NFT"}'
-        );
-        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
+    /// @dev Makes `tokenURI(tokenId)` resolve to `METADATA_BASE_URI + tokenId` for a live token, and keeps the
+    ///      inherited revert once the NFT is burned. Metadata is composed off-chain from this contract's reads,
+    ///      so live risk presentation never costs onchain state.
+    function _baseURI() internal pure override returns (string memory) {
+        return METADATA_BASE_URI;
     }
 
     /// @dev Clear the executor on a real ownership transfer before any `safeTransferFrom` receiver callback.

@@ -50,7 +50,7 @@ contract FinancedOpenForkTest is MarginCallForkBase {
     function test_intermediateLeverageRevertsOnFork() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, 13_000));
-        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, 13_000, 0);
+        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, 13_000, 0, "");
     }
 
     function test_insufficientCreditRevertsOnFork() public {
@@ -63,7 +63,7 @@ contract FinancedOpenForkTest is MarginCallForkBase {
 
         vm.prank(alice);
         vm.expectRevert();
-        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_5X, 0);
+        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_5X, 0, "");
 
         assertEq(nvdac.balanceOf(alice), aliceBefore);
         assertEq(pool.availableCredit(), poolBefore);
@@ -90,7 +90,7 @@ contract FinancedOpenForkTest is MarginCallForkBase {
         uint256 aliceBefore = nvdac.balanceOf(alice);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.OracleNotLive.selector, IOracleAdapter.State.INVALID));
-        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_1X, 0);
+        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_1X, 0, "");
         assertEq(nvdac.balanceOf(alice), aliceBefore);
     }
 
@@ -101,7 +101,7 @@ contract FinancedOpenForkTest is MarginCallForkBase {
         // Unrealistically high minOut forces SwapRouter02 "Too little received".
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSignature("Error(string)", "Too little received"));
-        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, type(uint256).max / 2);
+        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, type(uint256).max / 2, "");
 
         assertEq(nvdac.balanceOf(alice), aliceBefore);
         assertEq(pool.availableCredit(), poolBefore);

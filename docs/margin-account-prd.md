@@ -869,7 +869,10 @@ liquidate
 
 ## NFT/social layer
 
-**Planned application direction.** Today's `tokenURI` returns minimal identity metadata only. The living NFT presentation below is not shipped.
+**Partly built (issue #461), pending the coordinator redeploy.** `tokenURI` points at
+`https://margincall.fun/api/nft/{tokenId}`, which serves the opener's optional on-chain thesis and a
+pre-drawn stage image (healthy / warning / danger / liquidated, else the neutral ticker logo). The
+richer presentation below — composited or generated art, and health on portfolio cards — is not shipped.
 
 The living NFT is a presentation layer only.
 

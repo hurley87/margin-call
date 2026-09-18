@@ -135,7 +135,7 @@ contract AssetRegistryTest is MarginCallTestBase {
         _fund(bob, ONE_NVDAC);
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.AssetOpeningDisabled.selector, defaultAssetId));
-        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 0);
+        marginCall.openPosition(defaultAssetId, ONE_NVDAC, SPOT_LEVERAGE, 0, "");
 
         uint256 partialRepay = debt / 2;
         _fundUsdc(alice, partialRepay);
@@ -168,11 +168,11 @@ contract AssetRegistryTest is MarginCallTestBase {
         _fund(alice, ONE_NVDAC);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnknownAsset.selector, 0));
-        marginCall.openPosition(0, ONE_NVDAC, SPOT_LEVERAGE, 0);
+        marginCall.openPosition(0, ONE_NVDAC, SPOT_LEVERAGE, 0, "");
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnknownAsset.selector, 99));
-        marginCall.openPosition(99, ONE_NVDAC, SPOT_LEVERAGE, 0);
+        marginCall.openPosition(99, ONE_NVDAC, SPOT_LEVERAGE, 0, "");
     }
 
     function _adaptersFor(MockNvdaC stock)

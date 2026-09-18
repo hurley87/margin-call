@@ -57,7 +57,7 @@ contract SpotPositionLifecycle is LocalHarnessBase {
 
         console.log("--- tx: openPosition ---");
         state.tokenId =
-            state.marginCall.openPosition(nvdaAssetId, state.stockAmount, state.marginCall.SPOT_LEVERAGE(), 0);
+            state.marginCall.openPosition(nvdaAssetId, state.stockAmount, state.marginCall.SPOT_LEVERAGE(), 0, "");
         _inspectOpen(state);
 
         console.log("--- tx: closePosition ---");

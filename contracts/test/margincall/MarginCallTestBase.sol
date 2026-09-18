@@ -2,7 +2,6 @@
 pragma solidity 0.8.29;
 
 import {Test} from "forge-std/Test.sol";
-import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {IERC721Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
@@ -37,7 +36,8 @@ abstract contract MarginCallTestBase is Test {
     /// @dev Default `reduceExposure` sale size: small enough to leave residual stock on a 1 NVDAc open.
     uint256 internal constant REDUCE_SALE = ONE_NVDAC / 20;
     uint256 internal constant DEFAULT_CREDIT = 1_000_000e6;
-    string internal constant TOKEN_URI_PREFIX = "data:application/json;base64,";
+    /// @dev Pinned here rather than read from the contract so a change to the metadata origin has to be deliberate.
+    string internal constant TOKEN_URI_BASE = "https://margincall.fun/api/nft/";
 
     MockNvdaC internal nvdac;
     MockUsdc internal usdc;
@@ -93,10 +93,14 @@ abstract contract MarginCallTestBase is Test {
     }
 
     function _open(address user, uint256 amount) internal returns (uint256 tokenId) {
+        return _openWithThesis(user, amount, "");
+    }
+
+    function _openWithThesis(address user, uint256 amount, string memory thesis) internal returns (uint256 tokenId) {
         // Use the pinned constant, not `marginCall.SPOT_LEVERAGE()`: `vm.prank` covers only the next call, so a
         // getter call here would consume the prank and `openPosition` would run as the test contract.
         vm.prank(user);
-        tokenId = marginCall.openPosition(defaultAssetId, amount, SPOT_LEVERAGE, 0);
+        tokenId = marginCall.openPosition(defaultAssetId, amount, SPOT_LEVERAGE, 0, thesis);
     }
 
     function _openFinanced(address user, uint256 amount, uint256 leverage, uint256 minOut)
@@ -104,7 +108,7 @@ abstract contract MarginCallTestBase is Test {
         returns (uint256 tokenId)
     {
         vm.prank(user);
-        tokenId = marginCall.openPosition(defaultAssetId, amount, leverage, minOut);
+        tokenId = marginCall.openPosition(defaultAssetId, amount, leverage, minOut, "");
     }
 
     function _position(uint256 tokenId) internal view returns (MarginCall.Position memory) {
@@ -154,14 +158,8 @@ abstract contract MarginCallTestBase is Test {
         target.ownerOf(tokenId);
     }
 
-    function _expectedTokenJson(uint256 tokenId) internal pure returns (string memory) {
-        return string.concat(
-            '{"name":"Margin Call Position ', tokenId.toString(), '","description":"Margin Call Position NFT"}'
-        );
-    }
-
     function _expectedTokenURI(uint256 tokenId) internal pure returns (string memory) {
-        return string.concat(TOKEN_URI_PREFIX, Base64.encode(bytes(_expectedTokenJson(tokenId))));
+        return string.concat(TOKEN_URI_BASE, tokenId.toString());
     }
 
     function _deployStackWithStock(address stock_) internal returns (MarginCall mc, uint256 assetId) {

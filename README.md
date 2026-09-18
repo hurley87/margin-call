@@ -71,7 +71,7 @@ Agent tooling can operate on top of the protocol, but it is not the product defi
 | Executor / reduce-exposure / liquidate UI                        | Planned                                                                                                                                     |
 | Production frontend, indexing, keeper automation                 | Planned                                                                                                                                     |
 | External agent / visual control plane                            | Design in progress ([#431](https://github.com/hurley87/margin-call/issues/431), [#433](https://github.com/hurley87/margin-call/issues/433)) |
-| Living NFT presentation (`tokenURI`)                             | Planned (minimal identity metadata only today)                                                                                              |
+| Living NFT presentation (`tokenURI`)                             | Built ([#461](https://github.com/hurley87/margin-call/issues/461)) — HTTPS metadata + on-chain thesis; needs the coordinator redeploy       |
 | Convex JWT / identity                                            | Not wired yet (empty schema + HTTP router)                                                                                                  |
 
 The website is a visual/wallet control plane, not a conversational chatbot. Users may interact with a Margin Call agent outside the website. The user owns the Position NFT; executor / delegated authority stays narrow and revocable on-chain.

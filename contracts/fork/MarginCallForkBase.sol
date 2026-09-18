@@ -108,7 +108,7 @@ abstract contract MarginCallForkBase is Test {
 
     function _open(address user, uint256 amount) internal returns (uint256 tokenId) {
         vm.prank(user);
-        tokenId = marginCall.openPosition(nvdaAssetId, amount, V1Config.SPOT_LEVERAGE, 0);
+        tokenId = marginCall.openPosition(nvdaAssetId, amount, V1Config.SPOT_LEVERAGE, 0, "");
     }
 
     function _openFinanced(address user, uint256 amount, uint256 leverage, uint256 minOut)
@@ -116,6 +116,6 @@ abstract contract MarginCallForkBase is Test {
         returns (uint256 tokenId)
     {
         vm.prank(user);
-        tokenId = marginCall.openPosition(nvdaAssetId, amount, leverage, minOut);
+        tokenId = marginCall.openPosition(nvdaAssetId, amount, leverage, minOut, "");
     }
 }

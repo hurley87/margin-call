@@ -14,6 +14,13 @@ launch stack (issue #446: NVDAc + AAPLc + METAc + GOOGLc). The historical NVDA-o
 deployment is preserved at `contracts/deployments/base-nvda-only.legacy.json`; do not
 point the frontend at those addresses. The browser workspace consumes only `base.json`.
 
+The living Position NFT slice (issue #461 — optional on-chain thesis, HTTPS `tokenURI`,
+`GET /api/nft/[tokenId]`, stage artwork under `public/`) is built but **not live on Base**: it
+changed `MarginCall`, so it needs the coordinator-only redeploy in
+`contracts/script/BASE_LAUNCH.md`. Until that lands, the addresses in `base.json` have neither
+`thesisOf` nor the five-argument `openPosition`, so the frontend must ship in the same change as
+the manifest update.
+
 ## Commands
 
 - `pnpm dev` — dev server on localhost:3000

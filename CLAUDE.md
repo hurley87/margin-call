@@ -64,9 +64,18 @@ capability only through separately scoped work.
     stay gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`. All ten contracts are source-verified
     on Basescan (solc 0.8.29, 1M optimizer runs). Minimal browser workspace (issue #448)
     consumes this deployment via `src/lib/protocol/` — not a production frontend.
+  - Living Position NFT (issue #461) — **requires a coordinator redeploy before it is live on Base.**
+    `openPosition` takes an optional immutable thesis (max 280 UTF-8 bytes) stored in
+    `thesisOf[tokenId]`, which outlives close and liquidation; `tokenURI` is the fixed
+    `https://margincall.fun/api/nft/{tokenId}` and still reverts once the NFT is burned. That route
+    reads canonical Base and returns the thesis plus a static PNG already committed under `public/`
+    — no IPFS, no image generation. Artwork stage comes from a pure resolver
+    (`src/lib/positions/artwork.ts`) on LIVE equity ratio; live health renders only on
+    `/position/[tokenId]`, while list pages stay Convex identity/lifecycle with neutral ticker logos.
+    Cutover runbook: `script/BASE_LAUNCH.md` — redeploy `MarginCall` + `CreditPool` only, reusing
+    the curated adapters in `base.json`, then reset the Convex read model.
 
-  Still future work: living NFT presentation (`tokenURI` is minimal identity metadata only);
-  polished product UI layered on the same `contracts/deployments/base.json` path.
+  Still future work: polished product UI layered on the same `contracts/deployments/base.json` path.
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.
 
   Keep each slice in step with the docstring of the contract that owns it (`MarginCall.sol` for the
