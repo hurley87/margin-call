@@ -14,98 +14,43 @@ import {
   PositionQueryBoundary,
 } from "@/components/positions/position-list";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
+import { runManagedTx } from "@/components/protocol/run-managed-tx";
+import { TxStatus } from "@/components/protocol/tx-status";
 import { Button } from "@/components/ui/button";
 import { FlashValue } from "@/components/ui/flash-value";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
 import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
-import {
-  parseNetworkIdToChainId,
-  resolveBaseWalletClient,
-} from "@/lib/dynamic/resolve-wallet-client";
-import { STATUS_LABEL, type PositionStatus } from "@/lib/positions/types";
+import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
+import { STATUS_LABEL, type PositionListItem } from "@/lib/positions/types";
 import { formatStockAmount, formatUsdcRaw } from "@/lib/protocol/amounts";
 import {
   isPositionManager,
   isPositionOwner,
 } from "@/lib/protocol/authorization";
 import { assetLabel } from "@/lib/protocol/deployment";
-import { liveExposure } from "@/lib/protocol/exposure";
-import { basescanTxUrl } from "@/lib/protocol/explorer";
+import { exposureLabel, liveExposure } from "@/lib/protocol/exposure";
+import { basescanTxUrl, parseTxHash } from "@/lib/protocol/explorer";
 import {
   runClosePositionFlow,
   runRepayAllFlow,
 } from "@/lib/protocol/manage-flow";
-import { createBasePublicClient } from "@/lib/protocol/public-client";
+import {
+  createBasePublicClient,
+  type BasePublicClient,
+} from "@/lib/protocol/public-client";
 import { closeReadiness, repayReadiness } from "@/lib/protocol/readiness";
-import { loadPosition, type OpenPosition } from "@/lib/protocol/reads";
+import {
+  loadPosition,
+  type OpenPosition,
+  type PositionView,
+} from "@/lib/protocol/reads";
 import { isTxPending, type TxPhase } from "@/lib/protocol/tx-phase";
-import { ProtocolTxError } from "@/lib/protocol/writes";
 import { formatShortAddress } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
-
-type IndexedPosition = {
-  tokenId: string;
-  assetId: number;
-  owner: string;
-  status: PositionStatus;
-  terminalTxHash?: string;
-};
 
 function parseTokenId(value: string): bigint | null {
   if (!/^\d+$/.test(value)) return null;
   return BigInt(value);
-}
-
-function TxStatus({ phase }: { phase: TxPhase }) {
-  switch (phase.status) {
-    case "idle":
-      return null;
-    case "awaiting-signature":
-      return (
-        <p className="text-xs text-[var(--t-muted)]">
-          Awaiting wallet signature… ({phase.label})
-        </p>
-      );
-    case "submitted":
-    case "confirmed":
-      return (
-        <p className="text-xs text-[var(--t-muted)]">
-          {phase.status === "submitted" ? "Submitted" : "Confirmed"}:{" "}
-          <a
-            className="text-[var(--t-accent)] underline"
-            href={basescanTxUrl(phase.hash)}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {formatShortAddress(phase.hash)}
-          </a>{" "}
-          ({phase.label})
-        </p>
-      );
-    case "error":
-      return (
-        <p className="text-xs text-[var(--t-red)]">
-          {phase.label}: {phase.message}
-          {phase.hash ? (
-            <>
-              {" "}
-              <a
-                className="underline"
-                href={basescanTxUrl(phase.hash)}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {formatShortAddress(phase.hash)}
-              </a>
-            </>
-          ) : null}
-        </p>
-      );
-    default: {
-      const _exhaustive: never = phase;
-      return _exhaustive;
-    }
-  }
 }
 
 /** Canonical Position NFT management surface — live Base state + repay/close. */
@@ -165,7 +110,7 @@ function PositionDetailBody({ tokenId }: { tokenId: string }) {
 function PageHeader(props: {
   assetId: number;
   tokenId: string;
-  status: PositionStatus;
+  status: PositionListItem["status"];
 }) {
   return (
     <header className="space-y-2">
@@ -192,7 +137,9 @@ function NftSlot() {
   );
 }
 
-function TerminalPosition({ position }: { position: IndexedPosition }) {
+function TerminalPosition({ position }: { position: PositionListItem }) {
+  const terminalTxHash = parseTxHash(position.terminalTxHash);
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -202,25 +149,22 @@ function TerminalPosition({ position }: { position: IndexedPosition }) {
       />
       <NftSlot />
       <dl className="grid gap-3 border-t border-[var(--t-border)] pt-4 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="text-[var(--t-muted)]">Owner</dt>
-          <dd className="font-mono">{formatShortAddress(position.owner)}</dd>
-        </div>
+        <Fact label="Owner">{formatShortAddress(position.owner)}</Fact>
       </dl>
       <p className="text-sm leading-6 text-[var(--t-muted)]">
-        {position.status === "closed"
-          ? "This Position NFT is closed. Stock was returned to the owner."
-          : "This Position NFT was liquidated."}{" "}
+        {position.status === "liquidated"
+          ? "This Position NFT was liquidated."
+          : "This Position NFT is closed. Stock was returned to the owner."}{" "}
         Live financial state is not available after the token is burned.
       </p>
-      {position.terminalTxHash ? (
+      {terminalTxHash ? (
         <a
           className="w-fit text-xs text-[var(--t-accent)] underline"
-          href={basescanTxUrl(position.terminalTxHash as `0x${string}`)}
+          href={basescanTxUrl(terminalTxHash)}
           target="_blank"
           rel="noreferrer"
         >
-          {formatShortAddress(position.terminalTxHash)}
+          {formatShortAddress(terminalTxHash)}
         </a>
       ) : null}
       <Link
@@ -233,47 +177,15 @@ function TerminalPosition({ position }: { position: IndexedPosition }) {
   );
 }
 
-function ActivePosition({ indexed }: { indexed: IndexedPosition }) {
-  const [locallyClosed, setLocallyClosed] = useState(false);
-  const [closedOwner, setClosedOwner] = useState(indexed.owner);
-  const [closedTxHash, setClosedTxHash] = useState<string | undefined>(
-    indexed.terminalTxHash
-  );
+/** Owner and closing tx, known only when this session did the closing. */
+type TerminalOverride = { owner: string; hash?: `0x${string}` };
 
-  if (locallyClosed) {
-    return (
-      <TerminalPosition
-        position={{
-          ...indexed,
-          owner: closedOwner,
-          status: "closed",
-          terminalTxHash: closedTxHash,
-        }}
-      />
-    );
-  }
-
-  return (
-    <ActivePositionLive
-      indexed={indexed}
-      onClosed={(owner, hash) => {
-        setClosedOwner(owner);
-        setClosedTxHash(hash);
-        setLocallyClosed(true);
-      }}
-    />
-  );
-}
-
-function ActivePositionLive(props: {
-  indexed: IndexedPosition;
-  onClosed: (owner: string, hash: `0x${string}`) => void;
-}) {
-  const { indexed, onClosed } = props;
+function ActivePosition({ indexed }: { indexed: PositionListItem }) {
   const tokenId = parseTokenId(indexed.tokenId);
   const [publicClient] = useState(() => createBasePublicClient());
-  const [live, setLive] = useState<OpenPosition | null>(null);
+  const [view, setView] = useState<PositionView | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
+  const [justClosed, setJustClosed] = useState<TerminalOverride | null>(null);
 
   useEffect(() => {
     if (tokenId == null) return;
@@ -281,12 +193,12 @@ function ActivePositionLive(props: {
     void loadPosition(publicClient, tokenId)
       .then((next) => {
         if (cancelled) return;
-        setLive(next);
+        setView(next);
         setReadError(null);
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        setLive(null);
+        setView(null);
         setReadError(
           error instanceof Error
             ? error.message
@@ -298,18 +210,40 @@ function ActivePositionLive(props: {
     };
   }, [publicClient, tokenId]);
 
-  const assetId = live?.assetId ?? indexed.assetId;
+  // Base is authoritative: a burned token is closed even while Convex says active.
+  const terminal: TerminalOverride | null =
+    justClosed ?? (view?.status === "closed" ? { owner: indexed.owner } : null);
+
+  if (terminal) {
+    return (
+      <TerminalPosition
+        position={{
+          ...indexed,
+          owner: terminal.owner,
+          status: "closed",
+          terminalTxHash: terminal.hash,
+        }}
+      />
+    );
+  }
+
+  const live = view?.status === "open" ? view : null;
+  const loadError = tokenId == null ? "Not a valid token id." : readError;
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader assetId={assetId} tokenId={indexed.tokenId} status="active" />
+      <PageHeader
+        assetId={live?.assetId ?? indexed.assetId}
+        tokenId={indexed.tokenId}
+        status="active"
+      />
       <NftSlot />
       {live ? (
         <LiveFacts position={live} />
-      ) : readError ? (
+      ) : loadError ? (
         <p className="text-sm leading-6 text-[var(--t-red)]">
           Couldn&apos;t read live Base state. The index may still show this
-          Position as active. {readError}
+          Position as active. {loadError}
         </p>
       ) : (
         <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
@@ -317,7 +251,12 @@ function ActivePositionLive(props: {
         </p>
       )}
       {live ? (
-        <ManageBar live={live} onClosed={onClosed} onRepaid={setLive} />
+        <ManageBar
+          publicClient={publicClient}
+          live={live}
+          onClosed={(owner, hash) => setJustClosed({ owner, hash })}
+          onRepaid={setView}
+        />
       ) : null}
     </div>
   );
@@ -333,10 +272,9 @@ function Fact(props: { label: string; children: ReactNode }) {
 }
 
 function LiveFacts({ position }: { position: OpenPosition }) {
-  const exposure = liveExposure({
-    nav: position.nav,
-    currentDebt: position.currentDebt,
-  });
+  const leverage = exposureLabel(
+    liveExposure({ nav: position.nav, currentDebt: position.currentDebt })
+  );
 
   return (
     <dl className="grid gap-3 border-t border-[var(--t-border)] pt-4 text-sm">
@@ -350,11 +288,7 @@ function LiveFacts({ position }: { position: OpenPosition }) {
       <Fact label="Recorded principal">
         {formatUsdcRaw(position.principal)} USDC
       </Fact>
-      {exposure.kind === "unlevered" || exposure.kind === "levered" ? (
-        <Fact label="Leverage">{exposure.label}</Fact>
-      ) : exposure.kind === "equity-exhausted" ? (
-        <Fact label="Leverage">Equity exhausted</Fact>
-      ) : null}
+      {leverage ? <Fact label="Leverage">{leverage}</Fact> : null}
       <Fact label="NAV">
         {position.nav == null
           ? "Pricing unavailable"
@@ -367,48 +301,30 @@ function LiveFacts({ position }: { position: OpenPosition }) {
   );
 }
 
-function ManageBar(props: {
+type ManageProps = {
+  publicClient: BasePublicClient;
   live: OpenPosition;
   onClosed: (owner: string, hash: `0x${string}`) => void;
   onRepaid: (next: OpenPosition) => void;
-}) {
+};
+
+/**
+ * Decides whether this visitor gets repay/close controls at all.
+ * Owner-vs-executor authority stays in the readiness gates.
+ */
+function ManageBar(props: ManageProps) {
   const session = useWalletSession();
-
-  switch (session.kind) {
-    case "connected":
-      return (
-        <ManageConnected
-          address={session.address}
-          live={props.live}
-          onClosed={props.onClosed}
-          onRepaid={props.onRepaid}
-        />
-      );
-    case "disconnected":
-    case "unset":
-    case "hydrating":
-    case "failed":
-      return (
-        <p className="text-sm leading-6 text-[var(--t-muted)]">
-          Connect a wallet to repay or close this Position.
-        </p>
-      );
-    default: {
-      const _exhaustive: never = session;
-      return _exhaustive;
-    }
-  }
-}
-
-function ManageConnected(props: {
-  address: `0x${string}`;
-  live: OpenPosition;
-  onClosed: (owner: string, hash: `0x${string}`) => void;
-  onRepaid: (next: OpenPosition) => void;
-}) {
   const { data: accounts = [] } = useGetWalletAccounts();
-  const evmAccount = accounts.find(isEvmWalletAccount) ?? null;
 
+  if (session.kind !== "connected") {
+    return (
+      <p className="text-sm leading-6 text-[var(--t-muted)]">
+        Connect a wallet to repay or close this Position.
+      </p>
+    );
+  }
+
+  const evmAccount = accounts.find(isEvmWalletAccount) ?? null;
   if (!evmAccount) {
     return (
       <p className="text-sm leading-6 text-[var(--t-muted)]">
@@ -417,14 +333,9 @@ function ManageConnected(props: {
     );
   }
 
-  const isManager = isPositionManager(
-    props.address,
-    props.live.owner,
-    props.live.executor
-  );
-  const isOwner = isPositionOwner(props.address, props.live.owner);
-
-  if (!isManager && !isOwner) {
+  if (
+    !isPositionManager(session.address, props.live.owner, props.live.executor)
+  ) {
     return (
       <p className="text-sm leading-6 text-[var(--t-muted)]">
         Connected wallet is not the owner or executor.
@@ -434,26 +345,24 @@ function ManageConnected(props: {
 
   return (
     <ManageActions
-      address={props.address}
+      {...props}
+      address={session.address}
+      accounts={accounts}
       evmAccount={evmAccount}
-      live={props.live}
-      onClosed={props.onClosed}
-      onRepaid={props.onRepaid}
     />
   );
 }
 
-function ManageActions(props: {
-  address: `0x${string}`;
-  evmAccount: WalletAccount;
-  live: OpenPosition;
-  onClosed: (owner: string, hash: `0x${string}`) => void;
-  onRepaid: (next: OpenPosition) => void;
-}) {
-  const { address, evmAccount, live, onClosed, onRepaid } = props;
-  const { data: accounts = [] } = useGetWalletAccounts();
+function ManageActions(
+  props: ManageProps & {
+    address: `0x${string}`;
+    accounts: readonly WalletAccount[];
+    /** Chain reads are per-account, so this component owns them post-narrowing. */
+    evmAccount: WalletAccount;
+  }
+) {
+  const { address, accounts, evmAccount, publicClient, live } = props;
   const syncPositionTx = useSyncPositionTransaction();
-  const [publicClient] = useState(() => createBasePublicClient());
   const [txPhase, setTxPhase] = useState<TxPhase>({ status: "idle" });
   const pending = isTxPending(txPhase);
 
@@ -465,110 +374,57 @@ function ManageActions(props: {
   });
   const chainId = parseNetworkIdToChainId(networkQuery.data?.networkId);
 
-  const isManager = isPositionManager(address, live.owner, live.executor);
-  const isOwner = isPositionOwner(address, live.owner);
   const repayGate = repayReadiness({
     chainId,
     currentDebt: live.currentDebt,
-    positionExists: true,
-    isManager,
+    isManager: isPositionManager(address, live.owner, live.executor),
   });
   const closeGate = closeReadiness({
     chainId,
     currentDebt: live.currentDebt,
-    positionExists: true,
-    isOwner,
+    isOwner: isPositionOwner(address, live.owner),
   });
 
   async function handleRepay() {
-    const walletClient = resolveBaseWalletClient(accounts);
-    if (!walletClient) {
-      setTxPhase({
-        status: "error",
-        label: "Repay all",
-        message: "No Base wallet client. Reconnect an EVM wallet.",
-      });
-      return;
-    }
+    const repaid = await runManagedTx({
+      label: "Repay all",
+      accounts,
+      setTxPhase,
+      run: (walletClient, onSubmitted) =>
+        runRepayAllFlow({
+          walletClient,
+          publicClient,
+          wallet: address,
+          tokenId: live.tokenId,
+          chainId,
+          onSubmitted,
+        }),
+    });
 
-    let submittedHash: `0x${string}` | undefined;
-    try {
-      setTxPhase({ status: "awaiting-signature", label: "Repay all" });
-      const next = await runRepayAllFlow({
-        walletClient,
-        publicClient,
-        wallet: address,
-        tokenId: live.tokenId,
-        chainId,
-        onSubmitted: (hash, label) => {
-          submittedHash = hash;
-          setTxPhase({ status: "submitted", label, hash });
-        },
-      });
-      if (submittedHash) {
-        setTxPhase({
-          status: "confirmed",
-          label: "Repay all",
-          hash: submittedHash,
-        });
-      } else {
-        setTxPhase({ status: "idle" });
-      }
-      onRepaid(next);
-    } catch (error) {
-      const hash =
-        error instanceof ProtocolTxError ? error.hash : submittedHash;
-      setTxPhase({
-        status: "error",
-        label: "Repay all",
-        message: error instanceof Error ? error.message : "Repay failed",
-        ...(hash ? { hash } : {}),
-      });
-    }
+    // Repayment does not change indexed lifecycle — no Convex sync.
+    if (repaid) props.onRepaid(repaid.position);
   }
 
   async function handleClose() {
-    const walletClient = resolveBaseWalletClient(accounts);
-    if (!walletClient) {
-      setTxPhase({
-        status: "error",
-        label: "Close",
-        message: "No Base wallet client. Reconnect an EVM wallet.",
-      });
-      return;
-    }
+    const closed = await runManagedTx({
+      label: "Close",
+      accounts,
+      setTxPhase,
+      run: (walletClient, onSubmitted) =>
+        runClosePositionFlow({
+          walletClient,
+          publicClient,
+          wallet: address,
+          tokenId: live.tokenId,
+          chainId,
+          onSubmitted,
+        }),
+    });
 
-    let submittedHash: `0x${string}` | undefined;
-    try {
-      setTxPhase({ status: "awaiting-signature", label: "Close" });
-      const closed = await runClosePositionFlow({
-        walletClient,
-        publicClient,
-        wallet: address,
-        tokenId: live.tokenId,
-        chainId,
-        onSubmitted: (hash, label) => {
-          submittedHash = hash;
-          setTxPhase({ status: "submitted", label, hash });
-        },
-      });
-      setTxPhase({
-        status: "confirmed",
-        label: "Close position",
-        hash: closed.hash,
-      });
-      void syncPositionTx(closed.hash).catch(() => undefined);
-      onClosed(live.owner, closed.hash);
-    } catch (error) {
-      const hash =
-        error instanceof ProtocolTxError ? error.hash : submittedHash;
-      setTxPhase({
-        status: "error",
-        label: "Close",
-        message: error instanceof Error ? error.message : "Close failed",
-        ...(hash ? { hash } : {}),
-      });
-    }
+    if (!closed) return;
+    // Best-effort index — the burn is terminal on Base regardless of Convex.
+    void syncPositionTx(closed.hash).catch(() => undefined);
+    props.onClosed(live.owner, closed.hash);
   }
 
   return (

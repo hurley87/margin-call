@@ -20,7 +20,7 @@ import {
   isPositionManager,
   isPositionOwner,
 } from "@/lib/protocol/authorization";
-import { liveExposure } from "@/lib/protocol/exposure";
+import { exposureLabel, liveExposure } from "@/lib/protocol/exposure";
 import {
   assertBaseChain,
   closeReadiness,
@@ -234,7 +234,6 @@ describe("closeReadiness", () => {
       closeReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: 100n,
-        positionExists: true,
         isOwner: true,
       }).ok
     ).toBe(false);
@@ -243,7 +242,6 @@ describe("closeReadiness", () => {
       closeReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: null,
-        positionExists: true,
         isOwner: true,
       }).ok
     ).toBe(false);
@@ -252,7 +250,6 @@ describe("closeReadiness", () => {
       closeReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: 0n,
-        positionExists: true,
         isOwner: true,
       })
     ).toEqual({ ok: true });
@@ -263,7 +260,6 @@ describe("closeReadiness", () => {
       closeReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: 0n,
-        positionExists: true,
         isOwner: false,
       })
     ).toEqual({
@@ -279,7 +275,6 @@ describe("repayReadiness", () => {
       repayReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: 100n,
-        positionExists: true,
         isManager: true,
       })
     ).toEqual({ ok: true });
@@ -290,7 +285,6 @@ describe("repayReadiness", () => {
       repayReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: 0n,
-        positionExists: true,
         isManager: true,
       })
     ).toEqual({
@@ -304,7 +298,6 @@ describe("repayReadiness", () => {
       repayReadiness({
         chainId: BASE_CHAIN_ID,
         currentDebt: 100n,
-        positionExists: true,
         isManager: false,
       })
     ).toEqual({
@@ -370,5 +363,16 @@ describe("liveExposure", () => {
     expect(liveExposure({ nav: 100n, currentDebt: 100n })).toEqual({
       kind: "equity-exhausted",
     });
+  });
+});
+
+describe("exposureLabel", () => {
+  it("renders a leverage row only when the number is real", () => {
+    expect(exposureLabel({ kind: "unlevered", label: "1.0x" })).toBe("1.0x");
+    expect(exposureLabel({ kind: "levered", label: "1.25x" })).toBe("1.25x");
+    expect(exposureLabel({ kind: "equity-exhausted" })).toBe(
+      "Equity exhausted"
+    );
+    expect(exposureLabel({ kind: "pricing-unavailable" })).toBeNull();
   });
 });

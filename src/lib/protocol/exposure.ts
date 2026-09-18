@@ -33,3 +33,20 @@ export function liveExposure(args: {
     label: `${whole.toString()}.${hundredths.toString().padStart(2, "0")}x`,
   };
 }
+
+/** Display text for a leverage row, or null when there is nothing honest to show. */
+export function exposureLabel(exposure: LiveExposure): string | null {
+  switch (exposure.kind) {
+    case "unlevered":
+    case "levered":
+      return exposure.label;
+    case "equity-exhausted":
+      return "Equity exhausted";
+    case "pricing-unavailable":
+      return null;
+    default: {
+      const _exhaustive: never = exposure;
+      return _exhaustive;
+    }
+  }
+}

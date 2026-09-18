@@ -5,6 +5,8 @@ export type PositionListItem = {
   assetId: number;
   owner: string;
   status: PositionStatus;
+  /** Close/liquidate transaction — only indexed once the token is terminal. */
+  terminalTxHash?: string;
 };
 
 export const STATUS_LABEL: Record<PositionStatus, string> = {

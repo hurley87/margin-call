@@ -4,7 +4,9 @@ import {
   parseOracleState,
   type OracleState,
 } from "@/lib/protocol/constants";
+import { BaseError, ContractFunctionRevertedError } from "viem";
 import {
+  ERC721_NONEXISTENT_TOKEN,
   creditPoolAbi,
   erc20Abi,
   marginCallAbi,
@@ -129,16 +131,31 @@ export async function loadOpenSnapshot(
   };
 }
 
+/** A burned token is closed. Any other revert is a read failure, not a lifecycle fact. */
+function isNonexistentTokenError(error: unknown): boolean {
+  if (error instanceof BaseError) {
+    const reverted = error.walk(
+      (cause) => cause instanceof ContractFunctionRevertedError
+    );
+    if (reverted instanceof ContractFunctionRevertedError) {
+      return reverted.data?.errorName === ERC721_NONEXISTENT_TOKEN;
+    }
+  }
+  return (
+    error instanceof Error && error.message.includes(ERC721_NONEXISTENT_TOKEN)
+  );
+}
+
 /**
- * Load an open Position NFT from Base.
- * `ownerOf` is required so a burned token is not treated as a zero-debt live position.
+ * Load a Position NFT from Base.
+ * `ownerOf` is required so a burned token reads as closed rather than a zero-debt live position.
  * NAV/liquidatable stay optional (LIVE-only riskSnapshot).
  */
 export async function loadPosition(
   client: BasePublicClient,
   tokenId: bigint
-): Promise<OpenPosition> {
-  const [pos, debt, owner] = await Promise.all([
+): Promise<PositionView> {
+  const core = await Promise.all([
     client.readContract({
       address: baseDeployment.marginCall,
       abi: marginCallAbi,
@@ -157,7 +174,16 @@ export async function loadPosition(
       functionName: "ownerOf",
       args: [tokenId],
     }),
-  ]);
+  ]).catch((error: unknown) => {
+    if (isNonexistentTokenError(error)) return null;
+    throw error;
+  });
+
+  if (core == null) {
+    return { status: "closed", tokenId };
+  }
+
+  const [pos, debt, owner] = core;
 
   let nav: bigint | null = null;
   let liquidatable: boolean | null = null;

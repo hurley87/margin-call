@@ -104,8 +104,43 @@ describe("runRepayAllFlow", () => {
         tokenId: 42n,
       })
     );
-    expect(after.currentDebt).toBe(0n);
+    expect(after.position.currentDebt).toBe(0n);
+    expect(after.hash).toBe(REPAY_HASH);
     expect(closePositionMock).not.toHaveBeenCalled();
+  });
+
+  it("reports no hash when there was nothing left to repay", async () => {
+    repayAllMock.mockResolvedValue({ repaid: false, receipt: null });
+    const { walletClient, publicClient } = stubClients();
+
+    const after = await runRepayAllFlow({
+      walletClient,
+      publicClient,
+      wallet: OWNER,
+      tokenId: 42n,
+      chainId: 8453,
+    });
+
+    expect(after.hash).toBeUndefined();
+    expect(after.position.currentDebt).toBe(0n);
+  });
+
+  it("refuses a burned token before writing", async () => {
+    loadPositionMock.mockReset();
+    loadPositionMock.mockResolvedValue({ status: "closed", tokenId: 42n });
+    const { walletClient, publicClient } = stubClients();
+
+    await expect(
+      runRepayAllFlow({
+        walletClient,
+        publicClient,
+        wallet: OWNER,
+        tokenId: 42n,
+        chainId: 8453,
+      })
+    ).rejects.toThrow(/No open position/);
+
+    expect(repayAllMock).not.toHaveBeenCalled();
   });
 
   it("lets the executor repay", async () => {
@@ -209,6 +244,23 @@ describe("runClosePositionFlow", () => {
         chainId: 8453,
       })
     ).rejects.toThrow(/owner can close/);
+
+    expect(closePositionMock).not.toHaveBeenCalled();
+  });
+
+  it("refuses a burned token before writing", async () => {
+    loadPositionMock.mockResolvedValue({ status: "closed", tokenId: 42n });
+    const { walletClient, publicClient } = stubClients();
+
+    await expect(
+      runClosePositionFlow({
+        walletClient,
+        publicClient,
+        wallet: OWNER,
+        tokenId: 42n,
+        chainId: 8453,
+      })
+    ).rejects.toThrow(/No open position/);
 
     expect(closePositionMock).not.toHaveBeenCalled();
   });

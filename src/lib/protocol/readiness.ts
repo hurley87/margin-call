@@ -100,15 +100,10 @@ export function openReadiness(input: OpenReadinessInput): WriteGate {
 export function closeReadiness(args: {
   chainId: number | null | undefined;
   currentDebt: bigint | null;
-  positionExists: boolean;
   isOwner: boolean;
 }): WriteGate {
   const chain = assertBaseChain(args.chainId);
   if (!chain.ok) return chain;
-
-  if (!args.positionExists) {
-    return { ok: false, reason: "No open position." };
-  }
 
   if (!args.isOwner) {
     return { ok: false, reason: "Only the Position owner can close." };
@@ -135,15 +130,10 @@ export function closeReadiness(args: {
 export function repayReadiness(args: {
   chainId: number | null | undefined;
   currentDebt: bigint | null;
-  positionExists: boolean;
   isManager: boolean;
 }): WriteGate {
   const chain = assertBaseChain(args.chainId);
   if (!chain.ok) return chain;
-
-  if (!args.positionExists) {
-    return { ok: false, reason: "No open position." };
-  }
 
   if (!args.isManager) {
     return {

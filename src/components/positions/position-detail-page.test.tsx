@@ -99,6 +99,8 @@ const EXECUTOR = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" as const;
 const STRANGER = "0x1111111111111111111111111111111111111111" as const;
 const CLOSE_HASH =
   "0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc" as const;
+const REPAY_HASH =
+  "0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" as const;
 const EVM_ACCOUNT = { chain: "EVM", key: "test" } as const;
 
 function indexed(overrides: Record<string, unknown> = {}) {
@@ -149,9 +151,10 @@ describe("PositionDetailPage", () => {
     });
     useQueryMock.mockReturnValue(undefined);
     loadPositionMock.mockResolvedValue(live());
-    runRepayAllFlowMock.mockResolvedValue(
-      live({ currentDebt: 0n, principal: 0n })
-    );
+    runRepayAllFlowMock.mockResolvedValue({
+      position: live({ currentDebt: 0n, principal: 0n }),
+      hash: REPAY_HASH,
+    });
     runClosePositionFlowMock.mockResolvedValue({
       tokenId: 42n,
       hash: CLOSE_HASH,
@@ -197,6 +200,33 @@ describe("PositionDetailPage", () => {
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
     expect(loadPositionMock).not.toHaveBeenCalled();
+  });
+
+  it("treats a token burned on Base as closed while the index still says active", async () => {
+    useQueryMock.mockReturnValue(indexed());
+    loadPositionMock.mockResolvedValue({ status: "closed", tokenId: 42n });
+    render(<PositionDetailPage tokenId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Closed")).not.toBeNull();
+    });
+
+    expect(screen.queryByText(/Couldn't read live Base state/i)).toBeNull();
+    expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
+  });
+
+  it("surfaces a failed Base read instead of inventing a lifecycle state", async () => {
+    useQueryMock.mockReturnValue(indexed());
+    loadPositionMock.mockRejectedValue(new Error("HTTP request failed"));
+    render(<PositionDetailPage tokenId="42" />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/HTTP request failed/i)).not.toBeNull();
+    });
+
+    expect(screen.queryByText("Closed")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
   });
 
   it("reads live Base owner, stock, debt, NAV, and leverage for an active position", async () => {

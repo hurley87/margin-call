@@ -83,13 +83,16 @@ describe("loadPosition", () => {
 
     const position = await loadPosition(client as never, 7n);
 
-    expect(position.nav).toBeNull();
-    expect(position.liquidatable).toBeNull();
-    expect(position.owner).toBe(OWNER);
-    expect(position.currentDebt).toBe(10n);
+    expect(position).toMatchObject({
+      status: "open",
+      owner: OWNER,
+      currentDebt: 10n,
+      nav: null,
+      liquidatable: null,
+    });
   });
 
-  it("fails when ownerOf reverts so burned storage is not treated as live", async () => {
+  it("reads a burned token as closed rather than zero-debt live storage", async () => {
     const client = mockClient((name) => {
       if (name === "ownerOf") {
         throw new Error("ERC721NonexistentToken");
@@ -110,8 +113,35 @@ describe("loadPosition", () => {
       throw new Error(`unexpected ${name}`);
     });
 
+    await expect(loadPosition(client as never, 99n)).resolves.toEqual({
+      status: "closed",
+      tokenId: 99n,
+    });
+  });
+
+  it("still throws when the read fails for any other reason", async () => {
+    const client = mockClient((name) => {
+      if (name === "ownerOf") {
+        throw new Error("HTTP request failed");
+      }
+      if (name === "positions") {
+        return {
+          assetId: 1n,
+          stockAmount: 50n,
+          principal: 10n,
+          accruedInterest: 0n,
+          lastAccruedAt: 0n,
+          executor: "0x0000000000000000000000000000000000000000",
+        };
+      }
+      if (name === "currentDebt") {
+        return 10n;
+      }
+      throw new Error(`unexpected ${name}`);
+    });
+
     await expect(loadPosition(client as never, 99n)).rejects.toThrow(
-      /ERC721NonexistentToken/
+      /HTTP request failed/
     );
   });
 });

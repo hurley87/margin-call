@@ -22,6 +22,24 @@ type ManageFlowArgs = {
   onSubmitted?: (hash: `0x${string}`, label: string) => void;
 };
 
+/** Manage writes need a live token — a burned one has no debt to repay and nothing to close. */
+async function loadOpenPosition(
+  publicClient: BasePublicClient,
+  tokenId: bigint
+): Promise<OpenPosition> {
+  const view = await loadPosition(publicClient, tokenId);
+  if (view.status !== "open") {
+    throw new Error("No open position.");
+  }
+  return view;
+}
+
+export type RepayAllFlowResult = {
+  position: OpenPosition;
+  /** Absent when there was nothing left to repay. */
+  hash?: `0x${string}`;
+};
+
 /**
  * Repay remaining debt from the connected wallet.
  * Fresh Base load gates owner/executor + outstanding debt, then repayAll
@@ -30,23 +48,22 @@ type ManageFlowArgs = {
  */
 export async function runRepayAllFlow(
   args: ManageFlowArgs
-): Promise<OpenPosition> {
+): Promise<RepayAllFlowResult> {
   const { walletClient, publicClient, wallet, tokenId, chainId, onSubmitted } =
     args;
 
   await assertWalletOnBase(walletClient);
-  const live = await loadPosition(publicClient, tokenId);
+  const live = await loadOpenPosition(publicClient, tokenId);
   const gate = repayReadiness({
     chainId,
     currentDebt: live.currentDebt,
-    positionExists: true,
     isManager: isPositionManager(wallet, live.owner, live.executor),
   });
   if (!gate.ok) {
     throw new Error(gate.reason);
   }
 
-  await repayAll({
+  const { receipt } = await repayAll({
     walletClient,
     publicClient,
     owner: wallet,
@@ -54,7 +71,8 @@ export async function runRepayAllFlow(
     onSubmitted,
   });
 
-  return loadPosition(publicClient, tokenId);
+  const position = await loadOpenPosition(publicClient, tokenId);
+  return receipt ? { position, hash: receipt.transactionHash } : { position };
 }
 
 export type ClosePositionFlowResult = {
@@ -74,11 +92,10 @@ export async function runClosePositionFlow(
     args;
 
   await assertWalletOnBase(walletClient);
-  const live = await loadPosition(publicClient, tokenId);
+  const live = await loadOpenPosition(publicClient, tokenId);
   const gate = closeReadiness({
     chainId,
     currentDebt: live.currentDebt,
-    positionExists: true,
     isOwner: isPositionOwner(wallet, live.owner),
   });
   if (!gate.ok) {
