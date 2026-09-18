@@ -11,8 +11,8 @@ const WalletConnectIsland = dynamic(
 );
 
 /**
- * Small Connect / address / Disconnect control for the coming-soon landing.
- * Hidden when Dynamic is not configured at build time.
+ * Env-gated Base workspace shell.
+ * Hidden when Dynamic is not configured at build time (Connect chunk elided).
  */
 export function WalletConnectControl() {
   // Inlined at build time by Next, so this elides the island chunk entirely.

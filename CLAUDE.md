@@ -2,13 +2,13 @@
 
 ## Project overview
 
-Margin Call is between product versions. The Crash game has been retired from this repository. The site is a coming-soon landing page with Dynamic wallet connect. Stack scaffolding remains for the next build:
+Margin Call is between product versions. The Crash game has been retired from this repository. The site is a minimal Base Position workspace (Dynamic wallet → viem → canonical contracts) that proves open → repay → close. Stack scaffolding remains for the next build:
 
 - `CONTEXT.md` — product glossary
-- Dynamic wallet foundation mounted on the landing page (connect + Base viem `WalletClient` helper in `src/lib/dynamic/`); Convex remains empty schema/HTTP with no JWT auth yet
+- Dynamic wallet foundation + `src/lib/protocol/` (reads/writes `contracts/deployments/base.json`); Convex remains empty schema/HTTP with no JWT auth yet
 - `contracts/` has started landing product contracts, one scoped slice at a time
 
-Do not infer that the frontend is already implemented, or that a contract slice covers more than it says. Add
+Do not infer that the production frontend is already implemented, or that a contract slice covers more than it says. Add
 capability only through separately scoped work.
 
 ## Commands
@@ -25,7 +25,7 @@ capability only through separately scoped work.
 
 ## Retained architecture
 
-- `src/` — Next.js shell, Dynamic wallet foundation, styling, and UI primitives
+- `src/` — Next.js shell, Dynamic wallet, minimal Base Position workspace, styling, and UI primitives
 - `convex/` — Convex HTTP infrastructure (empty schema; no JWT providers yet).
   When the first authed Convex table or function lands, add Dynamic `customJwt` in
   `convex/auth.config.ts`:
@@ -62,10 +62,11 @@ capability only through separately scoped work.
     `CreditPool`. Curated addresses and tx evidence: `contracts/deployments/base.json`.
     Scripts/runbook: `script/BASE_LAUNCH.md`. Dry-run wrappers remain available; live wrappers
     stay gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`. All ten contracts are source-verified
-    on Basescan (solc 0.8.29, 1M optimizer runs). No frontend consume yet.
+    on Basescan (solc 0.8.29, 1M optimizer runs). Minimal browser workspace (issue #448)
+    consumes this deployment via `src/lib/protocol/` — not a production frontend.
 
   Still future work: living NFT presentation (`tokenURI` is minimal identity metadata only);
-  frontend targeting `contracts/deployments/base.json` for new positions.
+  polished product UI layered on the same `contracts/deployments/base.json` path.
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.
 
   Keep each slice in step with the docstring of the contract that owns it (`MarginCall.sol` for the

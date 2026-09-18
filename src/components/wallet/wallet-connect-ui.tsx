@@ -82,19 +82,19 @@ export function WalletConnectUi() {
   switch (view.kind) {
     case "init-failed":
       return (
-        <p className="mt-8 max-w-xs text-center text-xs leading-5 text-[var(--t-muted)]">
+        <p className="max-w-xs text-xs leading-5 text-[var(--t-muted)]">
           {view.message}
         </p>
       );
     case "initializing":
       return (
-        <p className="mt-8 text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
+        <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
           Preparing wallet…
         </p>
       );
     case "connected":
       return (
-        <div className="mt-8 flex flex-col items-center gap-3">
+        <div className="flex flex-col gap-3">
           <p className="font-mono text-sm text-[var(--t-text)]">
             {formatShortAddress(view.address)}
           </p>
@@ -102,6 +102,7 @@ export function WalletConnectUi() {
             type="button"
             variant="outline"
             size="sm"
+            className="w-fit"
             disabled={isLoggingOut}
             onClick={() => {
               resetConnect();
@@ -118,11 +119,12 @@ export function WalletConnectUi() {
       );
     case "idle":
       return (
-        <div className="mt-8 flex flex-col items-center gap-3">
+        <div className="flex flex-col gap-3">
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="w-fit"
             onClick={() => {
               resetConnect();
               resetLogout();
@@ -138,8 +140,8 @@ export function WalletConnectUi() {
       );
     case "no-providers":
       return (
-        <div className="mt-8 flex flex-col items-center gap-3">
-          <p className="max-w-xs text-center text-xs leading-5 text-[var(--t-muted)]">
+        <div className="flex flex-col gap-3">
+          <p className="max-w-xs text-xs leading-5 text-[var(--t-muted)]">
             Install an EVM wallet extension to connect.
           </p>
           {errorMessage ? (
@@ -149,7 +151,7 @@ export function WalletConnectUi() {
       );
     case "picking":
       return (
-        <div className="mt-8 flex flex-col items-center gap-3">
+        <div className="flex flex-col gap-3">
           <ul className="flex w-full max-w-xs flex-col gap-2">
             {view.providers.map((provider) => (
               <li key={provider.key}>

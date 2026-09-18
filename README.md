@@ -2,16 +2,16 @@
 
 # Margin Call
 
-Margin Call is between versions. The Crash game has been retired from this repository. The deployed site is a **Coming soon** placeholder while the next product is built.
+Margin Call is between versions. The Crash game has been retired from this repository. The deployed site is a **minimal Base Position workspace** (connect → open → repay → close) wired to the canonical launch contracts — not the production frontend.
 
 ## What's in the repo today
 
-| Area               | State                                                                            |
-| ------------------ | -------------------------------------------------------------------------------- |
-| `src/`             | Next.js 16 shell (coming-soon landing + Dynamic wallet connect), UI primitives   |
-| `convex/`          | Empty HTTP router and schema; no JWT auth until a product feature needs identity |
-| `packages/shared/` | Framework-neutral validation helpers                                             |
-| `contracts/`       | Foundry workspace: canonical multi-stock launch contracts — see `CLAUDE.md`      |
+| Area               | State                                                                               |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| `src/`             | Next.js 16 shell (Base workspace + Dynamic wallet), protocol helpers, UI primitives |
+| `convex/`          | Empty HTTP router and schema; no JWT auth until a product feature needs identity    |
+| `packages/shared/` | Framework-neutral validation helpers                                                |
+| `contracts/`       | Foundry workspace: canonical multi-stock launch contracts — see `CLAUDE.md`         |
 
 ## Tech stack
 
@@ -35,9 +35,11 @@ For local wallet connect:
 3. Allowlist `http://localhost:3000` (and production origin).
 4. Prefer **in-app** auth token storage (needed later for any Convex JWT bridge).
 
-`NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is read at build time. Without it, the coming-soon page still renders and the Connect control chunk is omitted from the build.
+`NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is read at build time. Without it, the page still renders a configure-Dynamic message and the Connect chunk is omitted from the build.
 
-For future user-approved Base transactions, `src/lib/dynamic/wallet-client.ts` exposes a Base (8453) viem `WalletClient` from a connected Dynamic EVM wallet and its EIP-1193 provider.
+Optional: set `NEXT_PUBLIC_BASE_RPC_URL` for public Base reads (defaults to `https://mainnet.base.org`).
+
+`src/lib/dynamic/wallet-client.ts` exposes a Base (8453) viem `WalletClient` from a connected Dynamic EVM wallet. `src/lib/protocol/` loads addresses from `contracts/deployments/base.json` and encodes open / repay / close.
 
 ## Commands
 
