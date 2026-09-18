@@ -10,6 +10,13 @@ import {
   optimizeFile,
 } from "../../scripts/optimize-artwork.mjs";
 
+/**
+ * optimizeFile is edge-agnostic, so the behaviour tests use a small edge.
+ * Encoding at the real 1024px costs seconds per case at `effort: 10`.
+ */
+const EDGE = 128;
+const OVERSIZED = 160;
+
 let workDir: string;
 
 beforeEach(async () => {
@@ -20,7 +27,7 @@ afterEach(async () => {
   await rm(workDir, { recursive: true, force: true });
 });
 
-/** A square gradient PNG, large enough to need downscaling. */
+/** A square gradient PNG, which always re-encodes smaller. */
 async function writeGradient(name: string, size: number): Promise<string> {
   const pixels = Buffer.alloc(size * size * 3);
   for (let y = 0; y < size; y++) {
@@ -31,9 +38,17 @@ async function writeGradient(name: string, size: number): Promise<string> {
       pixels[i + 2] = ((x + y) * 255) / (2 * size);
     }
   }
+  return writePng(name, pixels, size);
+}
+
+async function writePng(
+  name: string,
+  pixels: Buffer,
+  size: number
+): Promise<string> {
   const filePath = path.join(workDir, name);
   await sharp(pixels, { raw: { width: size, height: size, channels: 3 } })
-    .png()
+    .png({ compressionLevel: 9 })
     .toFile(filePath);
   return filePath;
 }
@@ -77,36 +92,36 @@ describe("ARTWORK_TARGETS", () => {
 
 describe("optimizeFile", () => {
   it("downscales an oversized image to the target edge, still square PNG", async () => {
-    const filePath = await writeGradient("oversized.png", 1254);
+    const filePath = await writeGradient("oversized.png", OVERSIZED);
     const before = (await readFile(filePath)).byteLength;
 
-    const result = await optimizeFile(filePath, STAGE_MAX_EDGE);
+    const result = await optimizeFile(filePath, EDGE);
 
     expect(result.status).toBe("replaced");
     expect(result.after).toBeLessThan(before);
 
     const metadata = await sharp(filePath).metadata();
     expect(metadata.format).toBe("png");
-    expect(metadata.width).toBe(STAGE_MAX_EDGE);
-    expect(metadata.height).toBe(STAGE_MAX_EDGE);
+    expect(metadata.width).toBe(EDGE);
+    expect(metadata.height).toBe(EDGE);
   });
 
   it("leaves an already-small image byte-identical", async () => {
-    const filePath = await writeGradient("small.png", STAGE_MAX_EDGE);
+    const filePath = await writeGradient("small.png", EDGE);
     const original = await readFile(filePath);
 
-    const result = await optimizeFile(filePath, STAGE_MAX_EDGE);
+    const result = await optimizeFile(filePath, EDGE);
 
     expect(result.status).toBe("skipped");
     expect(await readFile(filePath)).toEqual(original);
   });
 
   it("is idempotent: a second run skips the file it just wrote", async () => {
-    const filePath = await writeGradient("twice.png", 1254);
+    const filePath = await writeGradient("twice.png", OVERSIZED);
 
-    const first = await optimizeFile(filePath, STAGE_MAX_EDGE);
+    const first = await optimizeFile(filePath, EDGE);
     const optimized = await readFile(filePath);
-    const second = await optimizeFile(filePath, STAGE_MAX_EDGE);
+    const second = await optimizeFile(filePath, EDGE);
 
     expect(first.status).toBe("replaced");
     expect(second.status).toBe("skipped");
@@ -114,20 +129,18 @@ describe("optimizeFile", () => {
   });
 
   it("keeps the original when the re-encode would be larger", async () => {
-    // A synthetic pattern that compresses far better at full size than the
-    // downscaled palette output does.
-    const size = 1100;
-    const pixels = Buffer.alloc(size * size * 3);
+    // A strictly periodic pattern costs almost nothing to store, because PNG
+    // filters predict it exactly. Downscaling by a non-integer ratio aliases
+    // the periodicity into noise that no longer compresses, so the re-encode
+    // comes out bigger than the source it would replace.
+    const pixels = Buffer.alloc(OVERSIZED * OVERSIZED * 3);
     for (let i = 0; i < pixels.length; i++) {
       pixels[i] = (i * 2654435761) % 256;
     }
-    const filePath = path.join(workDir, "incompressible.png");
-    await sharp(pixels, { raw: { width: size, height: size, channels: 3 } })
-      .png({ compressionLevel: 9 })
-      .toFile(filePath);
+    const filePath = await writePng("periodic.png", pixels, OVERSIZED);
     const original = await readFile(filePath);
 
-    const result = await optimizeFile(filePath, STAGE_MAX_EDGE);
+    const result = await optimizeFile(filePath, EDGE);
 
     expect(result.status).toBe("unchanged");
     expect(result.after).toBe(result.before);
@@ -135,28 +148,28 @@ describe("optimizeFile", () => {
   });
 
   it("does not leave a temp file behind", async () => {
-    const filePath = await writeGradient("tidy.png", 1254);
+    const filePath = await writeGradient("tidy.png", OVERSIZED);
 
-    await optimizeFile(filePath, LOGO_MAX_EDGE);
+    await optimizeFile(filePath, EDGE);
 
     await expect(readFile(`${filePath}.tmp`)).rejects.toThrow();
   });
 
   it("rejects when the file does not exist", async () => {
     await expect(
-      optimizeFile(path.join(workDir, "missing.png"), STAGE_MAX_EDGE)
+      optimizeFile(path.join(workDir, "missing.png"), EDGE)
     ).rejects.toThrow();
   });
 });
 
 describe("optimizeFile write safety", () => {
   it("does not touch sibling files in the same directory", async () => {
-    const target = await writeGradient("target.png", 1254);
+    const target = await writeGradient("target.png", OVERSIZED);
     const sibling = path.join(workDir, "sibling.png");
     await writeFile(sibling, await readFile(target));
     const siblingBefore = await readFile(sibling);
 
-    await optimizeFile(target, STAGE_MAX_EDGE);
+    await optimizeFile(target, EDGE);
 
     expect(await readFile(sibling)).toEqual(siblingBefore);
   });
