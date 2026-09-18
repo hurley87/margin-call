@@ -51,10 +51,9 @@ describe("WalletConnectControl", () => {
     expect(
       screen.getByText("NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID")
     ).not.toBeNull();
-    expect(screen.getByText("Base workspace")).not.toBeNull();
+    expect(screen.getByText(/to enable Connect/)).not.toBeNull();
   });
 });
-
 describe("WalletConnectUi", () => {
   beforeEach(() => {
     useInitStatusMock.mockReturnValue({ data: "finished", error: null });

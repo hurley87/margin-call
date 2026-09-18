@@ -1,9 +1,5 @@
-import { WalletConnectControl } from "@/components/wallet/wallet-connect-control";
+import { MyPositionsPage } from "@/components/positions/my-positions-page";
 
 export default function Home() {
-  return (
-    <main className="min-h-screen bg-[var(--t-bg)] text-[var(--t-text)]">
-      <WalletConnectControl />
-    </main>
-  );
+  return <MyPositionsPage />;
 }
