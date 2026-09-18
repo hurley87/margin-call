@@ -52,6 +52,7 @@ import {
   openPosition,
   repayAll,
 } from "@/lib/protocol/writes";
+import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
 import { formatShortAddress } from "@/lib/utils";
 
 function TxStatus({ phase }: { phase: TxPhase }) {
@@ -169,7 +170,9 @@ function ConnectedWorkspace(props: {
   const [position, setPosition] = useState<PositionView | null>(null);
   const [txPhase, setTxPhase] = useState<TxPhase>({ status: "idle" });
   const [readError, setReadError] = useState<string | null>(null);
+  const [indexNote, setIndexNote] = useState<string | null>(null);
   const snapshotGen = useRef(0);
+  const syncPositionTx = useSyncPositionTransaction();
 
   const asset = getAssetByName(assetName);
   const stockAmount = parseStockAmount(amountInput);
@@ -434,7 +437,7 @@ function ConnectedWorkspace(props: {
                     throw new Error("Stock approval required before open.");
                   }
 
-                  const { tokenId } = await openPosition({
+                  const { tokenId, receipt } = await openPosition({
                     walletClient,
                     publicClient,
                     assetId: BigInt(asset.assetId),
@@ -444,6 +447,14 @@ function ConnectedWorkspace(props: {
                   });
                   setPosition(await loadPosition(publicClient, tokenId));
                   await refreshSnapshot();
+                  const syncStatus = await syncPositionTx(
+                    receipt.transactionHash
+                  );
+                  setIndexNote(
+                    syncStatus === "pending"
+                      ? "Position indexed pending — reconciliation will catch up shortly."
+                      : null
+                  );
                 }
               )
             }
@@ -529,7 +540,7 @@ function ConnectedWorkspace(props: {
                     void runTx(
                       "Close position",
                       async ({ walletClient, onSubmitted }) => {
-                        const { tokenId } = await closePosition({
+                        const { tokenId, receipt } = await closePosition({
                           walletClient,
                           publicClient,
                           tokenId: position.tokenId,
@@ -537,6 +548,14 @@ function ConnectedWorkspace(props: {
                         });
                         setPosition({ status: "closed", tokenId });
                         await refreshSnapshot();
+                        const syncStatus = await syncPositionTx(
+                          receipt.transactionHash
+                        );
+                        setIndexNote(
+                          syncStatus === "pending"
+                            ? "Close indexed pending — reconciliation will catch up shortly."
+                            : null
+                        );
                       }
                     )
                   }
@@ -556,6 +575,9 @@ function ConnectedWorkspace(props: {
 
       <section className="border-t border-[var(--t-border)] pt-4">
         <TxStatus phase={txPhase} />
+        {indexNote ? (
+          <p className="mt-2 text-xs text-[var(--t-muted)]">{indexNote}</p>
+        ) : null}
       </section>
     </>
   );

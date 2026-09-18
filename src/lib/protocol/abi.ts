@@ -140,6 +140,25 @@ export const marginCallAbi = [
       { name: "stockAmount", type: "uint256", indexed: false },
     ],
   },
+  {
+    type: "event",
+    name: "PositionLiquidated",
+    inputs: [
+      { name: "tokenId", type: "uint256", indexed: true },
+      { name: "owner", type: "address", indexed: true },
+      { name: "stockAmount", type: "uint256", indexed: false },
+      { name: "usdcOut", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "Transfer",
+    inputs: [
+      { name: "from", type: "address", indexed: true },
+      { name: "to", type: "address", indexed: true },
+      { name: "tokenId", type: "uint256", indexed: true },
+    ],
+  },
 ] as const;
 
 export const creditPoolAbi = [

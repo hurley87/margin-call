@@ -32,6 +32,7 @@ describe("base deployment assets", () => {
 
     expect(baseDeployment.chainId).toBe(BASE_CHAIN_ID);
     expect(baseDeployment.assets).toHaveLength(4);
+    expect(baseDeployment.marginCallDeployedAtBlock).toBe(51470656);
   });
 });
 
