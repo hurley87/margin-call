@@ -10,18 +10,18 @@ import {OracleStatePolicy} from "./OracleStatePolicy.sol";
 import {V1Config} from "./V1Config.sol";
 
 /// @title OracleAdapter
-/// @notice Stateful Coinbase/Chainlink NVDAc total-return adapter with fail-closed Base sequencer checks.
-/// @dev Classification itself lives in `OracleStatePolicy`; this contract only fetches rounds and persists the
-///      observed hold. Reading (`latestObservation`) is a pure view and never writes, because a caller that
-///      rejects a non-`LIVE` observation reverts — which would roll back any write made on its behalf. Recording
-///      a hold is therefore a separate, permissionless, committing call (`refresh`).
+/// @notice Stateful Coinbase/Chainlink total-return adapter with fail-closed Base sequencer checks.
+/// @dev One instance per supported stock. Classification itself lives in `OracleStatePolicy`; this contract only
+///      fetches rounds and persists the observed hold. Reading (`latestObservation`) is a pure view and never
+///      writes, because a caller that rejects a non-`LIVE` observation reverts — which would roll back any write
+///      made on its behalf. Recording a hold is therefore a separate, permissionless, committing call (`refresh`).
 contract OracleAdapter is IOracleAdapter {
     error ZeroAddress();
 
     event HoldObserved(uint80 heldRoundId, uint256 heldUpdatedAt);
 
-    address public immutable NVDAC;
-    IAggregatorV3 public immutable NVDA_FEED;
+    address public immutable override STOCK;
+    IAggregatorV3 public immutable FEED;
     ICoinbaseOracleRegistry public immutable REGISTRY;
     IAggregatorV3 public immutable SEQUENCER_FEED;
 
@@ -32,13 +32,12 @@ contract OracleAdapter is IOracleAdapter {
     /// @notice When `refresh` last committed an observation. Zero until the first one.
     uint256 public lastRefreshedAt;
 
-    constructor(address nvdac_, address nvdaFeed_, address registry_, address sequencerFeed_) {
-        if (nvdac_ == address(0) || nvdaFeed_ == address(0) || registry_ == address(0) || sequencerFeed_ == address(0))
-        {
+    constructor(address stock_, address feed_, address registry_, address sequencerFeed_) {
+        if (stock_ == address(0) || feed_ == address(0) || registry_ == address(0) || sequencerFeed_ == address(0)) {
             revert ZeroAddress();
         }
-        NVDAC = nvdac_;
-        NVDA_FEED = IAggregatorV3(nvdaFeed_);
+        STOCK = stock_;
+        FEED = IAggregatorV3(feed_);
         REGISTRY = ICoinbaseOracleRegistry(registry_);
         SEQUENCER_FEED = IAggregatorV3(sequencerFeed_);
     }
@@ -92,14 +91,14 @@ contract OracleAdapter is IOracleAdapter {
         input.heldRoundId = heldRoundId;
         input.heldUpdatedAt = heldUpdatedAt;
 
-        try REGISTRY.getOracleParams(NVDAC) returns (uint256, bool paused) {
+        try REGISTRY.getOracleParams(STOCK) returns (uint256, bool paused) {
             input.registryOk = true;
             input.registryPaused = paused;
         } catch {
             return (input, false);
         }
 
-        try NVDA_FEED.latestRoundData() returns (
+        try FEED.latestRoundData() returns (
             uint80 roundId, int256 answer, uint256 startedAt, uint256 updatedAt, uint80 answeredInRound
         ) {
             input.feedOk = true;

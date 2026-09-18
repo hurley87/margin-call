@@ -17,7 +17,9 @@ contract ReduceExposureTest is MarginCallTestBase {
     function test_ownerReduceExposureSellsExactStockAndRepaysPool() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (uint256 stockBefore, uint256 principalBefore,,,) = _position(tokenId);
+        MarginCall.Position memory pos = _position(tokenId);
+        uint256 stockBefore = pos.stockAmount;
+        uint256 principalBefore = pos.principal;
         assertGt(stockBefore, ONE_NVDAC);
         assertGt(principalBefore, 0);
         assertTrue(SMALL_SALE > 0 && SMALL_SALE < stockBefore);
@@ -35,7 +37,10 @@ contract ReduceExposureTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.reduceExposure(tokenId, SMALL_SALE, 0);
 
-        (uint256 stockAfter, uint256 principalAfter, uint256 accruedAfter,,) = _position(tokenId);
+        pos = _position(tokenId);
+        uint256 stockAfter = pos.stockAmount;
+        uint256 principalAfter = pos.principal;
+        uint256 accruedAfter = pos.accruedInterest;
         assertEq(stockAfter, stockBefore - SMALL_SALE, "exact stock sold");
         assertEq(accruedAfter, 0, "no accrued interest yet");
         assertEq(principalAfter, principalBefore - repayAmount);
@@ -50,7 +55,7 @@ contract ReduceExposureTest is MarginCallTestBase {
     function test_executorCanReduceExposure() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (uint256 stockBefore,,,,) = _position(tokenId);
+        uint256 stockBefore = _position(tokenId).stockAmount;
 
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
@@ -58,7 +63,7 @@ contract ReduceExposureTest is MarginCallTestBase {
         vm.prank(bob);
         marginCall.reduceExposure(tokenId, SMALL_SALE, 0);
 
-        (uint256 stockAfter,,,,) = _position(tokenId);
+        uint256 stockAfter = _position(tokenId).stockAmount;
         assertEq(stockAfter, stockBefore - SMALL_SALE);
         assertEq(marginCall.ownerOf(tokenId), alice);
     }
@@ -92,7 +97,7 @@ contract ReduceExposureTest is MarginCallTestBase {
     function test_zeroAndExcessStockRevert() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (uint256 stock,,,,) = _position(tokenId);
+        uint256 stock = _position(tokenId).stockAmount;
 
         vm.expectRevert(MarginCall.ZeroStockAmount.selector);
         vm.prank(alice);
@@ -102,7 +107,7 @@ contract ReduceExposureTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.reduceExposure(tokenId, stock + 1, 0);
 
-        (uint256 stockAfter,,,,) = _position(tokenId);
+        uint256 stockAfter = _position(tokenId).stockAmount;
         assertEq(stockAfter, stock);
     }
 
@@ -112,15 +117,15 @@ contract ReduceExposureTest is MarginCallTestBase {
         _fund(bob, ONE_NVDAC);
         uint256 tokenB = _openFinanced(bob, ONE_NVDAC, LEVERAGE_1_25X, 0);
 
-        (uint256 stockABefore,,,,) = _position(tokenA);
-        (uint256 stockBBefore,,,,) = _position(tokenB);
+        uint256 stockABefore = _position(tokenA).stockAmount;
+        uint256 stockBBefore = _position(tokenB).stockAmount;
         uint256 custodyBefore = nvdac.balanceOf(address(marginCall));
 
         vm.prank(alice);
         marginCall.reduceExposure(tokenA, SMALL_SALE, 0);
 
-        (uint256 stockAAfter,,,,) = _position(tokenA);
-        (uint256 stockBAfter,,,,) = _position(tokenB);
+        uint256 stockAAfter = _position(tokenA).stockAmount;
+        uint256 stockBAfter = _position(tokenB).stockAmount;
         assertEq(stockAAfter, stockABefore - SMALL_SALE);
         assertEq(stockBAfter, stockBBefore, "other position untouched");
         assertEq(nvdac.balanceOf(address(marginCall)), custodyBefore - SMALL_SALE);
@@ -129,7 +134,7 @@ contract ReduceExposureTest is MarginCallTestBase {
     function test_heldInvalidAndRevertingOracleBlockReduceButNotRepayTransferOrClose() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (uint256 stock,,,,) = _position(tokenId);
+        uint256 stock = _position(tokenId).stockAmount;
 
         vm.warp(OPENED_AT + 14 days);
         uint256 debt = marginCall.currentDebt(tokenId);
@@ -154,13 +159,13 @@ contract ReduceExposureTest is MarginCallTestBase {
         // Executor update and transfer remain available.
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
-        (,,,, address executor) = _position(tokenId);
+        address executor = _position(tokenId).executor;
         assertEq(executor, bob);
 
         vm.prank(alice);
         marginCall.transferFrom(alice, carol, tokenId);
         assertEq(marginCall.ownerOf(tokenId), carol);
-        (,,,, executor) = _position(tokenId);
+        executor = _position(tokenId).executor;
         assertEq(executor, address(0));
 
         // Finish with external repay + debt-free close under reverting oracle.
@@ -171,7 +176,7 @@ contract ReduceExposureTest is MarginCallTestBase {
         marginCall.repay(tokenId, remaining);
         assertEq(marginCall.currentDebt(tokenId), 0);
 
-        (uint256 stockLeft,,,,) = _position(tokenId);
+        uint256 stockLeft = _position(tokenId).stockAmount;
         assertEq(stockLeft, stock);
         vm.prank(carol);
         marginCall.closePosition(tokenId);
@@ -182,7 +187,7 @@ contract ReduceExposureTest is MarginCallTestBase {
     function test_interestFirstPartialThenFullDebtClearance() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (, uint256 principal,,,) = _position(tokenId);
+        uint256 principal = _position(tokenId).principal;
 
         vm.warp(OPENED_AT + V1Config.SECONDS_PER_YEAR);
         uint256 interest = _expectedUnaccrued(principal, V1Config.SECONDS_PER_YEAR);
@@ -198,13 +203,15 @@ contract ReduceExposureTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.reduceExposure(tokenId, saleForHalfInterest, 0);
 
-        (, uint256 principalAfter, uint256 accruedAfter,,) = _position(tokenId);
+        MarginCall.Position memory pos = _position(tokenId);
+        uint256 principalAfter = pos.principal;
+        uint256 accruedAfter = pos.accruedInterest;
         assertEq(principalAfter, principal, "interest-first leaves principal");
         assertEq(accruedAfter, interest - usdcOut);
         assertEq(marginCall.currentDebt(tokenId), principal + accruedAfter);
 
         // Sell enough remaining stock to clear all debt (with surplus possible).
-        (uint256 stockLeft,,,,) = _position(tokenId);
+        uint256 stockLeft = _position(tokenId).stockAmount;
         uint256 debtLeft = marginCall.currentDebt(tokenId);
         // Buffer for the ceil fill, capped at the stock actually left.
         uint256 saleToClear = Math.min(_stockForUsdcOut(debtLeft + debtLeft / 10), stockLeft);
@@ -223,7 +230,9 @@ contract ReduceExposureTest is MarginCallTestBase {
     function test_surplusGoesToOwnerNotExecutor() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (uint256 stock, uint256 principal,,,) = _position(tokenId);
+        MarginCall.Position memory pos = _position(tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principal = pos.principal;
 
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
@@ -260,7 +269,7 @@ contract ReduceExposureTest is MarginCallTestBase {
         vm.prank(alice);
         marginCall.reduceExposure(tokenId, sale, 0);
 
-        (uint256 stockAfter,,,,) = _position(tokenId);
+        uint256 stockAfter = _position(tokenId).stockAmount;
         assertEq(stockAfter, ONE_NVDAC - sale);
         assertEq(usdc.balanceOf(alice), aliceBefore + usdcOut);
         assertEq(pool.availableCredit(), poolBefore, "spot has no debt to repay");

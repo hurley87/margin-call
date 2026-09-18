@@ -60,7 +60,7 @@ contract MockRegistry {
 
 /// @dev RPC-free production OracleAdapter semantics, including held-round persistence.
 contract OracleAdapterTest is Test {
-    address internal constant NVDAC = address(0xB20);
+    address internal constant STOCK = address(0xB20);
 
     MockAggregator internal feed;
     MockRegistry internal registry;
@@ -71,13 +71,16 @@ contract OracleAdapterTest is Test {
         feed = new MockAggregator();
         registry = new MockRegistry();
         sequencer = new MockAggregator();
-        oracle = new OracleAdapter(NVDAC, address(feed), address(registry), address(sequencer));
+        oracle = new OracleAdapter(STOCK, address(feed), address(registry), address(sequencer));
 
         _setLiveFixtures();
         vm.warp(BaseV1Constants.PINNED_TIMESTAMP);
     }
 
     function test_liveObservation() public {
+        assertEq(oracle.STOCK(), STOCK);
+        assertEq(address(oracle.FEED()), address(feed));
+
         IOracleAdapter.Observation memory obs = oracle.latestObservation();
         assertEq(uint256(obs.state), uint256(IOracleAdapter.State.LIVE));
         assertEq(obs.price, BaseV1Constants.PINNED_FEED_ANSWER);

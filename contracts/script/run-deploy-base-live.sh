@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# LIVE Base mainnet DeployV1 broadcast. Requires CONFIRM_BASE_MAINNET=I_UNDERSTAND.
+# LIVE Base mainnet DeployLaunch broadcast. Requires CONFIRM_BASE_MAINNET=I_UNDERSTAND.
+# Do not execute in the multi-stock architecture PR. Human-controlled follow-up only.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,15 +26,18 @@ else
   echo "warning: ETHERSCAN_API_KEY unset; deploying without --verify" >&2
 fi
 
-echo "LIVE DeployV1 broadcast on Base mainnet (chain ${chain_id})."
+echo "LIVE DeployLaunch broadcast on Base mainnet (chain ${chain_id})."
+echo "Will deploy MarginCall, CreditPool, and NVDAc/AAPLc/METAc/GOOGLc adapters."
+echo "Will NOT mutate the historical NVDA-only deployment."
 echo "Private keys are read from the environment and are never printed."
 
-forge script script/DeployV1.s.sol:DeployV1 \
+forge script script/DeployLaunch.s.sol:DeployLaunch \
   --sig "run()" \
   --rpc-url "$RPC_URL" \
   --broadcast \
   ${VERIFY_ARGS[@]+"${VERIFY_ARGS[@]}"} \
   -vv
 
-echo "Deploy run record: deployments/base-deploy.run.json"
-echo "Merge into deployments/base.json by hand after acceptance (see BASE_MAINNET.md)."
+echo "Deploy run record: deployments/base-launch-deploy.run.json"
+echo "After acceptance, record the curated launch manifest at deployments/base.json (see BASE_LAUNCH.md)."
+echo "Do not merge into deployments/base-nvda-only.legacy.json."

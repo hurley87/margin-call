@@ -16,21 +16,21 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         emit MarginCall.ExecutorUpdated(tokenId, address(0), bob);
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
-        (,,,, address executor) = _position(tokenId);
+        address executor = _position(tokenId).executor;
         assertEq(executor, bob);
 
         vm.expectEmit(true, true, true, true, address(marginCall));
         emit MarginCall.ExecutorUpdated(tokenId, bob, carol);
         vm.prank(alice);
         marginCall.setExecutor(tokenId, carol);
-        (,,,, executor) = _position(tokenId);
+        executor = _position(tokenId).executor;
         assertEq(executor, carol);
 
         vm.expectEmit(true, true, true, true, address(marginCall));
         emit MarginCall.ExecutorUpdated(tokenId, carol, address(0));
         vm.prank(alice);
         marginCall.setExecutor(tokenId, address(0));
-        (,,,, executor) = _position(tokenId);
+        executor = _position(tokenId).executor;
         assertEq(executor, address(0));
     }
 
@@ -56,13 +56,13 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         vm.prank(outsider);
         marginCall.setExecutor(tokenId, outsider);
 
-        (,,,, address executor) = _position(tokenId);
+        address executor = _position(tokenId).executor;
         assertEq(executor, bob);
     }
 
     function test_executorCanRepayAndReduceButCannotTransferCloseOrSetExecutor() public {
         (uint256 tokenId, uint256 debt) = _openFinancedWithAccrual();
-        (uint256 stockBefore,,,,) = _position(tokenId);
+        uint256 stockBefore = _position(tokenId).stockAmount;
 
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
@@ -75,7 +75,7 @@ contract ExecutorDelegationTest is MarginCallTestBase {
 
         vm.prank(bob);
         marginCall.reduceExposure(tokenId, REDUCE_SALE, 0);
-        (uint256 stockAfter,,,,) = _position(tokenId);
+        uint256 stockAfter = _position(tokenId).stockAmount;
         assertEq(stockAfter, stockBefore - REDUCE_SALE);
 
         vm.expectRevert(abi.encodeWithSelector(IERC721Errors.ERC721InsufficientApproval.selector, bob, tokenId));
@@ -95,7 +95,7 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         marginCall.setExecutor(tokenId, carol);
 
         assertEq(marginCall.ownerOf(tokenId), alice);
-        (,,,, address executor) = _position(tokenId);
+        address executor = _position(tokenId).executor;
         assertEq(executor, bob);
     }
 
@@ -139,7 +139,9 @@ contract ExecutorDelegationTest is MarginCallTestBase {
     function test_executorOpenPositionMintsSeparateTokenNotPrincipalOnExisting() public {
         _fund(alice, ONE_NVDAC);
         uint256 tokenId = _openFinanced(alice, ONE_NVDAC, LEVERAGE_1_25X, 0);
-        (uint256 stockBefore, uint256 principalBefore,,,) = _position(tokenId);
+        MarginCall.Position memory pos = _position(tokenId);
+        uint256 stockBefore = pos.stockAmount;
+        uint256 principalBefore = pos.principal;
 
         vm.prank(alice);
         marginCall.setExecutor(tokenId, bob);
@@ -149,7 +151,9 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         assertEq(bobToken, 2);
         assertEq(marginCall.ownerOf(bobToken), bob);
 
-        (uint256 stockAfter, uint256 principalAfter,,,) = _position(tokenId);
+        pos = _position(tokenId);
+        uint256 stockAfter = pos.stockAmount;
+        uint256 principalAfter = pos.principal;
         assertEq(stockAfter, stockBefore);
         assertEq(principalAfter, principalBefore);
         assertEq(marginCall.ownerOf(tokenId), alice);
@@ -192,7 +196,7 @@ contract ExecutorDelegationTest is MarginCallTestBase {
         vm.prank(bob);
         marginCall.transferFrom(alice, carol, tokenId);
         assertEq(marginCall.ownerOf(tokenId), carol);
-        (,,,, address executor) = _position(tokenId);
+        address executor = _position(tokenId).executor;
         assertEq(executor, address(0));
     }
 }

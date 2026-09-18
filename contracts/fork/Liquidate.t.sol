@@ -21,17 +21,19 @@ contract LiquidateForkTest is MarginCallForkBase {
         IOracleAdapter.Observation memory live = oracle.latestObservation();
         assertEq(uint256(live.state), uint256(IOracleAdapter.State.LIVE));
 
-        vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
 
-        (uint256 stock, uint256 principal,,,) = marginCall.positions(tokenId);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principal = pos.principal;
         assertGt(stock, ONE_NVDAC);
         assertGt(principal, 0);
         uint256 debt = marginCall.currentDebt(tokenId);
 
         // Mock a LIVE-but-liquidatable mark for eligibility. Real Uniswap still fills near the pinned market,
         // so proceeds cover debt and surplus routes to the owner (shortfall stays in the RPC-free suite).
-        uint256 liquidatablePrice = MaintenanceFixtures.priceForDebtShare(stock, debt, MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS);
+        uint256 liquidatablePrice =
+            MaintenanceFixtures.priceForDebtShare(stock, debt, MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS);
         assertTrue(
             V1Config.isLiquidatable(oracle.valueUsdc(stock, liquidatablePrice), debt), "fixture must be liquidatable"
         );
@@ -59,9 +61,11 @@ contract LiquidateForkTest is MarginCallForkBase {
     }
 
     function test_liquidateRequiresLiveOracleOnFork() public {
-        vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
-        (uint256 stockBefore, uint256 principalBefore,, uint256 lastAccruedBefore,) = marginCall.positions(tokenId);
+        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stockBefore = pos.stockAmount;
+        uint256 principalBefore = pos.principal;
+        uint256 lastAccruedBefore = pos.lastAccruedAt;
         uint256 poolBefore = pool.availableCredit();
         uint256 custodyBefore = nvdac.balanceOf(address(marginCall));
 
@@ -73,7 +77,10 @@ contract LiquidateForkTest is MarginCallForkBase {
         vm.prank(makeAddr("fork-liquidator"));
         marginCall.liquidate(tokenId);
 
-        (uint256 stockAfter, uint256 principalAfter,, uint256 lastAccruedAfter,) = marginCall.positions(tokenId);
+        pos = marginCall.positions(tokenId);
+        uint256 stockAfter = pos.stockAmount;
+        uint256 principalAfter = pos.principal;
+        uint256 lastAccruedAfter = pos.lastAccruedAt;
         assertEq(stockAfter, stockBefore);
         assertEq(principalAfter, principalBefore);
         assertEq(lastAccruedAfter, lastAccruedBefore, "failed liquidate must not accrue");
@@ -84,19 +91,21 @@ contract LiquidateForkTest is MarginCallForkBase {
     }
 
     function test_liquidateSellRevertRollsBackAtomicallyOnFork() public {
-        vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
-        (uint256 stock, uint256 principalBefore,,,) = marginCall.positions(tokenId);
+        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principalBefore = pos.principal;
         uint256 debt = marginCall.currentDebt(tokenId);
 
         IOracleAdapter.Observation memory live = oracle.latestObservation();
-        uint256 liquidatablePrice = MaintenanceFixtures.priceForDebtShare(stock, debt, MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS);
+        uint256 liquidatablePrice =
+            MaintenanceFixtures.priceForDebtShare(stock, debt, MaintenanceFixtures.LIQUIDATABLE_DEBT_SHARE_BPS);
         _mockLiveObservation(liquidatablePrice, live.roundId, block.timestamp);
 
         // Force the execution path to revert after eligibility passes; position must remain active.
         vm.mockCallRevert(
             address(execution),
-            abi.encodeWithSelector(IExecutionAdapter.sellNvda.selector, stock, uint256(0), liquidatablePrice),
+            abi.encodeWithSelector(IExecutionAdapter.sellStock.selector, stock, uint256(0), liquidatablePrice),
             "mock sell revert"
         );
 
@@ -108,7 +117,9 @@ contract LiquidateForkTest is MarginCallForkBase {
         vm.prank(makeAddr("fork-liquidator"));
         marginCall.liquidate(tokenId);
 
-        (uint256 stockAfter, uint256 principalAfter,,,) = marginCall.positions(tokenId);
+        pos = marginCall.positions(tokenId);
+        uint256 stockAfter = pos.stockAmount;
+        uint256 principalAfter = pos.principal;
         assertEq(stockAfter, stock);
         assertEq(principalAfter, principalBefore);
         assertEq(marginCall.currentDebt(tokenId), debt);
@@ -120,22 +131,18 @@ contract LiquidateForkTest is MarginCallForkBase {
 
     function _mockLiveObservation(uint256 price, uint80 roundId, uint256 updatedAt) internal {
         IOracleAdapter.Observation memory obs = IOracleAdapter.Observation({
-            state: IOracleAdapter.State.LIVE,
-            price: price,
-            roundId: roundId,
-            updatedAt: updatedAt
+            state: IOracleAdapter.State.LIVE, price: price, roundId: roundId, updatedAt: updatedAt
         });
         vm.mockCall(address(oracle), abi.encodeWithSelector(IOracleAdapter.latestObservation.selector), abi.encode(obs));
     }
 
     function _assertPositionCleared(uint256 tokenId) internal view {
-        (uint256 stockAmount, uint256 principal, uint256 accruedInterest, uint256 lastAccruedAt, address executor) =
-            marginCall.positions(tokenId);
-        assertEq(stockAmount, 0);
-        assertEq(principal, 0);
-        assertEq(accruedInterest, 0);
-        assertEq(lastAccruedAt, 0);
-        assertEq(executor, address(0));
+        MarginCall.Position memory position = marginCall.positions(tokenId);
+        assertEq(position.assetId, 0);
+        assertEq(position.stockAmount, 0);
+        assertEq(position.principal, 0);
+        assertEq(position.accruedInterest, 0);
+        assertEq(position.lastAccruedAt, 0);
+        assertEq(position.executor, address(0));
     }
-
 }

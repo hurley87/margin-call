@@ -3,6 +3,7 @@ pragma solidity 0.8.29;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
+import {V1Config} from "../../src/V1Config.sol";
 import {BaseV1Constants} from "./BaseV1Constants.sol";
 
 /// @title ExecutionFixtures
@@ -14,12 +15,8 @@ library ExecutionFixtures {
     uint256 internal constant REPRESENTATIVE_USDC_BUY_INPUT = 100e6;
     uint256 internal constant REPRESENTATIVE_NVDAC_SELL_INPUT = 47_217_697;
 
-    uint256 internal constant NORMALIZATION_DENOMINATOR = 10
-        ** (uint256(BaseV1Constants.NVDAC_DECIMALS)
-            + uint256(BaseV1Constants.NVDA_FEED_DECIMALS)
-            - uint256(BaseV1Constants.USDC_DECIMALS));
-    uint256 internal constant ADVERSE_BOUND_BPS =
-        BaseV1Constants.BPS_DENOMINATOR - BaseV1Constants.MAX_ORACLE_DEVIATION_BPS;
+    uint256 internal constant NORMALIZATION_DENOMINATOR = V1Config.VALUATION_DENOMINATOR;
+    uint256 internal constant ADVERSE_BOUND_BPS = V1Config.ADVERSE_BOUND_BPS;
 
     function isApprovedPair(address tokenIn, address tokenOut) internal pure returns (bool) {
         return (tokenIn == BaseV1Constants.USDC && tokenOut == BaseV1Constants.NVDAC)
@@ -37,7 +34,7 @@ library ExecutionFixtures {
 
     /// @notice Minimum raw NVDAc output for an exact-input USDC buy at the 100 bps adverse bound.
     /// @dev Rounds up so the accepted output cannot exceed the configured adverse deviation by a fractional raw unit.
-    function protocolMinNvdaOutForBuy(uint256 usdcAmountIn, uint256 livePrice) internal pure returns (uint256) {
+    function protocolMinStockOutForBuy(uint256 usdcAmountIn, uint256 livePrice) internal pure returns (uint256) {
         _validateLivePrice(livePrice);
         return Math.mulDiv(
             usdcAmountIn,

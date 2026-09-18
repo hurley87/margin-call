@@ -7,8 +7,9 @@ chain.
 **Local Anvil only.** Each Solidity script reverts unless `block.chainid == 31337`.
 Do not weaken this guard for mainnet work.
 
-Base mainnet deploy + acceptance (issue #429) lives in [BASE_MAINNET.md](./BASE_MAINNET.md)
-and hard-requires `block.chainid == 8453`.
+Canonical Base launch deploy + acceptance lives in [BASE_LAUNCH.md](./BASE_LAUNCH.md)
+and hard-requires `block.chainid == 8453`. The historical NVDA-only deployment is archived
+in [BASE_NVDA_ONLY.md](./BASE_NVDA_ONLY.md).
 
 Never commit, hardcode, log, or paste a private key into source. Supply it only
 at runtime through `MARGIN_CALL_PRIVATE_KEY`. Do not pass the key as a
@@ -16,10 +17,10 @@ command-line argument, and do not put it inline in `export ...=<key>` (both ente
 shell history). For local use, paste a **disposable Anvil development key** into
 a silent prompt.
 
-The same rule holds on the Base mainnet path, where the wrappers prompt for any
+The same rule holds on the Base launch path, where the wrappers prompt for any
 missing key with echo off and derive addresses inside forge via `vm.envUint` —
 never by handing a key to a child process as an argument. See
-[BASE_MAINNET.md](./BASE_MAINNET.md).
+[BASE_LAUNCH.md](./BASE_LAUNCH.md).
 
 ## Shared setup
 
@@ -186,5 +187,5 @@ contracts/broadcast/FinancedExecutorTransfer.s.sol/31337/bobRepayAndVerify-lates
 `broadcast/` is gitignored. Do not commit these files. Stop Anvil with Ctrl+C
 when finished and discard the local key/session.
 
-For Base mainnet deploy + acceptance, see [BASE_MAINNET.md](./BASE_MAINNET.md)
-(`OPERATOR_PRIVATE_KEY` / `EXECUTOR_PRIVATE_KEY` / `RECIPIENT_PRIVATE_KEY`).
+For the canonical Base launch deploy + acceptance, see [BASE_LAUNCH.md](./BASE_LAUNCH.md)
+(`OPERATOR_PRIVATE_KEY`). Historical NVDA-only evidence: [BASE_NVDA_ONLY.md](./BASE_NVDA_ONLY.md).

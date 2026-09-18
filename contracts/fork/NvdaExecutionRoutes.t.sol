@@ -160,8 +160,7 @@ contract NvdaExecutionRoutesTest is Test {
     uint24 internal constant UNISWAP_FEE = BaseV1Constants.UNISWAP_FEE;
 
     uint256 internal constant PINNED_FEED_ANSWER = BaseV1Constants.PINNED_FEED_ANSWER;
-    int256 internal constant MAX_V1_ORACLE_DEVIATION_BPS_X100 =
-        int256(BaseV1Constants.MAX_ORACLE_DEVIATION_BPS * 100);
+    int256 internal constant MAX_V1_ORACLE_DEVIATION_BPS_X100 = int256(BaseV1Constants.MAX_ORACLE_DEVIATION_BPS * 100);
     int256 internal constant MIN_BUY_DEVIATION_BPS_X100 = 2_100;
     int256 internal constant MAX_BUY_DEVIATION_BPS_X100 = 2_200;
     int256 internal constant MIN_SELL_DEVIATION_BPS_X100 = -1_200;
@@ -412,7 +411,7 @@ contract NvdaExecutionRoutesTest is Test {
         int256 deviation = _deviationBpsX100(amountIn, actualExecutionValue);
         assertGe(deviation, 0);
         assertLe(deviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
-        assertGe(amountOut, ExecutionFixtures.protocolMinNvdaOutForBuy(amountIn, PINNED_FEED_ANSWER));
+        assertGe(amountOut, ExecutionFixtures.protocolMinStockOutForBuy(amountIn, PINNED_FEED_ANSWER));
 
         emit log_named_uint("Uniswap buy input USDC raw", amountIn);
         emit log_named_uint("Uniswap buy quote and actual NVDAc raw", amountOut);
@@ -477,12 +476,8 @@ contract NvdaExecutionRoutesTest is Test {
         assertLe(buyDeviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
         assertGe(sellDeviation, 0);
         assertLe(sellDeviation, MAX_V1_ORACLE_DEVIATION_BPS_X100);
-        assertGe(
-            buyOutput, ExecutionFixtures.protocolMinNvdaOutForBuy(buyInput, uint256(observation.price.answer))
-        );
-        assertGe(
-            sellOutput, ExecutionFixtures.protocolMinUsdcOutForSell(sellInput, uint256(observation.price.answer))
-        );
+        assertGe(buyOutput, ExecutionFixtures.protocolMinStockOutForBuy(buyInput, uint256(observation.price.answer)));
+        assertGe(sellOutput, ExecutionFixtures.protocolMinUsdcOutForSell(sellInput, uint256(observation.price.answer)));
 
         emit log_named_uint("Historical Base block", forkBlock);
         emit log_named_uint("Historical block timestamp", block.timestamp);
@@ -498,12 +493,12 @@ contract NvdaExecutionRoutesTest is Test {
         (amountOut,,,) = IAerodromeQuoter(AERODROME_QUOTER)
             .quoteExactInputSingle(
                 IAerodromeQuoter.QuoteExactInputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                amountIn: amountIn,
-                tickSpacing: AERODROME_TICK_SPACING,
-                sqrtPriceLimitX96: 0
-            })
+                    tokenIn: tokenIn,
+                    tokenOut: tokenOut,
+                    amountIn: amountIn,
+                    tickSpacing: AERODROME_TICK_SPACING,
+                    sqrtPriceLimitX96: 0
+                })
             );
     }
 
@@ -511,8 +506,8 @@ contract NvdaExecutionRoutesTest is Test {
         (amountOut,,,) = IUniswapV3Quoter(UNISWAP_QUOTER)
             .quoteExactInputSingle(
                 IUniswapV3Quoter.QuoteExactInputSingleParams({
-                tokenIn: tokenIn, tokenOut: tokenOut, amountIn: amountIn, fee: UNISWAP_FEE, sqrtPriceLimitX96: 0
-            })
+                    tokenIn: tokenIn, tokenOut: tokenOut, amountIn: amountIn, fee: UNISWAP_FEE, sqrtPriceLimitX96: 0
+                })
             );
     }
 

@@ -34,14 +34,15 @@ capability only through separately scoped work.
   - algorithm: `RS256`
   - applicationID: exact `aud` from a live Dynamic access token
 - `packages/shared/` — framework-neutral validation helpers
-- `contracts/` — Foundry workspace. `src/MarginCall.sol` is the Position NFT coordinator (NVDAc custody +
-  ERC-721 ownership), supported by `CreditPool.sol`, `OracleAdapter.sol`, `OracleStatePolicy.sol`,
-  `ExecutionAdapter.sol`, and the immutable `V1Config.sol` presets. Landed slices, in order:
+- `contracts/` — Foundry workspace. `src/MarginCall.sol` is the Position NFT coordinator (curated
+  multi-stock custody + ERC-721 ownership), supported by `CreditPool.sol`, per-stock `OracleAdapter` /
+  `ExecutionAdapter` instances, `OracleStatePolicy.sol`, shared `V1Config.sol` risk pins, and
+  `LaunchAssets.sol` (test/script pins only). Landed slices, in order:
   - spot-only open and close (`openPosition` at 1.0x, `closePosition`)
   - financed open against protocol credit (Uniswap-only execution, `LIVE` pricing required)
   - lazy debt accrual at the immutable V1 10% APR, `repay`, and debt-free close
   - single-executor delegation (`setExecutor`), cleared on real ownership transfer
-  - one-way `reduceExposure` — sells exact NVDAc, pays interest then principal, surplus to the owner
+  - one-way `reduceExposure` — sells exact recorded stock, pays interest then principal, surplus to the owner
   - permissionless `liquidate` — LIVE + equity strictly below 30% maintenance; surplus to owner or
     `BadDebtRealized` on shortfall; burns the Position NFT
   - minimal public risk/read surface — `riskSnapshot(tokenId)` returns LIVE-only `nav`, `currentDebt`,
@@ -49,14 +50,22 @@ capability only through separately scoped work.
     and `CreditPool.availableCredit()` remain the authoritative oracle-independent reads
   - treasury idle withdrawal on `CreditPool` — immutable `treasury` may withdraw idle USDC only; does
     not touch borrowed capital, Position NFT state, or user debt
-  - Base mainnet deploy + acceptance (issue #429) — V1 is live on Base (`chainid` 8453).
-    Curated addresses and tx evidence: `contracts/deployments/base.json`.
-    Scripts/runbook: `script/BASE_MAINNET.md`. Dry-run wrappers remain available;
-    live wrappers stay gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`.
+  - Base mainnet deploy + acceptance (issue #429) — **legacy NVDA-only deployment** on Base
+    (`chainid` 8453). Historical evidence: `contracts/deployments/base-nvda-only.legacy.json`.
     All four contracts are source-verified on Basescan (solc 0.8.29, 1M optimizer runs).
-    No frontend yet.
+    Do not redeploy from current HEAD. Do not point the frontend at these addresses after launch.
+  - Multi-stock launch architecture (issue #446) — append-only curated asset registry on
+    `MarginCall` with immutable `ASSET_ADMIN`; each Position permanently records one `assetId`;
+    launch rails NVDAc + AAPLc + METAc + GOOGLc (TSLAc excluded for zero Uniswap liquidity;
+    METAc replaced it). Shared 100 bps execution bound reused. Future curated assets can be
+    appended without redeploying `MarginCall` or `CreditPool`. **This is the canonical launch
+    stack.** Deployment tooling: `script/BASE_LAUNCH.md`. Dry-run wrappers:
+    `pnpm contracts:deploy:base:dry` / `pnpm contracts:accept:base:dry`. Live wrappers stay
+    gated behind `CONFIRM_BASE_MAINNET=I_UNDERSTAND`. Not yet broadcast — after live deploy,
+    record the curated manifest at `contracts/deployments/base.json` for the frontend.
 
-  Still future work: the living NFT presentation (`tokenURI` is minimal identity metadata only).
+  Still future work: living NFT presentation (`tokenURI` is minimal identity metadata only);
+  Base launch broadcast + tiny live acceptance (human-controlled; do not run from this PR).
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.
 
   Keep each slice in step with the docstring of the contract that owns it (`MarginCall.sol` for the

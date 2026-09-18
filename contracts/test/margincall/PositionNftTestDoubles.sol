@@ -13,9 +13,9 @@ import {MarginCall} from "../../src/MarginCall.sol";
 import {NvdaValuation} from "../valuation/NvdaValuation.sol";
 import {V1Config} from "../../src/V1Config.sol";
 
-/// @dev Standard raw-unit ERC-20 with NVDAc's 8 decimals. Not production NVDAc.
+/// @dev Standard raw-unit ERC-20 with stock 8 decimals. Not a production B20 token.
 contract MockNvdaC is ERC20 {
-    constructor() ERC20("NVDAc", "NVDAc") {}
+    constructor() ERC20("MockStock", "STOCK") {}
 
     function decimals() public pure override returns (uint8) {
         return BaseV1Constants.NVDAC_DECIMALS;
@@ -41,6 +41,8 @@ contract MockUsdc is ERC20 {
 
 /// @dev Controllable oracle double implementing the production `IOracleAdapter` surface.
 contract MockOracleAdapter is IOracleAdapter {
+    address private immutable _stock;
+
     State public state = State.LIVE;
     uint256 public price = BaseV1Constants.PINNED_FEED_ANSWER;
     uint80 public roundId = 1;
@@ -48,6 +50,14 @@ contract MockOracleAdapter is IOracleAdapter {
     bool public shouldRevert;
 
     error MockOracleRevert();
+
+    constructor(address stock_) {
+        _stock = stock_;
+    }
+
+    function STOCK() external view override returns (address) {
+        return _stock;
+    }
 
     function setObservation(State state_, uint256 price_, uint80 roundId_, uint256 updatedAt_) external {
         state = state_;
@@ -93,19 +103,23 @@ contract MockOracleAdapter is IOracleAdapter {
 }
 
 /// @dev Exact-input Uniswap stand-in with configurable fill rate versus the oracle-fair amount.
+///      Constructor registers one primary USDC/stock pair; additional pairs via `supportStock`.
 contract MockSwapRouter is IUniswapV3SwapRouter {
     MockUsdc public immutable USDC;
-    MockNvdaC public immutable NVDAC;
+    address public immutable STOCK;
+    mapping(address stock => bool) public supported;
+    mapping(address stock => uint256) public livePriceOf;
     /// @dev Fill as a fraction of oracle-fair output in bps. Defaults to exactly the 100 bps adverse bound.
     uint256 public fillBps = V1Config.ADVERSE_BOUND_BPS;
     bool public shouldRevert;
-    uint256 public livePrice = BaseV1Constants.PINNED_FEED_ANSWER;
 
     error MockRouterRevert();
 
-    constructor(MockUsdc usdc_, MockNvdaC nvdac_) {
+    constructor(MockUsdc usdc_, address stock_) {
         USDC = usdc_;
-        NVDAC = nvdac_;
+        STOCK = stock_;
+        supported[stock_] = true;
+        livePriceOf[stock_] = BaseV1Constants.PINNED_FEED_ANSWER;
     }
 
     function setFillBps(uint256 fillBps_) external {
@@ -116,32 +130,48 @@ contract MockSwapRouter is IUniswapV3SwapRouter {
         shouldRevert = shouldRevert_;
     }
 
+    /// @dev Sets the primary stock's live price (preserves existing single-pair call sites).
     function setLivePrice(uint256 livePrice_) external {
-        livePrice = livePrice_;
+        livePriceOf[STOCK] = livePrice_;
+    }
+
+    function setLivePrice(address stock, uint256 livePrice_) external {
+        livePriceOf[stock] = livePrice_;
+    }
+
+    function supportStock(address stock, uint256 price) external {
+        supported[stock] = true;
+        livePriceOf[stock] = price;
+    }
+
+    /// @dev Legacy single-pair read used by older tests that still query `livePrice`.
+    function livePrice() external view returns (uint256) {
+        return livePriceOf[STOCK];
     }
 
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut) {
         if (shouldRevert) {
             revert MockRouterRevert();
         }
-        if (params.tokenIn == address(USDC) && params.tokenOut == address(NVDAC)) {
+        if (params.tokenIn == address(USDC) && supported[params.tokenOut]) {
             require(USDC.transferFrom(msg.sender, address(this), params.amountIn), "usdc in");
-            // Match ExecutionAdapter's ceil-bound formula so a `fillBps` of 9900 clears the protocol floor.
+            uint256 price = livePriceOf[params.tokenOut];
             amountOut = Math.mulDiv(
                 params.amountIn,
                 V1Config.VALUATION_DENOMINATOR * fillBps,
-                livePrice * BaseV1Constants.BPS_DENOMINATOR,
+                price * BaseV1Constants.BPS_DENOMINATOR,
                 Math.Rounding.Ceil
             );
             require(amountOut >= params.amountOutMinimum, "Too little received");
-            NVDAC.mint(params.recipient, amountOut);
+            MockNvdaC(params.tokenOut).mint(params.recipient, amountOut);
             return amountOut;
         }
-        if (params.tokenIn == address(NVDAC) && params.tokenOut == address(USDC)) {
-            require(NVDAC.transferFrom(msg.sender, address(this), params.amountIn), "nvda in");
+        if (supported[params.tokenIn] && params.tokenOut == address(USDC)) {
+            require(MockNvdaC(params.tokenIn).transferFrom(msg.sender, address(this), params.amountIn), "stock in");
+            uint256 price = livePriceOf[params.tokenIn];
             amountOut = Math.mulDiv(
                 params.amountIn,
-                livePrice * fillBps,
+                price * fillBps,
                 V1Config.VALUATION_DENOMINATOR * BaseV1Constants.BPS_DENOMINATOR,
                 Math.Rounding.Ceil
             );
@@ -182,21 +212,24 @@ contract RevertingNvdaC {
 abstract contract SpotOpener {
     MarginCall public immutable marginCall;
     MockNvdaC public immutable nvdac;
+    uint256 public immutable assetId;
 
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_) {
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, uint256 assetId_) {
         marginCall = marginCall_;
         nvdac = nvdac_;
+        assetId = assetId_;
     }
 
     function openSpot(uint256 stockAmount) external returns (uint256 tokenId) {
         nvdac.approve(address(marginCall), stockAmount);
-        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+        return marginCall.openPosition(assetId, stockAmount, marginCall.SPOT_LEVERAGE(), 0);
     }
 }
 
 /// @dev Records MarginCall state observed inside `onERC721Received` during `_safeMint`.
 contract InspectingReceiver is SpotOpener, IERC721Receiver {
     address public observedOwner;
+    uint256 public observedAssetId;
     uint256 public observedStockAmount;
     uint256 public observedPrincipal;
     uint256 public observedAccruedInterest;
@@ -205,12 +238,17 @@ contract InspectingReceiver is SpotOpener, IERC721Receiver {
     uint256 public observedCustody;
     uint256 public observedDebt;
 
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_) SpotOpener(marginCall_, nvdac_) {}
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, uint256 assetId_) SpotOpener(marginCall_, nvdac_, assetId_) {}
 
     function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
         observedOwner = marginCall.ownerOf(tokenId);
-        (observedStockAmount, observedPrincipal, observedAccruedInterest, observedLastAccruedAt, observedExecutor) =
-            marginCall.positions(tokenId);
+        MarginCall.Position memory position = marginCall.positions(tokenId);
+        observedAssetId = position.assetId;
+        observedStockAmount = position.stockAmount;
+        observedPrincipal = position.principal;
+        observedAccruedInterest = position.accruedInterest;
+        observedLastAccruedAt = position.lastAccruedAt;
+        observedExecutor = position.executor;
         observedDebt = marginCall.currentDebt(tokenId);
         observedCustody = nvdac.balanceOf(address(marginCall));
         return IERC721Receiver.onERC721Received.selector;
@@ -259,7 +297,7 @@ contract TransferCallbackExecutorGuard is IERC721Receiver {
 
     function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
         observedOwner = marginCall.ownerOf(tokenId);
-        (,,,, observedExecutor) = marginCall.positions(tokenId);
+        observedExecutor = marginCall.positions(tokenId).executor;
         sawClearedExecutor = observedExecutor == address(0);
 
         uint256 debt = marginCall.currentDebt(tokenId);
@@ -276,7 +314,7 @@ contract TransferCallbackExecutorGuard is IERC721Receiver {
 contract CallbackCloser is SpotOpener, IERC721Receiver {
     bool public didClose;
 
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_) SpotOpener(marginCall_, nvdac_) {}
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, uint256 assetId_) SpotOpener(marginCall_, nvdac_, assetId_) {}
 
     function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
         marginCall.closePosition(tokenId);
@@ -289,7 +327,9 @@ contract CallbackCloser is SpotOpener, IERC721Receiver {
 contract CallbackTransferrer is SpotOpener, IERC721Receiver {
     address public immutable recipient;
 
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_, address recipient_) SpotOpener(marginCall_, nvdac_) {
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, uint256 assetId_, address recipient_)
+        SpotOpener(marginCall_, nvdac_, assetId_)
+    {
         recipient = recipient_;
     }
 
@@ -302,7 +342,7 @@ contract CallbackTransferrer is SpotOpener, IERC721Receiver {
 contract RevertingReceiver is SpotOpener, IERC721Receiver {
     error Rejected();
 
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_) SpotOpener(marginCall_, nvdac_) {}
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, uint256 assetId_) SpotOpener(marginCall_, nvdac_, assetId_) {}
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         revert Rejected();
@@ -310,7 +350,7 @@ contract RevertingReceiver is SpotOpener, IERC721Receiver {
 }
 
 contract InvalidSelectorReceiver is SpotOpener, IERC721Receiver {
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_) SpotOpener(marginCall_, nvdac_) {}
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, uint256 assetId_) SpotOpener(marginCall_, nvdac_, assetId_) {}
 
     function onERC721Received(address, address, uint256, bytes calldata) external pure returns (bytes4) {
         return bytes4(0xdeadbeef);
@@ -319,8 +359,11 @@ contract InvalidSelectorReceiver is SpotOpener, IERC721Receiver {
 
 /// @dev Has code but does not implement `IERC721Receiver`.
 contract NonReceiver {
-    function openSpot(MarginCall marginCall, MockNvdaC nvdac, uint256 stockAmount) external returns (uint256 tokenId) {
+    function openSpot(MarginCall marginCall, MockNvdaC nvdac, uint256 assetId, uint256 stockAmount)
+        external
+        returns (uint256 tokenId)
+    {
         nvdac.approve(address(marginCall), stockAmount);
-        return marginCall.openPosition(stockAmount, marginCall.SPOT_LEVERAGE(), 0);
+        return marginCall.openPosition(assetId, stockAmount, marginCall.SPOT_LEVERAGE(), 0);
     }
 }

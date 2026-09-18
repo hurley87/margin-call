@@ -20,10 +20,11 @@ contract ReduceExposureForkTest is MarginCallForkBase {
         IOracleAdapter.Observation memory obs = oracle.latestObservation();
         assertEq(uint256(obs.state), uint256(IOracleAdapter.State.LIVE));
 
-        vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
 
-        (uint256 stockBefore, uint256 principalBefore,,,) = marginCall.positions(tokenId);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stockBefore = pos.stockAmount;
+        uint256 principalBefore = pos.principal;
         assertGt(stockBefore, ONE_NVDAC);
         assertGt(principalBefore, 0);
         assertTrue(SMALL_SALE < stockBefore);
@@ -37,7 +38,7 @@ contract ReduceExposureForkTest is MarginCallForkBase {
         vm.prank(alice);
         marginCall.reduceExposure(tokenId, SMALL_SALE, 0);
 
-        (uint256 stockAfter,,,,) = marginCall.positions(tokenId);
+        uint256 stockAfter = marginCall.positions(tokenId).stockAmount;
         assertEq(stockAfter, stockBefore - SMALL_SALE, "exact stock sold");
         assertEq(nvdac.balanceOf(address(marginCall)), custodyBefore - SMALL_SALE);
         assertEq(usdc.balanceOf(address(marginCall)), 0, "no residual USDC");
@@ -52,10 +53,11 @@ contract ReduceExposureForkTest is MarginCallForkBase {
     }
 
     function test_reduceExposureTightMinOutRevertsAtomicallyOnFork() public {
-        vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
 
-        (uint256 stockBefore, uint256 principalBefore,,,) = marginCall.positions(tokenId);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stockBefore = pos.stockAmount;
+        uint256 principalBefore = pos.principal;
         uint256 poolBefore = pool.availableCredit();
         uint256 custodyBefore = nvdac.balanceOf(address(marginCall));
         uint256 aliceUsdcBefore = usdc.balanceOf(alice);
@@ -65,7 +67,9 @@ contract ReduceExposureForkTest is MarginCallForkBase {
         vm.expectRevert(abi.encodeWithSignature("Error(string)", "Too little received"));
         marginCall.reduceExposure(tokenId, SMALL_SALE, type(uint256).max / 2);
 
-        (uint256 stockAfter, uint256 principalAfter,,,) = marginCall.positions(tokenId);
+        pos = marginCall.positions(tokenId);
+        uint256 stockAfter = pos.stockAmount;
+        uint256 principalAfter = pos.principal;
         assertEq(stockAfter, stockBefore);
         assertEq(principalAfter, principalBefore);
         assertEq(marginCall.currentDebt(tokenId), debtBefore);
@@ -76,9 +80,8 @@ contract ReduceExposureForkTest is MarginCallForkBase {
     }
 
     function test_reduceExposureRequiresLiveOracleOnFork() public {
-        vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
-        (uint256 stockBefore,,,,) = marginCall.positions(tokenId);
+        uint256 tokenId = _openFinanced(alice, ONE_NVDAC, V1Config.LEVERAGE_1_25X, 0);
+        uint256 stockBefore = marginCall.positions(tokenId).stockAmount;
 
         vm.warp(block.timestamp + BaseV1Constants.MAX_LIVE_AGE + 1);
 
@@ -86,8 +89,7 @@ contract ReduceExposureForkTest is MarginCallForkBase {
         vm.expectRevert(abi.encodeWithSelector(MarginCall.OracleNotLive.selector, IOracleAdapter.State.INVALID));
         marginCall.reduceExposure(tokenId, SMALL_SALE, 0);
 
-        (uint256 stockAfter,,,,) = marginCall.positions(tokenId);
+        uint256 stockAfter = marginCall.positions(tokenId).stockAmount;
         assertEq(stockAfter, stockBefore);
     }
-
 }

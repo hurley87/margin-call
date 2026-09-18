@@ -21,15 +21,15 @@ contract ExecutionAdapterTest is Test {
         trader = makeAddr("trader");
         usdc = new MockUsdc();
         nvdac = new MockNvdaC();
-        router = new MockSwapRouter(usdc, nvdac);
+        router = new MockSwapRouter(usdc, address(nvdac));
         router.setLivePrice(BaseV1Constants.PINNED_FEED_ANSWER);
         execution = new ExecutionAdapter(address(usdc), address(nvdac), address(router), BaseV1Constants.UNISWAP_FEE);
     }
 
     function test_protocolMinsMatchFixtures() public view {
-        uint256 buy = execution.protocolMinNvdaOutForBuy(100e6, BaseV1Constants.PINNED_FEED_ANSWER);
+        uint256 buy = execution.protocolMinStockOutForBuy(100e6, BaseV1Constants.PINNED_FEED_ANSWER);
         uint256 sell = execution.protocolMinUsdcOutForSell(47_217_697, BaseV1Constants.PINNED_FEED_ANSWER);
-        assertEq(buy, ExecutionFixtures.protocolMinNvdaOutForBuy(100e6, BaseV1Constants.PINNED_FEED_ANSWER));
+        assertEq(buy, ExecutionFixtures.protocolMinStockOutForBuy(100e6, BaseV1Constants.PINNED_FEED_ANSWER));
         assertEq(sell, ExecutionFixtures.protocolMinUsdcOutForSell(47_217_697, BaseV1Constants.PINNED_FEED_ANSWER));
     }
 
@@ -39,8 +39,8 @@ contract ExecutionAdapterTest is Test {
         vm.startPrank(trader);
         usdc.approve(address(execution), amountIn);
 
-        uint256 protocolMin = execution.protocolMinNvdaOutForBuy(amountIn, BaseV1Constants.PINNED_FEED_ANSWER);
-        uint256 amountOut = execution.buyNvda(amountIn, protocolMin, BaseV1Constants.PINNED_FEED_ANSWER);
+        uint256 protocolMin = execution.protocolMinStockOutForBuy(amountIn, BaseV1Constants.PINNED_FEED_ANSWER);
+        uint256 amountOut = execution.buyStock(amountIn, protocolMin, BaseV1Constants.PINNED_FEED_ANSWER);
         vm.stopPrank();
 
         assertGe(amountOut, protocolMin);
@@ -58,7 +58,7 @@ contract ExecutionAdapterTest is Test {
             amountIn, V1Config.VALUATION_DENOMINATOR, BaseV1Constants.PINNED_FEED_ANSWER, Math.Rounding.Floor
         );
         vm.expectRevert(bytes("Too little received"));
-        execution.buyNvda(amountIn, fairOut + 1, BaseV1Constants.PINNED_FEED_ANSWER);
+        execution.buyStock(amountIn, fairOut + 1, BaseV1Constants.PINNED_FEED_ANSWER);
         vm.stopPrank();
 
         assertEq(usdc.balanceOf(trader), amountIn);
@@ -71,7 +71,7 @@ contract ExecutionAdapterTest is Test {
         vm.startPrank(trader);
         nvdac.approve(address(execution), amountIn);
         uint256 protocolMin = execution.protocolMinUsdcOutForSell(amountIn, BaseV1Constants.PINNED_FEED_ANSWER);
-        uint256 amountOut = execution.sellNvda(amountIn, 0, BaseV1Constants.PINNED_FEED_ANSWER);
+        uint256 amountOut = execution.sellStock(amountIn, 0, BaseV1Constants.PINNED_FEED_ANSWER);
         vm.stopPrank();
 
         assertGe(amountOut, protocolMin);
@@ -81,8 +81,8 @@ contract ExecutionAdapterTest is Test {
 
     function test_zeroAmountReverts() public {
         vm.expectRevert(ExecutionAdapter.ZeroAmount.selector);
-        execution.buyNvda(0, 0, BaseV1Constants.PINNED_FEED_ANSWER);
+        execution.buyStock(0, 0, BaseV1Constants.PINNED_FEED_ANSWER);
         vm.expectRevert(ExecutionAdapter.ZeroAmount.selector);
-        execution.sellNvda(0, 0, BaseV1Constants.PINNED_FEED_ANSWER);
+        execution.sellStock(0, 0, BaseV1Constants.PINNED_FEED_ANSWER);
     }
 }

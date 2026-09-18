@@ -11,7 +11,7 @@ Margin Call is between versions. The Crash game has been retired from this repos
 | `src/`             | Next.js 16 shell (coming-soon landing + Dynamic wallet connect), UI primitives   |
 | `convex/`          | Empty HTTP router and schema; no JWT auth until a product feature needs identity |
 | `packages/shared/` | Framework-neutral validation helpers                                             |
-| `contracts/`       | Foundry workspace with landed V1 Position NFT slices — see `CLAUDE.md`           |
+| `contracts/`       | Foundry workspace: canonical multi-stock launch contracts — see `CLAUDE.md`      |
 
 ## Tech stack
 

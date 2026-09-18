@@ -9,7 +9,6 @@ import {MarginCallForkBase} from "./MarginCallForkBase.sol";
 
 /// @dev Pinned Base-mainnet proof that production adapters open every financed preset via Uniswap V3.
 contract FinancedOpenForkTest is MarginCallForkBase {
-
     function _forkActorLabel() internal pure override returns (string memory) {
         return "financed-fork-alice-422";
     }
@@ -21,21 +20,18 @@ contract FinancedOpenForkTest is MarginCallForkBase {
     }
 
     function test_financedOpenAllPresetsOnUniswap() public {
-        uint256[4] memory presets = [
-            V1Config.LEVERAGE_1_1X,
-            V1Config.LEVERAGE_1_25X,
-            V1Config.LEVERAGE_1_4X,
-            V1Config.LEVERAGE_1_5X
-        ];
+        uint256[4] memory presets =
+            [V1Config.LEVERAGE_1_1X, V1Config.LEVERAGE_1_25X, V1Config.LEVERAGE_1_4X, V1Config.LEVERAGE_1_5X];
 
         for (uint256 i = 0; i < presets.length; ++i) {
             uint256 poolBefore = pool.availableCredit();
             uint256 custodyBefore = nvdac.balanceOf(address(marginCall));
 
-            vm.prank(alice);
-            uint256 tokenId = marginCall.openPosition(ONE_NVDAC, presets[i], 0);
+            uint256 tokenId = _openFinanced(alice, ONE_NVDAC, presets[i], 0);
 
-            (uint256 stock, uint256 principal,,,) = marginCall.positions(tokenId);
+            MarginCall.Position memory pos = marginCall.positions(tokenId);
+            uint256 stock = pos.stockAmount;
+            uint256 principal = pos.principal;
             assertEq(marginCall.ownerOf(tokenId), alice);
             assertGt(stock, ONE_NVDAC);
             assertGt(principal, 0);
@@ -54,7 +50,7 @@ contract FinancedOpenForkTest is MarginCallForkBase {
     function test_intermediateLeverageRevertsOnFork() public {
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.UnsupportedLeverage.selector, 13_000));
-        marginCall.openPosition(ONE_NVDAC, 13_000, 0);
+        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, 13_000, 0);
     }
 
     function test_insufficientCreditRevertsOnFork() public {
@@ -67,7 +63,7 @@ contract FinancedOpenForkTest is MarginCallForkBase {
 
         vm.prank(alice);
         vm.expectRevert();
-        marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_5X, 0);
+        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_5X, 0);
 
         assertEq(nvdac.balanceOf(alice), aliceBefore);
         assertEq(pool.availableCredit(), poolBefore);
@@ -79,9 +75,10 @@ contract FinancedOpenForkTest is MarginCallForkBase {
         vm.prank(address(marginCall));
         pool.draw(available);
 
-        vm.prank(alice);
-        uint256 tokenId = marginCall.openPosition(ONE_NVDAC, V1Config.SPOT_LEVERAGE, 0);
-        (uint256 stock, uint256 principal,,,) = marginCall.positions(tokenId);
+        uint256 tokenId = _open(alice, ONE_NVDAC);
+        MarginCall.Position memory pos = marginCall.positions(tokenId);
+        uint256 stock = pos.stockAmount;
+        uint256 principal = pos.principal;
         assertEq(stock, ONE_NVDAC);
         assertEq(principal, 0);
     }
@@ -93,7 +90,7 @@ contract FinancedOpenForkTest is MarginCallForkBase {
         uint256 aliceBefore = nvdac.balanceOf(alice);
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(MarginCall.OracleNotLive.selector, IOracleAdapter.State.INVALID));
-        marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_1X, 0);
+        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_1X, 0);
         assertEq(nvdac.balanceOf(alice), aliceBefore);
     }
 
@@ -104,7 +101,7 @@ contract FinancedOpenForkTest is MarginCallForkBase {
         // Unrealistically high minOut forces SwapRouter02 "Too little received".
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSignature("Error(string)", "Too little received"));
-        marginCall.openPosition(ONE_NVDAC, V1Config.LEVERAGE_1_25X, type(uint256).max / 2);
+        marginCall.openPosition(nvdaAssetId, ONE_NVDAC, V1Config.LEVERAGE_1_25X, type(uint256).max / 2);
 
         assertEq(nvdac.balanceOf(alice), aliceBefore);
         assertEq(pool.availableCredit(), poolBefore);
@@ -118,11 +115,10 @@ contract FinancedOpenForkTest is MarginCallForkBase {
         deal(BaseV1Constants.USDC, address(this), amountIn);
         usdc.approve(address(execution), amountIn);
 
-        uint256 minOut = execution.protocolMinNvdaOutForBuy(amountIn, obs.price);
+        uint256 minOut = execution.protocolMinStockOutForBuy(amountIn, obs.price);
         uint256 before = nvdac.balanceOf(address(this));
-        uint256 amountOut = execution.buyNvda(amountIn, minOut, obs.price);
+        uint256 amountOut = execution.buyStock(amountIn, minOut, obs.price);
         assertGe(amountOut, minOut);
         assertEq(nvdac.balanceOf(address(this)) - before, amountOut);
     }
-
 }

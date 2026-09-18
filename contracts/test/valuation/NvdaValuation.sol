@@ -3,20 +3,18 @@ pragma solidity 0.8.29;
 
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import {BaseV1Constants} from "../fixtures/BaseV1Constants.sol";
+import {V1Config} from "../../src/V1Config.sol";
 
 /// @title NvdaValuation
-/// @notice Test-only reference for raw NVDAc valuation against its total-return feed.
+/// @notice Test-only reference for raw stock valuation against a total-return feed (8/8/6).
 /// @dev Not production code. The feed answer is assumed to have passed the oracle policy's positive-answer checks.
+///      Decimal invariant binds to `V1Config.VALUATION_DENOMINATOR`.
 library NvdaValuation {
-    uint8 internal constant STOCK_DECIMALS = BaseV1Constants.NVDAC_DECIMALS;
-    uint8 internal constant FEED_DECIMALS = BaseV1Constants.NVDA_FEED_DECIMALS;
-    uint8 internal constant USDC_DECIMALS = BaseV1Constants.USDC_DECIMALS;
+    uint8 internal constant STOCK_DECIMALS = V1Config.STOCK_DECIMALS;
+    uint8 internal constant FEED_DECIMALS = V1Config.FEED_DECIMALS;
+    uint8 internal constant USDC_DECIMALS = V1Config.USDC_DECIMALS;
 
-    // stockAmountRaw * feedAnswer * 10^6 / 10^8 / 10^8
-    // = stockAmountRaw * feedAnswer / 10^10.
-    uint256 internal constant NORMALIZATION_DENOMINATOR =
-        10 ** (uint256(STOCK_DECIMALS) + uint256(FEED_DECIMALS) - uint256(USDC_DECIMALS));
+    uint256 internal constant NORMALIZATION_DENOMINATOR = V1Config.VALUATION_DENOMINATOR;
 
     /// @notice Return raw USDC value, rounded down to the nearest USDC base unit.
     /// @dev Floor rounding is conservative for lender-risk checks because it never overstates collateral NAV.

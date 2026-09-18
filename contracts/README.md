@@ -30,13 +30,15 @@
 
 #
 
-# Base mainnet deploy + acceptance (issue #429):
+# Canonical Base launch deploy + acceptance:
 
-# see script/BASE_MAINNET.md
+# see script/BASE_LAUNCH.md
 
 # pnpm contracts:deploy:base:dry / pnpm contracts:accept:base:dry
 
 # Live broadcast is gated (CONFIRM_BASE_MAINNET=I_UNDERSTAND); not an ungated pnpm script.
+
+# Historical NVDA-only evidence: script/BASE_NVDA_ONLY.md / deployments/base-nvda-only.legacy.json
 
 #
 
