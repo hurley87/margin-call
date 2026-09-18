@@ -50,33 +50,14 @@ library LaunchAssets {
     /// @notice The four qualified launch rails in registration order.
     function launchSet() internal pure returns (Asset[] memory rails) {
         rails = new Asset[](4);
-        rails[0] = Asset({
-            name: "NVDAc",
-            stock: NVDAC,
-            feed: NVDA_FEED,
-            pool: UNISWAP_USDC_NVDAC_POOL,
-            fee: NVDA_UNISWAP_FEE
-        });
-        rails[1] = Asset({
-            name: "AAPLc",
-            stock: AAPLC,
-            feed: AAPL_FEED,
-            pool: UNISWAP_USDC_AAPLC_POOL,
-            fee: AAPL_UNISWAP_FEE
-        });
-        rails[2] = Asset({
-            name: "METAc",
-            stock: METAC,
-            feed: META_FEED,
-            pool: UNISWAP_USDC_METAC_POOL,
-            fee: META_UNISWAP_FEE
-        });
+        rails[0] =
+            Asset({name: "NVDAc", stock: NVDAC, feed: NVDA_FEED, pool: UNISWAP_USDC_NVDAC_POOL, fee: NVDA_UNISWAP_FEE});
+        rails[1] =
+            Asset({name: "AAPLc", stock: AAPLC, feed: AAPL_FEED, pool: UNISWAP_USDC_AAPLC_POOL, fee: AAPL_UNISWAP_FEE});
+        rails[2] =
+            Asset({name: "METAc", stock: METAC, feed: META_FEED, pool: UNISWAP_USDC_METAC_POOL, fee: META_UNISWAP_FEE});
         rails[3] = Asset({
-            name: "GOOGLc",
-            stock: GOOGLC,
-            feed: GOOGL_FEED,
-            pool: UNISWAP_USDC_GOOGLC_POOL,
-            fee: GOOGL_UNISWAP_FEE
+            name: "GOOGLc", stock: GOOGLC, feed: GOOGL_FEED, pool: UNISWAP_USDC_GOOGLC_POOL, fee: GOOGL_UNISWAP_FEE
         });
     }
 }

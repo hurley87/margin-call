@@ -117,8 +117,7 @@ contract MixedAssetIsolationTest is MarginCallTestBase {
         assertEq(debtB, posB.principal);
 
         // Crash only asset B's mark so B is liquidatable while A stays healthy at the pinned mark.
-        uint256 crashPrice =
-            MaintenanceFixtures.priceForDebtShare(posB.stockAmount, debtB, LIQUIDATABLE_DEBT_SHARE_BPS);
+        uint256 crashPrice = MaintenanceFixtures.priceForDebtShare(posB.stockAmount, debtB, LIQUIDATABLE_DEBT_SHARE_BPS);
         oracleB.setObservation(IOracleAdapter.State.LIVE, crashPrice, 2, block.timestamp);
         router.setLivePrice(address(stockB), crashPrice);
 

@@ -41,7 +41,7 @@ contract MockUsdc is ERC20 {
 
 /// @dev Controllable oracle double implementing the production `IOracleAdapter` surface.
 contract MockOracleAdapter is IOracleAdapter {
-    address public immutable override STOCK;
+    address private immutable _stock;
 
     State public state = State.LIVE;
     uint256 public price = BaseV1Constants.PINNED_FEED_ANSWER;
@@ -52,7 +52,11 @@ contract MockOracleAdapter is IOracleAdapter {
     error MockOracleRevert();
 
     constructor(address stock_) {
-        STOCK = stock_;
+        _stock = stock_;
+    }
+
+    function STOCK() external view override returns (address) {
+        return _stock;
     }
 
     function setObservation(State state_, uint256 price_, uint80 roundId_, uint256 updatedAt_) external {
@@ -99,7 +103,7 @@ contract MockOracleAdapter is IOracleAdapter {
 }
 
 /// @dev Exact-input Uniswap stand-in with configurable fill rate versus the oracle-fair amount.
-///      Constructor registers one primary USDC ↔ stock pair; additional pairs via `supportStock`.
+///      Constructor registers one primary USDC/stock pair; additional pairs via `supportStock`.
 contract MockSwapRouter is IUniswapV3SwapRouter {
     MockUsdc public immutable USDC;
     address public immutable STOCK;
@@ -234,9 +238,7 @@ contract InspectingReceiver is SpotOpener, IERC721Receiver {
     uint256 public observedCustody;
     uint256 public observedDebt;
 
-    constructor(MarginCall marginCall_, MockNvdaC nvdac_, uint256 assetId_)
-        SpotOpener(marginCall_, nvdac_, assetId_)
-    {}
+    constructor(MarginCall marginCall_, MockNvdaC nvdac_, uint256 assetId_) SpotOpener(marginCall_, nvdac_, assetId_) {}
 
     function onERC721Received(address, address, uint256 tokenId, bytes calldata) external returns (bytes4) {
         observedOwner = marginCall.ownerOf(tokenId);
