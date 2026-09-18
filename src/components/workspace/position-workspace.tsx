@@ -185,8 +185,9 @@ function ConnectedWorkspace(props: {
 
   const refreshSnapshot = useCallback(async () => {
     const gen = ++snapshotGen.current;
+    setSnapshot(null);
+    setReadError(null);
     try {
-      setReadError(null);
       const next = await loadOpenSnapshot(publicClient, {
         address,
         asset,
@@ -197,6 +198,7 @@ function ConnectedWorkspace(props: {
       setSnapshot(next);
     } catch (error) {
       if (gen !== snapshotGen.current) return;
+      setSnapshot(null);
       setReadError(
         error instanceof Error ? error.message : "Failed to read Base state"
       );
@@ -206,6 +208,9 @@ function ConnectedWorkspace(props: {
   useEffect(() => {
     void refreshSnapshot();
   }, [refreshSnapshot]);
+
+  const openPos = position?.status === "open" ? position : null;
+  const formLocked = openPos != null || pending;
 
   const readiness = openReadiness({
     chainId,
@@ -217,7 +222,6 @@ function ConnectedWorkspace(props: {
     estimatedPrincipal: snapshot?.estimatedPrincipal ?? null,
   });
 
-  const openPos = position?.status === "open" ? position : null;
   const closeGate = closeReadiness({
     chainId,
     currentDebt: openPos?.currentDebt ?? null,
@@ -335,7 +339,7 @@ function ConnectedWorkspace(props: {
           <select
             className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)]"
             value={assetName}
-            disabled={pending}
+            disabled={formLocked}
             onChange={(event) => {
               const name = event.target.value;
               const next = baseDeployment.assets.find(
@@ -357,7 +361,7 @@ function ConnectedWorkspace(props: {
             className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)]"
             inputMode="decimal"
             value={amountInput}
-            disabled={pending}
+            disabled={formLocked}
             onChange={(event) => setAmountInput(event.target.value)}
           />
         </label>
@@ -366,7 +370,7 @@ function ConnectedWorkspace(props: {
           <select
             className="border border-[var(--t-border)] bg-[var(--t-bg)] px-3 py-2 text-sm text-[var(--t-text)]"
             value={leverage}
-            disabled={pending}
+            disabled={formLocked}
             onChange={(event) => setLeverage(Number(event.target.value))}
           >
             {OPENING_LEVERAGE_PRESETS.map((preset) => (
@@ -390,6 +394,9 @@ function ConnectedWorkspace(props: {
               <span className="text-[var(--t-amber)]">{readiness.reason}</span>
             )}
           </p>
+          {openPos != null ? (
+            <p>Close the current position before opening another.</p>
+          ) : null}
           {readError ? (
             <p className="text-[var(--t-red)]">{readError}</p>
           ) : null}
@@ -400,7 +407,7 @@ function ConnectedWorkspace(props: {
             variant="outline"
             size="sm"
             disabled={
-              pending ||
+              formLocked ||
               !chainGate.ok ||
               !needsStockApproval ||
               stockAmount == null ||
@@ -429,7 +436,7 @@ function ConnectedWorkspace(props: {
             variant="outline"
             size="sm"
             disabled={
-              pending ||
+              formLocked ||
               !readiness.ok ||
               needsStockApproval ||
               stockAmount == null
@@ -438,7 +445,39 @@ function ConnectedWorkspace(props: {
               void runTx(
                 "Open position",
                 async ({ walletClient, onSubmitted }) => {
-                  if (stockAmount == null) return;
+                  if (openPos != null) {
+                    throw new Error(
+                      "Close the current position before opening another."
+                    );
+                  }
+                  if (stockAmount == null) {
+                    throw new Error("Enter a stock amount greater than zero.");
+                  }
+
+                  const fresh = await loadOpenSnapshot(publicClient, {
+                    address,
+                    asset,
+                    leverage,
+                    stockAmount,
+                  });
+                  setSnapshot(fresh);
+
+                  const freshGate = openReadiness({
+                    chainId,
+                    stockAmount,
+                    stockBalance: fresh.stockBalance,
+                    targetLeverage: leverage,
+                    oracleState: fresh.oracleState,
+                    availableCredit: fresh.availableCredit,
+                    estimatedPrincipal: fresh.estimatedPrincipal,
+                  });
+                  if (!freshGate.ok) {
+                    throw new Error(freshGate.reason);
+                  }
+                  if (fresh.stockAllowance < stockAmount) {
+                    throw new Error("Stock approval required before open.");
+                  }
+
                   const { tokenId } = await openPosition({
                     walletClient,
                     publicClient,
