@@ -8,6 +8,13 @@ import {
 
 export type WriteGate = { ok: true } | { ok: false; reason: string };
 
+/**
+ * Shown when a financed open cannot be priced. Oracle states are a protocol
+ * detail, so HELD and INVALID read the same to the person opening a position.
+ */
+export const PRICING_UNAVAILABLE_REASON =
+  "Market pricing is temporarily unavailable. Leveraged positions can be opened when fresh pricing returns.";
+
 /** Writes are only allowed on Base mainnet. */
 export function assertBaseChain(chainId: number | null | undefined): WriteGate {
   if (chainId == null) {
@@ -37,7 +44,8 @@ export type OpenReadinessInput = {
 
 /**
  * Whether the Open action should be enabled for the current form state.
- * Spot opens skip LIVE/credit gates. Financed opens require LIVE + credit.
+ * Spot opens are oracle-free on-chain, so they skip the LIVE/credit gates and
+ * stay openable while pricing is stale. Financed opens require LIVE + credit.
  */
 export function openReadiness(input: OpenReadinessInput): WriteGate {
   const chain = assertBaseChain(input.chainId);
@@ -63,15 +71,9 @@ export function openReadiness(input: OpenReadinessInput): WriteGate {
     return { ok: true };
   }
 
-  if (input.oracleState == null) {
-    return { ok: false, reason: "Oracle state unavailable." };
-  }
-
+  // Unread and stale price the same for the caller: we cannot size the loan.
   if (input.oracleState !== ORACLE_STATE.LIVE) {
-    return {
-      ok: false,
-      reason: `Selected asset oracle is not LIVE (state ${input.oracleState}).`,
-    };
+    return { ok: false, reason: PRICING_UNAVAILABLE_REASON };
   }
 
   if (input.estimatedPrincipal == null || input.availableCredit == null) {

@@ -74,7 +74,7 @@ vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
 }));
 
 import { CreatePositionPage } from "@/components/create/create-position-page";
-import { ORACLE_STATE } from "@/lib/protocol/constants";
+import { ORACLE_STATE, SPOT_LEVERAGE } from "@/lib/protocol/constants";
 import { baseDeployment, getAssetByName } from "@/lib/protocol/deployment";
 
 const CONNECTED_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678" as const;
@@ -460,6 +460,91 @@ describe("CreatePositionPage", () => {
 
     const docs = await screen.findByRole("link", { name: "docs" });
     expect(docs.getAttribute("href")).toBe("/docs");
+  });
+
+  it("explains unavailable pricing without naming oracle states", async () => {
+    for (const state of [ORACLE_STATE.HELD, ORACLE_STATE.INVALID]) {
+      loadOpenSnapshotMock.mockResolvedValue({
+        stockBalance: 1_000_000_00n,
+        stockAllowance: 1_000_000_00n,
+        availableCredit: 10_000_000_000n,
+        oracleState: state,
+        estimatedPrincipal: null,
+      });
+      const { container } = render(<CreatePositionPage />);
+
+      expect(
+        await screen.findByText(
+          "Market pricing is temporarily unavailable. Leveraged positions can be opened when fresh pricing returns."
+        )
+      ).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", true);
+
+      const shown = container.textContent ?? "";
+      expect(shown).not.toMatch(/state \d/);
+      expect(shown).not.toMatch(/HELD|INVALID/);
+      cleanup();
+    }
+  });
+
+  it("points at 1.0x as the open that needs no pricing", async () => {
+    loadOpenSnapshotMock.mockResolvedValue({
+      stockBalance: 1_000_000_00n,
+      stockAllowance: 1_000_000_00n,
+      availableCredit: 10_000_000_000n,
+      oracleState: ORACLE_STATE.INVALID,
+      estimatedPrincipal: null,
+    });
+    render(<CreatePositionPage />);
+
+    expect(
+      await screen.findByText(
+        "You can still open a 1.0x position, which does not require live pricing."
+      )
+    ).not.toBeNull();
+
+    const spot = screen.getByRole("radio", { name: "1.0x" });
+    expect(spot).toHaveProperty("disabled", false);
+
+    // Selecting 1.0x clears the block without waiting for pricing to return.
+    fireEvent.click(spot);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    expect(
+      screen.queryByText(
+        "Market pricing is temporarily unavailable. Leveraged positions can be opened when fresh pricing returns."
+      )
+    ).toBeNull();
+  });
+
+  it("opens a 1.0x position while pricing is unavailable", async () => {
+    loadOpenSnapshotMock.mockResolvedValue({
+      stockBalance: 1_000_000_00n,
+      stockAllowance: 1_000_000_00n,
+      availableCredit: 10_000_000_000n,
+      oracleState: ORACLE_STATE.INVALID,
+      estimatedPrincipal: null,
+    });
+    render(<CreatePositionPage />);
+
+    fireEvent.click(await screen.findByRole("radio", { name: "1.0x" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
+
+    await waitFor(() =>
+      expect(runOpenPositionFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({ targetLeverage: SPOT_LEVERAGE })
+      )
+    );
   });
 
   it("locks the draft while a transaction is awaiting its signature", async () => {

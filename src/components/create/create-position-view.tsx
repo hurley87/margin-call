@@ -34,6 +34,8 @@ import {
   OPENING_LEVERAGE_PRESETS,
   isFinancedLeverage,
   ORACLE_STATE,
+  SPOT_LEVERAGE,
+  type OracleState,
 } from "@/lib/protocol/constants";
 import {
   baseDeployment,
@@ -132,6 +134,18 @@ function StepTitle({
   );
 }
 
+/** Oracle states are protocol detail; the form only says whether it can price. */
+function marketPricingLabel(state: OracleState | null): string {
+  if (state == null) return "—";
+  return state === ORACLE_STATE.LIVE ? "Live" : "Temporarily unavailable";
+}
+
+function leverageStroke(selected: boolean, suggested: boolean): string {
+  if (selected) return "#ee771d";
+  if (suggested) return "#39854d";
+  return "#e5ded3";
+}
+
 function StockLogo({ assetName }: { assetName: LaunchAssetName }) {
   const asset = getAssetByName(assetName);
   return (
@@ -227,6 +241,9 @@ export function CreatePositionView(props: CreatePositionViewProps) {
     (preset) => preset.bps === leverage
   )?.label;
   const financed = isFinancedLeverage(leverage);
+  /** A financed open the oracle cannot price right now. Spot is unaffected. */
+  const pricingUnavailable =
+    financed && snapshot != null && snapshot.oracleState !== ORACLE_STATE.LIVE;
   const thesisBytes = thesisByteLength(thesis);
   const thesisTooLong = !isThesisWithinLimit(thesis);
   const wanted = amount != null && amount > 0n ? amount : null;
@@ -393,7 +410,10 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                     <DrawablyCard
                       {...SKETCH}
                       className="create-leverage-option"
-                      stroke={leverage === preset.bps ? "#ee771d" : "#e5ded3"}
+                      stroke={leverageStroke(
+                        leverage === preset.bps,
+                        pricingUnavailable && preset.bps === SPOT_LEVERAGE
+                      )}
                     >
                       <strong>{preset.label}</strong>
                       <span>{LEVERAGE_NOTE[preset.bps]}</span>
@@ -499,14 +519,8 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                 {financed ? (
                   <>
                     <p>
-                      Oracle:{" "}
-                      {snapshot?.oracleState == null
-                        ? "—"
-                        : snapshot.oracleState === ORACLE_STATE.LIVE
-                          ? "LIVE"
-                          : snapshot.oracleState === ORACLE_STATE.HELD
-                            ? "HELD"
-                            : "INVALID"}
+                      Market pricing:{" "}
+                      {marketPricingLabel(snapshot?.oracleState ?? null)}
                     </p>
                     <p>
                       Available credit:{" "}
@@ -520,6 +534,12 @@ export function CreatePositionView(props: CreatePositionViewProps) {
               {statusMessage ? (
                 <p className="create-status" role="status">
                   {statusMessage}
+                </p>
+              ) : null}
+              {pricingUnavailable ? (
+                <p className="create-spot-hint">
+                  You can still open a 1.0x position, which does not require
+                  live pricing.
                 </p>
               ) : null}
               {readError ? (
