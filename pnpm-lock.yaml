@@ -56,6 +56,9 @@ importers:
       convex:
         specifier: ^1.45.0
         version: 1.45.0(bufferutil@4.1.0)(react@19.3.0)(utf-8-validate@6.0.6)
+      drawably:
+        specifier: 0.4.2
+        version: 0.4.2(react@19.3.0)
       next:
         specifier: 16.3.4
         version: 16.3.4(@babel/core@7.29.7)(@opentelemetry/api@1.9.1)(@types/node@26.6.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
@@ -3476,6 +3479,14 @@ packages:
   dotenv@17.4.2:
     resolution: {integrity: sha512-nI4U3TottKAcAD9LLud4Cb7b2QztQMUEfHbvhTH09bqXTxnSie8WnjPALV/WMCrJZ6UV/qHJ6L03OqO3LcdYZw==}
     engines: {node: '>=12'}
+
+  drawably@0.4.2:
+    resolution: {integrity: sha512-kHLnj08iHHVgwXxn7htKszWMlGIOy+CqUTekInCwoAqITwIAYjD4E/K7PMF6GLj5bM/t7sxysv1WmVGPOKDJzA==}
+    peerDependencies:
+      react: '>=18 <20'
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   dunder-proto@1.0.1:
     resolution: {integrity: sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A==}
@@ -9718,6 +9729,10 @@ snapshots:
   dotenv@16.6.1: {}
 
   dotenv@17.4.2: {}
+
+  drawably@0.4.2(react@19.3.0):
+    optionalDependencies:
+      react: 19.3.0
 
   dunder-proto@1.0.1:
     dependencies:

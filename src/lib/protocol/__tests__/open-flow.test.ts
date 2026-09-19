@@ -9,7 +9,7 @@ import type { OpenSnapshot } from "@/lib/protocol/reads";
 
 const assertWalletOnBaseMock = vi.hoisted(() => vi.fn());
 const loadOpenSnapshotMock = vi.hoisted(() => vi.fn());
-const approveUnlimitedMock = vi.hoisted(() => vi.fn());
+const approveStockMock = vi.hoisted(() => vi.fn());
 const openPositionMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/lib/dynamic/resolve-wallet-client", () => ({
@@ -28,7 +28,7 @@ vi.mock("@/lib/protocol/writes", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/protocol/writes")>();
   return {
     ...actual,
-    approveUnlimited: approveUnlimitedMock,
+    approveStock: approveStockMock,
     openPosition: openPositionMock,
   };
 });
@@ -49,6 +49,7 @@ function readySnapshot(overrides: Partial<OpenSnapshot> = {}): OpenSnapshot {
     availableCredit: 10_000_000_000n,
     oracleState: ORACLE_STATE.LIVE,
     estimatedPrincipal: 100_000n,
+    contributionValue: 400_000n,
     ...overrides,
   };
 }
@@ -67,7 +68,7 @@ describe("runOpenPositionFlow", () => {
   beforeEach(() => {
     assertWalletOnBaseMock.mockReset();
     loadOpenSnapshotMock.mockReset();
-    approveUnlimitedMock.mockReset();
+    approveStockMock.mockReset();
     openPositionMock.mockReset();
 
     assertWalletOnBaseMock.mockResolvedValue(undefined);
@@ -96,7 +97,7 @@ describe("runOpenPositionFlow", () => {
 
     expect(assertWalletOnBaseMock).toHaveBeenCalledWith(walletClient);
     expect(loadOpenSnapshotMock).toHaveBeenCalledTimes(1);
-    expect(approveUnlimitedMock).not.toHaveBeenCalled();
+    expect(approveStockMock).not.toHaveBeenCalled();
     expect(openPositionMock).toHaveBeenCalledWith(
       expect.objectContaining({
         assetId: BigInt(asset.assetId),
@@ -134,7 +135,7 @@ describe("runOpenPositionFlow", () => {
       )
       .mockResolvedValueOnce(readySnapshot({ stockAllowance: 1_000_000_00n }));
 
-    approveUnlimitedMock.mockResolvedValue({
+    approveStockMock.mockResolvedValue({
       transactionHash: APPROVE_HASH,
     });
 
@@ -153,7 +154,13 @@ describe("runOpenPositionFlow", () => {
       onSubmitted,
     });
 
-    expect(approveUnlimitedMock).toHaveBeenCalledTimes(1);
+    expect(approveStockMock).toHaveBeenCalledTimes(1);
+    expect(approveStockMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        token: asset.stock,
+        amount: 1_000_000n,
+      })
+    );
     expect(loadOpenSnapshotMock).toHaveBeenCalledTimes(2);
     expect(openPositionMock).toHaveBeenCalledTimes(1);
     expect(result.tokenId).toBe(42n);
@@ -183,7 +190,7 @@ describe("runOpenPositionFlow", () => {
       })
     ).rejects.toThrow(/Insufficient selected-stock balance/);
 
-    expect(approveUnlimitedMock).not.toHaveBeenCalled();
+    expect(approveStockMock).not.toHaveBeenCalled();
     expect(openPositionMock).not.toHaveBeenCalled();
   });
 

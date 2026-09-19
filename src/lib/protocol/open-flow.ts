@@ -6,7 +6,7 @@ import type { BasePublicClient } from "@/lib/protocol/public-client";
 import { openReadiness } from "@/lib/protocol/readiness";
 import { loadOpenSnapshot, type OpenSnapshot } from "@/lib/protocol/reads";
 import {
-  approveUnlimited,
+  approveStock,
   openPosition,
   type ProtocolWalletClient,
 } from "@/lib/protocol/writes";
@@ -93,11 +93,12 @@ export async function runOpenPositionFlow(
   });
 
   if (snapshot.stockAllowance < stockAmount) {
-    await approveUnlimited({
+    await approveStock({
       walletClient,
       publicClient,
       token: asset.stock,
       spender: baseDeployment.marginCall,
+      amount: stockAmount,
       onSubmitted: (hash) => onSubmitted?.(hash, "Approve stock"),
     });
 

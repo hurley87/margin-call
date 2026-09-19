@@ -65,11 +65,7 @@ export class PositionQueryBoundary extends Component<
   render() {
     if (this.state.error) {
       return (
-        <QueryUnavailable
-          onRetry={() => {
-            this.setState({ error: null });
-          }}
-        />
+        <QueryUnavailable onRetry={() => this.setState({ error: null })} />
       );
     }
     return this.props.children;

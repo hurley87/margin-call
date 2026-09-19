@@ -6,5 +6,9 @@ type PositionPageProps = {
 
 export default async function PositionPage({ params }: PositionPageProps) {
   const { tokenId } = await params;
-  return <PositionDetailPage tokenId={tokenId} />;
+  return (
+    <div className="mx-auto w-full max-w-3xl py-8">
+      <PositionDetailPage tokenId={tokenId} />
+    </div>
+  );
 }

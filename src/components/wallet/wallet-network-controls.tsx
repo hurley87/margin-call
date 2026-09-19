@@ -4,7 +4,8 @@ import type { WalletAccount } from "@dynamic-labs-sdk/client";
 import { isProgrammaticNetworkSwitchAvailable } from "@dynamic-labs-sdk/client";
 import { useGetActiveNetworkId } from "@dynamic-labs-sdk/react-hooks";
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
+import { DrawablyButton } from "drawably/react";
+import { SKETCH } from "@/components/ui/sketch";
 import {
   parseNetworkIdToChainId,
   switchWalletToBase,
@@ -50,10 +51,10 @@ export function WalletNetworkControls(props: { evmAccount: WalletAccount }) {
           <p>{chainGate.reason}</p>
           {canSwitch ? (
             <>
-              <Button
+              <DrawablyButton
+                {...SKETCH}
                 type="button"
                 variant="outline"
-                size="sm"
                 disabled={switchMutation.isPending}
                 onClick={() => {
                   switchMutation.reset();
@@ -61,7 +62,7 @@ export function WalletNetworkControls(props: { evmAccount: WalletAccount }) {
                 }}
               >
                 Switch to Base
-              </Button>
+              </DrawablyButton>
               {switchMutation.error ? (
                 <p className="text-[var(--t-red)]">
                   {switchMutation.error instanceof Error

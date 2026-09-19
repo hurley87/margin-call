@@ -177,7 +177,7 @@ describe("portfolio-first app shell", () => {
     useGetWalletAccountsMock.mockReset();
   });
 
-  it("exposes My Positions, All Positions, Open Position, and wallet state", () => {
+  it("exposes Portfolio, Explore, Create, Docs, and wallet state", () => {
     render(
       <AppShell>
         <div>page</div>
@@ -185,16 +185,101 @@ describe("portfolio-first app shell", () => {
     );
 
     const nav = screen.getByRole("navigation", { name: "Primary" });
-    expect(
-      within(nav).getByRole("link", { name: "My Positions" })
-    ).toHaveProperty("href", expect.stringMatching(/\/$/));
-    expect(
-      within(nav).getByRole("link", { name: "All Positions" })
-    ).toHaveProperty("href", expect.stringMatching(/\/positions$/));
-    expect(
-      within(nav).getByRole("link", { name: "Open Position" })
-    ).toHaveProperty("href", expect.stringMatching(/\/create$/));
+    expect(within(nav).getByRole("link", { name: "Portfolio" })).toHaveProperty(
+      "href",
+      expect.stringMatching(/\/$/)
+    );
+    expect(within(nav).getByRole("link", { name: "Explore" })).toHaveProperty(
+      "href",
+      expect.stringMatching(/\/positions$/)
+    );
+    expect(within(nav).getByRole("link", { name: "Create" })).toHaveProperty(
+      "href",
+      expect.stringMatching(/\/create$/)
+    );
     expect(screen.getByRole("button", { name: "Connect" })).not.toBeNull();
+  });
+
+  it("links Docs and keeps one light theme on every route", () => {
+    const { container, rerender } = render(<AppShell>page</AppShell>);
+    expect(
+      screen.getByRole("link", { name: "Docs" }).getAttribute("href")
+    ).toBe("https://margin-call.gitbook.io/product-docs");
+    expect(
+      screen
+        .getByRole("link", { name: "Portfolio" })
+        .getAttribute("aria-current")
+    ).toBe("page");
+    for (const path of ["/", "/create", "/positions", "/position/42"]) {
+      usePathnameMock.mockReturnValue(path);
+      rerender(<AppShell>page</AppShell>);
+      expect(container.querySelector(".playful-theme")).not.toBeNull();
+      expect(screen.getByRole("main").className).toBe("playful-main");
+    }
+  });
+
+  it("keeps first-page loading distinct from an empty portfolio", () => {
+    mockConnectedSession();
+    usePaginatedQueryMock.mockReturnValue({
+      results: [],
+      status: "LoadingFirstPage",
+      loadMore: vi.fn(),
+    });
+    render(<MyPositionsPage />);
+    expect(screen.getByText("Loading positions…")).not.toBeNull();
+    expect(screen.queryByText("Your portfolio is empty")).toBeNull();
+    expect(screen.queryByRole("img")).toBeNull();
+  });
+
+  it("preserves owner filtering and pagination on a populated portfolio", () => {
+    mockConnectedSession();
+    const loadMore = vi.fn();
+    usePaginatedQueryMock.mockReturnValue({
+      results: [
+        {
+          tokenId: "1",
+          assetId: 1,
+          owner: CONNECTED_ADDRESS,
+          status: "active",
+        },
+      ],
+      status: "CanLoadMore",
+      loadMore,
+    });
+    render(<MyPositionsPage />);
+    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({
+      owner: CONNECTED_ADDRESS,
+      status: "active",
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(loadMore).toHaveBeenCalledWith(20);
+    expect(screen.queryByText("Collect puppies")).toBeNull();
+    expect(screen.queryByText("Your portfolio is empty")).toBeNull();
+  });
+
+  it("offers retry without showing the empty welcome when the portfolio query fails", () => {
+    mockConnectedSession();
+    usePaginatedQueryMock.mockImplementation(() => {
+      throw new Error("Index unavailable");
+    });
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    try {
+      render(<MyPositionsPage />);
+      expect(screen.queryByText("Your portfolio is empty")).toBeNull();
+      usePaginatedQueryMock.mockReturnValue({
+        results: [],
+        status: "Exhausted",
+        loadMore: vi.fn(),
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+      expect(
+        screen.getByRole("heading", { name: "Your portfolio is empty" })
+      ).not.toBeNull();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it("does not show the empty-portfolio copy when disconnected", () => {
@@ -202,11 +287,13 @@ describe("portfolio-first app shell", () => {
     render(<MyPositionsPage />);
 
     expect(
-      screen.getByText("Connect a wallet to see your Position NFTs.")
+      screen.getByText(
+        "Connect your wallet to see your portfolio and start collecting puppies."
+      )
     ).not.toBeNull();
-    expect(screen.queryByText("You don't have any positions yet.")).toBeNull();
+    expect(screen.queryByText("Your portfolio is empty")).toBeNull();
     expect(
-      screen.getByRole("link", { name: "+ Open Position" })
+      screen.getByRole("link", { name: "Open a Position" })
     ).not.toBeNull();
   });
 
@@ -221,7 +308,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.getByText("Project settings unavailable")).not.toBeNull();
     expect(screen.queryByText("Connecting wallet…")).toBeNull();
     expect(
-      screen.getByRole("link", { name: "+ Open Position" })
+      screen.getByRole("link", { name: "Open a Position" })
     ).not.toBeNull();
   });
 
@@ -234,7 +321,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.getByText("NEXT_PUBLIC_CONVEX_URL")).not.toBeNull();
     expect(screen.getByText(/to load your portfolio/)).not.toBeNull();
     expect(
-      screen.getByRole("link", { name: "+ Open Position" })
+      screen.getByRole("link", { name: "Open a Position" })
     ).not.toBeNull();
   });
 
@@ -248,10 +335,8 @@ describe("portfolio-first app shell", () => {
 
     render(<MyPositionsPage />);
 
-    expect(
-      screen.getByText("You don't have any positions yet.")
-    ).not.toBeNull();
-    const cta = screen.getByRole("link", { name: "+ Open Position" });
+    expect(screen.getByText("Your portfolio is empty")).not.toBeNull();
+    const cta = screen.getByRole("link", { name: "Open a Position" });
     expect(cta).toHaveProperty("href", expect.stringMatching(/\/create$/));
   });
 
@@ -390,9 +475,11 @@ describe("portfolio-first app shell", () => {
     render(<CreatePositionPage />);
 
     expect(
-      screen.getByRole("heading", { name: "Open Position" })
+      screen.getByRole("heading", { name: "Create a Position" })
     ).not.toBeNull();
-    expect(screen.getByRole("button", { name: /^Open$/i })).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: /^Create Position$/i })
+    ).not.toBeNull();
     expect(screen.queryByRole("button", { name: /Approve/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
@@ -430,7 +517,7 @@ describe("portfolio-first app shell", () => {
     render(<MyPositionsPage openedTokenId="42" />);
 
     expect(screen.getByText("Indexing Position #42…")).not.toBeNull();
-    expect(screen.queryByText("You don't have any positions yet.")).toBeNull();
+    expect(screen.queryByText("Your portfolio is empty")).toBeNull();
     expect(screen.queryByRole("link", { name: /Token #42/ })).toBeNull();
   });
 
