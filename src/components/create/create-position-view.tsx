@@ -116,10 +116,6 @@ function CopyTokenAddress({
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    setCopied(false);
-  }, [address]);
-
-  useEffect(() => {
     if (!copied) return;
     const timeout = window.setTimeout(() => setCopied(false), 1600);
     return () => window.clearTimeout(timeout);
@@ -280,7 +276,11 @@ export function CreatePositionView({
                   <StockLogo assetName={assetName} />
                   <div className="create-selected-token-meta">
                     <span>{assetName}</span>
-                    <CopyTokenAddress name={assetName} address={asset.stock} />
+                    <CopyTokenAddress
+                      key={asset.stock}
+                      name={assetName}
+                      address={asset.stock}
+                    />
                   </div>
                 </div>
                 <div className="create-amount-control">
@@ -421,7 +421,11 @@ export function CreatePositionView({
                   <dd className="create-review-stock">
                     <StockLogo assetName={assetName} />
                     {assetName}
-                    <CopyTokenAddress name={assetName} address={asset.stock} />
+                    <CopyTokenAddress
+                      key={asset.stock}
+                      name={assetName}
+                      address={asset.stock}
+                    />
                   </dd>
                   <dt>Collateral</dt>
                   <dd>
