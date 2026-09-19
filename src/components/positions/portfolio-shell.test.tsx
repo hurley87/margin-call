@@ -414,6 +414,47 @@ describe("portfolio-first app shell", () => {
     ]);
   });
 
+  it("shows dedicated terminal artwork from indexed status without live reads", () => {
+    mockConnectedSession();
+    usePaginatedQueryMock.mockReturnValue({
+      results: [
+        {
+          tokenId: "1",
+          assetId: 1,
+          owner: CONNECTED_ADDRESS,
+          status: "closed",
+        },
+        {
+          tokenId: "2",
+          assetId: 2,
+          owner: CONNECTED_ADDRESS,
+          status: "liquidated",
+        },
+        {
+          tokenId: "3",
+          assetId: 3,
+          owner: CONNECTED_ADDRESS,
+          status: "active",
+        },
+      ],
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+
+    render(<MyPositionsPage />);
+
+    expect(loadPosition).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+    const thumbnails = Array.from(document.querySelectorAll("img")).map((img) =>
+      decodeURIComponent(img.getAttribute("src") ?? "")
+    );
+    expect(thumbnails).toEqual([
+      expect.stringContaining("/nvda/closed.png"),
+      expect.stringContaining("/aapl/liquidated.png"),
+      expect.stringContaining("/logos/meta.png"),
+    ]);
+  });
+
   it("create page has Open without repay, close, or Approve", () => {
     mockConnectedSession();
     useGetWalletAccountsMock.mockReturnValue({

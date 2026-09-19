@@ -215,11 +215,11 @@ describe("PositionDetailPage", () => {
     expect(artworkSrc(/Liquidated$/)).toContain("/meta/liquidated.png");
   });
 
-  it("stays on the neutral logo for a closed position", () => {
+  it("shows terminal closed artwork from the index alone", () => {
     useQueryMock.mockReturnValue(indexed({ status: "closed" }));
     render(<PositionDetailPage tokenId="42" />);
 
-    expect(artworkSrc(/Closed$/)).toContain("/logos/meta.png");
+    expect(artworkSrc(/Closed$/)).toContain("/meta/closed.png");
   });
 
   it("shows live stage artwork and the thesis for an active position", async () => {

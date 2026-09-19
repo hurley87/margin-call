@@ -203,7 +203,7 @@ describe("Explore gallery", () => {
     expect(cards[0].textContent).toContain("Active");
     expect(cards[0].textContent).toContain("Owner");
     expect(artSrc(cards[0])).toContain("/logos/nvda.png");
-    expect(artSrc(cards[1])).toContain("/logos/aapl.png");
+    expect(artSrc(cards[1])).toContain("/aapl/closed.png");
     expect(artSrc(cards[2])).toContain("/nvda/liquidated.png");
     expect(cards[3].querySelector(".explore-art-placeholder")).not.toBeNull();
 

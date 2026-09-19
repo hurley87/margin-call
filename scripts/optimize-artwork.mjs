@@ -38,7 +38,7 @@ const REPO_ROOT = path.resolve(
 );
 
 const TICKERS = ["aapl", "nvda", "googl", "meta"];
-const STAGES = ["healthy", "warning", "danger", "liquidated"];
+const STAGES = ["healthy", "warning", "danger", "liquidated", "closed"];
 
 /** Stage art is the primary NFT image; logos are the pricing-unavailable fallback. */
 export const STAGE_MAX_EDGE = 1024;
