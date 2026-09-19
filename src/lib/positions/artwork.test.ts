@@ -7,6 +7,7 @@ import {
   artworkPath,
   faceFromStage,
   faceFromStatus,
+  marketplaceFace,
   resolvePositionStage,
   stockSymbol,
 } from "@/lib/positions/artwork";
@@ -100,6 +101,19 @@ describe("faceFromStage", () => {
   it("stays neutral for a stage the app cannot price or has not read", () => {
     expect(faceFromStage("pricing_unavailable")).toBe("neutral");
     expect(faceFromStage(null)).toBe("neutral");
+  });
+});
+
+describe("marketplaceFace", () => {
+  it("shows the healthy dog rather than a ticker a marketplace would cache", () => {
+    // The Stage label still says Pricing unavailable; only the file changes.
+    expect(marketplaceFace("pricing_unavailable")).toBe("healthy");
+  });
+
+  it("publishes a named stage unchanged", () => {
+    expect(marketplaceFace("healthy")).toBe("healthy");
+    expect(marketplaceFace("warning")).toBe("warning");
+    expect(marketplaceFace("danger")).toBe("danger");
   });
 });
 

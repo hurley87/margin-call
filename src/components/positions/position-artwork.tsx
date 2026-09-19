@@ -15,8 +15,8 @@ type PositionArtworkProps = {
 /**
  * The hand-drawn face of a Position NFT.
  *
- * Takes an already-resolved path so the caller owns the risk read: list pages
- * pass lifecycle-only artwork and the detail page passes live stage artwork.
+ * Takes an already-resolved path: galleries unwrap metadata artwork and
+ * detail uses the same artwork rule against its existing Base read.
  */
 export function PositionArtwork({
   src,

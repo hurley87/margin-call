@@ -256,6 +256,11 @@ describe("PositionDetailPage", () => {
 
     // Claiming a stage before the read lands would be a guess.
     expect(artworkSrc("METAc Position NFT")).toContain("/logos/meta.png");
+    // The ticker logo is a small centred mark, not a tile-filling dog.
+    expect(
+      screen.getByAltText("METAc Position NFT").closest(".position-art")
+        ?.className
+    ).toContain("position-art-neutral");
   });
 
   it("omits the thesis section entirely when the owner opened without one", async () => {
@@ -335,14 +340,53 @@ describe("PositionDetailPage", () => {
     render(<PositionDetailPage tokenId="42" />);
 
     await waitFor(() => {
-      expect(screen.getByText("Pricing unavailable")).not.toBeNull();
+      expect(screen.getAllByText("Pricing unavailable")).toHaveLength(2);
     });
 
-    // The detail page names the stage in copy, so the art stays honest here —
-    // only cached marketplace metadata trades the logo for the healthy dog.
-    expect(artworkSrc(/Pricing unavailable$/)).toContain("/logos/meta.png");
+    // Match the NFT image while retaining the unavailable pricing label.
+    expect(artworkSrc(/Pricing unavailable$/)).toContain("/meta/healthy.png");
+    // A dog fills the slot; only the ticker logo gets the small centred mark.
+    expect(
+      screen.getByAltText(/Pricing unavailable$/).closest(".position-art")
+        ?.className
+    ).not.toContain("position-art-neutral");
     expect(screen.queryByText("Liquidatable")).toBeNull();
     expect(screen.queryByText("1.25x")).toBeNull();
+  });
+
+  it("uses the shared gallery notice when the index never mounted", () => {
+    useOptionalConvexClientMock.mockReturnValue(null);
+    render(<PositionDetailPage tokenId="42" />);
+
+    const notice = screen.getByText(/Position index unavailable/);
+    expect(notice.closest(".explore-message")).not.toBeNull();
+    expect(
+      screen.getByRole("link", { name: /Back to portfolio/ })
+    ).not.toBeNull();
+  });
+
+  it("shows a shared network blocker once and disables both actions", async () => {
+    mockConnected();
+    useGetActiveNetworkIdMock.mockReturnValue({ data: undefined });
+    useQueryMock.mockReturnValue(indexed());
+    render(<PositionDetailPage tokenId="42" />);
+    await screen.findByRole("button", { name: "Repay all" });
+    expect(
+      screen.getAllByText("Wallet chain unknown. Connect and switch to Base.")
+    ).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Repay all" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(screen.getByRole("button", { name: "Close" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(
+      screen
+        .getByRole("link", { name: /Back to portfolio/ })
+        .getAttribute("href")
+    ).toBe("/");
   });
 
   it("hides repay and close from a connected wallet that is not owner or executor", async () => {

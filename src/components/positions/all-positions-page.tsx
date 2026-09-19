@@ -4,10 +4,10 @@ import { usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 import { DrawablyButton, DrawablyCard, DrawablyDivider } from "drawably/react";
 import {
-  ExploreGallery,
   ExploreMessage,
   ExploreQueryFailed,
-} from "@/components/positions/explore-gallery";
+  PositionGallery,
+} from "@/components/positions/position-gallery";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import { ResettableErrorBoundary } from "@/components/ui/resettable-error-boundary";
 import {
@@ -55,7 +55,7 @@ function AllPositionsList({ queryArgs }: { queryArgs: AllPositionsFilter }) {
   );
 
   return (
-    <ExploreGallery
+    <PositionGallery
       results={results}
       status={status}
       loadMore={loadMore}

@@ -6,6 +6,7 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -264,8 +265,8 @@ describe("portfolio-first app shell", () => {
       loadMore,
     });
     const { container } = render(<MyPositionsPage />);
-    expect(container.querySelector(".position-card")).not.toBeNull();
-    expect(container.querySelector(".explore-grid")).toBeNull();
+    expect(container.querySelector(".explore-card")).not.toBeNull();
+    expect(container.querySelector(".explore-grid")).not.toBeNull();
     expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({
       owner: CONNECTED_ADDRESS,
       status: "active",
@@ -337,7 +338,7 @@ describe("portfolio-first app shell", () => {
 
     render(<MyPositionsPage />);
 
-    expect(screen.getByText("NEXT_PUBLIC_CONVEX_URL")).not.toBeNull();
+    expect(screen.getByText(/Position index unavailable/)).not.toBeNull();
     expect(screen.getByText(/to load your portfolio/)).not.toBeNull();
     expect(
       screen.getByRole("link", { name: "Open a Position" })
@@ -398,11 +399,9 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
 
-    // Card artwork must stay lifecycle-driven. Explore pays for live health
-    // per card; the portfolio makes neither the Base read nor the metadata
-    // fetch behind it, however many positions a wallet holds.
+    // Galleries read metadata, never the wallet management Base loader.
     expect(loadPosition).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     // Thumbnails are decorative (the ticker and status are already text), so
     // they are queried from the DOM rather than the accessibility tree.
     const thumbnails = Array.from(document.querySelectorAll("img")).map((img) =>
@@ -444,7 +443,8 @@ describe("portfolio-first app shell", () => {
     render(<MyPositionsPage />);
 
     expect(loadPosition).not.toHaveBeenCalled();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith("/api/nft/3", expect.anything());
     const thumbnails = Array.from(document.querySelectorAll("img")).map((img) =>
       decodeURIComponent(img.getAttribute("src") ?? "")
     );
@@ -453,6 +453,89 @@ describe("portfolio-first app shell", () => {
       expect.stringContaining("/aapl/liquidated.png"),
       expect.stringContaining("/logos/meta.png"),
     ]);
+  });
+
+  it("shows metadata dogs with honest pricing labels and keeps failed cards", async () => {
+    mockConnectedSession();
+    usePaginatedQueryMock.mockReturnValue({
+      results: [1, 2].map((id) => ({
+        tokenId: String(id),
+        assetId: id,
+        owner: CONNECTED_ADDRESS,
+        status: "active",
+      })),
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+    fetchMock.mockImplementation(async (url: string) =>
+      url.endsWith("/1")
+        ? {
+            ok: true,
+            json: async () => ({
+              name: "Position #1",
+              description: "Long-term thesis",
+              image: "https://margincall.fun/nvda/healthy.png",
+              attributes: [
+                { trait_type: "Stage", value: "Pricing unavailable" },
+              ],
+            }),
+          }
+        : { ok: false, status: 502 }
+    );
+    render(<MyPositionsPage openedTokenId="1" />);
+    await screen.findByText("Pricing unavailable");
+    await screen.findByText("Health unavailable");
+    const card = screen.getByRole("link", { name: /Token #1/ });
+    expect(card.getAttribute("data-highlighted")).toBe("true");
+    expect(decodeURIComponent(card.querySelector("img")!.src)).toContain(
+      "/nvda/healthy.png"
+    );
+    expect(screen.queryByText(/^Owner /)).toBeNull();
+
+    // Layout follows the published file: the unpriced card fills the tile with
+    // the dog it just unwrapped, while the failed read keeps the ticker slot.
+    expect(card.querySelector(".explore-card-art")?.className).not.toContain(
+      "explore-card-art-neutral"
+    );
+    const failed = screen.getByRole("link", { name: /Token #2/ });
+    expect(failed.querySelector(".explore-card-art")?.className).toContain(
+      "explore-card-art-neutral"
+    );
+    expect(screen.getByText("Pricing unavailable").className).toBe(
+      "stage-chip"
+    );
+  });
+
+  it("cancels old wallet metadata and clears cards when the owner changes", async () => {
+    mockConnectedSession();
+    fetchMock.mockImplementation(() => new Promise(() => {}));
+    usePaginatedQueryMock.mockReturnValue({
+      results: [
+        {
+          tokenId: "1",
+          assetId: 1,
+          owner: CONNECTED_ADDRESS,
+          status: "active",
+        },
+      ],
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+    const { rerender } = render(<MyPositionsPage />);
+    const oldSignal = fetchMock.mock.calls[0][1].signal as AbortSignal;
+    useWalletSessionMock.mockReturnValue({
+      kind: "connected",
+      address: "0x1111111111111111111111111111111111111111",
+    });
+    usePaginatedQueryMock.mockReturnValue({
+      results: [],
+      status: "LoadingFirstPage",
+      loadMore: vi.fn(),
+    });
+    rerender(<MyPositionsPage />);
+    await waitFor(() => expect(oldSignal.aborted).toBe(true));
+    expect(screen.queryByRole("link", { name: /Token #1/ })).toBeNull();
+    expect(screen.getByText("Loading positions…")).not.toBeNull();
   });
 
   it("create page has Open without repay, close, or Approve", () => {

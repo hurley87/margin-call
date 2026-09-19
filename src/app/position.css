@@ -1,0 +1,179 @@
+/* Position management shares the paper, ink, and sketch language of Create. */
+.position-detail {
+  width: 100%;
+  margin: 30px auto 48px;
+  font-size: 21px;
+  line-height: 1.4;
+}
+.position-back {
+  display: inline-block;
+  margin-bottom: 28px;
+  color: var(--t-muted);
+}
+.position-back:hover {
+  color: var(--t-accent);
+}
+.position-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.2fr);
+  gap: 28px 40px;
+  align-items: start;
+}
+.position-heading {
+  grid-column: 1 / -1;
+}
+.position-detail .position-title {
+  font: inherit;
+  font-size: clamp(40px, 4.3vw, 60px);
+  line-height: 1.1;
+  margin: 4px 0 12px;
+}
+.position-label {
+  color: var(--t-muted);
+}
+.position-status {
+  display: inline-block;
+  padding: 3px 14px;
+  border-radius: 24px;
+  background: var(--t-surface);
+  color: var(--t-muted);
+}
+.position-detail .position-art-card {
+  padding: 18px;
+  background: #ffffff80;
+}
+.position-art {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--t-surface);
+}
+.position-art img {
+  border: 0;
+}
+.position-art-neutral img {
+  width: 100px;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.position-detail .position-information {
+  min-width: 0;
+  padding: 28px;
+  background: #ffffff80;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.position-information dl {
+  display: grid;
+  gap: 18px;
+}
+.position-fact {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 16px;
+}
+.position-fact dt {
+  color: var(--t-muted);
+}
+.position-fact dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+.position-detail p {
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.position-muted {
+  color: var(--t-muted);
+}
+.position-alert {
+  color: var(--t-red);
+}
+.position-link {
+  width: fit-content;
+  color: var(--t-accent);
+  text-decoration: underline;
+}
+.position-thesis-body {
+  white-space: pre-wrap;
+}
+.position-detail .mc-live-value {
+  text-shadow: none;
+}
+.position-manage,
+.position-thesis {
+  padding-top: 24px;
+  border-top: 1px solid var(--t-border);
+}
+.position-manage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.position-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.position-detail .drawably-button {
+  min-height: 48px;
+  padding: 10px 26px;
+  font-size: 23px;
+  color: var(--t-bg);
+}
+.position-detail .drawably-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.position-detail :is(button, a):focus-visible {
+  outline: 2px solid var(--t-focus-ring);
+  outline-offset: 5px;
+}
+.position-thesis h2 {
+  font-size: 27px;
+  margin-bottom: 10px;
+  color: var(--t-text);
+}
+@media (max-width: 800px) {
+  .position-layout {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
+  }
+  .position-art-card {
+    width: 100%;
+    max-width: 460px;
+    justify-self: center;
+  }
+  .position-detail .position-information {
+    padding: 22px;
+  }
+}
+@media (max-width: 480px) {
+  .position-detail {
+    font-size: 19px;
+  }
+  .position-detail .position-information {
+    padding: 18px;
+  }
+  .position-fact {
+    gap: 12px;
+  }
+}
+
+.position-detail .position-notice {
+  padding: 28px;
+  background: #ffffff80;
+}
+
+.position-identity-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}

@@ -871,8 +871,11 @@ liquidate
 
 **Partly built (issue #461), live on Base since the 2026-09-18 coordinator redeploy.** `tokenURI` points at
 `https://margincall.fun/api/nft/{tokenId}`, which serves the opener's optional on-chain thesis and a
-pre-drawn stage image (healthy / warning / danger / liquidated, else the neutral ticker logo). The
-richer presentation below — composited or generated art, and health on portfolio cards — is not shipped.
+pre-drawn dog image (healthy / warning / danger). Unpriced metadata retains the healthy dog
+with a “Pricing unavailable” Stage trait. Health and metadata-backed dog artwork are shown
+on portfolio cards as well as Explore; detail uses the same image rule from its live Base read.
+Closed and liquidated images are app-only lifecycle states after the NFT is burned.
+Composited or generated artwork described below is not shipped.
 
 The living NFT is a presentation layer only.
 

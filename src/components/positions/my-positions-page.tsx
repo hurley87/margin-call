@@ -4,9 +4,9 @@ import { usePaginatedQuery } from "convex/react";
 import type { ReactNode } from "react";
 import {
   IndexUnavailable,
-  PositionList,
+  PositionGallery,
   PositionQueryBoundary,
-} from "@/components/positions/position-list";
+} from "@/components/positions/position-gallery";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import {
   OpenPositionCta,
@@ -129,11 +129,12 @@ function MyPositionsQuery({
         </p>
       ) : null}
       {!(isIndexing && results.length === 0) ? (
-        <PositionList
+        <PositionGallery
           results={results}
           status={status}
           loadMore={loadMore}
           emptyMessage="Loading your portfolio…"
+          showOwner={false}
           highlightedTokenId={
             openedIsPresent && openedTokenId ? openedTokenId : undefined
           }
