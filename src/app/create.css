@@ -1,12 +1,5 @@
-.create-home {
-  min-height: 100vh;
-}
-.create-main {
-  max-width: var(--playful-max);
-  margin: 0 auto;
-  padding: 30px var(--playful-gutter) 64px;
-}
 .create-workspace {
+  padding-top: 30px;
   font-size: 21px;
   line-height: 1.35;
 }
@@ -470,8 +463,8 @@
   margin-top: 8px;
 }
 @media (max-width: 1100px) {
-  .create-main {
-    padding: 24px var(--playful-gutter) 48px;
+  .create-workspace {
+    padding-top: 24px;
   }
   .create-form-card.drawably-card,
   .create-preview-card.drawably-card {
@@ -535,10 +528,8 @@
   }
 }
 @media (max-width: 480px) {
-  .create-main {
-    padding: 20px var(--playful-gutter) 40px;
-  }
   .create-workspace {
+    padding-top: 20px;
     font-size: 19px;
   }
   .create-form-card.drawably-card,

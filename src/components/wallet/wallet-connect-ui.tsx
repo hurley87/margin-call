@@ -13,8 +13,8 @@ import {
   useVerifyWalletAccount,
 } from "@dynamic-labs-sdk/react-hooks";
 import { useState, type ReactNode } from "react";
-import { DrawablyCard } from "drawably/react";
-import { SketchButton as Button } from "@/components/ui/sketch-button";
+import { DrawablyButton, DrawablyCard } from "drawably/react";
+import { SKETCH } from "@/components/ui/sketch";
 import {
   useWalletSession,
   type WalletSession,
@@ -32,6 +32,15 @@ type ActionableView =
 type WalletView =
   { kind: "preparing" } | { kind: "failed"; message: string } | ActionableView;
 
+/**
+ * What the dropdown is showing.
+ *
+ * `connecting` is distinct from `account` because it must survive the connect →
+ * SIWE gap: the session flips to connected the moment pairing lands, so an
+ * account view here would flash Sign in at a wallet about to auto-verify.
+ */
+type PanelState = "closed" | "connecting" | "account";
+
 function derivePickerView(evmProviders: WalletProviderData[]): ActionableView {
   if (evmProviders.length === 0) {
     return { kind: "no-providers" };
@@ -39,11 +48,6 @@ function derivePickerView(evmProviders: WalletProviderData[]): ActionableView {
   return { kind: "picking", providers: evmProviders };
 }
 
-/**
- * The picker stays mounted for the whole connect → SIWE sequence. The session
- * flips to `connected` the moment pairing lands, so rendering the connected
- * view mid-handshake would flash Sign in at a wallet about to auto-verify.
- */
 function deriveWalletView(args: {
   session: WalletSession;
   isPickerOpen: boolean;
@@ -92,10 +96,24 @@ function statusCopy(args: {
   return null;
 }
 
+function summaryLabel(args: {
+  view: ActionableView;
+  isConnecting: boolean;
+  isVerifying: boolean;
+}): string {
+  if (args.view.kind === "connected") {
+    return formatShortAddress(args.view.address);
+  }
+  if (args.isVerifying) return "Signing…";
+  if (args.isConnecting) return "Connecting…";
+  if (args.view.kind === "needs-signature") return "Sign in";
+  // Kept short: the pill narrows to 155px on small screens and never wraps.
+  return "Connect";
+}
+
 /** Wallet UI that assumes Dynamic hooks are available in the tree. */
 export function WalletConnectUi(props: {
   evmAccount: WalletAccount | null;
-  compact?: boolean;
   children?: ReactNode;
 }) {
   const { evmAccount } = props;
@@ -119,7 +137,7 @@ export function WalletConnectUi(props: {
     error: logoutError,
     reset: resetLogout,
   } = useLogout();
-  const [isPickerOpen, setIsPickerOpen] = useState(false);
+  const [panel, setPanel] = useState<PanelState>("closed");
 
   const evmProviders = providers.filter((provider) => provider.chain === "EVM");
   const errorMessage =
@@ -155,7 +173,7 @@ export function WalletConnectUi(props: {
         connect,
         verify,
       });
-      setIsPickerOpen(false);
+      setPanel("closed");
     } catch {
       // Connect/verify errors surface through the mutation error state.
     }
@@ -163,7 +181,7 @@ export function WalletConnectUi(props: {
 
   const view = deriveWalletView({
     session,
-    isPickerOpen,
+    isPickerOpen: panel === "connecting",
     evmAccount,
     evmProviders,
   });
@@ -183,8 +201,19 @@ export function WalletConnectUi(props: {
     );
   }
 
+  // The wallet still owes us an action, so the panel is not dismissable yet.
+  const isPinnedOpen =
+    isConnecting || isVerifying || view.kind === "needs-signature";
+  const isOpen = isPinnedOpen || panel !== "closed";
+
+  const startPicking = () => {
+    resetFlow();
+    setPanel("connecting");
+  };
+
   const disconnectButton = (
-    <Button
+    <DrawablyButton
+      {...SKETCH}
       type="button"
       variant="outline"
       className="w-fit"
@@ -195,24 +224,22 @@ export function WalletConnectUi(props: {
       }}
     >
       Disconnect
-    </Button>
+    </DrawablyButton>
   );
 
   const renderBody = (actionable: ActionableView) => {
     switch (actionable.kind) {
       case "idle":
         return (
-          <Button
+          <DrawablyButton
+            {...SKETCH}
             type="button"
             variant="outline"
             className="w-fit"
-            onClick={() => {
-              resetFlow();
-              setIsPickerOpen(true);
-            }}
+            onClick={startPicking}
           >
             Connect
-          </Button>
+          </DrawablyButton>
         );
       case "no-providers":
         return (
@@ -226,7 +253,8 @@ export function WalletConnectUi(props: {
             <ul className="flex w-full max-w-xs flex-col gap-2">
               {actionable.providers.map((provider) => (
                 <li key={provider.key}>
-                  <Button
+                  <DrawablyButton
+                    {...SKETCH}
                     type="button"
                     variant="outline"
                     className="w-full"
@@ -234,7 +262,7 @@ export function WalletConnectUi(props: {
                     onClick={() => void connectProvider(provider)}
                   >
                     {provider.metadata.displayName}
-                  </Button>
+                  </DrawablyButton>
                 </li>
               ))}
             </ul>
@@ -246,25 +274,16 @@ export function WalletConnectUi(props: {
           </>
         );
       case "connected":
-        return (
-          <>
-            <p className="font-mono text-sm text-[var(--t-text)]">
-              {formatShortAddress(actionable.address)}
-            </p>
-            {disconnectButton}
-          </>
-        );
+        return disconnectButton;
       case "needs-signature":
         return (
           <>
-            <p className="font-mono text-sm text-[var(--t-text)]">
-              {formatShortAddress(actionable.address)}
-            </p>
             <div className="flex flex-col gap-2">
               <p className="max-w-xs text-xs leading-5 text-[var(--t-muted)]">
                 {prompt ?? "Sign in your wallet to finish connecting."}
               </p>
-              <Button
+              <DrawablyButton
+                {...SKETCH}
                 type="button"
                 variant="outline"
                 className="w-fit"
@@ -272,7 +291,7 @@ export function WalletConnectUi(props: {
                 onClick={() => void signIn(actionable.account)}
               >
                 {isVerifying ? "Waiting for signature…" : "Sign in"}
-              </Button>
+              </DrawablyButton>
             </div>
             {disconnectButton}
           </>
@@ -284,74 +303,58 @@ export function WalletConnectUi(props: {
     }
   };
 
-  if (props.compact && view.kind !== "idle") {
-    const connected = view.kind === "connected";
-    const label = connected
-      ? formatShortAddress(view.address)
-      : isVerifying
-        ? "Signing…"
-        : isConnecting
-          ? "Connecting…"
-          : view.kind === "needs-signature"
-            ? "Sign in"
-            : "Connect wallet";
-    return (
-      <details
-        className="wallet-account"
-        open={!connected}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            event.currentTarget.open = false;
-            event.currentTarget.querySelector("summary")?.focus();
+  return (
+    <details
+      className="wallet-account"
+      open={isOpen}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          setPanel("closed");
+          event.currentTarget.querySelector("summary")?.focus();
+        }
+      }}
+    >
+      <summary
+        className="wallet-address-pill"
+        aria-label={
+          view.kind === "connected"
+            ? `Account controls for ${formatShortAddress(view.address)}`
+            : "Wallet connection controls"
+        }
+        // React owns `open`, so suppress the native toggle and drive the state.
+        onClick={(event) => {
+          event.preventDefault();
+          if (isOpen) {
+            setPanel("closed");
+          } else if (view.kind === "connected") {
+            setPanel("account");
+          } else {
+            startPicking();
           }
         }}
       >
-        <summary
-          className="wallet-address-pill"
-          aria-label={
-            connected
-              ? `Account controls for ${formatShortAddress(view.address)}`
-              : "Wallet connection controls"
-          }
+        <svg className="wallet-avatar" viewBox="0 0 32 32" aria-hidden="true">
+          <circle cx="16" cy="16" r="16" fill="currentColor" />
+          <circle cx="16" cy="12" r="5" fill="white" />
+          <path d="M7 26c0-10 18-10 18 0" fill="white" />
+        </svg>
+        <span>{summaryLabel({ view, isConnecting, isVerifying })}</span>
+        <svg
+          className="wallet-chevron"
+          viewBox="0 0 20 20"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          aria-hidden="true"
         >
-          <svg className="wallet-avatar" viewBox="0 0 32 32" aria-hidden="true">
-            <circle cx="16" cy="16" r="16" fill="currentColor" />
-            <circle cx="16" cy="12" r="5" fill="white" />
-            <path d="M7 26c0-10 18-10 18 0" fill="white" />
-          </svg>
-          <span>{label}</span>
-          <svg
-            className="wallet-chevron"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            aria-hidden="true"
-          >
-            <path d="m4 7 6 6 6-6" />
-          </svg>
-        </summary>
-        <DrawablyCard
-          className="wallet-account-panel"
-          seed={24}
-          roughness={0.7}
-          boil={0}
-        >
-          {connected ? disconnectButton : renderBody(view)}
-          {props.children}
-          {errorMessage ? <p role="alert">{errorMessage}</p> : null}
-        </DrawablyCard>
-      </details>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-3">
-      {renderBody(view)}
-      {props.children}
-      {errorMessage ? (
-        <p className="text-xs text-[var(--t-muted)]">{errorMessage}</p>
-      ) : null}
-    </div>
+          <path d="m4 7 6 6 6-6" />
+        </svg>
+      </summary>
+      <DrawablyCard {...SKETCH} seed={24} className="wallet-account-panel">
+        {renderBody(view)}
+        {props.children}
+        {errorMessage ? <p role="alert">{errorMessage}</p> : null}
+      </DrawablyCard>
+    </details>
   );
 }

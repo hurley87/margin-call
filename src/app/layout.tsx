@@ -7,6 +7,8 @@ import {
 import { AppProviders } from "@/components/providers/app-providers";
 import { AppShell } from "@/components/shell/app-shell";
 import "./globals.css";
+import "./playful.css";
+import "./portfolio.css";
 import "./create.css";
 
 const patrickHand = Patrick_Hand({

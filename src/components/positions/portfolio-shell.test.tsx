@@ -200,7 +200,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.getByRole("button", { name: "Connect" })).not.toBeNull();
   });
 
-  it("links Docs and scopes the light content theme to the homepage", () => {
+  it("links Docs and keeps one light theme on every route", () => {
     const { container, rerender } = render(<AppShell>page</AppShell>);
     expect(
       screen.getByRole("link", { name: "Docs" }).getAttribute("href")
@@ -210,12 +210,11 @@ describe("portfolio-first app shell", () => {
         .getByRole("link", { name: "Portfolio" })
         .getAttribute("aria-current")
     ).toBe("page");
-    expect(container.querySelector(".portfolio-home")).not.toBeNull();
-    for (const path of ["/positions", "/position/42"]) {
+    for (const path of ["/", "/create", "/positions", "/position/42"]) {
       usePathnameMock.mockReturnValue(path);
       rerender(<AppShell>page</AppShell>);
-      expect(container.querySelector(".portfolio-home")).toBeNull();
-      expect(screen.getByRole("main").className).toContain("max-w-3xl");
+      expect(container.querySelector(".playful-theme")).not.toBeNull();
+      expect(screen.getByRole("main").className).toBe("playful-main");
     }
   });
 

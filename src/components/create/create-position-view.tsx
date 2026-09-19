@@ -1,16 +1,25 @@
 "use client";
 
-import { DrawablyCard, DrawablyInput, DrawablyTextarea } from "drawably/react";
+import {
+  DrawablyButton,
+  DrawablyCard,
+  DrawablyInput,
+  DrawablyTextarea,
+} from "drawably/react";
 import Image from "next/image";
 import { useEffect, useState, type ReactNode } from "react";
-import { MAX_THESIS_BYTES, thesisByteLength } from "@margin-call/shared/thesis";
+import {
+  MAX_THESIS_BYTES,
+  isThesisWithinLimit,
+  thesisByteLength,
+} from "@margin-call/shared/thesis";
 import { PositionArtwork } from "@/components/positions/position-artwork";
 import { TxStatus } from "@/components/protocol/tx-status";
 import { PlayfulIcon } from "@/components/ui/playful-icon";
-import { SketchButton } from "@/components/ui/sketch-button";
+import { SKETCH } from "@/components/ui/sketch";
 import { formatShortAddress } from "@/lib/utils";
 import {
-  artworkPath,
+  curatedArtworkPath,
   stockSymbol,
   type ArtworkFace,
 } from "@/lib/positions/artwork";
@@ -25,6 +34,7 @@ import {
   ORACLE_STATE,
 } from "@/lib/protocol/constants";
 import {
+  baseDeployment,
   getAssetByName,
   type LaunchAssetName,
 } from "@/lib/protocol/deployment";
@@ -32,49 +42,67 @@ import type { OpenSnapshot } from "@/lib/protocol/reads";
 import type { TxPhase } from "@/lib/protocol/tx-phase";
 import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
 
+/** Everything the form collects. Owned by the page so it survives connecting. */
 export type CreateDraft = {
   assetName: LaunchAssetName;
-  setAssetName: (name: LaunchAssetName) => void;
   amountInput: string;
-  setAmountInput: (amount: string) => void;
   thesis: string;
-  setThesis: (thesis: string) => void;
   leverage: number;
-  setLeverage: (leverage: number) => void;
 };
 
-type CreatePositionViewProps = {
+/** Base reads, submission, and transaction state — only a live wallet has these. */
+type CreateLiveState = {
+  snapshot: OpenSnapshot | null;
+  pending: boolean;
+  ready: boolean;
+  statusMessage: string | null;
+  readError: string | null;
+  onRefresh: () => void;
+  onCreate: () => void;
+  txPhase: TxPhase;
+};
+
+export type CreatePositionViewProps = {
   draft: CreateDraft;
-  snapshot?: OpenSnapshot | null;
-  pending?: boolean;
-  ready?: boolean;
-  statusMessage?: string | null;
-  readError?: string | null;
-  onRefresh?: () => void;
-  onCreate?: () => void;
-  txPhase?: TxPhase;
+  onDraftChange: (next: CreateDraft) => void;
+} & (
+  | { mode: "browse"; statusMessage: string }
+  | ({ mode: "live" } & CreateLiveState)
+);
+
+const COMPANY_NAME: Record<LaunchAssetName, string> = {
+  AAPLc: "Apple",
+  NVDAc: "NVIDIA",
+  GOOGLc: "Alphabet",
+  METAc: "Meta",
 };
 
-const STOCKS = [
-  { name: "AAPLc", company: "Apple" },
-  { name: "NVDAc", company: "NVIDIA" },
-  { name: "GOOGLc", company: "Alphabet" },
-  { name: "METAc", company: "Meta" },
-] as const;
-const LEVERAGE_NOTES = [
-  "No borrowing",
-  "Light",
-  "Balanced",
-  "Higher",
-  "Maximum",
-];
+const LEVERAGE_NOTE: Record<number, string> = {
+  10_000: "No borrowing",
+  11_000: "Light",
+  12_500: "Balanced",
+  14_000: "Higher",
+  15_000: "Maximum",
+};
+
 const STAGES: { face: ArtworkFace; label: string }[] = [
   { face: "healthy", label: "Healthy" },
   { face: "warning", label: "Watching" },
   { face: "danger", label: "At risk" },
   { face: "liquidated", label: "Liquidated" },
 ];
-const SKETCH = { roughness: 0.5, boil: 0, seed: 42 } as const;
+
+/** Browsing is a real mode, not a live form with every field missing. */
+const BROWSING: CreateLiveState = {
+  snapshot: null,
+  pending: false,
+  ready: false,
+  statusMessage: null,
+  readError: null,
+  onRefresh: () => {},
+  onCreate: () => {},
+  txPhase: { status: "idle" },
+};
 
 function StepTitle({
   number,
@@ -97,7 +125,7 @@ function StockLogo({ assetName }: { assetName: LaunchAssetName }) {
   const asset = getAssetByName(assetName);
   return (
     <Image
-      src={artworkPath(asset.assetId, "neutral")!}
+      src={curatedArtworkPath(asset.assetId, "neutral")}
       width={52}
       height={52}
       alt=""
@@ -162,27 +190,15 @@ function CopyTokenAddress({
 }
 
 /** Shared by disconnected browsing and the wallet-backed transaction controller. */
-export function CreatePositionView({
-  draft,
-  snapshot = null,
-  pending = false,
-  ready = false,
-  statusMessage,
-  readError,
-  onRefresh,
-  onCreate,
-  txPhase = { status: "idle" },
-}: CreatePositionViewProps) {
-  const {
-    assetName,
-    amountInput,
-    leverage,
-    thesis,
-    setAssetName,
-    setAmountInput,
-    setLeverage,
-    setThesis,
-  } = draft;
+export function CreatePositionView(props: CreatePositionViewProps) {
+  const { draft, onDraftChange, statusMessage } = props;
+  const { snapshot, pending, ready, readError, onRefresh, onCreate, txPhase } =
+    props.mode === "live" ? props : BROWSING;
+
+  const { assetName, amountInput, leverage, thesis } = draft;
+  const update = (patch: Partial<CreateDraft>) =>
+    onDraftChange({ ...draft, ...patch });
+
   const asset = getAssetByName(assetName);
   const symbol = stockSymbol(asset.assetId);
   const amount = parseStockAmount(amountInput);
@@ -193,7 +209,7 @@ export function CreatePositionView({
   )?.label;
   const financed = isFinancedLeverage(leverage);
   const thesisBytes = thesisByteLength(thesis);
-  const thesisTooLong = thesisBytes > MAX_THESIS_BYTES;
+  const thesisTooLong = !isThesisWithinLimit(thesis);
   const contribution = snapshot?.contributionValue ?? null;
   const principal = snapshot?.estimatedPrincipal ?? null;
   const total =
@@ -224,7 +240,7 @@ export function CreatePositionView({
           <form
             onSubmit={(event) => {
               event.preventDefault();
-              if (ready && !pending && !thesisTooLong) onCreate?.();
+              if (ready && !pending && !thesisTooLong) onCreate();
             }}
           >
             <fieldset className="create-step" disabled={pending}>
@@ -235,26 +251,24 @@ export function CreatePositionView({
                 Each stock has its own puppy with a unique look.
               </p>
               <div className="create-stock-options">
-                {STOCKS.map(({ name, company }) => (
-                  <label key={name} className="create-choice">
+                {baseDeployment.assets.map((option) => (
+                  <label key={option.name} className="create-choice">
                     <input
                       type="radio"
                       name="stock"
-                      aria-label={name}
-                      value={name}
-                      checked={assetName === name}
-                      onChange={() => setAssetName(name)}
+                      aria-label={option.name}
+                      value={option.name}
+                      checked={assetName === option.name}
+                      onChange={() => update({ assetName: option.name })}
                     />
                     <DrawablyCard
                       {...SKETCH}
                       className="create-stock-option"
-                      stroke={assetName === name ? "#ee771d" : "#e5ded3"}
+                      stroke={assetName === option.name ? "#ee771d" : "#e5ded3"}
                     >
-                      <StockLogo assetName={name} />
-                      <strong>
-                        {stockSymbol(getAssetByName(name).assetId)}
-                      </strong>
-                      <span>{company}</span>
+                      <StockLogo assetName={option.name} />
+                      <strong>{stockSymbol(option.assetId)}</strong>
+                      <span>{COMPANY_NAME[option.name]}</span>
                     </DrawablyCard>
                   </label>
                 ))}
@@ -293,7 +307,9 @@ export function CreatePositionView({
                     inputMode="decimal"
                     autoComplete="off"
                     value={amountInput}
-                    onChange={(event) => setAmountInput(event.target.value)}
+                    onChange={(event) =>
+                      update({ amountInput: event.target.value })
+                    }
                   />
                   <button
                     type="button"
@@ -301,9 +317,9 @@ export function CreatePositionView({
                     disabled={pending || snapshot == null}
                     onClick={() => {
                       if (snapshot)
-                        setAmountInput(
-                          formatStockAmount(snapshot.stockBalance)
-                        );
+                        update({
+                          amountInput: formatStockAmount(snapshot.stockBalance),
+                        });
                     }}
                   >
                     Max
@@ -330,7 +346,7 @@ export function CreatePositionView({
                 Higher leverage = higher potential returns (and higher risk).
               </p>
               <div className="create-leverage-options">
-                {OPENING_LEVERAGE_PRESETS.map((preset, index) => (
+                {OPENING_LEVERAGE_PRESETS.map((preset) => (
                   <label key={preset.bps} className="create-choice">
                     <input
                       type="radio"
@@ -338,7 +354,7 @@ export function CreatePositionView({
                       aria-label={preset.label}
                       value={preset.bps}
                       checked={leverage === preset.bps}
-                      onChange={() => setLeverage(preset.bps)}
+                      onChange={() => update({ leverage: preset.bps })}
                     />
                     <DrawablyCard
                       {...SKETCH}
@@ -346,7 +362,7 @@ export function CreatePositionView({
                       stroke={leverage === preset.bps ? "#ee771d" : "#e5ded3"}
                     >
                       <strong>{preset.label}</strong>
-                      <span>{LEVERAGE_NOTES[index]}</span>
+                      <span>{LEVERAGE_NOTE[preset.bps]}</span>
                     </DrawablyCard>
                   </label>
                 ))}
@@ -398,7 +414,7 @@ export function CreatePositionView({
                 placeholder="Why this position? Recorded on Base, forever."
                 aria-describedby="thesis-budget"
                 aria-invalid={thesisTooLong || undefined}
-                onChange={(event) => setThesis(event.target.value)}
+                onChange={(event) => update({ thesis: event.target.value })}
               />
               <p
                 id="thesis-budget"
@@ -475,16 +491,18 @@ export function CreatePositionView({
               {readError ? (
                 <div className="create-read-error">
                   <p role="alert">{readError}</p>
-                  <SketchButton
+                  <DrawablyButton
+                    {...SKETCH}
                     onClick={onRefresh}
                     disabled={pending}
                     type="button"
                   >
                     Retry quote
-                  </SketchButton>
+                  </DrawablyButton>
                 </div>
               ) : null}
-              <SketchButton
+              <DrawablyButton
+                {...SKETCH}
                 variant="solid"
                 type="submit"
                 className="create-submit"
@@ -493,7 +511,7 @@ export function CreatePositionView({
                 <PlayfulIcon kind="paw" />
                 {pending ? "Creating position…" : "Create Position"}
                 <span aria-hidden="true">→</span>
-              </SketchButton>
+              </DrawablyButton>
               <div className="create-tx-status" aria-live="polite">
                 <TxStatus phase={txPhase} />
               </div>
@@ -514,7 +532,7 @@ export function CreatePositionView({
             <h2>Your puppy preview</h2>
             <p>Here’s what your {symbol} puppy could look like.</p>
             <PositionArtwork
-              src={artworkPath(asset.assetId, "healthy")}
+              src={curatedArtworkPath(asset.assetId, "healthy")}
               alt={`${assetName} Position NFT preview`}
               className="create-puppy-preview"
               sizes="(max-width: 850px) 85vw, 480px"
@@ -529,7 +547,7 @@ export function CreatePositionView({
                   className={`create-stage create-stage-${face}`}
                 >
                   <PositionArtwork
-                    src={artworkPath(asset.assetId, face)}
+                    src={curatedArtworkPath(asset.assetId, face)}
                     alt={`${symbol} ${label.toLowerCase()} artwork`}
                     sizes="(max-width: 480px) 20vw, 110px"
                   />

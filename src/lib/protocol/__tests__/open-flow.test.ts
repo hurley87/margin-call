@@ -49,6 +49,7 @@ function readySnapshot(overrides: Partial<OpenSnapshot> = {}): OpenSnapshot {
     availableCredit: 10_000_000_000n,
     oracleState: ORACLE_STATE.LIVE,
     estimatedPrincipal: 100_000n,
+    contributionValue: 400_000n,
     ...overrides,
   };
 }

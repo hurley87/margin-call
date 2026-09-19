@@ -6,7 +6,11 @@ import {
   useGetActiveNetworkId,
   useGetWalletAccounts,
 } from "@dynamic-labs-sdk/react-hooks";
-import { MAX_THESIS_BYTES, thesisByteLength } from "@margin-call/shared/thesis";
+import {
+  MAX_THESIS_BYTES,
+  isThesisWithinLimit,
+  thesisByteLength,
+} from "@margin-call/shared/thesis";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -14,38 +18,52 @@ import {
   type CreateDraft,
 } from "@/components/create/create-position-view";
 import { runManagedTx } from "@/components/protocol/run-managed-tx";
-import { useWalletSession } from "@/components/wallet/wallet-providers";
+import {
+  useWalletSession,
+  type WalletSession,
+} from "@/components/wallet/wallet-providers";
 import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
 import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
 import { parseStockAmount } from "@/lib/protocol/amounts";
 import { DEFAULT_LEVERAGE } from "@/lib/protocol/constants";
-import {
-  getAssetByName,
-  type LaunchAssetName,
-} from "@/lib/protocol/deployment";
+import { getAssetByName } from "@/lib/protocol/deployment";
 import { runOpenPositionFlow } from "@/lib/protocol/open-flow";
 import { createBasePublicClient } from "@/lib/protocol/public-client";
 import { openReadiness } from "@/lib/protocol/readiness";
 import { loadOpenSnapshot, type OpenSnapshot } from "@/lib/protocol/reads";
 import { isTxPending, type TxPhase } from "@/lib/protocol/tx-phase";
 
+const INITIAL_DRAFT: CreateDraft = {
+  assetName: "NVDAc",
+  amountInput: "0.01",
+  thesis: "",
+  leverage: DEFAULT_LEVERAGE,
+};
+
+/** Why the form is read-only, for every session that cannot sign. */
+function browseMessage(
+  session: Exclude<WalletSession, { kind: "connected" }>
+): string {
+  switch (session.kind) {
+    case "hydrating":
+      return "Connecting wallet…";
+    case "failed":
+      return session.message;
+    case "unset":
+      return "Wallet connection is currently unavailable.";
+    case "disconnected":
+      return "Connect a wallet to open a Position NFT.";
+    default: {
+      const _exhaustive: never = session;
+      return _exhaustive;
+    }
+  }
+}
+
 /** A browsable draft; wallet hooks and Base reads mount only after connection. */
 export function CreatePositionPage() {
   const session = useWalletSession();
-  const [assetName, setAssetName] = useState<LaunchAssetName>("NVDAc");
-  const [amountInput, setAmountInput] = useState("0.01");
-  const [thesis, setThesis] = useState("");
-  const [leverage, setLeverage] = useState(DEFAULT_LEVERAGE);
-  const draft: CreateDraft = {
-    assetName,
-    setAssetName,
-    amountInput,
-    setAmountInput,
-    thesis,
-    setThesis,
-    leverage,
-    setLeverage,
-  };
+  const [draft, setDraft] = useState<CreateDraft>(INITIAL_DRAFT);
 
   if (session.kind === "connected") {
     return (
@@ -53,33 +71,39 @@ export function CreatePositionPage() {
         key={session.address}
         address={session.address}
         draft={draft}
+        onDraftChange={setDraft}
       />
     );
   }
-  const statusMessage =
-    session.kind === "hydrating"
-      ? "Connecting wallet…"
-      : session.kind === "failed"
-        ? session.message
-        : session.kind === "unset"
-          ? "Wallet connection is currently unavailable."
-          : "Connect a wallet to open a Position NFT.";
-  return <CreatePositionView draft={draft} statusMessage={statusMessage} />;
+
+  return (
+    <CreatePositionView
+      mode="browse"
+      draft={draft}
+      onDraftChange={setDraft}
+      statusMessage={browseMessage(session)}
+    />
+  );
 }
+
+type DraftProps = {
+  draft: CreateDraft;
+  onDraftChange: (next: CreateDraft) => void;
+};
 
 function CreatePositionConnected({
   address,
   draft,
-}: {
-  address: `0x${string}`;
-  draft: CreateDraft;
-}) {
+  onDraftChange,
+}: DraftProps & { address: `0x${string}` }) {
   const { data: accounts = [] } = useGetWalletAccounts();
   const evmAccount = accounts.find(isEvmWalletAccount) ?? null;
   if (!evmAccount) {
     return (
       <CreatePositionView
+        mode="browse"
         draft={draft}
+        onDraftChange={onDraftChange}
         statusMessage="Connect an EVM wallet on Base to open a Position NFT."
       />
     );
@@ -89,16 +113,18 @@ function CreatePositionConnected({
       address={address}
       evmAccount={evmAccount}
       draft={draft}
+      onDraftChange={onDraftChange}
     />
   );
 }
 
-function CreatePositionForm(props: {
-  address: `0x${string}`;
-  evmAccount: WalletAccount;
-  draft: CreateDraft;
-}) {
-  const { address, evmAccount, draft } = props;
+function CreatePositionForm(
+  props: DraftProps & {
+    address: `0x${string}`;
+    evmAccount: WalletAccount;
+  }
+) {
+  const { address, evmAccount, draft, onDraftChange } = props;
   const { assetName, amountInput, thesis, leverage } = draft;
   const router = useRouter();
   const { data: accounts = [] } = useGetWalletAccounts();
@@ -127,10 +153,7 @@ function CreatePositionForm(props: {
   const snapshotKey = `${address}:${assetName}:${leverage}:${stockAmount}`;
   const snapshot =
     snapshotResult?.key === snapshotKey ? snapshotResult.value : null;
-
-  // The contract measures UTF-8 bytes, so emoji cost more than the count shows.
-  const thesisBytes = thesisByteLength(thesis);
-  const thesisTooLong = thesisBytes > MAX_THESIS_BYTES;
+  const thesisFits = isThesisWithinLimit(thesis);
 
   const refreshSnapshot = useCallback(async () => {
     const gen = ++snapshotGen.current;
@@ -179,11 +202,11 @@ function CreatePositionForm(props: {
     }
 
     // Guarded here too: the button is disabled, but the contract is the limit.
-    if (thesisTooLong) {
+    if (!thesisFits) {
       setTxPhase({
         status: "error",
         label: "Open",
-        message: `Thesis is ${thesisBytes} bytes; the limit is ${MAX_THESIS_BYTES}.`,
+        message: `Thesis is ${thesisByteLength(thesis)} bytes; the limit is ${MAX_THESIS_BYTES}.`,
       });
       return;
     }
@@ -218,14 +241,13 @@ function CreatePositionForm(props: {
 
   return (
     <CreatePositionView
+      mode="live"
       draft={draft}
+      onDraftChange={onDraftChange}
       snapshot={snapshot}
       pending={pending}
       ready={
-        readiness.ok &&
-        stockAmount != null &&
-        stockAmount > 0n &&
-        !thesisTooLong
+        readiness.ok && stockAmount != null && stockAmount > 0n && thesisFits
       }
       statusMessage={
         readError

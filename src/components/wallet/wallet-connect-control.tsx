@@ -53,10 +53,8 @@ function WalletConnectLive() {
   const evmAccount = accounts.find(isEvmWalletAccount) ?? null;
 
   return (
-    <div className="flex flex-col gap-2">
-      <WalletConnectUi evmAccount={evmAccount} compact>
-        {evmAccount ? <WalletNetworkControls evmAccount={evmAccount} /> : null}
-      </WalletConnectUi>
-    </div>
+    <WalletConnectUi evmAccount={evmAccount}>
+      {evmAccount ? <WalletNetworkControls evmAccount={evmAccount} /> : null}
+    </WalletConnectUi>
   );
 }

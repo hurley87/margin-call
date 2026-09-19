@@ -7,7 +7,6 @@ import {
   PAGE_SIZE,
   PositionList,
   PositionQueryBoundary,
-  QueryUnavailable,
 } from "@/components/positions/position-list";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import {
@@ -92,14 +91,7 @@ function MyPositionsList({
   }
 
   return (
-    <PositionQueryBoundary
-      key={owner}
-      renderError={(onRetry) => (
-        <PageFrame>
-          <QueryUnavailable onRetry={onRetry} />
-        </PageFrame>
-      )}
-    >
+    <PositionQueryBoundary key={owner}>
       <MyPositionsQuery owner={owner} openedTokenId={openedTokenId} />
     </PositionQueryBoundary>
   );

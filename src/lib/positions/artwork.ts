@@ -123,3 +123,17 @@ export function artworkPath(assetId: number, face: ArtworkFace): string | null {
     ? `/logos/${art.directory}.png`
     : `/${art.directory}/${face}.png`;
 }
+
+/**
+ * Artwork path for an asset the caller took from the curated registry.
+ *
+ * Every launch rail ships committed art, so a miss here is a broken build
+ * rather than a UI state worth rendering a placeholder for.
+ */
+export function curatedArtworkPath(assetId: number, face: ArtworkFace): string {
+  const path = artworkPath(assetId, face);
+  if (path === null) {
+    throw new Error(`No ${face} artwork for curated asset ${assetId}`);
+  }
+  return path;
+}
