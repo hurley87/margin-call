@@ -7,6 +7,7 @@ import {
   DrawablyTextarea,
 } from "drawably/react";
 import Image from "next/image";
+import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import {
   MAX_THESIS_BYTES,
@@ -17,6 +18,7 @@ import { PositionArtwork } from "@/components/positions/position-artwork";
 import { TxStatus } from "@/components/protocol/tx-status";
 import { PlayfulIcon } from "@/components/ui/playful-icon";
 import { SKETCH } from "@/components/ui/sketch";
+import { AcquireStockLinks } from "@/components/uniswap/acquire-stock-links";
 import { formatShortAddress } from "@/lib/utils";
 import {
   curatedArtworkPath,
@@ -32,6 +34,7 @@ import {
   OPENING_LEVERAGE_PRESETS,
   isFinancedLeverage,
   ORACLE_STATE,
+  type OracleState,
 } from "@/lib/protocol/constants";
 import {
   baseDeployment,
@@ -39,8 +42,11 @@ import {
   type LaunchAssetName,
 } from "@/lib/protocol/deployment";
 import type { OpenSnapshot } from "@/lib/protocol/reads";
+import {
+  PRICING_AVAILABILITY_CAVEAT,
+  PRICING_AVAILABILITY_NOTE,
+} from "@/lib/protocol/readiness";
 import type { TxPhase } from "@/lib/protocol/tx-phase";
-import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
 
 /** Everything the form collects. Owned by the page so it survives connecting. */
 export type CreateDraft = {
@@ -50,6 +56,14 @@ export type CreateDraft = {
   leverage: number;
 };
 
+/** Present only while the connected wallet sits on a chain other than Base. */
+export type WrongNetworkState = {
+  canSwitch: boolean;
+  switching: boolean;
+  error: string | null;
+  onSwitch: () => void;
+};
+
 /** Base reads, submission, and transaction state — only a live wallet has these. */
 type CreateLiveState = {
   snapshot: OpenSnapshot | null;
@@ -57,6 +71,7 @@ type CreateLiveState = {
   ready: boolean;
   statusMessage: string | null;
   readError: string | null;
+  wrongNetwork: WrongNetworkState | null;
   onRefresh: () => void;
   onCreate: () => void;
   txPhase: TxPhase;
@@ -99,6 +114,7 @@ const BROWSING: CreateLiveState = {
   ready: false,
   statusMessage: null,
   readError: null,
+  wrongNetwork: null,
   onRefresh: () => {},
   onCreate: () => {},
   txPhase: { status: "idle" },
@@ -119,6 +135,16 @@ function StepTitle({
       <span>{children}</span>
     </span>
   );
+}
+
+/** Oracle states are protocol detail; the form only says whether it can price. */
+function marketPricingLabel(state: OracleState | null): string {
+  if (state == null) return "—";
+  return state === ORACLE_STATE.LIVE ? "Live" : "Temporarily unavailable";
+}
+
+function leverageStroke(selected: boolean): string {
+  return selected ? "#ee771d" : "#e5ded3";
 }
 
 function StockLogo({ assetName }: { assetName: LaunchAssetName }) {
@@ -192,8 +218,16 @@ function CopyTokenAddress({
 /** Shared by disconnected browsing and the wallet-backed transaction controller. */
 export function CreatePositionView(props: CreatePositionViewProps) {
   const { draft, onDraftChange, statusMessage } = props;
-  const { snapshot, pending, ready, readError, onRefresh, onCreate, txPhase } =
-    props.mode === "live" ? props : BROWSING;
+  const {
+    snapshot,
+    pending,
+    ready,
+    readError,
+    wrongNetwork,
+    onRefresh,
+    onCreate,
+    txPhase,
+  } = props.mode === "live" ? props : BROWSING;
 
   const { assetName, amountInput, leverage, thesis } = draft;
   const update = (patch: Partial<CreateDraft>) =>
@@ -208,8 +242,17 @@ export function CreatePositionView(props: CreatePositionViewProps) {
     (preset) => preset.bps === leverage
   )?.label;
   const financed = isFinancedLeverage(leverage);
+  /** A financed open the oracle cannot price right now. Spot is unaffected. */
+  const pricingUnavailable =
+    financed && snapshot != null && snapshot.oracleState !== ORACLE_STATE.LIVE;
   const thesisBytes = thesisByteLength(thesis);
   const thesisTooLong = !isThesisWithinLimit(thesis);
+  const wanted = amount != null && amount > 0n ? amount : null;
+  /** Only a read balance that falls short earns a Uniswap hand-off. */
+  const shortfall =
+    snapshot != null && wanted != null && snapshot.stockBalance < wanted
+      ? { balance: snapshot.stockBalance, wanted }
+      : null;
   const contribution = snapshot?.contributionValue ?? null;
   const principal = snapshot?.estimatedPrincipal ?? null;
   const total =
@@ -336,6 +379,15 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                   <span>≈ {money(contribution)}</span>
                 ) : null}
               </div>
+              {shortfall ? (
+                <AcquireStockLinks
+                  stockName={assetName}
+                  stockAddress={asset.stock}
+                  stockBalance={shortfall.balance}
+                  stockAmount={shortfall.wanted}
+                  onRefresh={onRefresh}
+                />
+              ) : null}
             </fieldset>
 
             <fieldset className="create-step" disabled={pending}>
@@ -359,7 +411,7 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                     <DrawablyCard
                       {...SKETCH}
                       className="create-leverage-option"
-                      stroke={leverage === preset.bps ? "#ee771d" : "#e5ded3"}
+                      stroke={leverageStroke(leverage === preset.bps)}
                     >
                       <strong>{preset.label}</strong>
                       <span>{LEVERAGE_NOTE[preset.bps]}</span>
@@ -465,14 +517,8 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                 {financed ? (
                   <>
                     <p>
-                      Oracle:{" "}
-                      {snapshot?.oracleState == null
-                        ? "—"
-                        : snapshot.oracleState === ORACLE_STATE.LIVE
-                          ? "LIVE"
-                          : snapshot.oracleState === ORACLE_STATE.HELD
-                            ? "HELD"
-                            : "INVALID"}
+                      Market pricing:{" "}
+                      {marketPricingLabel(snapshot?.oracleState ?? null)}
                     </p>
                     <p>
                       Available credit:{" "}
@@ -488,6 +534,12 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                   {statusMessage}
                 </p>
               ) : null}
+              {pricingUnavailable ? (
+                <div className="create-pricing-note">
+                  <p>{PRICING_AVAILABILITY_NOTE}</p>
+                  <p>{PRICING_AVAILABILITY_CAVEAT}</p>
+                </div>
+              ) : null}
               {readError ? (
                 <div className="create-read-error">
                   <p role="alert">{readError}</p>
@@ -501,23 +553,50 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                   </DrawablyButton>
                 </div>
               ) : null}
-              <DrawablyButton
-                {...SKETCH}
-                variant="solid"
-                type="submit"
-                className="create-submit"
-                disabled={pending || !ready || thesisTooLong}
-              >
-                <PlayfulIcon kind="paw" />
-                {pending ? "Creating position…" : "Create Position"}
-                <span aria-hidden="true">→</span>
-              </DrawablyButton>
+              {wrongNetwork ? (
+                <div className="create-switch-network">
+                  {wrongNetwork.canSwitch ? (
+                    <DrawablyButton
+                      {...SKETCH}
+                      variant="solid"
+                      type="button"
+                      className="create-submit"
+                      disabled={wrongNetwork.switching}
+                      onClick={wrongNetwork.onSwitch}
+                    >
+                      {wrongNetwork.switching
+                        ? "Switching to Base…"
+                        : "Switch to Base"}
+                      <span aria-hidden="true">→</span>
+                    </DrawablyButton>
+                  ) : (
+                    <p>Switch the wallet to Base mainnet (8453) to continue.</p>
+                  )}
+                  {wrongNetwork.error ? (
+                    <p className="create-error" role="alert">
+                      {wrongNetwork.error}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <DrawablyButton
+                  {...SKETCH}
+                  variant="solid"
+                  type="submit"
+                  className="create-submit"
+                  disabled={pending || !ready || thesisTooLong}
+                >
+                  <PlayfulIcon kind="paw" />
+                  {pending ? "Creating position…" : "Create Position"}
+                  <span aria-hidden="true">→</span>
+                </DrawablyButton>
+              )}
               <div className="create-tx-status" aria-live="polite">
                 <TxStatus phase={txPhase} />
               </div>
               <p className="create-docs-note">
                 Before creating a position, read the{" "}
-                <a href={PRODUCT_DOCS_URL}>protocol docs and risks</a>.
+                <Link href="/docs">docs</Link>.
               </p>
             </section>
           </form>

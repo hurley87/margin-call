@@ -25,6 +25,9 @@ import {
   assertBaseChain,
   closeReadiness,
   openReadiness,
+  PRICING_AVAILABILITY_CAVEAT,
+  PRICING_AVAILABILITY_NOTE,
+  PRICING_UNAVAILABLE_REASON,
   repayReadiness,
 } from "@/lib/protocol/readiness";
 import { repayCeiling, sizePrincipal } from "@/lib/protocol/repay";
@@ -223,22 +226,66 @@ describe("openReadiness", () => {
     });
   });
 
-  it("allows spot open without LIVE/credit gates", () => {
-    expect(
-      openReadiness({
-        ...base,
-        targetLeverage: SPOT_LEVERAGE,
-        oracleState: ORACLE_STATE.HELD,
-        availableCredit: null,
-        estimatedPrincipal: null,
-      })
-    ).toEqual({ ok: true });
+  it("opens spot at any oracle state, since the spot path is oracle-free", () => {
+    for (const oracleState of [
+      ORACLE_STATE.LIVE,
+      ORACLE_STATE.HELD,
+      ORACLE_STATE.INVALID,
+      null,
+    ]) {
+      expect(
+        openReadiness({
+          ...base,
+          targetLeverage: SPOT_LEVERAGE,
+          oracleState,
+          availableCredit: null,
+          estimatedPrincipal: null,
+        })
+      ).toEqual({ ok: true });
+    }
   });
 
-  it("requires LIVE oracle and credit for financed opens", () => {
-    expect(openReadiness({ ...base, oracleState: ORACLE_STATE.HELD }).ok).toBe(
-      false
+  it("still gates spot on the ordinary requirements", () => {
+    const spot = { ...base, targetLeverage: SPOT_LEVERAGE, oracleState: null };
+
+    expect(openReadiness({ ...spot, chainId: 1 }).ok).toBe(false);
+    expect(openReadiness({ ...spot, stockAmount: 0n }).ok).toBe(false);
+    expect(openReadiness({ ...spot, stockBalance: null }).ok).toBe(false);
+    expect(openReadiness({ ...spot, stockBalance: 1n }).ok).toBe(false);
+  });
+
+  it("blocks financed opens whenever pricing is not live", () => {
+    for (const oracleState of [ORACLE_STATE.HELD, ORACLE_STATE.INVALID, null]) {
+      expect(openReadiness({ ...base, oracleState })).toEqual({
+        ok: false,
+        reason: PRICING_UNAVAILABLE_REASON,
+      });
+    }
+  });
+
+  it("keeps the pricing copy free of raw oracle states", () => {
+    expect(PRICING_UNAVAILABLE_REASON).toBe(
+      "Market pricing is temporarily unavailable."
     );
+    for (const copy of [
+      PRICING_UNAVAILABLE_REASON,
+      PRICING_AVAILABILITY_NOTE,
+      PRICING_AVAILABILITY_CAVEAT,
+    ]) {
+      // "live" as ordinary English is fine; the enum names are not.
+      expect(copy).not.toMatch(/state \d|\bLIVE\b|\bHELD\b|\bINVALID\b/);
+      expect(copy).not.toMatch(/oracle/i);
+    }
+  });
+
+  it("describes pricing hours as typical rather than guaranteed", () => {
+    expect(PRICING_AVAILABILITY_NOTE).toContain("typically");
+    // Exact hours are the market's to set, not a promise Margin Call can keep.
+    expect(PRICING_AVAILABILITY_NOTE).not.toMatch(/\d{1,2}:\d{2}|\bET\b/);
+    expect(PRICING_AVAILABILITY_CAVEAT).toContain("market holidays");
+  });
+
+  it("requires credit for financed opens once pricing is live", () => {
     expect(
       openReadiness({
         ...base,

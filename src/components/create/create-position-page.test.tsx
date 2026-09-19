@@ -17,6 +17,13 @@ const resolveBaseWalletClientMock = vi.hoisted(() => vi.fn());
 const loadOpenSnapshotMock = vi.hoisted(() => vi.fn());
 const runOpenPositionFlowMock = vi.hoisted(() => vi.fn());
 const syncPositionTxMock = vi.hoisted(() => vi.fn());
+const switchWalletToBaseMock = vi.hoisted(() => vi.fn());
+const isProgrammaticNetworkSwitchAvailableMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@dynamic-labs-sdk/client", () => ({
+  isProgrammaticNetworkSwitchAvailable:
+    isProgrammaticNetworkSwitchAvailableMock,
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: useRouterPushMock }),
@@ -43,6 +50,7 @@ vi.mock("@/lib/dynamic/resolve-wallet-client", () => ({
     return match?.[1] ? Number(match[1]) : null;
   },
   assertWalletOnBase: vi.fn(),
+  switchWalletToBase: switchWalletToBaseMock,
 }));
 
 vi.mock("@/lib/protocol/public-client", () => ({
@@ -66,8 +74,8 @@ vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
 }));
 
 import { CreatePositionPage } from "@/components/create/create-position-page";
-import { ORACLE_STATE } from "@/lib/protocol/constants";
-import { getAssetByName } from "@/lib/protocol/deployment";
+import { ORACLE_STATE, SPOT_LEVERAGE } from "@/lib/protocol/constants";
+import { baseDeployment, getAssetByName } from "@/lib/protocol/deployment";
 
 const CONNECTED_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678" as const;
 const OPEN_HASH =
@@ -104,6 +112,8 @@ describe("CreatePositionPage", () => {
       hash: OPEN_HASH,
     });
     syncPositionTxMock.mockResolvedValue("synced");
+    switchWalletToBaseMock.mockResolvedValue(undefined);
+    isProgrammaticNetworkSwitchAvailableMock.mockReturnValue(true);
     useRouterPushMock.mockReset();
   });
 
@@ -284,6 +294,264 @@ describe("CreatePositionPage", () => {
       expect(
         screen.getByRole("button", { name: "Create Position" })
       ).toHaveProperty("disabled", false)
+    );
+  });
+
+  it("leaves Uniswap out of the way when the balance covers the amount", async () => {
+    render(<CreatePositionPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    expect(screen.queryByRole("link", { name: /Buy/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Refresh balance" })
+    ).toBeNull();
+  });
+
+  it("offers a Uniswap hand-off for the stock the wallet does not hold", async () => {
+    loadOpenSnapshotMock.mockResolvedValue({
+      stockBalance: 0n,
+      stockAllowance: 0n,
+      availableCredit: 10_000_000_000n,
+      oracleState: ORACLE_STATE.LIVE,
+      estimatedPrincipal: 100_000n,
+    });
+    render(<CreatePositionPage />);
+
+    expect(
+      await screen.findByText("You don’t have any NVDAc yet.")
+    ).not.toBeNull();
+
+    const usdc = screen.getByRole("link", { name: "Buy NVDAc with USDC" });
+    const usdcParams = new URL(usdc.getAttribute("href") ?? "").searchParams;
+    expect(usdcParams.get("chain")).toBe("base");
+    expect(usdcParams.get("inputCurrency")).toBe(baseDeployment.usdc);
+    expect(usdcParams.get("outputCurrency")).toBe(
+      getAssetByName("NVDAc").stock
+    );
+    expect(usdc.getAttribute("target")).toBe("_blank");
+    expect(usdc.getAttribute("rel")).toBe("noopener noreferrer");
+
+    const eth = screen.getByRole("link", { name: "Buy NVDAc with ETH" });
+    expect(
+      new URL(eth.getAttribute("href") ?? "").searchParams.get("inputCurrency")
+    ).toBe("ETH");
+    expect(eth.getAttribute("target")).toBe("_blank");
+
+    // The link follows the selected stock rather than a hardcoded per-stock URL.
+    fireEvent.click(screen.getByRole("radio", { name: "AAPLc" }));
+    const aapl = await screen.findByRole("link", {
+      name: "Buy AAPLc with USDC",
+    });
+    expect(
+      new URL(aapl.getAttribute("href") ?? "").searchParams.get(
+        "outputCurrency"
+      )
+    ).toBe(getAssetByName("AAPLc").stock);
+  });
+
+  it("names the shortfall and re-reads Base after a swap", async () => {
+    loadOpenSnapshotMock.mockResolvedValue({
+      stockBalance: 10_000_000n,
+      stockAllowance: 0n,
+      availableCredit: 10_000_000_000n,
+      oracleState: ORACLE_STATE.LIVE,
+      estimatedPrincipal: 100_000n,
+    });
+    render(<CreatePositionPage />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Stock amount" }), {
+      target: { value: "0.25" },
+    });
+
+    expect(
+      await screen.findByText("You need 0.25 NVDAc but only have 0.1.")
+    ).not.toBeNull();
+    expect(
+      screen.getByText("Insufficient selected-stock balance.")
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
+
+    const reads = loadOpenSnapshotMock.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh balance" }));
+    await waitFor(() =>
+      expect(loadOpenSnapshotMock.mock.calls.length).toBeGreaterThan(reads)
+    );
+  });
+
+  it("offers the network switch instead of Create Position on the wrong chain", async () => {
+    useGetActiveNetworkIdMock.mockReturnValue({
+      data: { networkId: "eip155:1" },
+    });
+    render(<CreatePositionPage />);
+
+    const switchButton = await screen.findByRole("button", {
+      name: "Switch to Base",
+    });
+    expect(
+      screen.queryByRole("button", { name: "Create Position" })
+    ).toBeNull();
+    expect(
+      screen.getByText("Wrong network (chain 1). Switch to Base (8453).")
+    ).not.toBeNull();
+
+    fireEvent.click(switchButton);
+    await waitFor(() =>
+      expect(switchWalletToBaseMock).toHaveBeenCalledTimes(1)
+    );
+    expect(runOpenPositionFlowMock).not.toHaveBeenCalled();
+  });
+
+  it("asks for a manual switch when the wallet cannot change chains", async () => {
+    isProgrammaticNetworkSwitchAvailableMock.mockReturnValue(false);
+    useGetActiveNetworkIdMock.mockReturnValue({
+      data: { networkId: "eip155:1" },
+    });
+    render(<CreatePositionPage />);
+
+    expect(
+      await screen.findByText(
+        "Switch the wallet to Base mainnet (8453) to continue."
+      )
+    ).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Switch to Base" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Create Position" })
+    ).toBeNull();
+  });
+
+  it("surfaces a failed network switch without losing the button", async () => {
+    switchWalletToBaseMock.mockRejectedValue(new Error("user rejected"));
+    useGetActiveNetworkIdMock.mockReturnValue({
+      data: { networkId: "eip155:1" },
+    });
+    render(<CreatePositionPage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Switch to Base" })
+    );
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "user rejected"
+    );
+    expect(
+      screen.getByRole("button", { name: "Switch to Base" })
+    ).toHaveProperty("disabled", false);
+  });
+
+  it("keeps Create Position when the wallet is already on Base", async () => {
+    render(<CreatePositionPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    expect(screen.queryByRole("button", { name: "Switch to Base" })).toBeNull();
+  });
+
+  it("points the docs note at the in-app docs page", async () => {
+    render(<CreatePositionPage />);
+
+    const docs = await screen.findByRole("link", { name: "docs" });
+    expect(docs.getAttribute("href")).toBe("/docs");
+  });
+
+  it("explains unavailable pricing without naming oracle states", async () => {
+    for (const state of [ORACLE_STATE.HELD, ORACLE_STATE.INVALID]) {
+      loadOpenSnapshotMock.mockResolvedValue({
+        stockBalance: 1_000_000_00n,
+        stockAllowance: 1_000_000_00n,
+        availableCredit: 10_000_000_000n,
+        oracleState: state,
+        estimatedPrincipal: null,
+      });
+      const { container } = render(<CreatePositionPage />);
+
+      expect(
+        await screen.findByText("Market pricing is temporarily unavailable.")
+      ).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", true);
+
+      const shown = container.textContent ?? "";
+      expect(shown).not.toMatch(/state \d/);
+      expect(shown).not.toMatch(/HELD|INVALID/);
+      cleanup();
+    }
+  });
+
+  it("says when leveraged opening comes back instead of offering a workaround", async () => {
+    loadOpenSnapshotMock.mockResolvedValue({
+      stockBalance: 1_000_000_00n,
+      stockAllowance: 1_000_000_00n,
+      availableCredit: 10_000_000_000n,
+      oracleState: ORACLE_STATE.INVALID,
+      estimatedPrincipal: null,
+    });
+    const { container } = render(<CreatePositionPage />);
+
+    expect(
+      await screen.findByText(
+        "Leveraged positions are available when fresh U.S. market pricing is live, typically Monday–Friday during regular trading hours."
+      )
+    ).not.toBeNull();
+    expect(
+      screen.getByText(
+        "Availability may vary on market holidays or during pricing interruptions."
+      )
+    ).not.toBeNull();
+
+    // The pause is the message; dropping to 1.0x is not pitched as the fix.
+    expect(container.textContent ?? "").not.toMatch(
+      /You can still open a 1\.0x position/
+    );
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("leaves leveraged opening alone while pricing is live", async () => {
+    const { container } = render(<CreatePositionPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    const shown = container.textContent ?? "";
+    expect(shown).not.toMatch(/Market pricing is temporarily unavailable\./);
+    expect(shown).not.toMatch(/typically Monday–Friday/);
+  });
+
+  it("opens a 1.0x position while pricing is unavailable", async () => {
+    loadOpenSnapshotMock.mockResolvedValue({
+      stockBalance: 1_000_000_00n,
+      stockAllowance: 1_000_000_00n,
+      availableCredit: 10_000_000_000n,
+      oracleState: ORACLE_STATE.INVALID,
+      estimatedPrincipal: null,
+    });
+    render(<CreatePositionPage />);
+
+    fireEvent.click(await screen.findByRole("radio", { name: "1.0x" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
+
+    await waitFor(() =>
+      expect(runOpenPositionFlowMock).toHaveBeenCalledWith(
+        expect.objectContaining({ targetLeverage: SPOT_LEVERAGE })
+      )
     );
   });
 

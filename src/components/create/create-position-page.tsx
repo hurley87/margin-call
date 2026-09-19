@@ -24,8 +24,9 @@ import {
 } from "@/components/wallet/wallet-providers";
 import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
 import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
+import { useSwitchToBase } from "@/lib/dynamic/use-switch-to-base";
 import { parseStockAmount } from "@/lib/protocol/amounts";
-import { DEFAULT_LEVERAGE } from "@/lib/protocol/constants";
+import { BASE_CHAIN_ID, DEFAULT_LEVERAGE } from "@/lib/protocol/constants";
 import { getAssetByName } from "@/lib/protocol/deployment";
 import { runOpenPositionFlow } from "@/lib/protocol/open-flow";
 import { createBasePublicClient } from "@/lib/protocol/public-client";
@@ -137,6 +138,9 @@ function CreatePositionForm(
     },
   });
   const chainId = parseNetworkIdToChainId(networkQuery.data?.networkId);
+  const switchToBase = useSwitchToBase(evmAccount);
+  // An unread chain is still loading, not yet wrong.
+  const offBase = chainId != null && chainId !== BASE_CHAIN_ID;
 
   const [publicClient] = useState(() => createBasePublicClient());
   const [snapshotResult, setSnapshotResult] = useState<{
@@ -259,6 +263,7 @@ function CreatePositionForm(
               : readiness.reason
       }
       readError={readError}
+      wrongNetwork={offBase ? switchToBase : null}
       onRefresh={() => void refreshSnapshot()}
       onCreate={() => void handleOpen()}
       txPhase={txPhase}

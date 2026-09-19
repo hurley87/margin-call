@@ -29,6 +29,10 @@
 .docs-page p + p {
   margin-top: 18px;
 }
+.docs-page .docs-subsection {
+  margin-top: 24px;
+  margin-bottom: 10px;
+}
 .docs-hero {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -259,22 +263,10 @@
   padding: 0 16px 16px 2px;
   font-size: 18px;
 }
-.docs-faq summary:focus-visible,
-.docs-footer a:focus-visible {
+.docs-faq summary:focus-visible {
   outline: 2px solid var(--t-focus-ring);
   outline-offset: 4px;
   border-radius: 3px;
-}
-.docs-footer {
-  border-top: 1px solid var(--t-border);
-  padding-top: 22px;
-  color: var(--t-muted);
-  font-size: 18px;
-}
-.docs-footer a {
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  color: var(--t-text);
 }
 @media (max-width: 1000px) {
   .docs-steps {
