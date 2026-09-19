@@ -266,9 +266,7 @@ describe("portfolio-first app shell", () => {
     });
     const { container } = render(<MyPositionsPage />);
     expect(
-      screen
-        .getByRole("link", { name: "Build with Margin Call" })
-        .getAttribute("href")
+      screen.getByRole("link", { name: "Use an agent" }).getAttribute("href")
     ).toBe("/docs#agents");
     expect(
       screen.getByRole("link", { name: "Open a Position" }).getAttribute("href")
@@ -314,9 +312,7 @@ describe("portfolio-first app shell", () => {
     mockDisconnectedSession();
     render(<MyPositionsPage />);
     expect(
-      screen
-        .getByRole("link", { name: "Build with Margin Call" })
-        .getAttribute("href")
+      screen.getByRole("link", { name: "Use an agent" }).getAttribute("href")
     ).toBe("/docs#agents");
     expect(
       screen.getByRole("link", { name: "Open a Position" }).getAttribute("href")
@@ -324,7 +320,7 @@ describe("portfolio-first app shell", () => {
 
     expect(
       screen.getByText(
-        "Connect your wallet to see your portfolio and start collecting puppies."
+        "Margin Call is a protocol for leveraged tokenized-stock positions on Base."
       )
     ).not.toBeNull();
     expect(screen.queryByText("Your portfolio is empty")).toBeNull();
@@ -372,9 +368,7 @@ describe("portfolio-first app shell", () => {
     render(<MyPositionsPage />);
 
     expect(
-      screen
-        .getByRole("link", { name: "Build with Margin Call" })
-        .getAttribute("href")
+      screen.getByRole("link", { name: "Use an agent" }).getAttribute("href")
     ).toBe("/docs#agents");
     expect(screen.getByText("Your portfolio is empty")).not.toBeNull();
     const cta = screen.getByRole("link", { name: "Open a Position" });
