@@ -1,11 +1,10 @@
 "use client";
 
-import { Component, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { PositionCard } from "@/components/positions/position-card";
 import { Button } from "@/components/ui/button";
-import type { PositionListItem } from "@/lib/positions/types";
-
-const PAGE_SIZE = 20;
+import { ResettableErrorBoundary } from "@/components/ui/resettable-error-boundary";
+import { PAGE_SIZE, type PositionListItem } from "@/lib/positions/types";
 
 /** Missing NEXT_PUBLIC_CONVEX_URL — index never mounted. */
 export function IndexUnavailable({ purpose }: { purpose: string }) {
@@ -19,78 +18,57 @@ export function IndexUnavailable({ purpose }: { purpose: string }) {
 }
 
 /** Runtime Convex query failure — keep chrome, offer retry. */
-export function QueryUnavailable({ onRetry }: { onRetry?: () => void }) {
+export function QueryUnavailable({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm leading-6 text-[var(--t-red)]">
         Couldn&apos;t load positions from the index. Try again in a moment.
       </p>
-      {onRetry ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-fit"
-          onClick={onRetry}
-        >
-          Retry
-        </Button>
-      ) : null}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="w-fit"
+        onClick={onRetry}
+      >
+        Retry
+      </Button>
     </div>
   );
 }
-
-type BoundaryProps = {
-  children: ReactNode;
-};
-
-type BoundaryState = {
-  error: Error | null;
-};
 
 /**
  * Catches Convex query throws so portfolio pages stay in-shell
  * instead of falling through to the global error boundary.
  */
-export class PositionQueryBoundary extends Component<
-  BoundaryProps,
-  BoundaryState
-> {
-  state: BoundaryState = { error: null };
-
-  static getDerivedStateFromError(error: Error): BoundaryState {
-    return { error };
-  }
-
-  render() {
-    if (this.state.error) {
-      return (
-        <QueryUnavailable onRetry={() => this.setState({ error: null })} />
-      );
-    }
-    return this.props.children;
-  }
+export function PositionQueryBoundary({ children }: { children: ReactNode }) {
+  return (
+    <ResettableErrorBoundary
+      fallback={(reset) => <QueryUnavailable onRetry={reset} />}
+    >
+      {children}
+    </ResettableErrorBoundary>
+  );
 }
 
 type PositionListProps = {
   results: PositionListItem[];
   status: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
   loadMore: (numItems: number) => void;
-  showOwner?: boolean;
   emptyMessage: string;
   highlightedTokenId?: string;
 };
 
-/** Shared paginated Position NFT list — identity cards only. */
+/**
+ * The portfolio's paginated Position NFT list — identity cards only.
+ *
+ * Deliberately offline: a card here shows indexed lifecycle and committed
+ * artwork, never live health. Explore pays for live metadata per card, and
+ * putting that fetch behind this component would hand the same per-card
+ * fan-out to every portfolio render.
+ */
 export function PositionList(props: PositionListProps) {
-  const {
-    results,
-    status,
-    loadMore,
-    showOwner = false,
-    emptyMessage,
-    highlightedTokenId,
-  } = props;
+  const { results, status, loadMore, emptyMessage, highlightedTokenId } = props;
 
   if (status === "LoadingFirstPage") {
     return (
@@ -113,7 +91,6 @@ export function PositionList(props: PositionListProps) {
           <li key={position.tokenId}>
             <PositionCard
               position={position}
-              showOwner={showOwner}
               highlighted={position.tokenId === highlightedTokenId}
             />
           </li>
@@ -134,5 +111,3 @@ export function PositionList(props: PositionListProps) {
     </div>
   );
 }
-
-export { PAGE_SIZE };

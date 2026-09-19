@@ -127,11 +127,13 @@ vi.mock("@/lib/protocol/public-client", () => ({
   createBasePublicClient: () => ({}),
 }));
 
+const fetchMock = vi.hoisted(() => vi.fn());
+vi.stubGlobal("fetch", fetchMock);
+
 vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
   useSyncPositionTransaction: () => vi.fn().mockResolvedValue("skipped"),
 }));
 
-import { AllPositionsPage } from "@/components/positions/all-positions-page";
 import { MyPositionsPage } from "@/components/positions/my-positions-page";
 import { PositionDetailPage } from "@/components/positions/position-detail-page";
 import { AppShell } from "@/components/shell/app-shell";
@@ -165,6 +167,12 @@ describe("portfolio-first app shell", () => {
     });
     useQueryMock.mockReturnValue(undefined);
     vi.mocked(loadPosition).mockClear();
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => ({}),
+    });
   });
 
   afterEach(() => {
@@ -204,17 +212,26 @@ describe("portfolio-first app shell", () => {
     const { container, rerender } = render(<AppShell>page</AppShell>);
     expect(
       screen.getByRole("link", { name: "Docs" }).getAttribute("href")
-    ).toBe("https://margin-call.gitbook.io/product-docs");
+    ).toBe("/docs");
     expect(
       screen
         .getByRole("link", { name: "Portfolio" })
         .getAttribute("aria-current")
     ).toBe("page");
-    for (const path of ["/", "/create", "/positions", "/position/42"]) {
+    for (const path of [
+      "/",
+      "/create",
+      "/positions",
+      "/position/42",
+      "/docs",
+    ]) {
       usePathnameMock.mockReturnValue(path);
       rerender(<AppShell>page</AppShell>);
       expect(container.querySelector(".playful-theme")).not.toBeNull();
       expect(screen.getByRole("main").className).toBe("playful-main");
+      expect(
+        screen.getByRole("link", { name: "Docs" }).getAttribute("aria-current")
+      ).toBe(path === "/docs" ? "page" : null);
     }
   });
 
@@ -246,7 +263,9 @@ describe("portfolio-first app shell", () => {
       status: "CanLoadMore",
       loadMore,
     });
-    render(<MyPositionsPage />);
+    const { container } = render(<MyPositionsPage />);
+    expect(container.querySelector(".position-card")).not.toBeNull();
+    expect(container.querySelector(".explore-grid")).toBeNull();
     expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({
       owner: CONNECTED_ADDRESS,
       status: "active",
@@ -379,9 +398,11 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
 
-    // Card artwork must stay lifecycle-driven: live health here would cost one
-    // Base read per card, which is exactly what this page refuses to do.
+    // Card artwork must stay lifecycle-driven. Explore pays for live health
+    // per card; the portfolio makes neither the Base read nor the metadata
+    // fetch behind it, however many positions a wallet holds.
     expect(loadPosition).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
     // Thumbnails are decorative (the ticker and status are already text), so
     // they are queried from the DOM rather than the accessibility tree.
     const thumbnails = Array.from(document.querySelectorAll("img")).map((img) =>
@@ -391,80 +412,6 @@ describe("portfolio-first app shell", () => {
       expect.stringContaining("/logos/nvda.png"),
       expect.stringContaining("/logos/aapl.png"),
     ]);
-  });
-
-  it("filters All Positions by lifecycle without live RPC fields", () => {
-    usePaginatedQueryMock.mockReturnValue({
-      results: [
-        {
-          tokenId: "9",
-          assetId: 1,
-          owner: "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd",
-          status: "closed",
-        },
-      ],
-      status: "Exhausted",
-      loadMore: vi.fn(),
-    });
-
-    render(<AllPositionsPage />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Closed" }));
-
-    expect(usePaginatedQueryMock).toHaveBeenCalled();
-    const lastCall = usePaginatedQueryMock.mock.calls.at(-1);
-    expect(lastCall?.[1]).toEqual({ status: "closed" });
-
-    expect(screen.getByText("Token #9")).not.toBeNull();
-    expect(screen.getByText(/Owner/)).not.toBeNull();
-    expect(screen.queryByText(/NAV/i)).toBeNull();
-    expect(screen.queryByText(/debt/i)).toBeNull();
-    expect(loadPosition).not.toHaveBeenCalled();
-  });
-
-  it("requires a status before asset chips can be selected", () => {
-    usePaginatedQueryMock.mockReturnValue({
-      results: [],
-      status: "Exhausted",
-      loadMore: vi.fn(),
-    });
-
-    render(<AllPositionsPage />);
-
-    const nvda = screen.getByRole("button", { name: "NVDAc" });
-    expect(nvda).toHaveProperty("disabled", true);
-    expect(
-      screen.getByText("Choose a status to filter by asset.")
-    ).not.toBeNull();
-
-    fireEvent.click(nvda);
-    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({});
-
-    fireEvent.click(screen.getByRole("button", { name: "Active" }));
-    fireEvent.click(screen.getByRole("button", { name: "NVDAc" }));
-
-    const lastCall = usePaginatedQueryMock.mock.calls.at(-1);
-    expect(lastCall?.[1]).toEqual({ status: "active", assetId: 1 });
-    expect(
-      screen.queryByText("Choose a status to filter by asset.")
-    ).toBeNull();
-  });
-
-  it("keeps the list in-shell when a Convex query throws", () => {
-    usePaginatedQueryMock.mockImplementation(() => {
-      throw new Error("Convex query failed");
-    });
-
-    render(<AllPositionsPage />);
-
-    expect(
-      screen.getByText(/Couldn't load positions from the index/)
-    ).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
-    expect(
-      screen.getByRole("heading", { name: "All Positions" })
-    ).not.toBeNull();
-    expect(screen.queryByText(/circuit breaker/i)).toBeNull();
   });
 
   it("create page has Open without repay, close, or Approve", () => {

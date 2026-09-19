@@ -28,6 +28,13 @@ under `retiredCoordinator` in that manifest for provenance — never point the f
 
 `GET /api/nft/[tokenId]` makes five Base reads per request, which the public RPC rate-limits.
 Production needs the server-only `BASE_RPC_URL` set, or the route returns 502 under load.
+Explore (`/positions`) shows live health by fetching that same payload
+(`src/components/positions/explore-gallery.tsx`); the portfolio list stays Convex
+identity/lifecycle with neutral ticker logos and makes neither read. Explore multiplies
+those five reads by the live positions on screen. `buildNftMetadata` swaps in the healthy
+dog so marketplaces do not cache the ticker through a halt; Explore unwraps that same
+`metadata.image` instead of recomputing artwork from Stage. `faceFromStage` keeps unpriced
+positions on the ticker logo on surfaces that do not read metadata (detail, portfolio).
 
 ## Commands
 

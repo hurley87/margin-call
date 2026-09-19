@@ -6,12 +6,12 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { PlayfulIcon } from "@/components/ui/playful-icon";
 import { WalletConnectControl } from "@/components/wallet/wallet-connect-control";
-import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
 
 const NAV_ITEMS = [
   { href: "/", label: "Portfolio" },
   { href: "/positions", label: "Explore" },
   { href: "/create", label: "Create" },
+  { href: "/docs", label: "Docs" },
 ] as const;
 
 /** The one product shell: light theme and shared header on every route. */
@@ -46,7 +46,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
               </Link>
             ))}
-            <a href={PRODUCT_DOCS_URL}>Docs</a>
           </nav>
           <div className="playful-wallet">
             <WalletConnectControl />

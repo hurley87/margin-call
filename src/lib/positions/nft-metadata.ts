@@ -4,7 +4,9 @@ import {
   faceFromStage,
   resolvePositionStage,
   stockSymbol,
+  type ArtworkFace,
   type PositionRiskInput,
+  type PositionStage,
 } from "@/lib/positions/artwork";
 
 /**
@@ -36,6 +38,18 @@ export type NftMetadataInput = PositionRiskInput & {
 };
 
 /**
+ * Artwork a marketplace should cache for a stage.
+ *
+ * Only place that departs from `faceFromStage`: an unpriced position would
+ * otherwise publish the ticker logo, and marketplaces cache that image for far
+ * longer than the weekend or halt that produced it. The Stage trait still
+ * reports `Pricing unavailable`, so the metadata stays honest either way.
+ */
+function marketplaceFace(stage: PositionStage): ArtworkFace {
+  return stage === "pricing_unavailable" ? "healthy" : faceFromStage(stage);
+}
+
+/**
  * Standard ERC-721 metadata for a live Position NFT.
  *
  * Attributes stay deliberately coarse. Debt and NAV move every block, and
@@ -49,7 +63,7 @@ export function buildNftMetadata(input: NftMetadataInput): NftMetadata {
   const { tokenId, assetId, thesis } = input;
 
   const stage = resolvePositionStage(input);
-  const imagePath = artworkPath(assetId, faceFromStage(stage));
+  const imagePath = artworkPath(assetId, marketplaceFace(stage));
   const symbol = stockSymbol(assetId);
   if (imagePath === null || symbol === null) {
     throw new Error(`No curated launch asset for assetId ${assetId}`);
@@ -66,4 +80,101 @@ export function buildNftMetadata(input: NftMetadataInput): NftMetadata {
       { trait_type: "Status", value: "Active" },
     ],
   };
+}
+
+function isAttribute(value: unknown): value is NftAttribute {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "trait_type" in value &&
+    "value" in value &&
+    typeof value.trait_type === "string" &&
+    typeof value.value === "string"
+  );
+}
+
+/**
+ * Committed public PNG on the contract origin: `/nvda/healthy.png`,
+ * `/logos/nvda.png`. Anything else is not a file this app ships.
+ */
+const LOCAL_ARTWORK_PATH = /^\/[a-z0-9-]+\/[a-z0-9-]+\.png$/;
+
+/**
+ * Parse an image URL only if it is a committed public PNG on `METADATA_ORIGIN`.
+ *
+ * Origin is compared after `URL` parsing — a prefix check would accept a
+ * lookalike host. Search, hash, and credentials are rejected so Explore never
+ * unwraps a URL that is not the exact file marketplaces cache.
+ */
+function parsedMetadataImage(image: string): URL | null {
+  try {
+    const url = new URL(image);
+    if (url.origin !== METADATA_ORIGIN) return null;
+    if (url.username !== "" || url.password !== "") return null;
+    if (url.search !== "" || url.hash !== "") return null;
+    if (!LOCAL_ARTWORK_PATH.test(url.pathname)) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Local public path for a validated metadata image, or null if it is not a
+ * committed file on the contract origin.
+ *
+ * Explore renders this instead of recomputing artwork from the Stage trait, so
+ * an unpriced token shows the healthy dog the metadata route actually published.
+ */
+export function localArtworkPathFromMetadata(
+  metadata: NftMetadata
+): string | null {
+  return parsedMetadataImage(metadata.image)?.pathname ?? null;
+}
+
+/**
+ * Accepts the JSON `GET /api/nft/[tokenId]` actually serves.
+ *
+ * Image URLs must stay on the contract origin so Explore can unwrap them
+ * to the same committed files marketplaces cache.
+ */
+export function parseNftMetadata(value: unknown): NftMetadata | null {
+  if (typeof value !== "object" || value === null) return null;
+  if (
+    !("name" in value) ||
+    !("description" in value) ||
+    !("image" in value) ||
+    !("attributes" in value)
+  ) {
+    return null;
+  }
+  const { name, description, image, attributes } = value;
+  if (typeof name !== "string" || name.length === 0) return null;
+  if (typeof description !== "string") return null;
+  if (typeof image !== "string" || parsedMetadataImage(image) === null) {
+    return null;
+  }
+  if (!Array.isArray(attributes) || !attributes.every(isAttribute)) {
+    return null;
+  }
+  return { name, description, image, attributes };
+}
+
+/** Live health from the Stage trait, or null when the payload cannot name one. */
+export function stageFromMetadata(metadata: NftMetadata): PositionStage | null {
+  const label = metadata.attributes.find(
+    (attribute) => attribute.trait_type === "Stage"
+  )?.value;
+  switch (label) {
+    case STAGE_LABEL.healthy:
+      return "healthy";
+    case STAGE_LABEL.warning:
+      return "warning";
+    case STAGE_LABEL.danger:
+      return "danger";
+    case STAGE_LABEL.pricing_unavailable:
+      return "pricing_unavailable";
+    default:
+      return null;
+  }
 }

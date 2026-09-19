@@ -1,15 +1,12 @@
 import Link from "next/link";
 import { PositionArtwork } from "@/components/positions/position-artwork";
 import { artworkPath, faceFromStatus } from "@/lib/positions/artwork";
-import type { PositionListItem } from "@/lib/positions/types";
-import { STATUS_LABEL } from "@/lib/positions/types";
+import { STATUS_LABEL, type PositionListItem } from "@/lib/positions/types";
 import { assetLabel } from "@/lib/protocol/deployment";
-import { cn, formatShortAddress } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 
 export type PositionCardProps = {
   position: PositionListItem;
-  /** When true, show truncated owner (All Positions). */
-  showOwner?: boolean;
   /** Temporary post-open accent from `?opened=` — UX hint only. */
   highlighted?: boolean;
 };
@@ -18,12 +15,12 @@ export type PositionCardProps = {
  * Browseable Position NFT row — identity only, no live financial state.
  *
  * The thumbnail is deliberately lifecycle-driven: rendering live health here
- * would mean one Base read per card. Live stage artwork lives on the detail
- * page, which already reads canonical state.
+ * would mean one metadata read per card. Live stage artwork lives on the
+ * detail page and on Explore, which each pay for that read on purpose.
  */
 export function PositionCard(props: PositionCardProps) {
-  const { position, showOwner = false, highlighted = false } = props;
-  const { tokenId, assetId, status, owner } = position;
+  const { position, highlighted = false } = props;
+  const { tokenId, assetId, status } = position;
 
   return (
     <Link
@@ -50,11 +47,6 @@ export function PositionCard(props: PositionCardProps) {
           <p className="truncate text-xs text-[var(--t-muted)]">
             Token #{tokenId}
           </p>
-          {showOwner ? (
-            <p className="text-xs text-[var(--t-muted)]">
-              Owner {formatShortAddress(owner)}
-            </p>
-          ) : null}
         </div>
         <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--t-muted)]">
           {STATUS_LABEL[status]}

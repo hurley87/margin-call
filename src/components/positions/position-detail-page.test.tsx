@@ -338,6 +338,9 @@ describe("PositionDetailPage", () => {
       expect(screen.getByText("Pricing unavailable")).not.toBeNull();
     });
 
+    // The detail page names the stage in copy, so the art stays honest here —
+    // only cached marketplace metadata trades the logo for the healthy dog.
+    expect(artworkSrc(/Pricing unavailable$/)).toContain("/logos/meta.png");
     expect(screen.queryByText("Liquidatable")).toBeNull();
     expect(screen.queryByText("1.25x")).toBeNull();
   });

@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   FALLBACK_DESCRIPTION,
   buildNftMetadata,
+  localArtworkPathFromMetadata,
+  parseNftMetadata,
+  stageFromMetadata,
   type NftMetadataInput,
 } from "@/lib/positions/nft-metadata";
 
@@ -63,12 +66,12 @@ describe("buildNftMetadata", () => {
     });
   });
 
-  it("reports pricing unavailable with neutral art instead of guessing health", () => {
+  it("keeps the Stage trait honest and shows the healthy dog while unpriced", () => {
     const metadata = buildNftMetadata(
       input({ currentDebt: 250_000n, nav: null, liquidatable: null })
     );
 
-    expect(metadata.image).toBe("https://margincall.fun/logos/nvda.png");
+    expect(metadata.image).toBe("https://margincall.fun/nvda/healthy.png");
     expect(metadata.attributes).toContainEqual({
       trait_type: "Stage",
       value: "Pricing unavailable",
@@ -89,5 +92,93 @@ describe("buildNftMetadata", () => {
     ).attributes.map((attribute) => attribute.trait_type);
 
     expect(traits).toEqual(["Stock", "Stage", "Status"]);
+  });
+});
+
+describe("parseNftMetadata", () => {
+  const live = buildNftMetadata(input());
+
+  it("accepts the JSON the metadata route serves", () => {
+    expect(parseNftMetadata(live)).toEqual(live);
+    expect(stageFromMetadata(live)).toBe("healthy");
+  });
+
+  it("maps every stage label the route publishes", () => {
+    expect(
+      stageFromMetadata(
+        buildNftMetadata(
+          input({ currentDebt: 550_000n, nav: 1_000_000n, liquidatable: false })
+        )
+      )
+    ).toBe("warning");
+    expect(
+      stageFromMetadata(
+        buildNftMetadata(
+          input({ currentDebt: 700_000n, nav: 1_000_000n, liquidatable: false })
+        )
+      )
+    ).toBe("danger");
+  });
+
+  it("rejects a payload marketplaces would not render", () => {
+    expect(parseNftMetadata(null)).toBeNull();
+    expect(parseNftMetadata({ ...live, name: "" })).toBeNull();
+    expect(
+      parseNftMetadata({ ...live, image: "https://example.com/nvda.png" })
+    ).toBeNull();
+    expect(
+      parseNftMetadata({
+        ...live,
+        image: "https://margincall.fun.evil.com/nvda/healthy.png",
+      })
+    ).toBeNull();
+    expect(
+      parseNftMetadata({
+        ...live,
+        image: "https://margincall.fun/nvda/healthy.png?cache=1",
+      })
+    ).toBeNull();
+    expect(stageFromMetadata({ ...live, attributes: [] })).toBeNull();
+  });
+});
+
+describe("localArtworkPathFromMetadata", () => {
+  it("unwraps a contract-origin image to the committed public path", () => {
+    expect(localArtworkPathFromMetadata(buildNftMetadata(input()))).toBe(
+      "/nvda/healthy.png"
+    );
+    expect(
+      localArtworkPathFromMetadata(
+        buildNftMetadata(
+          input({
+            currentDebt: 250_000n,
+            nav: null,
+            liquidatable: null,
+          })
+        )
+      )
+    ).toBe("/nvda/healthy.png");
+  });
+
+  it("rejects a URL that is not a committed PNG on the contract origin", () => {
+    const live = buildNftMetadata(input());
+    expect(
+      localArtworkPathFromMetadata({
+        ...live,
+        image: "https://example.com/nvda/healthy.png",
+      })
+    ).toBeNull();
+    expect(
+      localArtworkPathFromMetadata({
+        ...live,
+        image: "https://margincall.fun/nvda/healthy.png?cache=1",
+      })
+    ).toBeNull();
+    expect(
+      localArtworkPathFromMetadata({
+        ...live,
+        image: "not-a-url",
+      })
+    ).toBeNull();
   });
 });
