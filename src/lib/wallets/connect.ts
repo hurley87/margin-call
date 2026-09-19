@@ -3,7 +3,7 @@ import {
   type WalletMetadata,
 } from "@dynamic-labs-wallet/node";
 import { DynamicEvmWalletClient } from "@dynamic-labs-wallet/node-evm";
-import type { TransactionSerializable } from "viem";
+import type { TransactionSerializable, TypedData } from "viem";
 import type { DynamicServerWalletEnv } from "@/lib/wallets/config";
 import type { DynamicServerWalletApi } from "@/lib/wallets/dynamic-server";
 import type { DynamicWalletMetadata } from "@/lib/wallets/metadata-store";
@@ -71,6 +71,21 @@ export async function connectDynamicServerWallet(
           walletMetadata: walletMetadata as WalletMetadata,
           password,
           transaction: transaction as TransactionSerializable,
+        });
+      } catch (error) {
+        failClosed(
+          "Dynamic could not recover signing capability from persisted metadata and the backup password. Confirm DYNAMIC_API_TOKEN, DYNAMIC_WALLET_PASSWORD, and .dynamic-agent-wallet.json.",
+          error,
+          secrets
+        );
+      }
+    },
+    async signTypedData({ walletMetadata, password, typedData }) {
+      try {
+        return await sdk.signTypedData({
+          walletMetadata: walletMetadata as WalletMetadata,
+          typedData: typedData as TypedData,
+          password,
         });
       } catch (error) {
         failClosed(

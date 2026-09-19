@@ -1,6 +1,16 @@
 import { USDC_DECIMALS } from "@/lib/protocol/constants";
 import { baseDeployment } from "@/lib/protocol/deployment";
+import {
+  createUniswapTradingApi,
+  readUniswapApiKey,
+  type UniswapTradingApi,
+} from "@/lib/uniswap/trading-api";
 import type { TransactionReceiptSummary } from "@/lib/wallets/adapter";
+import {
+  acquireSupportedStock,
+  parseAcquireCliArgs,
+  type AcquireStockResult,
+} from "@/lib/wallets/acquire-stock";
 import {
   readWalletBalances,
   type BalanceClient,
@@ -27,7 +37,11 @@ export type AgentWalletDemoDeps = {
   argv: readonly string[];
   connect: (env: DynamicServerWalletEnv) => Promise<DynamicServerWalletApi>;
   createPublicClient: (rpcUrl: string) => DemoPublicClient;
+  createTradingApi?: (apiKey: string) => UniswapTradingApi;
 };
+
+const SKIP_UNISWAP_NOTE =
+  "Stock acquisition is not a Margin Call protocol step. An agent whose wallet already swaps (for example Bankr) should skip Uniswap, read the stock address from get_assets, and continue once that wallet holds the token.";
 
 function formatDemoReport(args: {
   provisioned: ProvisionedDynamicWallet;
@@ -55,9 +69,33 @@ function formatPing(receipt: TransactionReceiptSummary): string[] {
   ];
 }
 
+function formatAcquire(result: AcquireStockResult): string[] {
+  if (!result.ok) {
+    return [
+      "",
+      `Acquire   failed (${result.code})`,
+      result.message,
+      "",
+      SKIP_UNISWAP_NOTE,
+    ];
+  }
+  return [
+    "",
+    `Acquire   USDC -> ${result.asset} via Uniswap (reference)`,
+    `Spent     ${result.usdcAmountFormatted} USDC`,
+    `Received  ${result.stockReceivedFormatted} ${result.asset}`,
+    ...result.transactionHashes.map(
+      (hash, index) => `Tx ${index + 1}     ${hash}`
+    ),
+    "Verified  onchain stock balance increased",
+    "",
+    SKIP_UNISWAP_NOTE,
+  ];
+}
+
 /**
  * Walletless-agent demo: provision or resolve a Dynamic server wallet, print
- * Base balances, optionally sign and broadcast a 0 ETH self-transfer.
+ * Base balances, optionally ping or acquire a supported stock via Uniswap.
  */
 export async function runAgentWalletDemo(
   deps: AgentWalletDemoDeps
@@ -85,6 +123,11 @@ export async function runAgentWalletDemo(
     },
   ]);
   const lines = formatDemoReport({ provisioned, balances });
+  const secrets = [
+    deps.env.DYNAMIC_API_TOKEN,
+    deps.env.DYNAMIC_WALLET_PASSWORD,
+    deps.env.UNISWAP_API_KEY,
+  ];
 
   if (deps.argv.includes("--ping")) {
     if (balances.ethRaw === 0n) {
@@ -107,9 +150,40 @@ export async function runAgentWalletDemo(
     } catch (error) {
       const message = redactSecrets(
         error instanceof Error ? error.message : String(error),
-        [deps.env.DYNAMIC_API_TOKEN, deps.env.DYNAMIC_WALLET_PASSWORD]
+        secrets
       );
       lines.push("", message);
+      return { lines, exitCode: 1 };
+    }
+  }
+
+  const acquire = parseAcquireCliArgs(deps.argv);
+  if (acquire.requested) {
+    if (acquire.error) {
+      lines.push("", acquire.error, "", SKIP_UNISWAP_NOTE);
+      return { lines, exitCode: 1 };
+    }
+    try {
+      const apiKey = readUniswapApiKey(deps.env);
+      const trading = (
+        deps.createTradingApi ??
+        ((key: string) => createUniswapTradingApi({ apiKey: key }))
+      )(apiKey);
+      const result = await acquireSupportedStock({
+        wallet,
+        balances: publicClient,
+        trading,
+        asset: acquire.asset,
+        usdcAmount: acquire.usdcAmount,
+      });
+      lines.push(...formatAcquire(result));
+      return { lines, exitCode: result.ok ? 0 : 1 };
+    } catch (error) {
+      const message = redactSecrets(
+        error instanceof Error ? error.message : String(error),
+        secrets
+      );
+      lines.push("", message, "", SKIP_UNISWAP_NOTE);
       return { lines, exitCode: 1 };
     }
   }

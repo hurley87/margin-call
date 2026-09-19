@@ -8,7 +8,9 @@
 export type {
   AgentWallet,
   TransactionReceiptSummary,
+  TypedDataAgentWallet,
   UnsignedTransaction,
+  WalletTypedData,
 } from "@/lib/wallets/adapter";
 
 export {
@@ -37,3 +39,9 @@ export {
   readDynamicServerWalletEnv,
   type DynamicServerWalletEnv,
 } from "@/lib/wallets/config";
+
+export {
+  acquireSupportedStock,
+  permitDataToTypedData,
+  type AcquireStockResult,
+} from "@/lib/wallets/acquire-stock";

@@ -22,7 +22,11 @@ async function main(): Promise<void> {
 main().catch((error: unknown) => {
   const message = redactSecrets(
     error instanceof Error ? error.message : String(error),
-    [process.env.DYNAMIC_API_TOKEN, process.env.DYNAMIC_WALLET_PASSWORD]
+    [
+      process.env.DYNAMIC_API_TOKEN,
+      process.env.DYNAMIC_WALLET_PASSWORD,
+      process.env.UNISWAP_API_KEY,
+    ]
   );
   console.error(message);
   process.exitCode = 1;
