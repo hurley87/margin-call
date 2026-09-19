@@ -137,16 +137,103 @@ const marginCallFunctions = [
     inputs: [{ name: "tokenId", type: "uint256" }],
     outputs: [{ name: "", type: "string" }],
   },
+  {
+    type: "function",
+    name: "assetConfig",
+    stateMutability: "view",
+    inputs: [{ name: "assetId", type: "uint256" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "stock", type: "address" },
+          { name: "oracle", type: "address" },
+          { name: "execution", type: "address" },
+          { name: "openingEnabled", type: "bool" },
+        ],
+      },
+    ],
+  },
 ] as const;
 
 /** OpenZeppelin IERC721Errors — lets viem name the revert when a token is burned. */
 export const ERC721_NONEXISTENT_TOKEN = "ERC721NonexistentToken";
 
+/**
+ * Custom errors, so a simulated or failed call arrives named instead of as raw
+ * data. `InsufficientCredit` is declared by `CreditPool` but bubbles through
+ * `MarginCall`, so the caller decodes it from this ABI too.
+ */
 const marginCallErrors = [
   {
     type: "error",
     name: ERC721_NONEXISTENT_TOKEN,
     inputs: [{ name: "tokenId", type: "uint256" }],
+  },
+  { type: "error", name: "ZeroStockAmount", inputs: [] },
+  {
+    type: "error",
+    name: "ExcessStockAmount",
+    inputs: [
+      { name: "requested", type: "uint256" },
+      { name: "available", type: "uint256" },
+    ],
+  },
+  {
+    type: "error",
+    name: "UnsupportedLeverage",
+    inputs: [{ name: "targetLeverage", type: "uint256" }],
+  },
+  {
+    type: "error",
+    name: "InvalidMinStockOut",
+    inputs: [{ name: "minStockOut", type: "uint256" }],
+  },
+  {
+    type: "error",
+    name: "OracleNotLive",
+    inputs: [{ name: "state", type: "uint8" }],
+  },
+  {
+    type: "error",
+    name: "ContributionTooSmall",
+    inputs: [{ name: "contributionValue", type: "uint256" }],
+  },
+  {
+    type: "error",
+    name: "UnknownAsset",
+    inputs: [{ name: "assetId", type: "uint256" }],
+  },
+  {
+    type: "error",
+    name: "AssetOpeningDisabled",
+    inputs: [{ name: "assetId", type: "uint256" }],
+  },
+  {
+    type: "error",
+    name: "LeverageExceeded",
+    inputs: [
+      { name: "targetLeverage", type: "uint256" },
+      { name: "nav", type: "uint256" },
+      { name: "debt", type: "uint256" },
+    ],
+  },
+  {
+    type: "error",
+    name: "ThesisTooLong",
+    inputs: [
+      { name: "length", type: "uint256" },
+      { name: "maxLength", type: "uint256" },
+    ],
+  },
+  {
+    type: "error",
+    name: "InsufficientCredit",
+    inputs: [
+      { name: "requested", type: "uint256" },
+      { name: "available", type: "uint256" },
+    ],
   },
 ] as const;
 

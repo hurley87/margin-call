@@ -52,6 +52,14 @@ export function isSupportedOpeningLeverage(targetLeverage: number): boolean {
   );
 }
 
+/** Display label for a supported preset, or null for an unsupported value. */
+export function leverageLabel(targetLeverage: number): string | null {
+  return (
+    OPENING_LEVERAGE_PRESETS.find((preset) => preset.bps === targetLeverage)
+      ?.label ?? null
+  );
+}
+
 export function isFinancedLeverage(targetLeverage: number): boolean {
   return (
     isSupportedOpeningLeverage(targetLeverage) &&
