@@ -17,7 +17,7 @@ const FEATURES = [
   {
     icon: "shield",
     title: "Stay in control",
-    description: "Repay or close anytime from your position page.",
+    description: "Repay and manage your position anytime.",
   },
   {
     icon: "heart",
