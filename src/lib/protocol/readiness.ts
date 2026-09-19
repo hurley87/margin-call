@@ -13,7 +13,17 @@ export type WriteGate = { ok: true } | { ok: false; reason: string };
  * detail, so HELD and INVALID read the same to the person opening a position.
  */
 export const PRICING_UNAVAILABLE_REASON =
-  "Market pricing is temporarily unavailable. Leveraged positions can be opened when fresh pricing returns.";
+  "Market pricing is temporarily unavailable.";
+
+/**
+ * Explains the pause above. Pricing follows the U.S. equity market rather than
+ * a schedule Margin Call sets, so this says "typically" instead of fixed hours.
+ */
+export const PRICING_AVAILABILITY_NOTE =
+  "Leveraged positions are available when fresh U.S. market pricing is live, typically Monday–Friday during regular trading hours.";
+
+export const PRICING_AVAILABILITY_CAVEAT =
+  "Availability may vary on market holidays or during pricing interruptions.";
 
 /** Writes are only allowed on Base mainnet. */
 export function assertBaseChain(chainId: number | null | undefined): WriteGate {

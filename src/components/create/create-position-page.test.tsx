@@ -474,9 +474,7 @@ describe("CreatePositionPage", () => {
       const { container } = render(<CreatePositionPage />);
 
       expect(
-        await screen.findByText(
-          "Market pricing is temporarily unavailable. Leveraged positions can be opened when fresh pricing returns."
-        )
+        await screen.findByText("Market pricing is temporarily unavailable.")
       ).not.toBeNull();
       expect(
         screen.getByRole("button", { name: "Create Position" })
@@ -489,7 +487,7 @@ describe("CreatePositionPage", () => {
     }
   });
 
-  it("points at 1.0x as the open that needs no pricing", async () => {
+  it("says when leveraged opening comes back instead of offering a workaround", async () => {
     loadOpenSnapshotMock.mockResolvedValue({
       stockBalance: 1_000_000_00n,
       stockAllowance: 1_000_000_00n,
@@ -497,29 +495,39 @@ describe("CreatePositionPage", () => {
       oracleState: ORACLE_STATE.INVALID,
       estimatedPrincipal: null,
     });
-    render(<CreatePositionPage />);
+    const { container } = render(<CreatePositionPage />);
 
     expect(
       await screen.findByText(
-        "You can still open a 1.0x position, which does not require live pricing."
+        "Leveraged positions are available when fresh U.S. market pricing is live, typically Monday–Friday during regular trading hours."
+      )
+    ).not.toBeNull();
+    expect(
+      screen.getByText(
+        "Availability may vary on market holidays or during pricing interruptions."
       )
     ).not.toBeNull();
 
-    const spot = screen.getByRole("radio", { name: "1.0x" });
-    expect(spot).toHaveProperty("disabled", false);
+    // The pause is the message; dropping to 1.0x is not pitched as the fix.
+    expect(container.textContent ?? "").not.toMatch(
+      /You can still open a 1\.0x position/
+    );
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
+  });
 
-    // Selecting 1.0x clears the block without waiting for pricing to return.
-    fireEvent.click(spot);
+  it("leaves leveraged opening alone while pricing is live", async () => {
+    const { container } = render(<CreatePositionPage />);
+
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Create Position" })
       ).toHaveProperty("disabled", false)
     );
-    expect(
-      screen.queryByText(
-        "Market pricing is temporarily unavailable. Leveraged positions can be opened when fresh pricing returns."
-      )
-    ).toBeNull();
+    const shown = container.textContent ?? "";
+    expect(shown).not.toMatch(/Market pricing is temporarily unavailable\./);
+    expect(shown).not.toMatch(/typically Monday–Friday/);
   });
 
   it("opens a 1.0x position while pricing is unavailable", async () => {

@@ -77,6 +77,11 @@ const faqs = [
       "Chainlink total-return price feeds value the stock for position health and solvency. Actual purchases and sales execute through Uniswap V3, where execution prices can differ from the oracle price. Actions that need pricing require a valid, live feed.",
   },
   {
+    question: "Why can’t I open a leveraged position right now?",
+    answer:
+      "Margin Call requires fresh U.S. market pricing before creating new leveraged debt. Fresh pricing is typically available during regular U.S. trading hours, Monday–Friday, excluding market holidays. If pricing is stale or unavailable, new leveraged positions are temporarily paused.",
+  },
+  {
     question: "Can I sell my position NFT?",
     answer:
       "The NFT is transferable using standard ERC-721 transfers. Control of the existing position passes to the new owner, with the stock and debt unchanged. Margin Call does not currently provide listings, bids, or purchase settlement, and does not guarantee a secondary market.",
@@ -183,6 +188,27 @@ export default function DocsPage() {
             Chainlink total-return price feeds value your tokenized stocks and
             determine position health. Stock purchases and sales execute through
             Uniswap V3.
+          </p>
+          <h3 className="docs-subsection">Market pricing availability</h3>
+          <p>
+            Margin Call uses fresh U.S. equity pricing to value collateral,
+            calculate leverage, and enforce liquidation rules.
+          </p>
+          <p>
+            New leveraged positions can only be opened while fresh market
+            pricing is available. This is typically during regular U.S. trading
+            hours, Monday–Friday, excluding market holidays.
+          </p>
+          <p>
+            When fresh pricing is unavailable — for example overnight, on
+            weekends, during market holidays, or during a pricing interruption —
+            Margin Call pauses new leveraged positions rather than relying on
+            stale prices.
+          </p>
+          <p>
+            Existing positions remain onchain. Debt continues to accrue
+            normally, but actions that require live pricing remain subject to
+            the protocol’s oracle safety checks.
           </p>
           <div className="docs-chainlink">
             <span className="docs-chainlink-mark" aria-hidden="true" />

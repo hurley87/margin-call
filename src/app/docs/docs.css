@@ -29,6 +29,10 @@
 .docs-page p + p {
   margin-top: 18px;
 }
+.docs-page .docs-subsection {
+  margin-top: 24px;
+  margin-bottom: 10px;
+}
 .docs-hero {
   display: grid;
   grid-template-columns: 1fr 1fr;

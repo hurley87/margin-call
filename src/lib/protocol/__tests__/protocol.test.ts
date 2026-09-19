@@ -25,6 +25,8 @@ import {
   assertBaseChain,
   closeReadiness,
   openReadiness,
+  PRICING_AVAILABILITY_CAVEAT,
+  PRICING_AVAILABILITY_NOTE,
   PRICING_UNAVAILABLE_REASON,
   repayReadiness,
 } from "@/lib/protocol/readiness";
@@ -261,13 +263,26 @@ describe("openReadiness", () => {
     }
   });
 
-  it("keeps the pricing message free of raw oracle states", () => {
+  it("keeps the pricing copy free of raw oracle states", () => {
     expect(PRICING_UNAVAILABLE_REASON).toBe(
-      "Market pricing is temporarily unavailable. Leveraged positions can be opened when fresh pricing returns."
+      "Market pricing is temporarily unavailable."
     );
-    expect(PRICING_UNAVAILABLE_REASON).not.toMatch(
-      /state \d|LIVE|HELD|INVALID|oracle/i
-    );
+    for (const copy of [
+      PRICING_UNAVAILABLE_REASON,
+      PRICING_AVAILABILITY_NOTE,
+      PRICING_AVAILABILITY_CAVEAT,
+    ]) {
+      // "live" as ordinary English is fine; the enum names are not.
+      expect(copy).not.toMatch(/state \d|\bLIVE\b|\bHELD\b|\bINVALID\b/);
+      expect(copy).not.toMatch(/oracle/i);
+    }
+  });
+
+  it("describes pricing hours as typical rather than guaranteed", () => {
+    expect(PRICING_AVAILABILITY_NOTE).toContain("typically");
+    // Exact hours are the market's to set, not a promise Margin Call can keep.
+    expect(PRICING_AVAILABILITY_NOTE).not.toMatch(/\d{1,2}:\d{2}|\bET\b/);
+    expect(PRICING_AVAILABILITY_CAVEAT).toContain("market holidays");
   });
 
   it("requires credit for financed opens once pricing is live", () => {

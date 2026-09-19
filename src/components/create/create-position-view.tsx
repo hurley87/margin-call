@@ -34,7 +34,6 @@ import {
   OPENING_LEVERAGE_PRESETS,
   isFinancedLeverage,
   ORACLE_STATE,
-  SPOT_LEVERAGE,
   type OracleState,
 } from "@/lib/protocol/constants";
 import {
@@ -43,6 +42,10 @@ import {
   type LaunchAssetName,
 } from "@/lib/protocol/deployment";
 import type { OpenSnapshot } from "@/lib/protocol/reads";
+import {
+  PRICING_AVAILABILITY_CAVEAT,
+  PRICING_AVAILABILITY_NOTE,
+} from "@/lib/protocol/readiness";
 import type { TxPhase } from "@/lib/protocol/tx-phase";
 
 /** Everything the form collects. Owned by the page so it survives connecting. */
@@ -140,10 +143,8 @@ function marketPricingLabel(state: OracleState | null): string {
   return state === ORACLE_STATE.LIVE ? "Live" : "Temporarily unavailable";
 }
 
-function leverageStroke(selected: boolean, suggested: boolean): string {
-  if (selected) return "#ee771d";
-  if (suggested) return "#39854d";
-  return "#e5ded3";
+function leverageStroke(selected: boolean): string {
+  return selected ? "#ee771d" : "#e5ded3";
 }
 
 function StockLogo({ assetName }: { assetName: LaunchAssetName }) {
@@ -410,10 +411,7 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                     <DrawablyCard
                       {...SKETCH}
                       className="create-leverage-option"
-                      stroke={leverageStroke(
-                        leverage === preset.bps,
-                        pricingUnavailable && preset.bps === SPOT_LEVERAGE
-                      )}
+                      stroke={leverageStroke(leverage === preset.bps)}
                     >
                       <strong>{preset.label}</strong>
                       <span>{LEVERAGE_NOTE[preset.bps]}</span>
@@ -537,10 +535,10 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                 </p>
               ) : null}
               {pricingUnavailable ? (
-                <p className="create-spot-hint">
-                  You can still open a 1.0x position, which does not require
-                  live pricing.
-                </p>
+                <div className="create-pricing-note">
+                  <p>{PRICING_AVAILABILITY_NOTE}</p>
+                  <p>{PRICING_AVAILABILITY_CAVEAT}</p>
+                </div>
               ) : null}
               {readError ? (
                 <div className="create-read-error">

@@ -421,10 +421,13 @@
   font-size: 18px;
   color: #8c561c;
 }
-.create-spot-hint {
+.create-pricing-note {
   margin: -6px 3px 14px;
   font-size: 17px;
-  color: #39854d;
+  color: var(--t-muted);
+}
+.create-pricing-note p + p {
+  margin-top: 6px;
 }
 .create-read-error {
   color: var(--t-red);
