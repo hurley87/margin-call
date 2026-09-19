@@ -57,7 +57,7 @@ function WalletConnectLive() {
       <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
         Wallet
       </p>
-      <WalletConnectUi />
+      <WalletConnectUi evmAccount={evmAccount} />
       {evmAccount ? <WalletNetworkControls evmAccount={evmAccount} /> : null}
     </div>
   );

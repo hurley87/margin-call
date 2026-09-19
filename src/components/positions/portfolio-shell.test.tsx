@@ -65,8 +65,14 @@ vi.mock("@dynamic-labs-sdk/react-hooks", () => ({
   useInitStatus: () => ({ data: "finished", error: null }),
   useGetWalletAccounts: useGetWalletAccountsMock,
   useGetAvailableWalletProvidersData: () => ({ data: [] }),
-  useConnectAndVerifyWithWalletProvider: () => ({
-    mutate: vi.fn(),
+  useConnectWithWalletProvider: () => ({
+    mutateAsync: vi.fn(),
+    isPending: false,
+    error: null,
+    reset: vi.fn(),
+  }),
+  useVerifyWalletAccount: () => ({
+    mutateAsync: vi.fn(),
     isPending: false,
     error: null,
     reset: vi.fn(),
@@ -86,6 +92,8 @@ vi.mock("@dynamic-labs-sdk/evm", () => ({
 
 vi.mock("@dynamic-labs-sdk/client", () => ({
   isProgrammaticNetworkSwitchAvailable: () => false,
+  isDeeplinkWalletProvider: () => false,
+  isWalletAccountVerified: () => true,
 }));
 
 vi.mock("@/lib/protocol/reads", async (importOriginal) => {
