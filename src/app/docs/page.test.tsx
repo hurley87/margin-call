@@ -54,6 +54,55 @@ describe("DocsPage", () => {
     expect(screen.getByText(/Already have a Bankr-style agent/)).not.toBeNull();
   });
 
+  it("frames Dynamic as optional local developer tooling", () => {
+    render(<DocsPage />);
+    expect(
+      screen.getByRole("heading", {
+        name: "Developer example: start an agent without a wallet",
+      })
+    ).not.toBeNull();
+    expect(
+      screen.getByText(
+        /This section is for developers who want to run the Margin Call reference implementation locally/
+      )
+    ).not.toBeNull();
+    expect(
+      screen.getByText(
+        /You do not need to clone the repository or use Dynamic to call Margin Call’s public API or MCP/
+      )
+    ).not.toBeNull();
+    expect(
+      screen.getByText(
+        /If your agent already has a Base-capable wallet, skip this section/
+      )
+    ).not.toBeNull();
+    expect(
+      screen.getByText(/not needed for the hosted Margin Call API or MCP/)
+    ).not.toBeNull();
+    expect(screen.getByText("DYNAMIC_ENVIRONMENT_ID")).not.toBeNull();
+    expect(screen.getByText("DYNAMIC_API_TOKEN")).not.toBeNull();
+    expect(screen.getByText("DYNAMIC_WALLET_PASSWORD")).not.toBeNull();
+    expect(screen.getAllByText("UNISWAP_API_KEY").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("BASE_RPC_URL").length).toBeGreaterThan(0);
+
+    const shown =
+      screen
+        .getByRole("heading", { name: "Agents & builders" })
+        .closest("section")?.textContent ?? "";
+    expect(shown).toContain(
+      "git clone https://github.com/hurley87/margin-call.git"
+    );
+    expect(shown.indexOf("git clone")).toBeLessThan(
+      shown.indexOf("pnpm agent:wallet")
+    );
+    expect(
+      screen.getByLabelText("Clone the Margin Call repository").textContent
+    ).toContain("pnpm install");
+    expect(
+      screen.getByLabelText("Local Dynamic reference commands").textContent
+    ).toContain("pnpm agent:wallet --open --asset NVDAc");
+  });
+
   it("provides hosted tools and an unsigned preparation quickstart", () => {
     render(<DocsPage />);
     const config = screen.getByLabelText("MCP connection configuration");

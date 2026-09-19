@@ -35,9 +35,10 @@ The public API/MCP service never holds a key, signs, or broadcasts. The optional
 local wallet demo signs through its configured wallet provider. `prepare_open` hands back
 ordinary unsigned Base calldata; a Dynamic server wallet, a Bankr agent wallet, a Coinbase
 smart wallet, or a bare `viem` account can all execute the identical transactions. **Dynamic
-is not required.** It is the reference wallet for agents that start without one — see
-`pnpm agent:wallet` and [`src/lib/wallets/`](../src/lib/wallets/). Agents that already have a
-Base-capable signer skip that step.
+is not required.** It is optional developer tooling for agents that start without a
+wallet — see [Developer example](#developer-example-start-an-agent-without-a-wallet)
+and [`src/lib/wallets/`](../src/lib/wallets/). Agents that already have a Base-capable
+signer skip that section. Hosted API/MCP usage requires none of the local demo env vars.
 
 Stock acquisition is also outside Margin Call. `prepare_open` only cares that the calling
 wallet already holds the supported stock from `get_assets`. The Dynamic demo acquires that
@@ -440,31 +441,58 @@ curl -X POST https://margincall.fun/api/agent/prepare-open \
 Submit `transactions` in order from that wallet. Decode `PositionOpened` from the open receipt
 for the token id, then `GET /api/agent/position/{tokenId}`.
 
-### Dynamic reference demo
+### Developer example: start an agent without a wallet
 
-For an agent that starts without a wallet:
+This section is for developers who want to run the Margin Call reference implementation
+locally. You do not need to clone the repository or use Dynamic to call Margin Call’s
+public API or MCP.
+
+If your agent already has a Base-capable wallet, skip this section.
+
+The reference implementation uses Dynamic to provision a server wallet so you can see
+how a walletless agent could be built. Dynamic is not a Margin Call dependency.
+
+Clone the repository first:
 
 ```bash
-pnpm agent:wallet --open --asset NVDAc
+git clone https://github.com/hurley87/margin-call.git
+cd margin-call
+pnpm install
 ```
 
-Configure `DYNAMIC_ENVIRONMENT_ID` (or `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID`),
-`DYNAMIC_API_TOKEN`, and `DYNAMIC_WALLET_PASSWORD` for the local reference demo.
-Use `pnpm agent:wallet` to obtain the address, then manually fund it with Base ETH
-for gas and USDC. Set `UNISWAP_API_KEY` and run
-`pnpm agent:wallet --acquire --asset NVDAc --usdc 2` to acquire stock.
-A provisioned `BASE_RPC_URL` is recommended; the demo otherwise uses
-`NEXT_PUBLIC_BASE_RPC_URL` or the public Base RPC. These settings are not required
-to call the hosted public tools.
+These environment variables are local developer configuration for this reference
+implementation. They are not needed for the hosted Margin Call API or MCP:
+
+- `DYNAMIC_ENVIRONMENT_ID` (or `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID`)
+- `DYNAMIC_API_TOKEN`
+- `DYNAMIC_WALLET_PASSWORD`
+- `UNISWAP_API_KEY`
+- optional `BASE_RPC_URL`
+
+In Dynamic, enable embedded wallets and multiple embedded wallets per chain. Keep
+credentials server-side. Set `UNISWAP_API_KEY` for acquisition. A provisioned
+`BASE_RPC_URL` is recommended; the demo otherwise uses `NEXT_PUBLIC_BASE_RPC_URL`
+or the public Base RPC.
+
+```bash
+# Provision or resolve a Base wallet
+pnpm agent:wallet
+
+# After manually funding the address with Base ETH + USDC:
+pnpm agent:wallet --acquire --asset NVDAc --usdc 2
+
+# When fresh market pricing is available:
+pnpm agent:wallet --open --asset NVDAc
+```
 
 The open command defaults to the wallet's full stock balance; `--stock` accepts a
 human decimal amount to limit it. Combined `--acquire --open` runs acquisition
 before the open pricing gate, so acquisition may succeed even when opening is refused.
 
-That command provisions or reuses the Dynamic server wallet, checks market state, and — only
-when pricing is live — signs the prepared 1.25x open. The Position NFT is minted to that
-Dynamic address because it is the transaction sender. `--acquire` can precede `--open` in the
-same invocation if the wallet still needs stock.
+Those commands provision or reuse the Dynamic server wallet, check market state, and —
+only when pricing is live — sign the prepared 1.25x open. The Position NFT is minted to
+that Dynamic address because it is the transaction sender. `--acquire` can precede
+`--open` in the same invocation if the wallet still needs stock.
 
 When pricing is unavailable the demo prints
 `Fresh U.S. equity pricing is unavailable, so I will not open a leveraged position.`

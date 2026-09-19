@@ -42,9 +42,9 @@ export function AgentDocs() {
         Give your agent access to leveraged tokenized-stock positions on Base.
         Bring any Base-capable wallet: Dynamic, Bankr, Coinbase, or your own
         signer.
-        <strong> Dynamic is not required.</strong> It is the reference demo for
-        agents that start without a wallet. Your agent runs in your own runtime;
-        this website is the visual product surface.
+        <strong> Dynamic is not required.</strong> It is an optional developer
+        reference for agents that start without a wallet. Your agent runs in
+        your own runtime; this website is the visual product surface.
       </p>
       <h3>Bring your own wallet</h3>
       <ol className="docs-agent-flow">
@@ -163,28 +163,59 @@ export function AgentDocs() {
         execution.
       </p>
 
-      <h3>Dynamic reference demo: start without a wallet</h3>
+      <h3>Developer example: start an agent without a wallet</h3>
       <p>
-        Run the demo locally from the repository. In Dynamic, enable embedded
-        wallets and multiple embedded wallets per chain. Configure
-        <code> DYNAMIC_ENVIRONMENT_ID</code> (or{" "}
-        <code>NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID</code>),
-        <code> DYNAMIC_API_TOKEN</code>, and{" "}
-        <code>DYNAMIC_WALLET_PASSWORD</code>. Keep credentials server-side. Set{" "}
-        <code>UNISWAP_API_KEY</code> for acquisition. A provisioned{" "}
-        <code>BASE_RPC_URL</code> is recommended for the demo; otherwise it
-        falls back to <code>NEXT_PUBLIC_BASE_RPC_URL</code> or the public Base
-        RPC. These credentials are for the reference demo, not public API
-        access.
+        This section is for developers who want to run the Margin Call reference
+        implementation locally. You do not need to clone the repository or use
+        Dynamic to call Margin Call’s public API or MCP.
       </p>
-      <CodeBlock label="Dynamic reference demo commands">{`# 1. Provision or resolve a Base wallet; note its address.
+      <p>If your agent already has a Base-capable wallet, skip this section.</p>
+      <p>
+        The reference implementation uses Dynamic to provision a server wallet
+        so you can see how a walletless agent could be built. Dynamic is not a
+        Margin Call dependency.
+      </p>
+      <p>Clone the repository first:</p>
+      <CodeBlock label="Clone the Margin Call repository">{`git clone https://github.com/hurley87/margin-call.git
+cd margin-call
+pnpm install`}</CodeBlock>
+      <p>
+        These environment variables are local developer configuration for this
+        reference implementation. They are not needed for the hosted Margin Call
+        API or MCP:
+      </p>
+      <ul>
+        <li>
+          <code>DYNAMIC_ENVIRONMENT_ID</code> (or{" "}
+          <code>NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID</code>)
+        </li>
+        <li>
+          <code>DYNAMIC_API_TOKEN</code>
+        </li>
+        <li>
+          <code>DYNAMIC_WALLET_PASSWORD</code>
+        </li>
+        <li>
+          <code>UNISWAP_API_KEY</code>
+        </li>
+        <li>
+          optional <code>BASE_RPC_URL</code>
+        </li>
+      </ul>
+      <p>
+        In Dynamic, enable embedded wallets and multiple embedded wallets per
+        chain. Keep credentials server-side. Set <code>UNISWAP_API_KEY</code>{" "}
+        for acquisition. A provisioned <code>BASE_RPC_URL</code> is recommended
+        for the local demo; otherwise it falls back to{" "}
+        <code>NEXT_PUBLIC_BASE_RPC_URL</code> or the public Base RPC.
+      </p>
+      <CodeBlock label="Local Dynamic reference commands">{`# Provision or resolve a Base wallet
 pnpm agent:wallet
 
-# 2. Manually fund that address with Base ETH for gas and USDC.
-# 3. Acquire supported stock through Uniswap (spends USDC).
+# After manually funding the address with Base ETH + USDC:
 pnpm agent:wallet --acquire --asset NVDAc --usdc 2
 
-# 4. Check pricing, prepare, sign, and submit a 1.25x open.
+# When fresh market pricing is available:
 pnpm agent:wallet --open --asset NVDAc`}</CodeBlock>
       <p>
         The open command defaults to the wallet’s full balance of the chosen
