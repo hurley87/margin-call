@@ -168,9 +168,39 @@
   border-radius: 12px;
   min-width: 135px;
 }
+.create-selected-token-meta {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.15;
+}
 .create-selected-token .create-stock-logo {
   width: 29px;
   height: 29px;
+}
+.create-copy-address {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--t-muted);
+  font: inherit;
+  font-size: 14px;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+}
+.create-copy-address:hover,
+.create-copy-address:focus-visible {
+  color: #4a4338;
+}
+.create-copy-address:focus-visible {
+  outline: 2px solid var(--t-focus-ring);
+  outline-offset: 3px;
+  border-radius: 6px;
 }
 .create-amount-control {
   position: relative;
@@ -302,7 +332,11 @@
 .create-review-stock {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
+}
+.create-review-stock .create-copy-address {
+  margin-left: auto;
 }
 .create-review-stock .create-stock-logo {
   width: 24px;

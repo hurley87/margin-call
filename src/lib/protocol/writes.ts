@@ -3,7 +3,6 @@ import {
   type TransactionReceipt,
   type Transport,
   type WalletClient,
-  maxUint256,
 } from "viem";
 import { base } from "viem/chains";
 import { erc20Abi, marginCallAbi } from "@/lib/protocol/abi";
@@ -67,18 +66,19 @@ export async function sendAndWait(args: SendArgs): Promise<TransactionReceipt> {
   return receipt;
 }
 
-export async function approveUnlimited(args: {
+export async function approveStock(args: {
   walletClient: ProtocolWalletClient;
   publicClient: BasePublicClient;
   token: `0x${string}`;
   spender: `0x${string}`;
+  amount: bigint;
   onSubmitted?: (hash: `0x${string}`) => void;
 }): Promise<TransactionReceipt> {
   return sendAndWait({
     walletClient: args.walletClient,
     publicClient: args.publicClient,
     to: args.token,
-    data: encodeApprove({ spender: args.spender, amount: maxUint256 }),
+    data: encodeApprove({ spender: args.spender, amount: args.amount }),
     label: "Approve stock",
     onSubmitted: args.onSubmitted,
   });

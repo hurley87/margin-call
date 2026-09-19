@@ -1,8 +1,20 @@
 import type { Metadata, Viewport } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans_Condensed } from "next/font/google";
+import {
+  IBM_Plex_Mono,
+  IBM_Plex_Sans_Condensed,
+  Patrick_Hand,
+} from "next/font/google";
 import { AppProviders } from "@/components/providers/app-providers";
 import { AppShell } from "@/components/shell/app-shell";
 import "./globals.css";
+import "./create.css";
+
+const patrickHand = Patrick_Hand({
+  variable: "--font-patrick-hand",
+  subsets: ["latin"],
+  weight: "400",
+  display: "swap",
+});
 
 const plexMono = IBM_Plex_Mono({
   variable: "--font-plex-mono",
@@ -47,7 +59,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${plexMono.variable} ${plexSans.variable} antialiased`}>
+      <body
+        className={`${plexMono.variable} ${plexSans.variable} ${patrickHand.variable} antialiased`}
+      >
         <AppProviders>
           <AppShell>{children}</AppShell>
         </AppProviders>

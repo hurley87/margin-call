@@ -2,6 +2,7 @@ import type { WalletAccount } from "@dynamic-labs-sdk/client";
 import { resolveBaseWalletClient } from "@/lib/dynamic/resolve-wallet-client";
 import type { BaseWalletClient } from "@/lib/dynamic/wallet-client";
 import type { TxPhase } from "@/lib/protocol/tx-phase";
+import { isUserRejectedRequest } from "@/lib/protocol/user-rejected";
 import { ProtocolTxError } from "@/lib/protocol/writes";
 
 /** Flow result carrying the confirmed transaction, when the flow sent one. */
@@ -57,6 +58,10 @@ export async function runManagedTx<T extends ManagedTxResult>(
     );
     return result;
   } catch (error) {
+    if (isUserRejectedRequest(error)) {
+      setTxPhase({ status: "idle" });
+      return null;
+    }
     const hash = error instanceof ProtocolTxError ? error.hash : submittedHash;
     setTxPhase({
       status: "error",

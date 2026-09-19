@@ -67,6 +67,7 @@ vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
 
 import { CreatePositionPage } from "@/components/create/create-position-page";
 import { ORACLE_STATE } from "@/lib/protocol/constants";
+import { getAssetByName } from "@/lib/protocol/deployment";
 
 const CONNECTED_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678" as const;
 const OPEN_HASH =
@@ -118,25 +119,222 @@ describe("CreatePositionPage", () => {
     expect(
       screen.getByText("Connect a wallet to open a Position NFT.")
     ).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Open" })).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("copies the selected stock token address", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(<CreatePositionPage />);
+
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Copy NVDAc token address" })[0]!
+    );
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(getAssetByName("NVDAc").stock);
+    });
+
+    fireEvent.click(screen.getByRole("radio", { name: "AAPLc" }));
+    fireEvent.click(
+      screen.getAllByRole("button", { name: "Copy AAPLc token address" })[0]!
+    );
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledWith(getAssetByName("AAPLc").stock);
+    });
   });
 
   it("shows stock, amount, leverage, and Open without repay/close or Approve", async () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).not.toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).not.toBeNull();
     });
 
     expect(
-      screen.getByRole("heading", { name: "Open Position" })
+      screen.getByRole("heading", { name: "Create a Position" })
     ).not.toBeNull();
-    expect(screen.getByText("Stock")).not.toBeNull();
-    expect(screen.getByText("Stock amount")).not.toBeNull();
+    expect(screen.getByRole("radio", { name: "NVDAc" })).not.toBeNull();
+    expect(
+      screen.getByRole("textbox", { name: "Stock amount" })
+    ).not.toBeNull();
     expect(screen.getByText("Leverage")).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Approve" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Repay/i })).toBeNull();
     expect(screen.queryByRole("button", { name: /Close/i })).toBeNull();
+  });
+
+  it("allows stock and leverage selection before connecting without issuing reads", () => {
+    useWalletSessionMock.mockReturnValue({ kind: "disconnected" });
+    render(<CreatePositionPage />);
+    fireEvent.click(screen.getByRole("radio", { name: "METAc" }));
+    fireEvent.click(screen.getByRole("radio", { name: "1.5x" }));
+    expect(screen.getByRole("radio", { name: "METAc" })).toHaveProperty(
+      "checked",
+      true
+    );
+    expect(screen.getByRole("radio", { name: "1.5x" })).toHaveProperty(
+      "checked",
+      true
+    );
+    for (const [alt, face] of [
+      ["METAc Position NFT preview", "healthy"],
+      ["META watching artwork", "warning"],
+      ["META at risk artwork", "danger"],
+      ["META liquidated artwork", "liquidated"],
+    ]) {
+      expect(
+        decodeURIComponent(screen.getByAltText(alt).getAttribute("src") ?? "")
+      ).toContain(`/meta/${face}.png`);
+    }
+    expect(screen.getByRole("button", { name: "Max" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
+    expect(loadOpenSnapshotMock).not.toHaveBeenCalled();
+    expect(runOpenPositionFlowMock).not.toHaveBeenCalled();
+  });
+
+  it("keeps a draft when the wallet connects", async () => {
+    useWalletSessionMock.mockReturnValue({ kind: "disconnected" });
+    const { rerender } = render(<CreatePositionPage />);
+    fireEvent.click(screen.getByRole("radio", { name: "AAPLc" }));
+    fireEvent.change(screen.getByRole("textbox", { name: "Stock amount" }), {
+      target: { value: "0.12345678" },
+    });
+    useWalletSessionMock.mockReturnValue({
+      kind: "connected",
+      address: CONNECTED_ADDRESS,
+    });
+    rerender(<CreatePositionPage />);
+    await waitFor(() =>
+      expect(loadOpenSnapshotMock).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          asset: expect.objectContaining({ name: "AAPLc" }),
+          stockAmount: 12345678n,
+        })
+      )
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Stock amount" })
+    ).toHaveProperty("value", "0.12345678");
+  });
+
+  it("uses the exact balance for Max and suppresses stale quotes on stock change", async () => {
+    loadOpenSnapshotMock.mockResolvedValueOnce({
+      stockBalance: 123456789n,
+      stockAllowance: 0n,
+      availableCredit: 10000000000n,
+      oracleState: ORACLE_STATE.LIVE,
+      estimatedPrincipal: 100000n,
+      contributionValue: 400000n,
+    });
+    render(<CreatePositionPage />);
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Max" })).toHaveProperty(
+        "disabled",
+        false
+      )
+    );
+    expect(
+      screen.getByText(/Estimated position value: 0.5 USDC/)
+    ).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Max" }));
+    expect(
+      screen.getByRole("textbox", { name: "Stock amount" })
+    ).toHaveProperty("value", "1.23456789");
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Max" })).toHaveProperty(
+        "disabled",
+        false
+      )
+    );
+    loadOpenSnapshotMock.mockImplementation(() => new Promise(() => {}));
+    fireEvent.click(screen.getByRole("radio", { name: "GOOGLc" }));
+    expect(screen.getByRole("button", { name: "Max" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
+    expect(screen.queryByText(/Estimated position value: 0.5 USDC/)).toBeNull();
+  });
+
+  it("can retry a failed quote without enabling creation early", async () => {
+    loadOpenSnapshotMock.mockRejectedValueOnce(new Error("RPC unavailable"));
+    render(<CreatePositionPage />);
+    const retry = await screen.findByRole("button", { name: "Retry quote" });
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
+    fireEvent.click(retry);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+  });
+
+  it("locks the draft while a transaction is awaiting its signature", async () => {
+    runOpenPositionFlowMock.mockImplementation(() => new Promise(() => {}));
+    render(<CreatePositionPage />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
+    expect(
+      screen.getByRole("button", { name: "Creating position…" })
+    ).toHaveProperty("disabled", true);
+    expect(
+      screen.getByRole("radio", { name: "AAPLc" }).closest("fieldset")
+    ).toHaveProperty("disabled", true);
+    expect(
+      screen.getByRole("textbox", { name: "Stock amount" }).closest("fieldset")
+    ).toHaveProperty("disabled", true);
+    expect(
+      screen.getByRole("textbox", { name: "Thesis (optional)" })
+    ).toHaveProperty("disabled", true);
+  });
+
+  it("resets the draft when the wallet rejects the signature", async () => {
+    runOpenPositionFlowMock.mockRejectedValueOnce(
+      Object.assign(new Error("User rejected the request."), { code: 4001 })
+    );
+    render(<CreatePositionPage />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    expect(screen.queryByText(/Awaiting wallet signature/)).toBeNull();
+    expect(screen.queryByText(/Open:/)).toBeNull();
+    expect(
+      screen.getByRole("radio", { name: "AAPLc" }).closest("fieldset")
+    ).toHaveProperty("disabled", false);
+    expect(
+      screen.getByRole("textbox", { name: "Stock amount" })
+    ).toHaveProperty("value", "0.01");
   });
 
   it("previews the healthy artwork for the selected stock", async () => {
@@ -155,13 +353,12 @@ describe("CreatePositionPage", () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
 
     await waitFor(() => {
       expect(runOpenPositionFlowMock).toHaveBeenCalledWith(
@@ -177,13 +374,12 @@ describe("CreatePositionPage", () => {
     fireEvent.change(field, { target: { value: "Long the puppy." } });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
 
     await waitFor(() => {
       expect(runOpenPositionFlowMock).toHaveBeenCalledWith(
@@ -201,20 +397,18 @@ describe("CreatePositionPage", () => {
     fireEvent.change(field, { target: { value: "🐶".repeat(70) } });
     expect(screen.getByText("280/280 bytes")).not.toBeNull();
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false);
     });
 
     fireEvent.change(field, { target: { value: "🐶".repeat(71) } });
     expect(screen.getByText(/284\/280 bytes/)).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-      "disabled",
-      true
-    );
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
     expect(runOpenPositionFlowMock).not.toHaveBeenCalled();
   });
 
@@ -222,13 +416,12 @@ describe("CreatePositionPage", () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
 
     await waitFor(() => {
       expect(runOpenPositionFlowMock).toHaveBeenCalled();
@@ -243,13 +436,12 @@ describe("CreatePositionPage", () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
 
     await waitFor(() => {
       expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
@@ -263,13 +455,12 @@ describe("CreatePositionPage", () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
 
     await waitFor(() => {
       expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
@@ -282,13 +473,12 @@ describe("CreatePositionPage", () => {
     render(<CreatePositionPage />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Open" })).toHaveProperty(
-        "disabled",
-        false
-      );
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create Position" }));
 
     await waitFor(() => {
       expect(useRouterPushMock).toHaveBeenCalledWith("/?opened=42");
