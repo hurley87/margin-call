@@ -97,7 +97,10 @@ export function ExploreGallery(props: ExploreGalleryProps) {
 }
 
 function ExploreCard({ view }: { view: ExploreCardView }) {
-  const isNeutral = view.face === "neutral";
+  // Layout follows the file, not the Stage face: unpriced metadata still
+  // publishes the healthy dog, and shrinking that into the ticker slot would
+  // make Explore disagree with the NFT image it just unwrapped.
+  const isNeutral = view.imageSrc?.startsWith("/logos/") ?? true;
 
   return (
     <Link href={view.href} className="explore-card-link">

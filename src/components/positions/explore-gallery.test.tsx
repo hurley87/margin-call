@@ -269,7 +269,7 @@ describe("Explore gallery", () => {
     }
   );
 
-  it("keeps the ticker and the honest label when a position cannot be priced", async () => {
+  it("keeps the honest label and the metadata dog when a position cannot be priced", async () => {
     fetchMock.mockResolvedValue(
       nftResponse(
         "Pricing unavailable",
@@ -289,9 +289,11 @@ describe("Explore gallery", () => {
         "Pricing unavailable"
       );
     });
-    // Marketplaces cache the healthy dog; Explore re-reads every minute and can
-    // afford to say it does not know.
-    expect(artSrc(onlyCard())).toContain("/logos/nvda.png");
+    // The route publishes the healthy dog so marketplaces do not cache the
+    // ticker through a weekend halt. Explore shows that same file.
+    expect(artSrc(onlyCard())).toContain("/nvda/healthy.png");
+    expect(artSrc(onlyCard())).not.toContain("/logos/nvda.png");
+    expect(within(onlyCard()).getByText("Active")).not.toBeNull();
   });
 
   it("tells one story when the index still lists a burned token as active", async () => {

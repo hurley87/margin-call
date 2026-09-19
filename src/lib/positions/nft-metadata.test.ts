@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   FALLBACK_DESCRIPTION,
   buildNftMetadata,
+  localArtworkPathFromMetadata,
   parseNftMetadata,
   stageFromMetadata,
   type NftMetadataInput,
@@ -125,6 +126,59 @@ describe("parseNftMetadata", () => {
     expect(
       parseNftMetadata({ ...live, image: "https://example.com/nvda.png" })
     ).toBeNull();
+    expect(
+      parseNftMetadata({
+        ...live,
+        image: "https://margincall.fun.evil.com/nvda/healthy.png",
+      })
+    ).toBeNull();
+    expect(
+      parseNftMetadata({
+        ...live,
+        image: "https://margincall.fun/nvda/healthy.png?cache=1",
+      })
+    ).toBeNull();
     expect(stageFromMetadata({ ...live, attributes: [] })).toBeNull();
+  });
+});
+
+describe("localArtworkPathFromMetadata", () => {
+  it("unwraps a contract-origin image to the committed public path", () => {
+    expect(localArtworkPathFromMetadata(buildNftMetadata(input()))).toBe(
+      "/nvda/healthy.png"
+    );
+    expect(
+      localArtworkPathFromMetadata(
+        buildNftMetadata(
+          input({
+            currentDebt: 250_000n,
+            nav: null,
+            liquidatable: null,
+          })
+        )
+      )
+    ).toBe("/nvda/healthy.png");
+  });
+
+  it("rejects a URL that is not a committed PNG on the contract origin", () => {
+    const live = buildNftMetadata(input());
+    expect(
+      localArtworkPathFromMetadata({
+        ...live,
+        image: "https://example.com/nvda/healthy.png",
+      })
+    ).toBeNull();
+    expect(
+      localArtworkPathFromMetadata({
+        ...live,
+        image: "https://margincall.fun/nvda/healthy.png?cache=1",
+      })
+    ).toBeNull();
+    expect(
+      localArtworkPathFromMetadata({
+        ...live,
+        image: "not-a-url",
+      })
+    ).toBeNull();
   });
 });

@@ -78,8 +78,10 @@ capability only through separately scoped work.
     `GET /api/nft/[tokenId]` payload marketplaces cache, owned by
     `src/components/positions/explore-gallery.tsx`; the portfolio list stays Convex
     identity/lifecycle with neutral ticker logos and makes neither read.
-    `faceFromStage` keeps unpriced positions on the ticker logo — only `buildNftMetadata` swaps in
-    the healthy dog, because marketplaces cache an image far longer than the halt that produced it.
+    `faceFromStage` keeps unpriced positions on the ticker logo on surfaces that do not read
+    metadata (detail, portfolio). `buildNftMetadata` swaps in the healthy dog so marketplaces
+    do not cache the ticker through a halt; Explore unwraps that same `metadata.image` instead
+    of recomputing artwork from Stage.
     Cutover runbook: `script/BASE_LAUNCH.md`. The route needs a provisioned server-only
     `BASE_RPC_URL`; the public Base RPC rate-limits the five reads each metadata request makes,
     and Explore multiplies that by the live positions on screen.

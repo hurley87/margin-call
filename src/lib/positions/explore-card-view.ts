@@ -6,6 +6,7 @@ import {
   type ArtworkFace,
   type PositionStage,
 } from "@/lib/positions/artwork";
+import { localArtworkPathFromMetadata } from "@/lib/positions/nft-metadata";
 import type { GalleryNft } from "@/lib/positions/use-gallery-health";
 import {
   STATUS_LABEL,
@@ -42,7 +43,13 @@ export type ExploreCardView = {
   healthKind: ExploreHealthKind;
   healthLabel: string | null;
   face: ArtworkFace;
-  /** Local committed artwork — never the absolute URL from metadata. */
+  /**
+   * Local committed artwork — never the absolute URL from metadata.
+   *
+   * Active cards with a usable payload take this from `metadata.image`. Stage
+   * still drives `healthKind` / `healthLabel`, so Pricing unavailable can sit
+   * on the healthy dog the route published.
+   */
   imageSrc: string | null;
   description: string | null;
 };
@@ -95,6 +102,13 @@ export function toExploreCardView(
   const { tokenId, assetId, status, owner } = position;
   const healthKind = healthKindFor(position, snapshot);
   const face = faceFor(status, healthKind);
+  // Terminal Convex rows never fetch metadata. Active cards with a usable
+  // payload show the image the route declared rather than recomputing it
+  // from Stage — `faceFromStage("pricing_unavailable")` is the ticker logo.
+  const metadataPath =
+    status === "active" && snapshot?.metadata
+      ? localArtworkPathFromMetadata(snapshot.metadata)
+      : null;
 
   return {
     href: `/position/${tokenId}`,
@@ -108,7 +122,7 @@ export function toExploreCardView(
     healthKind,
     healthLabel: HEALTH_LABEL[healthKind],
     face,
-    imageSrc: artworkPath(assetId, face),
+    imageSrc: metadataPath ?? artworkPath(assetId, face),
     description: snapshot?.metadata?.description ?? null,
   };
 }

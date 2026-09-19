@@ -94,6 +94,45 @@ function isAttribute(value: unknown): value is NftAttribute {
 }
 
 /**
+ * Committed public PNG on the contract origin: `/nvda/healthy.png`,
+ * `/logos/nvda.png`. Anything else is not a file this app ships.
+ */
+const LOCAL_ARTWORK_PATH = /^\/[a-z0-9-]+\/[a-z0-9-]+\.png$/;
+
+/**
+ * Parse an image URL only if it is a committed public PNG on `METADATA_ORIGIN`.
+ *
+ * Origin is compared after `URL` parsing — a prefix check would accept a
+ * lookalike host. Search, hash, and credentials are rejected so Explore never
+ * unwraps a URL that is not the exact file marketplaces cache.
+ */
+function parsedMetadataImage(image: string): URL | null {
+  try {
+    const url = new URL(image);
+    if (url.origin !== METADATA_ORIGIN) return null;
+    if (url.username !== "" || url.password !== "") return null;
+    if (url.search !== "" || url.hash !== "") return null;
+    if (!LOCAL_ARTWORK_PATH.test(url.pathname)) return null;
+    return url;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Local public path for a validated metadata image, or null if it is not a
+ * committed file on the contract origin.
+ *
+ * Explore renders this instead of recomputing artwork from the Stage trait, so
+ * an unpriced token shows the healthy dog the metadata route actually published.
+ */
+export function localArtworkPathFromMetadata(
+  metadata: NftMetadata
+): string | null {
+  return parsedMetadataImage(metadata.image)?.pathname ?? null;
+}
+
+/**
  * Accepts the JSON `GET /api/nft/[tokenId]` actually serves.
  *
  * Image URLs must stay on the contract origin so Explore can unwrap them
@@ -112,7 +151,7 @@ export function parseNftMetadata(value: unknown): NftMetadata | null {
   const { name, description, image, attributes } = value;
   if (typeof name !== "string" || name.length === 0) return null;
   if (typeof description !== "string") return null;
-  if (typeof image !== "string" || !image.startsWith(METADATA_ORIGIN)) {
+  if (typeof image !== "string" || parsedMetadataImage(image) === null) {
     return null;
   }
   if (!Array.isArray(attributes) || !attributes.every(isAttribute)) {
