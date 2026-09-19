@@ -446,6 +446,12 @@
 .create-submit > span {
   font-size: 30px;
 }
+.create-switch-network p {
+  font-size: 18px;
+  margin-top: 10px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
 .create-tx-status p {
   font-size: 18px;
   margin-top: 12px;

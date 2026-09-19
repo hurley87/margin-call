@@ -17,6 +17,13 @@ const resolveBaseWalletClientMock = vi.hoisted(() => vi.fn());
 const loadOpenSnapshotMock = vi.hoisted(() => vi.fn());
 const runOpenPositionFlowMock = vi.hoisted(() => vi.fn());
 const syncPositionTxMock = vi.hoisted(() => vi.fn());
+const switchWalletToBaseMock = vi.hoisted(() => vi.fn());
+const isProgrammaticNetworkSwitchAvailableMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@dynamic-labs-sdk/client", () => ({
+  isProgrammaticNetworkSwitchAvailable:
+    isProgrammaticNetworkSwitchAvailableMock,
+}));
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: useRouterPushMock }),
@@ -43,6 +50,7 @@ vi.mock("@/lib/dynamic/resolve-wallet-client", () => ({
     return match?.[1] ? Number(match[1]) : null;
   },
   assertWalletOnBase: vi.fn(),
+  switchWalletToBase: switchWalletToBaseMock,
 }));
 
 vi.mock("@/lib/protocol/public-client", () => ({
@@ -104,6 +112,8 @@ describe("CreatePositionPage", () => {
       hash: OPEN_HASH,
     });
     syncPositionTxMock.mockResolvedValue("synced");
+    switchWalletToBaseMock.mockResolvedValue(undefined);
+    isProgrammaticNetworkSwitchAvailableMock.mockReturnValue(true);
     useRouterPushMock.mockReset();
   });
 
@@ -371,6 +381,85 @@ describe("CreatePositionPage", () => {
     await waitFor(() =>
       expect(loadOpenSnapshotMock.mock.calls.length).toBeGreaterThan(reads)
     );
+  });
+
+  it("offers the network switch instead of Create Position on the wrong chain", async () => {
+    useGetActiveNetworkIdMock.mockReturnValue({
+      data: { networkId: "eip155:1" },
+    });
+    render(<CreatePositionPage />);
+
+    const switchButton = await screen.findByRole("button", {
+      name: "Switch to Base",
+    });
+    expect(
+      screen.queryByRole("button", { name: "Create Position" })
+    ).toBeNull();
+    expect(
+      screen.getByText("Wrong network (chain 1). Switch to Base (8453).")
+    ).not.toBeNull();
+
+    fireEvent.click(switchButton);
+    await waitFor(() =>
+      expect(switchWalletToBaseMock).toHaveBeenCalledTimes(1)
+    );
+    expect(runOpenPositionFlowMock).not.toHaveBeenCalled();
+  });
+
+  it("asks for a manual switch when the wallet cannot change chains", async () => {
+    isProgrammaticNetworkSwitchAvailableMock.mockReturnValue(false);
+    useGetActiveNetworkIdMock.mockReturnValue({
+      data: { networkId: "eip155:1" },
+    });
+    render(<CreatePositionPage />);
+
+    expect(
+      await screen.findByText(
+        "Switch the wallet to Base mainnet (8453) to continue."
+      )
+    ).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Switch to Base" })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Create Position" })
+    ).toBeNull();
+  });
+
+  it("surfaces a failed network switch without losing the button", async () => {
+    switchWalletToBaseMock.mockRejectedValue(new Error("user rejected"));
+    useGetActiveNetworkIdMock.mockReturnValue({
+      data: { networkId: "eip155:1" },
+    });
+    render(<CreatePositionPage />);
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Switch to Base" })
+    );
+
+    expect(await screen.findByRole("alert")).toHaveProperty(
+      "textContent",
+      "user rejected"
+    );
+    expect(
+      screen.getByRole("button", { name: "Switch to Base" })
+    ).toHaveProperty("disabled", false);
+  });
+
+  it("keeps Create Position when the wallet is already on Base", async () => {
+    render(<CreatePositionPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    expect(screen.queryByRole("button", { name: "Switch to Base" })).toBeNull();
+  });
+
+  it("points the docs note at the in-app docs page", async () => {
+    render(<CreatePositionPage />);
+
+    const docs = await screen.findByRole("link", { name: "docs" });
+    expect(docs.getAttribute("href")).toBe("/docs");
   });
 
   it("locks the draft while a transaction is awaiting its signature", async () => {

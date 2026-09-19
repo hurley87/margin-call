@@ -1,15 +1,11 @@
 "use client";
 
 import type { WalletAccount } from "@dynamic-labs-sdk/client";
-import { isProgrammaticNetworkSwitchAvailable } from "@dynamic-labs-sdk/client";
 import { useGetActiveNetworkId } from "@dynamic-labs-sdk/react-hooks";
-import { useMutation } from "@tanstack/react-query";
 import { DrawablyButton } from "drawably/react";
 import { SKETCH } from "@/components/ui/sketch";
-import {
-  parseNetworkIdToChainId,
-  switchWalletToBase,
-} from "@/lib/dynamic/resolve-wallet-client";
+import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
+import { useSwitchToBase } from "@/lib/dynamic/use-switch-to-base";
 import { BASE_CHAIN_ID } from "@/lib/protocol/constants";
 import { assertBaseChain } from "@/lib/protocol/readiness";
 
@@ -26,13 +22,7 @@ export function WalletNetworkControls(props: { evmAccount: WalletAccount }) {
 
   const chainId = parseNetworkIdToChainId(networkQuery.data?.networkId);
   const chainGate = assertBaseChain(chainId);
-  const canSwitch = isProgrammaticNetworkSwitchAvailable({
-    walletAccount: evmAccount,
-  });
-
-  const switchMutation = useMutation({
-    mutationFn: () => switchWalletToBase(evmAccount),
-  });
+  const switchToBase = useSwitchToBase(evmAccount);
 
   return (
     <div className="flex flex-col gap-2 text-xs text-[var(--t-muted)]">
@@ -49,26 +39,19 @@ export function WalletNetworkControls(props: { evmAccount: WalletAccount }) {
       {!chainGate.ok ? (
         <div className="flex flex-col gap-2">
           <p>{chainGate.reason}</p>
-          {canSwitch ? (
+          {switchToBase.canSwitch ? (
             <>
               <DrawablyButton
                 {...SKETCH}
                 type="button"
                 variant="outline"
-                disabled={switchMutation.isPending}
-                onClick={() => {
-                  switchMutation.reset();
-                  switchMutation.mutate();
-                }}
+                disabled={switchToBase.switching}
+                onClick={switchToBase.onSwitch}
               >
                 Switch to Base
               </DrawablyButton>
-              {switchMutation.error ? (
-                <p className="text-[var(--t-red)]">
-                  {switchMutation.error instanceof Error
-                    ? switchMutation.error.message
-                    : "Failed to switch to Base."}
-                </p>
+              {switchToBase.error ? (
+                <p className="text-[var(--t-red)]">{switchToBase.error}</p>
               ) : null}
             </>
           ) : (
