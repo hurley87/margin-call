@@ -19,7 +19,6 @@ const {
   useWalletSessionMock,
   connectAsyncMock,
   verifyAsyncMock,
-  verifyMutateMock,
   logoutMutateMock,
   connectResetMock,
   verifyResetMock,
@@ -34,7 +33,6 @@ const {
   useWalletSessionMock: vi.fn(),
   connectAsyncMock: vi.fn(),
   verifyAsyncMock: vi.fn(),
-  verifyMutateMock: vi.fn(),
   logoutMutateMock: vi.fn(),
   connectResetMock: vi.fn(),
   verifyResetMock: vi.fn(),
@@ -55,8 +53,11 @@ vi.mock("@/components/wallet/wallet-providers", () => ({
   useWalletSession: useWalletSessionMock,
 }));
 
+import type { WalletAccount } from "@dynamic-labs-sdk/client";
 import { WalletConnectControl } from "@/components/wallet/wallet-connect-control";
 import { WalletConnectUi } from "@/components/wallet/wallet-connect-ui";
+
+const CONNECTED_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678";
 
 const metamaskProvider = {
   key: "metamaskevm",
@@ -77,16 +78,16 @@ const phantomDeeplinkProvider = {
 const unverifiedAccount = {
   id: "account-1",
   chain: "EVM",
-  address: "0x1234567890abcdef1234567890abcdef12345678",
+  address: CONNECTED_ADDRESS,
   lastSelectedAt: null,
   verifiedCredentialId: null,
   walletProviderKey: "metamaskevm",
-};
+} as WalletAccount;
 
 const verifiedAccount = {
   ...unverifiedAccount,
   verifiedCredentialId: "vc-1",
-};
+} as WalletAccount;
 
 describe("WalletConnectControl", () => {
   afterEach(() => {
@@ -122,7 +123,6 @@ describe("WalletConnectUi", () => {
     });
     useVerifyWalletAccountMock.mockReturnValue({
       mutateAsync: verifyAsyncMock,
-      mutate: verifyMutateMock,
       isPending: false,
       error: null,
       reset: verifyResetMock,
@@ -141,7 +141,6 @@ describe("WalletConnectUi", () => {
     cleanup();
     connectAsyncMock.mockReset();
     verifyAsyncMock.mockReset();
-    verifyMutateMock.mockReset();
     logoutMutateMock.mockReset();
     connectResetMock.mockReset();
     verifyResetMock.mockReset();
@@ -150,13 +149,13 @@ describe("WalletConnectUi", () => {
   });
 
   it("shows Connect when disconnected", () => {
-    render(<WalletConnectUi />);
+    render(<WalletConnectUi evmAccount={null} />);
 
     expect(screen.getByRole("button", { name: "Connect" })).not.toBeNull();
   });
 
   it("connects then verifies so SIWE is not stacked on the pairing prompt", async () => {
-    render(<WalletConnectUi />);
+    render(<WalletConnectUi evmAccount={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     fireEvent.click(screen.getByRole("button", { name: "MetaMask" }));
 
@@ -180,7 +179,7 @@ describe("WalletConnectUi", () => {
       data: [phantomDeeplinkProvider],
     });
 
-    render(<WalletConnectUi />);
+    render(<WalletConnectUi evmAccount={null} />);
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     fireEvent.click(screen.getByRole("button", { name: "Phantom" }));
 
@@ -192,43 +191,60 @@ describe("WalletConnectUi", () => {
     expect(verifyAsyncMock).not.toHaveBeenCalled();
   });
 
+  it("keeps the picker up through the connect to SIWE gap", () => {
+    connectAsyncMock.mockImplementation(() => new Promise(() => {}));
+
+    const { rerender } = render(<WalletConnectUi evmAccount={null} />);
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    fireEvent.click(screen.getByRole("button", { name: "MetaMask" }));
+
+    // Pairing landed, so the session reports connected while SIWE is still pending.
+    useWalletSessionMock.mockReturnValue({
+      kind: "connected",
+      address: CONNECTED_ADDRESS,
+    });
+    rerender(<WalletConnectUi evmAccount={unverifiedAccount} />);
+
+    expect(screen.getByRole("button", { name: "MetaMask" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+  });
+
   it("shows a truncated address and Disconnect when connected", () => {
     useWalletSessionMock.mockReturnValue({
       kind: "connected",
-      address: "0x1234567890abcdef1234567890abcdef12345678",
+      address: CONNECTED_ADDRESS,
     });
-    useGetWalletAccountsMock.mockReturnValue({ data: [verifiedAccount] });
 
-    render(<WalletConnectUi />);
+    render(<WalletConnectUi evmAccount={verifiedAccount} />);
 
     expect(screen.getByText("0x1234…5678")).not.toBeNull();
     expect(screen.getByRole("button", { name: "Disconnect" })).not.toBeNull();
     expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
   });
 
-  it("offers Sign in when the connected wallet still needs a signature", () => {
+  it("offers Sign in when the connected wallet still needs a signature", async () => {
     useWalletSessionMock.mockReturnValue({
       kind: "connected",
-      address: "0x1234567890abcdef1234567890abcdef12345678",
+      address: CONNECTED_ADDRESS,
     });
-    useGetWalletAccountsMock.mockReturnValue({ data: [unverifiedAccount] });
 
-    render(<WalletConnectUi />);
+    render(<WalletConnectUi evmAccount={unverifiedAccount} />);
     fireEvent.click(screen.getByRole("button", { name: "Sign in" }));
 
-    expect(verifyMutateMock).toHaveBeenCalledWith({
-      walletAccount: unverifiedAccount,
+    await waitFor(() => {
+      expect(verifyAsyncMock).toHaveBeenCalledWith({
+        walletAccount: unverifiedAccount,
+      });
     });
   });
 
   it("clears connected state through logout", () => {
     useWalletSessionMock.mockReturnValue({
       kind: "connected",
-      address: "0x1234567890abcdef1234567890abcdef12345678",
+      address: CONNECTED_ADDRESS,
     });
-    useGetWalletAccountsMock.mockReturnValue({ data: [verifiedAccount] });
 
-    render(<WalletConnectUi />);
+    render(<WalletConnectUi evmAccount={verifiedAccount} />);
     fireEvent.click(screen.getByRole("button", { name: "Disconnect" }));
 
     expect(logoutResetMock).toHaveBeenCalled();
@@ -241,7 +257,7 @@ describe("WalletConnectUi", () => {
       message: "Project settings unavailable",
     });
 
-    render(<WalletConnectUi />);
+    render(<WalletConnectUi evmAccount={null} />);
 
     expect(screen.getByText("Project settings unavailable")).not.toBeNull();
     expect(screen.queryByText("Preparing wallet…")).toBeNull();

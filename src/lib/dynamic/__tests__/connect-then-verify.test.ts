@@ -1,10 +1,7 @@
 import type { WalletAccount } from "@dynamic-labs-sdk/client";
 import { WalletAccountAlreadyVerifiedError } from "@dynamic-labs-sdk/client";
 import { describe, expect, it, vi } from "vitest";
-import {
-  connectThenVerifyWallet,
-  shouldAutoVerifyAfterConnect,
-} from "@/lib/dynamic/connect-then-verify";
+import { connectThenVerifyWallet } from "@/lib/dynamic/connect-then-verify";
 
 function account(verifiedCredentialId: string | null = null): WalletAccount {
   return {
@@ -17,27 +14,12 @@ function account(verifiedCredentialId: string | null = null): WalletAccount {
   } as WalletAccount;
 }
 
-describe("shouldAutoVerifyAfterConnect", () => {
-  it("auto-verifies installed and WalletConnect providers", () => {
-    expect(shouldAutoVerifyAfterConnect({ isDeeplinkProvider: false })).toBe(
-      true
-    );
-  });
-
-  it("skips auto-verify for deep-link wallets", () => {
-    expect(shouldAutoVerifyAfterConnect({ isDeeplinkProvider: true })).toBe(
-      false
-    );
-  });
-});
-
 describe("connectThenVerifyWallet", () => {
-  it("connects then verifies after the connect prompt can close", async () => {
+  it("connects then verifies so SIWE is not stacked on the pairing prompt", async () => {
     const connected = account();
     const verified = account("vc-1");
     const connect = vi.fn().mockResolvedValue(connected);
     const verify = vi.fn().mockResolvedValue(verified);
-    const waitForPrompt = vi.fn().mockResolvedValue(undefined);
 
     await expect(
       connectThenVerifyWallet({
@@ -45,18 +27,14 @@ describe("connectThenVerifyWallet", () => {
         isDeeplinkProvider: false,
         connect,
         verify,
-        isVerified: (walletAccount) =>
-          walletAccount.verifiedCredentialId != null,
-        waitForPrompt,
       })
     ).resolves.toEqual(verified);
 
     expect(connect).toHaveBeenCalledWith({
       walletProviderKey: "metamaskevm",
     });
-    expect(waitForPrompt).toHaveBeenCalledOnce();
     expect(verify).toHaveBeenCalledWith({ walletAccount: connected });
-    expect(waitForPrompt.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(connect.mock.invocationCallOrder[0]!).toBeLessThan(
       verify.mock.invocationCallOrder[0]!
     );
   });
@@ -72,8 +50,6 @@ describe("connectThenVerifyWallet", () => {
         isDeeplinkProvider: false,
         connect,
         verify,
-        isVerified: () => true,
-        waitForPrompt: vi.fn(),
       })
     ).resolves.toEqual(verified);
 
@@ -91,8 +67,6 @@ describe("connectThenVerifyWallet", () => {
         isDeeplinkProvider: true,
         connect,
         verify,
-        isVerified: () => false,
-        waitForPrompt: vi.fn(),
       })
     ).resolves.toEqual(connected);
 
@@ -114,9 +88,22 @@ describe("connectThenVerifyWallet", () => {
         isDeeplinkProvider: false,
         connect,
         verify,
-        isVerified: () => false,
-        waitForPrompt: async () => undefined,
       })
     ).resolves.toEqual(connected);
+  });
+
+  it("surfaces other verify failures to the caller", async () => {
+    const connected = account();
+    const connect = vi.fn().mockResolvedValue(connected);
+    const verify = vi.fn().mockRejectedValue(new Error("User rejected"));
+
+    await expect(
+      connectThenVerifyWallet({
+        walletProviderKey: "metamaskevm",
+        isDeeplinkProvider: false,
+        connect,
+        verify,
+      })
+    ).rejects.toThrow("User rejected");
   });
 });

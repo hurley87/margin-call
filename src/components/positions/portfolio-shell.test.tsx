@@ -73,7 +73,6 @@ vi.mock("@dynamic-labs-sdk/react-hooks", () => ({
   }),
   useVerifyWalletAccount: () => ({
     mutateAsync: vi.fn(),
-    mutate: vi.fn(),
     isPending: false,
     error: null,
     reset: vi.fn(),
