@@ -42,6 +42,7 @@ export function QueryUnavailable({ onRetry }: { onRetry?: () => void }) {
 
 type BoundaryProps = {
   children: ReactNode;
+  renderError?: (onRetry: () => void) => ReactNode;
 };
 
 type BoundaryState = {
@@ -64,12 +65,11 @@ export class PositionQueryBoundary extends Component<
 
   render() {
     if (this.state.error) {
-      return (
-        <QueryUnavailable
-          onRetry={() => {
-            this.setState({ error: null });
-          }}
-        />
+      const onRetry = () => this.setState({ error: null });
+      return this.props.renderError ? (
+        this.props.renderError(onRetry)
+      ) : (
+        <QueryUnavailable onRetry={onRetry} />
       );
     }
     return this.props.children;

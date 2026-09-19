@@ -4,7 +4,7 @@ import type { WalletAccount } from "@dynamic-labs-sdk/client";
 import { isProgrammaticNetworkSwitchAvailable } from "@dynamic-labs-sdk/client";
 import { useGetActiveNetworkId } from "@dynamic-labs-sdk/react-hooks";
 import { useMutation } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
+import { SketchButton as Button } from "@/components/ui/sketch-button";
 import {
   parseNetworkIdToChainId,
   switchWalletToBase,
@@ -53,7 +53,6 @@ export function WalletNetworkControls(props: { evmAccount: WalletAccount }) {
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 disabled={switchMutation.isPending}
                 onClick={() => {
                   switchMutation.reset();

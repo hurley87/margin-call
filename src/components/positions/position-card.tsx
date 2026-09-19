@@ -30,7 +30,7 @@ export function PositionCard(props: PositionCardProps) {
       href={`/position/${tokenId}`}
       data-highlighted={highlighted ? "true" : undefined}
       className={cn(
-        "block border px-4 py-3 transition-colors hover:border-[var(--t-accent)]",
+        "position-card block border px-4 py-3 transition-colors hover:border-[var(--t-accent)]",
         highlighted
           ? "border-[var(--t-accent)] bg-[var(--t-accent-soft)]"
           : "border-[var(--t-border)]"
@@ -44,7 +44,7 @@ export function PositionCard(props: PositionCardProps) {
           sizes="48px"
         />
         <div className="min-w-0 flex-1 space-y-1">
-          <p className="font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)]">
+          <p className="position-card-title font-[family-name:var(--font-plex-sans)] text-base font-bold uppercase tracking-tight text-[var(--t-accent)]">
             {assetLabel(assetId)}
           </p>
           <p className="truncate text-xs text-[var(--t-muted)]">

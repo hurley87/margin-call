@@ -23,6 +23,8 @@ export type OpenSnapshot = {
   availableCredit: bigint;
   oracleState: OracleState | null;
   estimatedPrincipal: bigint | null;
+  /** LIVE oracle value of the deposited stock, in USDC base units. */
+  contributionValue?: bigint | null;
 };
 
 export type OpenPosition = {
@@ -134,6 +136,7 @@ export async function loadOpenSnapshot(
     stockAllowance,
     availableCredit,
     oracleState,
+    contributionValue,
     estimatedPrincipal: sizePrincipal(contributionValue, args.leverage),
   };
 }

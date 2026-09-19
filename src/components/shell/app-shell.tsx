@@ -1,69 +1,77 @@
 "use client";
 
 import Link from "next/link";
+import { DrawablyUnderline } from "drawably/react";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { PlayfulIcon } from "@/components/ui/playful-icon";
 import { WalletConnectControl } from "@/components/wallet/wallet-connect-control";
-import { cn } from "@/lib/utils";
+import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
 
 const NAV_ITEMS = [
-  { href: "/", label: "My Positions" },
-  { href: "/positions", label: "All Positions" },
-  { href: "/create", label: "Open Position" },
+  { href: "/", label: "Portfolio" },
+  { href: "/positions", label: "Explore" },
+  { href: "/create", label: "Create" },
 ] as const;
 
-function isActivePath(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
-  return pathname === href || pathname.startsWith(`${href}/`);
-}
-
-/** Persistent product chrome: brand, nav, wallet, and page content. */
+/** Shared light header; the portfolio and create page share the light content theme. */
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const isHome = pathname === "/";
+  const isCreate = pathname === "/create";
 
   return (
-    <div className="min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]">
-      <header className="border-b border-[var(--t-border)]">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 py-5 sm:flex-row sm:items-start sm:justify-between">
-          <div className="space-y-3">
-            <Link href="/" className="block space-y-1">
-              <p className="text-xs font-bold uppercase tracking-[0.28em] text-[var(--t-green)]">
-                Margin Call
-              </p>
-              <p className="font-[family-name:var(--font-plex-sans)] text-lg font-black uppercase tracking-tight text-[var(--t-accent)]">
-                Positions
-              </p>
-            </Link>
-            <nav
-              aria-label="Primary"
-              className="flex flex-wrap items-center gap-1"
-            >
-              {NAV_ITEMS.map((item) => {
-                const isActive = isActivePath(pathname, item.href);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    aria-current={isActive ? "page" : undefined}
-                    className={cn(
-                      "px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors",
-                      isActive
-                        ? "border border-[var(--t-accent)] text-[var(--t-accent)]"
-                        : "border border-transparent text-[var(--t-muted)] hover:text-[var(--t-text)]"
-                    )}
-                  >
+    <div
+      className={
+        isHome || isCreate
+          ? `${isHome ? "portfolio-home" : "create-home"} playful-theme`
+          : "min-h-screen bg-[var(--t-bg)] font-mono text-[var(--t-text)]"
+      }
+    >
+      <header className="playful-header playful-theme">
+        <div className="playful-header-inner">
+          <Link
+            href="/"
+            className="playful-brand"
+            aria-label="Margin Call home"
+          >
+            <PlayfulIcon kind="paw" />
+            <span>margin call</span>
+          </Link>
+          <nav aria-label="Primary" className="playful-nav">
+            {NAV_ITEMS.map((item) => (
+              <Link
+                key={item.href}
+                href={item.href}
+                aria-current={pathname === item.href ? "page" : undefined}
+              >
+                {pathname === item.href ? (
+                  <DrawablyUnderline seed={12} roughness={0.7} boil={0}>
                     {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
-          </div>
-          <div className="shrink-0 sm:max-w-xs sm:pt-1">
+                  </DrawablyUnderline>
+                ) : (
+                  item.label
+                )}
+              </Link>
+            ))}
+            <a href={PRODUCT_DOCS_URL}>Docs</a>
+          </nav>
+          <div className="playful-wallet">
             <WalletConnectControl />
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-3xl px-6 py-8">{children}</main>
+      <main
+        className={
+          isHome
+            ? "portfolio-main"
+            : isCreate
+              ? "create-main"
+              : "mx-auto w-full max-w-3xl px-6 py-8"
+        }
+      >
+        {children}
+      </main>
     </div>
   );
 }

@@ -12,8 +12,9 @@ import {
   useLogout,
   useVerifyWalletAccount,
 } from "@dynamic-labs-sdk/react-hooks";
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
+import { useState, type ReactNode } from "react";
+import { DrawablyCard } from "drawably/react";
+import { SketchButton as Button } from "@/components/ui/sketch-button";
 import {
   useWalletSession,
   type WalletSession,
@@ -92,7 +93,11 @@ function statusCopy(args: {
 }
 
 /** Wallet UI that assumes Dynamic hooks are available in the tree. */
-export function WalletConnectUi(props: { evmAccount: WalletAccount | null }) {
+export function WalletConnectUi(props: {
+  evmAccount: WalletAccount | null;
+  compact?: boolean;
+  children?: ReactNode;
+}) {
   const { evmAccount } = props;
   const session = useWalletSession();
   const { data: providers = [] } = useGetAvailableWalletProvidersData();
@@ -182,7 +187,6 @@ export function WalletConnectUi(props: { evmAccount: WalletAccount | null }) {
     <Button
       type="button"
       variant="outline"
-      size="sm"
       className="w-fit"
       disabled={isLoggingOut}
       onClick={() => {
@@ -201,7 +205,6 @@ export function WalletConnectUi(props: { evmAccount: WalletAccount | null }) {
           <Button
             type="button"
             variant="outline"
-            size="sm"
             className="w-fit"
             onClick={() => {
               resetFlow();
@@ -226,7 +229,6 @@ export function WalletConnectUi(props: { evmAccount: WalletAccount | null }) {
                   <Button
                     type="button"
                     variant="outline"
-                    size="sm"
                     className="w-full"
                     disabled={isConnecting || isVerifying}
                     onClick={() => void connectProvider(provider)}
@@ -265,7 +267,6 @@ export function WalletConnectUi(props: { evmAccount: WalletAccount | null }) {
               <Button
                 type="button"
                 variant="outline"
-                size="sm"
                 className="w-fit"
                 disabled={isVerifying}
                 onClick={() => void signIn(actionable.account)}
@@ -283,9 +284,71 @@ export function WalletConnectUi(props: { evmAccount: WalletAccount | null }) {
     }
   };
 
+  if (props.compact && view.kind !== "idle") {
+    const connected = view.kind === "connected";
+    const label = connected
+      ? formatShortAddress(view.address)
+      : isVerifying
+        ? "Signing…"
+        : isConnecting
+          ? "Connecting…"
+          : view.kind === "needs-signature"
+            ? "Sign in"
+            : "Connect wallet";
+    return (
+      <details
+        className="wallet-account"
+        open={!connected}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.currentTarget.open = false;
+            event.currentTarget.querySelector("summary")?.focus();
+          }
+        }}
+      >
+        <summary
+          className="wallet-address-pill"
+          aria-label={
+            connected
+              ? `Account controls for ${formatShortAddress(view.address)}`
+              : "Wallet connection controls"
+          }
+        >
+          <svg className="wallet-avatar" viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="16" r="16" fill="currentColor" />
+            <circle cx="16" cy="12" r="5" fill="white" />
+            <path d="M7 26c0-10 18-10 18 0" fill="white" />
+          </svg>
+          <span>{label}</span>
+          <svg
+            className="wallet-chevron"
+            viewBox="0 0 20 20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            aria-hidden="true"
+          >
+            <path d="m4 7 6 6 6-6" />
+          </svg>
+        </summary>
+        <DrawablyCard
+          className="wallet-account-panel"
+          seed={24}
+          roughness={0.7}
+          boil={0}
+        >
+          {connected ? disconnectButton : renderBody(view)}
+          {props.children}
+          {errorMessage ? <p role="alert">{errorMessage}</p> : null}
+        </DrawablyCard>
+      </details>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-3">
       {renderBody(view)}
+      {props.children}
       {errorMessage ? (
         <p className="text-xs text-[var(--t-muted)]">{errorMessage}</p>
       ) : null}

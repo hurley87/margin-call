@@ -222,6 +222,79 @@ describe("WalletConnectUi", () => {
     expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
   });
 
+  it("opens compact account controls and closes them with Escape", () => {
+    useWalletSessionMock.mockReturnValue({
+      kind: "connected",
+      address: CONNECTED_ADDRESS,
+    });
+    const { container } = render(
+      <WalletConnectUi evmAccount={verifiedAccount} compact>
+        <p>Base network controls</p>
+      </WalletConnectUi>
+    );
+    const summary = container.querySelector("summary")!;
+    const details = container.querySelector("details")!;
+    expect(details.open).toBe(false);
+    fireEvent.click(summary);
+    expect(details.open).toBe(true);
+    expect(screen.getByRole("button", { name: "Disconnect" })).not.toBeNull();
+    expect(screen.getByText("Base network controls")).not.toBeNull();
+    fireEvent.keyDown(details, { key: "Escape" });
+    expect(details.open).toBe(false);
+    expect(document.activeElement).toBe(summary);
+  });
+
+  it("keeps pairing, signature prompts, and network warnings in the compact dropdown", async () => {
+    connectAsyncMock.mockImplementation(() => new Promise(() => {}));
+    const { container, rerender } = render(
+      <WalletConnectUi evmAccount={null} compact />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+    fireEvent.click(screen.getByRole("button", { name: "MetaMask" }));
+
+    useWalletSessionMock.mockReturnValue({
+      kind: "connected",
+      address: CONNECTED_ADDRESS,
+    });
+    useVerifyWalletAccountMock.mockReturnValue({
+      mutateAsync: verifyAsyncMock,
+      isPending: true,
+      error: null,
+      reset: verifyResetMock,
+    });
+    rerender(
+      <WalletConnectUi evmAccount={unverifiedAccount} compact>
+        <p>Wrong network. Switch to Base.</p>
+      </WalletConnectUi>
+    );
+    const panel = container.querySelector(".wallet-account-panel")!;
+    expect(
+      panel.contains(screen.getByText("Confirm the signature in your wallet."))
+    ).toBe(true);
+    expect(
+      panel.contains(screen.getByText("Wrong network. Switch to Base."))
+    ).toBe(true);
+    expect(container.querySelector("summary")?.textContent).toBe("Signing…");
+    expect(container.querySelector("details")?.open).toBe(true);
+    expect(screen.getByRole("button", { name: "MetaMask" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(screen.queryByRole("button", { name: "Sign in" })).toBeNull();
+  });
+
+  it("keeps signature requests visible in compact mode", () => {
+    useWalletSessionMock.mockReturnValue({
+      kind: "connected",
+      address: CONNECTED_ADDRESS,
+    });
+    const { container } = render(
+      <WalletConnectUi evmAccount={unverifiedAccount} compact />
+    );
+    expect(screen.getByRole("button", { name: "Sign in" })).not.toBeNull();
+    expect(container.querySelector("details")?.open).toBe(true);
+  });
+
   it("offers Sign in when the connected wallet still needs a signature", async () => {
     useWalletSessionMock.mockReturnValue({
       kind: "connected",

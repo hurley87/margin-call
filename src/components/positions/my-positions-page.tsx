@@ -1,18 +1,20 @@
 "use client";
 
 import { usePaginatedQuery } from "convex/react";
-import Link from "next/link";
 import type { ReactNode } from "react";
 import {
   IndexUnavailable,
   PAGE_SIZE,
   PositionList,
   PositionQueryBoundary,
+  QueryUnavailable,
 } from "@/components/positions/position-list";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
-import { buttonVariants } from "@/components/ui/button";
+import {
+  OpenPositionCta,
+  PortfolioWelcome,
+} from "@/components/positions/portfolio-welcome";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
-import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 
 type MyPositionsPageProps = {
@@ -57,13 +59,7 @@ export function MyPositionsPage({ openedTokenId }: MyPositionsPageProps) {
         </PageFrame>
       );
     case "disconnected":
-      return (
-        <PageFrame>
-          <p className="text-sm leading-6 text-[var(--t-muted)]">
-            Connect a wallet to see your Position NFTs.
-          </p>
-        </PageFrame>
-      );
+      return <PortfolioWelcome />;
     case "connected":
       return (
         <MyPositionsList
@@ -96,11 +92,16 @@ function MyPositionsList({
   }
 
   return (
-    <PageFrame>
-      <PositionQueryBoundary>
-        <MyPositionsQuery owner={owner} openedTokenId={openedTokenId} />
-      </PositionQueryBoundary>
-    </PageFrame>
+    <PositionQueryBoundary
+      key={owner}
+      renderError={(onRetry) => (
+        <PageFrame>
+          <QueryUnavailable onRetry={onRetry} />
+        </PageFrame>
+      )}
+    >
+      <MyPositionsQuery owner={owner} openedTokenId={openedTokenId} />
+    </PositionQueryBoundary>
   );
 }
 
@@ -124,67 +125,43 @@ function MyPositionsQuery({
   const isIndexing =
     openedTokenId != null && status !== "LoadingFirstPage" && !openedIsPresent;
 
-  const list = (
-    <PositionList
-      results={results}
-      status={status}
-      loadMore={loadMore}
-      emptyMessage="You don't have any positions yet."
-      highlightedTokenId={
-        openedIsPresent && openedTokenId ? openedTokenId : undefined
-      }
-    />
-  );
-
-  if (!isIndexing) {
-    return list;
-  }
-
-  const indexingNote = (
-    <p className="text-sm leading-6 text-[var(--t-muted)]">
-      Indexing Position #{openedTokenId}…
-    </p>
-  );
-
-  if (results.length === 0) {
-    return indexingNote;
+  if (status === "Exhausted" && results.length === 0 && !isIndexing) {
+    return <PortfolioWelcome empty />;
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      {indexingNote}
-      {list}
-    </div>
+    <PageFrame>
+      {isIndexing ? (
+        <p role="status" className="text-[var(--t-muted)]">
+          Indexing Position #{openedTokenId}…
+        </p>
+      ) : null}
+      {!(isIndexing && results.length === 0) ? (
+        <PositionList
+          results={results}
+          status={status}
+          loadMore={loadMore}
+          emptyMessage="Loading your portfolio…"
+          highlightedTokenId={
+            openedIsPresent && openedTokenId ? openedTokenId : undefined
+          }
+        />
+      ) : null}
+    </PageFrame>
   );
 }
 
 function PageFrame({ children }: { children: ReactNode }) {
   return (
-    <div className="flex flex-col gap-6">
-      <header className="space-y-2">
-        <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-tight text-[var(--t-accent)]">
-          My Positions
-        </h1>
-        <p className="text-sm leading-6 text-[var(--t-muted)]">
-          Position NFTs currently owned by your connected wallet.
-        </p>
+    <div className="portfolio-content">
+      <header className="portfolio-content-heading">
+        <div>
+          <h1>Your portfolio</h1>
+          <p>Position NFTs currently owned by your connected wallet.</p>
+        </div>
+        <OpenPositionCta />
       </header>
-      <OpenPositionCta />
       {children}
     </div>
-  );
-}
-
-function OpenPositionCta() {
-  return (
-    <Link
-      href="/create"
-      className={cn(
-        buttonVariants({ variant: "outline", size: "sm" }),
-        "w-fit"
-      )}
-    >
-      + Open Position
-    </Link>
   );
 }
