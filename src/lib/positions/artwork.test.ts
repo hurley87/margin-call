@@ -97,7 +97,7 @@ describe("faceFromStage", () => {
     expect(faceFromStage("danger")).toBe("danger");
   });
 
-  it("is neutral when there is no honest stage to show", () => {
+  it("stays neutral for a stage the app cannot price or has not read", () => {
     expect(faceFromStage("pricing_unavailable")).toBe("neutral");
     expect(faceFromStage(null)).toBe("neutral");
   });

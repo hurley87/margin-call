@@ -9,6 +9,9 @@ export type PositionListItem = {
   terminalTxHash?: string;
 };
 
+/** Convex page size shared by every paginated Position surface. */
+export const PAGE_SIZE = 20;
+
 export const STATUS_LABEL: Record<PositionStatus, string> = {
   active: "Active",
   closed: "Closed",

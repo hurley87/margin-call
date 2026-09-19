@@ -6,7 +6,7 @@ import { getAssetById, type LaunchAssetName } from "@/lib/protocol/deployment";
  *
  * `pricing_unavailable` is a real answer, not a failure: a financed position
  * whose oracle is HELD or INVALID has no honest health to report, so the app
- * and the metadata route both fall back to neutral artwork instead of guessing.
+ * falls back to neutral artwork instead of guessing.
  */
 export type PositionStage =
   "healthy" | "warning" | "danger" | "pricing_unavailable";
@@ -102,14 +102,27 @@ export function stockSymbol(assetId: number): string | null {
 
 /** A stage the app has not resolved, or cannot price, has no honest face. */
 export function faceFromStage(stage: PositionStage | null): ArtworkFace {
-  return stage === null || stage === "pricing_unavailable" ? "neutral" : stage;
+  switch (stage) {
+    case null:
+    case "pricing_unavailable":
+      return "neutral";
+    case "healthy":
+    case "warning":
+    case "danger":
+      return stage;
+    default: {
+      const _exhaustive: never = stage;
+      return _exhaustive;
+    }
+  }
 }
 
 /**
  * Face for surfaces that only have the indexed lifecycle status.
  *
- * Active and closed both stay neutral: live health needs a Base read that list
- * pages deliberately do not make. Only `liquidated` is knowable offline.
+ * Active and closed both stay neutral: live health needs a read that the
+ * portfolio list deliberately does not make. Only `liquidated` is knowable
+ * offline.
  */
 export function faceFromStatus(status: PositionStatus): ArtworkFace {
   return status === "liquidated" ? "liquidated" : "neutral";
