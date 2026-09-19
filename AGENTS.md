@@ -2,17 +2,22 @@
 
 ## Project overview
 
-Margin Call is a Next.js 16 application between product versions. The Crash game has been retired. The site shows a minimal Base Position workspace (connect → open → repay → close) wired to the canonical multi-stock deployment — not the production frontend. Use this repository as scaffolding for the next product:
+Margin Call is a Next.js 16 Base Position NFT application. The Crash game has been retired. The product surface is
+landed and wired to the canonical multi-stock deployment: `/` (portfolio), `/positions` (explore), `/create`,
+`/position/[tokenId]`, and `GET /api/nft/[tokenId]`, with a working connect → open → repay → close write path.
 
 - Dynamic (external EVM wallets on Base; wallet island included at build time when `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is set)
-- Convex (empty HTTP router + empty schema; no JWT auth until a product query needs identity)
+- Convex (Position NFT lifecycle index: `positions` + `syncState`, discovery queries, a `syncTransaction` receipt action, and a 10-minute reconcile cron; HTTP router still empty; no JWT auth until a product query needs identity)
 - Foundry (reproducible workspace pins; product contracts live under `contracts/`)
 
-Do not treat a polished product UI, keeper, or indexing as implemented.
+Position lifecycle indexing is implemented; keeper automation, an agent surface, and executor / reduce-exposure /
+liquidate UI are not. Convex is a discovery read model — Base stays authoritative for debt, NAV, and risk, and no
+Convex function verifies that the caller owns the `owner` it queries.
+
 The live Base deployment (`contracts/deployments/base.json`) is the canonical multi-stock
 launch stack (issue #446: NVDAc + AAPLc + METAc + GOOGLc). The historical NVDA-only
 deployment is preserved at `contracts/deployments/base-nvda-only.legacy.json`; do not
-point the frontend at those addresses. The browser workspace consumes only `base.json`.
+point the frontend at those addresses. `src/` and `convex/` both consume only `base.json`.
 
 The living Position NFT slice (issue #461 — optional on-chain thesis, HTTPS `tokenURI`,
 `GET /api/nft/[tokenId]`, stage artwork under `public/`) is **live on Base**. It changed
