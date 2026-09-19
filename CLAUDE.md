@@ -2,17 +2,14 @@
 
 ## Project overview
 
-Margin Call is a Base Position NFT app. The Crash game has been retired from this repository. The product surface is
-landed: `/` (portfolio), `/positions` (explore), `/create`, and `/position/[tokenId]`, plus `GET /api/nft/[tokenId]`,
-over a working Dynamic wallet → viem → canonical contracts path for open → repay → close.
+Margin Call is between product versions. The Crash game has been retired from this repository. The site is a minimal Base Position workspace (Dynamic wallet → viem → canonical contracts) that proves open → repay → close. Stack scaffolding remains for the next build:
 
 - `CONTEXT.md` — product glossary
-- Dynamic wallet foundation + `src/lib/protocol/` (reads/writes `contracts/deployments/base.json`)
-- `convex/` indexes Position NFT lifecycle for discovery; its HTTP router is still empty and there is no JWT auth
-- `contracts/` lands product contracts, one scoped slice at a time
+- Dynamic wallet foundation + `src/lib/protocol/` (reads/writes `contracts/deployments/base.json`); Convex remains empty schema/HTTP with no JWT auth yet
+- `contracts/` has started landing product contracts, one scoped slice at a time
 
-Landed is not complete. Keeper automation, an agent surface, and executor / reduce-exposure / liquidate UI are not
-implemented, and a contract slice never covers more than it says. Add capability only through separately scoped work.
+Do not infer that the production frontend is already implemented, or that a contract slice covers more than it says. Add
+capability only through separately scoped work.
 
 ## Commands
 
@@ -26,14 +23,10 @@ implemented, and a contract slice never covers more than it says. Add capability
 - `pnpm test:contracts:fork` — Base mainnet fork checks (RPC required)
 - `pnpm test:contracts:smoke` — local Anvil signer smoke harness
 
-## Architecture
+## Retained architecture
 
-- `src/` — Next.js shell and nav, Dynamic wallet, the Position routes above, `src/lib/protocol/` (Base reads plus
-  open/repay/close encoding), `src/lib/positions/` (artwork stage + NFT metadata), styling, and UI primitives
-- `convex/` — Position NFT read model: `positions` + `syncState` tables, `positions.*` discovery queries, the
-  `sync.syncTransaction` receipt action clients call after a write, and a 10-minute `sync.reconcile` cron backstop.
-  Base stays authoritative for debt, NAV, and risk. The HTTP router is empty and no function checks identity, so the
-  `owner` argument is client-supplied and unverified.
+- `src/` — Next.js shell, Dynamic wallet, minimal Base Position workspace, styling, and UI primitives
+- `convex/` — Convex HTTP infrastructure (empty schema; no JWT providers yet).
   When the first authed Convex table or function lands, add Dynamic `customJwt` in
   `convex/auth.config.ts`:
   - issuer: `https://app.dynamicauth.com/${DYNAMIC_ENVIRONMENT_ID}`
@@ -96,7 +89,7 @@ implemented, and a contract slice never covers more than it says. Add capability
 
 - Next.js 16 App Router, React 19, and TypeScript strict mode
 - Tailwind CSS v4 and shadcn-style UI primitives
-- Use Convex hooks directly for Convex-backed state (`useQuery` / `usePaginatedQuery`, as in `src/components/positions/`)
+- Use Convex hooks directly for future Convex-backed state
 - Keep secrets out of client code, commits, and tool output
 - Preserve the distinction between implemented behaviour and future design
 
