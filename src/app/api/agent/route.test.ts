@@ -228,6 +228,24 @@ describe("POST /api/agent/quote-open", () => {
     });
   });
 
+  it("answers 200 when a supported asset is closed to new opens", async () => {
+    stubBase(openSnapshotReads({ openingEnabled: false }));
+
+    const response = await quoteOpenRoute(
+      post("/api/agent/quote-open", {
+        asset: "NVDAc",
+        stockAmount: "1000000",
+        leverage: 12500,
+      })
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: false,
+      code: "ASSET_OPENING_DISABLED",
+    });
+  });
+
   it("is 400 for a malformed body", async () => {
     stubBase({});
 

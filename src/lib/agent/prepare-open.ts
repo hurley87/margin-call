@@ -2,6 +2,7 @@ import { BaseError, ContractFunctionRevertedError } from "viem";
 import {
   AGENT_PRICING_UNAVAILABLE_REASON,
   agentError,
+  assetOpeningDisabledError,
   readBase,
   type AgentErr,
   type AgentErrorCode,
@@ -28,7 +29,10 @@ import {
 } from "@/lib/protocol/deployment";
 import { encodeApprove, encodeOpenPosition } from "@/lib/protocol/encode";
 import type { BasePublicClient } from "@/lib/protocol/public-client";
-import { loadOpenSnapshot } from "@/lib/protocol/reads";
+import {
+  loadAssetOpeningEnabled,
+  loadOpenSnapshot,
+} from "@/lib/protocol/reads";
 
 export type PrepareOpenInput = AssetSelector & {
   wallet: unknown;
@@ -107,12 +111,6 @@ const OPEN_REVERTS: Record<string, { code: AgentErrorCode; message: string }> =
       code: "UNKNOWN_ASSET",
       message: "The contract does not know this assetId.",
     },
-    // Not UNKNOWN_ASSET: the asset is real and the request was well formed, so
-    // re-spelling the id will not help. Only time or an admin change will.
-    AssetOpeningDisabled: {
-      code: "SIMULATION_FAILED",
-      message: "Opening is currently disabled for this asset.",
-    },
     ZeroStockAmount: {
       code: "INVALID_INPUT",
       message: "stockAmount must be greater than zero.",
@@ -129,13 +127,22 @@ function revertName(error: unknown): string | null {
     : null;
 }
 
-function simulationRefusal(error: unknown): AgentErr {
+function simulationRefusal(
+  error: unknown,
+  assetName: LaunchAssetName
+): AgentErr {
   const name = revertName(error);
   if (name == null) {
     return agentError(
       "SIMULATION_FAILED",
       "Base did not confirm this open would succeed. Re-check market state and credit before retrying."
     );
+  }
+  // Defense in depth: the explicit openingEnabled read should have refused
+  // already. If an admin disables opening between that read and this dry run,
+  // name the same protocol code rather than a generic simulation failure.
+  if (name === "AssetOpeningDisabled") {
+    return assetOpeningDisabledError(assetName);
   }
   const known = OPEN_REVERTS[name];
   return known
@@ -194,6 +201,8 @@ function openTransaction(args: {
  * The approve step appears only when the existing allowance is short. When it
  * does, the open is not simulated — a dry run would revert on the allowance
  * that the caller has not granted yet — and says so via `simulated: false`.
+ * Opening-disabled is checked from `assetConfig` before any calldata is built,
+ * so a missing allowance cannot hide a closed rail.
  */
 export async function prepareOpen(
   client: BasePublicClient,
@@ -214,15 +223,23 @@ export async function prepareOpen(
   const thesis = parseThesis(input.thesis);
   if (!thesis.ok) return thesis;
 
-  const snapshot = await readBase(() =>
-    loadOpenSnapshot(client, {
-      address: wallet.value,
-      asset: asset.value,
-      leverage: leverage.value,
-      stockAmount: stockAmount.value,
-    })
-  );
+  const snapshot = await readBase(async () => {
+    const [open, openingEnabled] = await Promise.all([
+      loadOpenSnapshot(client, {
+        address: wallet.value,
+        asset: asset.value,
+        leverage: leverage.value,
+        stockAmount: stockAmount.value,
+      }),
+      loadAssetOpeningEnabled(client, asset.value.assetId),
+    ]);
+    return { open, openingEnabled };
+  });
   if (!snapshot.ok) return snapshot;
+
+  if (!snapshot.value.openingEnabled) {
+    return assetOpeningDisabledError(asset.value.name);
+  }
 
   const {
     stockBalance,
@@ -230,7 +247,8 @@ export async function prepareOpen(
     availableCredit,
     oracleState,
     contributionValue,
-  } = snapshot.value;
+    estimatedPrincipal: sizedPrincipal,
+  } = snapshot.value.open;
 
   if (stockBalance < stockAmount.value) {
     return agentError(
@@ -246,13 +264,13 @@ export async function prepareOpen(
   if (financed) {
     const refusal = financedOpenRefusal({
       pricing: pricing ?? "unavailable",
-      estimatedPrincipal: snapshot.value.estimatedPrincipal,
+      estimatedPrincipal: sizedPrincipal,
       availableCredit,
     });
     if (refusal) return refusal;
   }
 
-  const estimatedPrincipal = snapshot.value.estimatedPrincipal ?? 0n;
+  const estimatedPrincipal = sizedPrincipal ?? 0n;
   const needsApproval = stockAllowance < stockAmount.value;
 
   if (!needsApproval) {
@@ -271,7 +289,7 @@ export async function prepareOpen(
         account: wallet.value,
       });
     } catch (error) {
-      return simulationRefusal(error);
+      return simulationRefusal(error, asset.value.name);
     }
   }
 

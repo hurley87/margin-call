@@ -122,6 +122,26 @@ describe("POST /api/mcp", () => {
     expect(result.isError).toBe(false);
   });
 
+  it("does not flag a closed-to-opens rail as a tool failure", async () => {
+    base.client = fakeClient(openSnapshotReads({ openingEnabled: false }));
+
+    const result = await call("tools/call", {
+      name: "quote_open",
+      arguments: {
+        asset: "NVDAc",
+        stockAmount: "1000000",
+        leverage: 12_500,
+      },
+    });
+    const text = (result.content as { text: string }[])[0]?.text ?? "{}";
+
+    expect(JSON.parse(text)).toMatchObject({
+      ok: false,
+      code: "ASSET_OPENING_DISABLED",
+    });
+    expect(result.isError).toBe(false);
+  });
+
   it("flags a caller mistake as a tool error so the model corrects it", async () => {
     base.client = fakeClient({});
 

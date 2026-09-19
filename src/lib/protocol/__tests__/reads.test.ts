@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { loadPosition } from "@/lib/protocol/reads";
+import { loadAssetOpeningEnabled, loadPosition } from "@/lib/protocol/reads";
+import { baseDeployment } from "@/lib/protocol/deployment";
 
 const OWNER = "0x1234567890abcdef1234567890abcdef12345678" as const;
 const EXECUTOR = "0xabcdefabcdefabcdefabcdefabcdefabcdefabcd" as const;
@@ -150,5 +151,35 @@ describe("loadPosition", () => {
     await expect(loadPosition(client as never, 99n)).rejects.toThrow(
       /HTTP request failed/
     );
+  });
+});
+
+describe("loadAssetOpeningEnabled", () => {
+  it("reads openingEnabled from MarginCall.assetConfig", async () => {
+    const readContract = vi.fn(
+      async ({
+        address,
+        functionName,
+        args,
+      }: {
+        address: string;
+        functionName: string;
+        args: readonly unknown[];
+      }) => {
+        expect(address).toBe(baseDeployment.marginCall);
+        expect(functionName).toBe("assetConfig");
+        expect(args).toEqual([1n]);
+        return {
+          stock: "0x0000000000000000000000000000000000000001",
+          oracle: "0x0000000000000000000000000000000000000002",
+          execution: "0x0000000000000000000000000000000000000003",
+          openingEnabled: false,
+        };
+      }
+    );
+
+    await expect(
+      loadAssetOpeningEnabled({ readContract } as never, 1)
+    ).resolves.toBe(false);
   });
 });

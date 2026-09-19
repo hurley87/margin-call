@@ -110,6 +110,7 @@ export function openSnapshotReads(fixture: {
   availableCredit?: bigint;
   oracleState?: OracleState;
   contributionValue?: bigint;
+  openingEnabled?: boolean;
 }): ReadHandlers {
   return {
     balanceOf: () => fixture.balance ?? 10_000_000n,
@@ -118,5 +119,11 @@ export function openSnapshotReads(fixture: {
     latestObservation: () =>
       observation(fixture.oracleState ?? ORACLE_STATE.LIVE),
     valueUsdc: () => fixture.contributionValue ?? 2_000_000n,
+    assetConfig: () => ({
+      stock: "0x0000000000000000000000000000000000000001",
+      oracle: "0x0000000000000000000000000000000000000002",
+      execution: "0x0000000000000000000000000000000000000003",
+      openingEnabled: fixture.openingEnabled ?? true,
+    }),
   };
 }

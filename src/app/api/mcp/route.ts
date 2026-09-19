@@ -95,7 +95,7 @@ const handler = createMcpHandler(
       {
         title: "Quote opening a position",
         description:
-          "Whether a requested open is possible right now and how it would be sized: contribution value, borrowed principal, and total exposure. Needs no wallet. Refuses a financed open when pricing is not live rather than using a stale price.",
+          "Whether a requested open is possible right now and how it would be sized: contribution value, borrowed principal, and total exposure. Needs no wallet. Refuses a financed open when pricing is not live rather than using a stale price. Refuses both spot and financed opens when the asset is temporarily closed to new positions.",
         inputSchema: z.object({ ...assetSelector, stockAmount, leverage }),
       },
       async (args) =>
@@ -121,7 +121,7 @@ const handler = createMcpHandler(
       {
         title: "Prepare an unsigned open",
         description:
-          "Build the unsigned Base transactions that open a position for a wallet: a stock approval when the allowance is short, then MarginCall.openPosition. Returns calldata only — Margin Call never signs or broadcasts, so any Base-capable wallet can execute the result.",
+          "Build the unsigned Base transactions that open a position for a wallet: a stock approval when the allowance is short, then MarginCall.openPosition. Returns calldata only — Margin Call never signs or broadcasts, so any Base-capable wallet can execute the result. Refuses before building transactions when the asset is closed to new positions.",
         inputSchema: z.object({
           wallet: z
             .string()

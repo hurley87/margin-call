@@ -67,6 +67,26 @@ export function loadAvailableCredit(client: BasePublicClient): Promise<bigint> {
   });
 }
 
+/**
+ * Whether `openPosition` will accept a new mint for this asset right now.
+ *
+ * Distinct from launch-manifest support: a curated rail can still have
+ * `openingEnabled == false`, and the coordinator reverts with
+ * `AssetOpeningDisabled` rather than `UnknownAsset`.
+ */
+export async function loadAssetOpeningEnabled(
+  client: BasePublicClient,
+  assetId: number
+): Promise<boolean> {
+  const config = await client.readContract({
+    address: baseDeployment.marginCall,
+    abi: marginCallAbi,
+    functionName: "assetConfig",
+    args: [BigInt(assetId)],
+  });
+  return config.openingEnabled;
+}
+
 /** Oracle value of a stock amount in USDC base units, at an observed price. */
 export function loadStockValueUsdc(
   client: BasePublicClient,

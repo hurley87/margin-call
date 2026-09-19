@@ -1,4 +1,8 @@
-import { readBase, type AgentResult } from "@/lib/agent/result";
+import {
+  assetOpeningDisabledError,
+  readBase,
+  type AgentResult,
+} from "@/lib/agent/result";
 import {
   parseAssetSelector,
   parseLeverage,
@@ -20,6 +24,7 @@ import {
 import type { LaunchAssetName } from "@/lib/protocol/deployment";
 import type { BasePublicClient } from "@/lib/protocol/public-client";
 import {
+  loadAssetOpeningEnabled,
   loadAvailableCredit,
   loadMarketObservation,
   loadStockValueUsdc,
@@ -59,6 +64,8 @@ export type QuoteOpenPayload = {
  *
  * Spot (1.0x) borrows nothing and never touches the oracle on-chain, so it
  * still quotes while pricing is stale. Financed leverage refuses instead.
+ * Both refuse when the asset's live `openingEnabled` flag is false — that is
+ * protocol state, not an unknown-asset mistake.
  */
 export async function quoteOpen(
   client: BasePublicClient,
@@ -74,9 +81,10 @@ export async function quoteOpen(
   if (!leverage.ok) return leverage;
 
   const reads = await readBase(async () => {
-    const [observation, availableCredit] = await Promise.all([
+    const [observation, availableCredit, openingEnabled] = await Promise.all([
       loadMarketObservation(client, asset.value),
       loadAvailableCredit(client),
+      loadAssetOpeningEnabled(client, asset.value.assetId),
     ]);
     const contributionValue =
       observation.state === ORACLE_STATE.LIVE
@@ -86,9 +94,13 @@ export async function quoteOpen(
             price: observation.price,
           })
         : null;
-    return { observation, availableCredit, contributionValue };
+    return { observation, availableCredit, contributionValue, openingEnabled };
   });
   if (!reads.ok) return reads;
+
+  if (!reads.value.openingEnabled) {
+    return assetOpeningDisabledError(asset.value.name);
+  }
 
   const { availableCredit, contributionValue } = reads.value;
   const pricing = toPricing(reads.value.observation.state);

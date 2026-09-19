@@ -41,6 +41,7 @@ export type {
 export {
   agentError,
   agentErrorKind,
+  assetOpeningDisabledError,
   AGENT_PRICING_UNAVAILABLE_REASON,
   BASE_UNAVAILABLE_MESSAGE,
 } from "@/lib/agent/result";

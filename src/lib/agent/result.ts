@@ -13,6 +13,7 @@ export type AgentErrorCode =
   | "PRICING_UNAVAILABLE"
   | "INSUFFICIENT_CREDIT"
   | "INSUFFICIENT_BALANCE"
+  | "ASSET_OPENING_DISABLED"
   | "THESIS_TOO_LONG"
   | "POSITION_NOT_FOUND"
   | "SIMULATION_FAILED"
@@ -57,6 +58,7 @@ export function agentErrorKind(code: AgentErrorCode): AgentErrorKind {
     case "PRICING_UNAVAILABLE":
     case "INSUFFICIENT_CREDIT":
     case "INSUFFICIENT_BALANCE":
+    case "ASSET_OPENING_DISABLED":
     case "SIMULATION_FAILED":
       return "protocol";
     default: {
@@ -75,6 +77,17 @@ export function agentErrorKind(code: AgentErrorCode): AgentErrorKind {
  */
 export const AGENT_PRICING_UNAVAILABLE_REASON =
   "Fresh U.S. equity pricing is unavailable.";
+
+/**
+ * The asset is a known launch rail; new mints are paused. Re-spelling the
+ * id will not help — only an admin toggle or time will.
+ */
+export function assetOpeningDisabledError(assetName: string): AgentErr {
+  return agentError(
+    "ASSET_OPENING_DISABLED",
+    `Opening new positions is currently disabled for ${assetName}.`
+  );
+}
 
 /**
  * Base is the only chain this surface prepares transactions for, and RPC

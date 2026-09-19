@@ -137,6 +137,24 @@ const marginCallFunctions = [
     inputs: [{ name: "tokenId", type: "uint256" }],
     outputs: [{ name: "", type: "string" }],
   },
+  {
+    type: "function",
+    name: "assetConfig",
+    stateMutability: "view",
+    inputs: [{ name: "assetId", type: "uint256" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "stock", type: "address" },
+          { name: "oracle", type: "address" },
+          { name: "execution", type: "address" },
+          { name: "openingEnabled", type: "bool" },
+        ],
+      },
+    ],
+  },
 ] as const;
 
 /** OpenZeppelin IERC721Errors — lets viem name the revert when a token is burned. */

@@ -36,12 +36,14 @@ function quoteReads(
     oracleState?: 0 | 1 | 2;
     availableCredit?: bigint;
     contributionValue?: bigint;
+    openingEnabled?: boolean;
   } = {}
 ): ReadHandlers {
   return openSnapshotReads({
     oracleState: overrides.oracleState ?? ORACLE_STATE.LIVE,
     availableCredit: overrides.availableCredit ?? 20_000_000n,
     contributionValue: overrides.contributionValue ?? CONTRIBUTION,
+    openingEnabled: overrides.openingEnabled,
   });
 }
 
@@ -180,6 +182,33 @@ describe("quote_open", () => {
       ).resolves.toMatchObject({ ok: false, code: "INVALID_INPUT" });
     }
   });
+
+  it.each([
+    ["spot", 10_000],
+    ["financed", 12_500],
+  ])(
+    "refuses a %s open when the asset is closed to new positions",
+    async (_label, leverage) => {
+      const client = fakeClient(quoteReads({ openingEnabled: false }));
+
+      const quote = await quoteOpen(client, {
+        asset: "NVDAc",
+        stockAmount: STOCK_AMOUNT.toString(),
+        leverage,
+      });
+
+      expect(quote).toMatchObject({
+        ok: false,
+        code: "ASSET_OPENING_DISABLED",
+      });
+      expect(quote).not.toMatchObject({ canOpen: true });
+      if (!quote.ok) {
+        expect(quote.message).toBe(
+          "Opening new positions is currently disabled for NVDAc."
+        );
+      }
+    }
+  );
 });
 
 describe("prepare_open", () => {
@@ -384,6 +413,15 @@ describe("prepare_open", () => {
       }),
       "SIMULATION_FAILED",
     ],
+    [
+      "AssetOpeningDisabled",
+      encodeErrorResult({
+        abi: marginCallAbi,
+        errorName: "AssetOpeningDisabled",
+        args: [1n],
+      }),
+      "ASSET_OPENING_DISABLED",
+    ],
   ])(
     "translates a %s simulation revert into a code an agent can act on",
     async (_name, data, code) => {
@@ -464,4 +502,37 @@ describe("prepare_open", () => {
       ).resolves.toMatchObject({ ok: false, code: "INVALID_INPUT" });
     }
   });
+
+  it.each([
+    ["spot", 10_000],
+    ["financed", 12_500],
+  ])(
+    "refuses a %s prepare when opening is disabled, even if an approve would skip simulation",
+    async (_label, leverage) => {
+      const client = fakeClient(
+        quoteReads({
+          openingEnabled: false,
+          oracleState: ORACLE_STATE.LIVE,
+        })
+      );
+
+      const prepared = await prepareOpen(client, {
+        wallet: WALLET,
+        assetId: 1,
+        stockAmount: STOCK_AMOUNT.toString(),
+        leverage,
+      });
+
+      expect(prepared).toMatchObject({
+        ok: false,
+        code: "ASSET_OPENING_DISABLED",
+      });
+      expect(prepared).not.toHaveProperty("transactions");
+      if (!prepared.ok) {
+        expect(prepared.message).toBe(
+          "Opening new positions is currently disabled for NVDAc."
+        );
+      }
+    }
+  );
 });

@@ -4,8 +4,8 @@ Margin Call exposes six read-and-prepare tools over plain HTTP and over the Mode
 Protocol. They are **unauthenticated** and **wallet-agnostic**: no API key, no account, no
 signup, and no assumption about which wallet you bring.
 
-The protocol is the product. Anything the website can do, an agent can do, because both go
-through the same Base contracts.
+The protocol is the product. Agents interact with the same Base contracts as the website,
+using a public read-and-prepare surface.
 
 | Base URL |                                    |
 | -------- | ---------------------------------- |
@@ -48,22 +48,26 @@ is not required** — it is simply what the website happens to use.
 
 ### Error codes
 
-| Code                   | Meaning                                      | HTTP |
-| ---------------------- | -------------------------------------------- | ---- |
-| `INVALID_INPUT`        | Malformed argument                           | 400  |
-| `UNKNOWN_ASSET`        | Not one of the launch rails                  | 400  |
-| `UNSUPPORTED_LEVERAGE` | Not a supported preset                       | 400  |
-| `THESIS_TOO_LONG`      | Over 280 UTF-8 bytes                         | 400  |
-| `POSITION_NOT_FOUND`   | Burned or never minted                       | 404  |
-| `BASE_UNAVAILABLE`     | Base RPC could not be reached                | 502  |
-| `PRICING_UNAVAILABLE`  | No fresh U.S. equity price to borrow against | 200  |
-| `INSUFFICIENT_CREDIT`  | The pool cannot fund this principal          | 200  |
-| `INSUFFICIENT_BALANCE` | The wallet does not hold enough stock        | 200  |
-| `SIMULATION_FAILED`    | Base did not confirm the open would succeed  | 200  |
+| Code                     | Meaning                                      | HTTP |
+| ------------------------ | -------------------------------------------- | ---- |
+| `INVALID_INPUT`          | Malformed argument                           | 400  |
+| `UNKNOWN_ASSET`          | Not one of the launch rails                  | 400  |
+| `UNSUPPORTED_LEVERAGE`   | Not a supported preset                       | 400  |
+| `THESIS_TOO_LONG`        | Over 280 UTF-8 bytes                         | 400  |
+| `POSITION_NOT_FOUND`     | Burned or never minted                       | 404  |
+| `BASE_UNAVAILABLE`       | Base RPC could not be reached                | 502  |
+| `PRICING_UNAVAILABLE`    | No fresh U.S. equity price to borrow against | 200  |
+| `INSUFFICIENT_CREDIT`    | The pool cannot fund this principal          | 200  |
+| `INSUFFICIENT_BALANCE`   | The wallet does not hold enough stock        | 200  |
+| `ASSET_OPENING_DISABLED` | New opens are paused for this asset          | 200  |
+| `SIMULATION_FAILED`      | Base did not confirm the open would succeed  | 200  |
 
-The last four answer **200 on purpose**. "Fresh U.S. equity pricing is unavailable" is a
+The last five answer **200 on purpose**. "Fresh U.S. equity pricing is unavailable" is a
 correct statement about Base, not a failed request, and a closed U.S. market must not look
-like an outage to a client that only reads the status line. Over MCP the same split shows up
+like an outage to a client that only reads the status line. The same is true when a
+supported rail is temporarily closed to new positions: `get_assets` still lists it,
+existing positions remain manageable, and `quote_open` / `prepare_open` return
+`ASSET_OPENING_DISABLED` until opening is enabled again. Over MCP the same split shows up
 as `isError`: caller mistakes are tool errors, protocol refusals are answers.
 
 ## Pricing: live vs unavailable
@@ -190,7 +194,9 @@ curl -X POST https://margincall.fun/api/agent/quote-open \
 ```
 
 `estimatedPrincipal` matches the contract's own sizing, including the adverse-bound haircut,
-so it is an estimate of the borrow rather than a promise about fill price.
+so it is an estimate of the borrow rather than a promise about fill price. A supported asset
+can still refuse here: when `openingEnabled` is false, both spot and financed quotes return
+`ASSET_OPENING_DISABLED`.
 
 ### `GET /api/agent/position/{tokenId}`
 
