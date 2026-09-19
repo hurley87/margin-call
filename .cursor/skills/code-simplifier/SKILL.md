@@ -16,7 +16,7 @@ description: >-
 
 ## Project context
 
-This repo is the **Dinari Alloy App**: Next.js 16, React 19, TypeScript, Tailwind CSS 4, Shadcn/ui, TanStack React Query, React Hook Form + Zod, WorkOS AuthKit. Follow **`CLAUDE.md`** and existing code in `src/` for architecture (App Router, `src/features/alloys`, `src/components/alloys`, `src/lib`, proxy auth).
+This repo is the **Dinari Alloy App**: Next.js 16, React 19, TypeScript, Tailwind CSS 4, Shadcn/ui, TanStack React Query, React Hook Form + Zod, WorkOS AuthKit. Follow **`AGENTS.md`** and existing code in `src/` for architecture (App Router, `src/features/alloys`, `src/components/alloys`, `src/lib`, proxy auth).
 
 ## Standards to apply
 
@@ -40,7 +40,7 @@ This repo is the **Dinari Alloy App**: Next.js 16, React 19, TypeScript, Tailwin
 - Drive-by changes outside the requested or recently touched scope.
 - Over-merging unrelated concerns into one component or hook.
 - Removing abstractions that keep features (`src/features/`) or alloy types (`src/types/alloy.ts`) organized.
-- Behavior changes, shortcutting auth, proxy, or session assumptions documented in `CLAUDE.md`.
+- Behavior changes, shortcutting auth, proxy, or session assumptions documented in `AGENTS.md`.
 
 ## Process
 
