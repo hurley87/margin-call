@@ -73,6 +73,7 @@ Agent tooling can operate on top of the protocol, but it is not the product defi
 | Public agent API + MCP (read, quote, prepare)                    | **Shipped** ([#491](https://github.com/hurley87/margin-call/issues/491)) — see [`docs/agent-api.md`](docs/agent-api.md) |
 | Dynamic server-wallet reference (walletless agent)               | **Shipped** ([#490](https://github.com/hurley87/margin-call/issues/490)) — `pnpm agent:wallet`                          |
 | Dynamic + Uniswap stock acquisition (reference only)             | **Shipped** ([#492](https://github.com/hurley87/margin-call/issues/492)) — `pnpm agent:wallet --acquire`                |
+| Wallet-agnostic financed open (1.25x Position NFT)               | **Shipped** ([#493](https://github.com/hurley87/margin-call/issues/493)) — `pnpm agent:wallet --open`                   |
 | Living NFT presentation (`tokenURI`)                             | **Shipped** on Base ([#461](https://github.com/hurley87/margin-call/issues/461)) — HTTPS metadata + on-chain thesis     |
 | Convex JWT / identity                                            | Not wired yet (empty schema + HTTP router)                                                                              |
 
@@ -188,6 +189,33 @@ Expected:
 
 `--usdc` is a human decimal (default `2`). `--asset` defaults to `NVDAc`. Unit tests mock Uniswap and Dynamic; they do not prove a live Uniswap fill.
 
+Once the wallet holds a supported stock, open a **1.25x** financed Position NFT. The same Margin Call interface is used regardless of who signs:
+
+```bash
+pnpm agent:wallet --open --asset NVDAc
+```
+
+Expected when U.S. equity pricing is live:
+
+- checks `get_market_state` before borrowing
+- quotes and prepares a 1.25x open (no leverage picker)
+- signs stock approval if the allowance is short
+- signs and submits `openPosition(assetId, stockAmount, 12500, 0, thesis)` on Base
+- waits for the receipt, decodes the minted token id
+- reads the position back and prints token id, stock, principal/debt, leverage, thesis, and owner (the sending wallet)
+
+`--stock` is a human decimal (defaults to the wallet's full balance of that asset). `--asset` defaults to `NVDAc`. The demo thesis is `Opened by Margin Call agent reference demo.` so the NFT metadata shows an agent-created position.
+
+When pricing is unavailable (weekend, holiday, or a stale oracle), the CLI **does not submit** and prints:
+
+> Fresh U.S. equity pricing is unavailable, so I will not open a leveraged position.
+
+That refusal is a successful outcome (exit 0). It does not fall back to 1.0x.
+
+A Bankr-style agent that already has a Base address, the canonical stock from `get_assets`, and a signer should **skip** `pnpm agent:wallet` entirely: call `get_market_state` → `quote_open` → `prepare_open`, then submit the returned `{ to, data, value }` transactions with its own wallet. Those prepared transactions have no Dynamic dependency. See [`docs/agent-api.md`](docs/agent-api.md).
+
+`--acquire` and `--open` can run in one invocation (`pnpm agent:wallet --acquire --open`) after the address is funded.
+
 ## Commands
 
 | Command                          | Description                                                      |
@@ -199,6 +227,7 @@ Expected:
 | `pnpm test`                      | Vitest unit tests                                                |
 | `pnpm agent:wallet`              | Provision/resolve a Dynamic server wallet (reference agent demo) |
 | `pnpm agent:wallet --acquire`    | Swap a small USDC amount into a supported stock via Uniswap      |
+| `pnpm agent:wallet --open`       | Open a 1.25x Position NFT when live pricing permits it           |
 | `pnpm install:forge-deps`        | Install gitignored Foundry libraries                             |
 | `pnpm test:contracts`            | Foundry workspace checks                                         |
 | `pnpm test:contracts:ci`         | Foundry CI profile checks                                        |

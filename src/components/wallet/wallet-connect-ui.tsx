@@ -333,11 +333,6 @@ export function WalletConnectUi(props: {
           }
         }}
       >
-        <svg className="wallet-avatar" viewBox="0 0 32 32" aria-hidden="true">
-          <circle cx="16" cy="16" r="16" fill="currentColor" />
-          <circle cx="16" cy="12" r="5" fill="white" />
-          <path d="M7 26c0-10 18-10 18 0" fill="white" />
-        </svg>
         <span>{summaryLabel({ view, isConnecting, isVerifying })}</span>
         <svg
           className="wallet-chevron"

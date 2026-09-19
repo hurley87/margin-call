@@ -1,11 +1,23 @@
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { encodeEventTopics, toHex } from "viem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getAssets } from "@/lib/agent/assets";
+import {
+  fakeClient,
+  livePositionReads,
+  openSnapshotReads,
+} from "@/lib/agent/__tests__/fake-client";
+import { marginCallAbi } from "@/lib/protocol/abi";
+import { ORACLE_STATE } from "@/lib/protocol/constants";
 import { baseDeployment } from "@/lib/protocol/deployment";
-import { runAgentWalletDemo } from "@/lib/wallets/demo";
 import type { UniswapTradingApi } from "@/lib/uniswap/trading-api";
+import { runAgentWalletDemo } from "@/lib/wallets/demo";
+import {
+  FINANCED_DEMO_THESIS,
+  FINANCED_OPEN_PRICING_REFUSAL,
+} from "@/lib/wallets/open-position";
 
 const ADDRESS = "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c" as const;
 const HASH =
@@ -273,5 +285,115 @@ describe("runAgentWalletDemo", () => {
     expect(output).toMatch(/UNISWAP_API_KEY/);
     expect(output).toMatch(/Bankr/);
     expect(output).toMatch(/skip/i);
+  });
+
+  function positionOpenedLog() {
+    const topics = encodeEventTopics({
+      abi: marginCallAbi,
+      eventName: "PositionOpened",
+      args: { tokenId: 42n, owner: ADDRESS, assetId: 1n },
+    }) as [`0x${string}`, ...`0x${string}`[]];
+    return {
+      address: baseDeployment.marginCall,
+      topics,
+      data: toHex(1_000_000n, { size: 32 }),
+      blockHash: HASH,
+      blockNumber: 99n,
+      logIndex: 0,
+      transactionHash: HASH,
+      transactionIndex: 0,
+      removed: false,
+    };
+  }
+
+  function fakeOpenPublicClient(
+    oracleState: (typeof ORACLE_STATE)[keyof typeof ORACLE_STATE] = ORACLE_STATE.LIVE
+  ) {
+    const agent = fakeClient({
+      ...openSnapshotReads({
+        balance: 1_000_000n,
+        allowance: 0n,
+        contributionValue: 2_000_000n,
+        oracleState,
+      }),
+      ...livePositionReads({
+        owner: ADDRESS,
+        stockAmount: 1_000_000n,
+        principal: 495_000n,
+        currentDebt: 495_000n,
+        thesis: FINANCED_DEMO_THESIS,
+        risk: { nav: 2_495_000n, liquidatable: false },
+      }),
+    });
+    const publicClient = fakePublicClient();
+    publicClient.readContract =
+      agent.readContract as typeof publicClient.readContract;
+    Object.assign(publicClient, {
+      simulateContract: agent.simulateContract,
+    });
+    publicClient.waitForTransactionReceipt = vi.fn(async () => ({
+      status: "success" as const,
+      blockNumber: 99n,
+      transactionHash: HASH,
+      logs: [positionOpenedLog()],
+    }));
+    return publicClient;
+  }
+
+  it("opens a 1.25x Position NFT and prints token id, debt, thesis, and owner", async () => {
+    const env = await envWithStore();
+    const publicClient = fakeOpenPublicClient();
+
+    const result = await runAgentWalletDemo({
+      env,
+      argv: ["--open", "--asset", "NVDAc"],
+      connect: fakeConnect(),
+      createPublicClient: () => publicClient,
+    });
+
+    expect(result.exitCode).toBe(0);
+    const output = result.lines.join("\n");
+    expect(output).toContain("1.25x");
+    expect(output).toContain("42");
+    expect(output).toContain(FINANCED_DEMO_THESIS);
+    expect(output).toContain(ADDRESS);
+    expect(output).toMatch(/Bankr/);
+    expect(output).toMatch(/ordinary Base transactions/i);
+    expect(publicClient.sendRawTransaction).toHaveBeenCalled();
+  });
+
+  it("treats unavailable pricing as a successful refusal and does not submit", async () => {
+    const env = await envWithStore();
+    const publicClient = fakeOpenPublicClient(ORACLE_STATE.HELD);
+
+    const result = await runAgentWalletDemo({
+      env,
+      argv: ["--open"],
+      connect: fakeConnect(),
+      createPublicClient: () => publicClient,
+    });
+
+    expect(result.exitCode).toBe(0);
+    const output = result.lines.join("\n");
+    expect(output).toContain(FINANCED_OPEN_PRICING_REFUSAL);
+    expect(output).not.toMatch(/1\.0x/);
+    expect(publicClient.sendRawTransaction).not.toHaveBeenCalled();
+  });
+
+  it("refuses --open when the wallet has no ETH for gas", async () => {
+    const env = await envWithStore();
+    const publicClient = fakeOpenPublicClient();
+    publicClient.getBalance = vi.fn(async () => 0n);
+
+    const result = await runAgentWalletDemo({
+      env,
+      argv: ["--open"],
+      connect: fakeConnect(),
+      createPublicClient: () => publicClient,
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(publicClient.sendRawTransaction).not.toHaveBeenCalled();
+    expect(result.lines.join("\n")).toMatch(/0 ETH/);
   });
 });

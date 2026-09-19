@@ -21,7 +21,9 @@ in that surface signs or broadcasts. Both transports call the same core function
 [`docs/agent-api.md`](docs/agent-api.md). Write tools (`repay`, `close`, `liquidate`) are not exposed yet.
 Stock acquisition is the caller's job: the Dynamic reference demo swaps USDC for a launch stock via Uniswap
 (`pnpm agent:wallet --acquire`); agents that already swap skip that and continue once the wallet holds the
-canonical token from `get_assets`.
+canonical token from `get_assets`. The financed-open execute path (issue #493) lives in `src/lib/wallets/` and
+submits those prepared transactions through any `AgentWallet` — Dynamic is the reference demo
+(`pnpm agent:wallet --open`), not a requirement.
 
 The live Base deployment (`contracts/deployments/base.json`) is the canonical multi-stock
 launch stack (issue #446: NVDAc + AAPLc + METAc + GOOGLc). The historical NVDA-only
@@ -55,6 +57,7 @@ without an extra metadata request. Loading and failed reads retain neutral ticke
 - `pnpm typecheck` — TypeScript
 - `pnpm agent:wallet` — provision or resolve a Dynamic server wallet (reference agent demo; Base only)
 - `pnpm agent:wallet --acquire` — Dynamic + Uniswap reference path to buy a supported stock with USDC
+- `pnpm agent:wallet --open` — open a 1.25x Position NFT when live pricing permits it
 - `pnpm test` — Vitest
 - `pnpm install:forge-deps` — install Forge libraries into `contracts/lib`
 - `pnpm test:contracts` / `pnpm test:contracts:ci` — Foundry workspace checks

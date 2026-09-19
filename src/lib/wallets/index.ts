@@ -45,3 +45,12 @@ export {
   permitDataToTypedData,
   type AcquireStockResult,
 } from "@/lib/wallets/acquire-stock";
+
+export {
+  FINANCED_DEMO_LEVERAGE,
+  FINANCED_DEMO_THESIS,
+  FINANCED_OPEN_PRICING_REFUSAL,
+  openFinancedPosition,
+  parseOpenCliArgs,
+  type OpenFinancedResult,
+} from "@/lib/wallets/open-position";
