@@ -6,7 +6,7 @@ Margin Call is a Next.js 16 Base Position NFT application. The Crash game has be
 landed and wired to the canonical multi-stock deployment: `/` (portfolio), `/positions` (explore), `/create`,
 `/position/[tokenId]`, and `GET /api/nft/[tokenId]`, with a working connect → open → repay → close write path.
 
-- Dynamic (external EVM wallets on Base; wallet island included at build time when `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID` is set)
+- Dynamic (website: external EVM wallets on Base; agent reference: server wallets in `src/lib/wallets/`. Dynamic is not required — the public agent surface is wallet-agnostic.)
 - Convex (Position NFT lifecycle index: `positions` + `syncState`, discovery queries, a `syncTransaction` receipt action, and a 10-minute reconcile cron; HTTP router still empty; no JWT auth until a product query needs identity)
 - Foundry (reproducible workspace pins; product contracts live under `contracts/`)
 
@@ -48,6 +48,7 @@ positions on the ticker logo on surfaces that do not read metadata (detail, port
 - `pnpm build` — production build
 - `pnpm lint` — ESLint
 - `pnpm typecheck` — TypeScript
+- `pnpm agent:wallet` — provision or resolve a Dynamic server wallet (reference agent demo; Base only)
 - `pnpm test` — Vitest
 - `pnpm install:forge-deps` — install Forge libraries into `contracts/lib`
 - `pnpm test:contracts` / `pnpm test:contracts:ci` — Foundry workspace checks

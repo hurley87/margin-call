@@ -30,6 +30,7 @@
     "audit:prod": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "audit:all:gated": "node scripts/audit-all-gated.mjs",
+    "agent:wallet": "tsx src/lib/wallets/cli.ts",
     "prepare": "husky"
   },
   "dependencies": {
@@ -37,6 +38,8 @@
     "@dynamic-labs-sdk/client": "^1.33.4",
     "@dynamic-labs-sdk/evm": "^1.33.4",
     "@dynamic-labs-sdk/react-hooks": "^1.33.4",
+    "@dynamic-labs-wallet/node": "1.1.14",
+    "@dynamic-labs-wallet/node-evm": "^1.1.14",
     "@margin-call/shared": "workspace:*",
     "@modelcontextprotocol/server": "^2.0.0",
     "@sentry/nextjs": "^10.74.0",
@@ -73,6 +76,7 @@
     "prettier": "^3.9.6",
     "sharp": "^0.35.4",
     "tailwindcss": "^4",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "4.1.11"
   },

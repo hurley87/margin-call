@@ -4,6 +4,11 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   transpilePackages: ["@margin-call/shared"],
+  // Native MPC addons for the agent-wallet CLI; never bundle into the app.
+  serverExternalPackages: [
+    "@dynamic-labs-wallet/node",
+    "@dynamic-labs-wallet/node-evm",
+  ],
   async headers() {
     return [
       {

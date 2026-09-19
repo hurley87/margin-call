@@ -54,3 +54,6 @@ next-env.d.ts
 
 # Floor #248 live probe / sponsorship evidence (secrets + RPC artifacts)
 .floor-evidence/
+
+# Dynamic server-wallet metadata for the agent demo (issue #490)
+.dynamic-agent-wallet.json
