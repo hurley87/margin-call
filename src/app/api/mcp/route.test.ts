@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   fakeClient,
-  observation,
   openSnapshotReads,
 } from "@/lib/agent/__tests__/fake-client";
 import { ORACLE_STATE } from "@/lib/protocol/constants";
@@ -81,9 +80,9 @@ describe("POST /api/mcp", () => {
   });
 
   it("answers a tool call with the same payload the HTTP surface returns", async () => {
-    base.client = fakeClient({
-      latestObservation: () => observation(ORACLE_STATE.LIVE),
-    });
+    base.client = fakeClient(
+      openSnapshotReads({ oracleState: ORACLE_STATE.LIVE })
+    );
 
     const result = await call("tools/call", {
       name: "get_market_state",
@@ -95,7 +94,31 @@ describe("POST /api/mcp", () => {
       ok: true,
       asset: "NVDAc",
       pricing: "live",
+      openingEnabled: true,
       canOpenLeveragedPosition: true,
+    });
+    expect(result.isError).toBe(false);
+  });
+
+  it("does not flag a closed-to-opens get_market_state as a tool failure", async () => {
+    base.client = fakeClient(
+      openSnapshotReads({
+        oracleState: ORACLE_STATE.LIVE,
+        openingEnabled: false,
+      })
+    );
+
+    const result = await call("tools/call", {
+      name: "get_market_state",
+      arguments: { asset: "NVDAc" },
+    });
+    const text = (result.content as { text: string }[])[0]?.text ?? "{}";
+
+    expect(JSON.parse(text)).toMatchObject({
+      ok: true,
+      openingEnabled: false,
+      canOpenLeveragedPosition: false,
+      reason: "Opening new positions is currently disabled for NVDAc.",
     });
     expect(result.isError).toBe(false);
   });

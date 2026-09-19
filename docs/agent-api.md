@@ -72,28 +72,47 @@ as `isError`: caller mistakes are tool errors, protocol refusals are answers.
 
 ## Pricing: live vs unavailable
 
-Financed opens need a fresh price. The oracle distinguishes held from invalid readings, but
-that is protocol detail — the agent surface collapses both into `pricing: "unavailable"`,
-because the decision is identical either way.
+Financed opens need a fresh price **and** an asset that still accepts new mints.
+`canOpenLeveragedPosition` is true only when both are true. The oracle distinguishes
+held from invalid readings, but that is protocol detail — the agent surface collapses
+both into `pricing: "unavailable"`, because the decision is identical either way.
 
 ```jsonc
-// Weekday, U.S. market open
-{ "ok": true, "asset": "NVDAc", "pricing": "live", "canOpenLeveragedPosition": true }
+// Weekday, U.S. market open, asset accepting new positions
+{
+  "ok": true,
+  "asset": "NVDAc",
+  "pricing": "live",
+  "openingEnabled": true,
+  "canOpenLeveragedPosition": true
+}
 
 // Weekend, holiday, or a pricing interruption
 {
   "ok": true,
   "asset": "NVDAc",
   "pricing": "unavailable",
+  "openingEnabled": true,
   "canOpenLeveragedPosition": false,
   "reason": "Fresh U.S. equity pricing is unavailable."
+}
+
+// Supported rail, temporarily closed to new positions
+{
+  "ok": true,
+  "asset": "NVDAc",
+  "pricing": "live",
+  "openingEnabled": false,
+  "canOpenLeveragedPosition": false,
+  "reason": "Opening new positions is currently disabled for NVDAc."
 }
 ```
 
 When pricing is unavailable, **refusing to open a leveraged position is the correct
 outcome.** Do not silently fall back to spot to force a financed request through; say that
 pricing is unavailable and stop. Spot (`10000`) borrows nothing and never consults the
-oracle on-chain, so it stays openable — but only offer it if that is what the user asked for.
+oracle on-chain, so it stays openable while pricing is stale — but only offer it if that
+is what the user asked for, and only while `openingEnabled` is true.
 
 ## HTTP endpoints
 
@@ -139,6 +158,7 @@ curl https://margincall.fun/api/agent/assets
 ### `GET /api/agent/market-state`
 
 Whether one asset can back a financed open right now. Takes `?asset=NVDAc` or `?assetId=1`.
+`canOpenLeveragedPosition` is true only when pricing is live and `openingEnabled` is true.
 
 ```bash
 curl "https://margincall.fun/api/agent/market-state?asset=NVDAc"
@@ -343,14 +363,14 @@ Cursor (`.cursor/mcp.json`) or Claude Desktop:
 }
 ```
 
-| Tool               | Purpose                                       |
-| ------------------ | --------------------------------------------- |
-| `get_assets`       | Supported stocks, addresses, leverage presets |
-| `get_market_state` | Is pricing live enough to borrow against?     |
-| `get_credit_pool`  | How much USDC the pool can lend               |
-| `quote_open`       | Size a prospective open                       |
-| `get_position`     | Read one Position NFT                         |
-| `prepare_open`     | Unsigned calldata to open a position          |
+| Tool               | Purpose                                        |
+| ------------------ | ---------------------------------------------- |
+| `get_assets`       | Supported stocks, addresses, leverage presets  |
+| `get_market_state` | Can this asset back a financed open right now? |
+| `get_credit_pool`  | How much USDC the pool can lend                |
+| `quote_open`       | Size a prospective open                        |
+| `get_position`     | Read one Position NFT                          |
+| `prepare_open`     | Unsigned calldata to open a position           |
 
 A raw JSON-RPC call, for clients you are wiring by hand:
 
@@ -365,7 +385,7 @@ curl -X POST https://margincall.fun/api/mcp \
 ## A complete open
 
 1. `get_assets` — pick an asset and a leverage preset.
-2. `get_market_state` — if you want leverage and pricing is unavailable, stop and say so.
+2. `get_market_state` — if you want leverage and `canOpenLeveragedPosition` is false, stop and say so.
 3. `quote_open` — confirm the principal and that the pool can fund it.
 4. `prepare_open` — get the unsigned transactions.
 5. Sign and submit them with your own wallet, in order.

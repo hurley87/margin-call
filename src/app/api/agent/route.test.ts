@@ -87,7 +87,29 @@ describe("GET /api/agent/market-state", () => {
       ok: true,
       asset: "NVDAc",
       pricing: "live",
+      openingEnabled: true,
       canOpenLeveragedPosition: true,
+    });
+  });
+
+  it("still answers 200 when a supported asset is closed to new opens", async () => {
+    stubBase(
+      openSnapshotReads({
+        oracleState: ORACLE_STATE.LIVE,
+        openingEnabled: false,
+      })
+    );
+
+    const response = await getMarketStateRoute(
+      get("/api/agent/market-state?asset=NVDAc")
+    );
+
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      ok: true,
+      openingEnabled: false,
+      canOpenLeveragedPosition: false,
+      reason: "Opening new positions is currently disabled for NVDAc.",
     });
   });
 
@@ -110,6 +132,7 @@ describe("GET /api/agent/market-state", () => {
       latestObservation: () => {
         throw new Error("fetch failed");
       },
+      assetConfig: () => ({ openingEnabled: true }),
     });
 
     const response = await getMarketStateRoute(

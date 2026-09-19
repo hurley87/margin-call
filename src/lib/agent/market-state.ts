@@ -1,5 +1,6 @@
 import {
   AGENT_PRICING_UNAVAILABLE_REASON,
+  assetOpeningDisabledMessage,
   readBase,
   type AgentResult,
 } from "@/lib/agent/result";
@@ -7,7 +8,10 @@ import { parseAssetSelector, type AssetSelector } from "@/lib/agent/input";
 import { ORACLE_STATE, type OracleState } from "@/lib/protocol/constants";
 import type { LaunchAssetName } from "@/lib/protocol/deployment";
 import type { BasePublicClient } from "@/lib/protocol/public-client";
-import { loadMarketObservation } from "@/lib/protocol/reads";
+import {
+  loadAssetOpeningEnabled,
+  loadMarketObservation,
+} from "@/lib/protocol/reads";
 import {
   PRICING_AVAILABILITY_CAVEAT,
   PRICING_AVAILABILITY_NOTE,
@@ -23,8 +27,10 @@ export type MarketStatePayload = {
   asset: LaunchAssetName;
   assetId: number;
   pricing: AgentPricing;
+  /** Live `MarginCall.assetConfig(assetId).openingEnabled`. */
+  openingEnabled: boolean;
   canOpenLeveragedPosition: boolean;
-  /** Present only when pricing is unavailable. */
+  /** Present when a financed open is not possible, naming why. */
   reason?: string;
   pricingNote: string;
   /** Oracle observation time, ISO-8601, or null when the feed has never set one. */
@@ -45,8 +51,9 @@ function observedAt(updatedAt: bigint): string | null {
 /**
  * Whether one launch rail can currently back a financed open.
  *
- * Spot opens do not consult the oracle on-chain, so `canOpenLeveragedPosition`
- * is strictly about borrowing — it is not a claim that the asset is unusable.
+ * `canOpenLeveragedPosition` is true only when pricing is live and the
+ * coordinator still accepts new mints. Spot opens skip the oracle on-chain,
+ * so a false here from stale pricing is not a claim that 1.0x is unusable.
  */
 export async function getMarketState(
   client: BasePublicClient,
@@ -55,21 +62,35 @@ export async function getMarketState(
   const asset = parseAssetSelector(selector);
   if (!asset.ok) return asset;
 
-  const observation = await readBase(() =>
-    loadMarketObservation(client, asset.value)
-  );
-  if (!observation.ok) return observation;
+  const reads = await readBase(async () => {
+    const [observation, openingEnabled] = await Promise.all([
+      loadMarketObservation(client, asset.value),
+      loadAssetOpeningEnabled(client, asset.value.assetId),
+    ]);
+    return { observation, openingEnabled };
+  });
+  if (!reads.ok) return reads;
 
-  const pricing = toPricing(observation.value.state);
+  const pricing = toPricing(reads.value.observation.state);
+  const { openingEnabled } = reads.value;
+  const canOpenLeveragedPosition = pricing === "live" && openingEnabled;
+
+  let reason: string | undefined;
+  if (!openingEnabled) {
+    reason = assetOpeningDisabledMessage(asset.value.name);
+  } else if (pricing !== "live") {
+    reason = AGENT_PRICING_UNAVAILABLE_REASON;
+  }
 
   return {
     ok: true,
     asset: asset.value.name,
     assetId: asset.value.assetId,
     pricing,
-    canOpenLeveragedPosition: pricing === "live",
-    ...(pricing === "live" ? {} : { reason: AGENT_PRICING_UNAVAILABLE_REASON }),
+    openingEnabled,
+    canOpenLeveragedPosition,
+    ...(reason == null ? {} : { reason }),
     pricingNote: PRICING_NOTE,
-    priceUpdatedAt: observedAt(observation.value.updatedAt),
+    priceUpdatedAt: observedAt(reads.value.observation.updatedAt),
   };
 }

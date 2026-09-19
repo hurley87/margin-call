@@ -9,7 +9,7 @@ import { baseDeployment } from "@/lib/protocol/deployment";
 import {
   fakeClient,
   livePositionReads,
-  observation,
+  openSnapshotReads,
 } from "@/lib/agent/__tests__/fake-client";
 
 describe("get_assets", () => {
@@ -54,10 +54,10 @@ describe("get_assets", () => {
 });
 
 describe("get_market_state", () => {
-  it("reports live pricing as openable for leverage", async () => {
-    const client = fakeClient({
-      latestObservation: () => observation(ORACLE_STATE.LIVE),
-    });
+  it("reports live pricing as openable for leverage when opening is enabled", async () => {
+    const client = fakeClient(
+      openSnapshotReads({ oracleState: ORACLE_STATE.LIVE })
+    );
 
     const state = await getMarketState(client, { asset: "NVDAc" });
 
@@ -66,6 +66,7 @@ describe("get_market_state", () => {
       asset: "NVDAc",
       assetId: 1,
       pricing: "live",
+      openingEnabled: true,
       canOpenLeveragedPosition: true,
     });
     expect(state).not.toHaveProperty("reason");
@@ -77,15 +78,14 @@ describe("get_market_state", () => {
   ])(
     "collapses %s pricing into one unavailable answer with a plain reason",
     async (_label, state) => {
-      const client = fakeClient({
-        latestObservation: () => observation(state),
-      });
+      const client = fakeClient(openSnapshotReads({ oracleState: state }));
 
       const market = await getMarketState(client, { assetId: 1 });
 
       expect(market).toMatchObject({
         ok: true,
         pricing: "unavailable",
+        openingEnabled: true,
         canOpenLeveragedPosition: false,
         reason: "Fresh U.S. equity pricing is unavailable.",
       });
@@ -94,10 +94,46 @@ describe("get_market_state", () => {
     }
   );
 
-  it("accepts either an asset name or an assetId", async () => {
-    const client = fakeClient({
-      latestObservation: () => observation(ORACLE_STATE.LIVE),
+  it("keeps live pricing but refuses leverage when the asset is closed to new opens", async () => {
+    const client = fakeClient(
+      openSnapshotReads({
+        oracleState: ORACLE_STATE.LIVE,
+        openingEnabled: false,
+      })
+    );
+
+    const state = await getMarketState(client, { asset: "NVDAc" });
+
+    expect(state).toMatchObject({
+      ok: true,
+      pricing: "live",
+      openingEnabled: false,
+      canOpenLeveragedPosition: false,
+      reason: "Opening new positions is currently disabled for NVDAc.",
     });
+  });
+
+  it("names the opening-disabled gate when pricing is also unavailable", async () => {
+    const client = fakeClient(
+      openSnapshotReads({
+        oracleState: ORACLE_STATE.HELD,
+        openingEnabled: false,
+      })
+    );
+
+    await expect(
+      getMarketState(client, { asset: "NVDAc" })
+    ).resolves.toMatchObject({
+      ok: true,
+      pricing: "unavailable",
+      openingEnabled: false,
+      canOpenLeveragedPosition: false,
+      reason: "Opening new positions is currently disabled for NVDAc.",
+    });
+  });
+
+  it("accepts either an asset name or an assetId", async () => {
+    const client = fakeClient(openSnapshotReads());
 
     await expect(
       getMarketState(client, { asset: "googlc" })
@@ -126,6 +162,7 @@ describe("get_market_state", () => {
       latestObservation: () => {
         throw new Error("fetch failed");
       },
+      assetConfig: () => ({ openingEnabled: true }),
     });
 
     await expect(

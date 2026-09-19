@@ -82,10 +82,14 @@ export const AGENT_PRICING_UNAVAILABLE_REASON =
  * The asset is a known launch rail; new mints are paused. Re-spelling the
  * id will not help — only an admin toggle or time will.
  */
+export function assetOpeningDisabledMessage(assetName: string): string {
+  return `Opening new positions is currently disabled for ${assetName}.`;
+}
+
 export function assetOpeningDisabledError(assetName: string): AgentErr {
   return agentError(
     "ASSET_OPENING_DISABLED",
-    `Opening new positions is currently disabled for ${assetName}.`
+    assetOpeningDisabledMessage(assetName)
   );
 }
 

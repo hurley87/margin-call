@@ -72,7 +72,7 @@ const handler = createMcpHandler(
       {
         title: "Check pricing availability",
         description:
-          "Whether fresh U.S. equity pricing is live for one asset, and therefore whether a leveraged position can be opened right now. Check this before quoting a financed open.",
+          "Whether a leveraged open is possible for one asset right now: fresh U.S. equity pricing must be live, and the asset must still accept new positions. Check this before quoting a financed open.",
         inputSchema: z.object(assetSelector),
       },
       async (args) =>
@@ -146,7 +146,7 @@ const handler = createMcpHandler(
   {
     serverInfo: { name: "margin-call", version: "1.0.0" },
     instructions:
-      "Margin Call opens leveraged positions in tokenized stocks on Base. Reads, quotes, and transaction preparation are public and need no wallet. To open a position: check get_market_state, then quote_open, then prepare_open, then sign and submit the returned transactions with your own Base wallet. When pricing is unavailable, refusing to open a leveraged position is the correct outcome — do not fall back to spot to force a financed request through.",
+      "Margin Call opens leveraged positions in tokenized stocks on Base. Reads, quotes, and transaction preparation are public and need no wallet. To open a position: check get_market_state, then quote_open, then prepare_open, then sign and submit the returned transactions with your own Base wallet. When canOpenLeveragedPosition is false, refusing to open a leveraged position is the correct outcome — do not fall back to spot to force a financed request through.",
   }
 );
 

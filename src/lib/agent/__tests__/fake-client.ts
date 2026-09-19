@@ -104,14 +104,16 @@ export function livePositionReads(fixture: PositionFixture = {}): ReadHandlers {
 }
 
 /** Reads that make `loadOpenSnapshot` resolve for one wallet and asset. */
-export function openSnapshotReads(fixture: {
-  balance?: bigint;
-  allowance?: bigint;
-  availableCredit?: bigint;
-  oracleState?: OracleState;
-  contributionValue?: bigint;
-  openingEnabled?: boolean;
-}): ReadHandlers {
+export function openSnapshotReads(
+  fixture: {
+    balance?: bigint;
+    allowance?: bigint;
+    availableCredit?: bigint;
+    oracleState?: OracleState;
+    contributionValue?: bigint;
+    openingEnabled?: boolean;
+  } = {}
+): ReadHandlers {
   return {
     balanceOf: () => fixture.balance ?? 10_000_000n,
     allowance: () => fixture.allowance ?? 0n,
