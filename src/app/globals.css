@@ -1,6 +1,7 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "drawably/style.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -955,5 +956,538 @@
   }
   ::-webkit-scrollbar-thumb:hover {
     background: rgba(214, 166, 96, 0.42);
+  }
+}
+
+/* Hand-drawn portfolio. These tokens never escape the homepage or header. */
+.playful-theme {
+  --drawably-stroke: #20272b;
+  --drawably-fill: #20272b;
+  --drawably-paper: #fffefa;
+  --t-bg: #fffefa;
+  --t-surface: #f6f3ed;
+  --t-text: #111c24;
+  --t-muted: #687078;
+  --t-accent: #a94e12;
+  --t-accent-soft: #fff0dd;
+  --t-border: #e3ded5;
+  --t-green: #287e38;
+  --t-red: #b43333;
+  --t-amber: #936115;
+  --t-focus-ring: #2477c7;
+  --playful-max: 1480px;
+  --playful-gutter: 40px;
+  color: var(--t-text);
+  background: var(--t-bg);
+  font-family: var(--font-patrick-hand), cursive;
+  font-weight: 400;
+}
+
+.playful-theme ::selection {
+  background: #ffdcaa;
+  color: #111c24;
+}
+
+.portfolio-home {
+  min-height: 100vh;
+}
+.playful-header {
+  position: relative;
+  z-index: 10;
+}
+.playful-header-inner {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 32px;
+  max-width: var(--playful-max);
+  margin: 0 auto;
+  padding: 24px var(--playful-gutter);
+}
+.playful-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  width: fit-content;
+  white-space: nowrap;
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+}
+.playful-brand svg {
+  width: 44px;
+  height: 44px;
+  color: #f57b16;
+}
+.playful-nav {
+  display: flex;
+  align-items: center;
+  gap: 38px;
+  font-size: 24px;
+}
+.playful-nav a {
+  color: #58616a;
+  padding: 8px 0;
+  border-bottom: 3px solid transparent;
+}
+.playful-nav a:hover,
+.playful-nav a[aria-current="page"] {
+  color: #111c24;
+}
+.playful-nav a[aria-current="page"] {
+  border-bottom-color: transparent;
+}
+.playful-wallet {
+  display: flex;
+  align-items: center;
+  min-height: 50px;
+  justify-self: end;
+  min-width: 0;
+  max-width: 280px;
+}
+.playful-wallet [data-slot="button"] {
+  min-height: 44px;
+  height: auto;
+  padding: 8px 20px;
+  border-radius: 24px;
+  font: inherit;
+  font-size: 21px;
+  color: #111c24;
+  background: #f5f2ec;
+  border-color: transparent;
+}
+.playful-wallet [data-slot="button"]:hover {
+  background: #ebe6dd;
+}
+.playful-wallet p {
+  font-size: 17px;
+  line-height: 1.4;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.playful-wallet code {
+  overflow-wrap: anywhere;
+  font-size: 11px;
+}
+.wallet-account {
+  position: relative;
+}
+.wallet-address-pill {
+  height: 50px;
+  line-height: 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-radius: 24px;
+  background: #f5f2ec;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-size: 23px;
+  white-space: nowrap;
+  list-style: none;
+}
+.wallet-address-pill::-webkit-details-marker {
+  display: none;
+}
+.wallet-address-pill:focus-visible {
+  outline: 2px solid var(--t-focus-ring);
+  outline-offset: 3px;
+}
+.wallet-avatar {
+  width: 30px;
+  height: 30px;
+  color: #218cff;
+}
+.wallet-chevron {
+  width: 20px;
+  height: 20px;
+  margin-left: 12px;
+}
+.wallet-account[open] .wallet-chevron {
+  transform: rotate(180deg);
+}
+.wallet-account-panel {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(300px, calc(100vw - 32px));
+  max-height: min(520px, calc(100dvh - 100px));
+  overflow-y: auto;
+  overflow-wrap: anywhere;
+  padding: 20px;
+  border: 1px solid var(--t-border);
+  border-radius: 20px;
+  background: #fffefa;
+  box-shadow: 0 12px 35px #29221a14;
+  white-space: normal;
+}
+.portfolio-main {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 24px 48px;
+}
+.portfolio-welcome {
+  padding-top: 32px;
+  text-align: center;
+}
+.portfolio-hero-art {
+  display: block;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+  height: auto;
+  mix-blend-mode: multiply;
+}
+.portfolio-welcome-copy {
+  margin: 22px auto 0;
+}
+.portfolio-welcome h1 {
+  font-size: clamp(38px, 4.9vw, 72px);
+  line-height: 1.12;
+  letter-spacing: 0.005em;
+  text-wrap: balance;
+}
+.portfolio-welcome-copy > p {
+  margin: 18px auto 0;
+  color: var(--t-muted);
+  font-size: clamp(22px, 2.45vw, 34px);
+  line-height: 1.3;
+  text-wrap: balance;
+}
+.portfolio-open-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 22px;
+  max-width: 100%;
+  padding: 15px 48px;
+  border: 2px solid #1c252b;
+  border-radius: 999px;
+  background: #20272b;
+  color: #fffefa;
+  font-size: 30px;
+  line-height: 1.35;
+  white-space: nowrap;
+  box-shadow: inset 0 0 16px #ffffff08;
+}
+.portfolio-open-cta:hover {
+  background: #354047;
+}
+.portfolio-open-cta > span {
+  font-size: 39px;
+  line-height: 1;
+}
+.portfolio-welcome-copy .portfolio-open-cta {
+  min-width: min(380px, 100%);
+  margin-top: 34px;
+}
+.portfolio-features {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 36px;
+  margin: 56px 0 0;
+  padding: 0 12px;
+  list-style: none;
+}
+.portfolio-feature svg {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto 12px;
+}
+.portfolio-feature-chart svg {
+  color: #39a342;
+}
+.portfolio-feature-paw svg {
+  color: #f57b16;
+}
+.portfolio-feature-shield svg {
+  color: #328dff;
+}
+.portfolio-feature-heart svg {
+  color: #f45882;
+}
+.portfolio-feature h2 {
+  font-size: 27px;
+  line-height: 1.2;
+}
+.portfolio-feature p {
+  max-width: 265px;
+  margin: 10px auto 0;
+  color: var(--t-muted);
+  font-size: 23px;
+  line-height: 1.3;
+  text-wrap: pretty;
+}
+.portfolio-content {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  max-width: 960px;
+  margin: 48px auto;
+  font-size: 21px;
+}
+.portfolio-content-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.portfolio-content-heading h1 {
+  font-size: 48px;
+  line-height: 1.1;
+}
+.portfolio-content-heading p {
+  margin-top: 10px;
+  color: var(--t-muted);
+  font-size: 21px;
+}
+.portfolio-content-heading .portfolio-open-cta {
+  font-size: 23px;
+  padding: 12px 25px;
+  gap: 12px;
+}
+.portfolio-home .position-card {
+  padding: 20px;
+  border-radius: 18px;
+  background: #ffffff80;
+}
+.portfolio-home .position-card[data-highlighted] {
+  background: var(--t-accent-soft);
+}
+.portfolio-home .position-card-title {
+  font-family: inherit;
+  color: var(--t-text);
+  font-size: 25px;
+  font-weight: 400;
+}
+.portfolio-home .position-card p:not(.position-card-title),
+.portfolio-home .position-card span {
+  font-size: 18px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.portfolio-home .portfolio-content > p {
+  font-size: 21px;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.portfolio-home [data-slot="button"] {
+  min-height: 44px;
+  border-radius: 999px;
+  font-size: 20px;
+  padding: 8px 20px;
+  color: var(--t-text);
+}
+
+@media (max-width: 1100px) {
+  .playful-theme {
+    --playful-gutter: 24px;
+  }
+  .playful-header-inner {
+    gap: 24px;
+    padding: 22px var(--playful-gutter);
+  }
+  .playful-brand {
+    font-size: 34px;
+    gap: 10px;
+  }
+  .playful-brand svg {
+    width: 36px;
+    height: 36px;
+  }
+  .playful-nav {
+    gap: 24px;
+    font-size: 22px;
+  }
+  .wallet-address-pill {
+    font-size: 20px;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .wallet-chevron {
+    margin-left: 2px;
+  }
+  .portfolio-features {
+    gap: 28px;
+  }
+  .portfolio-feature h2 {
+    font-size: 24px;
+  }
+  .portfolio-feature p {
+    font-size: 21px;
+  }
+}
+@media (max-width: 850px) {
+  .playful-header-inner {
+    grid-template-columns: 1fr auto;
+    gap: 18px;
+  }
+  .playful-nav {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    justify-content: center;
+    gap: 36px;
+  }
+  .playful-wallet {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .portfolio-welcome {
+    padding-top: 26px;
+  }
+  .portfolio-features {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 36px 24px;
+    margin-top: 44px;
+  }
+  .portfolio-content-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+@media (max-width: 480px) {
+  .playful-theme {
+    --playful-gutter: 16px;
+  }
+  .playful-header-inner {
+    padding: 20px var(--playful-gutter) 12px;
+    gap: 16px 10px;
+  }
+  .playful-brand {
+    font-size: 28px;
+    gap: 7px;
+  }
+  .playful-brand svg {
+    width: 29px;
+    height: 29px;
+  }
+  .playful-wallet {
+    max-width: 155px;
+  }
+  .playful-wallet p {
+    font-size: 14px;
+  }
+  .playful-wallet [data-slot="button"] {
+    font-size: 18px;
+    padding: 8px 15px;
+  }
+  .wallet-address-pill {
+    padding: 9px 10px;
+    font-size: 17px;
+    gap: 6px;
+  }
+  .wallet-avatar {
+    width: 23px;
+    height: 23px;
+  }
+  .wallet-chevron {
+    width: 14px;
+    height: 14px;
+  }
+  .playful-nav {
+    font-size: 21px;
+    gap: 30px;
+  }
+  .portfolio-main {
+    padding: 0 16px 40px;
+  }
+  .portfolio-hero-art {
+    width: calc(100% + 32px);
+    max-width: none;
+    margin-left: -16px;
+  }
+  .portfolio-welcome-copy {
+    margin-top: 24px;
+  }
+  .portfolio-welcome-copy > p {
+    margin-top: 16px;
+  }
+  .portfolio-open-cta {
+    font-size: 25px;
+    padding: 13px 30px;
+    gap: 15px;
+  }
+  .portfolio-welcome-copy .portfolio-open-cta {
+    margin-top: 28px;
+  }
+  .portfolio-features {
+    grid-template-columns: 1fr;
+    gap: 32px;
+  }
+  .portfolio-feature h2 {
+    font-size: 26px;
+  }
+  .portfolio-feature p {
+    font-size: 22px;
+  }
+  .portfolio-content {
+    margin-top: 32px;
+  }
+  .portfolio-content-heading h1 {
+    font-size: 40px;
+  }
+}
+
+/* Drawably supplies strokes; Patrick Hand remains the product typeface. */
+.playful-theme .drawably-host {
+  font-family: var(--font-patrick-hand), cursive;
+}
+.playful-theme .drawably-svg {
+  animation: none;
+}
+.playful-wallet .drawably-button {
+  background: transparent;
+  border-radius: 10px;
+}
+.playful-wallet .drawably-button:hover {
+  background: transparent;
+}
+.playful-wallet .wallet-account-panel {
+  position: absolute;
+  border: 0;
+  padding: 20px;
+}
+.portfolio-open-cta {
+  position: relative;
+  isolation: isolate;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.portfolio-open-cta:hover {
+  background: transparent;
+}
+.portfolio-cta-sketch {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  fill: #20272b;
+  stroke: #20272b;
+  stroke-width: 2;
+  pointer-events: none;
+}
+.portfolio-open-cta:hover .portfolio-cta-sketch {
+  fill: #354047;
+  stroke: #354047;
+}
+
+@media (max-width: 360px) {
+  .playful-brand {
+    font-size: 24px;
+  }
+  .playful-brand svg {
+    width: 25px;
+    height: 25px;
+  }
+  .wallet-address-pill {
+    font-size: 16px;
+  }
+  .wallet-avatar {
+    display: none;
   }
 }
