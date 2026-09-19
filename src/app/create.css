@@ -246,6 +246,74 @@
   font-size: 17px;
   color: var(--t-muted);
 }
+.create-acquire {
+  margin: 12px 4px 0;
+  font-size: 17px;
+  color: var(--t-muted);
+}
+.create-acquire-empty {
+  margin: 14px 0 0;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #fbf3e9;
+  color: #8c561c;
+}
+.create-acquire-note {
+  margin: 0;
+}
+.create-acquire-empty .create-acquire-note {
+  font-size: 19px;
+  color: #6d4517;
+}
+.create-acquire-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin-top: 8px;
+}
+.create-acquire-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #c15b12;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.create-acquire-empty .create-acquire-link {
+  font-size: 19px;
+}
+.create-acquire-link:hover,
+.create-acquire-link:focus-visible {
+  color: #8c561c;
+}
+.create-acquire-refresh {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 8px 0 0;
+}
+.create-acquire-refresh button {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.create-acquire-refresh button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.create-acquire-link:focus-visible,
+.create-acquire-refresh button:focus-visible {
+  outline: 2px solid var(--t-focus-ring);
+  outline-offset: 3px;
+  border-radius: 6px;
+}
 .create-leverage-options {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

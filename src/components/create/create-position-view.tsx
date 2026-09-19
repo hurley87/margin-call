@@ -17,6 +17,7 @@ import { PositionArtwork } from "@/components/positions/position-artwork";
 import { TxStatus } from "@/components/protocol/tx-status";
 import { PlayfulIcon } from "@/components/ui/playful-icon";
 import { SKETCH } from "@/components/ui/sketch";
+import { AcquireStockLinks } from "@/components/uniswap/acquire-stock-links";
 import { formatShortAddress } from "@/lib/utils";
 import {
   curatedArtworkPath,
@@ -210,6 +211,12 @@ export function CreatePositionView(props: CreatePositionViewProps) {
   const financed = isFinancedLeverage(leverage);
   const thesisBytes = thesisByteLength(thesis);
   const thesisTooLong = !isThesisWithinLimit(thesis);
+  const wanted = amount != null && amount > 0n ? amount : null;
+  /** Only a read balance that falls short earns a Uniswap hand-off. */
+  const shortfall =
+    snapshot != null && wanted != null && snapshot.stockBalance < wanted
+      ? { balance: snapshot.stockBalance, wanted }
+      : null;
   const contribution = snapshot?.contributionValue ?? null;
   const principal = snapshot?.estimatedPrincipal ?? null;
   const total =
@@ -336,6 +343,15 @@ export function CreatePositionView(props: CreatePositionViewProps) {
                   <span>≈ {money(contribution)}</span>
                 ) : null}
               </div>
+              {shortfall ? (
+                <AcquireStockLinks
+                  stockName={assetName}
+                  stockAddress={asset.stock}
+                  stockBalance={shortfall.balance}
+                  stockAmount={shortfall.wanted}
+                  onRefresh={onRefresh}
+                />
+              ) : null}
             </fieldset>
 
             <fieldset className="create-step" disabled={pending}>

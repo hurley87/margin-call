@@ -67,7 +67,7 @@ vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
 
 import { CreatePositionPage } from "@/components/create/create-position-page";
 import { ORACLE_STATE } from "@/lib/protocol/constants";
-import { getAssetByName } from "@/lib/protocol/deployment";
+import { baseDeployment, getAssetByName } from "@/lib/protocol/deployment";
 
 const CONNECTED_ADDRESS = "0x1234567890abcdef1234567890abcdef12345678" as const;
 const OPEN_HASH =
@@ -284,6 +284,92 @@ describe("CreatePositionPage", () => {
       expect(
         screen.getByRole("button", { name: "Create Position" })
       ).toHaveProperty("disabled", false)
+    );
+  });
+
+  it("leaves Uniswap out of the way when the balance covers the amount", async () => {
+    render(<CreatePositionPage />);
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Create Position" })
+      ).toHaveProperty("disabled", false)
+    );
+    expect(screen.queryByRole("link", { name: /Buy/ })).toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Refresh balance" })
+    ).toBeNull();
+  });
+
+  it("offers a Uniswap hand-off for the stock the wallet does not hold", async () => {
+    loadOpenSnapshotMock.mockResolvedValue({
+      stockBalance: 0n,
+      stockAllowance: 0n,
+      availableCredit: 10_000_000_000n,
+      oracleState: ORACLE_STATE.LIVE,
+      estimatedPrincipal: 100_000n,
+    });
+    render(<CreatePositionPage />);
+
+    expect(
+      await screen.findByText("You don’t have any NVDAc yet.")
+    ).not.toBeNull();
+
+    const usdc = screen.getByRole("link", { name: "Buy NVDAc with USDC" });
+    const usdcParams = new URL(usdc.getAttribute("href") ?? "").searchParams;
+    expect(usdcParams.get("chain")).toBe("base");
+    expect(usdcParams.get("inputCurrency")).toBe(baseDeployment.usdc);
+    expect(usdcParams.get("outputCurrency")).toBe(
+      getAssetByName("NVDAc").stock
+    );
+    expect(usdc.getAttribute("target")).toBe("_blank");
+    expect(usdc.getAttribute("rel")).toBe("noopener noreferrer");
+
+    const eth = screen.getByRole("link", { name: "Buy NVDAc with ETH" });
+    expect(
+      new URL(eth.getAttribute("href") ?? "").searchParams.get("inputCurrency")
+    ).toBe("ETH");
+    expect(eth.getAttribute("target")).toBe("_blank");
+
+    // The link follows the selected stock rather than a hardcoded per-stock URL.
+    fireEvent.click(screen.getByRole("radio", { name: "AAPLc" }));
+    const aapl = await screen.findByRole("link", {
+      name: "Buy AAPLc with USDC",
+    });
+    expect(
+      new URL(aapl.getAttribute("href") ?? "").searchParams.get(
+        "outputCurrency"
+      )
+    ).toBe(getAssetByName("AAPLc").stock);
+  });
+
+  it("names the shortfall and re-reads Base after a swap", async () => {
+    loadOpenSnapshotMock.mockResolvedValue({
+      stockBalance: 10_000_000n,
+      stockAllowance: 0n,
+      availableCredit: 10_000_000_000n,
+      oracleState: ORACLE_STATE.LIVE,
+      estimatedPrincipal: 100_000n,
+    });
+    render(<CreatePositionPage />);
+    fireEvent.change(screen.getByRole("textbox", { name: "Stock amount" }), {
+      target: { value: "0.25" },
+    });
+
+    expect(
+      await screen.findByText("You need 0.25 NVDAc but only have 0.1.")
+    ).not.toBeNull();
+    expect(
+      screen.getByText("Insufficient selected-stock balance.")
+    ).not.toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Create Position" })
+    ).toHaveProperty("disabled", true);
+
+    const reads = loadOpenSnapshotMock.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Refresh balance" }));
+    await waitFor(() =>
+      expect(loadOpenSnapshotMock.mock.calls.length).toBeGreaterThan(reads)
     );
   });
 
