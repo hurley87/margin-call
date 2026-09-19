@@ -1,3 +1,5 @@
+import type { Log } from "viem";
+
 /**
  * Wallet-agnostic Base signer for agents. Dynamic is one implementation —
  * Bankr, Coinbase, or a bare viem account can satisfy the same shape.
@@ -12,6 +14,8 @@ export type TransactionReceiptSummary = {
   hash: `0x${string}`;
   status: "success" | "reverted";
   blockNumber: bigint;
+  /** Present when the signer surfaces receipt logs; used to decode token ids. */
+  logs?: readonly Log[];
 };
 
 /** EIP-712 payload. Used for Permit2 when the Uniswap quote requires it. */

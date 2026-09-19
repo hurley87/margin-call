@@ -48,6 +48,7 @@ export type DynamicChainClient = {
     status: "success" | "reverted";
     blockNumber: bigint;
     transactionHash?: `0x${string}`;
+    logs?: TransactionReceiptSummary["logs"];
   }>;
 };
 
@@ -147,6 +148,7 @@ export function createDynamicAgentWallet(args: {
         hash,
         status: receipt.status,
         blockNumber: receipt.blockNumber,
+        ...(receipt.logs ? { logs: receipt.logs } : {}),
       };
     },
     async signTypedData(typedData: WalletTypedData) {

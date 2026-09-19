@@ -1,5 +1,7 @@
+import { formatStockAmount, formatUsdcRaw } from "@/lib/protocol/amounts";
 import { USDC_DECIMALS } from "@/lib/protocol/constants";
 import { baseDeployment } from "@/lib/protocol/deployment";
+import type { BasePublicClient } from "@/lib/protocol/public-client";
 import {
   createUniswapTradingApi,
   readUniswapApiKey,
@@ -28,6 +30,11 @@ import {
   type ProvisionedDynamicWallet,
 } from "@/lib/wallets/dynamic-server";
 import { fileWalletMetadataStore } from "@/lib/wallets/metadata-store";
+import {
+  openFinancedPosition,
+  parseOpenCliArgs,
+  type OpenFinancedResult,
+} from "@/lib/wallets/open-position";
 import { redactSecrets } from "@/lib/wallets/redact";
 
 export type DemoPublicClient = BalanceClient & DynamicChainClient;
@@ -42,6 +49,9 @@ export type AgentWalletDemoDeps = {
 
 const SKIP_UNISWAP_NOTE =
   "Stock acquisition is not a Margin Call protocol step. An agent whose wallet already swaps (for example Bankr) should skip Uniswap, read the stock address from get_assets, and continue once that wallet holds the token.";
+
+const ANY_WALLET_NOTE =
+  "These are ordinary Base transactions. A Bankr agent (or any Base-capable signer) that already holds the stock skips Dynamic and submits the same Margin Call prepare_open output.";
 
 function formatDemoReport(args: {
   provisioned: ProvisionedDynamicWallet;
@@ -90,6 +100,33 @@ function formatAcquire(result: AcquireStockResult): string[] {
     "Verified  onchain stock balance increased",
     "",
     SKIP_UNISWAP_NOTE,
+  ];
+}
+
+function formatOpen(result: OpenFinancedResult): string[] {
+  if (!result.ok) {
+    return [
+      "",
+      `Open      refused (${result.code})`,
+      result.message,
+      "",
+      ANY_WALLET_NOTE,
+    ];
+  }
+  return [
+    "",
+    `Open      ${result.leverageLabel} ${result.asset} Position NFT`,
+    `Token     ${result.tokenId}`,
+    `Stock     ${formatStockAmount(BigInt(result.stockAmount))} ${result.asset}`,
+    `Principal ${formatUsdcRaw(BigInt(result.principal))} USDC`,
+    `Debt      ${formatUsdcRaw(BigInt(result.currentDebt))} USDC`,
+    `Thesis    ${result.thesis}`,
+    `Owner     ${result.owner}`,
+    ...result.transactionHashes.map(
+      (hash, index) => `Tx ${index + 1}     ${hash}`
+    ),
+    "",
+    ANY_WALLET_NOTE,
   ];
 }
 
@@ -177,13 +214,55 @@ export async function runAgentWalletDemo(
         usdcAmount: acquire.usdcAmount,
       });
       lines.push(...formatAcquire(result));
-      return { lines, exitCode: result.ok ? 0 : 1 };
+      if (!result.ok) {
+        return { lines, exitCode: 1 };
+      }
     } catch (error) {
       const message = redactSecrets(
         error instanceof Error ? error.message : String(error),
         secrets
       );
       lines.push("", message, "", SKIP_UNISWAP_NOTE);
+      return { lines, exitCode: 1 };
+    }
+  }
+
+  const open = parseOpenCliArgs(deps.argv);
+  if (open.requested) {
+    if (open.error) {
+      lines.push("", open.error, "", ANY_WALLET_NOTE);
+      return { lines, exitCode: 1 };
+    }
+    if (balances.ethRaw === 0n) {
+      lines.push(
+        "",
+        "Open skipped: this address has 0 ETH. Fund it manually with a small amount of Base ETH for gas, then retry --open.",
+        "",
+        ANY_WALLET_NOTE
+      );
+      return { lines, exitCode: 1 };
+    }
+    try {
+      const agentClient = publicClient as unknown as BasePublicClient;
+      const result = await openFinancedPosition({
+        wallet,
+        client: agentClient,
+        asset: open.asset,
+        stockAmount: open.stockAmount,
+      });
+      lines.push(...formatOpen(result));
+      const refusedPricing =
+        !result.ok && result.code === "PRICING_UNAVAILABLE";
+      return {
+        lines,
+        exitCode: result.ok || refusedPricing ? 0 : 1,
+      };
+    } catch (error) {
+      const message = redactSecrets(
+        error instanceof Error ? error.message : String(error),
+        secrets
+      );
+      lines.push("", message, "", ANY_WALLET_NOTE);
       return { lines, exitCode: 1 };
     }
   }

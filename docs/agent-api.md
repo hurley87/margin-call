@@ -402,6 +402,45 @@ that and uses its own swap. Margin Call only checks the balance at `prepare_open
 5. Sign and submit them with your own wallet, in order.
 6. `get_position` — read the minted Position NFT.
 
+The first reference demo uses a single financed preset: **1.25x** (`leverage: 12500`). Do not
+fall back to 1.0x when pricing is unavailable — refusing is the correct outcome.
+
+### Already have a wallet (Bankr, Coinbase, viem, …)
+
+Skip Dynamic. You do not call `pnpm agent:wallet`. Point your signer at the same HTTP or MCP
+surface, then broadcast the prepared `{ to, data, value }` objects as ordinary Base
+transactions. Margin Call never learns which provider signed.
+
+```bash
+# market gate
+curl "https://margincall.fun/api/agent/market-state?asset=NVDAc"
+
+# when canOpenLeveragedPosition is true:
+curl -X POST https://margincall.fun/api/agent/prepare-open \
+  -H 'Content-Type: application/json' \
+  -d '{"wallet":"0xYourAddress","asset":"NVDAc","stockAmount":"1000000","leverage":12500,"thesis":"Agent-opened"}'
+```
+
+Submit `transactions` in order from that wallet. Decode `PositionOpened` from the open receipt
+for the token id, then `GET /api/agent/position/{tokenId}`.
+
+### Dynamic reference demo
+
+For an agent that starts without a wallet:
+
+```bash
+pnpm agent:wallet --open --asset NVDAc
+```
+
+That command provisions or reuses the Dynamic server wallet, checks market state, and — only
+when pricing is live — signs the prepared 1.25x open. The Position NFT is minted to that
+Dynamic address because it is the transaction sender. `--acquire` can precede `--open` in the
+same invocation if the wallet still needs stock.
+
+When pricing is unavailable the demo prints
+`Fresh U.S. equity pricing is unavailable, so I will not open a leveraged position.`
+and exits successfully without submitting.
+
 ## Limits
 
 - Read and prepare only. There is no `repay`, `close`, `reduce_exposure`, or `liquidate`
