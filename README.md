@@ -63,18 +63,18 @@ Agent tooling can operate on top of the protocol, but it is not the product defi
 
 ## App and agent status
 
-| Layer                                                            | Status                                                                                                                                      |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| Multi-stock contracts + compact live acceptance                  | **Shipped** on Base                                                                                                                         |
-| Dynamic wallet foundation                                        | **Shipped** for the workspace                                                                                                               |
-| Minimal Base Position workspace (connect → open → repay → close) | **Shipped** — not the production frontend                                                                                                   |
-| Executor / reduce-exposure / liquidate UI                        | Planned                                                                                                                                     |
-| Production frontend, indexing, keeper automation                 | Planned                                                                                                                                     |
-| External agent / visual control plane                            | Design in progress ([#431](https://github.com/hurley87/margin-call/issues/431), [#433](https://github.com/hurley87/margin-call/issues/433)) |
-| Living NFT presentation (`tokenURI`)                             | **Shipped** on Base ([#461](https://github.com/hurley87/margin-call/issues/461)) — HTTPS metadata + on-chain thesis                         |
-| Convex JWT / identity                                            | Not wired yet (empty schema + HTTP router)                                                                                                  |
+| Layer                                                            | Status                                                                                                                  |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Multi-stock contracts + compact live acceptance                  | **Shipped** on Base                                                                                                     |
+| Dynamic wallet foundation                                        | **Shipped** for the workspace                                                                                           |
+| Minimal Base Position workspace (connect → open → repay → close) | **Shipped** — not the production frontend                                                                               |
+| Executor / reduce-exposure / liquidate UI                        | Planned                                                                                                                 |
+| Production frontend, indexing, keeper automation                 | Planned                                                                                                                 |
+| Public agent API + MCP (read, quote, prepare)                    | **Shipped** ([#491](https://github.com/hurley87/margin-call/issues/491)) — see [`docs/agent-api.md`](docs/agent-api.md) |
+| Living NFT presentation (`tokenURI`)                             | **Shipped** on Base ([#461](https://github.com/hurley87/margin-call/issues/461)) — HTTPS metadata + on-chain thesis     |
+| Convex JWT / identity                                            | Not wired yet (empty schema + HTTP router)                                                                              |
 
-The website is a visual/wallet control plane, not a conversational chatbot. Users may interact with a Margin Call agent outside the website. The user owns the Position NFT; executor / delegated authority stays narrow and revocable on-chain.
+The website is a visual/wallet control plane, not a conversational chatbot. Users may interact with a Margin Call agent outside the website — the unauthenticated agent surface at `/api/agent/*` and `/api/mcp` exposes the same Base reads, quotes, and unsigned open calldata the site uses, and works with any wallet. The user owns the Position NFT; executor / delegated authority stays narrow and revocable on-chain.
 
 ## What's in the repo today
 

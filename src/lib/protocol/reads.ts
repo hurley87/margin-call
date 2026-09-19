@@ -27,6 +27,59 @@ export type OpenSnapshot = {
   contributionValue: bigint | null;
 };
 
+/** One asset's latest oracle reading, with the raw state byte already narrowed. */
+export type MarketObservation = {
+  state: OracleState;
+  price: bigint;
+  updatedAt: bigint;
+};
+
+/**
+ * Latest oracle reading for one launch rail.
+ *
+ * Wallet-free on purpose: pricing availability is public protocol state, and
+ * the agent surface must answer it without an address to read balances for.
+ */
+export async function loadMarketObservation(
+  client: BasePublicClient,
+  asset: LaunchAsset
+): Promise<MarketObservation> {
+  const observation = await client.readContract({
+    address: asset.oracleAdapter,
+    abi: oracleAdapterAbi,
+    functionName: "latestObservation",
+  });
+
+  const state = parseOracleState(Number(observation.state));
+  if (state == null) {
+    throw new Error(`Unexpected oracle state: ${String(observation.state)}`);
+  }
+
+  return { state, price: observation.price, updatedAt: observation.updatedAt };
+}
+
+/** USDC the CreditPool can still lend. Public state, no wallet required. */
+export function loadAvailableCredit(client: BasePublicClient): Promise<bigint> {
+  return client.readContract({
+    address: baseDeployment.creditPool,
+    abi: creditPoolAbi,
+    functionName: "availableCredit",
+  });
+}
+
+/** Oracle value of a stock amount in USDC base units, at an observed price. */
+export function loadStockValueUsdc(
+  client: BasePublicClient,
+  args: { asset: LaunchAsset; stockAmount: bigint; price: bigint }
+): Promise<bigint> {
+  return client.readContract({
+    address: args.asset.oracleAdapter,
+    abi: oracleAdapterAbi,
+    functionName: "valueUsdc",
+    args: [args.stockAmount, args.price],
+  });
+}
+
 export type OpenPosition = {
   status: "open";
   tokenId: bigint;
@@ -85,17 +138,9 @@ export async function loadOpenSnapshot(
         functionName: "allowance",
         args: [args.address, baseDeployment.marginCall],
       }),
-      client.readContract({
-        address: baseDeployment.creditPool,
-        abi: creditPoolAbi,
-        functionName: "availableCredit",
-      }),
+      loadAvailableCredit(client),
       financed
-        ? client.readContract({
-            address: args.asset.oracleAdapter,
-            abi: oracleAdapterAbi,
-            functionName: "latestObservation",
-          })
+        ? loadMarketObservation(client, args.asset)
         : Promise.resolve(null),
     ]);
 
@@ -110,10 +155,7 @@ export async function loadOpenSnapshot(
     };
   }
 
-  const oracleState = parseOracleState(Number(observation.state));
-  if (oracleState == null) {
-    throw new Error(`Unexpected oracle state: ${String(observation.state)}`);
-  }
+  const oracleState = observation.state;
 
   if (oracleState !== ORACLE_STATE.LIVE || args.stockAmount == null) {
     return {
@@ -126,11 +168,10 @@ export async function loadOpenSnapshot(
     };
   }
 
-  const contributionValue = await client.readContract({
-    address: args.asset.oracleAdapter,
-    abi: oracleAdapterAbi,
-    functionName: "valueUsdc",
-    args: [args.stockAmount, observation.price],
+  const contributionValue = await loadStockValueUsdc(client, {
+    asset: args.asset,
+    stockAmount: args.stockAmount,
+    price: observation.price,
   });
 
   return {

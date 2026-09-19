@@ -10,9 +10,15 @@ landed and wired to the canonical multi-stock deployment: `/` (portfolio), `/pos
 - Convex (Position NFT lifecycle index: `positions` + `syncState`, discovery queries, a `syncTransaction` receipt action, and a 10-minute reconcile cron; HTTP router still empty; no JWT auth until a product query needs identity)
 - Foundry (reproducible workspace pins; product contracts live under `contracts/`)
 
-Position lifecycle indexing is implemented; keeper automation, an agent surface, and executor / reduce-exposure /
-liquidate UI are not. Convex is a discovery read model — Base stays authoritative for debt, NAV, and risk, and no
-Convex function verifies that the caller owns the `owner` it queries.
+Position lifecycle indexing is implemented; keeper automation and executor / reduce-exposure / liquidate UI are not.
+Convex is a discovery read model — Base stays authoritative for debt, NAV, and risk, and no Convex function verifies
+that the caller owns the `owner` it queries.
+
+The public agent surface (issue #491) is live: six unauthenticated, wallet-agnostic tools in `src/lib/agent/`,
+exposed as thin HTTP routes under `src/app/api/agent/` and as a Streamable HTTP MCP endpoint at
+`src/app/api/mcp/route.ts`. It reads and prepares only — `prepare_open` returns unsigned Base calldata and nothing
+in that surface signs or broadcasts. Both transports call the same core functions, so they cannot disagree. See
+[`docs/agent-api.md`](docs/agent-api.md). Write tools (`repay`, `close`, `liquidate`) are not exposed yet.
 
 The live Base deployment (`contracts/deployments/base.json`) is the canonical multi-stock
 launch stack (issue #446: NVDAc + AAPLc + METAc + GOOGLc). The historical NVDA-only

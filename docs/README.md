@@ -15,6 +15,7 @@ The **application layer** remains separate: today's site is a minimal Base Posit
 V1 deliberately keeps ownership and position accounting in one contract: `MarginCall` itself inherits ERC-721 and mints/burns the Position NFTs. There is no separate `PositionNFT` contract.
 
 - [Canonical product glossary](../CONTEXT.md)
+- [Public agent API](agent-api.md) — unauthenticated HTTP + MCP tools over the live Base deployment
 - [NFT transfer availability decision](adr/0001-independent-nft-transfer-availability.md)
 - [Treasury loss and liquidation decision](adr/0002-finalize-shortfalls-as-treasury-losses.md)
 
