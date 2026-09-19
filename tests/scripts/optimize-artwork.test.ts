@@ -5,6 +5,8 @@ import sharp from "sharp";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   ARTWORK_TARGETS,
+  DOCS_MAX_EDGE,
+  DOCS_TARGETS,
   LOGO_MAX_EDGE,
   STAGE_MAX_EDGE,
   optimizeFile,
@@ -90,6 +92,28 @@ describe("ARTWORK_TARGETS", () => {
   });
 });
 
+describe("DOCS_TARGETS", () => {
+  it("covers exactly the eight public/docs illustrations", () => {
+    expect(DOCS_TARGETS.map((target) => target.file)).toEqual([
+      "public/docs/docs-hero-puppy-books.png",
+      "public/docs/docs-page-reference.png",
+      "public/docs/leverage-flow.png",
+      "public/docs/position-nft-card.png",
+      "public/docs/position-nft-signpost.png",
+      "public/docs/step-borrow-usdc.png",
+      "public/docs/step-deposit-stock.png",
+      "public/docs/step-more-same-stock.png",
+    ]);
+  });
+
+  it("keeps docs illustrations at a larger edge than NFT stage art", () => {
+    expect(DOCS_MAX_EDGE).toBeGreaterThan(STAGE_MAX_EDGE);
+    expect(
+      DOCS_TARGETS.every((target) => target.maxEdge === DOCS_MAX_EDGE)
+    ).toBe(true);
+  });
+});
+
 describe("optimizeFile", () => {
   it("downscales an oversized image to the target edge, still square PNG", async () => {
     const filePath = await writeGradient("oversized.png", OVERSIZED);
@@ -106,8 +130,26 @@ describe("optimizeFile", () => {
     expect(metadata.height).toBe(EDGE);
   });
 
-  it("leaves an already-small image byte-identical", async () => {
+  it("palettes an already-small truecolor PNG without changing its pixel size", async () => {
     const filePath = await writeGradient("small.png", EDGE);
+    const before = (await readFile(filePath)).byteLength;
+
+    const result = await optimizeFile(filePath, EDGE);
+
+    expect(result.status).toBe("replaced");
+    expect(result.after).toBeLessThan(before);
+    expect(result.width).toBe(EDGE);
+    expect(result.height).toBe(EDGE);
+
+    const metadata = await sharp(filePath).metadata();
+    expect(metadata.format).toBe("png");
+    expect(metadata.width).toBe(EDGE);
+    expect(metadata.height).toBe(EDGE);
+  });
+
+  it("leaves an already-small paletted PNG byte-identical", async () => {
+    const filePath = await writeGradient("already-paletted.png", EDGE);
+    await optimizeFile(filePath, EDGE);
     const original = await readFile(filePath);
 
     const result = await optimizeFile(filePath, EDGE);
