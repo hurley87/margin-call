@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { AgentDocs } from "@/components/docs/agent-docs";
 import {
   DocsAssetCard,
   DocsDivider,
@@ -103,6 +104,9 @@ export default function DocsPage() {
             Everything you need to know about
             <br className="docs-desktop-break" /> Margin Call.
           </p>
+          <a className="docs-agent-shortcut" href="#agents">
+            Building an agent? Start here ↗
+          </a>
         </div>
         <Image
           className="docs-art docs-hero-art"
@@ -290,6 +294,8 @@ export default function DocsPage() {
           ))}
         </section>
       </div>
+      <DocsDivider />
+      <AgentDocs />
     </article>
   );
 }

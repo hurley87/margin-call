@@ -47,6 +47,17 @@ export function OpenPositionCta() {
   );
 }
 
+export function PortfolioActions() {
+  return (
+    <div className="portfolio-actions">
+      <OpenPositionCta />
+      <Link href="/docs#agents" className="portfolio-build-cta">
+        Build with Margin Call <span aria-hidden="true">↗</span>
+      </Link>
+    </div>
+  );
+}
+
 export function PortfolioWelcome({ empty = false }: { empty?: boolean }) {
   return (
     <div className="portfolio-welcome">
@@ -68,7 +79,7 @@ export function PortfolioWelcome({ empty = false }: { empty?: boolean }) {
             ? "Open your first position to start collecting puppies."
             : "Connect your wallet to see your portfolio and start collecting puppies."}
         </p>
-        <OpenPositionCta />
+        <PortfolioActions />
       </section>
       <ul className="portfolio-features">
         {FEATURES.map(({ icon, title, description }) => (

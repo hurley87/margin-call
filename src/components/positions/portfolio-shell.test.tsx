@@ -265,6 +265,14 @@ describe("portfolio-first app shell", () => {
       loadMore,
     });
     const { container } = render(<MyPositionsPage />);
+    expect(
+      screen
+        .getByRole("link", { name: "Build with Margin Call" })
+        .getAttribute("href")
+    ).toBe("/docs#agents");
+    expect(
+      screen.getByRole("link", { name: "Open a Position" }).getAttribute("href")
+    ).toBe("/create");
     expect(container.querySelector(".explore-card")).not.toBeNull();
     expect(container.querySelector(".explore-grid")).not.toBeNull();
     expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({
@@ -305,6 +313,14 @@ describe("portfolio-first app shell", () => {
   it("does not show the empty-portfolio copy when disconnected", () => {
     mockDisconnectedSession();
     render(<MyPositionsPage />);
+    expect(
+      screen
+        .getByRole("link", { name: "Build with Margin Call" })
+        .getAttribute("href")
+    ).toBe("/docs#agents");
+    expect(
+      screen.getByRole("link", { name: "Open a Position" }).getAttribute("href")
+    ).toBe("/create");
 
     expect(
       screen.getByText(
@@ -355,6 +371,11 @@ describe("portfolio-first app shell", () => {
 
     render(<MyPositionsPage />);
 
+    expect(
+      screen
+        .getByRole("link", { name: "Build with Margin Call" })
+        .getAttribute("href")
+    ).toBe("/docs#agents");
     expect(screen.getByText("Your portfolio is empty")).not.toBeNull();
     const cta = screen.getByRole("link", { name: "Open a Position" });
     expect(cta).toHaveProperty("href", expect.stringMatching(/\/create$/));
