@@ -5,6 +5,7 @@ import {
   resolvePositionStage,
   stockSymbol,
   type PositionRiskInput,
+  type PositionStage,
 } from "@/lib/positions/artwork";
 
 /**
@@ -66,4 +67,62 @@ export function buildNftMetadata(input: NftMetadataInput): NftMetadata {
       { trait_type: "Status", value: "Active" },
     ],
   };
+}
+
+function isAttribute(value: unknown): value is NftAttribute {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "trait_type" in value &&
+    "value" in value &&
+    typeof value.trait_type === "string" &&
+    typeof value.value === "string"
+  );
+}
+
+/**
+ * Accepts the JSON `GET /api/nft/[tokenId]` actually serves.
+ *
+ * Image URLs must stay on the contract origin so Explore can unwrap them
+ * to the same committed files marketplaces cache.
+ */
+export function parseNftMetadata(value: unknown): NftMetadata | null {
+  if (typeof value !== "object" || value === null) return null;
+  if (
+    !("name" in value) ||
+    !("description" in value) ||
+    !("image" in value) ||
+    !("attributes" in value)
+  ) {
+    return null;
+  }
+  const { name, description, image, attributes } = value;
+  if (typeof name !== "string" || name.length === 0) return null;
+  if (typeof description !== "string") return null;
+  if (typeof image !== "string" || !image.startsWith(METADATA_ORIGIN)) {
+    return null;
+  }
+  if (!Array.isArray(attributes) || !attributes.every(isAttribute)) {
+    return null;
+  }
+  return { name, description, image, attributes };
+}
+
+/** Live health from the Stage trait, or null when the payload cannot name one. */
+export function stageFromMetadata(metadata: NftMetadata): PositionStage | null {
+  const label = metadata.attributes.find(
+    (attribute) => attribute.trait_type === "Stage"
+  )?.value;
+  switch (label) {
+    case STAGE_LABEL.healthy:
+      return "healthy";
+    case STAGE_LABEL.warning:
+      return "warning";
+    case STAGE_LABEL.danger:
+      return "danger";
+    case STAGE_LABEL.pricing_unavailable:
+      return "pricing_unavailable";
+    default:
+      return null;
+  }
 }

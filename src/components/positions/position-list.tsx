@@ -1,9 +1,11 @@
 "use client";
 
 import { Component, type ReactNode } from "react";
+import { DrawablyButton, DrawablyCard } from "drawably/react";
 import { PositionCard } from "@/components/positions/position-card";
 import { Button } from "@/components/ui/button";
 import type { PositionListItem } from "@/lib/positions/types";
+import { useGalleryHealth } from "@/lib/positions/use-gallery-health";
 
 const PAGE_SIZE = 20;
 
@@ -19,7 +21,38 @@ export function IndexUnavailable({ purpose }: { purpose: string }) {
 }
 
 /** Runtime Convex query failure — keep chrome, offer retry. */
-export function QueryUnavailable({ onRetry }: { onRetry?: () => void }) {
+export function QueryUnavailable({
+  onRetry,
+  presentation = "list",
+}: {
+  onRetry?: () => void;
+  presentation?: "list" | "gallery";
+}) {
+  if (presentation === "gallery") {
+    return (
+      <DrawablyCard
+        stroke="var(--t-border)"
+        className="explore-message"
+        seed={31}
+        roughness={0.6}
+        boil={0}
+      >
+        <p role="alert">Couldn&apos;t load positions. Try again in a moment.</p>
+        {onRetry ? (
+          <DrawablyButton
+            type="button"
+            onClick={onRetry}
+            seed={32}
+            roughness={0.6}
+            boil={0}
+            tone="neutral"
+          >
+            Retry
+          </DrawablyButton>
+        ) : null}
+      </DrawablyCard>
+    );
+  }
   return (
     <div className="flex flex-col gap-3">
       <p className="text-sm leading-6 text-[var(--t-red)]">
@@ -42,6 +75,7 @@ export function QueryUnavailable({ onRetry }: { onRetry?: () => void }) {
 
 type BoundaryProps = {
   children: ReactNode;
+  presentation?: "list" | "gallery";
 };
 
 type BoundaryState = {
@@ -65,7 +99,10 @@ export class PositionQueryBoundary extends Component<
   render() {
     if (this.state.error) {
       return (
-        <QueryUnavailable onRetry={() => this.setState({ error: null })} />
+        <QueryUnavailable
+          presentation={this.props.presentation}
+          onRetry={() => this.setState({ error: null })}
+        />
       );
     }
     return this.props.children;
@@ -73,6 +110,7 @@ export class PositionQueryBoundary extends Component<
 }
 
 type PositionListProps = {
+  presentation?: "list" | "gallery";
   results: PositionListItem[];
   status: "LoadingFirstPage" | "CanLoadMore" | "LoadingMore" | "Exhausted";
   loadMore: (numItems: number) => void;
@@ -90,7 +128,29 @@ export function PositionList(props: PositionListProps) {
     showOwner = false,
     emptyMessage,
     highlightedTokenId,
+    presentation = "list",
   } = props;
+
+  const health = useGalleryHealth(results, presentation === "gallery");
+
+  if (
+    presentation === "gallery" &&
+    (status === "LoadingFirstPage" || results.length === 0)
+  ) {
+    return (
+      <DrawablyCard
+        stroke="var(--t-border)"
+        className="explore-message"
+        seed={31}
+        roughness={0.6}
+        boil={0}
+      >
+        <p role="status">
+          {status === "LoadingFirstPage" ? "Loading positions…" : emptyMessage}
+        </p>
+      </DrawablyCard>
+    );
+  }
 
   if (status === "LoadingFirstPage") {
     return (
@@ -107,12 +167,23 @@ export function PositionList(props: PositionListProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <ul className="flex flex-col gap-2">
+    <div
+      className={
+        presentation === "gallery" ? "explore-results" : "flex flex-col gap-3"
+      }
+    >
+      <ul
+        className={
+          presentation === "gallery" ? "explore-grid" : "flex flex-col gap-2"
+        }
+      >
         {results.map((position) => (
           <li key={position.tokenId}>
             <PositionCard
               position={position}
+              presentation={presentation}
+              health={health[position.tokenId]?.health}
+              metadata={health[position.tokenId]?.metadata}
               showOwner={showOwner}
               highlighted={position.tokenId === highlightedTokenId}
             />
@@ -120,16 +191,31 @@ export function PositionList(props: PositionListProps) {
         ))}
       </ul>
       {status === "CanLoadMore" || status === "LoadingMore" ? (
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="w-fit"
-          disabled={status === "LoadingMore"}
-          onClick={() => loadMore(PAGE_SIZE)}
-        >
-          {status === "LoadingMore" ? "Loading…" : "Load more"}
-        </Button>
+        presentation === "gallery" ? (
+          <DrawablyButton
+            type="button"
+            className="explore-load-more"
+            seed={32}
+            roughness={0.6}
+            boil={0}
+            tone="neutral"
+            disabled={status === "LoadingMore"}
+            onClick={() => loadMore(PAGE_SIZE)}
+          >
+            {status === "LoadingMore" ? "Loading…" : "Load more"}
+          </DrawablyButton>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-fit"
+            disabled={status === "LoadingMore"}
+            onClick={() => loadMore(PAGE_SIZE)}
+          >
+            {status === "LoadingMore" ? "Loading…" : "Load more"}
+          </Button>
+        )
       ) : null}
     </div>
   );

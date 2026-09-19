@@ -2,8 +2,8 @@
 
 import { usePaginatedQuery } from "convex/react";
 import { useState } from "react";
+import { DrawablyButton, DrawablyCard, DrawablyDivider } from "drawably/react";
 import {
-  IndexUnavailable,
   PAGE_SIZE,
   PositionList,
   PositionQueryBoundary,
@@ -11,7 +11,6 @@ import {
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import type { AllPositionsFilter, PositionStatus } from "@/lib/positions/types";
 import { baseDeployment } from "@/lib/protocol/deployment";
-import { cn } from "@/lib/utils";
 import { api } from "../../../convex/_generated/api";
 
 /** Public protocol explorer backed by the Convex Position read model. */
@@ -21,18 +20,28 @@ export function AllPositionsPage() {
 
   if (!convex) {
     return (
-      <div className="flex flex-col gap-6">
+      <div className="explore-page">
         <PageHeader />
-        <IndexUnavailable purpose="to browse protocol positions." />
+        <DrawablyCard
+          stroke="var(--t-border)"
+          className="explore-message"
+          seed={31}
+          boil={0}
+          roughness={0.6}
+        >
+          <p role="status">
+            Positions are temporarily unavailable. Please try again later.
+          </p>
+        </DrawablyCard>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="explore-page">
       <PageHeader />
       <Filters filter={filter} onChange={setFilter} />
-      <PositionQueryBoundary>
+      <PositionQueryBoundary presentation="gallery">
         <AllPositionsList queryArgs={filter} />
       </PositionQueryBoundary>
     </div>
@@ -52,6 +61,7 @@ function AllPositionsList({ queryArgs }: { queryArgs: AllPositionsFilter }) {
       status={status}
       loadMore={loadMore}
       showOwner
+      presentation="gallery"
       emptyMessage="No positions match these filters."
     />
   );
@@ -59,13 +69,9 @@ function AllPositionsList({ queryArgs }: { queryArgs: AllPositionsFilter }) {
 
 function PageHeader() {
   return (
-    <header className="space-y-2">
-      <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-tight text-[var(--t-accent)]">
-        All Positions
-      </h1>
-      <p className="text-sm leading-6 text-[var(--t-muted)]">
-        Protocol-wide Position NFTs from the indexed read model.
-      </p>
+    <header className="explore-heading">
+      <h1>Explore</h1>
+      <p>Discover onchain stock positions. Every position has a story.</p>
     </header>
   );
 }
@@ -112,12 +118,16 @@ function Filters(props: {
   }
 
   return (
-    <div className="flex flex-col gap-4 border-t border-[var(--t-border)] pt-4">
-      <div className="space-y-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
-          Status
-        </p>
-        <div className="flex flex-wrap gap-1">
+    <DrawablyCard
+      stroke="var(--t-border)"
+      className="explore-filters"
+      seed={17}
+      roughness={0.6}
+      boil={0}
+    >
+      <div className="explore-filter-group" role="group" aria-label="Status">
+        <p className="explore-filter-label">Status</p>
+        <div className="explore-filter-options">
           {!hasAsset ? (
             <Chip
               label="All"
@@ -135,11 +145,15 @@ function Filters(props: {
           ))}
         </div>
       </div>
-      <div className="space-y-2">
-        <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--t-muted)]">
-          Asset
-        </p>
-        <div className="flex flex-wrap gap-1">
+      <DrawablyDivider
+        seed={18}
+        roughness={0.5}
+        boil={0}
+        stroke="var(--t-border)"
+      />
+      <div className="explore-filter-group" role="group" aria-label="Asset">
+        <p className="explore-filter-label">Asset</p>
+        <div className="explore-filter-options">
           <Chip label="All" selected={!hasAsset} onClick={selectAssetAll} />
           {baseDeployment.assets.map((asset) => (
             <Chip
@@ -152,12 +166,12 @@ function Filters(props: {
           ))}
         </div>
         {!canFilterByAsset ? (
-          <p className="text-xs text-[var(--t-muted)]">
+          <p className="explore-filter-hint">
             Choose a status to filter by asset.
           </p>
         ) : null}
       </div>
-    </div>
+    </DrawablyCard>
   );
 }
 
@@ -169,20 +183,19 @@ function Chip(props: {
 }) {
   const { label, selected, onClick, disabled = false } = props;
   return (
-    <button
+    <DrawablyButton
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={cn(
-        "px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.14em]",
-        disabled
-          ? "cursor-not-allowed border border-transparent text-[var(--t-muted)] opacity-40"
-          : selected
-            ? "border border-[var(--t-accent)] text-[var(--t-accent)]"
-            : "border border-transparent text-[var(--t-muted)] hover:text-[var(--t-text)]"
-      )}
+      aria-pressed={selected}
+      className="explore-filter-button"
+      variant="outline"
+      tone="neutral"
+      seed={19}
+      roughness={0.6}
+      boil={0}
     >
       {label}
-    </button>
+    </DrawablyButton>
   );
 }

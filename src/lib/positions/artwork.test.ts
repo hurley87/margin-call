@@ -97,8 +97,8 @@ describe("faceFromStage", () => {
     expect(faceFromStage("danger")).toBe("danger");
   });
 
-  it("is neutral when there is no honest stage to show", () => {
-    expect(faceFromStage("pricing_unavailable")).toBe("neutral");
+  it("uses the healthy dog when pricing is unavailable, and stays neutral while unread", () => {
+    expect(faceFromStage("pricing_unavailable")).toBe("healthy");
     expect(faceFromStage(null)).toBe("neutral");
   });
 });

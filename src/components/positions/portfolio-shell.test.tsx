@@ -127,10 +127,14 @@ vi.mock("@/lib/protocol/public-client", () => ({
   createBasePublicClient: () => ({}),
 }));
 
+const fetchMock = vi.hoisted(() => vi.fn());
+vi.stubGlobal("fetch", fetchMock);
+
 vi.mock("@/lib/convex/use-sync-position-transaction", () => ({
   useSyncPositionTransaction: () => vi.fn().mockResolvedValue("skipped"),
 }));
 
+import { PositionCard } from "@/components/positions/position-card";
 import { AllPositionsPage } from "@/components/positions/all-positions-page";
 import { MyPositionsPage } from "@/components/positions/my-positions-page";
 import { PositionDetailPage } from "@/components/positions/position-detail-page";
@@ -165,6 +169,12 @@ describe("portfolio-first app shell", () => {
     });
     useQueryMock.mockReturnValue(undefined);
     vi.mocked(loadPosition).mockClear();
+    fetchMock.mockReset();
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => ({}),
+    });
   });
 
   afterEach(() => {
@@ -204,17 +214,26 @@ describe("portfolio-first app shell", () => {
     const { container, rerender } = render(<AppShell>page</AppShell>);
     expect(
       screen.getByRole("link", { name: "Docs" }).getAttribute("href")
-    ).toBe("https://margin-call.gitbook.io/product-docs");
+    ).toBe("/docs");
     expect(
       screen
         .getByRole("link", { name: "Portfolio" })
         .getAttribute("aria-current")
     ).toBe("page");
-    for (const path of ["/", "/create", "/positions", "/position/42"]) {
+    for (const path of [
+      "/",
+      "/create",
+      "/positions",
+      "/position/42",
+      "/docs",
+    ]) {
       usePathnameMock.mockReturnValue(path);
       rerender(<AppShell>page</AppShell>);
       expect(container.querySelector(".playful-theme")).not.toBeNull();
       expect(screen.getByRole("main").className).toBe("playful-main");
+      expect(
+        screen.getByRole("link", { name: "Docs" }).getAttribute("aria-current")
+      ).toBe(path === "/docs" ? "page" : null);
     }
   });
 
@@ -246,7 +265,9 @@ describe("portfolio-first app shell", () => {
       status: "CanLoadMore",
       loadMore,
     });
-    render(<MyPositionsPage />);
+    const { container } = render(<MyPositionsPage />);
+    expect(container.querySelector(".position-card")).not.toBeNull();
+    expect(container.querySelector(".explore-grid")).toBeNull();
     expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({
       owner: CONNECTED_ADDRESS,
       status: "active",
@@ -420,6 +441,7 @@ describe("portfolio-first app shell", () => {
     expect(screen.queryByText(/NAV/i)).toBeNull();
     expect(screen.queryByText(/debt/i)).toBeNull();
     expect(loadPosition).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("requires a status before asset chips can be selected", () => {
@@ -457,14 +479,179 @@ describe("portfolio-first app shell", () => {
 
     render(<AllPositionsPage />);
 
-    expect(
-      screen.getByText(/Couldn't load positions from the index/)
-    ).not.toBeNull();
+    expect(screen.getByText(/Couldn't load positions/)).not.toBeNull();
     expect(screen.getByRole("button", { name: "Retry" })).not.toBeNull();
-    expect(
-      screen.getByRole("heading", { name: "All Positions" })
-    ).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Explore" })).not.toBeNull();
     expect(screen.queryByText(/circuit breaker/i)).toBeNull();
+  });
+
+  it("renders gallery cards and preserves pagination", () => {
+    const loadMore = vi.fn();
+    const results = [
+      { tokenId: "51", assetId: 1, status: "active", owner: CONNECTED_ADDRESS },
+      { tokenId: "52", assetId: 2, status: "closed", owner: CONNECTED_ADDRESS },
+      {
+        tokenId: "53",
+        assetId: 1,
+        status: "liquidated",
+        owner: CONNECTED_ADDRESS,
+      },
+      {
+        tokenId: "54",
+        assetId: 999,
+        status: "active",
+        owner: CONNECTED_ADDRESS,
+      },
+    ];
+    usePaginatedQueryMock.mockReturnValue({
+      results,
+      status: "CanLoadMore",
+      loadMore,
+    });
+    const { container, rerender } = render(<AllPositionsPage />);
+    const cards = container.querySelectorAll(".explore-card-link");
+    expect(cards).toHaveLength(4);
+    expect(cards[0].getAttribute("href")).toBe("/position/51");
+    expect(cards[0].textContent).toContain("Active");
+    expect(cards[0].textContent).toContain("Owner");
+    expect(cards[0].querySelector("img")?.getAttribute("src")).toContain(
+      "logos%2Fnvda.png"
+    );
+    expect(cards[1].querySelector("img")?.getAttribute("src")).toContain(
+      "logos%2Faapl.png"
+    );
+    expect(cards[2].querySelector("img")?.getAttribute("src")).toContain(
+      "nvda%2Fliquidated.png"
+    );
+    expect(cards[3].querySelector(".explore-art-placeholder")).not.toBeNull();
+    expect(fetchMock.mock.calls.map(([url]) => url).sort()).toEqual([
+      "/api/nft/51",
+      "/api/nft/54",
+    ]);
+    expect(loadPosition).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Load more" }));
+    expect(loadMore).toHaveBeenCalledWith(20);
+    usePaginatedQueryMock.mockReturnValue({
+      results,
+      status: "LoadingMore",
+      loadMore,
+    });
+    rerender(<AllPositionsPage />);
+    expect(screen.getByRole("button", { name: "Loading…" })).toHaveProperty(
+      "disabled",
+      true
+    );
+    expect(container.querySelectorAll(".explore-card-link")).toHaveLength(4);
+    usePaginatedQueryMock.mockReturnValue({
+      results,
+      status: "Exhausted",
+      loadMore,
+    });
+    rerender(<AllPositionsPage />);
+    expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
+  });
+
+  it.each(["healthy", "warning", "danger"] as const)(
+    "shows the %s dog and health tag in Explore",
+    (health) => {
+      const { container } = render(
+        <PositionCard
+          presentation="gallery"
+          health={health}
+          position={{
+            tokenId: "20",
+            assetId: 1,
+            status: "active",
+            owner: CONNECTED_ADDRESS,
+          }}
+        />
+      );
+      expect(container.querySelector("img")?.getAttribute("src")).toContain(
+        `nvda%2F${health}.png`
+      );
+      expect(screen.getByRole("status").textContent?.toLowerCase()).toBe(
+        health
+      );
+      expect(screen.getByText("Active")).not.toBeNull();
+    }
+  );
+
+  it("retains the selected asset when switching status and clears filters", () => {
+    render(<AllPositionsPage />);
+    fireEvent.click(screen.getByRole("button", { name: "Active" }));
+    fireEvent.click(screen.getByRole("button", { name: "NVDAc" }));
+    fireEvent.click(screen.getByRole("button", { name: "Closed" }));
+    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({
+      status: "closed",
+      assetId: 1,
+    });
+    expect(
+      screen.getByRole("button", { name: "NVDAc" }).getAttribute("aria-pressed")
+    ).toBe("true");
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Asset" })).getByRole("button", {
+        name: "All",
+      })
+    );
+    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({
+      status: "closed",
+    });
+    fireEvent.click(
+      within(screen.getByRole("group", { name: "Status" })).getByRole(
+        "button",
+        { name: "All" }
+      )
+    );
+    expect(usePaginatedQueryMock.mock.calls.at(-1)?.[1]).toEqual({});
+    expect(screen.getByRole("button", { name: "NVDAc" })).toHaveProperty(
+      "disabled",
+      true
+    );
+  });
+
+  it("distinguishes gallery loading, empty, and unavailable states", () => {
+    usePaginatedQueryMock.mockReturnValue({
+      results: [],
+      status: "LoadingFirstPage",
+      loadMore: vi.fn(),
+    });
+    const { rerender } = render(<AllPositionsPage />);
+    expect(screen.getByRole("status").textContent).toBe("Loading positions…");
+    expect(screen.queryByText("No positions match these filters.")).toBeNull();
+    usePaginatedQueryMock.mockReturnValue({
+      results: [],
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+    rerender(<AllPositionsPage />);
+    expect(screen.getByRole("status").textContent).toBe(
+      "No positions match these filters."
+    );
+    useOptionalConvexClientMock.mockReturnValue(null);
+    rerender(<AllPositionsPage />);
+    expect(screen.getByRole("status").textContent).toContain(
+      "temporarily unavailable"
+    );
+    expect(screen.queryByText(/NEXT_PUBLIC/)).toBeNull();
+  });
+
+  it("recovers the gallery after a query failure using Retry", () => {
+    usePaginatedQueryMock.mockImplementation(() => {
+      throw new Error("offline");
+    });
+    render(<AllPositionsPage />);
+    expect(screen.getByRole("alert").textContent).toContain(
+      "Couldn't load positions"
+    );
+    usePaginatedQueryMock.mockReturnValue({
+      results: [],
+      status: "Exhausted",
+      loadMore: vi.fn(),
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(screen.getByRole("status").textContent).toBe(
+      "No positions match these filters."
+    );
   });
 
   it("create page has Open without repay, close, or Approve", () => {

@@ -338,6 +338,7 @@ describe("PositionDetailPage", () => {
       expect(screen.getByText("Pricing unavailable")).not.toBeNull();
     });
 
+    expect(artworkSrc(/Pricing unavailable$/)).toContain("/meta/healthy.png");
     expect(screen.queryByText("Liquidatable")).toBeNull();
     expect(screen.queryByText("1.25x")).toBeNull();
   });
