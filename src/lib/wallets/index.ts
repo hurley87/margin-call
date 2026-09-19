@@ -8,6 +8,7 @@
 export type {
   AgentWallet,
   TransactionReceiptSummary,
+  TypedDataAgentWallet,
   UnsignedTransaction,
   WalletTypedData,
 } from "@/lib/wallets/adapter";

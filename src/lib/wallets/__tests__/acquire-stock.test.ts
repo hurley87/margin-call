@@ -2,7 +2,7 @@ import { getAddress } from "viem";
 import { describe, expect, it, vi } from "vitest";
 import { getAssets } from "@/lib/agent/assets";
 import { baseDeployment, getAssetByName } from "@/lib/protocol/deployment";
-import type { AgentWallet } from "@/lib/wallets/adapter";
+import type { TypedDataAgentWallet } from "@/lib/wallets/adapter";
 import {
   acquireSupportedStock,
   parseAcquireCliArgs,
@@ -62,7 +62,7 @@ function classicQuote(
   };
 }
 
-function fakeWallet(): AgentWallet & {
+function fakeWallet(): TypedDataAgentWallet & {
   sendTransaction: ReturnType<typeof vi.fn>;
   waitForReceipt: ReturnType<typeof vi.fn>;
   signTypedData: ReturnType<typeof vi.fn>;
@@ -191,6 +191,37 @@ describe("acquireSupportedStock", () => {
     );
     expect(wallet.sendTransaction).toHaveBeenCalledWith(SWAP_TX);
     expect(result.stockReceivedFormatted).toBe("0.011");
+  });
+
+  it("swaps without signing typed data when the quote has no Permit2 payload", async () => {
+    const wallet = fakeWallet();
+    const trading = fakeTrading({
+      quote: async () => ({ ok: true, ...classicQuote(NVDAC, false) }),
+    });
+
+    const result = await acquireSupportedStock({
+      wallet,
+      balances: fakeBalances({
+        eth: 1_000_000_000_000_000n,
+        usdc: 5_000_000n,
+        stock: [0n, 1_100_000n],
+      }),
+      trading,
+      asset: "NVDAc",
+      usdcAmount: 2_000_000n,
+    });
+
+    expect(result).toMatchObject({
+      ok: true,
+      asset: "NVDAc",
+      stockReceived: "1100000",
+    });
+    expect(wallet.signTypedData).not.toHaveBeenCalled();
+    expect(trading.createSwap).toHaveBeenCalledTimes(1);
+    const swapArgs = trading.createSwap.mock.calls.at(0)?.at(0) as
+      { signature?: unknown } | undefined;
+    expect(swapArgs).not.toHaveProperty("signature");
+    expect(wallet.sendTransaction).toHaveBeenCalledWith(SWAP_TX);
   });
 
   it("refuses to swap when the wallet has no USDC", async () => {

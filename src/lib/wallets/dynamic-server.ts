@@ -1,8 +1,8 @@
 import { ADDRESS_RE } from "@margin-call/shared/address";
 import { base } from "viem/chains";
 import type {
-  AgentWallet,
   TransactionReceiptSummary,
+  TypedDataAgentWallet,
   UnsignedTransaction,
   WalletTypedData,
 } from "@/lib/wallets/adapter";
@@ -100,7 +100,8 @@ function asSignedHex(value: string, what: string): `0x${string}` {
 }
 
 /**
- * Base-only AgentWallet backed by Dynamic server-wallet signing.
+ * Dynamic reference wallet: Base transactions plus EIP-712 typed-data
+ * signing for the Uniswap Permit2 acquisition path.
  *
  * Key shares are recovered inside Dynamic from the password-protected backup;
  * this adapter never accepts or stores them.
@@ -110,7 +111,7 @@ export function createDynamicAgentWallet(args: {
   publicClient: DynamicChainClient;
   walletMetadata: DynamicWalletMetadata;
   password: string;
-}): AgentWallet {
+}): TypedDataAgentWallet {
   const address = dynamicWalletAddress(args.walletMetadata);
 
   return {

@@ -5,6 +5,7 @@ import { STOCK_DECIMALS, USDC_DECIMALS } from "@/lib/protocol/constants";
 import { baseDeployment } from "@/lib/protocol/deployment";
 import type {
   AgentWallet,
+  TypedDataAgentWallet,
   UnsignedTransaction,
   WalletTypedData,
 } from "@/lib/wallets/adapter";
@@ -49,7 +50,7 @@ export type AcquireStockErr = {
 export type AcquireStockResult = AcquireStockOk | AcquireStockErr;
 
 export type AcquireStockArgs = {
-  wallet: AgentWallet;
+  wallet: TypedDataAgentWallet;
   balances: BalanceClient;
   trading: UniswapTradingApi;
   asset: string;

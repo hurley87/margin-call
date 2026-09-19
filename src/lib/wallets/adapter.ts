@@ -1,6 +1,6 @@
 /**
- * Wallet-agnostic signer for agents. Dynamic is one implementation — Bankr,
- * Coinbase, or a bare viem account can satisfy the same shape.
+ * Wallet-agnostic Base signer for agents. Dynamic is one implementation —
+ * Bankr, Coinbase, or a bare viem account can satisfy the same shape.
  */
 export type UnsignedTransaction = {
   to: `0x${string}`;
@@ -26,5 +26,9 @@ export type AgentWallet = {
   address: `0x${string}`;
   sendTransaction: (tx: UnsignedTransaction) => Promise<`0x${string}`>;
   waitForReceipt: (hash: `0x${string}`) => Promise<TransactionReceiptSummary>;
+};
+
+/** EIP-712 signing for the Dynamic + Uniswap path when Permit2 is present. */
+export type TypedDataAgentWallet = AgentWallet & {
   signTypedData: (typedData: WalletTypedData) => Promise<`0x${string}`>;
 };
