@@ -83,7 +83,7 @@ The website is a visual/wallet control plane, not a conversational chatbot. User
 | `src/`             | Next.js 16 shell (Base workspace + Dynamic wallet), protocol helpers, UI primitives      |
 | `convex/`          | Empty HTTP router and schema; no JWT auth until a product feature needs identity         |
 | `packages/shared/` | Framework-neutral validation helpers                                                     |
-| `contracts/`       | Foundry workspace: canonical multi-stock launch contracts — see [`CLAUDE.md`](CLAUDE.md) |
+| `contracts/`       | Foundry workspace: canonical multi-stock launch contracts — see [`AGENTS.md`](AGENTS.md) |
 
 ## Tech stack
 

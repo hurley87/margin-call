@@ -4,7 +4,7 @@
  * convex/_generated/api.d.ts.
  *
  * The committed generated types are what `next build` type-checks against, and
- * `build` does NOT run codegen (backend deploys are separate — see CLAUDE.md).
+ * `build` does NOT run codegen (backend deploys are separate — see AGENTS.md).
  * So adding a Convex module without running `npx convex codegen` leaves the
  * generated `internal`/`api` types stale, which crashes the production build
  * (see PR #195). This catches that drift before the build starts, without
