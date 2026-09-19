@@ -32,10 +32,10 @@ async function loadGalleryNft(
 }
 
 /**
- * Bounded Explore refresh against the same `tokenURI` metadata marketplaces cache.
+ * Bounded gallery refresh against the same `tokenURI` metadata marketplaces cache.
  *
- * Explore-only by design. Each token costs the metadata route five Base reads,
- * so this stays behind the gallery rather than any shared list component.
+ * Shared by Explore and portfolio. Each active token costs five Base reads;
+ * concurrency is limited to three and refreshes run once per minute.
  */
 export function useGalleryHealth(positions: PositionListItem[]) {
   const ids = positions

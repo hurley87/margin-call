@@ -120,11 +120,25 @@ export function faceFromStage(stage: PositionStage | null): ArtworkFace {
 }
 
 /**
+ * The face a surface should publish for a stage.
+ *
+ * Only place that departs from `faceFromStage`: an unpriced position would
+ * otherwise show the ticker logo, and marketplaces cache that image for far
+ * longer than the weekend or halt that produced it. Every surface that shows
+ * the token's own image — `tokenURI`, Explore, detail — uses this one, so the
+ * app never disagrees with the picture the metadata route published. Stage
+ * copy still reports `Pricing unavailable`, so the label stays honest.
+ */
+export function marketplaceFace(stage: PositionStage): ArtworkFace {
+  return stage === "pricing_unavailable" ? "healthy" : faceFromStage(stage);
+}
+
+/**
  * Face for surfaces that only have the indexed lifecycle status.
  *
- * Active stays neutral: live health needs a read that the portfolio list
- * deliberately does not make. Closed and liquidated are terminal and
- * knowable from Convex alone — no Base read, and never each other's art.
+ * Active stays neutral until live state or metadata is available. Closed and
+ * liquidated are terminal and knowable from Convex alone — no Base read,
+ * and never each other's art.
  */
 export function faceFromStatus(status: PositionStatus): ArtworkFace {
   switch (status) {

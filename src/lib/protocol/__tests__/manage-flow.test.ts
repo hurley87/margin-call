@@ -228,7 +228,7 @@ describe("runClosePositionFlow", () => {
         tokenId: 42n,
         chainId: 8453,
       })
-    ).rejects.toThrow(/zero/);
+    ).rejects.toThrow(/outstanding debt/);
 
     expect(closePositionMock).not.toHaveBeenCalled();
   });

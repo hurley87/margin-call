@@ -111,8 +111,8 @@
   display: flex;
   flex-direction: column;
   gap: 28px;
-  max-width: 960px;
-  margin: 48px auto;
+  width: 100%;
+  margin: 30px auto 40px;
   font-size: 21px;
 }
 .portfolio-content-heading {
@@ -122,7 +122,7 @@
   gap: 24px;
 }
 .portfolio-content-heading h1 {
-  font-size: 48px;
+  font-size: clamp(40px, 4.3vw, 60px);
   line-height: 1.1;
 }
 .portfolio-content-heading p {
@@ -147,27 +147,6 @@
   padding: 8px 20px;
   color: var(--t-text);
 }
-.portfolio-content .position-card {
-  padding: 20px;
-  border-radius: 18px;
-  background: #ffffff80;
-}
-.portfolio-content .position-card[data-highlighted] {
-  background: var(--t-accent-soft);
-}
-.portfolio-content .position-card-title {
-  font-family: inherit;
-  color: var(--t-text);
-  font-size: 25px;
-  font-weight: 400;
-}
-.portfolio-content .position-card p:not(.position-card-title),
-.portfolio-content .position-card span {
-  font-size: 18px;
-  letter-spacing: normal;
-  text-transform: none;
-}
-
 @media (max-width: 1100px) {
   .portfolio-features {
     gap: 28px;

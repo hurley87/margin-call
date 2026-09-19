@@ -1,10 +1,9 @@
 import {
   STAGE_LABEL,
   artworkPath,
-  faceFromStage,
+  marketplaceFace,
   resolvePositionStage,
   stockSymbol,
-  type ArtworkFace,
   type PositionRiskInput,
   type PositionStage,
 } from "@/lib/positions/artwork";
@@ -36,18 +35,6 @@ export type NftMetadataInput = PositionRiskInput & {
   assetId: number;
   thesis: string;
 };
-
-/**
- * Artwork a marketplace should cache for a stage.
- *
- * Only place that departs from `faceFromStage`: an unpriced position would
- * otherwise publish the ticker logo, and marketplaces cache that image for far
- * longer than the weekend or halt that produced it. The Stage trait still
- * reports `Pricing unavailable`, so the metadata stays honest either way.
- */
-function marketplaceFace(stage: PositionStage): ArtworkFace {
-  return stage === "pricing_unavailable" ? "healthy" : faceFromStage(stage);
-}
 
 /**
  * Standard ERC-721 metadata for a live Position NFT.

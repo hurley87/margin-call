@@ -1,8 +1,8 @@
 import {
   STAGE_LABEL,
   artworkPath,
-  faceFromStage,
   faceFromStatus,
+  marketplaceFace,
   type ArtworkFace,
   type PositionStage,
 } from "@/lib/positions/artwork";
@@ -42,6 +42,11 @@ export type ExploreCardView = {
   statusKind: PositionStatus;
   healthKind: ExploreHealthKind;
   healthLabel: string | null;
+  /**
+   * The file on screen, not the honest stage: an unpriced card shows the
+   * healthy dog the metadata route published. Layout reads this, so a ticker
+   * logo is `neutral` and nothing has to inspect the path.
+   */
   face: ArtworkFace;
   /**
    * Local committed artwork — never the absolute URL from metadata.
@@ -73,7 +78,7 @@ function faceFor(
     case "warning":
     case "danger":
     case "pricing_unavailable":
-      return faceFromStage(healthKind);
+      return marketplaceFace(healthKind);
     case "loading":
     case "unavailable":
     case "ended":
@@ -103,8 +108,8 @@ export function toExploreCardView(
   const healthKind = healthKindFor(position, snapshot);
   const face = faceFor(status, healthKind);
   // Terminal Convex rows never fetch metadata. Active cards with a usable
-  // payload show the image the route declared rather than recomputing it
-  // from Stage — `faceFromStage("pricing_unavailable")` is the ticker logo.
+  // payload show the image the route declared rather than recomputing it;
+  // `face` agrees, so the fallback below lands on the same file.
   const metadataPath =
     status === "active" && snapshot?.metadata
       ? localArtworkPathFromMetadata(snapshot.metadata)

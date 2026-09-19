@@ -86,7 +86,7 @@
   border-radius: 16px;
   color: var(--t-text);
 }
-.explore-page .explore-card {
+.position-gallery .explore-card {
   padding: 18px;
   height: 100%;
   background: #ffffff80;
@@ -150,14 +150,14 @@
   margin: 5px 0 0;
   overflow-wrap: anywhere;
 }
-.explore-page .explore-load-more {
+.position-gallery .explore-load-more {
   display: block;
   margin: 32px auto 0;
   min-height: 44px;
   padding: 10px 30px;
   font-size: 22px;
 }
-.explore-page .explore-message {
+.playful-theme .explore-message {
   padding: 36px;
   color: var(--t-muted);
   background: #ffffff80;
@@ -206,31 +206,13 @@
   .explore-page .explore-filter-button {
     padding: 8px 16px;
   }
-  .explore-page .explore-message {
+  .playful-theme .explore-message {
     padding: 24px;
   }
 }
 
-.explore-card-health {
-  width: fit-content;
+.explore-card .stage-chip {
   margin: 10px 0 0;
-  padding: 3px 12px;
-  border-radius: 20px;
-  font-size: 18px;
-  background: var(--t-surface);
-  color: var(--t-muted);
-}
-.explore-card-health[data-health="healthy"] {
-  color: var(--t-green);
-  background: #edf5e9;
-}
-.explore-card-health[data-health="warning"] {
-  color: var(--t-amber);
-  background: #fff1d6;
-}
-.explore-card-health[data-health="danger"] {
-  color: var(--t-red);
-  background: #fceae5;
 }
 
 .explore-card-description {
@@ -240,4 +222,14 @@
   margin: 10px 0;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.explore-card-link[data-highlighted="true"] {
+  background: var(--t-accent-soft);
+  outline: 2px solid var(--t-accent);
+  outline-offset: 3px;
+}
+.position-gallery button:focus-visible {
+  outline: 2px solid var(--t-focus-ring);
+  outline-offset: 5px;
 }

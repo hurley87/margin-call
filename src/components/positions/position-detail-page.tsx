@@ -7,27 +7,29 @@ import {
   useGetWalletAccounts,
 } from "@dynamic-labs-sdk/react-hooks";
 import { useQuery } from "convex/react";
+import { DrawablyButton, DrawablyCard } from "drawably/react";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
+import { PositionArtwork } from "@/components/positions/position-artwork";
 import {
   IndexUnavailable,
   PositionQueryBoundary,
-} from "@/components/positions/position-list";
-import { PositionArtwork } from "@/components/positions/position-artwork";
+} from "@/components/positions/position-gallery";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import { runManagedTx } from "@/components/protocol/run-managed-tx";
 import { TxStatus } from "@/components/protocol/tx-status";
-import { Button } from "@/components/ui/button";
 import { FlashValue } from "@/components/ui/flash-value";
+import { SKETCH, SURFACE_SKETCH } from "@/components/ui/sketch";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
 import { useSyncPositionTransaction } from "@/lib/convex/use-sync-position-transaction";
 import { parseNetworkIdToChainId } from "@/lib/dynamic/resolve-wallet-client";
 import {
   STAGE_LABEL,
   artworkPath,
-  faceFromStage,
   faceFromStatus,
+  marketplaceFace,
   resolvePositionStage,
+  type ArtworkFace,
   type PositionStage,
 } from "@/lib/positions/artwork";
 import { STATUS_LABEL, type PositionListItem } from "@/lib/positions/types";
@@ -64,17 +66,43 @@ function parseTokenId(value: string): bigint | null {
 
 /** Canonical Position NFT management surface — live Base state + repay/close. */
 export function PositionDetailPage({ tokenId }: { tokenId: string }) {
+  return (
+    <div className="position-detail">
+      <Link href="/" className="position-back">
+        ← Back to portfolio
+      </Link>
+      <PositionDetailContent tokenId={tokenId} />
+    </div>
+  );
+}
+
+/** Paper frame for the page's one-line states: loading, unindexed, unavailable. */
+function NoticeCard({ children }: { children: ReactNode }) {
+  return (
+    <DrawablyCard className="position-notice" seed={31} {...SURFACE_SKETCH}>
+      {children}
+    </DrawablyCard>
+  );
+}
+
+/** The right-hand column: facts, manage controls, and the thesis. */
+function InformationCard({ children }: { children: ReactNode }) {
+  return (
+    <DrawablyCard
+      className="position-information"
+      seed={31}
+      {...SURFACE_SKETCH}
+    >
+      {children}
+    </DrawablyCard>
+  );
+}
+
+function PositionDetailContent({ tokenId }: { tokenId: string }) {
   const convex = useOptionalConvexClient();
 
   if (!convex) {
-    return (
-      <div className="space-y-2">
-        <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-tight text-[var(--t-accent)]">
-          Position
-        </h1>
-        <IndexUnavailable purpose="to load this Position." />
-      </div>
-    );
+    return <IndexUnavailable purpose="to load this Position." />;
   }
 
   return (
@@ -89,23 +117,21 @@ function PositionDetailBody({ tokenId }: { tokenId: string }) {
 
   if (position === undefined) {
     return (
-      <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-        Loading position…
-      </p>
+      <NoticeCard>
+        <p role="status">Loading position…</p>
+      </NoticeCard>
     );
   }
 
   if (position === null) {
     return (
-      <div className="space-y-2">
-        <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-tight text-[var(--t-accent)]">
-          Position
-        </h1>
-        <p className="text-sm leading-6 text-[var(--t-muted)]">
+      <NoticeCard>
+        <h1 className="position-title">Position</h1>
+        <p className="position-muted">
           Token #{tokenId} is not in the index yet. If you just opened it, wait
           for receipt sync.
         </p>
-      </div>
+      </NoticeCard>
     );
   }
 
@@ -121,32 +147,48 @@ function PageHeader(props: {
   tokenId: string;
   /** Free text: a burned-but-unindexed token has no `PositionStatus` yet. */
   statusLabel: string;
+  stage?: PositionStage | null;
 }) {
   return (
-    <header className="space-y-2">
-      <p className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]">
-        Position
-      </p>
-      <h1 className="font-[family-name:var(--font-plex-sans)] text-2xl font-black uppercase tracking-tight text-[var(--t-accent)]">
-        {assetLabel(props.assetId)}
-      </h1>
-      <p className="text-sm text-[var(--t-muted)]">Token #{props.tokenId}</p>
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--t-muted)]">
-        {props.statusLabel}
-      </p>
+    <header className="position-heading">
+      <p className="position-label">Position</p>
+      <h1 className="position-title">{assetLabel(props.assetId)}</h1>
+      <div className="position-identity-meta">
+        <p className="position-label">Token #{props.tokenId}</p>
+        <span className="position-status">{props.statusLabel}</span>
+        {props.stage ? (
+          <span className="stage-chip" data-health={props.stage}>
+            {STAGE_LABEL[props.stage]}
+          </span>
+        ) : null}
+      </div>
     </header>
   );
 }
 
-/** Shared frame so every state renders the NFT at the same size. */
-function NftSlot(props: { src: string | null; alt: string }) {
+/**
+ * Shared frame so every state renders the NFT at the same size.
+ *
+ * `face` is the published file, so the ticker logo gets the small centered
+ * slot and any dog fills the tile.
+ */
+function NftSlot(props: {
+  src: string | null;
+  alt: string;
+  face: ArtworkFace;
+}) {
   return (
-    <PositionArtwork
-      src={props.src}
-      alt={props.alt}
-      className="max-w-[220px]"
-      sizes="220px"
-    />
+    <DrawablyCard className="position-art-card" seed={29} {...SURFACE_SKETCH}>
+      <div
+        className={`position-art${props.face === "neutral" ? " position-art-neutral" : ""}`}
+      >
+        <PositionArtwork
+          src={props.src}
+          alt={props.alt}
+          sizes="(max-width: 800px) 90vw, 460px"
+        />
+      </div>
+    </DrawablyCard>
   );
 }
 
@@ -156,12 +198,14 @@ function NftSlot(props: { src: string | null; alt: string }) {
  */
 function liveArtwork(assetId: number, stage: PositionStage | null) {
   const label = assetLabel(assetId);
+  const face: ArtworkFace = stage === null ? "neutral" : marketplaceFace(stage);
   return {
-    src: artworkPath(assetId, faceFromStage(stage)),
+    src: artworkPath(assetId, face),
     alt:
       stage === null
         ? `${label} Position NFT`
         : `${label} Position NFT — ${STAGE_LABEL[stage]}`,
+    face,
   };
 }
 
@@ -170,54 +214,53 @@ function Thesis({ thesis }: { thesis: string }) {
   if (thesis.trim().length === 0) return null;
 
   return (
-    <section className="space-y-1 border-t border-[var(--t-border)] pt-4">
-      <h2 className="text-xs font-bold uppercase tracking-[0.2em] text-[var(--t-muted)]">
-        Thesis
-      </h2>
-      <p className="whitespace-pre-wrap text-sm leading-6">{thesis}</p>
+    <section className="position-thesis">
+      <h2 className="position-label">Thesis</h2>
+      <p className="position-thesis-body">{thesis}</p>
     </section>
   );
 }
 
 function TerminalPosition({ position }: { position: PositionListItem }) {
   const terminalTxHash = parseTxHash(position.terminalTxHash);
+  const face = faceFromStatus(position.status);
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="position-layout">
       <PageHeader
         assetId={position.assetId}
         tokenId={position.tokenId}
         statusLabel={STATUS_LABEL[position.status]}
       />
       <NftSlot
-        src={artworkPath(position.assetId, faceFromStatus(position.status))}
+        src={artworkPath(position.assetId, face)}
         alt={`${assetLabel(position.assetId)} Position NFT — ${STATUS_LABEL[position.status]}`}
+        face={face}
       />
-      <dl className="grid gap-3 border-t border-[var(--t-border)] pt-4 text-sm">
-        <Fact label="Owner">{formatShortAddress(position.owner)}</Fact>
-      </dl>
-      <p className="text-sm leading-6 text-[var(--t-muted)]">
-        {position.status === "liquidated"
-          ? "This Position NFT was liquidated."
-          : "This Position NFT is closed. Stock was returned to the owner."}{" "}
-        Live financial state is not available after the token is burned.
-      </p>
-      {terminalTxHash ? (
-        <a
-          className="w-fit text-xs text-[var(--t-accent)] underline"
-          href={basescanTxUrl(terminalTxHash)}
-          target="_blank"
-          rel="noreferrer"
-        >
-          {formatShortAddress(terminalTxHash)}
-        </a>
-      ) : null}
-      <Link
-        href="/"
-        className="w-fit text-xs font-bold uppercase tracking-[0.16em] text-[var(--t-accent)]"
-      >
-        My Positions
-      </Link>
+      <InformationCard>
+        <dl>
+          <Fact label="Owner">{formatShortAddress(position.owner)}</Fact>
+        </dl>
+        <p className="position-muted">
+          {position.status === "liquidated"
+            ? "This Position NFT was liquidated."
+            : "This Position NFT is closed. Stock was returned to the owner."}{" "}
+          Live financial state is not available after the token is burned.
+        </p>
+        {terminalTxHash ? (
+          <a
+            className="position-link"
+            href={basescanTxUrl(terminalTxHash)}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {formatShortAddress(terminalTxHash)}
+          </a>
+        ) : null}
+        <Link href="/" className="position-link">
+          My Positions
+        </Link>
+      </InformationCard>
     </div>
   );
 }
@@ -229,7 +272,7 @@ function TerminalPosition({ position }: { position: PositionListItem }) {
  */
 function PendingTerminalPosition(props: { assetId: number; tokenId: string }) {
   return (
-    <div className="flex flex-col gap-6">
+    <div className="position-layout">
       <PageHeader
         assetId={props.assetId}
         tokenId={props.tokenId}
@@ -239,16 +282,17 @@ function PendingTerminalPosition(props: { assetId: number; tokenId: string }) {
       <NftSlot
         src={artworkPath(props.assetId, "neutral")}
         alt={`${assetLabel(props.assetId)} Position NFT`}
+        face="neutral"
       />
-      <p className="text-sm leading-6 text-[var(--t-muted)]">
-        This Position no longer exists on Base. Waiting for lifecycle indexing…
-      </p>
-      <Link
-        href="/"
-        className="w-fit text-xs font-bold uppercase tracking-[0.16em] text-[var(--t-accent)]"
-      >
-        My Positions
-      </Link>
+      <InformationCard>
+        <p className="position-muted">
+          This Position no longer exists on Base. Waiting for lifecycle
+          indexing…
+        </p>
+        <Link href="/" className="position-link">
+          My Positions
+        </Link>
+      </InformationCard>
     </div>
   );
 }
@@ -319,43 +363,44 @@ function ActivePosition({ indexed }: { indexed: PositionListItem }) {
   const stage = live ? resolvePositionStage(live) : null;
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="position-layout">
       <PageHeader
         assetId={assetId}
         tokenId={indexed.tokenId}
         statusLabel={STATUS_LABEL.active}
+        stage={stage}
       />
       <NftSlot {...liveArtwork(assetId, stage)} />
-      {live ? <Thesis thesis={live.thesis} /> : null}
-      {live ? (
-        <LiveFacts position={live} />
-      ) : loadError ? (
-        <p className="text-sm leading-6 text-[var(--t-red)]">
-          Couldn&apos;t read live Base state. The index may still show this
-          Position as active. {loadError}
-        </p>
-      ) : (
-        <p className="text-xs uppercase tracking-[0.2em] text-[var(--t-muted)]">
-          Reading Base…
-        </p>
-      )}
-      {live ? (
-        <ManageBar
-          publicClient={publicClient}
-          live={live}
-          onClosed={(owner, hash) => setJustClosed({ owner, hash })}
-          onRepaid={setView}
-        />
-      ) : null}
+      <InformationCard>
+        {live ? (
+          <LiveFacts position={live} />
+        ) : loadError ? (
+          <p className="position-alert">
+            Couldn&apos;t read live Base state. The index may still show this
+            Position as active. {loadError}
+          </p>
+        ) : (
+          <p className="position-muted">Reading Base…</p>
+        )}
+        {live ? (
+          <ManageBar
+            publicClient={publicClient}
+            live={live}
+            onClosed={(owner, hash) => setJustClosed({ owner, hash })}
+            onRepaid={setView}
+          />
+        ) : null}
+        {live ? <Thesis thesis={live.thesis} /> : null}
+      </InformationCard>
     </div>
   );
 }
 
 function Fact(props: { label: string; children: ReactNode }) {
   return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-[var(--t-muted)]">{props.label}</dt>
-      <dd className="font-mono">{props.children}</dd>
+    <div className="position-fact">
+      <dt>{props.label}</dt>
+      <dd>{props.children}</dd>
     </div>
   );
 }
@@ -366,7 +411,7 @@ function LiveFacts({ position }: { position: OpenPosition }) {
   );
 
   return (
-    <dl className="grid gap-3 border-t border-[var(--t-border)] pt-4 text-sm">
+    <dl>
       <Fact label="Owner">{formatShortAddress(position.owner)}</Fact>
       <Fact label="Stock">{formatStockAmount(position.stockAmount)}</Fact>
       <Fact label="Current debt">
@@ -407,7 +452,7 @@ function ManageBar(props: ManageProps) {
 
   if (session.kind !== "connected") {
     return (
-      <p className="text-sm leading-6 text-[var(--t-muted)]">
+      <p className="position-muted">
         Connect a wallet to repay or close this Position.
       </p>
     );
@@ -416,7 +461,7 @@ function ManageBar(props: ManageProps) {
   const evmAccount = accounts.find(isEvmWalletAccount) ?? null;
   if (!evmAccount) {
     return (
-      <p className="text-sm leading-6 text-[var(--t-muted)]">
+      <p className="position-muted">
         Connect an EVM wallet on Base to manage this Position.
       </p>
     );
@@ -426,7 +471,7 @@ function ManageBar(props: ManageProps) {
     !isPositionManager(session.address, props.live.owner, props.live.executor)
   ) {
     return (
-      <p className="text-sm leading-6 text-[var(--t-muted)]">
+      <p className="position-muted">
         Connected wallet is not the owner or executor.
       </p>
     );
@@ -517,34 +562,39 @@ function ManageActions(
   }
 
   return (
-    <section className="flex flex-col gap-3">
-      <div className="flex flex-wrap gap-2">
-        <Button
+    <section className="position-manage">
+      <div className="position-actions">
+        <DrawablyButton
+          variant="solid"
           type="button"
-          variant="outline"
-          size="sm"
+          {...SKETCH}
+          seed={32}
           disabled={pending || !repayGate.ok}
           onClick={() => void handleRepay()}
         >
           Repay all
-        </Button>
-        <Button
+        </DrawablyButton>
+        <DrawablyButton
+          variant="solid"
           type="button"
-          variant="outline"
-          size="sm"
+          {...SKETCH}
+          seed={32}
           disabled={pending || !closeGate.ok}
           onClick={() => void handleClose()}
         >
           Close
-        </Button>
+        </DrawablyButton>
       </div>
       {!repayGate.ok ? (
-        <p className="text-xs text-[var(--t-muted)]">{repayGate.reason}</p>
+        <p className="position-muted">{repayGate.reason}</p>
       ) : null}
-      {!closeGate.ok ? (
-        <p className="text-xs text-[var(--t-muted)]">{closeGate.reason}</p>
+      {!closeGate.ok &&
+      (repayGate.ok || closeGate.reason !== repayGate.reason) ? (
+        <p className="position-muted">{closeGate.reason}</p>
       ) : null}
-      <TxStatus phase={txPhase} />
+      <div aria-live="polite">
+        <TxStatus phase={txPhase} />
+      </div>
     </section>
   );
 }

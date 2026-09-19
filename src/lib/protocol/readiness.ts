@@ -128,7 +128,7 @@ export function closeReadiness(args: {
   if (args.currentDebt !== 0n) {
     return {
       ok: false,
-      reason: "Close enabled only when currentDebt is zero. Repay all first.",
+      reason: "Repay your outstanding debt before closing this position.",
     };
   }
 

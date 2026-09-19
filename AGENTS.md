@@ -34,13 +34,15 @@ under `retiredCoordinator` in that manifest for provenance — never point the f
 
 `GET /api/nft/[tokenId]` makes five Base reads per request, which the public RPC rate-limits.
 Production needs the server-only `BASE_RPC_URL` set, or the route returns 502 under load.
-Explore (`/positions`) shows live health by fetching that same payload
-(`src/components/positions/explore-gallery.tsx`); the portfolio list stays Convex
-identity/lifecycle with neutral ticker logos and makes neither read. Explore multiplies
-those five reads by the live positions on screen. `buildNftMetadata` swaps in the healthy
-dog so marketplaces do not cache the ticker through a halt; Explore unwraps that same
-`metadata.image` instead of recomputing artwork from Stage. `faceFromStage` keeps unpriced
-positions on the ticker logo on surfaces that do not read metadata (detail, portfolio).
+Explore (`/positions`) and portfolio (`/`) share a metadata-backed gallery
+(`src/components/positions/position-gallery.tsx`). Each active card fetches that payload,
+with at most three requests in flight and a 60-second refresh. Both multiply those five
+reads by the loaded active positions. Terminal cards use indexed lifecycle artwork without
+metadata reads. `marketplaceFace` in `src/lib/positions/artwork.ts` is the one published-face
+rule: it swaps in the healthy dog so marketplaces do not cache the ticker through a halt, and
+`tokenURI`, the galleries, and detail all go through it. Galleries unwrap `metadata.image`
+while retaining the honest Stage label; detail applies the same rule to its existing Base read,
+without an extra metadata request. Loading and failed reads retain neutral ticker artwork.
 
 ## Commands
 

@@ -76,6 +76,9 @@ describe("toExploreCardView", () => {
     expect(view.healthKind).toBe("pricing_unavailable");
     expect(view.healthLabel).toBe("Pricing unavailable");
     expect(view.imageSrc).toBe("/nvda/healthy.png");
+    // Layout follows the published file, so the card fills the tile with the
+    // dog instead of shrinking it into the ticker slot.
+    expect(view.face).toBe("healthy");
     expect(view.statusLabel).toBe("Active");
   });
 
