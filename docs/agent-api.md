@@ -31,7 +31,8 @@ flowchart LR
   wallet -->|"sign and submit prepared txs"| base
 ```
 
-Margin Call never holds a key, never signs, and never broadcasts. `prepare_open` hands back
+The public API/MCP service never holds a key, signs, or broadcasts. The optional
+local wallet demo signs through its configured wallet provider. `prepare_open` hands back
 ordinary unsigned Base calldata; a Dynamic server wallet, a Bankr agent wallet, a Coinbase
 smart wallet, or a bare `viem` account can all execute the identical transactions. **Dynamic
 is not required.** It is the reference wallet for agents that start without one — see
@@ -42,6 +43,10 @@ Stock acquisition is also outside Margin Call. `prepare_open` only cares that th
 wallet already holds the supported stock from `get_assets`. The Dynamic demo acquires that
 token with Uniswap (`pnpm agent:wallet --acquire`). A Bankr-style agent should skip Uniswap,
 swap with its own wallet tooling, verify the balance, and continue.
+
+Hosted reads and quotes require no wallet, authentication, or caller-supplied RPC.
+Preparation requires the intended wallet address; execution requires that wallet’s Base signer.
+See the [in-app agent guide](https://margincall.fun/docs#agents) for the walkthrough.
 
 ## Conventions
 
@@ -323,33 +328,44 @@ Notes on the shape:
 Executing the prepared transactions with `viem`:
 
 ```ts
-import { createWalletClient, http } from "viem";
+import { createPublicClient, createWalletClient, http } from "viem";
 import { base } from "viem/chains";
 import { privateKeyToAccount } from "viem/accounts";
 
 const account = privateKeyToAccount(process.env.PRIVATE_KEY as `0x${string}`);
 const wallet = createWalletClient({ account, chain: base, transport: http() });
 
-const { transactions } = await fetch(
-  "https://margincall.fun/api/agent/prepare-open",
-  {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      wallet: account.address,
-      assetId: 1,
-      stockAmount: "1000000",
-      leverage: 12500,
-    }),
-  }
-).then((response) => response.json());
+const publicClient = createPublicClient({ chain: base, transport: http() });
 
-for (const tx of transactions) {
-  await wallet.sendTransaction({
+const response = await fetch("https://margincall.fun/api/agent/prepare-open", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    wallet: account.address,
+    assetId: 1,
+    stockAmount: "1000000",
+    leverage: 12500,
+  }),
+});
+const result = await response.json();
+// Protocol refusals can use HTTP 200. Never submit a refused preparation.
+if (!response.ok || result.ok !== true) {
+  throw new Error(
+    `${result.code ?? response.status}: ${result.message ?? "Preparation failed"}`
+  );
+}
+
+for (const tx of result.transactions) {
+  if (tx.chainId !== base.id) throw new Error("Expected Base transactions");
+  const hash = await wallet.sendTransaction({
     to: tx.to,
     data: tx.data,
     value: BigInt(tx.value),
   });
+  const receipt = await publicClient.waitForTransactionReceipt({ hash });
+  if (receipt.status !== "success") {
+    throw new Error(`Transaction reverted: ${hash}`);
+  }
 }
 ```
 
@@ -358,7 +374,7 @@ for (const tx of transactions) {
 The same six tools are served as a Streamable HTTP MCP endpoint at
 `https://margincall.fun/api/mcp`. No OAuth, no API key, no stdio server to install.
 
-Cursor (`.cursor/mcp.json`) or Claude Desktop:
+For a client supporting remote Streamable HTTP MCP (using its MCP configuration):
 
 ```json
 {
@@ -432,6 +448,19 @@ For an agent that starts without a wallet:
 pnpm agent:wallet --open --asset NVDAc
 ```
 
+Configure `DYNAMIC_ENVIRONMENT_ID` (or `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID`),
+`DYNAMIC_API_TOKEN`, and `DYNAMIC_WALLET_PASSWORD` for the local reference demo.
+Use `pnpm agent:wallet` to obtain the address, then manually fund it with Base ETH
+for gas and USDC. Set `UNISWAP_API_KEY` and run
+`pnpm agent:wallet --acquire --asset NVDAc --usdc 2` to acquire stock.
+A provisioned `BASE_RPC_URL` is recommended; the demo otherwise uses
+`NEXT_PUBLIC_BASE_RPC_URL` or the public Base RPC. These settings are not required
+to call the hosted public tools.
+
+The open command defaults to the wallet's full stock balance; `--stock` accepts a
+human decimal amount to limit it. Combined `--acquire --open` runs acquisition
+before the open pricing gate, so acquisition may succeed even when opening is refused.
+
 That command provisions or reuses the Dynamic server wallet, checks market state, and — only
 when pricing is live — signs the prepared 1.25x open. The Position NFT is minted to that
 Dynamic address because it is the transaction sender. `--acquire` can precede `--open` in the
@@ -444,6 +473,6 @@ and exits successfully without submitting.
 ## Limits
 
 - Read and prepare only. There is no `repay`, `close`, `reduce_exposure`, or `liquidate`
-  tool yet; those write paths exist on-chain and in the website today.
+  tool yet. Repay and close are available in the website; liquidation exists on-chain.
 - No rate limits are advertised. Be reasonable — every read hits Base.
 - Base mainnet only (`chainId` 8453).

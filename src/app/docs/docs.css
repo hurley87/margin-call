@@ -369,3 +369,77 @@
 .docs-step:nth-child(4) .docs-step-art {
   clip-path: inset(28px 0 0);
 }
+
+.docs-agent-shortcut {
+  display: inline-block;
+  margin-top: 20px;
+  font-size: 22px;
+}
+.docs-agents {
+  padding: 36px 0;
+  max-width: 900px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+#agents {
+  scroll-margin-top: 120px;
+}
+.docs-agents h3 {
+  margin: 32px 0 14px;
+}
+.docs-agents a,
+.docs-agent-shortcut {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.docs-agents a:focus-visible,
+.docs-agents pre:focus-visible,
+.docs-agent-shortcut:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 4px;
+}
+.docs-agents pre {
+  max-width: 100%;
+  overflow-x: auto;
+  padding: 20px;
+  margin: 20px 0;
+  border: 1px solid var(--t-muted);
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre;
+}
+.docs-agents code {
+  font-family: monospace;
+  font-size: 0.85em;
+}
+.docs-agents pre code {
+  font-size: inherit;
+}
+.docs-agents ol,
+.docs-agents ul {
+  padding-left: 26px;
+  margin: 20px 0;
+  list-style: revert;
+}
+.docs-agents li + li {
+  margin-top: 10px;
+}
+.docs-agents dl {
+  margin: 24px 0;
+}
+.docs-agents dl > div {
+  margin-top: 14px;
+}
+.docs-agents dt {
+  font-weight: 700;
+}
+.docs-agents dd {
+  color: var(--t-muted);
+  margin: 4px 0 0;
+}
+.docs-agents blockquote {
+  margin: 20px 0;
+  padding: 12px 20px;
+  border-left: 3px solid var(--t-muted);
+}

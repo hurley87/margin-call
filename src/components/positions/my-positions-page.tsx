@@ -9,7 +9,7 @@ import {
 } from "@/components/positions/position-gallery";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
 import {
-  OpenPositionCta,
+  PortfolioActions,
   PortfolioWelcome,
 } from "@/components/positions/portfolio-welcome";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
@@ -152,7 +152,7 @@ function PageFrame({ children }: { children: ReactNode }) {
           <h1>Your portfolio</h1>
           <p>Position NFTs currently owned by your connected wallet.</p>
         </div>
-        <OpenPositionCta />
+        <PortfolioActions />
       </header>
       {children}
     </div>
