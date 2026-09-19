@@ -21,6 +21,36 @@ const eslintConfig = defineConfig([
       ],
     },
   },
+  {
+    files: [
+      "src/lib/agent/**/*.{ts,tsx}",
+      "src/app/api/agent/**/*.{ts,tsx}",
+      "src/app/api/mcp/**/*.{ts,tsx}",
+    ],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: [
+                "@privy-io",
+                "@privy-io/*",
+                "@/lib/wallets",
+                "@/lib/wallets/*",
+                "@dynamic-labs-wallet/node",
+                "@dynamic-labs-wallet/node-evm",
+                "@dynamic-labs-wallet/node/*",
+                "@dynamic-labs-wallet/node-evm/*",
+              ],
+              message:
+                "The public agent surface is wallet-agnostic. Dynamic server wallets live in src/lib/wallets.",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

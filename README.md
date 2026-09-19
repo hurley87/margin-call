@@ -71,10 +71,11 @@ Agent tooling can operate on top of the protocol, but it is not the product defi
 | Executor / reduce-exposure / liquidate UI                        | Planned                                                                                                                 |
 | Production frontend, indexing, keeper automation                 | Planned                                                                                                                 |
 | Public agent API + MCP (read, quote, prepare)                    | **Shipped** ([#491](https://github.com/hurley87/margin-call/issues/491)) — see [`docs/agent-api.md`](docs/agent-api.md) |
+| Dynamic server-wallet reference (walletless agent)               | **Shipped** ([#490](https://github.com/hurley87/margin-call/issues/490)) — `pnpm agent:wallet`                          |
 | Living NFT presentation (`tokenURI`)                             | **Shipped** on Base ([#461](https://github.com/hurley87/margin-call/issues/461)) — HTTPS metadata + on-chain thesis     |
 | Convex JWT / identity                                            | Not wired yet (empty schema + HTTP router)                                                                              |
 
-The website is a visual/wallet control plane, not a conversational chatbot. Users may interact with a Margin Call agent outside the website — the unauthenticated agent surface at `/api/agent/*` and `/api/mcp` exposes the same Base reads, quotes, and unsigned open calldata the site uses, and works with any wallet. The user owns the Position NFT; executor / delegated authority stays narrow and revocable on-chain.
+The website is a visual/wallet control plane, not a conversational chatbot. Users may interact with a Margin Call agent outside the website — the unauthenticated agent surface at `/api/agent/*` and `/api/mcp` exposes the same Base reads, quotes, and unsigned open calldata the site uses, and works with **any Base-capable wallet**. Dynamic is the reference integration for agents that do not already have a wallet; it is not a protocol requirement. The user owns the Position NFT; executor / delegated authority stays narrow and revocable on-chain.
 
 ## What's in the repo today
 
@@ -113,23 +114,79 @@ Optional: set `NEXT_PUBLIC_BASE_RPC_URL` for public Base reads (defaults to `htt
 
 `src/lib/dynamic/wallet-client.ts` exposes a Base (8453) viem `WalletClient` from a connected Dynamic EVM wallet. `src/lib/protocol/` loads addresses from `contracts/deployments/base.json` and encodes open / repay / close.
 
+### Agent wallet (reference integration)
+
+Any Base-capable signer can use Margin Call — Bankr, Coinbase, a custom `viem` account, or Dynamic. Dynamic is **not required**. It is the reference path for an agent that starts without a wallet.
+
+In the [Dynamic console](https://console.dynamic.xyz/dashboard/embedded-wallets/dynamic), enable **embedded wallets** and **multiple embedded wallets per chain**, then create an API token under Developer → API. Set `DYNAMIC_API_TOKEN` and `DYNAMIC_WALLET_PASSWORD` (a backup password, not a private key). `DYNAMIC_ENVIRONMENT_ID` can reuse `NEXT_PUBLIC_DYNAMIC_ENVIRONMENT_ID`.
+
+The Node wallet client is constructed with `enableMPCAccelerator: false` so this local/reference demo does not depend on Nitro-compatible MPC accelerator infrastructure.
+
+Signing material stays in Dynamic's server-wallet backup. This repo never stores a raw private key; `DYNAMIC_API_TOKEN` and `DYNAMIC_WALLET_PASSWORD` are not a key. Persist only the non-sensitive wallet metadata file (gitignored `.dynamic-agent-wallet.json`). Fund the printed address manually with a little Base ETH for gas and enough USDC to acquire tokenized stock — there is no faucet in this demo.
+
+The reusable adapter lives in [`src/lib/wallets/`](src/lib/wallets/) and is isolated from the wallet-agnostic public agent surface in [`src/lib/agent/`](src/lib/agent/). Unit tests mock Dynamic, so they do not prove wallet creation, metadata reuse, backup-password recovery, or a real Base broadcast. Run this live sequence against Dynamic for issue #490:
+
+```bash
+# first run
+pnpm agent:wallet
+```
+
+Expected:
+
+- authenticates to Dynamic
+- creates a server wallet if one does not exist
+- writes only non-sensitive metadata to `.dynamic-agent-wallet.json`
+- prints Base address
+- prints ETH and USDC balances
+
+Then manually fund that address with a small amount of Base ETH.
+
+Restart the process and run:
+
+```bash
+pnpm agent:wallet
+```
+
+Expected:
+
+- reports `resolved`, not `created`
+- returns the exact same wallet address
+
+Then run:
+
+```bash
+pnpm agent:wallet --ping
+```
+
+Expected:
+
+- recovers signing capability using the persisted metadata + Dynamic backup password
+- signs a 0 ETH self-transfer
+- broadcasts it on Base
+- waits for the receipt
+- prints tx hash
+- receipt status is success
+
+This second-process `--ping` is the important check: stored metadata must be enough to recover the Dynamic-backed signer. Nothing in this demo relies on key material that only existed during wallet creation. If recovery or signing fails, the CLI prints a concise error. It never logs `DYNAMIC_API_TOKEN`, `DYNAMIC_WALLET_PASSWORD`, key shares, or raw signing material.
+
 ## Commands
 
-| Command                          | Description                                         |
-| -------------------------------- | --------------------------------------------------- |
-| `pnpm dev`                       | Start dev server (Next.js on localhost:3000)        |
-| `pnpm build`                     | Production build                                    |
-| `pnpm lint`                      | Run ESLint                                          |
-| `pnpm typecheck`                 | TypeScript check                                    |
-| `pnpm test`                      | Vitest unit tests                                   |
-| `pnpm install:forge-deps`        | Install gitignored Foundry libraries                |
-| `pnpm test:contracts`            | Foundry workspace checks                            |
-| `pnpm test:contracts:ci`         | Foundry CI profile checks                           |
-| `pnpm test:contracts:fork`       | Base mainnet fork checks (RPC required)             |
-| `pnpm test:contracts:smoke`      | Local Anvil signer smoke harness                    |
-| `pnpm contracts:preflight:base`  | Base deploy preflight (balances; never prints keys) |
-| `pnpm contracts:deploy:base:dry` | Dry-run deploy on a current Base fork               |
-| `pnpm contracts:accept:base:dry` | Dry-run compact acceptance on a current Base fork   |
+| Command                          | Description                                                      |
+| -------------------------------- | ---------------------------------------------------------------- |
+| `pnpm dev`                       | Start dev server (Next.js on localhost:3000)                     |
+| `pnpm build`                     | Production build                                                 |
+| `pnpm lint`                      | Run ESLint                                                       |
+| `pnpm typecheck`                 | TypeScript check                                                 |
+| `pnpm test`                      | Vitest unit tests                                                |
+| `pnpm agent:wallet`              | Provision/resolve a Dynamic server wallet (reference agent demo) |
+| `pnpm install:forge-deps`        | Install gitignored Foundry libraries                             |
+| `pnpm test:contracts`            | Foundry workspace checks                                         |
+| `pnpm test:contracts:ci`         | Foundry CI profile checks                                        |
+| `pnpm test:contracts:fork`       | Base mainnet fork checks (RPC required)                          |
+| `pnpm test:contracts:smoke`      | Local Anvil signer smoke harness                                 |
+| `pnpm contracts:preflight:base`  | Base deploy preflight (balances; never prints keys)              |
+| `pnpm contracts:deploy:base:dry` | Dry-run deploy on a current Base fork                            |
+| `pnpm contracts:accept:base:dry` | Dry-run compact acceptance on a current Base fork                |
 
 ## Docs
 

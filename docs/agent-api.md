@@ -34,7 +34,9 @@ flowchart LR
 Margin Call never holds a key, never signs, and never broadcasts. `prepare_open` hands back
 ordinary unsigned Base calldata; a Dynamic server wallet, a Bankr agent wallet, a Coinbase
 smart wallet, or a bare `viem` account can all execute the identical transactions. **Dynamic
-is not required** — it is simply what the website happens to use.
+is not required.** It is the reference wallet for agents that start without one — see
+`pnpm agent:wallet` and [`src/lib/wallets/`](../src/lib/wallets/). Agents that already have a
+Base-capable signer skip that step.
 
 ## Conventions
 
