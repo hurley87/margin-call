@@ -1,14 +1,23 @@
 "use client";
 
-import type { WalletProviderData } from "@dynamic-labs-sdk/client";
 import {
-  useConnectAndVerifyWithWalletProvider,
+  isDeeplinkWalletProvider,
+  isWalletAccountVerified,
+  type WalletAccount,
+  type WalletProviderData,
+} from "@dynamic-labs-sdk/client";
+import { isEvmWalletAccount } from "@dynamic-labs-sdk/evm";
+import {
+  useConnectWithWalletProvider,
   useGetAvailableWalletProvidersData,
+  useGetWalletAccounts,
   useLogout,
+  useVerifyWalletAccount,
 } from "@dynamic-labs-sdk/react-hooks";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
+import { connectThenVerifyWallet } from "@/lib/dynamic/connect-then-verify";
 import { formatShortAddress } from "@/lib/utils";
 
 type DisconnectedView =
@@ -29,16 +38,33 @@ function deriveDisconnectedView(args: {
   return { kind: "picking", providers: args.evmProviders };
 }
 
+function statusCopy(args: {
+  isConnecting: boolean;
+  isVerifying: boolean;
+}): string | null {
+  if (args.isVerifying) return "Confirm the signature in your wallet.";
+  if (args.isConnecting) return "Approve the connection in your wallet.";
+  return null;
+}
+
 /** Wallet UI that assumes Dynamic hooks are available in the tree. */
 export function WalletConnectUi() {
   const session = useWalletSession();
+  const { data: accounts = [] } = useGetWalletAccounts();
   const { data: providers = [] } = useGetAvailableWalletProvidersData();
   const {
-    mutate: connectAndVerify,
+    mutateAsync: connect,
     isPending: isConnecting,
     error: connectError,
     reset: resetConnect,
-  } = useConnectAndVerifyWithWalletProvider();
+  } = useConnectWithWalletProvider();
+  const {
+    mutateAsync: verify,
+    mutate: verifyWalletAccount,
+    isPending: isVerifying,
+    error: verifyError,
+    reset: resetVerify,
+  } = useVerifyWalletAccount();
   const {
     mutate: logout,
     isPending: isLoggingOut,
@@ -48,7 +74,47 @@ export function WalletConnectUi() {
   const [isPickerOpen, setIsPickerOpen] = useState(false);
 
   const evmProviders = providers.filter((provider) => provider.chain === "EVM");
-  const errorMessage = connectError?.message ?? logoutError?.message ?? null;
+  const evmAccount = accounts.find(isEvmWalletAccount) ?? null;
+  const errorMessage =
+    connectError?.message ??
+    verifyError?.message ??
+    logoutError?.message ??
+    null;
+  const prompt = statusCopy({
+    isConnecting,
+    isVerifying,
+  });
+
+  const resetFlow = () => {
+    resetConnect();
+    resetVerify();
+    resetLogout();
+  };
+
+  const signIn = (walletAccount: WalletAccount) => {
+    resetFlow();
+    verifyWalletAccount({ walletAccount });
+  };
+
+  const connectProvider = (provider: WalletProviderData) => {
+    resetFlow();
+    void connectThenVerifyWallet({
+      walletProviderKey: provider.key,
+      isDeeplinkProvider: isDeeplinkWalletProvider({
+        walletProvider: provider,
+      }),
+      connect,
+      verify,
+      isVerified: (walletAccount) => isWalletAccountVerified({ walletAccount }),
+    }).then(
+      () => {
+        setIsPickerOpen(false);
+      },
+      () => {
+        // Connect/verify errors surface through the mutation error state.
+      }
+    );
+  };
 
   switch (session.kind) {
     case "unset":
@@ -64,12 +130,40 @@ export function WalletConnectUi() {
           {session.message}
         </p>
       );
-    case "connected":
+    case "connected": {
+      const needsSignature =
+        evmAccount != null &&
+        !isWalletAccountVerified({ walletAccount: evmAccount });
+
       return (
         <div className="flex flex-col gap-3">
           <p className="font-mono text-sm text-[var(--t-text)]">
             {formatShortAddress(session.address)}
           </p>
+          {needsSignature ? (
+            <div className="flex flex-col gap-2">
+              <p className="max-w-xs text-xs leading-5 text-[var(--t-muted)]">
+                {prompt ?? "Sign in your wallet to finish connecting."}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-fit"
+                disabled={isVerifying || evmAccount == null}
+                onClick={() => {
+                  if (!evmAccount) return;
+                  signIn(evmAccount);
+                }}
+              >
+                {isVerifying ? "Waiting for signature…" : "Sign in"}
+              </Button>
+            </div>
+          ) : prompt ? (
+            <p className="max-w-xs text-xs leading-5 text-[var(--t-muted)]">
+              {prompt}
+            </p>
+          ) : null}
           <Button
             type="button"
             variant="outline"
@@ -77,8 +171,7 @@ export function WalletConnectUi() {
             className="w-fit"
             disabled={isLoggingOut}
             onClick={() => {
-              resetConnect();
-              resetLogout();
+              resetFlow();
               logout();
             }}
           >
@@ -89,6 +182,7 @@ export function WalletConnectUi() {
           ) : null}
         </div>
       );
+    }
     case "disconnected": {
       const view = deriveDisconnectedView({ isPickerOpen, evmProviders });
       switch (view.kind) {
@@ -101,8 +195,7 @@ export function WalletConnectUi() {
                 size="sm"
                 className="w-fit"
                 onClick={() => {
-                  resetConnect();
-                  resetLogout();
+                  resetFlow();
                   setIsPickerOpen(true);
                 }}
               >
@@ -135,23 +228,19 @@ export function WalletConnectUi() {
                       variant="outline"
                       size="sm"
                       className="w-full"
-                      disabled={isConnecting}
-                      onClick={() => {
-                        resetConnect();
-                        resetLogout();
-                        connectAndVerify(
-                          { walletProviderKey: provider.key },
-                          {
-                            onSuccess: () => setIsPickerOpen(false),
-                          }
-                        );
-                      }}
+                      disabled={isConnecting || isVerifying}
+                      onClick={() => connectProvider(provider)}
                     >
                       {provider.metadata.displayName}
                     </Button>
                   </li>
                 ))}
               </ul>
+              {prompt ? (
+                <p className="max-w-xs text-xs leading-5 text-[var(--t-muted)]">
+                  {prompt}
+                </p>
+              ) : null}
               {errorMessage ? (
                 <p className="text-xs text-[var(--t-muted)]">{errorMessage}</p>
               ) : null}
