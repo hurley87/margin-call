@@ -4,6 +4,7 @@ import type {
   AgentWallet,
   TransactionReceiptSummary,
   UnsignedTransaction,
+  WalletTypedData,
 } from "@/lib/wallets/adapter";
 import type {
   DynamicWalletMetadata,
@@ -24,6 +25,11 @@ export type DynamicServerWalletApi = {
     walletMetadata: DynamicWalletMetadata;
     password: string;
     transaction: unknown;
+  }) => Promise<string>;
+  signTypedData: (params: {
+    walletMetadata: DynamicWalletMetadata;
+    password: string;
+    typedData: unknown;
   }) => Promise<string>;
 };
 
@@ -86,9 +92,9 @@ export async function provisionOrResolveDynamicWallet(args: {
   return { walletMetadata, created: true };
 }
 
-function asSignedTransaction(value: string): `0x${string}` {
+function asSignedHex(value: string, what: string): `0x${string}` {
   if (!/^0x[0-9a-fA-F]+$/.test(value)) {
-    throw new Error("Dynamic did not return a signed transaction");
+    throw new Error(`Dynamic did not return a ${what}`);
   }
   return value as `0x${string}`;
 }
@@ -100,7 +106,7 @@ function asSignedTransaction(value: string): `0x${string}` {
  * this adapter never accepts or stores them.
  */
 export function createDynamicAgentWallet(args: {
-  client: Pick<DynamicServerWalletApi, "signTransaction">;
+  client: Pick<DynamicServerWalletApi, "signTransaction" | "signTypedData">;
   publicClient: DynamicChainClient;
   walletMetadata: DynamicWalletMetadata;
   password: string;
@@ -120,12 +126,13 @@ export function createDynamicAgentWallet(args: {
         ...(tx.value !== undefined ? { value: tx.value } : {}),
         chain: base,
       });
-      const signed = asSignedTransaction(
+      const signed = asSignedHex(
         await args.client.signTransaction({
           walletMetadata: args.walletMetadata,
           password: args.password,
           transaction: prepared,
-        })
+        }),
+        "signed transaction"
       );
       return args.publicClient.sendRawTransaction({
         serializedTransaction: signed,
@@ -140,6 +147,16 @@ export function createDynamicAgentWallet(args: {
         status: receipt.status,
         blockNumber: receipt.blockNumber,
       };
+    },
+    async signTypedData(typedData: WalletTypedData) {
+      return asSignedHex(
+        await args.client.signTypedData({
+          walletMetadata: args.walletMetadata,
+          password: args.password,
+          typedData,
+        }),
+        "typed-data signature"
+      );
     },
   };
 }

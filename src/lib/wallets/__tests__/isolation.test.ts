@@ -23,7 +23,7 @@ describe("wallet-agnostic agent surface", () => {
     expect(files.length).toBeGreaterThan(0);
 
     const forbidden =
-      /@\/lib\/wallets|@dynamic-labs-wallet|createDynamicAgentWallet|provisionOrResolveDynamicWallet/;
+      /@\/lib\/wallets|@dynamic-labs-wallet|createDynamicAgentWallet|provisionOrResolveDynamicWallet|@\/lib\/uniswap\/trading-api|acquireSupportedStock/;
 
     for (const file of files) {
       const source = readFileSync(file, "utf8");

@@ -72,10 +72,11 @@ Agent tooling can operate on top of the protocol, but it is not the product defi
 | Production frontend, indexing, keeper automation                 | Planned                                                                                                                 |
 | Public agent API + MCP (read, quote, prepare)                    | **Shipped** ([#491](https://github.com/hurley87/margin-call/issues/491)) — see [`docs/agent-api.md`](docs/agent-api.md) |
 | Dynamic server-wallet reference (walletless agent)               | **Shipped** ([#490](https://github.com/hurley87/margin-call/issues/490)) — `pnpm agent:wallet`                          |
+| Dynamic + Uniswap stock acquisition (reference only)             | **Shipped** ([#492](https://github.com/hurley87/margin-call/issues/492)) — `pnpm agent:wallet --acquire`                |
 | Living NFT presentation (`tokenURI`)                             | **Shipped** on Base ([#461](https://github.com/hurley87/margin-call/issues/461)) — HTTPS metadata + on-chain thesis     |
 | Convex JWT / identity                                            | Not wired yet (empty schema + HTTP router)                                                                              |
 
-The website is a visual/wallet control plane, not a conversational chatbot. Users may interact with a Margin Call agent outside the website — the unauthenticated agent surface at `/api/agent/*` and `/api/mcp` exposes the same Base reads, quotes, and unsigned open calldata the site uses, and works with **any Base-capable wallet**. Dynamic is the reference integration for agents that do not already have a wallet; it is not a protocol requirement. The user owns the Position NFT; executor / delegated authority stays narrow and revocable on-chain.
+The website is a visual/wallet control plane, not a conversational chatbot. Users may interact with a Margin Call agent outside the website — the unauthenticated agent surface at `/api/agent/*` and `/api/mcp` exposes the same Base reads, quotes, and unsigned open calldata the site uses, and works with **any Base-capable wallet**. Dynamic is the reference integration for agents that do not already have a wallet; it is not a protocol requirement. Uniswap is the reference stock-acquisition path for that Dynamic demo only — agents that already swap skip it. The user owns the Position NFT; executor / delegated authority stays narrow and revocable on-chain.
 
 ## What's in the repo today
 
@@ -169,6 +170,24 @@ Expected:
 
 This second-process `--ping` is the important check: stored metadata must be enough to recover the Dynamic-backed signer. Nothing in this demo relies on key material that only existed during wallet creation. If recovery or signing fails, the CLI prints a concise error. It never logs `DYNAMIC_API_TOKEN`, `DYNAMIC_WALLET_PASSWORD`, key shares, or raw signing material.
 
+Stock acquisition is **not** a Margin Call protocol responsibility. The next step (`prepare_open`) only requires that the calling wallet already holds the supported stock. A Bankr-style agent (or any wallet that can already swap on Base) should skip Uniswap: read the canonical stock address from `get_assets` / `GET /api/agent/assets`, acquire that exact token with its own swap tooling, verify the balance, and continue.
+
+The Dynamic reference demo acquires stock through the Uniswap Trading API (quote + approval/Permit2 + swap calldata). It does not embed Uniswap UI. Set `UNISWAP_API_KEY` from the [Uniswap Developer Portal](https://developers.uniswap.org/docs/trading/swapping-api/start-building/integration-guide), then:
+
+```bash
+pnpm agent:wallet --acquire --asset NVDAc --usdc 2
+```
+
+Expected:
+
+- quotes USDC → NVDAc on Base (canonical `base.json` stock address; refuses any other output token)
+- Dynamic signs the approval / Permit2 / swap transaction(s)
+- waits for confirmation
+- verifies the onchain NVDAc balance increased
+- prints transaction hash(es) and the acquired amount
+
+`--usdc` is a human decimal (default `2`). `--asset` defaults to `NVDAc`. Unit tests mock Uniswap and Dynamic; they do not prove a live Uniswap fill.
+
 ## Commands
 
 | Command                          | Description                                                      |
@@ -179,6 +198,7 @@ This second-process `--ping` is the important check: stored metadata must be eno
 | `pnpm typecheck`                 | TypeScript check                                                 |
 | `pnpm test`                      | Vitest unit tests                                                |
 | `pnpm agent:wallet`              | Provision/resolve a Dynamic server wallet (reference agent demo) |
+| `pnpm agent:wallet --acquire`    | Swap a small USDC amount into a supported stock via Uniswap      |
 | `pnpm install:forge-deps`        | Install gitignored Foundry libraries                             |
 | `pnpm test:contracts`            | Foundry workspace checks                                         |
 | `pnpm test:contracts:ci`         | Foundry CI profile checks                                        |

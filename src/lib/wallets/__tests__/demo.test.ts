@@ -2,8 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { getAssets } from "@/lib/agent/assets";
 import { baseDeployment } from "@/lib/protocol/deployment";
 import { runAgentWalletDemo } from "@/lib/wallets/demo";
+import type { UniswapTradingApi } from "@/lib/uniswap/trading-api";
 
 const ADDRESS = "0xBe523e724B9Ea7D618dD093f14618D90c4B19b0c" as const;
 const HASH =
@@ -50,13 +52,17 @@ describe("runAgentWalletDemo", () => {
         externalServerKeyShares: [{ share: "secret" }],
       })),
       signTransaction: vi.fn(async () => SIGNED),
+      signTypedData: vi.fn(async () => SIGNED),
     }));
   }
 
   function fakePublicClient() {
     return {
       getBalance: vi.fn(async () => 1_000_000_000_000_000n),
-      readContract: vi.fn(async () => 2_500_000n),
+      readContract: vi.fn(async ({ address }: { address: `0x${string}` }) => {
+        void address;
+        return 2_500_000n;
+      }),
       prepareTransactionRequest: vi.fn(async () => ({
         to: ADDRESS,
         value: 0n,
@@ -146,6 +152,7 @@ describe("runAgentWalletDemo", () => {
           `ceremony failed token=${ENV.DYNAMIC_API_TOKEN} password=${ENV.DYNAMIC_WALLET_PASSWORD}`
         );
       }),
+      signTypedData: vi.fn(async () => SIGNED),
     }));
 
     const result = await runAgentWalletDemo({
@@ -178,5 +185,93 @@ describe("runAgentWalletDemo", () => {
     expect(result.exitCode).toBe(1);
     expect(publicClient.sendRawTransaction).not.toHaveBeenCalled();
     expect(result.lines.join("\n")).toMatch(/0 ETH/);
+  });
+
+  it("acquires NVDAc via Uniswap and prints hashes plus the verified amount", async () => {
+    const env = { ...(await envWithStore()), UNISWAP_API_KEY: "uni-key" };
+    const nvda = getAssets().assets.find((asset) => asset.name === "NVDAc");
+    if (!nvda) throw new Error("NVDAc missing from get_assets");
+    const stockReads = [0n, 1_100_000n];
+    const publicClient = fakePublicClient();
+    publicClient.readContract.mockImplementation(
+      async (args: { address: `0x${string}` }) => {
+        if (args.address.toLowerCase() === baseDeployment.usdc.toLowerCase()) {
+          return 5_000_000n;
+        }
+        if (args.address.toLowerCase() === nvda.stock.toLowerCase()) {
+          return stockReads.shift() ?? 0n;
+        }
+        return 0n;
+      }
+    );
+
+    const approveData =
+      "0x095ea7b30000000000000000000000000000000000000001" as const;
+    const swapData =
+      "0x3593564c0000000000000000000000000000000000000001" as const;
+    publicClient.sendRawTransaction = vi.fn(async () => HASH);
+
+    const trading: UniswapTradingApi = {
+      checkApproval: vi.fn(async () => ({
+        ok: true as const,
+        approval: {
+          to: baseDeployment.usdc,
+          data: approveData,
+          value: 0n,
+        },
+        cancel: null,
+      })),
+      quote: vi.fn(async (args) => ({
+        ok: true as const,
+        routing: "CLASSIC" as const,
+        outputToken: nvda.stock,
+        amountOut: 1_100_000n,
+        minimumAmountOut: 1_089_000n,
+        permitData: null,
+        quote: { output: { token: args.tokenOut } },
+      })),
+      createSwap: vi.fn(async () => ({
+        ok: true as const,
+        to: "0x2626664c2603336E57B271c5C0b26F421741e481" as const,
+        data: swapData,
+        value: 0n,
+      })),
+    };
+
+    const result = await runAgentWalletDemo({
+      env,
+      argv: ["--acquire", "--asset", "NVDAc", "--usdc", "2"],
+      connect: fakeConnect(),
+      createPublicClient: () => publicClient,
+      createTradingApi: () => trading,
+    });
+
+    expect(result.exitCode).toBe(0);
+    const output = result.lines.join("\n");
+    expect(output).toContain(HASH);
+    expect(output).toMatch(/0\.011/);
+    expect(output).toMatch(/NVDAc/);
+    expect(output).toMatch(/Bankr/);
+    expect(output).toMatch(/skip Uniswap/i);
+    expect(trading.quote).toHaveBeenCalledWith(
+      expect.objectContaining({ tokenOut: nvda.stock, amount: 2_000_000n })
+    );
+    expect(publicClient.sendRawTransaction).toHaveBeenCalled();
+  });
+
+  it("tells a swap-capable agent to skip Uniswap when the API key is missing", async () => {
+    const env = await envWithStore();
+    const result = await runAgentWalletDemo({
+      env,
+      argv: ["--acquire"],
+      connect: fakeConnect(),
+      createPublicClient: fakePublicClient,
+    });
+
+    expect(result.exitCode).toBe(1);
+    const output = result.lines.join("\n");
+    expect(output).toMatch(/UNISWAP_API_KEY/);
+    expect(output).toMatch(/Bankr/);
+    expect(output).toMatch(/skip/i);
   });
 });

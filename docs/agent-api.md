@@ -38,6 +38,11 @@ is not required.** It is the reference wallet for agents that start without one 
 `pnpm agent:wallet` and [`src/lib/wallets/`](../src/lib/wallets/). Agents that already have a
 Base-capable signer skip that step.
 
+Stock acquisition is also outside Margin Call. `prepare_open` only cares that the calling
+wallet already holds the supported stock from `get_assets`. The Dynamic demo acquires that
+token with Uniswap (`pnpm agent:wallet --acquire`). A Bankr-style agent should skip Uniswap,
+swap with its own wallet tooling, verify the balance, and continue.
+
 ## Conventions
 
 - Every response is a discriminated union. Success is `{ "ok": true, ... }`; a refusal is
@@ -385,6 +390,10 @@ curl -X POST https://margincall.fun/api/mcp \
 ```
 
 ## A complete open
+
+Hold the supported stock in your wallet first. How you acquired it does not matter. The
+Dynamic reference path is `pnpm agent:wallet --acquire` (Uniswap). A Bankr-style agent skips
+that and uses its own swap. Margin Call only checks the balance at `prepare_open`.
 
 1. `get_assets` — pick an asset and a leverage preset.
 2. `get_market_state` — if you want leverage and `canOpenLeveragedPosition` is false, stop and say so.

@@ -20,6 +20,7 @@ describe("createDynamicAgentWallet", () => {
   it("signs through Dynamic, broadcasts on Base, and waits for the receipt", async () => {
     const prepared = { to: TO, value: 0n, chainId: 8453 };
     const signTransaction = vi.fn(async () => SIGNED);
+    const signTypedData = vi.fn(async () => SIGNED);
     const prepareTransactionRequest = vi.fn(async () => prepared);
     const sendRawTransaction = vi.fn(async () => HASH);
     const waitForTransactionReceipt = vi.fn(async () => ({
@@ -29,7 +30,7 @@ describe("createDynamicAgentWallet", () => {
     }));
 
     const wallet = createDynamicAgentWallet({
-      client: { signTransaction },
+      client: { signTransaction, signTypedData },
       publicClient: {
         prepareTransactionRequest,
         sendRawTransaction,
@@ -61,5 +62,37 @@ describe("createDynamicAgentWallet", () => {
       status: "success",
       blockNumber: 12n,
     });
+  });
+
+  it("signs Permit2 typed data through Dynamic without caller-supplied key shares", async () => {
+    const signTransaction = vi.fn(async () => SIGNED);
+    const signTypedData = vi.fn(async () => SIGNED);
+    const wallet = createDynamicAgentWallet({
+      client: { signTransaction, signTypedData },
+      publicClient: {
+        prepareTransactionRequest: vi.fn(),
+        sendRawTransaction: vi.fn(),
+        waitForTransactionReceipt: vi.fn(),
+      },
+      walletMetadata,
+      password: "test-password",
+    });
+
+    const typedData = {
+      domain: { name: "Permit2", chainId: 8453 },
+      types: { PermitSingle: [{ name: "spender", type: "address" as const }] },
+      primaryType: "PermitSingle",
+      message: { spender: TO },
+    };
+
+    await expect(wallet.signTypedData(typedData)).resolves.toBe(SIGNED);
+    expect(signTypedData).toHaveBeenCalledWith({
+      walletMetadata,
+      password: "test-password",
+      typedData,
+    });
+    const signArgs = signTypedData.mock.calls.at(0)?.at(0) as
+      { externalServerKeyShares?: unknown } | undefined;
+    expect(signArgs).not.toHaveProperty("externalServerKeyShares");
   });
 });

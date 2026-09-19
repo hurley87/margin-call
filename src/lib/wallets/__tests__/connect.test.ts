@@ -1,12 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DynamicServerWalletEnv } from "@/lib/wallets/config";
 
-const { authenticateApiToken, createWalletAccount, signTransaction } =
-  vi.hoisted(() => ({
-    authenticateApiToken: vi.fn(),
-    createWalletAccount: vi.fn(),
-    signTransaction: vi.fn(),
-  }));
+const {
+  authenticateApiToken,
+  createWalletAccount,
+  signTransaction,
+  signTypedData,
+} = vi.hoisted(() => ({
+  authenticateApiToken: vi.fn(),
+  createWalletAccount: vi.fn(),
+  signTransaction: vi.fn(),
+  signTypedData: vi.fn(),
+}));
 
 vi.mock("@dynamic-labs-wallet/node", () => ({
   ThresholdSignatureScheme: { TWO_OF_TWO: "TWO_OF_TWO" },
@@ -18,6 +23,7 @@ vi.mock("@dynamic-labs-wallet/node-evm", () => ({
       authenticateApiToken,
       createWalletAccount,
       signTransaction,
+      signTypedData,
     };
   }),
 }));
@@ -39,6 +45,7 @@ describe("connectDynamicServerWallet", () => {
     authenticateApiToken.mockReset().mockResolvedValue(undefined);
     createWalletAccount.mockReset();
     signTransaction.mockReset();
+    signTypedData.mockReset();
   });
 
   it("constructs the Dynamic client with the MPC accelerator disabled", async () => {
