@@ -64,7 +64,7 @@ describe("runAgentWalletDemo", () => {
       })),
       sendRawTransaction: vi.fn(async () => HASH),
       waitForTransactionReceipt: vi.fn(async () => ({
-        status: "success" as const,
+        status: "success" as "success" | "reverted",
         blockNumber: 99n,
         transactionHash: HASH,
       })),
@@ -114,6 +114,53 @@ describe("runAgentWalletDemo", () => {
     expect(result.exitCode).toBe(0);
     expect(publicClient.sendRawTransaction).toHaveBeenCalled();
     expect(result.lines.join("\n")).toContain(HASH);
+  });
+
+  it("fails --ping when the receipt is not success", async () => {
+    const env = await envWithStore();
+    const publicClient = fakePublicClient();
+    publicClient.waitForTransactionReceipt.mockResolvedValue({
+      status: "reverted",
+      blockNumber: 99n,
+      transactionHash: HASH,
+    });
+
+    const result = await runAgentWalletDemo({
+      env,
+      argv: ["--ping"],
+      connect: fakeConnect(),
+      createPublicClient: () => publicClient,
+    });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.lines.join("\n")).toContain(HASH);
+    expect(result.lines.join("\n")).toMatch(/reverted/i);
+  });
+
+  it("surfaces Dynamic signing failures without leaking credentials", async () => {
+    const env = await envWithStore();
+    const connect = vi.fn(async () => ({
+      createWalletAccount: vi.fn(async () => ({ walletMetadata })),
+      signTransaction: vi.fn(async () => {
+        throw new Error(
+          `ceremony failed token=${ENV.DYNAMIC_API_TOKEN} password=${ENV.DYNAMIC_WALLET_PASSWORD}`
+        );
+      }),
+    }));
+
+    const result = await runAgentWalletDemo({
+      env,
+      argv: ["--ping"],
+      connect,
+      createPublicClient: fakePublicClient,
+    });
+
+    expect(result.exitCode).toBe(1);
+    const output = result.lines.join("\n");
+    expect(output).toContain(ADDRESS);
+    expect(output).not.toContain(ENV.DYNAMIC_API_TOKEN);
+    expect(output).not.toContain(ENV.DYNAMIC_WALLET_PASSWORD);
+    expect(output).toContain("[redacted]");
   });
 
   it("refuses --ping when the wallet has no ETH for gas", async () => {

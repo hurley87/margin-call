@@ -18,6 +18,7 @@ import {
   type ProvisionedDynamicWallet,
 } from "@/lib/wallets/dynamic-server";
 import { fileWalletMetadataStore } from "@/lib/wallets/metadata-store";
+import { redactSecrets } from "@/lib/wallets/redact";
 
 export type DemoPublicClient = BalanceClient & DynamicChainClient;
 
@@ -93,12 +94,24 @@ export async function runAgentWalletDemo(
       );
       return { lines, exitCode: 1 };
     }
-    const hash = await wallet.sendTransaction({
-      to: wallet.address,
-      value: 0n,
-    });
-    const receipt = await wallet.waitForReceipt(hash);
-    lines.push(...formatPing(receipt));
+    try {
+      const hash = await wallet.sendTransaction({
+        to: wallet.address,
+        value: 0n,
+      });
+      const receipt = await wallet.waitForReceipt(hash);
+      lines.push(...formatPing(receipt));
+      if (receipt.status !== "success") {
+        return { lines, exitCode: 1 };
+      }
+    } catch (error) {
+      const message = redactSecrets(
+        error instanceof Error ? error.message : String(error),
+        [deps.env.DYNAMIC_API_TOKEN, deps.env.DYNAMIC_WALLET_PASSWORD]
+      );
+      lines.push("", message);
+      return { lines, exitCode: 1 };
+    }
   }
 
   return { lines, exitCode: 0 };
