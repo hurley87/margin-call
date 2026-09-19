@@ -105,7 +105,8 @@ describe("toExploreCardView", () => {
     expect(closed.healthKind).toBe("idle");
     expect(closed.healthLabel).toBeNull();
     expect(closed.statusLabel).toBe("Closed");
-    expect(closed.imageSrc).toBe("/logos/nvda.png");
+    expect(closed.face).toBe("closed");
+    expect(closed.imageSrc).toBe("/nvda/closed.png");
 
     const liquidated = toExploreCardView(
       position({ status: "liquidated" }),
@@ -113,6 +114,7 @@ describe("toExploreCardView", () => {
     );
     expect(liquidated.healthLabel).toBeNull();
     expect(liquidated.statusLabel).toBe("Liquidated");
+    expect(liquidated.face).toBe("liquidated");
     expect(liquidated.imageSrc).toBe("/nvda/liquidated.png");
   });
 

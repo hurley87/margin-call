@@ -104,13 +104,13 @@ describe("faceFromStage", () => {
 });
 
 describe("faceFromStatus", () => {
-  it("shows the liquidated face only for the indexed liquidated status", () => {
+  it("maps indexed terminal status to a dedicated face without a live health read", () => {
+    expect(faceFromStatus("closed")).toBe("closed");
     expect(faceFromStatus("liquidated")).toBe("liquidated");
   });
 
-  it("stays neutral for active and closed, which carry no live risk read", () => {
+  it("stays neutral for active, which carries no live risk read", () => {
     expect(faceFromStatus("active")).toBe("neutral");
-    expect(faceFromStatus("closed")).toBe("neutral");
   });
 });
 
@@ -120,6 +120,10 @@ describe("artworkPath", () => {
     expect(artworkPath(AAPL, "warning")).toBe("/aapl/warning.png");
     expect(artworkPath(META, "danger")).toBe("/meta/danger.png");
     expect(artworkPath(GOOGL, "liquidated")).toBe("/googl/liquidated.png");
+    expect(artworkPath(NVDA, "closed")).toBe("/nvda/closed.png");
+    expect(artworkPath(AAPL, "closed")).toBe("/aapl/closed.png");
+    expect(artworkPath(META, "closed")).toBe("/meta/closed.png");
+    expect(artworkPath(GOOGL, "closed")).toBe("/googl/closed.png");
   });
 
   it("uses the ticker logo for the neutral face", () => {
@@ -149,6 +153,7 @@ describe("committed artwork", () => {
       "healthy",
       "warning",
       "danger",
+      "closed",
       "liquidated",
       "neutral",
     ];

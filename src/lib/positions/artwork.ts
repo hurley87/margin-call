@@ -24,9 +24,11 @@ export const STAGE_LABEL: Record<PositionStage, string> = {
  * Distinct from `PositionStage`: a stage is a risk answer, a face is a file.
  * `neutral` is the ticker logo, for every surface that cannot honestly name a
  * health state — unpriced, still reading, or burned for an unindexed reason.
+ * `closed` and `liquidated` are app lifecycle faces only; live ERC-721
+ * metadata never publishes them, because a burned token has no `tokenURI`.
  */
 export type ArtworkFace =
-  "healthy" | "warning" | "danger" | "liquidated" | "neutral";
+  "healthy" | "warning" | "danger" | "closed" | "liquidated" | "neutral";
 
 /**
  * Artwork thresholds on equity ratio, in basis points. These are presentation
@@ -120,12 +122,23 @@ export function faceFromStage(stage: PositionStage | null): ArtworkFace {
 /**
  * Face for surfaces that only have the indexed lifecycle status.
  *
- * Active and closed both stay neutral: live health needs a read that the
- * portfolio list deliberately does not make. Only `liquidated` is knowable
- * offline.
+ * Active stays neutral: live health needs a read that the portfolio list
+ * deliberately does not make. Closed and liquidated are terminal and
+ * knowable from Convex alone — no Base read, and never each other's art.
  */
 export function faceFromStatus(status: PositionStatus): ArtworkFace {
-  return status === "liquidated" ? "liquidated" : "neutral";
+  switch (status) {
+    case "closed":
+      return "closed";
+    case "liquidated":
+      return "liquidated";
+    case "active":
+      return "neutral";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
 }
 
 /** Public path to the committed artwork, or null for an unknown asset. */

@@ -56,24 +56,28 @@ async function writePng(
 }
 
 describe("ARTWORK_TARGETS", () => {
-  it("covers exactly the 16 stage images and 4 ticker logos", () => {
+  it("covers exactly the 20 stage images and 4 ticker logos", () => {
     expect(ARTWORK_TARGETS.map((target) => target.file)).toEqual([
       "public/aapl/healthy.png",
       "public/aapl/warning.png",
       "public/aapl/danger.png",
       "public/aapl/liquidated.png",
+      "public/aapl/closed.png",
       "public/nvda/healthy.png",
       "public/nvda/warning.png",
       "public/nvda/danger.png",
       "public/nvda/liquidated.png",
+      "public/nvda/closed.png",
       "public/googl/healthy.png",
       "public/googl/warning.png",
       "public/googl/danger.png",
       "public/googl/liquidated.png",
+      "public/googl/closed.png",
       "public/meta/healthy.png",
       "public/meta/warning.png",
       "public/meta/danger.png",
       "public/meta/liquidated.png",
+      "public/meta/closed.png",
       "public/logos/aapl.png",
       "public/logos/nvda.png",
       "public/logos/googl.png",
