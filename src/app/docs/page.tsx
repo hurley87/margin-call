@@ -5,7 +5,6 @@ import {
   DocsDivider,
   DocsStepNumber,
 } from "@/components/docs/docs-sketch";
-import { PRODUCT_DOCS_URL } from "@/lib/product-docs";
 import "./docs.css";
 
 export const metadata: Metadata = {
@@ -265,10 +264,6 @@ export default function DocsPage() {
           ))}
         </section>
       </div>
-      <footer className="docs-footer">
-        Want to go deeper? Read the{" "}
-        <a href={PRODUCT_DOCS_URL}>protocol docs and risks</a>.
-      </footer>
     </article>
   );
 }
