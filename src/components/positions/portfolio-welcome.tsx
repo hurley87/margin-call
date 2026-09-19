@@ -7,22 +7,22 @@ const FEATURES = [
   {
     icon: "chart",
     title: "Long your favorite stocks",
-    description: "Use your assets as collateral to go long.",
+    description: "Use tokenized stocks as collateral for a leveraged long.",
   },
   {
     icon: "paw",
     title: "Collect puppies",
-    description: "Each position is a unique puppy with a life of its own.",
+    description: "Each position is a unique NFT with a life of its own.",
   },
   {
     icon: "shield",
     title: "Stay in control",
-    description: "Repay and manage your position anytime.",
+    description: "Repay or close anytime.",
   },
   {
     icon: "heart",
-    title: "Same stocks. More fun.",
-    description: "A more playful way to put your capital to work.",
+    title: "Same stocks. More leverage.",
+    description: "Borrow against tokenized stocks on Base.",
   },
 ] as const;
 
@@ -52,7 +52,7 @@ export function PortfolioActions() {
     <div className="portfolio-actions">
       <OpenPositionCta />
       <Link href="/docs#agents" className="portfolio-build-cta">
-        Build with Margin Call <span aria-hidden="true">↗</span>
+        Use an agent <span aria-hidden="true">↗</span>
       </Link>
     </div>
   );
@@ -76,8 +76,8 @@ export function PortfolioWelcome({ empty = false }: { empty?: boolean }) {
         </h1>
         <p>
           {empty
-            ? "Open your first position to start collecting puppies."
-            : "Connect your wallet to see your portfolio and start collecting puppies."}
+            ? "Open your first Position NFT."
+            : "Margin Call is a protocol for leveraged tokenized-stock positions on Base."}
         </p>
         <PortfolioActions />
       </section>
