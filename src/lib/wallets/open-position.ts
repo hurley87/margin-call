@@ -102,14 +102,15 @@ export async function openFinancedPosition(
   if (!market.ok) return fail(market.code, market.message);
 
   if (!market.canOpenLeveragedPosition) {
-    if (market.pricing !== "live") {
-      return fail("PRICING_UNAVAILABLE", FINANCED_OPEN_PRICING_REFUSAL);
+    if (!market.openingEnabled) {
+      return fail(
+        "ASSET_OPENING_DISABLED",
+        market.reason ??
+          `Opening new positions is currently disabled for ${market.asset}.`
+      );
     }
-    return fail(
-      "ASSET_OPENING_DISABLED",
-      market.reason ??
-        `Opening new positions is currently disabled for ${market.asset}.`
-    );
+
+    return fail("PRICING_UNAVAILABLE", FINANCED_OPEN_PRICING_REFUSAL);
   }
 
   const resolved = await resolveOpenStockAmount({

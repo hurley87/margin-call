@@ -102,10 +102,13 @@ function fakeWallet(args?: {
 }
 
 describe("openFinancedPosition", () => {
-  it("refuses a financed open when pricing is unavailable and does not submit", async () => {
+  it("refuses with PRICING_UNAVAILABLE when pricing is unavailable and opening is enabled", async () => {
     const wallet = fakeWallet();
     const client = fakeClient(
-      openSnapshotReads({ oracleState: ORACLE_STATE.HELD })
+      openSnapshotReads({
+        oracleState: ORACLE_STATE.HELD,
+        openingEnabled: true,
+      })
     );
 
     const result = await openFinancedPosition({
@@ -165,7 +168,7 @@ describe("openFinancedPosition", () => {
     expect(wallet.sendTransaction).not.toHaveBeenCalled();
   });
 
-  it("refuses when opening is disabled, without submitting", async () => {
+  it("refuses with ASSET_OPENING_DISABLED when pricing is live and opening is disabled", async () => {
     const wallet = fakeWallet();
     const client = fakeClient(
       openSnapshotReads({
@@ -184,6 +187,31 @@ describe("openFinancedPosition", () => {
     expect(result).toMatchObject({
       ok: false,
       code: "ASSET_OPENING_DISABLED",
+      message: "Opening new positions is currently disabled for NVDAc.",
+    });
+    expect(wallet.sendTransaction).not.toHaveBeenCalled();
+  });
+
+  it("names the opening-disabled gate when pricing is also unavailable", async () => {
+    const wallet = fakeWallet();
+    const client = fakeClient(
+      openSnapshotReads({
+        oracleState: ORACLE_STATE.HELD,
+        openingEnabled: false,
+      })
+    );
+
+    const result = await openFinancedPosition({
+      wallet,
+      client,
+      asset: "NVDAc",
+      stockAmount: STOCK_AMOUNT,
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "ASSET_OPENING_DISABLED",
+      message: "Opening new positions is currently disabled for NVDAc.",
     });
     expect(wallet.sendTransaction).not.toHaveBeenCalled();
   });
