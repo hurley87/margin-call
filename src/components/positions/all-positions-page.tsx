@@ -4,12 +4,17 @@ import { usePaginatedQuery } from "convex/react";
 import { useState } from "react";
 import { DrawablyButton, DrawablyCard, DrawablyDivider } from "drawably/react";
 import {
-  PAGE_SIZE,
-  PositionList,
-  PositionQueryBoundary,
-} from "@/components/positions/position-list";
+  ExploreGallery,
+  ExploreMessage,
+  ExploreQueryFailed,
+} from "@/components/positions/explore-gallery";
 import { useOptionalConvexClient } from "@/components/providers/convex-client-provider";
-import type { AllPositionsFilter, PositionStatus } from "@/lib/positions/types";
+import { ResettableErrorBoundary } from "@/components/ui/resettable-error-boundary";
+import {
+  PAGE_SIZE,
+  type AllPositionsFilter,
+  type PositionStatus,
+} from "@/lib/positions/types";
 import { baseDeployment } from "@/lib/protocol/deployment";
 import { api } from "../../../convex/_generated/api";
 
@@ -22,17 +27,9 @@ export function AllPositionsPage() {
     return (
       <div className="explore-page">
         <PageHeader />
-        <DrawablyCard
-          stroke="var(--t-border)"
-          className="explore-message"
-          seed={31}
-          boil={0}
-          roughness={0.6}
-        >
-          <p role="status">
-            Positions are temporarily unavailable. Please try again later.
-          </p>
-        </DrawablyCard>
+        <ExploreMessage>
+          Positions are temporarily unavailable. Please try again later.
+        </ExploreMessage>
       </div>
     );
   }
@@ -41,9 +38,11 @@ export function AllPositionsPage() {
     <div className="explore-page">
       <PageHeader />
       <Filters filter={filter} onChange={setFilter} />
-      <PositionQueryBoundary presentation="gallery">
+      <ResettableErrorBoundary
+        fallback={(reset) => <ExploreQueryFailed onRetry={reset} />}
+      >
         <AllPositionsList queryArgs={filter} />
-      </PositionQueryBoundary>
+      </ResettableErrorBoundary>
     </div>
   );
 }
@@ -56,12 +55,10 @@ function AllPositionsList({ queryArgs }: { queryArgs: AllPositionsFilter }) {
   );
 
   return (
-    <PositionList
+    <ExploreGallery
       results={results}
       status={status}
       loadMore={loadMore}
-      showOwner
-      presentation="gallery"
       emptyMessage="No positions match these filters."
     />
   );

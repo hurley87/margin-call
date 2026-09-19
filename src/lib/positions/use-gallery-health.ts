@@ -31,18 +31,18 @@ async function loadGalleryNft(
   }
 }
 
-/** Bounded Explore refresh against the same `tokenURI` metadata marketplaces cache. */
-export function useGalleryHealth(
-  positions: PositionListItem[],
-  enabled: boolean
-) {
-  const ids = enabled
-    ? positions
-        .filter((position) => position.status === "active")
-        .map((position) => position.tokenId)
-        .sort()
-        .join(",")
-    : "";
+/**
+ * Bounded Explore refresh against the same `tokenURI` metadata marketplaces cache.
+ *
+ * Explore-only by design. Each token costs the metadata route five Base reads,
+ * so this stays behind the gallery rather than any shared list component.
+ */
+export function useGalleryHealth(positions: PositionListItem[]) {
+  const ids = positions
+    .filter((position) => position.status === "active")
+    .map((position) => position.tokenId)
+    .sort()
+    .join(",");
   const [snapshot, setSnapshot] = useState<{
     ids: string;
     health: Record<string, GalleryNft>;

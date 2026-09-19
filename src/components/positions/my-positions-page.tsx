@@ -4,7 +4,6 @@ import { usePaginatedQuery } from "convex/react";
 import type { ReactNode } from "react";
 import {
   IndexUnavailable,
-  PAGE_SIZE,
   PositionList,
   PositionQueryBoundary,
 } from "@/components/positions/position-list";
@@ -14,6 +13,7 @@ import {
   PortfolioWelcome,
 } from "@/components/positions/portfolio-welcome";
 import { useWalletSession } from "@/components/wallet/wallet-providers";
+import { PAGE_SIZE } from "@/lib/positions/types";
 import { api } from "../../../convex/_generated/api";
 
 type MyPositionsPageProps = {

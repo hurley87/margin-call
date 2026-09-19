@@ -97,8 +97,8 @@ describe("faceFromStage", () => {
     expect(faceFromStage("danger")).toBe("danger");
   });
 
-  it("uses the healthy dog when pricing is unavailable, and stays neutral while unread", () => {
-    expect(faceFromStage("pricing_unavailable")).toBe("healthy");
+  it("stays neutral for a stage the app cannot price or has not read", () => {
+    expect(faceFromStage("pricing_unavailable")).toBe("neutral");
     expect(faceFromStage(null)).toBe("neutral");
   });
 });

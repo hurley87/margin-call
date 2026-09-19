@@ -77,18 +77,15 @@ describe("Explore health", () => {
       );
     });
     const { result } = renderHook(() =>
-      useGalleryHealth(
-        [
-          position("1"),
-          position("2"),
-          position("3"),
-          position("4"),
-          position("5"),
-          position("6", "closed"),
-          position("7", "liquidated"),
-        ],
-        true
-      )
+      useGalleryHealth([
+        position("1"),
+        position("2"),
+        position("3"),
+        position("4"),
+        position("5"),
+        position("6", "closed"),
+        position("7", "liquidated"),
+      ])
     );
     await waitFor(() =>
       expect(
@@ -126,7 +123,7 @@ describe("Explore health", () => {
       () => new Promise((done) => resolve.push(done))
     );
     const { result, rerender } = renderHook(
-      ({ positions }) => useGalleryHealth(positions, true),
+      ({ positions }) => useGalleryHealth(positions),
       {
         initialProps: {
           positions: [
@@ -171,7 +168,7 @@ describe("Explore health", () => {
       )
     );
     const { result, unmount } = renderHook(() =>
-      useGalleryHealth([position("1")], true)
+      useGalleryHealth([position("1")])
     );
     await act(async () => {});
     expect(result.current["1"]?.health).toBe("healthy");
@@ -187,8 +184,10 @@ describe("Explore health", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("does not fetch metadata for Portfolio", () => {
-    renderHook(() => useGalleryHealth([position("1")], false));
+  it("makes no request for a page with nothing live on it", () => {
+    renderHook(() =>
+      useGalleryHealth([position("1", "closed"), position("2", "liquidated")])
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });

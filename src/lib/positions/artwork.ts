@@ -5,9 +5,8 @@ import { getAssetById, type LaunchAssetName } from "@/lib/protocol/deployment";
  * Presentation state for a live Position NFT.
  *
  * `pricing_unavailable` is a real answer, not a failure: a financed position
- * whose oracle is HELD or INVALID has no LIVE mark. The Stage trait still says
- * so; artwork uses the healthy dog for now so weekend/off-hours metadata does
- * not sit on the ticker logo.
+ * whose oracle is HELD or INVALID has no honest health to report, so the app
+ * falls back to neutral artwork instead of guessing.
  */
 export type PositionStage =
   "healthy" | "warning" | "danger" | "pricing_unavailable";
@@ -23,8 +22,8 @@ export const STAGE_LABEL: Record<PositionStage, string> = {
  * Which committed image a surface shows.
  *
  * Distinct from `PositionStage`: a stage is a risk answer, a face is a file.
- * `neutral` is the ticker logo for surfaces that have not read live risk yet,
- * or cannot name a lifecycle reason.
+ * `neutral` is the ticker logo, for every surface that cannot honestly name a
+ * health state — unpriced, still reading, or burned for an unindexed reason.
  */
 export type ArtworkFace =
   "healthy" | "warning" | "danger" | "liquidated" | "neutral";
@@ -101,13 +100,12 @@ export function stockSymbol(assetId: number): string | null {
   return artworkFor(assetId)?.ticker ?? null;
 }
 
-/** A stage the app has not resolved yet has no face. Unpriced still shows the dog. */
+/** A stage the app has not resolved, or cannot price, has no honest face. */
 export function faceFromStage(stage: PositionStage | null): ArtworkFace {
   switch (stage) {
     case null:
-      return "neutral";
     case "pricing_unavailable":
-      return "healthy";
+      return "neutral";
     case "healthy":
     case "warning":
     case "danger":
@@ -122,8 +120,9 @@ export function faceFromStage(stage: PositionStage | null): ArtworkFace {
 /**
  * Face for surfaces that only have the indexed lifecycle status.
  *
- * Active and closed both stay neutral: live health needs a Base read that list
- * pages deliberately do not make. Only `liquidated` is knowable offline.
+ * Active and closed both stay neutral: live health needs a read that the
+ * portfolio list deliberately does not make. Only `liquidated` is knowable
+ * offline.
  */
 export function faceFromStatus(status: PositionStatus): ArtworkFace {
   return status === "liquidated" ? "liquidated" : "neutral";

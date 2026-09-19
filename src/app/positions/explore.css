@@ -94,9 +94,6 @@
 .explore-card-link:hover {
   background: var(--t-accent-soft);
 }
-.explore-card-link[data-highlighted] {
-  background: var(--t-accent-soft);
-}
 .explore-card-art {
   display: flex;
   align-items: center;
@@ -223,15 +220,15 @@
   background: var(--t-surface);
   color: var(--t-muted);
 }
-.explore-card-health[data-stage="healthy"] {
+.explore-card-health[data-health="healthy"] {
   color: var(--t-green);
   background: #edf5e9;
 }
-.explore-card-health[data-stage="warning"] {
+.explore-card-health[data-health="warning"] {
   color: var(--t-amber);
   background: #fff1d6;
 }
-.explore-card-health[data-stage="danger"] {
+.explore-card-health[data-health="danger"] {
   color: var(--t-red);
   background: #fceae5;
 }

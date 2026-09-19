@@ -73,10 +73,16 @@ capability only through separately scoped work.
     `https://margincall.fun/api/nft/{tokenId}` and still reverts once the NFT is burned. That route
     reads canonical Base and returns the thesis plus a static PNG already committed under `public/`
     — no IPFS, no image generation. Artwork stage comes from a pure resolver
-    (`src/lib/positions/artwork.ts`) on LIVE equity ratio; live health renders only on
-    `/position/[tokenId]`, while list pages stay Convex identity/lifecycle with neutral ticker logos.
+    (`src/lib/positions/artwork.ts`) on LIVE equity ratio. `/position/[tokenId]` reads live Base
+    state directly. Explore (`/positions`) shows live health by fetching the same
+    `GET /api/nft/[tokenId]` payload marketplaces cache, owned by
+    `src/components/positions/explore-gallery.tsx`; the portfolio list stays Convex
+    identity/lifecycle with neutral ticker logos and makes neither read.
+    `faceFromStage` keeps unpriced positions on the ticker logo — only `buildNftMetadata` swaps in
+    the healthy dog, because marketplaces cache an image far longer than the halt that produced it.
     Cutover runbook: `script/BASE_LAUNCH.md`. The route needs a provisioned server-only
-    `BASE_RPC_URL`; the public Base RPC rate-limits the five reads each metadata request makes.
+    `BASE_RPC_URL`; the public Base RPC rate-limits the five reads each metadata request makes,
+    and Explore multiplies that by the live positions on screen.
 
   Still future work: polished product UI layered on the same `contracts/deployments/base.json` path.
   RPC-dependent tests stay in `contracts/fork/` under the `base-mainnet` profile.

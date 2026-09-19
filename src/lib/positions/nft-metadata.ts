@@ -4,6 +4,7 @@ import {
   faceFromStage,
   resolvePositionStage,
   stockSymbol,
+  type ArtworkFace,
   type PositionRiskInput,
   type PositionStage,
 } from "@/lib/positions/artwork";
@@ -37,6 +38,18 @@ export type NftMetadataInput = PositionRiskInput & {
 };
 
 /**
+ * Artwork a marketplace should cache for a stage.
+ *
+ * Only place that departs from `faceFromStage`: an unpriced position would
+ * otherwise publish the ticker logo, and marketplaces cache that image for far
+ * longer than the weekend or halt that produced it. The Stage trait still
+ * reports `Pricing unavailable`, so the metadata stays honest either way.
+ */
+function marketplaceFace(stage: PositionStage): ArtworkFace {
+  return stage === "pricing_unavailable" ? "healthy" : faceFromStage(stage);
+}
+
+/**
  * Standard ERC-721 metadata for a live Position NFT.
  *
  * Attributes stay deliberately coarse. Debt and NAV move every block, and
@@ -50,7 +63,7 @@ export function buildNftMetadata(input: NftMetadataInput): NftMetadata {
   const { tokenId, assetId, thesis } = input;
 
   const stage = resolvePositionStage(input);
-  const imagePath = artworkPath(assetId, faceFromStage(stage));
+  const imagePath = artworkPath(assetId, marketplaceFace(stage));
   const symbol = stockSymbol(assetId);
   if (imagePath === null || symbol === null) {
     throw new Error(`No curated launch asset for assetId ${assetId}`);
